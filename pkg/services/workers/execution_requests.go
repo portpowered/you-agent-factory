@@ -1,7 +1,6 @@
 package workers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -14,13 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-// ModelInvocationService is the narrow Models operation used by one managed
-// inference attempt. Runtime-scoped replay can replace this effect without
-// replacing the process-wide Models root or its live backend.
-type ModelInvocationService interface {
-	InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
-}
 
 type RunnerToolExecutionMode string
 
@@ -283,10 +275,13 @@ type ProviderInferenceRequest struct {
 	// ModelRuntime is the explicit request-owned Models projection for a
 	// managed inference attempt. It is intentionally excluded from provider
 	// payloads and is copied through the private runner boundary.
-	ModelRuntime            *ModelRuntimeInput     `json:"-"`
-	ModelInvocationOverride ModelInvocationService `json:"-"`
-	SessionID               string                 `json:"session_id,omitempty"`
-	WorkflowContext         *Context               `json:"-"`
+	ModelRuntime *ModelRuntimeInput `json:"-"`
+	// ModelInvocationOverride is an opaque, request-scoped effect. The private
+	// managed inference runner asserts the Models InvokeModel shape; Workers
+	// does not publish a second service-root interface for replay.
+	ModelInvocationOverride any      `json:"-"`
+	SessionID               string   `json:"session_id,omitempty"`
+	WorkflowContext         *Context `json:"-"`
 	// Continuation is the opaque Providers-owned continuation. Providers owns
 	// decoding it and deciding whether the referenced attempt can continue.
 	Continuation *ProviderContinuationRef `json:"-"`
@@ -629,7 +624,7 @@ type ExecutionInput struct {
 	// ModelInvocationOverride carries the runtime-scoped managed-model effect
 	// used by deterministic replay. It is request-scoped so replay never
 	// replaces the process-wide Models service or its live backend.
-	ModelInvocationOverride ModelInvocationService `json:"-"`
+	ModelInvocationOverride any `json:"-"`
 	// PreparedRequestObserver receives the detached request after Workers has
 	// prepared request-scoped resources and before the runner starts. Runtime
 	// uses it to record the effective execution target without moving resource

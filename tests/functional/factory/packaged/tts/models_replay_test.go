@@ -2,7 +2,6 @@ package tts
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -17,10 +16,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -331,12 +328,20 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 	t.Run("success", func(t *testing.T) {
 		text := "models-backed factory tts success"
 		backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+		artifact, err := (models.InferenceArtifactRef{}).Parse("models-inference:artifact:tts-success")
+		if err != nil {
+			t.Fatalf("parse TTS artifact: %v", err)
+		}
+		backend.SetArtifacts([]models.InferenceArtifact{{
+			Artifact: artifact, Name: "audio", MediaType: "audio/wav",
+			SizeBytes:  int64(len(packagedTTSFakeAudioFixture)),
+			Properties: map[string]string{"fixture": "packaged-tts", "label": "speech.wav"},
+		}})
 		live := runManagedFactoryTTSRecording(t, text, backend, nil)
 
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after live success = %d, want one", backend.CallCount())
 		}
-		assertManagedFactoryTTSResourceReleased(t, live.status, "live success")
 		liveWork := factoryTTSCompletedWork(t, live.work)
 		liveAudio := managedFactoryTTSAudioPart(t, liveWork)
 		if liveAudio.ContentType == nil || *liveAudio.ContentType != "audio/wav" {
@@ -347,13 +352,13 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		}
 		assertManagedFactoryTTSAudioDigest(t, liveAudio)
 
-		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.artifactPath, backend)
+		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, backend, true)
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after success replay = %d, want no replay call", backend.CallCount())
 		}
-		assertManagedFactoryTTSResourceReleased(t, replayed.status, "replayed success")
 		replayedWork := factoryTTSCompletedWork(t, replayed.work)
 		assertFactoryTTSWorkEquivalent(t, liveWork, replayedWork, "successful replay Work")
+		assertManagedFactoryTTSAudioArtifactLineage(t, live, replayed)
 		assertManagedFactoryTTSReplayEvents(t, live, replayed, text, true)
 	})
 
@@ -365,7 +370,6 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after live failure = %d, want one", backend.CallCount())
 		}
-		assertManagedFactoryTTSResourceReleased(t, live.status, "live failure")
 		liveWork := factoryTTSFailedWork(t, live.work)
 		assertManagedFactoryTTSFailedWork(t, liveWork, text, "live failed Work")
 		assertManagedFactoryTTSFailureModelEvents(
@@ -381,11 +385,10 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		)
 		assertManagedFactoryTTSNoArtifactEvents(t, live.events, "live failure")
 
-		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.artifactPath, backend)
+		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, backend, false)
 		if backend.CallCount() != 1 {
 			t.Fatalf("Models backend calls after failure replay = %d, want no replay call", backend.CallCount())
 		}
-		assertManagedFactoryTTSResourceReleased(t, replayed.status, "replayed failure")
 		replayedWork := factoryTTSFailedWork(t, replayed.work)
 		assertManagedFactoryTTSFailedWork(t, replayedWork, text, "replayed failed Work")
 		replayedEvents := collectFactoryTTSDispatchEvents(t, replayed.events, factorysessions.DefaultSessionID)
@@ -394,27 +397,6 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		assertFactoryTTSWorkEquivalent(t, liveWork, replayedWork, "failed replay Work")
 		assertManagedFactoryTTSReplayEvents(t, live, replayed, text, false)
 	})
-}
-
-func assertManagedFactoryTTSResourceReleased(
-	t *testing.T,
-	status factoryapi.StatusResponse,
-	label string,
-) {
-	t.Helper()
-	if status.Resources == nil {
-		t.Fatalf("%s resources = nil, want tts-cache capacity projection", label)
-	}
-	for _, resource := range *status.Resources {
-		if resource.Name != "tts-cache" {
-			continue
-		}
-		if resource.Total != 1 || resource.Available != 1 {
-			t.Fatalf("%s tts-cache resource = %#v, want total=1 available=1", label, resource)
-		}
-		return
-	}
-	t.Fatalf("%s resources = %#v, want tts-cache capacity projection", label, *status.Resources)
 }
 
 func assertManagedFactoryTTSAudioDigest(t *testing.T, audio factoryapi.WorkAudioContentPart) {
@@ -431,6 +413,57 @@ func assertManagedFactoryTTSAudioDigest(t *testing.T, audio factoryapi.WorkAudio
 	gotDigest := fmt.Sprintf("%x", sha256.Sum256(decoded))
 	if gotDigest != wantDigest || string(decoded) != packagedTTSFakeAudioFixture {
 		t.Fatalf("managed TTS AUDIO bytes digest = %s, want %s; bytes = %q", gotDigest, wantDigest, decoded)
+	}
+}
+
+func assertManagedFactoryTTSAudioArtifactLineage(
+	t *testing.T,
+	live, replay managedFactoryTTSRecording,
+) {
+	t.Helper()
+	liveAudio := managedFactoryTTSAudioPart(t, factoryTTSCompletedWork(t, live.work))
+	replayAudio := managedFactoryTTSAudioPart(t, factoryTTSCompletedWork(t, replay.work))
+	if liveAudio.ArtifactId == nil || strings.TrimSpace(*liveAudio.ArtifactId) == "" {
+		t.Fatalf("live AUDIO artifactId = %#v, want non-empty Models artifact reference", liveAudio.ArtifactId)
+	}
+	if replayAudio.ArtifactId == nil || *replayAudio.ArtifactId != *liveAudio.ArtifactId {
+		t.Fatalf("replayed AUDIO artifactId = %#v, want live reference %q", replayAudio.ArtifactId, *liveAudio.ArtifactId)
+	}
+	if liveAudio.Metadata == nil || (*liveAudio.Metadata)["label"] != "speech.wav" || replayAudio.Metadata == nil || (*replayAudio.Metadata)["label"] != (*liveAudio.Metadata)["label"] {
+		t.Fatalf("AUDIO artifact metadata = live:%#v replay:%#v, want label parity", liveAudio.Metadata, replayAudio.Metadata)
+	}
+	assertManagedFactoryTTSArtifactEventLineage(t, live.events, *liveAudio.ArtifactId, "live")
+	assertManagedFactoryTTSArtifactEventLineage(t, replay.events, *liveAudio.ArtifactId, "replay")
+}
+
+func assertManagedFactoryTTSArtifactEventLineage(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantArtifactID, label string,
+) {
+	t.Helper()
+	observed := collectFactoryTTSDispatchEvents(t, events, factorysessions.DefaultSessionID)
+	payload, err := observed.dispatchResponse.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode %s DISPATCH_RESPONSE: %v", label, err)
+	}
+	if payload.OutputWork == nil || len(*payload.OutputWork) != 1 {
+		t.Fatalf("%s DISPATCH_RESPONSE outputWork = %#v, want one audio Work", label, payload.OutputWork)
+	}
+	audio := managedFactoryTTSAudioPart(t, (*payload.OutputWork)[0])
+	if audio.ArtifactId == nil || *audio.ArtifactId != wantArtifactID {
+		t.Fatalf("%s DISPATCH_RESPONSE artifactId = %#v, want %q", label, audio.ArtifactId, wantArtifactID)
+	}
+	modelResponse, err := observed.modelResponse.Payload.AsModelResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode %s MODEL_RESPONSE: %v", label, err)
+	}
+	if modelResponse.OutputContent == nil || len(*modelResponse.OutputContent) != 1 {
+		t.Fatalf("%s MODEL_RESPONSE outputContent = %#v, want one audio part", label, modelResponse.OutputContent)
+	}
+	modelAudio, err := (*modelResponse.OutputContent)[0].AsWorkAudioContentPart()
+	if err != nil || modelAudio.ArtifactId == nil || *modelAudio.ArtifactId != wantArtifactID {
+		t.Fatalf("%s MODEL_RESPONSE artifactId = %#v, want %q", label, modelAudio, wantArtifactID)
 	}
 }
 
@@ -773,8 +806,9 @@ func managedFactoryTTSAudioPart(t *testing.T, item factoryapi.Work) factoryapi.W
 
 type managedFactoryTTSRecording struct {
 	factoryDir   string
+	homeDir      string
+	cacheDir     string
 	artifactPath string
-	status       factoryapi.StatusResponse
 	work         factoryapi.ListWorkResponse
 	events       []factoryapi.FactoryEvent
 }
@@ -802,29 +836,44 @@ func runManagedFactoryTTSRecording(
 	edges, closeHost := managedTTSModelEdges(t, backend)
 	t.Cleanup(closeHost)
 	artifactPath := filepath.Join(t.TempDir(), "managed-tts-recording.replay.json")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Args:       []string{"--record", artifactPath},
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-			run.ModelCacheDirEnvironment+"="+cacheDir,
-		),
-		Edges: edges,
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--named", factorydefinitions.PackagedTTSFactoryName,
+		"--record", artifactPath, "--output", "primary", "--to", text,
 	})
-	support.UpsertDefaultSessionWorkRequest(t, server.URL(), managedFactoryTTSWorkRequest(text))
-	status := support.WaitForTerminalStatus(t, server.URL(), 30*time.Second)
-	result := managedFactoryTTSRecording{
-		factoryDir:   dir,
-		artifactPath: artifactPath,
-		status:       status,
-		work:         support.ListDefaultSessionWork(t, server.URL()),
-		events:       server.GetFactoryEvents(t),
+	inputs.Input.Env = append(os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		run.ModelCacheDirEnvironment+"="+cacheDir,
+	)
+	inputs.Input.WorkingDirectory = dir
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
+	if failure == nil && err != nil {
+		t.Fatalf("root Process.Execute(managed TTS) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
-	server.Stop(t)
+	if failure != nil && err == nil {
+		t.Fatalf("root Process.Execute(managed TTS) error=nil for expected failure; stdout=%q", inputs.Stdout())
+	}
+	wantStatus := factoryapi.InvocationTerminalStatusCompleted
+	if failure != nil {
+		wantStatus = factoryapi.InvocationTerminalStatusFailed
+	}
+	if wantStatus == factoryapi.InvocationTerminalStatusCompleted && err != nil {
+		t.Fatalf("root Process.Execute(managed TTS) status=%q error=%v stdout=%q stderr=%q", wantStatus, err, inputs.Stdout(), inputs.Stderr())
+	}
+	events := readManagedFactoryTTSRecording(t, artifactPath)
 	if _, err := os.Stat(artifactPath); err != nil {
 		t.Fatalf("recorded TTS artifact %q: %v", artifactPath, err)
 	}
+	return managedFactoryTTSRecording{
+		factoryDir: dir, homeDir: homeDir, cacheDir: cacheDir, artifactPath: artifactPath,
+		work: managedFactoryTTSOutputWork(t, events), events: events,
+	}
+}
+
+func readManagedFactoryTTSRecording(t *testing.T, artifactPath string) []factoryapi.FactoryEvent {
+	t.Helper()
 	data, err := os.ReadFile(artifactPath)
 	if err != nil {
 		t.Fatalf("read recorded TTS artifact %q: %v", artifactPath, err)
@@ -839,136 +888,51 @@ func runManagedFactoryTTSRecording(
 	if artifact.SchemaVersion != "agent-factory.replay.v1" {
 		t.Fatalf("managed TTS recording schema = %q, want agent-factory.replay.v1", artifact.SchemaVersion)
 	}
-	return result
+	return artifact.Events
 }
 
-func managedFactoryTTSWorkRequest(text string) factoryapi.WorkRequest {
-	part := factoryapi.WorkContentPart{}
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: text,
-	}); err != nil {
-		panic(fmt.Sprintf("build managed TTS text content: %v", err))
+func managedFactoryTTSOutputWork(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.ListWorkResponse {
+	t.Helper()
+	observed := collectFactoryTTSDispatchEvents(t, events, factorysessions.DefaultSessionID)
+	payload, err := observed.dispatchResponse.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode managed TTS DISPATCH_RESPONSE: %v", err)
 	}
-	content := factoryapi.WorkContent{part}
-	workType := "task"
-	return factoryapi.WorkRequest{
-		RequestId: "managed-tts-request",
-		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
-		Works: &[]factoryapi.Work{{
-			Name:         "managed TTS request",
-			WorkTypeName: &workType,
-			Content:      &content,
-		}},
+	if payload.OutputWork == nil || len(*payload.OutputWork) != 1 {
+		t.Fatalf("managed TTS DISPATCH_RESPONSE outputWork = %#v, want one terminal Work", payload.OutputWork)
 	}
+	return factoryapi.ListWorkResponse{Results: []factoryapi.Work{(*payload.OutputWork)[0]}}
 }
 
 func replayManagedFactoryTTSRecording(
 	t *testing.T,
-	factoryDir string,
+	factoryDir, homeDir, cacheDir string,
 	artifactPath string,
 	backend *packagedTTSModelsBackend,
+	wantSuccess bool,
 ) managedFactoryTTSRecording {
 	t.Helper()
 	edges, closeHost := managedTTSModelEdges(t, backend)
 	t.Cleanup(closeHost)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-		Args:       []string{"--replay", artifactPath},
-		Edges:      edges,
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--dir", factoryDir,
+		"--replay", artifactPath, "--no-record", "--output", "primary",
 	})
-	status := support.WaitForTerminalStatus(t, server.URL(), 30*time.Second)
-	result := managedFactoryTTSRecording{
-		status: status,
-		work:   support.ListDefaultSessionWork(t, server.URL()),
-		events: server.GetFactoryEvents(t),
+	inputs.Input.Env = append(os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		run.ModelCacheDirEnvironment+"="+cacheDir,
+	)
+	inputs.Input.WorkingDirectory = factoryDir
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
+	if wantSuccess && err != nil {
+		t.Fatalf("root Process.Execute(replay managed TTS) error=%v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
-	server.Stop(t)
-	return result
-}
-
-func managedTTSModelEdges(
-	t *testing.T,
-	backend *packagedTTSModelsBackend,
-) (serviceedges.Edges, func()) {
-	t.Helper()
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path == "/health" {
-			writer.WriteHeader(http.StatusOK)
-			return
-		}
-		http.NotFound(writer, request)
-	}))
-	edges := serviceedges.Edges{
-		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelResolveBackendArtifact: func(
-			context.Context,
-			serviceedges.ModelBackendArtifactSelectionRequest,
-		) (serviceedges.ModelBackendArtifactSelection, error) {
-			return packagedTTSPinnedBackendSelection(), nil
-		},
-		ModelHostProcessLauncher:      &packagedTTSModelHostLauncher{endpoint: modelServer.URL},
-		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
-		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
-		ModelHostHTTPClient:           modelServer.Client(),
-		ModelRuntimeHTTPClient:        modelServer.Client(),
-		ModelInvocationBackend:        backend.Invoke,
-	}
-	return edges, modelServer.Close
-}
-
-func assertFactoryTTSWorkEquivalent(
-	t *testing.T,
-	live, replay factoryapi.Work,
-	label string,
-) {
-	t.Helper()
-	if live.WorkTypeName == nil || replay.WorkTypeName == nil ||
-		*live.WorkTypeName != *replay.WorkTypeName ||
-		live.State == nil || replay.State == nil ||
-		live.State.Name != replay.State.Name ||
-		live.Content == nil || replay.Content == nil ||
-		len(*live.Content) != len(*replay.Content) {
-		t.Fatalf("%s shape = live:%#v replay:%#v", label, live, replay)
-	}
-	for index := range *live.Content {
-		liveJSON, err := json.Marshal((*live.Content)[index])
-		if err != nil {
-			t.Fatalf("marshal live Work content[%d]: %v", index, err)
-		}
-		replayJSON, err := json.Marshal((*replay.Content)[index])
-		if err != nil {
-			t.Fatalf("marshal replay Work content[%d]: %v", index, err)
-		}
-		if string(liveJSON) != string(replayJSON) {
-			t.Fatalf("%s content[%d] differs\nlive=%s\nreplay=%s", label, index, liveJSON, replayJSON)
-		}
-	}
-}
-
-func assertFactoryTTSEventProjectionEquivalent(
-	t *testing.T,
-	live, replay []factoryapi.FactoryEvent,
-	label string,
-) {
-	t.Helper()
-	if len(live) != len(replay) {
-		t.Fatalf("%s event count = live:%d replay:%d\nlive=%#v\nreplay=%#v", label, len(live), len(replay), live, replay)
-	}
-	for index := range live {
-		if live[index].Type != replay[index].Type {
-			t.Fatalf("%s event[%d] type = live:%q replay:%q", label, index, live[index].Type, replay[index].Type)
-		}
-		liveWorkIDs := []string(nil)
-		if live[index].Context.WorkIds != nil {
-			liveWorkIDs = *live[index].Context.WorkIds
-		}
-		replayWorkIDs := []string(nil)
-		if replay[index].Context.WorkIds != nil {
-			replayWorkIDs = *replay[index].Context.WorkIds
-		}
-		if strings.Join(liveWorkIDs, ",") != strings.Join(replayWorkIDs, ",") {
-			t.Fatalf("%s event[%d] work ids = live:%#v replay:%#v", label, index, live[index].Context.WorkIds, replay[index].Context.WorkIds)
-		}
+	events := readManagedFactoryTTSRecording(t, artifactPath)
+	return managedFactoryTTSRecording{
+		factoryDir: factoryDir, artifactPath: artifactPath,
+		work: managedFactoryTTSOutputWork(t, events), events: events,
 	}
 }

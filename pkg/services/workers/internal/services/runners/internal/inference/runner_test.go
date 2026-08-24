@@ -69,7 +69,12 @@ func TestRunnerInvokesModelsRootGenericOperationExactlyOnce(t *testing.T) {
 	if got := modelsEdge.LegacyCalls(); got != 0 {
 		t.Fatalf("Models InvokeLocal calls = %d, want zero", got)
 	}
-	captured := modelsEdge.Request()
+	assertGenericInvocationRequest(t, modelsEdge.Request())
+	assertGenericInvocationResult(t, result)
+}
+
+func assertGenericInvocationRequest(t *testing.T, captured models.InvokeModelRequest) {
+	t.Helper()
 	if captured.Model.NameOrURI != "WHISPER" || captured.Operation != models.OperationTTS {
 		t.Fatalf("generic model selection = %#v, want WHISPER/TTS", captured)
 	}
@@ -90,6 +95,10 @@ func TestRunnerInvokesModelsRootGenericOperationExactlyOnce(t *testing.T) {
 		captured.Parameters[1].Name != "pitch" {
 		t.Fatalf("ordered generic parameters = %#v", captured.Parameters)
 	}
+}
+
+func assertGenericInvocationResult(t *testing.T, result workers.RunnerExecutionResult) {
+	t.Helper()
 	if result.Outcome != workers.OutcomeAccepted || result.ProposedOutput == nil ||
 		len(result.ProposedOutput.Primary) != 1 {
 		t.Fatalf("runner result = %#v, want accepted proposed audio", result)

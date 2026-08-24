@@ -98,6 +98,15 @@ func (r *runner) Execute(
 			nil,
 		)
 	}
+	return r.executeManagedInvocation(ctx, request, scope, worker)
+}
+
+func (r *runner) executeManagedInvocation(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+	scope models.RuntimeScopeRef,
+	worker models.LocalWorker,
+) (workers.RunnerExecutionResult, error) {
 	invocation, err := genericInvocationRequest(request, scope, worker)
 	if err != nil {
 		return workers.RunnerExecutionResult{}, err
@@ -105,9 +114,9 @@ func (r *runner) Execute(
 	if err := invocation.ValidateGeneric(); err != nil {
 		return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
 	}
-	modelInvoker := r.models
-	if request.ModelInvocationOverride != nil {
-		modelInvoker = request.ModelInvocationOverride
+	modelInvoker, err := r.modelInvokerForRequest(request)
+	if err != nil {
+		return workers.RunnerExecutionResult{}, err
 	}
 	result, err := modelInvoker.InvokeModel(ctx, invocation)
 	if err != nil {
@@ -132,6 +141,17 @@ func (r *runner) Execute(
 			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 		}},
 	}, nil
+}
+
+func (r *runner) modelInvokerForRequest(request workers.RunnerExecutionRequest) (ModelInvoker, error) {
+	if request.ModelInvocationOverride == nil {
+		return r.models, nil
+	}
+	override, ok := request.ModelInvocationOverride.(ModelInvoker)
+	if !ok {
+		return nil, badRequest("inference model invocation override is invalid", nil)
+	}
+	return override, nil
 }
 
 func modelRuntimeProjection(

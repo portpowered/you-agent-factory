@@ -36,7 +36,7 @@ type runtimeWorkersServiceWithProgress struct {
 	providerOverride                  providers.Service
 	commandRunnerOverride             platformprocess.CommandRunner
 	replayCommandRunner               platformprocess.CommandRunner
-	modelInvocationOverride           workers.ModelInvocationService
+	modelInvocationOverride           any
 	skipBuiltInPrerequisiteValidation bool
 	invocationSkipPermissionsOverride *bool
 	workstationResolver               runtime.WorkstationExecutionResolver

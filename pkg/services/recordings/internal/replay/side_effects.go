@@ -488,7 +488,10 @@ func (s *SideEffects) InvokeModel(
 		}, errors.New(replayModelInvocationFailureDetail(message))
 	}
 
-	outputs := replayModelOutputs(record.completion.result)
+	outputs, err := replayModelOutputs(record.completion.result)
+	if err != nil {
+		return models.InvokeModelResult{}, err
+	}
 	if len(outputs) == 0 {
 		return models.InvokeModelResult{}, fmt.Errorf("recorded model invocation has no output")
 	}
@@ -530,13 +533,13 @@ func replayModelInvocationFailureDetail(message string) string {
 	return message
 }
 
-func replayModelOutputs(result workerexecution.WorkResult) []models.InferenceOutput {
+func replayModelOutputs(result workerexecution.WorkResult) ([]models.InferenceOutput, error) {
 	content := result.OutputContent
 	if len(content) == 0 && len(result.RecordedOutputWork) > 0 {
 		content = result.RecordedOutputWork[0].Content
 	}
 	if len(content) == 0 {
-		return nil
+		return nil, nil
 	}
 	outputs := make([]models.InferenceOutput, 0, len(content))
 	for index, part := range content {
@@ -549,15 +552,55 @@ func replayModelOutputs(result workerexecution.WorkResult) []models.InferenceOut
 			name = fmt.Sprintf("output-%d", index)
 		}
 		mediaType := strings.TrimSpace(part.ContentType)
+		artifact, err := replayModelArtifact(part)
+		if err != nil {
+			return nil, err
+		}
 		outputs = append(outputs, models.InferenceOutput{
 			Name:        name,
 			Modality:    modality,
 			ContentType: mediaType,
 			MediaType:   mediaType,
 			Content:     value,
+			Artifact:    artifact,
 		})
 	}
-	return outputs
+	return outputs, nil
+}
+
+func replayModelArtifact(part work.WorkContentPart) (*models.InferenceArtifact, error) {
+	artifactID := strings.TrimSpace(part.ArtifactID)
+	if artifactID == "" {
+		return nil, nil
+	}
+	ref, err := (models.InferenceArtifactRef{}).Parse(artifactID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.InferenceArtifact{
+		Artifact:   ref,
+		Name:       strings.TrimSpace(part.Label),
+		MediaType:  strings.TrimSpace(part.ContentType),
+		Properties: replayArtifactProperties(part.Metadata),
+	}, nil
+}
+
+func replayArtifactProperties(metadata map[string]any) map[string]string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	properties := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		key = strings.TrimSpace(key)
+		if key == "" || value == nil {
+			continue
+		}
+		properties[key] = fmt.Sprint(value)
+	}
+	if len(properties) == 0 {
+		return nil
+	}
+	return properties
 }
 
 func replayModelOutputValue(part work.WorkContentPart) (models.Modality, string) {

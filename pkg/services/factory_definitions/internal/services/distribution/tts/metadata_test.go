@@ -33,8 +33,9 @@ func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *t
 	if metadata.MediaType != "audio/wav" {
 		t.Fatalf("mediaType = %q, want audio/wav", metadata.MediaType)
 	}
-	if metadata.Backend != "OMNIVOICE_Q4_K_M/LLAMACPP" {
-		t.Fatalf("backend = %q", metadata.Backend)
+	wantBackend := factorydefinitions.DefaultTTSModelName + "/" + factorydefinitions.DefaultTTSBackendName
+	if metadata.Backend != wantBackend {
+		t.Fatalf("backend = %q, want %q", metadata.Backend, wantBackend)
 	}
 	if metadata.TraceID != "trace-tts" || metadata.SessionID != "~default" {
 		t.Fatalf("metadata correlation = %#v", metadata)

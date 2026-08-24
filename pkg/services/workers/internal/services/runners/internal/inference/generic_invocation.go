@@ -120,18 +120,28 @@ func inputContentMetadata(contentType, fallback string) (string, string) {
 }
 
 func operationParametersFromWorkPart(part work.WorkContentPart) ([]models.OperationParameter, error) {
-	var raw []byte
-	switch part.Type.Normalized() {
-	case work.WorkContentPartTypeJSON:
-		raw = append([]byte(nil), part.JSON...)
-	case work.WorkContentPartTypeText:
-		raw = []byte(part.Text)
-	default:
-		return nil, fmt.Errorf("parameters must be JSON content")
+	raw, err := parameterJSONFromWorkPart(part)
+	if err != nil {
+		return nil, err
 	}
 	if len(raw) == 0 || !json.Valid(raw) {
 		return nil, fmt.Errorf("parameters must contain valid JSON")
 	}
+	return decodeOperationParameters(raw)
+}
+
+func parameterJSONFromWorkPart(part work.WorkContentPart) ([]byte, error) {
+	switch part.Type.Normalized() {
+	case work.WorkContentPartTypeJSON:
+		return append([]byte(nil), part.JSON...), nil
+	case work.WorkContentPartTypeText:
+		return []byte(part.Text), nil
+	default:
+		return nil, fmt.Errorf("parameters must be JSON content")
+	}
+}
+
+func decodeOperationParameters(raw []byte) ([]models.OperationParameter, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	first, err := decoder.Token()
 	if err != nil {
@@ -224,6 +234,27 @@ func proposedOutputFromModelResult(result models.InvokeModelResult) (workers.Pro
 }
 
 func workContentPartFromModelOutput(output models.InferenceOutput, index int) (work.WorkContentPart, error) {
+	part, modality := baseWorkContentPartFromModelOutput(output, index)
+	switch {
+	case strings.EqualFold(string(modality), string(models.ModalityText)):
+		return textWorkContentPart(part, output), nil
+	case strings.EqualFold(string(modality), string(models.ModalityJSON)):
+		return jsonWorkContentPart(part, output)
+	case strings.EqualFold(string(modality), string(models.ModalityAudio)):
+		return audioWorkContentPart(part, output)
+	case strings.EqualFold(string(modality), string(models.ModalityImage)):
+		return mediaWorkContentPart(part, output, work.WorkContentPartTypeImage, "Models returned empty image output")
+	case strings.EqualFold(string(modality), string(models.ModalityBinary)):
+		return mediaWorkContentPart(part, output, work.WorkContentPartTypeBinary, "Models returned empty binary output")
+	default:
+		return work.WorkContentPart{}, badRequest(
+			fmt.Sprintf("Models returned unsupported output modality %q", modality),
+			nil,
+		)
+	}
+}
+
+func baseWorkContentPartFromModelOutput(output models.InferenceOutput, index int) (work.WorkContentPart, models.Modality) {
 	modality := output.Modality
 	if modality == "" {
 		modality = modalityFromMediaType(output.MediaType, output.ContentType)
@@ -237,57 +268,74 @@ func workContentPartFromModelOutput(output models.InferenceOutput, index int) (w
 	}
 	if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
 		part.ArtifactID = output.Artifact.Artifact.String()
+		part.Label = output.Artifact.Name
+		part.Metadata = workMetadataFromArtifact(output.Artifact)
 	}
-	switch {
-	case strings.EqualFold(string(modality), string(models.ModalityText)):
-		part.Type = work.WorkContentPartTypeText
-		part.Text = output.Content
-		if part.ContentType == "" {
-			part.ContentType = "text/plain"
-		}
-	case strings.EqualFold(string(modality), string(models.ModalityJSON)):
-		part.Type = work.WorkContentPartTypeJSON
-		part.JSON = []byte(output.Content)
-		if !json.Valid(part.JSON) {
-			return work.WorkContentPart{}, badRequest(
-				fmt.Sprintf("Models returned invalid JSON output %q", part.Slot),
-				nil,
-			)
-		}
-		if part.ContentType == "" {
-			part.ContentType = "application/json"
-		}
-	case strings.EqualFold(string(modality), string(models.ModalityAudio)):
-		part.Type = work.WorkContentPartTypeAudio
-		part.URL = inlineOutputURL(output.Content, firstNonEmpty(output.MediaType, output.ContentType, "audio/wav"))
-		if part.URL == "" {
-			return work.WorkContentPart{}, badRequest(
-				fmt.Sprintf("Models returned empty audio output %q", part.Slot),
-				models.ErrInferenceFailed,
-			)
-		}
-		if part.ContentType == "" {
-			part.ContentType = firstNonEmpty(output.MediaType, output.ContentType, "audio/wav")
-		}
-	case strings.EqualFold(string(modality), string(models.ModalityImage)):
-		part.Type = work.WorkContentPartTypeImage
-		part.URL = inlineOutputURL(output.Content, firstNonEmpty(output.MediaType, output.ContentType, "application/octet-stream"))
-		if part.URL == "" {
-			return work.WorkContentPart{}, badRequest("Models returned empty image output", models.ErrInferenceFailed)
-		}
-	case strings.EqualFold(string(modality), string(models.ModalityBinary)):
-		part.Type = work.WorkContentPartTypeBinary
-		part.URL = inlineOutputURL(output.Content, firstNonEmpty(output.MediaType, output.ContentType, "application/octet-stream"))
-		if part.URL == "" {
-			return work.WorkContentPart{}, badRequest("Models returned empty binary output", models.ErrInferenceFailed)
-		}
-	default:
+	return part, modality
+}
+
+func textWorkContentPart(part work.WorkContentPart, output models.InferenceOutput) work.WorkContentPart {
+	part.Type = work.WorkContentPartTypeText
+	part.Text = output.Content
+	if part.ContentType == "" {
+		part.ContentType = "text/plain"
+	}
+	return part
+}
+
+func jsonWorkContentPart(part work.WorkContentPart, output models.InferenceOutput) (work.WorkContentPart, error) {
+	part.Type = work.WorkContentPartTypeJSON
+	part.JSON = []byte(output.Content)
+	if !json.Valid(part.JSON) {
 		return work.WorkContentPart{}, badRequest(
-			fmt.Sprintf("Models returned unsupported output modality %q", modality),
+			fmt.Sprintf("Models returned invalid JSON output %q", part.Slot),
 			nil,
 		)
 	}
+	if part.ContentType == "" {
+		part.ContentType = "application/json"
+	}
 	return part, nil
+}
+
+func audioWorkContentPart(part work.WorkContentPart, output models.InferenceOutput) (work.WorkContentPart, error) {
+	part.Type = work.WorkContentPartTypeAudio
+	part.URL = inlineOutputURL(output.Content, firstNonEmpty(output.MediaType, output.ContentType, "audio/wav"))
+	if part.URL == "" {
+		return work.WorkContentPart{}, badRequest(
+			fmt.Sprintf("Models returned empty audio output %q", part.Slot),
+			models.ErrInferenceFailed,
+		)
+	}
+	if part.ContentType == "" {
+		part.ContentType = firstNonEmpty(output.MediaType, output.ContentType, "audio/wav")
+	}
+	return part, nil
+}
+
+func mediaWorkContentPart(
+	part work.WorkContentPart,
+	output models.InferenceOutput,
+	partType work.WorkContentPartType,
+	emptyMessage string,
+) (work.WorkContentPart, error) {
+	part.Type = partType
+	part.URL = inlineOutputURL(output.Content, firstNonEmpty(output.MediaType, output.ContentType, "application/octet-stream"))
+	if part.URL == "" {
+		return work.WorkContentPart{}, badRequest(emptyMessage, models.ErrInferenceFailed)
+	}
+	return part, nil
+}
+
+func workMetadataFromArtifact(artifact *models.InferenceArtifact) map[string]any {
+	if artifact == nil || len(artifact.Properties) == 0 {
+		return nil
+	}
+	metadata := make(map[string]any, len(artifact.Properties))
+	for key, value := range artifact.Properties {
+		metadata[key] = value
+	}
+	return metadata
 }
 
 func inlineOutputURL(content, mediaType string) string {
