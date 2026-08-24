@@ -459,7 +459,7 @@ test("the Windows backend build has a bounded platform-specific step timeout", a
 	assert.match(buildScript, /-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=\$\{windows_minimum_target\}/);
 	assert.match(buildScript, /grpc-server/);
 	assert.match(buildScript, /llama-cpp-cpu-all/);
-});
+	});
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
 	const root = await matrixArtifactFixture(t);
