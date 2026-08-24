@@ -21,7 +21,15 @@ import (
 
 func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) {
 	t.Parallel()
+	t.Run("nil process", testNilProcessCapabilities)
+	t.Run("missing capabilities", testMissingProcessCapabilities)
+	t.Run("invalid capability values", testInvalidProcessCapabilities)
+	t.Run("typed capabilities", testTypedProcessCapabilities)
+	t.Run("composed capabilities", testComposedProcessCapabilities)
+}
 
+func testNilProcessCapabilities(t *testing.T) {
+	t.Helper()
 	if got := RecordingsProjectionFromProcess(nil); got != nil {
 		t.Fatalf("RecordingsProjectionFromProcess(nil) = %#v, want nil", got)
 	}
@@ -31,7 +39,10 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	if got := RecordingsServiceFromProcess(nil); got != nil {
 		t.Fatalf("RecordingsServiceFromProcess(nil) = %#v, want nil", got)
 	}
+}
 
+func testMissingProcessCapabilities(t *testing.T) {
+	t.Helper()
 	withoutCapabilities, err := initializerapplication.NewProcess(
 		nil,
 		nil,
@@ -55,7 +66,10 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	if got := RecordingsServiceFromProcess(withoutCapabilities); got != nil {
 		t.Fatalf("RecordingsServiceFromProcess(without capability) = %#v, want nil", got)
 	}
+}
 
+func testInvalidProcessCapabilities(t *testing.T) {
+	t.Helper()
 	wrongType, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
 		nil,
 		nil,
@@ -82,7 +96,10 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	if got := RecordingsServiceFromProcess(wrongType); got != nil {
 		t.Fatalf("RecordingsServiceFromProcess(wrong type) = %#v, want nil", got)
 	}
+}
 
+func testTypedProcessCapabilities(t *testing.T) {
+	t.Helper()
 	typedProjection := &rootRecordingsProjectionProbe{}
 	typedProcess, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
 		nil,
@@ -104,7 +121,10 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	if got := RecordingsProjectionFromProcess(typedProcess); got != typedProjection {
 		t.Fatalf("RecordingsProjectionFromProcess(typed) = %#v, want %#v", got, typedProjection)
 	}
+}
 
+func testComposedProcessCapabilities(t *testing.T) {
+	t.Helper()
 	composed, err := BuildProcess(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
