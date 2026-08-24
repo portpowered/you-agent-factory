@@ -2,7 +2,9 @@ package root_composition_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -245,6 +247,66 @@ func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t 
 	overrideDetail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/tts")
 	if overrideDetail.Name != "tts" || len(overrideDetail.Capabilities) != 1 || overrideDetail.Capabilities[0].Worker != "factory-tts" {
 		t.Fatalf("factory tts detail = %#v, want Factory-owned tts capability", overrideDetail)
+	}
+}
+
+// TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP proves that a
+// root-composed catalog keeps an unknown model on the public not-found
+// contract instead of exposing an internal runtime failure.
+func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
+	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	endpoint := server.URL() + "/models/missing-catalog-model"
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	var failure factoryapi.ErrorResponse
+	decodeErr := json.NewDecoder(response.Body).Decode(&failure)
+	response.Body.Close()
+	if decodeErr != nil {
+		t.Fatalf("decode GET %s failure: %v", endpoint, decodeErr)
+	}
+	if response.StatusCode != http.StatusNotFound ||
+		failure.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+		failure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("GET %s = status %d, failure %#v; want typed not-found 404", endpoint, response.StatusCode, failure)
+	}
+}
+
+// TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP proves that
+// the effective built-in catalog rejects an operation outside the selected
+// model definition before any model host or provider effect is attempted.
+func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T) {
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	endpoint := server.URL() + "/models/tts/invocations"
+	response, err := http.Post(endpoint, "application/json", strings.NewReader(`{"operation":"ASR"}`))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	var failure factoryapi.ErrorResponse
+	decodeErr := json.NewDecoder(response.Body).Decode(&failure)
+	response.Body.Close()
+	if decodeErr != nil {
+		t.Fatalf("decode POST %s failure: %v", endpoint, decodeErr)
+	}
+	if response.StatusCode != http.StatusBadRequest ||
+		failure.Family != factoryapi.ErrorFamilyBadRequest ||
+		failure.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") {
+		t.Fatalf("POST %s = status %d, failure %#v; want typed bad-request 400", endpoint, response.StatusCode, failure)
 	}
 }
 
