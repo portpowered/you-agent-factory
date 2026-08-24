@@ -3975,7 +3975,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the shared --server selection; --port remains only for session list and create. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. The persisted row sessionId is the canonical value accepted by session show and the shared GET /factory-sessions/{session_id} detail route, including failed sessions with partial results. Session commands use the shared --server selection; --port remains only for session list and create. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
             "id": "you.session.description"
           },
           "title": {
@@ -5209,7 +5209,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "List factory sessions for the requested scope.\n\nlive returns workspace sessions kept open by the running host. persisted returns durable Factory Sessions from the deterministic provider loopback. all returns both live workspace sessions and durable Factory Sessions.\n\nHuman output prints the legacy live-session table for workspace rows and a durable Factory Session table with status, source identity, result availability, progress, and actions. Use --json to emit ListFactorySessionsResponse on stdout.",
+            "canonicalEnglish": "List factory sessions for the requested scope.\n\nlive returns workspace sessions kept open by the running host. persisted returns eligible durable Factory Sessions, including terminal and failed-with-partial sessions, from the deterministic provider loopback. all returns both live workspace sessions and eligible durable Factory Sessions.\n\nEach persisted row's sessionId is the canonical identity for GET /factory-sessions/{session_id} and `you session show`. Human output prints the legacy live-session table for workspace rows and a durable Factory Session table with status, source identity, result availability, progress, and actions. Use --json to emit ListFactorySessionsResponse on stdout.",
             "id": "you.session.list.description"
           },
           "title": {
@@ -6228,18 +6228,20 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Show one live factory session from GET /factory-sessions/{session_id}.\n\nHuman output uses FactorySession as the canonical runtime noun and prints orchestrator kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only as JavaScript shorthand. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped FactorySession payload and global --server to target the same factory API base URI as work list and factory show.",
+            "canonicalEnglish": "Show one live or persisted Factory Session from GET /factory-sessions/{session_id}.\n\nThe session id is resolved by the Factory Sessions service; use the exact sessionId returned by `you session list --scope persisted` for durable rows, including failed sessions with partial results. Human output uses FactorySession for live runtime projections and the durable Factory Session read model for persisted rows. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped response and global --server to target the same factory API base URI as work list and factory show.",
             "id": "you.session.show.description"
           },
           "title": {
-            "canonicalEnglish": "Show one live factory session",
+            "canonicalEnglish": "Show one live or persisted factory session",
             "id": "you.session.show.title"
           }
         },
         "examples": [
           "you session show",
           "you session show session-beta",
-          "you --json session show session-beta"
+          "you --json session show session-beta",
+          "you session list --scope persisted",
+          "you session show <sessionId-from-persisted-list>"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.show",
