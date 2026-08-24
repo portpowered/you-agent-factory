@@ -62,8 +62,8 @@ func mapActivationLifecycleError(err error) error {
 	if errors.As(err, &lifeErr) {
 		return &LifecycleError{
 			Kind:    LifecycleErrorKind(lifeErr.Kind),
-			Message: lifeErr.Message,
-			Cause:   lifeErr.Cause,
+			Message: lifeErr.Error(),
+			Cause:   errors.Unwrap(lifeErr),
 		}
 	}
 	return err
@@ -107,8 +107,8 @@ func mapProjectionError(err error) error {
 	if errors.As(err, &projErr) {
 		return &ProjectionError{
 			Kind:    ProjectionErrorKind(projErr.Kind),
-			Message: projErr.Message,
-			Cause:   projErr.Cause,
+			Message: projErr.Error(),
+			Cause:   errors.Unwrap(projErr),
 		}
 	}
 	return err

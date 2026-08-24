@@ -138,6 +138,86 @@ func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPI
 			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
 		}
 	}
+	commandLine, err := http.Get(enabledServer.URL() + "/debug/pprof/cmdline")
+	if err != nil {
+		t.Fatalf("enabled GET pprof cmdline: %v", err)
+	}
+	commandLineBody, err := io.ReadAll(commandLine.Body)
+	_ = commandLine.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof cmdline: %v", err)
+	}
+	if commandLine.StatusCode != http.StatusOK || len(commandLineBody) != 0 {
+		t.Fatalf("enabled pprof cmdline = (%d, %q), want the composed server's empty command-line edge", commandLine.StatusCode, commandLineBody)
+	}
+
+	for _, path := range []string{
+		"/debug/pprof/block",
+		"/debug/pprof/mutex",
+		"/debug/pprof/threadcreate",
+		"/debug/pprof/not-a-profile",
+	} {
+		response, err := http.Get(enabledServer.URL() + path)
+		if err != nil {
+			t.Fatalf("enabled GET %s: %v", path, err)
+		}
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read enabled GET %s: %v", path, err)
+		}
+		wantStatus := http.StatusOK
+		if path == "/debug/pprof/not-a-profile" {
+			wantStatus = http.StatusNotFound
+		}
+		if response.StatusCode != wantStatus || (wantStatus == http.StatusOK && len(body) == 0) {
+			t.Fatalf("enabled GET %s = (%d, body length %d), want status %d and a non-empty profile", path, response.StatusCode, len(body), wantStatus)
+		}
+	}
+
+	symbol, err := http.Get(enabledServer.URL() + "/debug/pprof/symbol?0x1+0x2")
+	if err != nil {
+		t.Fatalf("enabled GET pprof symbol: %v", err)
+	}
+	symbolBody, err := io.ReadAll(symbol.Body)
+	_ = symbol.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof symbol: %v", err)
+	}
+	if symbol.StatusCode != http.StatusOK || !strings.Contains(string(symbolBody), "num_symbols: 1") {
+		t.Fatalf("enabled pprof symbol = (%d, %q), want symbol response", symbol.StatusCode, symbolBody)
+	}
+
+	for _, path := range []string{
+		"/debug/pprof/heap?seconds=0",
+		"/debug/pprof/heap?seconds=1&debug=1",
+	} {
+		response, err := http.Get(enabledServer.URL() + path)
+		if err != nil {
+			t.Fatalf("enabled GET %s: %v", path, err)
+		}
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read enabled GET %s: %v", path, err)
+		}
+		if response.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "seconds") {
+			t.Fatalf("enabled GET %s = (%d, %q), want bounded bad-request diagnostic", path, response.StatusCode, body)
+		}
+	}
+
+	trace, err := http.Get(enabledServer.URL() + "/debug/pprof/trace?seconds=0")
+	if err != nil {
+		t.Fatalf("enabled GET pprof trace: %v", err)
+	}
+	traceBody, err := io.ReadAll(trace.Body)
+	_ = trace.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof trace: %v", err)
+	}
+	if trace.StatusCode != http.StatusOK || len(traceBody) == 0 {
+		t.Fatalf("enabled pprof trace = (%d, body length %d), want non-empty trace", trace.StatusCode, len(traceBody))
+	}
 	cpu, err := http.Get(enabledServer.URL() + "/debug/pprof/profile?seconds=1")
 	if err != nil {
 		t.Fatalf("enabled GET CPU profile: %v", err)
@@ -156,6 +236,61 @@ func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPI
 	}
 	if len(cpuProfile.SampleType) == 0 {
 		t.Fatalf("enabled live CPU profile = %+v, want sample types", cpuProfile)
+	}
+}
+
+// TestPlatformStarterWithListenerServesAndStopsThroughItsPublicLifecycle
+// proves the platform host can serve an already-bound listener and unwind it
+// on cancellation without relying on the injected functional server edge.
+func TestPlatformStarterWithListenerServesAndStopsThroughItsPublicLifecycle(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for platform starter: %v", err)
+	}
+
+	starter := platformhttpserver.StarterWithListener(listener, nil, func() []string {
+		return []string{"you", "server"}
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- starter(ctx, platformhttpserver.StartRequest{
+			Handler: http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/health" {
+					http.NotFound(writer, request)
+					return
+				}
+				writer.WriteHeader(http.StatusNoContent)
+			}),
+			OnBound: func(binding platformhttpserver.Binding) {
+				if binding.Port == 0 || binding.Host == "" {
+					t.Errorf("platform starter binding = %#v, want selected listener address", binding)
+				}
+			},
+		})
+	}()
+
+	response, err := http.Get("http://" + listener.Addr().String() + "/health")
+	if err != nil {
+		t.Fatalf("GET platform starter health: %v", err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("platform starter health status = %d, want %d", response.StatusCode, http.StatusNoContent)
+	}
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		if err != nil {
+			t.Fatalf("platform starter shutdown error = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for platform starter shutdown")
+	}
+	if err := starter(context.Background(), platformhttpserver.StartRequest{}); err == nil || !strings.Contains(err.Error(), "already used") {
+		t.Fatalf("second platform starter call error = %v, want already-used diagnostic", err)
 	}
 }
 

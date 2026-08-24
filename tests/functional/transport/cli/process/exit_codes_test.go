@@ -310,6 +310,35 @@ func TestBuiltCLIExitStatusForNonWorkerCommands(t *testing.T) {
 	}
 }
 
+// TestServerStopThroughProcessExecute proves the operator-facing stop command
+// uses the generated shutdown response and observes the composed server
+// listener closing through the public Process boundary.
+func TestServerStopThroughProcessExecute(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "server-stop-functional")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL(), "server", "stop",
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(server stop) error = %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if !strings.Contains(inputs.Stdout(), "Server stopped: "+server.URL()) {
+		t.Fatalf("server stop stdout = %q, want successful endpoint diagnostic", inputs.Stdout())
+	}
+	select {
+	case <-server.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("server stop returned before the hosted server process stopped")
+	}
+}
+
 func scaffoldCLIExitCodeFactory(t *testing.T) (string, string) {
 	t.Helper()
 
