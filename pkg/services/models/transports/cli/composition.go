@@ -299,16 +299,27 @@ func (service *rootService) genericCLIInput(
 		)
 	}
 	contentType := genericCLIInputContentType(slot)
-	if slot.Modality == modelinference.ModalityJSON && !json.Valid([]byte(value)) {
-		return modelinference.InferenceInput{}, genericCLIInputFailure(
-			modelinference.InvocationFailureClassInvalidParameter,
-			fmt.Sprintf("input slot %q must contain valid JSON", mapping.slot), mapping.slot, nil,
-		)
+	if slot.Modality == modelinference.ModalityJSON {
+		value = genericCLIJSONInputValue(value)
+		if !json.Valid([]byte(value)) {
+			return modelinference.InferenceInput{}, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("input slot %q must contain valid JSON", mapping.slot), mapping.slot, nil,
+			)
+		}
 	}
 	return modelinference.InferenceInput{
 		Name: mapping.slot, Modality: slot.Modality, ContentType: contentType,
 		MediaType: contentType, Content: value,
 	}, nil
+}
+
+func genericCLIJSONInputValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "json:") {
+		return strings.TrimSpace(strings.TrimPrefix(trimmed, "json:"))
+	}
+	return value
 }
 
 func genericCLIInputFailure(
