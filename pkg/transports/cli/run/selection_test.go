@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -14,6 +15,19 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
+
+func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) {
+	t.Parallel()
+
+	_, err := prepareCanonicalSessionIDForRun(RunConfig{})
+	if err == nil {
+		t.Fatal("prepareCanonicalSessionIDForRun() error = nil, want missing-generator diagnostic")
+	}
+	const want = "canonical Factory Session ID generator is required"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want %q", err, want)
+	}
+}
 
 func TestSplitFlagTerminatorPreservesCanonicalRunTokenization(t *testing.T) {
 	args := []string{"--named", "alpha", "input", "--", "--named", "positional"}
