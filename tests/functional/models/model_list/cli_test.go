@@ -165,3 +165,88 @@ func TestProcessModelsInspect_ReturnsHumanReadableDetail(t *testing.T) {
 		}
 	}
 }
+
+func TestProcessModelsRemoteFailuresExposeSafeDiagnosticsAndHTTPMetadata(t *testing.T) {
+	tests := []struct {
+		name       string
+		command    []string
+		status     int
+		body       string
+		wantOutput []string
+		forbidden  []string
+	}{
+		{
+			name:    "typed list failure",
+			command: []string{"models", "list"},
+			status:  http.StatusServiceUnavailable,
+			body:    `{"code":"SERVICE_UNAVAILABLE","family":"SERVICE_UNAVAILABLE","message":"catalog temporarily unavailable"}`,
+			wantOutput: []string{
+				"SERVICE_UNAVAILABLE", "catalog temporarily unavailable",
+				"debug: http method=GET", "status=503",
+			},
+		},
+		{
+			name:    "malformed inspect success",
+			command: []string{"models", "inspect", "voice"},
+			status:  http.StatusOK,
+			body:    `{`,
+			wantOutput: []string{
+				"CLI_COMMAND_FAILED", "debug: http method=GET", "status=200",
+			},
+			forbidden: []string{"query-secret"},
+		},
+		{
+			name:    "malformed pull failure",
+			command: []string{"models", "pull", "voice"},
+			status:  http.StatusBadGateway,
+			body:    `upstream body=credential-secret`,
+			wantOutput: []string{
+				"CLI_COMMAND_FAILED", "debug: http method=POST", "status=502",
+			},
+			forbidden: []string{"credential-secret"},
+		},
+		{
+			name:       "remove success",
+			command:    []string{"models", "remove", "voice"},
+			status:     http.StatusOK,
+			body:       `{"modelName":"voice","outcome":"REMOVED","revision":"rev1","cachePath":"/tmp/voice","bytesRemoved":42}`,
+			wantOutput: []string{"voice", "REMOVED", `"bytesRemoved":42`},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if test.command[1] == "remove" && r.Method != http.MethodDelete {
+					t.Errorf("remove method = %s, want DELETE", r.Method)
+				}
+				w.WriteHeader(test.status)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			t.Cleanup(server.Close)
+
+			process := support.BuildProcess(t, serviceedges.Edges{})
+			args := []string{"you", "--json", "--debug", "--server", strings.TrimSuffix(server.URL, "/")}
+			args = append(args, test.command...)
+			inputs := support.FakeInputs(t.Context(), args)
+			err := process.Execute(inputs.Input)
+			if test.status >= http.StatusBadRequest || test.body == "{" {
+				if err == nil {
+					t.Fatalf("Process.Execute(%v) error = nil, want failure\nstdout=%s\nstderr=%s", test.command, inputs.Stdout(), inputs.Stderr())
+				}
+			} else if err != nil {
+				t.Fatalf("Process.Execute(%v) error = %v\nstdout=%s\nstderr=%s", test.command, err, inputs.Stdout(), inputs.Stderr())
+			}
+			combined := inputs.Stdout() + inputs.Stderr()
+			for _, want := range test.wantOutput {
+				if !strings.Contains(combined, want) {
+					t.Fatalf("models %s output missing %q:\n%s", test.name, want, combined)
+				}
+			}
+			for _, forbidden := range test.forbidden {
+				if strings.Contains(combined, forbidden) {
+					t.Fatalf("models %s output leaked %q:\n%s", test.name, forbidden, combined)
+				}
+			}
+		})
+	}
+}
