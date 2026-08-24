@@ -174,24 +174,6 @@ func (f *factoryImpl) CleanInvocationSnapshot(ctx context.Context) (factory.Clea
 	return cleanInvocationSnapshot(ctx, f.GetEngineStateSnapshot)
 }
 
-func runtimeWorkflowContext(cfg *runtimeConfig, sessionID string, supplied *workerexecution.Context) *workerexecution.Context {
-	if context := supplied.Clone(); context != nil {
-		if strings.TrimSpace(context.SessionID) == "" {
-			context.SessionID = strings.TrimSpace(sessionID)
-		}
-		return context
-	}
-	if cfg != nil {
-		if context := cfg.workflowContext.Clone(); context != nil {
-			if strings.TrimSpace(context.SessionID) == "" {
-				context.SessionID = strings.TrimSpace(sessionID)
-			}
-			return context
-		}
-	}
-	return &workerexecution.Context{SessionID: strings.TrimSpace(sessionID)}
-}
-
 type cleanInvocationSnapshotReader func(
 	context.Context,
 ) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)

@@ -196,8 +196,6 @@ func cloneRecordedTokenUsage(usage *workersessions.TokenUsage) *workersessions.T
 	return &clone
 }
 
-const detachedAgentRunTranscriptSummaryLimit = 160
-
 func recordDetachedAgentRunResponse(
 	cfg *runtimeConfig,
 	request workers.ExecuteRequest,
@@ -217,17 +215,20 @@ func recordDetachedAgentRunResponse(
 	}
 
 	transcript := make([]workers.AgentRunTranscriptEntry, 0, 3)
-	appendTranscriptEntry(&transcript, "system", request.Target.Prompt.SystemPrompt)
-	appendTranscriptEntry(&transcript, "user", request.Target.Prompt.UserMessage)
+	appendPromptTranscriptEntry(&transcript, "system", request.Target.Prompt.SystemPrompt)
+	appendPromptTranscriptEntry(&transcript, "user", request.Target.Prompt.UserMessage)
 	appendTranscriptEntry(&transcript, "assistant", primaryOutputText(result.Output.Primary))
 	safeDiagnostics := workers.SafeWorkDiagnosticsFromWorkDiagnostics(result.Diagnostics.ToWorkDiagnostics())
 	if safeDiagnostics == nil {
 		safeDiagnostics = &workers.SafeWorkDiagnostics{}
 	}
-	safeDiagnostics.AgentRun = &workers.SafeAgentRunDiagnostic{
-		ExecutionBehavior: workers.AgentRunExecutionBehavior,
-		Transcript:        transcript,
+	agentRun := safeDiagnostics.AgentRun
+	if agentRun == nil {
+		agentRun = &workers.SafeAgentRunDiagnostic{}
 	}
+	agentRun.ExecutionBehavior = workers.AgentRunExecutionBehavior
+	agentRun.Transcript = transcript
+	safeDiagnostics.AgentRun = agentRun
 	diagnostics, err := workers.SafeWorkDiagnosticsEventPayload(safeDiagnostics)
 	if err != nil {
 		return
@@ -291,22 +292,4 @@ func runtimeRequestUsesAgentRun(cfg *runtimeConfig, request workers.ExecuteReque
 	}
 	workstation, found := lookup.Workstation(strings.TrimSpace(request.Target.WorkstationName))
 	return found && workstation != nil && interfaces.IsAgentRunWorkstationType(workstation.Type)
-}
-
-func appendTranscriptEntry(
-	transcript *[]workers.AgentRunTranscriptEntry,
-	role string,
-	content string,
-) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return
-	}
-	if len(content) > detachedAgentRunTranscriptSummaryLimit {
-		content = content[:detachedAgentRunTranscriptSummaryLimit] + "..."
-	}
-	*transcript = append(*transcript, workers.AgentRunTranscriptEntry{
-		Role:    role,
-		Summary: content,
-	})
 }
