@@ -25,6 +25,7 @@ type InvocationRequest struct {
 	DisableDefaultRecording bool
 	HomeDir                 string
 	RecordingTargetPlanner  recordings.LiveRecordingTargetPlanner
+	CanonicalSessionID      string
 	ReportedSessionID       string
 }
 
@@ -79,8 +80,9 @@ func (defaultAdapter) ResolveRecordPathWithContext(
 		reportedSessionID = DefaultReportedFactorySessionID
 	}
 	target, err := request.RecordingTargetPlanner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
-		HomeDir:           request.HomeDir,
-		ReportedSessionID: reportedSessionID,
+		HomeDir:            request.HomeDir,
+		CanonicalSessionID: request.CanonicalSessionID,
+		ReportedSessionID:  reportedSessionID,
 	})
 	if err != nil {
 		if resumePath != "" {

@@ -365,31 +365,24 @@ func (a *Assembly) Complete(
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
-	sessionID := strings.TrimSpace(factorySessionID)
-	if sessionID == "" {
-		sessionID = factorysessions.DefaultSessionID
-	}
-	isDefault := sessionID == factorysessions.DefaultSessionID
-	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
-	if isDefault {
-		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
-	}
+	identity := selectCompletionSessionIdentity(factorySessionID, startupSpec)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
-	session := livesession.New(
-		sessionID,
+	session := livesession.NewWithRuntimeID(
+		identity.id,
 		startupRuntime.Directory(),
 		startupRuntime.FolderDirectory(),
 		startupRuntime.LoadedRuntimeConfig().RuntimeBaseDir(),
-		target,
+		identity.target,
 		&runtimebinding.SessionState{Instance: startupRuntime, Spec: &startupSpec},
-		isDefault,
+		identity.isDefault,
 		filepath.Base(startupRuntime.FolderDirectory()),
 		clock,
 		a.sessionIDs,
 		a.eventIDs,
+		identity.runtimeID,
 	)
 	if session == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
@@ -474,11 +467,35 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, err
 	}
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
-	a.registerDetachedGateway(sessionID, gateway)
+	a.registerDetachedGateway(identity.id, gateway)
 	// The per-runtime gateway is returned to the operation caller. The
 	// process-scoped assembly keeps its original stable service slot so
 	// concurrent session completions cannot replace or race the shared root.
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
+}
+
+type completionSessionIdentity struct {
+	id        string
+	isDefault bool
+	target    factorysessions.TargetRef
+	runtimeID string
+}
+
+func selectCompletionSessionIdentity(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) completionSessionIdentity {
+	sessionID := strings.TrimSpace(factorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	isDefault := sessionID == factorysessions.DefaultSessionID
+	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
+	if isDefault {
+		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
+	}
+	runtimeID := ""
+	if isDefault && livesession.IsUUIDID(startupSpec.SessionID) {
+		runtimeID = strings.TrimSpace(startupSpec.SessionID)
+	}
+	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
 }
 
 type definitionHost struct {

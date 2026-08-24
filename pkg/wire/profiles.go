@@ -73,10 +73,12 @@ func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {
 	}
 }
 
-func provideLiveRecordingTargetPlanner() recordings.LiveRecordingTargetPlanner {
+func provideLiveRecordingTargetPlanner(
+	reserver runtimeartifact.Reserver,
+) recordings.LiveRecordingTargetPlanner {
 	return recordingswire.NewLiveRecordingTargetPlanner(
 		platformclock.Real{},
-		uuid.NewString,
+		reserver,
 		filepath.Join,
 	)
 }
@@ -86,11 +88,12 @@ func provideCLIRunDefaults(
 	recordingsCLI recordingscli.Adapter,
 ) runcli.RunConfig {
 	return runcli.RunConfig{
-		RuntimeLogConfig:       logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig:   platformmetrics.DefaultRuntimeMetricsConfig(),
-		RecordingTargetPlanner: recordingTargets,
-		RecordingsCLI:          recordingsCLI,
-		Clock:                  platformclock.Real{},
+		RuntimeLogConfig:            logging.DefaultRuntimeLogConfig(),
+		RuntimeMetricsConfig:        platformmetrics.DefaultRuntimeMetricsConfig(),
+		RecordingTargetPlanner:      recordingTargets,
+		CanonicalSessionIDGenerator: uuid.NewString,
+		RecordingsCLI:               recordingsCLI,
+		Clock:                       platformclock.Real{},
 	}
 }
 

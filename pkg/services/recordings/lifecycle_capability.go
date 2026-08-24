@@ -105,17 +105,19 @@ type RecordingLifecycleResult struct {
 
 // BeginRecordingRequest selects and binds one recording lifecycle. Disabled
 // requests are intentionally inert: they do not select a target or allocate
-// an identity. Artifact takes precedence over HomeDir/ReportedSessionID
+// an identity. Artifact takes precedence over HomeDir/CanonicalSessionID/
+// ReportedSessionID
 // generation; Artifact does not prescribe a file path, datastore key,
 // writer, or persistence implementation.
 type BeginRecordingRequest struct {
-	Enabled           bool
-	RecordingID       LifecycleRecordingID
-	Scope             LifecycleScope
-	Artifact          LifecycleArtifactReference
-	HomeDir           string
-	ReportedSessionID string
-	FlushInterval     time.Duration
+	Enabled            bool
+	RecordingID        LifecycleRecordingID
+	Scope              LifecycleScope
+	Artifact           LifecycleArtifactReference
+	HomeDir            string
+	CanonicalSessionID string
+	ReportedSessionID  string
+	FlushInterval      time.Duration
 }
 
 // BindLifecycleRequest identifies the Factory Session and opaque artifact

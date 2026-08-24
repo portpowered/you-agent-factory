@@ -62,7 +62,7 @@ func TestReserverCreatesDatedPathAndAvoidsExistingArtifact(t *testing.T) {
 	}
 }
 
-func TestReserverReserveNamedUsesUTCNameAndOrderedCollisions(t *testing.T) {
+func TestReserverReserveNamedWithCollisionUsesUTCNameAndOrderedCollisions(t *testing.T) {
 	reserver, err := NewReserver(localFileSystem{})
 	if err != nil {
 		t.Fatalf("NewReserver: %v", err)
@@ -70,23 +70,23 @@ func TestReserverReserveNamedUsesUTCNameAndOrderedCollisions(t *testing.T) {
 	root := t.TempDir()
 	at := time.Date(2026, time.May, 29, 23, 45, 3, 0, time.FixedZone("PDT", -7*60*60))
 
-	first, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	first, err := reserver.ReserveNamedWithCollision(root, at, "session", ".jsonl")
 	if err != nil {
-		t.Fatalf("ReserveNamed first: %v", err)
+		t.Fatalf("ReserveNamedWithCollision first: %v", err)
 	}
 	if err := os.WriteFile(first, []byte("first"), 0o644); err != nil {
 		t.Fatalf("WriteFile(first): %v", err)
 	}
-	second, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	second, err := reserver.ReserveNamedWithCollision(root, at, "session", ".jsonl")
 	if err != nil {
-		t.Fatalf("ReserveNamed second: %v", err)
+		t.Fatalf("ReserveNamedWithCollision second: %v", err)
 	}
 	if err := os.WriteFile(second, []byte("second"), 0o644); err != nil {
 		t.Fatalf("WriteFile(second): %v", err)
 	}
-	third, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	third, err := reserver.ReserveNamedWithCollision(root, at, "session", ".jsonl")
 	if err != nil {
-		t.Fatalf("ReserveNamed third: %v", err)
+		t.Fatalf("ReserveNamedWithCollision third: %v", err)
 	}
 
 	wantParent := filepath.Join(root, "2026", "05", "30")
@@ -120,7 +120,7 @@ func assertNamedReservationPaths(t *testing.T, got, want []string) {
 	}
 }
 
-func TestReserverReserveNamedReturnsNonCollisionFailures(t *testing.T) {
+func TestReserverReserveNamedWithCollisionReturnsNonCollisionFailures(t *testing.T) {
 	mkdirErr := errors.New("mkdir failed")
 	openErr := errors.New("open failed")
 	closeErr := errors.New("close failed")
@@ -157,7 +157,7 @@ func TestReserverReserveNamedReturnsNonCollisionFailures(t *testing.T) {
 			}
 			_, err = reserver.ReserveNamed(t.TempDir(), time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC), "session", ".jsonl")
 			if !errors.Is(err, test.wantErr) {
-				t.Fatalf("ReserveNamed error = %v, want %v", err, test.wantErr)
+				t.Fatalf("ReserveNamedWithCollision error = %v, want %v", err, test.wantErr)
 			}
 			if len(test.fileSystem.opened) != test.wantOpens {
 				t.Fatalf("OpenFile calls = %d, want %d", len(test.fileSystem.opened), test.wantOpens)
@@ -166,7 +166,7 @@ func TestReserverReserveNamedReturnsNonCollisionFailures(t *testing.T) {
 	}
 }
 
-func TestReserverReserveNamedExhaustsAtCollisionBound(t *testing.T) {
+func TestReserverReserveNamedWithCollisionExhaustsAtCollisionBound(t *testing.T) {
 	filesystem := &namedReservationExhaustionFileSystem{}
 	reserver, err := NewReserver(filesystem)
 	if err != nil {
@@ -175,12 +175,12 @@ func TestReserverReserveNamedExhaustsAtCollisionBound(t *testing.T) {
 
 	root := t.TempDir()
 	at := time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC)
-	path, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	path, err := reserver.ReserveNamedWithCollision(root, at, "session", ".jsonl")
 	if !errors.Is(err, ErrNamedReservationExhausted) {
-		t.Fatalf("ReserveNamed error = %v, want ErrNamedReservationExhausted", err)
+		t.Fatalf("ReserveNamedWithCollision error = %v, want ErrNamedReservationExhausted", err)
 	}
 	if path != "" {
-		t.Fatalf("ReserveNamed path = %q, want empty path", path)
+		t.Fatalf("ReserveNamedWithCollision path = %q, want empty path", path)
 	}
 	if len(filesystem.opened) != maxPathCollisions {
 		t.Fatalf("OpenFile calls = %d, want %d", len(filesystem.opened), maxPathCollisions)
@@ -201,7 +201,7 @@ func TestReserverReserveNamedExhaustsAtCollisionBound(t *testing.T) {
 	}
 }
 
-func TestReserverReserveNamedSharesCalendarDirectoryWithLogsAndMetrics(t *testing.T) {
+func TestReserverReserveNamedWithCollisionSharesCalendarDirectoryWithLogsAndMetrics(t *testing.T) {
 	root := t.TempDir()
 	at := time.Date(2026, time.May, 29, 23, 45, 3, 0, time.FixedZone("PDT", -7*60*60))
 	reserver, err := NewReserver(localFileSystem{})
@@ -211,7 +211,7 @@ func TestReserverReserveNamedSharesCalendarDirectoryWithLogsAndMetrics(t *testin
 
 	namedPath, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
 	if err != nil {
-		t.Fatalf("ReserveNamed: %v", err)
+		t.Fatalf("ReserveNamedWithCollision: %v", err)
 	}
 	logPath := internalartifact.RuntimeArtifactPath(root, at, internalartifact.RuntimeArtifactKindLog, "runtime")
 	metricsPath := internalartifact.RuntimeArtifactPath(root, at, internalartifact.RuntimeArtifactKindMetrics, "session-runtime")

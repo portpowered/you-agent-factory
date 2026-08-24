@@ -127,8 +127,9 @@ func (service *Service) startNewRecording(
 			return recordings.StartRecordingResult{}, recordings.ErrMissingRecordingTarget
 		}
 		target, err := service.targets.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
-			HomeDir:           request.Target.HomeDir,
-			ReportedSessionID: request.Target.ReportedSessionID,
+			HomeDir:            request.Target.HomeDir,
+			CanonicalSessionID: request.Target.CanonicalSessionID,
+			ReportedSessionID:  request.Target.ReportedSessionID,
 		})
 		if err != nil {
 			return recordings.StartRecordingResult{}, err

@@ -85,7 +85,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	submittedFilePathInspector := provideWorkSubmittedFilePathInspector(edges2)
 	invocationInputPreparation := work.NewInvocationInputPreparation(submittedFileReader, submittedFilePathInspector)
 	loggerBuilder := provideTerminalLoggerBuilder()
-	v5 := provideLiveRecordingTargetPlanner()
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		return nil, err
+	}
+	v5 := provideLiveRecordingTargetPlanner(reserver)
 	adapter := provideRecordingsCLIAdapter()
 	v6 := provideCLIRunDefaults(v5, adapter)
 	batchInputFileSystem := provideBatchInputFileSystem()
@@ -175,10 +179,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	runtimeLoggerFactory := provideRuntimeLoggerFactory()
 	wireRuntimeArtifactClock := provideRuntimeArtifactClock()
 	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
-	reserver, err := provideRuntimeArtifactPathReserver()
-	if err != nil {
-		return nil, err
-	}
 	factoryRuntimeLogOwner, err := provideRuntimeLogOwner(logger, wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
 	if err != nil {
 		return nil, err

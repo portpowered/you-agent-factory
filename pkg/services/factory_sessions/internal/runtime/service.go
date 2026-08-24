@@ -325,7 +325,7 @@ func (s *Service) Register(registration Registration) string {
 }
 
 func (s *Service) newLiveSession(registration Registration, sessionID string, isDefault bool) *livesession.LiveSession {
-	session := livesession.New(
+	session := livesession.NewWithRuntimeID(
 		sessionID,
 		strings.TrimSpace(registration.FactoryDir),
 		strings.TrimSpace(registration.FolderPath),
@@ -337,6 +337,7 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 		s.clock,
 		s.sessionIDs,
 		s.eventIDs,
+		registration.RuntimeFactorySessionID,
 	)
 	if session == nil {
 		return nil
