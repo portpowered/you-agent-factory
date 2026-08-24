@@ -2,11 +2,14 @@ package harness
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+var errNoFileAccessEvents = errors.New("strace output contained no file-access events")
 
 type traceRecord struct {
 	line       string
@@ -47,10 +50,21 @@ func auditTrace(repoRoot, initialCWD string, data []byte) (*SourceTreeReadError,
 	states := make(map[int]*traceState)
 	pending := make(map[int]traceRecord)
 	events := 0
+	unknownExitArtifact := false
+	processExited := false
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
 	for scanner.Scan() {
-		record, ok := parseTraceRecord(scanner.Text())
+		line := scanner.Text()
+		if isStraceUnknownExitArtifact(line) {
+			unknownExitArtifact = true
+			continue
+		}
+		if isStraceProcessExit(line) {
+			processExited = true
+			continue
+		}
+		record, ok := parseTraceRecord(line)
 		if !ok {
 			continue
 		}
@@ -58,7 +72,7 @@ func auditTrace(repoRoot, initialCWD string, data []byte) (*SourceTreeReadError,
 		if record.resumed {
 			unfinished, ok := pending[record.pid]
 			if !ok {
-				continue
+				return nil, fmt.Errorf("strace resumed %s for pid %d without an unfinished record", record.name, record.pid)
 			}
 			delete(pending, record.pid)
 			record.name = unfinished.name
@@ -87,13 +101,30 @@ func auditTrace(repoRoot, initialCWD string, data []byte) (*SourceTreeReadError,
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read strace output: %w", err)
 	}
+	if unknownExitArtifact && !processExited {
+		return nil, fmt.Errorf("strace output contained an unknown unfinished syscall without a process exit")
+	}
 	if len(pending) > 0 {
 		return nil, fmt.Errorf("strace output ended with unfinished file-access syscalls")
 	}
 	if events == 0 {
-		return nil, fmt.Errorf("strace output contained no file-access events")
+		return nil, errNoFileAccessEvents
 	}
 	return nil, nil
+}
+
+// strace can emit this synthetic record when a traced thread dies immediately
+// after syscall entry. With -ff the record is isolated to that thread's log;
+// it has no syscall name or path to audit and is not a real file-access event.
+// A genuinely unfinished named syscall remains fail-closed below.
+func isStraceUnknownExitArtifact(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.Contains(trimmed, "???(") && strings.Contains(trimmed, "<unfinished ...>")
+}
+
+func isStraceProcessExit(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.Contains(trimmed, "+++ exited") || strings.Contains(trimmed, "+++ killed")
 }
 
 func parseTraceRecord(line string) (traceRecord, bool) {

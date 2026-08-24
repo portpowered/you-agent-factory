@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -156,6 +157,56 @@ func TestAuditTracePairsPaddedResumedRecords(t *testing.T) {
 	}
 	if violation != nil {
 		t.Fatalf("audit reported an external read: %v", violation)
+	}
+}
+
+func TestAuditTraceRejectsUnpairedUnknownRecord(t *testing.T) {
+	_, err := auditTrace(t.TempDir(), t.TempDir(), []byte("123 ???( <unfinished ...>\n"))
+	if err == nil || !strings.Contains(err.Error(), "without a process exit") {
+		t.Fatalf("audit error = %v, want an incomplete-trace error", err)
+	}
+}
+
+func TestAuditLogFilesCollectsOnlyPerProcessOutputs(t *testing.T) {
+	runtimeDir := t.TempDir()
+	prefix := filepath.Join(runtimeDir, "file-access.strace")
+	for _, name := range []string{"file-access.strace.12", "file-access.strace.3"} {
+		if err := os.WriteFile(filepath.Join(runtimeDir, name), nil, 0o600); err != nil {
+			t.Fatalf("write trace file: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(runtimeDir, "unrelated.log"), nil, 0o600); err != nil {
+		t.Fatalf("write unrelated file: %v", err)
+	}
+	paths, err := auditLogFiles(prefix)
+	if err != nil {
+		t.Fatalf("audit log files: %v", err)
+	}
+	want := []string{filepath.Join(runtimeDir, "file-access.strace.12"), filepath.Join(runtimeDir, "file-access.strace.3")}
+	if !reflect.DeepEqual(paths, want) {
+		t.Fatalf("audit log files = %#v, want %#v", paths, want)
+	}
+}
+
+func TestCheckAuditAllowsEmptyPerProcessOutput(t *testing.T) {
+	repoRoot := t.TempDir()
+	workDir := t.TempDir()
+	runtimeDir := t.TempDir()
+	prefix := filepath.Join(runtimeDir, "file-access.strace")
+	if err := os.WriteFile(prefix+".12", []byte("12 ???( <unfinished ...>\n12 +++ exited with 0 +++\n"), 0o600); err != nil {
+		t.Fatalf("write empty trace: %v", err)
+	}
+	externalFile := filepath.Join(workDir, "factory.json")
+	trace := fmt.Sprintf("3 openat(AT_FDCWD, %q, O_RDONLY) = 3<%s>\n", filepath.Base(externalFile), externalFile)
+	if err := os.WriteFile(prefix+".3", []byte(trace), 0o600); err != nil {
+		t.Fatalf("write file trace: %v", err)
+	}
+	i := &Invocation{
+		harness: &Harness{repoRoot: repoRoot},
+		env:     InvocationEnvironment{WorkingDirectory: workDir},
+	}
+	if err := i.checkAudit(prefix, Result{}); err != nil {
+		t.Fatalf("check audit: %v", err)
 	}
 }
 

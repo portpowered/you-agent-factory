@@ -222,7 +222,7 @@ func (i *Invocation) Run(ctx context.Context, args ...string) (Result, error) {
 		return Result{}, err
 	}
 	auditLog := filepath.Join(i.env.RuntimeDirectory, "file-access.strace")
-	cmdArgs := []string{"-f", "-yy", "-e", "trace=%file", "-o", auditLog, binary}
+	cmdArgs := []string{"-ff", "-yy", "-e", "trace=%file", "-o", auditLog, binary}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, i.harness.tracer, cmdArgs...)
 	cmd.Dir = i.env.WorkingDirectory
@@ -255,18 +255,52 @@ func (i *Invocation) Run(ctx context.Context, args ...string) (Result, error) {
 }
 
 func (i *Invocation) checkAudit(auditLog string, result Result) error {
-	data, err := os.ReadFile(auditLog)
+	logs, err := auditLogFiles(auditLog)
 	if err != nil {
-		return fmt.Errorf("%w: read strace output: %v; stderr=%q", ErrAuditUnavailable, err, strings.TrimSpace(result.Stderr))
+		return fmt.Errorf("%w: find strace output: %v; stderr=%q", ErrAuditUnavailable, err, strings.TrimSpace(result.Stderr))
 	}
-	violation, err := auditTrace(i.harness.repoRoot, i.env.WorkingDirectory, data)
-	if err != nil {
-		return fmt.Errorf("%w: %v; stderr=%q", ErrAuditUnavailable, err, strings.TrimSpace(result.Stderr))
+	sawFileAccess := false
+	for _, logPath := range logs {
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			return fmt.Errorf("%w: read strace output %s: %v; stderr=%q", ErrAuditUnavailable, logPath, err, strings.TrimSpace(result.Stderr))
+		}
+		violation, err := auditTrace(i.harness.repoRoot, i.env.WorkingDirectory, data)
+		if errors.Is(err, errNoFileAccessEvents) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %v; stderr=%q", ErrAuditUnavailable, err, strings.TrimSpace(result.Stderr))
+		}
+		sawFileAccess = true
+		if violation != nil {
+			return violation
+		}
 	}
-	if violation != nil {
-		return violation
+	if !sawFileAccess {
+		return fmt.Errorf("%w: %v; stderr=%q", ErrAuditUnavailable, errNoFileAccessEvents, strings.TrimSpace(result.Stderr))
 	}
 	return nil
+}
+
+func auditLogFiles(prefix string) ([]string, error) {
+	directory := filepath.Dir(prefix)
+	filePrefix := filepath.Base(prefix) + "."
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), filePrefix) {
+			continue
+		}
+		paths = append(paths, filepath.Join(directory, entry.Name()))
+	}
+	if len(paths) == 0 {
+		return nil, errors.New("strace produced no per-process output files")
+	}
+	return paths, nil
 }
 
 func exitCode(cmd *exec.Cmd, runErr error) int {
