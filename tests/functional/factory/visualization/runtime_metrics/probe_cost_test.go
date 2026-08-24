@@ -28,9 +28,15 @@ const (
 	probeCostExpectedAmount   = "21.25"
 	probeCostExpectedInput    = int64(1_000_000)
 	probeCostExpectedOutput   = int64(2_000_000)
-	probeCostTimeout          = 30 * time.Second
-	probeCostProcessStopWait  = 5 * time.Second
-	probeCostEnableEnv        = "INFINITE_YOU_ENABLE_PROBE_COST"
+	// The probe has no in-process readiness hook: it deliberately starts the
+	// installed CLI and observes its public server. This is an overall process
+	// safety bound, not a replacement for the terminal-status observation.
+	probeCostTimeout = 30 * time.Second
+	// The replay server uses --continuously so the customer-facing query can
+	// run after replay reaches terminal state. This is the bounded cleanup
+	// grace period before terminating that deliberately long-lived process.
+	probeCostProcessStopWait = 5 * time.Second
+	probeCostEnableEnv       = "INFINITE_YOU_ENABLE_PROBE_COST"
 )
 
 const probeCostFalsifier = "reject UNPRICED, NO_USAGE, zero/null known_cost, missing measured row, or provider/model drift"
@@ -121,6 +127,23 @@ type probeCostResult struct {
 	Stderr            string
 }
 
+type probeCostFixture struct {
+	workspacePath string
+	homePath      string
+	fixturePath   string
+}
+
+type probeCostReplay struct {
+	ctx           context.Context
+	cancel        context.CancelFunc
+	serverURL     string
+	workspacePath string
+	environment   []string
+	process       *probeCostProcess
+	serverStdout  *bytes.Buffer
+	serverStderr  *bytes.Buffer
+}
+
 func runProbeCost(
 	t *testing.T,
 	binaryPath string,
@@ -133,106 +156,37 @@ func runProbeCost(
 		Falsifier: probeCostFalsifier,
 	}
 
-	probeRoot := t.TempDir()
-	workspacePath := filepath.Join(probeRoot, "workspace")
-	homePath := filepath.Join(probeRoot, "home")
-	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
-		result.Falsifier = fmt.Sprintf("prepare isolated workspace: %v", err)
-		return result
-	}
-	if err := os.MkdirAll(homePath, 0o755); err != nil {
-		result.Falsifier = fmt.Sprintf("prepare isolated home: %v", err)
-		return result
-	}
-
-	fixture, err := os.ReadFile(sourceFixturePath)
+	fixture, err := prepareProbeCostFixture(t, sourceFixturePath, mutate)
 	if err != nil {
-		result.Falsifier = fmt.Sprintf("read checked-in fixture: %v", err)
-		return result
-	}
-	if mutate != nil {
-		fixture, err = mutate(fixture)
-		if err != nil {
-			result.Falsifier = fmt.Sprintf("prepare isolated fixture copy: %v", err)
-			return result
-		}
-	}
-	fixturePath := filepath.Join(workspacePath, "probe.replay.json")
-	if err := os.WriteFile(fixturePath, fixture, 0o644); err != nil {
-		result.Falsifier = fmt.Sprintf("write isolated fixture copy: %v", err)
+		result.Falsifier = err.Error()
 		return result
 	}
 
-	port, err := reserveProbeCostPort()
+	replay, err := startProbeCostReplay(t, binaryPath, fixture)
 	if err != nil {
-		result.Falsifier = fmt.Sprintf("reserve isolated loopback port: %v", err)
+		result.Falsifier = err.Error()
 		return result
 	}
-	serverURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	commandArgs := []string{
-		"run",
-		"--dir", workspacePath,
-		"--replay", fixturePath,
-		"--no-record",
-		"--with-server",
-		"--server", serverURL,
-		"--continuously",
-		"--quiet",
-	}
-	result.Command = "you " + strings.Join(commandArgs, " ") + " ; you --json --server " + serverURL + " metrics costs"
-
-	probeContext, cancel := context.WithTimeout(t.Context(), probeCostTimeout)
-	defer cancel()
-	serverStdout := &bytes.Buffer{}
-	serverStderr := &bytes.Buffer{}
-	serverCommand := exec.CommandContext(probeContext, binaryPath, commandArgs...)
-	serverCommand.Dir = workspacePath
-	serverCommand.Env = probeCostEnvironment(homePath)
-	serverCommand.Stdout = serverStdout
-	serverCommand.Stderr = serverStderr
-	if err := serverCommand.Start(); err != nil {
-		result.Falsifier = fmt.Sprintf("start installed binary: %v", err)
-		result.Stderr = serverStderr.String()
-		return result
-	}
-	running := newProbeCostProcess(serverCommand)
-	defer running.Stop(cancel)
+	defer replay.stop()
+	result.Command = replay.command(fixture.fixturePath)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	status, err := waitForProbeCostTerminal(probeContext, client, serverURL, running)
+	status, err := waitForProbeCostTerminal(replay.ctx, client, replay.serverURL, replay.process)
 	if err != nil {
 		result.Falsifier = fmt.Sprintf("replay did not reach terminal public status: %v", err)
-		result.Stdout = serverStdout.String()
-		result.Stderr = serverStderr.String()
+		result.Stdout, result.Stderr = replay.serverOutput()
 		return result
 	}
 	if status.Categories.Terminal == 0 || status.Categories.Failed != 0 {
 		result.Falsifier = fmt.Sprintf("replay status terminal=%d failed=%d", status.Categories.Terminal, status.Categories.Failed)
-		result.Stdout = serverStdout.String()
-		result.Stderr = serverStderr.String()
+		result.Stdout, result.Stderr = replay.serverOutput()
 		return result
 	}
 
-	metricsArgs := []string{"--json", "--server", serverURL, "metrics", "costs"}
-	metricsCommand := exec.CommandContext(probeContext, binaryPath, metricsArgs...)
-	metricsCommand.Dir = workspacePath
-	metricsCommand.Env = probeCostEnvironment(homePath)
-	metricsStdout := &bytes.Buffer{}
-	metricsStderr := &bytes.Buffer{}
-	metricsCommand.Stdout = metricsStdout
-	metricsCommand.Stderr = metricsStderr
-	if err := metricsCommand.Run(); err != nil {
-		result.Falsifier = fmt.Sprintf("%s exited with error: %v", "you --json metrics costs", err)
-		result.Stdout = metricsStdout.String()
-		result.Stderr = metricsStderr.String()
-		return result
-	}
-	result.Stdout = metricsStdout.String()
-	result.Stderr = metricsStderr.String()
-
-	var report generatedclient.CostsReport
-	if err := json.Unmarshal([]byte(strings.TrimSpace(result.Stdout)), &report); err != nil {
-		result.Falsifier = fmt.Sprintf("decode metrics costs JSON: %v", err)
+	report, stdout, stderr, err := queryProbeCostReport(replay, binaryPath)
+	result.Stdout, result.Stderr = stdout, stderr
+	if err != nil {
+		result.Falsifier = err.Error()
 		return result
 	}
 	result.ObservedStatus, result.ObservedKnownCost, result.Provider, result.Model = observeProbeCostReport(report)
@@ -243,6 +197,111 @@ func runProbeCost(
 	}
 	result.Verdict = "PASS"
 	return result
+}
+
+func prepareProbeCostFixture(
+	t *testing.T,
+	sourceFixturePath string,
+	mutate func([]byte) ([]byte, error),
+) (probeCostFixture, error) {
+	t.Helper()
+	probeRoot := t.TempDir()
+	fixture := probeCostFixture{
+		workspacePath: filepath.Join(probeRoot, "workspace"),
+		homePath:      filepath.Join(probeRoot, "home"),
+	}
+	for _, path := range []string{fixture.workspacePath, fixture.homePath} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			return probeCostFixture{}, fmt.Errorf("prepare isolated directory %s: %v", path, err)
+		}
+	}
+
+	contents, err := os.ReadFile(sourceFixturePath)
+	if err != nil {
+		return probeCostFixture{}, fmt.Errorf("read checked-in fixture: %v", err)
+	}
+	if mutate != nil {
+		contents, err = mutate(contents)
+		if err != nil {
+			return probeCostFixture{}, fmt.Errorf("prepare isolated fixture copy: %v", err)
+		}
+	}
+	fixture.fixturePath = filepath.Join(fixture.workspacePath, "probe.replay.json")
+	if err := os.WriteFile(fixture.fixturePath, contents, 0o644); err != nil {
+		return probeCostFixture{}, fmt.Errorf("write isolated fixture copy: %v", err)
+	}
+	return fixture, nil
+}
+
+func startProbeCostReplay(t *testing.T, binaryPath string, fixture probeCostFixture) (*probeCostReplay, error) {
+	t.Helper()
+	port, err := reserveProbeCostPort()
+	if err != nil {
+		return nil, fmt.Errorf("reserve isolated loopback port: %v", err)
+	}
+	serverURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	commandArgs := []string{
+		"run", "--dir", fixture.workspacePath, "--replay", fixture.fixturePath,
+		"--no-record", "--with-server", "--server", serverURL, "--continuously", "--quiet",
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), probeCostTimeout)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	command := exec.CommandContext(ctx, binaryPath, commandArgs...)
+	command.Dir = fixture.workspacePath
+	command.Env = probeCostEnvironment(fixture.homePath)
+	command.Stdout = stdout
+	command.Stderr = stderr
+	if err := command.Start(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("start installed binary: %v", err)
+	}
+	return &probeCostReplay{
+		ctx:           ctx,
+		cancel:        cancel,
+		serverURL:     serverURL,
+		workspacePath: fixture.workspacePath,
+		environment:   probeCostEnvironment(fixture.homePath),
+		process:       newProbeCostProcess(command),
+		serverStdout:  stdout,
+		serverStderr:  stderr,
+	}, nil
+}
+
+func (replay *probeCostReplay) command(fixturePath string) string {
+	return fmt.Sprintf("you run --dir %s --replay %s --no-record --with-server --server %s --continuously --quiet ; you --json --server %s metrics costs",
+		filepath.Dir(fixturePath), fixturePath, replay.serverURL, replay.serverURL)
+}
+
+func (replay *probeCostReplay) serverOutput() (string, string) {
+	return replay.serverStdout.String(), replay.serverStderr.String()
+}
+
+func (replay *probeCostReplay) stop() {
+	// The replay server is intentionally long-lived so a second installed-binary
+	// command can query it after replay. There is no in-band shutdown event, and
+	// replacing this process cleanup with an edge mock would skip the OS boundary
+	// this probe exists to verify, so wait briefly before forcing termination.
+	replay.process.Stop(replay.cancel)
+}
+
+func queryProbeCostReport(replay *probeCostReplay, binaryPath string) (generatedclient.CostsReport, string, string, error) {
+	metricsArgs := []string{"--json", "--server", replay.serverURL, "metrics", "costs"}
+	command := exec.CommandContext(replay.ctx, binaryPath, metricsArgs...)
+	command.Dir = replay.workspacePath
+	command.Env = append([]string(nil), replay.environment...)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	command.Stdout = stdout
+	command.Stderr = stderr
+	if err := command.Run(); err != nil {
+		return generatedclient.CostsReport{}, stdout.String(), stderr.String(), fmt.Errorf("you --json metrics costs exited with error: %v", err)
+	}
+	var report generatedclient.CostsReport
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &report); err != nil {
+		return generatedclient.CostsReport{}, stdout.String(), stderr.String(), fmt.Errorf("decode metrics costs JSON: %v", err)
+	}
+	return report, stdout.String(), stderr.String(), nil
 }
 
 func logProbeCostVerdict(t *testing.T, result probeCostResult) {
@@ -348,6 +407,11 @@ func (process *probeCostProcess) ExitError() (bool, error) {
 	}
 }
 
+// Stop cleans up the deliberately long-lived --continuously replay process.
+// The public metrics query must run after terminal replay, so a deterministic
+// completion event cannot replace this shutdown path; the process boundary is
+// the behavior under test. Give graceful cancellation a bounded chance before
+// killing the child so a failed probe cannot leak a server into later tests.
 func (process *probeCostProcess) Stop(cancel context.CancelFunc) {
 	cancel()
 	select {
@@ -361,6 +425,10 @@ func (process *probeCostProcess) Stop(cancel context.CancelFunc) {
 	}
 }
 
+// waitForProbeCostTerminal observes readiness through the replay server's
+// customer-facing /status endpoint. The installed CLI exposes no readiness
+// channel, and replacing this poll with an edge mock would skip the OS/process
+// boundary that PROBE-COST and PROBE-OBS are required to verify.
 func waitForProbeCostTerminal(
 	ctx context.Context,
 	client *http.Client,
