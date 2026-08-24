@@ -29,6 +29,54 @@ func TestProbePinnedOmniProtocolRecordsMediaCapability(t *testing.T) {
 	}
 }
 
+func TestProbePinnedOmniProtocolUsesFixtureAcceptanceAndNarrowsCodec(t *testing.T) {
+	t.Parallel()
+
+	fixture := &recordingConformanceProbe{
+		accepted: map[models.Modality]bool{
+			models.ModalityAudio: true,
+			models.ModalityVideo: false,
+		},
+	}
+	evidence := ProbePinnedOmniProtocol(fixture)
+	if !evidence.AudioSupported || evidence.VideoSupported {
+		t.Fatalf("fixture capability = %#v, want audio accepted and video rejected", evidence)
+	}
+	if len(fixture.requests) != 2 {
+		t.Fatalf("conformance requests = %#v, want audio and video probes", fixture.requests)
+	}
+	if fixture.requests[0].Slot != "audio" || fixture.requests[0].ProtocolField != "Audios" ||
+		fixture.requests[0].MediaType != "audio/*" || fixture.requests[1].Slot != "video" ||
+		fixture.requests[1].ProtocolField != "Videos" || fixture.requests[1].MediaType != "video/*" {
+		t.Fatalf("conformance requests = %#v, want pinned audio/video field shapes", fixture.requests)
+	}
+
+	capability := CapabilityFromPinnedOmniProbe(evidence)
+	if !capability.Supported("audio") || capability.Supported("video") {
+		t.Fatalf("effective capability = %#v, want audio only", capability.Inputs)
+	}
+	codec, err := NewOmniCodec(&protocolFixture{response: PredictResponse{Text: "unused"}}, capability)
+	if err != nil {
+		t.Fatalf("NewOmniCodec: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:conformance")
+	if err != nil {
+		t.Fatalf("scope.Parse: %v", err)
+	}
+	_, err = codec.Encode(models.InvokeModelRequest{
+		Scope: scope, Holder: "conformance-test", Model: models.ModelReference{NameOrURI: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs: []models.InferenceInput{
+			{Name: "prompt", Modality: models.ModalityText, Content: "describe"},
+			{Name: "video", Modality: models.ModalityVideo, MediaType: "video/mp4", Content: "clip.mp4"},
+		},
+	})
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMediaCapability {
+		t.Fatalf("Encode error = %v, failure = %#v, want fixture-driven media rejection", err, failure)
+	}
+}
+
 func TestOmniCapabilityOperationNarrowsUnsupportedOptionalSlots(t *testing.T) {
 	t.Parallel()
 
@@ -182,6 +230,16 @@ type protocolFixture struct {
 	request  PredictRequest
 	response PredictResponse
 	calls    int
+}
+
+type recordingConformanceProbe struct {
+	requests []OmniConformanceRequest
+	accepted map[models.Modality]bool
+}
+
+func (probe *recordingConformanceProbe) Accepts(request OmniConformanceRequest) bool {
+	probe.requests = append(probe.requests, request)
+	return probe.accepted[request.Modality]
 }
 
 func (fixture *protocolFixture) Predict(_ context.Context, request PredictRequest) (PredictResponse, error) {

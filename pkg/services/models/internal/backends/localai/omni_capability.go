@@ -45,6 +45,30 @@ type OmniModalityCapability struct {
 	MediaTypes    []string
 }
 
+// OmniConformanceRequest is the private request given to the deterministic
+// pinned-protocol conformance fixture. It describes the exact field and media
+// shape that the pinned PredictOptions contract must accept; it does not
+// contain a live endpoint, model artifact, or generated LocalAI type.
+type OmniConformanceRequest struct {
+	ProtocolVersion  string
+	ProtocolRevision string
+	ProtocolPath     string
+	LocalAICommit    string
+	Slot             string
+	Modality         models.Modality
+	ProtocolField    string
+	MediaType        string
+	Repeatable       bool
+}
+
+// OmniProtocolConformanceProbe records whether one pinned protocol input
+// shape is representable and accepted. The production implementation is an
+// in-memory pinned-protocol fixture; tests can replace it with a recording
+// fixture to prove capability narrowing without contacting a backend.
+type OmniProtocolConformanceProbe interface {
+	Accepts(OmniConformanceRequest) bool
+}
+
 // Clone returns a detached capability fact.
 func (capability OmniModalityCapability) Clone() OmniModalityCapability {
 	capability.MediaTypes = append([]string(nil), capability.MediaTypes...)
@@ -72,11 +96,14 @@ func (capability OmniCapability) Clone() OmniCapability {
 	return cloned
 }
 
-// PinnedOmniCapability returns the capability facts read from the pinned
-// backend/backend.proto contract. The protocol has repeated Images and
-// explicit Audios and Videos fields on PredictOptions, so all three media
-// modalities are representable in this slice.
+// PinnedOmniCapability returns the capability facts recorded by the pinned
+// protocol conformance fixture. The result, rather than a static media flag,
+// controls the effective provider-neutral operation used by the codec.
 func PinnedOmniCapability() OmniCapability {
+	return CapabilityFromPinnedOmniProbe(ProbePinnedOmniProtocol())
+}
+
+func pinnedOmniProtocolShape() OmniCapability {
 	return OmniCapability{
 		ProtocolVersion:  modelseffects.PinnedHostProtocolVersion,
 		ProtocolRevision: PinnedProtocolRevision,
@@ -89,7 +116,7 @@ func PinnedOmniCapability() OmniCapability {
 			{Slot: "video", Modality: models.ModalityVideo, ProtocolField: predictVideoField, Supported: true, MediaTypes: []string{"video/*"}},
 			{Slot: "parameters", Modality: models.ModalityJSON, ProtocolField: "Metadata", Supported: true, MediaTypes: []string{"application/json"}},
 		},
-	}.Clone()
+	}
 }
 
 // Supported reports whether a named slot is part of the recorded capability.
@@ -164,8 +191,8 @@ func (capability OmniCapability) Validate() error {
 }
 
 // OmniProtocolProbe is the stable, serializable evidence produced from the
-// pinned protocol contract. It deliberately contains no live endpoint or
-// backend artifact facts.
+// pinned protocol contract and its conformance fixture. It deliberately
+// contains no live endpoint or backend artifact facts.
 type OmniProtocolProbe struct {
 	ProtocolVersion  string
 	ProtocolRevision string
@@ -179,11 +206,17 @@ type OmniProtocolProbe struct {
 	VideoSupported   bool
 }
 
-// ProbePinnedOmniProtocol records the pinned protocol's media capability.
-// Keeping this probe deterministic makes capability validation independent of
-// whether a platform backend artifact is installed or running.
-func ProbePinnedOmniProtocol() OmniProtocolProbe {
-	capability := PinnedOmniCapability()
+// ProbePinnedOmniProtocol records the pinned protocol's media capability by
+// asking a deterministic conformance fixture whether the exact audio and
+// video request shapes are representable and accepted. Keeping this probe
+// independent of installed artifacts makes capability validation deterministic
+// and keeps it inside the Models-owned LocalAI boundary.
+func ProbePinnedOmniProtocol(probes ...OmniProtocolConformanceProbe) OmniProtocolProbe {
+	capability := pinnedOmniProtocolShape()
+	probe := OmniProtocolConformanceProbe(pinnedProtocolConformanceFixture{})
+	if len(probes) > 0 && !isNilConformanceProbe(probes[0]) {
+		probe = probes[0]
+	}
 	return OmniProtocolProbe{
 		ProtocolVersion:  capability.ProtocolVersion,
 		ProtocolRevision: capability.ProtocolRevision,
@@ -193,9 +226,81 @@ func ProbePinnedOmniProtocol() OmniProtocolProbe {
 		ImageField:       protocolField(capability, models.ModalityImage),
 		AudioField:       protocolField(capability, models.ModalityAudio),
 		VideoField:       protocolField(capability, models.ModalityVideo),
-		AudioSupported:   capability.ModalitySupported(models.ModalityAudio),
-		VideoSupported:   capability.ModalitySupported(models.ModalityVideo),
+		AudioSupported:   probe.Accepts(conformanceRequest(capability, models.ModalityAudio)),
+		VideoSupported:   probe.Accepts(conformanceRequest(capability, models.ModalityVideo)),
 	}
+}
+
+// CapabilityFromPinnedOmniProbe applies conformance evidence to the pinned
+// protocol shape. Required text/image/parameter slots remain validated by
+// OmniCapability.Validate; optional audio/video slots follow the measured
+// acceptance result.
+func CapabilityFromPinnedOmniProbe(probe OmniProtocolProbe) OmniCapability {
+	capability := pinnedOmniProtocolShape()
+	for index := range capability.Inputs {
+		switch capability.Inputs[index].Modality {
+		case models.ModalityAudio:
+			capability.Inputs[index].Supported = probe.AudioSupported
+		case models.ModalityVideo:
+			capability.Inputs[index].Supported = probe.VideoSupported
+		}
+	}
+	return capability.Clone()
+}
+
+func conformanceRequest(capability OmniCapability, modality models.Modality) OmniConformanceRequest {
+	for _, input := range capability.Inputs {
+		if input.Modality != modality {
+			continue
+		}
+		mediaType := ""
+		if len(input.MediaTypes) > 0 {
+			mediaType = input.MediaTypes[0]
+		}
+		return OmniConformanceRequest{
+			ProtocolVersion:  capability.ProtocolVersion,
+			ProtocolRevision: capability.ProtocolRevision,
+			ProtocolPath:     capability.ProtocolPath,
+			LocalAICommit:    capability.LocalAICommit,
+			Slot:             input.Slot,
+			Modality:         input.Modality,
+			ProtocolField:    input.ProtocolField,
+			MediaType:        mediaType,
+			Repeatable:       input.Repeatable,
+		}
+	}
+	return OmniConformanceRequest{
+		ProtocolVersion:  capability.ProtocolVersion,
+		ProtocolRevision: capability.ProtocolRevision,
+		ProtocolPath:     capability.ProtocolPath,
+		LocalAICommit:    capability.LocalAICommit,
+		Modality:         modality,
+	}
+}
+
+type pinnedProtocolConformanceFixture struct{}
+
+func (pinnedProtocolConformanceFixture) Accepts(request OmniConformanceRequest) bool {
+	if request.ProtocolVersion != modelseffects.PinnedHostProtocolVersion ||
+		request.ProtocolRevision != PinnedProtocolRevision ||
+		request.ProtocolPath != PinnedProtocolPath ||
+		request.LocalAICommit != PinnedLocalAICommit {
+		return false
+	}
+	switch request.Modality {
+	case models.ModalityAudio:
+		return request.Slot == "audio" && request.ProtocolField == predictAudioField &&
+			request.MediaType == "audio/*" && !request.Repeatable
+	case models.ModalityVideo:
+		return request.Slot == "video" && request.ProtocolField == predictVideoField &&
+			request.MediaType == "video/*" && !request.Repeatable
+	default:
+		return false
+	}
+}
+
+func isNilConformanceProbe(probe OmniProtocolConformanceProbe) bool {
+	return probe == nil
 }
 
 func protocolField(capability OmniCapability, modality models.Modality) string {

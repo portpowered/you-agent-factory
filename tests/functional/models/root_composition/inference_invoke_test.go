@@ -460,6 +460,7 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
+		ModelInvocationProtocolClient:  genericCLIProtocolClient{},
 	})
 	environment := functionalHomeEnvironment(home)
 

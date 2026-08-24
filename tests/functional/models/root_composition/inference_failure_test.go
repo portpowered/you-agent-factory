@@ -273,6 +273,7 @@ func buildGenericCLIProcess(
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
+		ModelInvocationProtocolClient:  genericCLIProtocolClient{},
 	}
 	if outputEffects != nil {
 		edges.ModelCLIOutputCreateTempFile = outputEffects.CreateTemp
@@ -281,6 +282,22 @@ func buildGenericCLIProcess(
 		edges.ModelCLIOutputRenamePath = outputEffects.Rename
 	}
 	return support.BuildProcess(t, edges), directory, functionalHomeEnvironment(home)
+}
+
+type genericCLIProtocolClient struct{}
+
+func (genericCLIProtocolClient) Predict(
+	ctx context.Context,
+	request models.InvocationProtocolRequest,
+) (models.InvocationProtocolResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return models.InvocationProtocolResponse{}, err
+	}
+	value := request.Prompt
+	if value == "" && len(request.Inputs) > 0 {
+		value = request.Inputs[0].Content
+	}
+	return models.InvocationProtocolResponse{Text: value, Usage: value}, nil
 }
 
 func assertFunctionalFile(t testing.TB, path, want string) {

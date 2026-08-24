@@ -31,7 +31,8 @@ type PredictRequest struct {
 // PredictResponse is the detached text response returned by LocalAI's
 // protocol adapter.
 type PredictResponse struct {
-	Text string
+	Text  string
+	Usage string
 }
 
 // ProtocolClient is the only execution dependency needed by the codec. A
@@ -111,10 +112,13 @@ func (codec *OmniCodec) Encode(request models.InvokeModelRequest) (PredictReques
 }
 
 // Invoke performs one protocol call after Encode has completed all local
-// capability and slot validation, then returns provider-neutral text content.
+// capability and slot validation, then returns provider-neutral content. An
+// optional effective operation lets response metadata be retained only when
+// the caller's declared output contract includes that slot.
 func (codec *OmniCodec) Invoke(
 	ctx context.Context,
 	request models.InvokeModelRequest,
+	operations ...models.Operation,
 ) ([]models.InferenceContent, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -124,7 +128,13 @@ func (codec *OmniCodec) Invoke(
 		return nil, err
 	}
 	if codec == nil || codec.client == nil {
-		return nil, fmt.Errorf("%w: OMNI protocol client is required", models.ErrUnavailable)
+		return nil, &models.InvocationFailure{
+			Class:     models.InvocationFailureClassBackendProtocol,
+			Model:     request.Model,
+			Operation: models.OperationOMNI,
+			Message:   "OMNI protocol client is unavailable",
+			Cause:     models.ErrUnavailable,
+		}
 	}
 	response, err := codec.client.Predict(ctx, predict)
 	if err != nil {
@@ -139,13 +149,33 @@ func (codec *OmniCodec) Invoke(
 			Message:   "OMNI response did not contain text output",
 		}
 	}
-	return []models.InferenceContent{{
+	content := []models.InferenceContent{{
 		Name:        "text",
 		Modality:    models.ModalityText,
 		ContentType: "text/plain",
 		MediaType:   "text/plain",
 		Content:     response.Text,
-	}}, nil
+	}}
+	if strings.TrimSpace(response.Usage) != "" && declaresOutputSlot(operations, "usage") {
+		content = append(content, models.InferenceContent{
+			Name: "usage", Modality: models.ModalityJSON,
+			ContentType: "application/json", MediaType: "application/json",
+			Content: response.Usage,
+		})
+	}
+	return content, nil
+}
+
+func declaresOutputSlot(operations []models.Operation, name string) bool {
+	if len(operations) == 0 {
+		return true
+	}
+	for _, output := range operations[0].Outputs {
+		if strings.EqualFold(strings.TrimSpace(output.Name), name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (codec *OmniCodec) validateCapabilityInputs(request models.InvokeModelRequest) error {

@@ -156,10 +156,13 @@ type InvocationProtocolInput struct {
 	Reference string
 }
 
-// InvocationProtocolResponse is the detached text response returned by the
-// generic protocol adapter.
+// InvocationProtocolResponse is the detached response returned by the generic
+// protocol adapter. Usage is optional because the pinned OMNI text journey
+// only requires text, while protocol fixtures and adapters may expose usage
+// metadata when the caller's declared output contract includes it.
 type InvocationProtocolResponse struct {
-	Text string
+	Text  string
+	Usage string
 }
 
 // GenericOperationContracts returns the canonical provider-neutral operation
