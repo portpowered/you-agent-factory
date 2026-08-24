@@ -2,7 +2,8 @@
  * Material-inspired color role tokens (Factory Dark baseline).
  *
  * Long-term theme API for dashboard UI. Product --color-af-* keys that map to
- * roles are defined in this file; foundation/chart keys remain in styles.css.
+ * roles are defined in this file; literal foundation values remain in
+ * color-palette-presets.css.
  *
  * Accent intent:
  * - primary: yellow brand accent (most prominent)
@@ -126,6 +127,24 @@
     0 0 0 4px var(--color-af-graph-selected-glow);
   --shadow-af-graph-error: 0 0 0 3px var(--color-error-container);
 
+  /* Supporting roles for chart series that need palette-aware light values. */
+  --color-error-bright: var(--color-af-foundation-danger-bright);
+  --color-info-bright: var(--color-af-foundation-info-bright);
+
+  /* --- Dashboard chart roles --- */
+  --color-chart-grid-line: rgb(from var(--color-outline) r g b / 0.032);
+  --color-chart-queued: var(--color-on-primary-container);
+  --color-chart-in-flight: var(--color-on-info-container);
+  --color-chart-completed: var(--color-on-success-container);
+  --color-chart-failed: var(--color-error-bright);
+  --color-chart-failure-trend: var(--color-error-bright);
+  --color-chart-rework-trend: var(--color-primary);
+  --color-chart-timing-trend: var(--color-info-bright);
+  --color-chart-selection-fill: var(--color-primary-container);
+  --color-chart-selection-stroke: var(--color-primary);
+  --color-chart-cursor: var(--color-outline-variant);
+  --color-chart-active-dot-stroke: var(--color-background);
+
   /* --- Product af-* keys (role-backed; formerly color-role-aliases.css) --- */
   --color-af-background: var(--color-background);
   --color-af-surface: var(--color-surface);
@@ -164,6 +183,20 @@
   --color-af-worker-surface: var(--color-tertiary-container);
   --color-af-worker-text: var(--color-on-tertiary-container);
 
+  /* Product chart aliases. Keep chart consumers on the shared role layer. */
+  --color-af-chart-grid-line: var(--color-chart-grid-line);
+  --color-af-chart-queued: var(--color-chart-queued);
+  --color-af-chart-in-flight: var(--color-chart-in-flight);
+  --color-af-chart-completed: var(--color-chart-completed);
+  --color-af-chart-failed: var(--color-chart-failed);
+  --color-af-chart-failure-trend: var(--color-chart-failure-trend);
+  --color-af-chart-rework-trend: var(--color-chart-rework-trend);
+  --color-af-chart-timing-trend: var(--color-chart-timing-trend);
+  --color-af-chart-selection-fill: var(--color-chart-selection-fill);
+  --color-af-chart-selection-stroke: var(--color-chart-selection-stroke);
+  --color-af-chart-cursor: var(--color-chart-cursor);
+  --color-af-chart-active-dot-stroke: var(--color-chart-active-dot-stroke);
+
   /* Semantic border and overlay tokens for feedback and loading surfaces */
   --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
   --color-af-success-border: rgb(
@@ -185,8 +218,9 @@
 }
 
 /*
- * Factory Light uses light-surface-appropriate ink for solid semantic fills.
- * Keep the shared Factory Dark roles and foundation palette values unchanged.
+ * Factory Light uses light-surface-appropriate ink for solid semantic fills
+ * and darker chart foregrounds on its light canvas. Keep the shared Factory
+ * Dark roles and foundation palette values unchanged.
  */
 [data-color-palette="factory-light"] {
   --color-on-primary-container: var(--color-af-foundation-accent-ink);
@@ -195,4 +229,7 @@
   --color-on-warning: var(--color-af-foundation-overlay);
   --color-on-error: var(--color-af-foundation-overlay);
   --color-on-info: var(--color-af-foundation-overlay);
+  --color-chart-queued: var(--color-on-warning-container);
+  --color-chart-failed: var(--color-error);
+  --color-chart-failure-trend: var(--color-error);
 }

@@ -245,10 +245,25 @@ export function resolveFillRgb(
   fill: ParsedCssColor,
   surfaceRgb: RgbColor,
 ): RgbColor {
-  if (fillToken.endsWith("-container")) {
+  if (
+    fillToken.endsWith("-container") ||
+    fillToken.startsWith("--color-surface-container")
+  ) {
     return compositeOver(fill, surfaceRgb);
   }
   return fill.alpha === 1 ? fill.rgb : compositeOver(fill, surfaceRgb);
+}
+
+/** Euclidean distance in sRGB byte space; chart status colors must be >= 24. */
+export function rgbEuclideanDistance(
+  first: RgbColor,
+  second: RgbColor,
+): number {
+  return Math.hypot(
+    first[0] - second[0],
+    first[1] - second[1],
+    first[2] - second[2],
+  );
 }
 
 function relativeLuminance([red, green, blue]: RgbColor): number {

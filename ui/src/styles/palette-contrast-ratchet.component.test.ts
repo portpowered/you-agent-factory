@@ -14,6 +14,7 @@ import {
   type ParsedCssColor,
   resolveCssColor,
   resolveFillRgb,
+  rgbEuclideanDistance,
   stableRatio,
 } from "./palette-contrast-test-math";
 
@@ -21,6 +22,8 @@ const stylesDirectory = path.dirname(fileURLToPath(import.meta.url));
 const stylesSourcePath = path.resolve(stylesDirectory, "..", "styles.css");
 const CONTRAST_FLOOR = 4.5;
 const BASELINE_PRECISION = 2;
+const CHART_CONTRAST_FLOOR = 3;
+const MIN_STATUS_SERIES_RGB_DISTANCE = 24;
 
 const REQUIRED_CONTRAST_PAIRS = [
   ["--color-on-surface", "--color-surface"],
@@ -46,10 +49,33 @@ const REQUIRED_CONTRAST_PAIRS = [
   ["--color-on-info-container", "--color-info-container"],
 ] as const;
 
+const CHART_SERIES_CONTRAST_PAIRS = [
+  ["queued", "--color-af-chart-queued"],
+  ["in-flight", "--color-af-chart-in-flight"],
+  ["completed", "--color-af-chart-completed"],
+  ["failed", "--color-af-chart-failed"],
+] as const;
+
+const FACTORY_DARK_STATUS_COLORS = [
+  [236, 191, 88],
+  [181, 237, 244],
+  [167, 240, 196],
+  [255, 138, 138],
+] as const;
+
 interface PaletteContrastMeasurement {
   fillToken: string;
   foregroundToken: string;
   paletteId: ColorPaletteId;
+  ratio: number;
+  stableRatio: number;
+}
+
+interface ChartContrastMeasurement {
+  fillToken: string;
+  foregroundToken: string;
+  paletteId: ColorPaletteId;
+  property: "chart-series-on-canvas";
   ratio: number;
   stableRatio: number;
 }
@@ -105,8 +131,54 @@ function measurePaletteContrast(
   });
 }
 
+function measureChartSeriesContrast(
+  paletteId: ColorPaletteId,
+): ChartContrastMeasurement[] {
+  applyDocumentColorPalette(paletteId);
+  const computedStyle = getComputedStyle(document.documentElement);
+  const colors = new Map<string, ParsedCssColor>();
+  const readColor = (tokenName: string): ParsedCssColor => {
+    const cached = colors.get(tokenName);
+    if (cached) {
+      return cached;
+    }
+    const color = resolveCssColor(paletteId, tokenName, computedStyle);
+    colors.set(tokenName, color);
+    return color;
+  };
+  const surface = readColor("--color-surface");
+  const surfaceRgb = compositeOver(surface, surface.rgb);
+  const canvasToken = "--color-surface-container-low";
+  const canvas = readColor(canvasToken);
+  const canvasRgb = resolveFillRgb(canvasToken, canvas, surfaceRgb);
+
+  return CHART_SERIES_CONTRAST_PAIRS.map(([, foregroundToken]) => {
+    const foreground = readColor(foregroundToken);
+    const foregroundRgb = compositeOver(foreground, canvasRgb);
+    const ratio = contrastRatio(foregroundRgb, canvasRgb);
+    return {
+      fillToken: canvasToken,
+      foregroundToken,
+      paletteId,
+      property: "chart-series-on-canvas",
+      ratio,
+      stableRatio: stableRatio(ratio, BASELINE_PRECISION),
+    };
+  });
+}
+
 function formatMeasurement(measurement: PaletteContrastMeasurement): string {
   return [
+    measurement.paletteId,
+    measurement.foregroundToken,
+    measurement.fillToken,
+    measurement.stableRatio.toFixed(BASELINE_PRECISION),
+  ].join("\t");
+}
+
+function formatChartMeasurement(measurement: ChartContrastMeasurement): string {
+  return [
+    measurement.property,
     measurement.paletteId,
     measurement.foregroundToken,
     measurement.fillToken,
@@ -131,12 +203,12 @@ function createVariableReader(
   };
 }
 
-describe("exhaustive palette contrast ratchet", () => {
-  beforeAll(async () => {
-    const compiledCss = await compileDashboardStyles(stylesSourcePath);
-    injectCompiledRootRules(compiledCss);
-  });
+beforeAll(async () => {
+  const compiledCss = await compileDashboardStyles(stylesSourcePath);
+  injectCompiledRootRules(compiledCss);
+});
 
+describe("exhaustive palette contrast ratchet", () => {
   it("measures all 105 role/palette cells and ratchets the current debt", () => {
     const measurements = COLOR_PALETTE_IDS.flatMap(measurePaletteContrast);
     const debt = measurements.filter(
@@ -198,7 +270,84 @@ describe("exhaustive palette contrast ratchet", () => {
       )?.stableRatio,
     ).toBe(14.86);
   });
+});
 
+describe("dashboard chart palette contract", () => {
+  it("measures every status series against the chart canvas in every palette", () => {
+    const measurements = COLOR_PALETTE_IDS.flatMap(measureChartSeriesContrast);
+    const failures = measurements.filter(
+      (measurement) => measurement.ratio < CHART_CONTRAST_FLOOR,
+    );
+
+    console.log(
+      `Measured ${measurements.length} chart-series-on-canvas cells (${COLOR_PALETTE_IDS.length} palettes x ${CHART_SERIES_CONTRAST_PAIRS.length} series).`,
+    );
+    console.log("property\tpalette\tforeground\tfill\tratio");
+    for (const measurement of measurements) {
+      console.log(formatChartMeasurement(measurement));
+    }
+
+    expect(
+      failures,
+      failures
+        .map(
+          (measurement) =>
+            `${measurement.property} palette=${measurement.paletteId} foreground=${measurement.foregroundToken} fill=${measurement.fillToken} measured=${measurement.stableRatio.toFixed(BASELINE_PRECISION)} required floor=${CHART_CONTRAST_FLOOR.toFixed(1)}`,
+        )
+        .join("\n"),
+    ).toEqual([]);
+    expect(measurements).toHaveLength(20);
+  });
+
+  it("keeps queued, in-flight, completed, and failed colors distinguishable", () => {
+    for (const paletteId of COLOR_PALETTE_IDS) {
+      applyDocumentColorPalette(paletteId);
+      const computedStyle = getComputedStyle(document.documentElement);
+      const colors = CHART_SERIES_CONTRAST_PAIRS.map(([series, token]) => ({
+        color: resolveCssColor(paletteId, token, computedStyle),
+        series,
+        token,
+      }));
+
+      for (let firstIndex = 0; firstIndex < colors.length; firstIndex += 1) {
+        for (
+          let secondIndex = firstIndex + 1;
+          secondIndex < colors.length;
+          secondIndex += 1
+        ) {
+          const first = colors[firstIndex];
+          const second = colors[secondIndex];
+          if (!first || !second) {
+            continue;
+          }
+          const distance = rgbEuclideanDistance(
+            first.color.rgb,
+            second.color.rgb,
+          );
+          console.log(
+            `chart-series-color-distance\t${paletteId}\t${first.series}\t${second.series}\t${distance.toFixed(2)}\tminimum=${MIN_STATUS_SERIES_RGB_DISTANCE}`,
+          );
+          expect(
+            distance,
+            `${paletteId} ${first.token} and ${second.token} must be at least ${MIN_STATUS_SERIES_RGB_DISTANCE} sRGB units apart`,
+          ).toBeGreaterThanOrEqual(MIN_STATUS_SERIES_RGB_DISTANCE);
+        }
+      }
+    }
+  });
+
+  it("preserves the established Factory Dark status colors", () => {
+    applyDocumentColorPalette("factory-dark");
+    const computedStyle = getComputedStyle(document.documentElement);
+    const colors = CHART_SERIES_CONTRAST_PAIRS.map(([, token]) =>
+      resolveCssColor("factory-dark", token, computedStyle),
+    );
+
+    expect(colors.map(({ rgb }) => rgb)).toEqual(FACTORY_DARK_STATUS_COLORS);
+  });
+});
+
+describe("palette token resolution diagnostics", () => {
   it("fails unresolved, cyclic, and unsupported token values with context", () => {
     expect(() =>
       resolveCssColor(

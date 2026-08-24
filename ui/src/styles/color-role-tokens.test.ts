@@ -17,6 +17,7 @@ const roleTokensSourcePath = path.join(
   packageStylesDir,
   "color-role-tokens.css",
 );
+const dashboardStylesSourcePath = path.join(stylesDir, "..", "styles.css");
 const foundationPresetsSourcePath = path.join(
   packageStylesDir,
   "color-palette-presets.css",
@@ -63,6 +64,23 @@ const PRODUCT_AF_ROLE_PAIRS: ReadonlyArray<
   ["--color-af-worker-text", "--color-on-tertiary-container"],
 ];
 
+const CHART_ROLE_PAIRS: ReadonlyArray<
+  readonly [afToken: string, roleToken: string]
+> = [
+  ["--color-af-chart-grid-line", "--color-chart-grid-line"],
+  ["--color-af-chart-queued", "--color-chart-queued"],
+  ["--color-af-chart-in-flight", "--color-chart-in-flight"],
+  ["--color-af-chart-completed", "--color-chart-completed"],
+  ["--color-af-chart-failed", "--color-chart-failed"],
+  ["--color-af-chart-failure-trend", "--color-chart-failure-trend"],
+  ["--color-af-chart-rework-trend", "--color-chart-rework-trend"],
+  ["--color-af-chart-timing-trend", "--color-chart-timing-trend"],
+  ["--color-af-chart-selection-fill", "--color-chart-selection-fill"],
+  ["--color-af-chart-selection-stroke", "--color-chart-selection-stroke"],
+  ["--color-af-chart-cursor", "--color-chart-cursor"],
+  ["--color-af-chart-active-dot-stroke", "--color-chart-active-dot-stroke"],
+];
+
 function parseHexColor(hex: string): readonly [number, number, number] {
   const normalized = hex.trim().replace("#", "");
   if (normalized.length !== 6) {
@@ -103,6 +121,16 @@ describe("color-role-tokens product af-* wiring", () => {
 
     for (const [afToken, roleToken] of PRODUCT_AF_ROLE_PAIRS) {
       expect(source).toContain(`${afToken}: var(${roleToken});`);
+    }
+  });
+
+  it("maps each dashboard chart alias to a shared chart role", () => {
+    const roleSource = readFileSync(roleTokensSourcePath, "utf8");
+    const dashboardSource = readFileSync(dashboardStylesSourcePath, "utf8");
+
+    for (const [afToken, roleToken] of CHART_ROLE_PAIRS) {
+      expect(roleSource).toContain(`${afToken}: var(${roleToken});`);
+      expect(dashboardSource).not.toContain(`${afToken}:`);
     }
   });
 });
