@@ -120,6 +120,10 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 }
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	if strings.TrimSpace(string(sessionID)) == "" {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
 	if s.liveControl != nil {
 		liveLookupMiss, handled := s.readLiveFactorySession(w, r, sessionID)
 		if handled {

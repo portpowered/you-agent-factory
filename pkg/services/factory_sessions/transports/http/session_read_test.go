@@ -211,6 +211,36 @@ func TestHandlerFromRoot_GetFactorySessionNotFoundReturnsTypedErrorResponse(t *t
 	}
 }
 
+func TestHandlerFromRoot_GetFactorySessionBlankIDReturnsNotFoundWithoutLookup(t *testing.T) {
+	t.Parallel()
+
+	root := &httpSessionsRootFake{
+		getSession: func(context.Context, string) (factorysessions.SessionProjection, error) {
+			t.Fatal("blank session selector must not invoke live lookup")
+			return factorysessions.SessionProjection{}, nil
+		},
+		getDurableSession: func(context.Context, string) (factorysessions.SessionReadResult, error) {
+			t.Fatal("blank session selector must not invoke durable lookup")
+			return factorysessions.SessionReadResult{}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/%20", nil), " ")
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", recorder.Code, recorder.Body.String())
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND || errResp.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("error = %#v, want NOT_FOUND family/code", errResp)
+	}
+}
+
 func TestHandlerFromRoot_ListedPersistedSessionResolvesThroughCanonicalDetail(t *testing.T) {
 	t.Parallel()
 
