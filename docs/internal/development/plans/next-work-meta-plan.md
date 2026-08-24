@@ -59,7 +59,8 @@ through the installed binary.
 
 ## Part 2 — Work in progress
 
-State as of 2026-08-22, reconstructed from GitHub because the daemon is down.
+The infrastructure notes below are a 2026-08-22 snapshot. The PR bookkeeping
+has been rechecked against GitHub on 2026-08-24.
 
 ### Infrastructure
 
@@ -68,24 +69,17 @@ The factory has been down since roughly 08:30Z. `bin/you.exe` was built at 04:39
 schema change against a stale binary fails at startup in a way that is indistinguishable
 from a broken config. 125 worktrees hold no unpushed commits, so nothing is stranded.
 
-### Open PRs — 24
+### Tracked PR status — verified 2026-08-24
 
-**Clean and mergeable now (8):** #2132 (lmx-p3b), #2133 (perf-c1), #2161 (tts contract),
-#2162 (obs-13), #2163 (operator coverage floors), #2170 (lint deadcode gate), #2172
-(deflake worker cancel), #2173 (ci current-merge lint gate). These are finished work
-blocked only because review is a factory workstation and the factory is dead.
+The five entries that remain open from the prior inventory are #2132 (LocalAI
+P3 redo), #2151 (perf-f5), #2163 (operator coverage floors), #2174 (runtime
+visualization coverage), and #2176 (LocalAI conformance). The other tracked
+entries are merged: #2133, #2161, #2162, #2170, #2172, #2173, #2158, #2171,
+#2150, #2169, #2152, #2155, #2175, #2128, #2146, #2177, #2178, and #2154.
+#2175 appeared in two blocker rows in the prior snapshot, so that inventory
+contained 23 distinct PRs rather than 24.
 
-**Conflicted (2):** #2158, #2171.
-
-**Blocked (14) — three causes, not fourteen:**
-
-| Cause | PRs | Owner |
-|---|---|---|
-| Functional flake cluster on main | #2150, #2151, #2169, and contributing to #2152, #2155, #2174, #2175, #2176 | Baseline, not the lane |
-| Backend Lint — head predates #2165 (`cmd/gocoveragecheck/main.go` 1030 > 1000) | #2128, #2146 | Legitimate rebase; the comment must name #2165 |
-| Backend Lint — lane's own oversized file | #2177 (1242 lines), #2178 (137 > 100), #2154, #2175 | Lane; mechanical split |
-
-`Verification Policy` red is **derived** — it is green on healthy PRs and must never be
+`Verification Policy` red was **derived** — it is green on healthy PRs and must never be
 diagnosed as an independent cause.
 
 ### Main is ~40% green
@@ -227,8 +221,9 @@ recorded as untested, and we lost a ~185-work board to a machine restart on 2026
 | The resumed run reaches the same terminal states as an uninterrupted control | Divergent outcomes |
 | Durable session state survives when the process is killed without cleanup | Corrupt or unreadable state |
 
-This probe's result also determines the priority of #2128 (`fr-board-persistence`), which
-is currently blocked.
+This probe's result also determined the priority of #2128 (`fr-board-persistence`),
+which merged on 2026-08-22; the probe still supplies the customer-posture
+verification that the plan requires.
 
 ### PROBE-LOCALMODELS — local models
 
@@ -264,8 +259,8 @@ to stop.
    to split their oversized files.
 4. Submit SEC-1 as its own lane.
 5. Submit integration Story 0.
-6. Merge #2162 to close observability; land perf-c1/f5/u6/u7 to close the three-minute
-   test target.
+6. #2162, #2133, #2154, and #2175 are merged; #2151 (perf-f5) remains open for the
+   three-minute test target.
 7. Schedule the probe batch only after Story 0 merges.
 
 ## Part 7 — Second-evaluation extensions
