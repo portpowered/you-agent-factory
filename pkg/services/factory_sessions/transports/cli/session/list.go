@@ -57,7 +57,11 @@ func List(cfg ListConfig) (err error) {
 		return fmt.Errorf("context is required")
 	}
 	if cfg.LiveOnly && cfg.HistoryOnly {
-		return fmt.Errorf("--live-only and --history-only are mutually exclusive")
+		return &clidiag.LocalFailure{
+			Code:    clidiag.FlagConflictFailureCode,
+			Message: "--live-only and --history-only are mutually exclusive",
+			Cause:   fmt.Errorf("--live-only and --history-only are mutually exclusive"),
+		}
 	}
 	if cfg.DurableCloser != nil {
 		defer func() {

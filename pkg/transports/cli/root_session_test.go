@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
@@ -163,6 +164,37 @@ func TestSessionListCommand_ConflictingFlagsFailBeforeHTTP(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("conflict stdout = %q, want empty output", out.String())
+	}
+}
+
+func TestSessionListCommand_ConflictingFlagsRenderTypedDiagnostic(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := withTestInjectedPlatformRoles(CommandFactory{}).ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: []string{
+			"--server", "http://127.0.0.1:1",
+			"session", "list", "--live-only", "--history-only",
+		},
+		Stdin:   strings.NewReader(""),
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+		Context: context.Background(),
+	})
+	if err == nil {
+		t.Fatal("conflicting session-list flags error = nil, want failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("conflict stdout = %q, want empty output", stdout.String())
+	}
+	for _, want := range []string{
+		`"code":"CLI_FLAG_CONFLICT"`,
+		`"family":"BAD_REQUEST"`,
+		"cannot be used together",
+		"--live-only",
+		"--history-only",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("conflict stderr = %q, want %q", stderr.String(), want)
+		}
 	}
 }
 

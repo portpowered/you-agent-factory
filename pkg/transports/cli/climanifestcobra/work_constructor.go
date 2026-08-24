@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
@@ -680,10 +681,18 @@ func relationshipError(relationship plannedRelationship, message string) error {
 	for index, participant := range relationship.participants {
 		names[index] = participant.public
 	}
-	return fmt.Errorf(
+	cause := fmt.Errorf(
 		"input relationship %q: %s %s",
 		relationship.record.ID,
 		message,
 		strings.Join(names, ", "),
 	)
+	if relationship.record.Kind == "mutually-exclusive" || relationship.record.Kind == "conflict" {
+		return &clidiag.LocalFailure{
+			Code:    clidiag.FlagConflictFailureCode,
+			Message: cause.Error(),
+			Cause:   cause,
+		}
+	}
+	return cause
 }
