@@ -608,6 +608,18 @@ func TestMergeAppliesAndPreservesModelInvocationBackend(t *testing.T) {
 	if err != nil || len(content) != 1 || content[0].Content != "default" {
 		t.Fatalf("preserved ModelInvocationBackend = (%#v, %v), want default content", content, err)
 	}
+
+	defaultASR := ModelASRBackend(func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{Text: "default"}, nil
+	})
+	replacementASR := ModelASRBackend(func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{Text: "replacement"}, nil
+	})
+	merged = Merge(Edges{ModelASRBackend: defaultASR}, Edges{ModelASRBackend: replacementASR})
+	response, err := merged.ModelASRBackend(context.Background(), models.ASRBackendRequest{})
+	if err != nil || response.Text != "replacement" {
+		t.Fatalf("replaced ModelASRBackend = (%#v, %v), want replacement response", response, err)
+	}
 }
 
 func TestMergeAppliesCLIOutputInspectionReplacement(t *testing.T) {

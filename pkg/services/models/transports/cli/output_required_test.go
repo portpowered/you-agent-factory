@@ -174,6 +174,22 @@ func TestParseGenericCLIOutputMappingsValidatesIdentityAndPaths(t *testing.T) {
 	}
 }
 
+func TestGenericCLIInputNormalizeMediaTypeUsesStableAliases(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		input, want string
+	}{
+		{input: " audio/x-wav; charset=binary ", want: "audio/wav"},
+		{input: "application/ogg; codecs=opus", want: "audio/ogg"},
+		{input: " Text/Plain; charset=utf-8 ", want: "text/plain"},
+	} {
+		if got := genericCLIInputNormalizeMediaType(testCase.input); got != testCase.want {
+			t.Fatalf("genericCLIInputNormalizeMediaType(%q) = %q, want %q", testCase.input, got, testCase.want)
+		}
+	}
+}
+
 func TestValidateGenericCLIOutputMappingsChecksDeclaredOutputContract(t *testing.T) {
 	t.Parallel()
 
@@ -478,6 +494,29 @@ func TestWriteGenericCLIOutputMappingsClassifiesCompositionFailures(t *testing.T
 				t.Fatalf("writeGenericCLIOutputMappings() error = %v, want substring %q", err, testCase.want)
 			}
 		})
+	}
+}
+
+func TestWriteGenericCLIOutputPathPublishesSingleOutput(t *testing.T) {
+	t.Parallel()
+
+	fileSystem := &genericOutputFileSystem{temporaryName: "speech.tmp"}
+	var output strings.Builder
+	err := (&rootService{outputFileSystem: fileSystem}).writeGenericCLIOutputPath(
+		InvokeConfig{Context: context.Background(), OutputPath: "speech.wav", Output: &output},
+		modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{{Name: "audio", Content: "RIFF fixture"}}},
+	)
+	if err != nil {
+		t.Fatalf("writeGenericCLIOutputPath() error = %v", err)
+	}
+	if output.String() != "Wrote audio: speech.wav\n" {
+		t.Fatalf("output notice = %q, want published path", output.String())
+	}
+	if len(fileSystem.created) != 1 || string(fileSystem.created[0].data) != "RIFF fixture" {
+		t.Fatalf("created output = %#v, want fixture bytes", fileSystem.created)
+	}
+	if len(fileSystem.renamed) != 1 || fileSystem.renamed[0][1] != "speech.wav" {
+		t.Fatalf("published renames = %#v, want speech.wav target", fileSystem.renamed)
 	}
 }
 
