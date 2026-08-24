@@ -22,6 +22,11 @@ is a large change; all three are the same mistake.
 
 ## 1. The shape we do not want
 
+**Status: complete (2026-08-24).** Verified against merged PR #2188: the three
+leaked host-effect ports (`workers.CommandRunner`, `workers.PTYAllocator`, and
+`factory_runtime.InputFileSystem`) were privatized, and the final non-test peer
+scan reports zero references.
+
 **Rule.** An exported interface on a service's public root whose method set is a
 *host effect* — process execution, filesystem, clock, network, PTY — may be
 referenced by that service, by `pkg/services/edges`, and by `wire`. It must

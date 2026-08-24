@@ -19,6 +19,14 @@ Make the JavaScript workflow surface behave consistently with how it works in Cl
 
 Collapse the permission model to one per-call enum that maps directly onto the flag we actually pass to the provider, keep the declarative policy layer strictly as an allowlist over that enum, and close three specific parity gaps: structured child output, variadic pipeline stages, and contract truth.
 
+## Verified delivery status (2026-08-24)
+
+JS-P1, JS-P2, JS-P3, and JS-P4 are merged in PRs #2206, #2209, #2220,
+and #2232 respectively. The structured-child-output and generated-contract
+acceptance work in JS-P5 and JS-P7 is merged in PRs #2230 and #2229.
+JS-P6, the variadic-pipeline work, remains open in PR #2226. The plan remains
+open for that unfinished acceptance work; this note records PR state only.
+
 # original document
 
 `C:\Users\andre\.claude\skills\dispatching-you-subagents\references\claude-workflow-tool.md`
