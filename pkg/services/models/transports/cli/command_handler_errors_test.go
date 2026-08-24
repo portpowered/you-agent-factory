@@ -506,6 +506,29 @@ func TestModelsRootErrorDoesNotReclassifyInvocationFailuresOutsideClientPaths(t 
 	}
 }
 
+func TestMapModelsRootErrorClassifiesMissingCacheWithModelName(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf("remove model: %w: OMNIVOICE_Q4_K_M", modelinference.ErrModelCacheNotFound)
+	mapped := mapModelsRootError(cause)
+	if mapped == nil || !errors.Is(mapped, modelinference.ErrModelCacheNotFound) {
+		t.Fatalf("mapped cache error = %v, want preserved cache sentinel", mapped)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(mapped, &coded) {
+		t.Fatalf("mapped cache error = %T, want CLI diagnostic", mapped)
+	}
+	if coded.CLIErrorCode() != modelsRootCacheNotFoundCode ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound ||
+		coded.CLIErrorMessage() != "model cache is not installed; run you models pull OMNIVOICE_Q4_K_M first" {
+		t.Fatalf("cache diagnostic = (%q, %q, %q), want model-specific not-found guidance", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
+	}
+}
+
 func TestMapModelsRootError_ClassifiesMissingFactoryLayoutWithSearchedRoot(t *testing.T) {
 	t.Parallel()
 

@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
@@ -133,6 +137,141 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 		)
 	}
 }
+
+func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
+	t.Parallel()
+
+	scopes, err := runtimescopeswire.NewService(func() string { return "root-construction-test" })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	assets := inferenceRecordingAssetsService{}
+	catalog, err := catalogwire.NewService(scopes)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	launcher := &inferenceRecordingProcessLauncher{}
+	clock := &inferenceTestClock{}
+	runtimeHost, err := runtimehostwire.NewService(scopes, assets, launcher, http.DefaultClient, clock, nil, nil)
+	if err != nil {
+		t.Fatalf("construct Runtime Host: %v", err)
+	}
+	inferenceService, err := inferencewire.NewService(
+		scopes, assets, catalog, runtimeHost, inference.InputEchoInvocationRuntime{},
+		inference.InertArtifactFileSystem{}, clock.Now,
+	)
+	if err != nil {
+		t.Fatalf("construct Inference: %v", err)
+	}
+	root, err := NewRoot(
+		rootConstructionProcessLauncher{}, http.DefaultClient, rootConstructionClock{}, rootConstructionCommandRunner{},
+		http.DefaultClient, os.Stat, os.TempDir,
+		func(string, string) (localmodels.TempFile, error) { return rootConstructionTempFile{}, nil },
+		scopes, catalog, assets, runtimeHost, inferenceService,
+		modelseffects.ProcessDependencies{Clock: time.Now},
+	)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	if root == nil || root.resolveHuggingFaceRevision == nil || root.process.Logger == nil {
+		t.Fatal("NewRoot did not retain a usable root with default logger/revision resolver")
+	}
+}
+
+func TestNewRootRejectsMissingRequiredComposedDependencies(t *testing.T) {
+	t.Parallel()
+
+	validLauncher := rootConstructionProcessLauncher{}
+	validHTTP := http.DefaultClient
+	validClock := rootConstructionClock{}
+	validRunner := rootConstructionCommandRunner{}
+	validTempFile := func(string, string) (localmodels.TempFile, error) {
+		return rootConstructionTempFile{}, nil
+	}
+	construct := func(
+		processLauncher modelhost.ProcessLauncher,
+		hostHTTP modelhost.HTTPDoer,
+		hostClock modelhost.Clock,
+		runtimeRunner platformprocess.CommandRunner,
+		runtimeHTTP localmodels.HTTPDoer,
+		runtimeInspect localmodels.InspectFile,
+		runtimeTempDir localmodels.TempDirectory,
+		runtimeTempFile localmodels.CreateTempFile,
+	) error {
+		_, err := NewRoot(
+			processLauncher, hostHTTP, hostClock, runtimeRunner, runtimeHTTP, runtimeInspect,
+			runtimeTempDir, runtimeTempFile, nil, nil, nil, nil, nil,
+			modelseffects.ProcessDependencies{Clock: time.Now},
+		)
+		return err
+	}
+
+	missing := []struct {
+		name string
+		call func() error
+	}{
+		{name: "model host process launcher", call: func() error {
+			return construct(nil, validHTTP, validClock, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
+		}},
+		{name: "model host HTTP client", call: func() error {
+			return construct(validLauncher, nil, validClock, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
+		}},
+		{name: "model host clock", call: func() error {
+			return construct(validLauncher, validHTTP, nil, validRunner, validHTTP, os.Stat, os.TempDir, validTempFile)
+		}},
+		{name: "model runtime command runner", call: func() error {
+			return construct(validLauncher, validHTTP, validClock, nil, validHTTP, os.Stat, os.TempDir, validTempFile)
+		}},
+		{name: "model runtime HTTP client", call: func() error {
+			return construct(validLauncher, validHTTP, validClock, validRunner, nil, os.Stat, os.TempDir, validTempFile)
+		}},
+		{name: "model runtime file inspector", call: func() error {
+			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, nil, os.TempDir, validTempFile)
+		}},
+		{name: "model runtime temporary directory resolver", call: func() error {
+			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, os.Stat, nil, validTempFile)
+		}},
+		{name: "model runtime temporary file creator", call: func() error {
+			return construct(validLauncher, validHTTP, validClock, validRunner, validHTTP, os.Stat, os.TempDir, nil)
+		}},
+	}
+	for _, test := range missing {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.call(); !errors.Is(err, ErrInvalidDependencies) {
+				t.Fatalf("NewRoot missing %s error = %v, want ErrInvalidDependencies", test.name, err)
+			}
+		})
+	}
+}
+
+type rootConstructionCommandRunner struct{}
+
+func (rootConstructionCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
+}
+
+type rootConstructionProcessLauncher struct{}
+
+func (rootConstructionProcessLauncher) Start(context.Context, modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
+	return nil, nil
+}
+
+type rootConstructionClock struct{}
+
+func (rootConstructionClock) Now() time.Time { return time.Unix(0, 0) }
+func (rootConstructionClock) NewTimer(time.Duration) modelhost.Timer {
+	return rootConstructionTimer{}
+}
+
+type rootConstructionTimer struct{}
+
+func (rootConstructionTimer) C() <-chan time.Time { return nil }
+func (rootConstructionTimer) Stop() bool          { return true }
+
+type rootConstructionTempFile struct{}
+
+func (rootConstructionTempFile) Close() error { return nil }
+func (rootConstructionTempFile) Name() string { return "root-construction-temp" }
 
 type delegatingInferenceService struct {
 	invokeCalls   int

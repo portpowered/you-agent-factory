@@ -940,6 +940,33 @@ func TestRootContractOnlyOperationsFailExplicitly(t *testing.T) {
 	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
 	_, err = root.CancelInvocation(ctx, models.CancelInvocationRequest{})
 	assertContractOnlyUnsupported(t, "CancelInvocation", err)
+	_, err = root.ListModels(ctx)
+	if !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("ListModels error = %v, want ErrInvalidDependencies", err)
+	}
+	_, err = root.GetModel(ctx, "voice")
+	if !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("GetModel error = %v, want ErrInvalidDependencies", err)
+	}
+	_, err = root.PullModel(ctx, "voice")
+	if !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("PullModel error = %v, want ErrInvalidDependencies", err)
+	}
+	_, err = root.InspectRuntime(ctx, "voice")
+	if !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("InspectRuntime error = %v, want ErrInvalidDependencies", err)
+	}
+	_, err = root.AcquireLease(ctx, models.AcquireLeaseRequest{})
+	if !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("AcquireLease error = %v, want ErrInvalidDependencies", err)
+	}
+	if err := root.ReleaseLease(ctx, models.ReleaseLeaseRequest{}); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("ReleaseLease error = %v, want ErrInvalidDependencies", err)
+	}
+	_, err = root.InvokeLocal(ctx, models.LocalInvocationRequest{})
+	if err == nil {
+		t.Fatal("InvokeLocal error = nil, want missing runtime binding failure")
+	}
 }
 
 func TestBoundServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
@@ -992,4 +1019,21 @@ func TestRuntimeServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
 	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
 	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
 	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
+	_, err = svc.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
+	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
+	_, err = svc.InvokeModel(ctx, models.InvokeModelRequest{})
+	assertContractOnlyUnsupported(t, "InvokeModel", err)
+	result, err := svc.InvokeLocal(ctx, models.LocalInvocationRequest{})
+	if err != nil || result.Handled {
+		t.Fatalf("InvokeLocal result = %#v, error = %v, want declined no-op", result, err)
+	}
+	_, err = svc.InvokeLocal(ctx, models.LocalInvocationRequest{
+		Worker: models.LocalWorker{
+			Type:          models.RuntimeWorkerTypeInference,
+			ModelLocality: models.RuntimeModelLocalityLocal,
+		},
+	})
+	if !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("managed InvokeLocal error = %v, want ErrNotFound", err)
+	}
 }

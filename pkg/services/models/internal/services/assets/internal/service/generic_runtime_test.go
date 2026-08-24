@@ -86,6 +86,116 @@ func TestPrepareGenericAssetsDoesNotPublishManagedRuntimeAfterRuntimeCommitFailu
 	}
 }
 
+func TestPrepareGenericAssetsReplacesExistingManagedRuntimeMetadataAtomically(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory, scope, service, localPath, body := newNamedGenericRuntimeFixture(t, "replace-runtime")
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "replace-model",
+		Reference: models.ModelReference{NameOrURI: localPath},
+		Artifacts: []models.AssetRequirement{{
+			Name: filepath.Base(localPath), Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
+	}
+	if _, err := service.PrepareModelAssets(context.Background(), request); err != nil {
+		t.Fatalf("initial PrepareModelAssets: %v", err)
+	}
+
+	updatedBody := []byte("replacement runtime weights")
+	if err := os.WriteFile(localPath, updatedBody, 0o644); err != nil {
+		t.Fatalf("write replacement source: %v", err)
+	}
+	request.Artifacts[0].Bytes = int64(len(updatedBody))
+	request.Artifacts[0].SHA256 = sha256Hex(updatedBody)
+	if _, err := service.PrepareModelAssets(context.Background(), request); err != nil {
+		t.Fatalf("replacement PrepareModelAssets: %v", err)
+	}
+
+	inspection := inspectNamedGenericRuntime(t, service, scope, "replace-model")
+	if !inspection.Installed || !inspection.ManifestPresent || !inspection.ManifestValid ||
+		!inspection.IntegrityVerified || inspection.CacheBytes != int64(len(updatedBody)) {
+		t.Fatalf("replacement runtime inspection = %#v, want verified replacement", inspection)
+	}
+	root := filepath.Join(cacheDirectory, canonicalModelName("replace-model"))
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read replacement runtime root: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".partial") || strings.HasSuffix(entry.Name(), ".previous") {
+			t.Fatalf("replacement publication left transient entry %q", entry.Name())
+		}
+	}
+}
+
+func TestMoveExistingGenericMetadataClassifiesReplacementFailures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("stat failure", func(t *testing.T) {
+		_, _, service, _, _ := newNamedGenericRuntimeFixture(t, "metadata-stat-failure")
+		statErr := errors.New("metadata stat failed")
+		service.inspectPath = func(string) (os.FileInfo, error) { return nil, statErr }
+		if _, _, err := service.moveExistingGenericMetadata(filepath.Join(t.TempDir(), metadataFileName)); !errors.Is(err, statErr) {
+			t.Fatalf("moveExistingGenericMetadata error = %v, want %v", err, statErr)
+		}
+	})
+
+	t.Run("directory destination", func(t *testing.T) {
+		_, _, service, _, _ := newNamedGenericRuntimeFixture(t, "metadata-directory")
+		path := filepath.Join(t.TempDir(), metadataFileName)
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatalf("create metadata directory: %v", err)
+		}
+		if _, _, err := service.moveExistingGenericMetadata(path); err == nil {
+			t.Fatal("moveExistingGenericMetadata succeeded for directory metadata")
+		}
+	})
+
+	t.Run("backup removal failure", func(t *testing.T) {
+		_, _, service, _, _ := newNamedGenericRuntimeFixture(t, "metadata-backup-failure")
+		path := filepath.Join(t.TempDir(), metadataFileName)
+		if err := os.WriteFile(path, []byte("metadata"), 0o644); err != nil {
+			t.Fatalf("write metadata: %v", err)
+		}
+		removeErr := errors.New("metadata backup removal failed")
+		service.removePath = func(string) error { return removeErr }
+		if _, _, err := service.moveExistingGenericMetadata(path); !errors.Is(err, removeErr) {
+			t.Fatalf("moveExistingGenericMetadata error = %v, want %v", err, removeErr)
+		}
+	})
+
+	t.Run("backup rename failure", func(t *testing.T) {
+		_, _, service, _, _ := newNamedGenericRuntimeFixture(t, "metadata-rename-failure")
+		path := filepath.Join(t.TempDir(), metadataFileName)
+		if err := os.WriteFile(path, []byte("metadata"), 0o644); err != nil {
+			t.Fatalf("write metadata: %v", err)
+		}
+		renameErr := errors.New("metadata backup rename failed")
+		service.renamePath = func(string, string) error { return renameErr }
+		if _, _, err := service.moveExistingGenericMetadata(path); !errors.Is(err, renameErr) {
+			t.Fatalf("moveExistingGenericMetadata error = %v, want %v", err, renameErr)
+		}
+	})
+}
+
+func TestGenericRuntimeMetadataValidationRejectsInvalidAndDuplicateArtifacts(t *testing.T) {
+	t.Parallel()
+
+	if _, err := genericRuntimeMetadataFiles([]models.AssetArtifact{{Bytes: 1}}); !errors.Is(err, models.ErrAssetPreparationInterrupted) {
+		t.Fatalf("invalid generic metadata error = %v, want interrupted preparation", err)
+	}
+	if _, err := genericRuntimeMetadataFiles([]models.AssetArtifact{
+		{Name: "weights.bin", Bytes: 1},
+		{Name: "weights.bin", Bytes: 1},
+	}); !errors.Is(err, models.ErrAssetPreparationInterrupted) {
+		t.Fatalf("duplicate generic metadata error = %v, want interrupted preparation", err)
+	}
+	if got := genericRuntimeRevision(genericSource{revision: "pinned-revision"}, nil); got != "pinned-revision" {
+		t.Fatalf("genericRuntimeRevision() = %q, want pinned-revision", got)
+	}
+}
+
 func newNamedGenericRuntimeFixture(
 	t *testing.T,
 	issuer string,
