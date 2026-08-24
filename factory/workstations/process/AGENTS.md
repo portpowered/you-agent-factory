@@ -23,6 +23,7 @@ You are an autonomous coding agent working on a software project.
   SHA, record the run URL + test name in a PR COMMENT, rerun failed jobs ONCE,
   and move on — baseline flakes are owned by dedicated deflake lanes; do not
   burn your session re-proving them.
+- Browser/screenshot verification: attempt the required browser tool (dev-browser skill, Playwright MCP, or whichever the PRD names) using its single supported connection/availability check ONCE per session. If it returns no available instance, record that exact result in progress.txt ONE time, mark the affected PRD item's evidence as "live browser verification unavailable in this environment" rather than passes:true, and move on to other PRD items this same session. Do NOT retry the same connection/availability check again within the session, and do NOT spend a subsequent session re-attempting a check that already returned unavailable in a prior session unless the PRD or an operator note explicitly asks you to recheck. An unavailable browser tool is a system limitation, not a task to solve; substitute other available automated evidence (component/unit tests, an existing passing CI browser job) when the PRD allows it, or explicitly note the item as blocked-by-environment and leave it for review, which is authorized to waive it (see review/AGENTS.md addenda).
 - NEVER commit CI results, audit notes, or verification records onto your
   branch: each such commit creates a new head, invalidates the CI run it
   describes, and restarts CI. Evidence about a CI run belongs in a PR comment.
