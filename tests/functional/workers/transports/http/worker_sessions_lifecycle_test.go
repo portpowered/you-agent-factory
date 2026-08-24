@@ -140,8 +140,18 @@ func TestWorkerSessionHTTPFleetListWithoutWorkIDReturnsEmptyAndDirectSessions(t 
 		t.Fatalf("POST /worker-sessions status = %d, want 202", start.StatusCode)
 	}
 	runner.waitStarted(t)
+	eventResponse, eventCancel := openWorkerSessionEventStream(t, server.URL(), "fleet-list-direct")
+	defer eventCancel()
+	defer eventResponse.Body.Close()
 	close(gate)
 	runner.waitCompleted(t)
+	_, phase, err := readWorkerSessionEventStreamUntilTerminal(eventResponse)
+	if err != nil {
+		t.Fatalf("read direct Worker Session terminal event: %v", err)
+	}
+	if phase != "COMPLETED" {
+		t.Fatalf("direct Worker Session terminal phase = %q, want COMPLETED", phase)
+	}
 
 	listed := listFleetWorkerSessions()
 	if len(listed.Sessions) != 1 || listed.Sessions[0].WorkerSessionId != "fleet-list-direct" {

@@ -4177,6 +4177,42 @@ func TestListWorkerSessionObservationsPreservesBasePageOnOptionalProjectionFailu
 	}
 }
 
+func TestWorkerSessionObservationUsageProjectionPersistsCanonicalUsage(t *testing.T) {
+	r := newObservationRegistry(nil, nil)
+	r.sessions["worker-usage"] = observationSession("worker-usage", workersessions.StateCompleted)
+	r.observations["worker-usage"] = observationMetadata()
+
+	usage := workers.Draft{
+		Kind:    workers.KindUsage,
+		Phase:   workers.PhaseUpdated,
+		Payload: []byte(`{"inputTokens":3,"totalTokens":8,"model":"gpt-5-codex"}`),
+	}
+	r.updateUsageProjection(" worker-usage ", usage)
+	projected := baseObservation("worker-usage", r.sessions["worker-usage"], r.observations["worker-usage"])
+	if projected.Model == nil || *projected.Model != "gpt-5-codex" {
+		t.Fatalf("usage model = %#v, want gpt-5-codex", projected.Model)
+	}
+	if projected.TokenUsage == nil || projected.TokenUsage.InputTokens == nil || *projected.TokenUsage.InputTokens != 3 ||
+		projected.TokenUsage.OutputTokens != nil || projected.TokenUsage.TotalTokens == nil || *projected.TokenUsage.TotalTokens != 8 {
+		t.Fatalf("usage projection = %#v, want input/total with absent output", projected.TokenUsage)
+	}
+
+	// A valid usage record for an unknown identity is ignored without creating
+	// registry state, while malformed and uninformative usage records leave the
+	// already projected facts unchanged.
+	r.updateUsageProjection("missing", usage)
+	r.updateUsageProjection("worker-usage", workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: []byte("not-json")})
+	r.updateUsageProjection("worker-usage", workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: []byte(`{}`)})
+	afterInvalid := baseObservation("worker-usage", r.sessions["worker-usage"], r.observations["worker-usage"])
+	if afterInvalid.Model == nil || *afterInvalid.Model != "gpt-5-codex" || afterInvalid.TokenUsage == nil || afterInvalid.TokenUsage.InputTokens == nil || *afterInvalid.TokenUsage.InputTokens != 3 {
+		t.Fatalf("usage projection after invalid records = %#v, want original facts", afterInvalid)
+	}
+
+	if _, err := r.projectObservationList(context.Background(), []string{"missing"}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("projectObservationList(missing) error = %v, want session-not-found", err)
+	}
+}
+
 func TestReplayObservationSubscriptionCancellationCloses(t *testing.T) {
 	topic := workersessions.Topic("worker-1")
 	initial := replayProgressResult(topic, 2, 1)
@@ -4761,6 +4797,72 @@ func TestWorkerSessionClassification_CoversStructuredFallbackAndAssociationRejec
 	r.associateProviderSessionFromResult("missing-session", "dispatch", workers.WorkstationDispatchResult{
 		Result: workers.WorkResult{Continuation: &continuation},
 	})
+}
+
+func TestWorkerSessionCoverageCoversCancellationAndReplayRaceEdges(t *testing.T) {
+	if got := contradictorySuccessDetail(true, ""); got != "the Workers adapter reported failure after a successful result" {
+		t.Fatalf("contradictorySuccessDetail(adapter error) = %q, want adapter-specific detail", got)
+	}
+
+	supervision := newSupervision("dispatch-process", "turn-process")
+	supervision.requestedAction = workersessions.ControlActionCancel
+	processObserver := processLifecycleObserver{supervision: supervision}
+	processObserver.ProcessExited(platformprocess.ProcessInfo{PID: 42})
+	if supervision.processGoneObserved() {
+		t.Fatal("ProcessExited() marked a cancellation-owned process as gone")
+	}
+
+	workResult := &workers.WorkResult{Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}}
+	terminal, _, err := classifyExecuteResult(workers.ExecuteResult{}, nil, workResult)
+	if err != nil || terminal != workers.WorkstationDispatchTerminalOutcomeCanceled || workResult.Error == "" {
+		t.Fatalf("classifyExecuteResult(cancellation) = %q, %v, %#v, want canceled diagnostic", terminal, err, workResult)
+	}
+	classifiedResult := &workers.WorkResult{}
+	terminal, _, err = classifyExecuteError(workers.ErrWorkstationDispatchCanceled, workers.ExecuteResult{}, classifiedResult)
+	if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || terminal != workers.WorkstationDispatchTerminalOutcomeCanceled || classifiedResult.Cancellation == nil {
+		t.Fatalf("classifyExecuteError(dispatch canceled) = %q, %v, %#v, want canceled result", terminal, err, classifiedResult)
+	}
+
+	startDone := &startReplay{done: make(chan struct{}), result: workersessions.StartResult{Session: workersessions.Session{ID: "replayed-start"}}}
+	close(startDone.done)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if result, err := awaitStartReplay(canceled, startDone); err != nil || result.Session.ID != "replayed-start" {
+		t.Fatalf("awaitStartReplay(canceled completed) = %#v, %v, want completed replay", result, err)
+	}
+
+	interruptDone := &interruptReplay{done: make(chan struct{}), result: workersessions.InterruptResult{RequestID: "replayed-interrupt"}}
+	close(interruptDone.done)
+	if result, err := awaitInterruptReplay(canceled, interruptDone); err != nil || result.RequestID != "replayed-interrupt" {
+		t.Fatalf("awaitInterruptReplay(canceled completed) = %#v, %v, want completed replay", result, err)
+	}
+
+	stopRegistry := newTestRegistry(t)
+	stopSupervision := newSupervision("orphan-dispatch", "turn-orphan")
+	stopSupervision.serverOwned = true
+	stopSupervision.driverDone = make(chan struct{})
+	stopRegistry.supervisions["orphan-worker"] = stopSupervision
+	stopRegistry.startsDone = make(chan struct{})
+	stopContext, stopCancel := context.WithCancel(context.Background())
+	stopCancel()
+	if err := stopRegistry.stopOwned(stopContext); !errors.Is(err, workersessions.ErrSessionNotFound) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("stopOwned(orphan canceled) error = %v, want session-not-found and context canceled", err)
+	}
+
+	boundaryRegistry := newTestRegistry(t)
+	boundarySupervision := newSupervision("boundary-dispatch", "turn-boundary")
+	boundaryRegistry.sessions["boundary-worker"] = workersessions.Session{ID: "boundary-worker", State: workersessions.StateStarting}
+	control, retry, err := boundaryRegistry.cancelBoundary(
+		context.Background(),
+		workersessions.ControlRequest{ID: "boundary-worker"},
+		workersessions.ControlActionCancel,
+		false,
+		boundarySupervision,
+		cancellationAttempt{kind: cancellationAttemptBoundary, wait: make(chan struct{}), dispatchID: "boundary-dispatch"},
+	)
+	if err != nil || retry || control.Outcome != workersessions.ControlOutcomeApplied || control.Session.State != workersessions.StateCanceled {
+		t.Fatalf("cancelBoundary(before admission) = %#v, %t, %v, want applied CANCELED", control, retry, err)
+	}
 }
 
 func TestWorkerSessionRecordingPublication_CleansUpAndPreservesErrors(t *testing.T) {

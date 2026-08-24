@@ -1,6 +1,7 @@
 package workersessions_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -48,6 +49,64 @@ func TestPublish_CanonicalMockUsagePreservesExplicitZeroesAndModel(t *testing.T)
 	}
 	if _, ok := payload["cachedInputTokens"]; ok {
 		t.Fatalf("draft payload = %s, cachedInputTokens should remain omitted", draft.Payload)
+	}
+}
+
+func TestPublish_CanonicalMockUsageIgnoresMalformedAndUninformativePayloads(t *testing.T) {
+	for _, payload := range []string{"not-json", `{"totalTokens":5}`} {
+		t.Run(payload, func(t *testing.T) {
+			spy := &workerRecordSpy{}
+			publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+			publisher.Bind(spy)
+			publisher.Publish(workers.ProgressFragment{
+				DispatchID: "worker-invalid-usage",
+				Kind:       workers.ProgressFragmentKind,
+				Type:       "usage.updated",
+				Provider:   "codex",
+				Payload:    payload,
+			})
+			if len(spy.published) != 0 {
+				t.Fatalf("published records for payload %q = %#v, want none", payload, spy.published)
+			}
+		})
+	}
+}
+
+func TestPublisher_SuppressesContradictoryProviderFragmentBeforeForwarding(t *testing.T) {
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+	})
+	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-1"}
+	continuation := reference.ContinuationRef()
+	publisher.Publish(workers.ProgressFragment{
+		Provider:     string(providers.IDClaude),
+		Continuation: &continuation,
+	})
+	if forwarded != 0 {
+		t.Fatalf("forwarded contradictory provider fragments = %d, want zero", forwarded)
+	}
+}
+
+func TestRuntimeAttemptCompleteDelegatesAndRejectsUnavailableHandle(t *testing.T) {
+	called := false
+	attempt := workersessions.RuntimeAttempt(func(_ context.Context, result workers.WorkstationDispatchResult, dispatchErr error) error {
+		called = true
+		if result.DispatchID != "dispatch-1" || dispatchErr == nil {
+			t.Fatalf("RuntimeAttempt callback = %#v, %v, want dispatch and error", result, dispatchErr)
+		}
+		return nil
+	})
+	if err := attempt.Complete(context.Background(), workers.WorkstationDispatchResult{DispatchID: "dispatch-1"}, errors.New("failed")); err != nil {
+		t.Fatalf("RuntimeAttempt.Complete() error = %v, want nil", err)
+	}
+	if !called {
+		t.Fatal("RuntimeAttempt.Complete() did not invoke its callback")
+	}
+
+	var unavailable workersessions.RuntimeAttempt
+	if err := unavailable.Complete(context.Background(), workers.WorkstationDispatchResult{}, nil); err == nil {
+		t.Fatal("unavailable RuntimeAttempt.Complete() error = nil, want unavailable error")
 	}
 }
 
