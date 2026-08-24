@@ -23,7 +23,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		return *outcome, nil
 	}
 	policy := req.Policy
-	if policy.Mode == "" {
+	if policy.MaxAgents == 0 {
 		policy = workflowpolicy.DefaultEffectivePolicy()
 	}
 
@@ -35,11 +35,13 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	globals := &runtimeGlobals{
 		vm:             vm,
 		policy:         policy,
+		factoryName:    factoryNameForRequest(req),
 		sessionID:      sessionID,
 		ctx:            ctx,
 		records:        records,
 		childExecutor:  childExecutor,
 		parallelGate:   newParallelGate(policy),
+		pipelineGate:   newPipelineExecutionGate(),
 		agents:         req.Agents,
 		workerSettings: req.WorkerSettings,
 		onArtifact:     hooks.OnArtifact,
@@ -111,6 +113,16 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		}
 	}
 	return Outcome{OK: true, Value: typed, Records: records.list()}, nil
+}
+
+func factoryNameForRequest(req Request) string {
+	if name := strings.TrimSpace(req.FactoryName); name != "" {
+		return name
+	}
+	if name := strings.TrimSpace(req.Metadata["factoryName"]); name != "" {
+		return name
+	}
+	return strings.TrimSpace(req.Metadata["name"])
 }
 
 func preExecutionOutcome(req Request) *Outcome {

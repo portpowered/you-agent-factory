@@ -157,6 +157,7 @@ def tree_report(module, repo_path):
     for line in refs.splitlines():
         ref_name, object_id = line.split(maxsplit=1)
         private_refs[ref_name] = object_id
+    ancestor = git(["rev-parse", "HEAD^:"], repo_path, check=False)
 
     return {
         "head": git(["rev-parse", "HEAD"], repo_path).stdout.strip(),
@@ -165,7 +166,7 @@ def tree_report(module, repo_path):
         "index_tree": git(["write-tree"], repo_path).stdout.strip(),
         "worktree_tree": module.working_tree_tree(repo_path),
         "head_tree": git(["rev-parse", "HEAD:"], repo_path).stdout.strip(),
-        "ancestor_tree": git(["rev-parse", "HEAD^:"], repo_path).stdout.strip(),
+        "ancestor_tree": ancestor.stdout.strip() if ancestor.returncode == 0 else "",
         "private_refs": private_refs,
     }
 
@@ -220,7 +221,20 @@ def run_root_sync_process(
         raise ValueError(f"unknown root sync process role: {role}")
 
     try:
-        result_queue.put((role, "ok", module.sync_main(Path(repo_path))))
+        remote_sha = original_run_git(
+            "rev-parse",
+            "refs/remotes/origin/main",
+            cwd=repo_path,
+        ).stdout.strip()
+        result_queue.put(
+            (
+                role,
+                "ok",
+                module.sync_checked_out_main_with_stash(
+                    Path(repo_path), remote_sha,
+                ),
+            )
+        )
     except BaseException as error:  # report child failures in the parent test
         result_queue.put((role, "error", f"{type(error).__name__}: {error}"))
     finally:
@@ -279,14 +293,28 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
                         self.module.snapshot_ref_name(stale_snapshot): stale_snapshot,
                     }
 
+                root_head_before = git(["rev-parse", "HEAD"], local).stdout.strip()
+                root_main_before = git(
+                    ["rev-parse", "refs/heads/main"], local,
+                ).stdout.strip()
                 outcome = self.module.sync_main(local)
                 report = tree_report(self.module, local)
+                expected_head = (
+                    remote_sha
+                    if label in {"clean", "stale-private-ref"}
+                    else root_head_before
+                )
+                expected_main = (
+                    remote_sha
+                    if label in {"clean", "stale-private-ref"}
+                    else root_main_before
+                )
                 self.assertEqual(
-                    report["head"], remote_sha,
+                    report["head"], expected_head,
                     report_message(f"{label} outcome={outcome}", report),
                 )
                 self.assertEqual(
-                    report["main"], remote_sha,
+                    report["main"], expected_main,
                     report_message(f"{label} outcome={outcome}", report),
                 )
                 self.assertEqual(
@@ -419,11 +447,15 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(contents)
 
+        root_head_before = git(["rev-parse", "HEAD"], local).stdout.strip()
+        root_main_before = git(
+            ["rev-parse", "refs/heads/main"], local,
+        ).stdout.strip()
         outcome = self.module.sync_main(local)
         report = tree_report(self.module, local)
 
-        self.assertEqual(report["head"], remote_sha, report_message(outcome, report))
-        self.assertEqual(report["main"], remote_sha, report_message(outcome, report))
+        self.assertEqual(report["head"], root_head_before, report_message(outcome, report))
+        self.assertEqual(report["main"], root_main_before, report_message(outcome, report))
         self.assertEqual(
             git_bytes(["show", ":README.md"], local).stdout,
             staged_bytes,
@@ -663,7 +695,7 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
                 RuntimeError,
                 r"recovery snapshot preserved at refs/factory-snapshots/",
             ) as raised:
-                self.module.sync_main(local)
+                self.module.sync_checked_out_main_with_stash(local, remote_sha)
         finally:
             self.module.restore_stashed_changes = original_restore
 
@@ -680,28 +712,24 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         self.assertIn("merged.txt", report["porcelain"])
         self.assertIn(self.module.snapshot_ref_name(snapshot_id), str(raised.exception))
 
-    def test_sync_guard_checks_residue_when_main_is_already_current(self):
-        """A previous silent residue is rejected even when no fast-forward is needed."""
+    def test_sync_skips_root_residue_when_main_is_already_current(self):
+        """A dirty checkout can stay untouched when no root sync is needed."""
         local, _upstream, remote_sha = create_remote_repository(
             self.root / "guard-current", remote_ahead=True,
         )
         git(["reset", "--hard", remote_sha], local)
         git(["read-tree", "--reset", "-u", "HEAD^"], local)
 
-        with self.assertRaisesRegex(
-            RuntimeError,
-            r"no root snapshot was captured for automatic recovery",
-        ):
-            self.module.sync_main(local)
+        outcome = self.module.sync_main(local)
 
         report = tree_report(self.module, local)
-        self.assertEqual(report["head"], remote_sha, report_message("current", report))
-        self.assertEqual(report["main"], remote_sha, report_message("current", report))
+        self.assertEqual(report["head"], remote_sha, report_message(outcome, report))
+        self.assertEqual(report["main"], remote_sha, report_message(outcome, report))
         self.assertIn("merged.txt", report["porcelain"])
         self.assertEqual(report["private_refs"], {})
 
-    def test_setup_stops_before_lane_creation_on_ancestor_residue(self):
-        """The integrated guard fails before the requested lane is prepared."""
+    def test_setup_creates_lane_without_repairing_ancestor_residue(self):
+        """Lane setup leaves unrelated root residue untouched."""
         local, _upstream, remote_sha = create_remote_repository(
             self.root / "guard-setup", remote_ahead=True,
         )
@@ -724,13 +752,12 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
             check=False,
         )
 
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("Root cleanliness check failed", result.stderr)
-        self.assertIn("repository root is dirty", result.stderr.lower())
-        self.assertIn("merged.txt", result.stderr)
-        self.assertFalse(
-            (local / ".claude" / "worktrees" / prd_name).exists(),
-            result.stderr,
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ready")
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], Path(payload["worktree"])).stdout.strip(),
+            remote_sha,
         )
         report = tree_report(self.module, local)
         self.assertEqual(report["head"], remote_sha, report_message("setup", report))

@@ -3,6 +3,7 @@ package factory_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -125,6 +126,12 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 		"model":            "  gpt-test  ",
 		"reasoningEffort":  "  high  ",
 		"resourceId":       "  reviewers  ",
+		"schema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"answer": map[string]any{"type": "string"},
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Normalize() error = %v", err)
@@ -132,9 +139,163 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 	want := factory.JavaScriptChildSpec{
 		Prompt: "review this", Label: "reviewer", Preset: "careful", ExecutorProvider: "cursor-acp",
 		ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "high", ResourceID: "reviewers",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"answer": map[string]any{"type": "string"},
+			},
+		},
+		Permissions: factory.JavaScriptChildPermissionDefault,
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Normalize() = %#v, want %#v", got, want)
+	}
+}
+
+func TestJavaScriptChildFieldDescriptorIsDetachedAndRuntimeAligned(t *testing.T) {
+	t.Parallel()
+
+	descriptors := factory.JavaScriptChildFieldDescriptors()
+	want := []factory.JavaScriptChildFieldDescriptor{
+		{Name: "prompt", JSONType: "string", Required: true},
+		{Name: "label", JSONType: "string"},
+		{Name: "preset", JSONType: "string"},
+		{Name: "executorProvider", JSONType: "string"},
+		{Name: "modelProvider", JSONType: "string"},
+		{Name: "model", JSONType: "string"},
+		{Name: "reasoningEffort", JSONType: "string"},
+		{Name: "resourceId", JSONType: "string"},
+		{Name: "schema", JSONType: "object", AdditionalProperties: boolPointer(false)},
+		{Name: "permissions", JSONType: "string", Enum: []string{"DEFAULT", "SKIP_PERMISSIONS"}},
+	}
+	if !reflect.DeepEqual(descriptors, want) {
+		t.Fatalf("JavaScriptChildFieldDescriptors() = %#v, want %#v", descriptors, want)
+	}
+	descriptors[0].Name = "mutated"
+	descriptors[len(descriptors)-1].Enum[0] = "mutated"
+	if got := factory.JavaScriptChildSupportedFields()[0]; got != "prompt" {
+		t.Fatalf("mutating descriptor result changed runtime field name to %q", got)
+	}
+	if got := factory.JavaScriptChildFieldDescriptors()[len(descriptors)-1].Enum[0]; got != "DEFAULT" {
+		t.Fatalf("mutating descriptor result changed runtime enum to %q", got)
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
+}
+
+func TestNormalize_ClonesValidSchemaWithoutSharingNestedState(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+	}
+	got, err := factory.NormalizeJavaScriptChild(map[string]any{
+		"prompt": "review",
+		"schema": schema,
+	})
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	if !reflect.DeepEqual(got.Schema, schema) {
+		t.Fatalf("Normalize() schema = %#v, want %#v", got.Schema, schema)
+	}
+
+	gotProperties := got.Schema["properties"].(map[string]any)
+	gotProperties["answer"].(map[string]any)["type"] = "number"
+	if schema["properties"].(map[string]any)["answer"].(map[string]any)["type"] != "string" {
+		t.Fatal("normalized schema mutation changed caller-owned schema")
+	}
+	schema["properties"].(map[string]any)["answer"].(map[string]any)["type"] = "boolean"
+	if gotProperties["answer"].(map[string]any)["type"] != "number" {
+		t.Fatal("caller schema mutation changed normalized schema")
+	}
+}
+
+func TestNormalize_RejectsInvalidSchemasWithSafeDiagnostics(t *testing.T) {
+	t.Parallel()
+	const promptSecret = "prompt-secret"
+	const schemaSecret = "schema-secret"
+	cases := []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{name: "non-object", value: schemaSecret, want: `agent.run() requires "schema" to be an object`},
+		{name: "malformed-json-value", value: map[string]any{"type": func() {}}, want: `agent.run() requires "schema" to be a valid JSON Schema object`},
+		{name: "invalid-schema-keyword", value: map[string]any{"type": "not-a-schema-type"}, want: `agent.run() requires "schema" to be a valid JSON Schema object`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := factory.NormalizeJavaScriptChild(map[string]any{
+				"prompt": promptSecret,
+				"schema": test.value,
+			})
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("Normalize() error = %v, want %q", err, test.want)
+			}
+			if strings.Contains(err.Error(), promptSecret) || strings.Contains(err.Error(), schemaSecret) {
+				t.Fatalf("Normalize() error = %q, want safe schema diagnostic", err)
+			}
+		})
+	}
+}
+
+func TestNormalize_AcceptsOnlyCanonicalPermissionValues(t *testing.T) {
+	t.Parallel()
+
+	for _, permission := range []factory.JavaScriptChildPermission{
+		factory.JavaScriptChildPermissionDefault,
+		factory.JavaScriptChildPermissionSkipPermissions,
+	} {
+		got, err := factory.NormalizeJavaScriptChild(map[string]any{
+			"prompt":      "review",
+			"permissions": string(permission),
+		})
+		if err != nil {
+			t.Fatalf("Normalize(%q) error = %v", permission, err)
+		}
+		if got.Permissions != permission {
+			t.Fatalf("Normalize(%q).Permissions = %q, want %q", permission, got.Permissions, permission)
+		}
+	}
+
+	for _, value := range []any{"READ_ONLY", true, 1} {
+		_, err := factory.NormalizeJavaScriptChild(map[string]any{
+			"prompt":      "review",
+			"permissions": value,
+		})
+		if err == nil || !strings.Contains(err.Error(), `"permissions"`) {
+			t.Fatalf("Normalize(%#v) error = %v, want permissions diagnostic", value, err)
+		}
+	}
+}
+
+func TestNormalize_RejectsRetiredPermissionFieldWithReplacement(t *testing.T) {
+	t.Parallel()
+
+	retiredField := "skip" + "Permissions"
+	_, err := factory.NormalizeJavaScriptChild(map[string]any{
+		"prompt":     "review",
+		retiredField: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), `field "`+retiredField+`"`) ||
+		!strings.Contains(err.Error(), `use "permissions"`) {
+		t.Fatalf("Normalize() error = %v, want actionable permissions replacement", err)
+	}
+}
+
+func TestNormalize_RejectsInvalidPermissionsValues(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []any{"READ_ONLY", true, 42} {
+		_, err := factory.NormalizeJavaScriptChild(map[string]any{"prompt": "review", "permissions": value})
+		if err == nil || !strings.Contains(err.Error(), `"permissions"`) {
+			t.Fatalf("Normalize(%#v) error = %v, want field-specific permissions diagnostic", value, err)
+		}
 	}
 }
 
@@ -164,7 +325,7 @@ func TestNormalize_RejectsUnsupportedFieldsWithoutExposingValues(t *testing.T) {
 	t.Parallel()
 	unsupported := []string{
 		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
-		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+		"outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
 	}
 	const secret = "secret-value-that-must-not-appear"
 	for _, field := range unsupported {

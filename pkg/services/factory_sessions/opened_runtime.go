@@ -24,13 +24,16 @@ type ProgressPublisher = workers.ProgressPublisher
 type SessionRuntimeOpeningRequest struct {
 	// FactorySessionID correlates the opened runtime with its owning Factory
 	// Session. Empty values use the process's primary session alias.
-	FactorySessionID  string
-	PersistencePolicy PersistencePolicy
-	BackendScopeID    string
-	SystemConfigHome  string
-	SystemConfigPath  string
-	WorkFile          string
-	Host              RuntimeHostRequest
+	FactorySessionID string
+	// CanonicalSessionID is the preallocated identity for an automatic default
+	// recording. It is distinct from the public FactorySessionID alias.
+	CanonicalSessionID string
+	PersistencePolicy  PersistencePolicy
+	BackendScopeID     string
+	SystemConfigHome   string
+	SystemConfigPath   string
+	WorkFile           string
+	Host               RuntimeHostRequest
 }
 
 // RuntimeOpeningRequest is the Factory Sessions operation input assembled from

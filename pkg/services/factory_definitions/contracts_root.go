@@ -545,16 +545,20 @@ type ResolveRuntimeSnapshotResult struct {
 // no service interfaces, callbacks, providers, model handles, executors,
 // filesystems, or mutable loaded-source references are retained.
 type RuntimeSnapshot struct {
-	FactoryDir        string
-	RuntimeBaseDir    string
-	Invocation        RuntimeSnapshotInvocationContext
-	DefinitionVersion *FactoryVersion
-	EffectiveFactory  FactoryConfig
-	Workers           []FactoryWorkerConfig
-	Workstations      []FactoryWorkstationConfig
-	AutomationSources []RuntimeAutomationSource
-	PromptSources     []RuntimePromptSource
-	BundledFiles      []PortableBundledFileReplacement
+	FactoryDir     string
+	RuntimeBaseDir string
+	Invocation     RuntimeSnapshotInvocationContext
+	// InvocationSensitiveJSONPointers identifies authored Factory Definition
+	// fields that interpolated a declared sensitive invocation parameter. It
+	// carries only field provenance; it never carries an invocation value.
+	InvocationSensitiveJSONPointers []string
+	DefinitionVersion               *FactoryVersion
+	EffectiveFactory                FactoryConfig
+	Workers                         []FactoryWorkerConfig
+	Workstations                    []FactoryWorkstationConfig
+	AutomationSources               []RuntimeAutomationSource
+	PromptSources                   []RuntimePromptSource
+	BundledFiles                    []PortableBundledFileReplacement
 }
 
 // Clone returns a detached copy suitable for crossing another service
@@ -588,12 +592,13 @@ func (snapshot RuntimeSnapshot) Clone() (RuntimeSnapshot, error) {
 			WorkflowID:       snapshot.Invocation.WorkflowID,
 			Arguments:        work.CloneInvocationArguments(snapshot.Invocation.Arguments),
 		},
-		EffectiveFactory:  *config,
-		Workers:           make([]FactoryWorkerConfig, len(snapshot.Workers)),
-		Workstations:      make([]FactoryWorkstationConfig, len(snapshot.Workstations)),
-		AutomationSources: make([]RuntimeAutomationSource, len(snapshot.AutomationSources)),
-		PromptSources:     append([]RuntimePromptSource(nil), snapshot.PromptSources...),
-		BundledFiles:      append([]PortableBundledFileReplacement(nil), snapshot.BundledFiles...),
+		InvocationSensitiveJSONPointers: append([]string(nil), snapshot.InvocationSensitiveJSONPointers...),
+		EffectiveFactory:                *config,
+		Workers:                         make([]FactoryWorkerConfig, len(snapshot.Workers)),
+		Workstations:                    make([]FactoryWorkstationConfig, len(snapshot.Workstations)),
+		AutomationSources:               make([]RuntimeAutomationSource, len(snapshot.AutomationSources)),
+		PromptSources:                   append([]RuntimePromptSource(nil), snapshot.PromptSources...),
+		BundledFiles:                    append([]PortableBundledFileReplacement(nil), snapshot.BundledFiles...),
 	}
 	if snapshot.DefinitionVersion != nil {
 		version := *snapshot.DefinitionVersion

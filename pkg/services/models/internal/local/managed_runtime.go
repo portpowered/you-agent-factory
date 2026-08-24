@@ -43,31 +43,77 @@ func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntim
 			managedDiagnostics[key] = value
 		}
 	}
+	var revision *string
+	var cachePath *string
+	var cacheBytes *int64
+	if input.cacheInspection != nil && input.cacheInspection.Supported && input.cacheInspection.Installed {
+		if value := strings.TrimSpace(input.cacheInspection.Revision); value != "" {
+			revision = &value
+		}
+		if value := strings.TrimSpace(input.cacheInspection.CachePath); value != "" {
+			cachePath = &value
+		}
+		if input.cacheInspection.CacheBytes >= 0 {
+			value := input.cacheInspection.CacheBytes
+			cacheBytes = &value
+		}
+	}
 	return managedruntime.Runtime{
 		Identity:            input.summary.name,
 		ReadinessState:      readiness,
 		LifecycleState:      lifecycle,
 		Locality:            input.summary.locality,
+		Revision:            revision,
+		CachePath:           cachePath,
+		CacheBytes:          cacheBytes,
 		SupportedOperations: input.summary.operations,
 		Diagnostics:         managedDiagnostics,
 	}
 }
 
 func managedRuntimeStates(input managedRuntimeProjection) (managedruntime.ReadinessState, managedruntime.LifecycleState) {
-	if input.cacheInspection != nil && input.cacheInspection.Supported {
+	if input.cacheInspection != nil {
 		inspection := *input.cacheInspection
-		if inspection.Installed {
-			return managedruntime.ReadinessStateReady, managedruntime.LifecycleStateInstalled
-		}
-		if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
-			return managedruntime.ReadinessStateFailed, managedruntime.LifecycleStateNotInstalled
-		}
-		if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
-			return managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateInstalling
-		}
-		return managedruntime.ReadinessStateMissing, managedruntime.LifecycleStateNotInstalled
+		projection := managedruntime.ProjectManagedRuntimeState(
+			managedRuntimeCacheFacts(input.summary.locality, inspection),
+			models.ManagedRuntimeHostFacts{},
+		)
+		return projection.ReadinessState, projection.LifecycleState
 	}
-	return input.summary.readiness, input.summary.lifecycle
+	if input.summary.locality == managedruntime.LocalityLocal {
+		projection := managedruntime.ProjectManagedRuntimeState(
+			models.ManagedRuntimeCacheFacts{
+				Locality:  models.LocalityLocal,
+				Supported: true,
+			},
+			models.ManagedRuntimeHostFacts{},
+		)
+		return projection.ReadinessState, projection.LifecycleState
+	}
+	readiness, lifecycle := managedruntime.NormalizeManagedRuntimeState(
+		models.Locality(input.summary.locality), input.summary.readiness, input.summary.lifecycle,
+	)
+	return readiness, lifecycle
+}
+
+func managedRuntimeCacheFacts(
+	locality managedruntime.Locality,
+	inspection RuntimeCacheInspection,
+) models.ManagedRuntimeCacheFacts {
+	return models.ManagedRuntimeCacheFacts{
+		Locality:           models.Locality(locality),
+		Supported:          inspection.Supported,
+		Installed:          inspection.Installed,
+		ManifestPresent:    inspection.ManifestPresent,
+		ManifestValid:      inspection.ManifestValid,
+		ExpectedArtifacts:  append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+		ObservedArtifacts:  append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
+		InstalledFileCount: inspection.InstalledFileCount,
+		PartialArtifacts:   inspection.PartialArtifacts,
+		ActivePull:         inspection.ActivePull,
+		IntegrityVerified:  inspection.IntegrityVerified,
+		FailureReason:      inspection.FailureReason,
+	}
 }
 
 func managedRuntimeSourceResolutionValue(input managedRuntimeProjection) ManagedRuntimeSourceResolution {
@@ -90,6 +136,9 @@ func managedRuntimeDiagnostics(
 	}
 	for key, value := range diagnostics {
 		result[key] = value
+	}
+	if readiness == managedruntime.ReadinessStateFailed && result["failureReason"] == "" {
+		result["failureReason"] = "managed runtime cache or host state is not usable"
 	}
 	return result
 }
@@ -167,6 +216,62 @@ func ManagedRuntimeReadinessForFactoryContext(
 		sourceResolver,
 	)
 	return detail.ManagedRuntime, err
+}
+
+// ManagedRuntimeReadinessForEffectiveDefinitionContext applies current cache
+// facts to a catalog entry that came from an effective definition rather than
+// a Factory worker/resource projection. Built-in and operator model entries
+// use this path when a catalog scope has no authored runtime resources.
+func ManagedRuntimeReadinessForEffectiveDefinitionContext(
+	ctx context.Context,
+	baseline models.Runtime,
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	runtimeCacheInspector RuntimeCacheInspector,
+) (models.Runtime, error) {
+	if err := ctx.Err(); err != nil {
+		return models.Runtime{}, err
+	}
+	if runtimeCacheInspector == nil {
+		return baseline.Clone(), nil
+	}
+	inspection, err := runtimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return models.Runtime{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return models.Runtime{}, err
+	}
+	return projectManagedRuntimeCacheInspection(baseline, inspection), nil
+}
+
+func projectManagedRuntimeCacheInspection(
+	baseline models.Runtime,
+	inspection RuntimeCacheInspection,
+) models.Runtime {
+	projection := buildManagedRuntimeProjection(managedRuntimeProjection{
+		summary: managedRuntimeSummary{
+			name:       baseline.Identity,
+			locality:   managedruntime.Locality(baseline.Locality),
+			readiness:  managedruntime.ReadinessState(baseline.ReadinessState),
+			lifecycle:  managedruntime.LifecycleState(baseline.LifecycleState),
+			operations: baseline.SupportedOperations,
+		},
+		baseDiagnostics: baseline.Diagnostics,
+		cacheInspection: &inspection,
+		includeInspect:  true,
+	})
+	return models.Runtime{
+		Identity:            projection.Identity,
+		ReadinessState:      projection.ReadinessState,
+		LifecycleState:      projection.LifecycleState,
+		Locality:            projection.Locality,
+		Revision:            projection.Revision,
+		CachePath:           projection.CachePath,
+		CacheBytes:          projection.CacheBytes,
+		SupportedOperations: projection.SupportedOperations,
+		Diagnostics:         projection.Diagnostics,
+	}
 }
 
 type fixedRuntimeCacheInspector struct {

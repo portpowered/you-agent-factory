@@ -992,53 +992,6 @@ func assertPendingFactoryGraphTopologyEdges(t *testing.T, topology PendingFactor
 	}
 }
 
-func TestCloneSubprocessExecutionRequest_DetachesMutableFields(t *testing.T) {
-	t.Parallel()
-
-	request := SubprocessExecutionRequest{
-		Command:                  "runner",
-		Args:                     []string{"--flag"},
-		Stdin:                    []byte("stdin"),
-		Env:                      []string{"KEY=value"},
-		PreviousChainingTraceIDs: []string{"chain-a"},
-		Execution: ExecutionMetadata{
-			WorkIDs: []string{"work-1"},
-		},
-		Inputs: []workers.WorkInput{{
-			Kind:   string(workers.DataTypeWork),
-			State:  "review",
-			WorkID: "work-1",
-		}},
-	}
-
-	cloned := CloneSubprocessExecutionRequest(request)
-	cloned.Args[0] = "--changed"
-	cloned.Stdin[0] = 'X'
-	cloned.Env[0] = "KEY=changed"
-	cloned.PreviousChainingTraceIDs[0] = "chain-z"
-	cloned.Execution.WorkIDs[0] = "work-2"
-	cloned.Inputs[0].State = "changed"
-
-	if request.Args[0] != "--flag" {
-		t.Fatalf("original subprocess args mutated: %#v", request.Args)
-	}
-	if string(request.Stdin) != "stdin" {
-		t.Fatalf("original subprocess stdin mutated: %q", string(request.Stdin))
-	}
-	if request.Env[0] != "KEY=value" {
-		t.Fatalf("original subprocess env mutated: %#v", request.Env)
-	}
-	if request.PreviousChainingTraceIDs[0] != "chain-a" {
-		t.Fatalf("original subprocess trace ids mutated: %#v", request.PreviousChainingTraceIDs)
-	}
-	if request.Execution.WorkIDs[0] != "work-1" {
-		t.Fatalf("original subprocess execution mutated: %#v", request.Execution)
-	}
-	if request.Inputs[0].State != "review" {
-		t.Fatalf("original subprocess Work input mutated: %#v", request.Inputs)
-	}
-}
-
 func TestCanonicalBundledFileHelpers(t *testing.T) {
 	t.Parallel()
 

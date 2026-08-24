@@ -17,7 +17,9 @@ type rootFake struct {
 	pull          func(context.Context, string) (models.PullResult, error)
 	listCatalog   func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
 	getCatalog    func(context.Context, models.GetModelRequest) (models.GetModelResult, error)
+	readiness     func(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error)
 	pullForScope  func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	remove        func(context.Context, models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error)
 	invokeGeneric func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
@@ -108,9 +110,28 @@ func (fake *rootFake) CloseRuntimeScope(
 }
 
 func (fake *rootFake) GetModelReadiness(
-	context.Context,
-	models.GetModelReadinessRequest,
+	ctx context.Context,
+	request models.GetModelReadinessRequest,
 ) (models.GetModelReadinessResult, error) {
+	if fake.readiness != nil {
+		return fake.readiness(ctx, request)
+	}
+	if fake.getCatalog != nil {
+		model, err := fake.getCatalog(ctx, models.GetModelRequest{
+			Scope: request.Scope, Name: request.Name, Operation: request.Operation,
+		})
+		if err != nil {
+			return models.GetModelReadinessResult{}, err
+		}
+		return models.GetModelReadinessResult{ModelName: model.Model.Name, Readiness: model.Model.ManagedRuntime}, nil
+	}
+	if fake.get != nil {
+		model, err := fake.get(ctx, request.Name)
+		if err != nil {
+			return models.GetModelReadinessResult{}, err
+		}
+		return models.GetModelReadinessResult{ModelName: model.Name, Readiness: model.ManagedRuntime}, nil
+	}
 	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 }
 
@@ -129,9 +150,12 @@ func (fake *rootFake) InspectModelAssets(
 }
 
 func (fake *rootFake) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
+	ctx context.Context,
+	request models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
+	if fake.remove != nil {
+		return fake.remove(ctx, request)
+	}
 	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 

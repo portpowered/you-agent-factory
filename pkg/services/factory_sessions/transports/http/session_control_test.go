@@ -192,13 +192,13 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvalidSourceReturnsBadR
 func TestHandlerFromRoot_CloseFactorySessionInvokesRoot(t *testing.T) {
 	t.Parallel()
 
-	closed := false
+	deleted := false
 	root := &httpSessionsRootFake{
-		onClose: func(_ context.Context, sessionID string) error {
+		onDelete: func(_ context.Context, sessionID string) error {
 			if sessionID != "session-close-alpha" {
 				t.Fatalf("sessionId = %q, want session-close-alpha", sessionID)
 			}
-			closed = true
+			deleted = true
 			return nil
 		},
 	}
@@ -210,8 +210,8 @@ func TestHandlerFromRoot_CloseFactorySessionInvokesRoot(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", recorder.Code)
 	}
-	if !closed {
-		t.Fatal("fake root close was not invoked")
+	if !deleted {
+		t.Fatal("fake root delete was not invoked")
 	}
 }
 
@@ -285,5 +285,104 @@ func TestHandlerFromRoot_PauseLiveFactorySessionEncodesRootLifecycleControl(t *t
 	}
 	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
 		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+}
+
+func TestHandlerFromRoot_LiveCancelAndTerminateUseSupportedLifecycleControls(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-live-stop"
+	root := &httpSessionsRootFake{
+		onCancelLive: func(_ context.Context, gotSessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+			if gotSessionID != sessionID || control.Reason != "operator cancel" {
+				t.Fatalf("cancel request = %q/%#v, want %q/operator cancel", gotSessionID, control, sessionID)
+			}
+			return factorysessions.LifecycleControlResult{
+				SessionID: sessionID,
+				Operation: factorysessions.LifecycleControlCancel,
+				Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
+				Status:    factorysessions.LifecycleStatusSucceeded,
+			}, nil
+		},
+		onTerminateLive: func(_ context.Context, gotSessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+			if gotSessionID != sessionID || control.Reason != "operator terminate" {
+				t.Fatalf("terminate request = %q/%#v, want %q/operator terminate", gotSessionID, control, sessionID)
+			}
+			return factorysessions.LifecycleControlResult{
+				SessionID: sessionID,
+				Operation: factorysessions.LifecycleControlTerminate,
+				Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
+				Status:    factorysessions.LifecycleStatusSucceeded,
+			}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+
+	cancelRecorder := httptest.NewRecorder()
+	handler.CancelFactorySession(
+		cancelRecorder,
+		httptest.NewRequest(http.MethodPost, "/factory-sessions/"+sessionID+"/cancel", strings.NewReader(`{"reason":"operator cancel"}`)),
+		factoryapi.SessionID(sessionID),
+	)
+	if cancelRecorder.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, want 200: %s", cancelRecorder.Code, cancelRecorder.Body.String())
+	}
+	var cancelResponse factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(cancelRecorder.Body.Bytes(), &cancelResponse); err != nil {
+		t.Fatalf("decode cancel response: %v", err)
+	}
+	if cancelResponse.Operation != factoryapi.FactorySessionLifecycleControlKindCancel || cancelResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("cancel response = %#v, want accepted CANCEL", cancelResponse)
+	}
+
+	terminateRecorder := httptest.NewRecorder()
+	handler.TerminateFactorySession(
+		terminateRecorder,
+		httptest.NewRequest(http.MethodPost, "/factory-sessions/"+sessionID+"/terminate", strings.NewReader(`{"reason":"operator terminate"}`)),
+		factoryapi.SessionID(sessionID),
+	)
+	if terminateRecorder.Code != http.StatusOK {
+		t.Fatalf("terminate status = %d, want 200: %s", terminateRecorder.Code, terminateRecorder.Body.String())
+	}
+	var terminateResponse factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(terminateRecorder.Body.Bytes(), &terminateResponse); err != nil {
+		t.Fatalf("decode terminate response: %v", err)
+	}
+	if terminateResponse.Operation != factoryapi.FactorySessionLifecycleControlKindTerminate || terminateResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("terminate response = %#v, want accepted TERMINATE", terminateResponse)
+	}
+}
+
+func TestHandlerFromRoot_LiveLifecycleControlConflictIsTyped(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-live-conflict"
+	root := &httpSessionsRootFake{
+		onTerminateLive: func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+			return factorysessions.LifecycleControlResult{}, &factorysessions.ControlError{
+				Operation: factorysessions.LifecycleControlTerminate,
+				Outcome:   factorysessions.LifecycleControlOutcomeConflict,
+				Status:    factorysessions.LifecycleStatusRunning,
+				Message:   "runtime must be stopped before deletion",
+			}
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.TerminateFactorySession(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/factory-sessions/"+sessionID+"/terminate", nil),
+		factoryapi.SessionID(sessionID),
+	)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409: %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode conflict response: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindTerminate || response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeConflict || response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("conflict response = %#v, want typed running conflict", response)
 	}
 }

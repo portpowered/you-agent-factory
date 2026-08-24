@@ -2,8 +2,11 @@ package workerexecution
 
 import (
 	"context"
+	"sync"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const (
@@ -21,6 +24,56 @@ type mockWorkerOutputPolicyKey struct{}
 type progressPublisherKey struct{}
 type scriptEventRecorderKey struct{}
 type commandRunnerOverrideKey struct{}
+type mockWorkerUsageCaptureKey struct{}
+
+// MockWorkerUsageCapture is a request-scoped hand-off from the contextual
+// mock command runner to the Workers execution boundary. It records only the
+// first matched declaration so one dispatch cannot publish duplicate usage
+// when an underlying command path is retried or wrapped.
+type MockWorkerUsageCapture struct {
+	mu    sync.Mutex
+	usage *workers.MockWorkerUsageConfig
+}
+
+// Record snapshots one matched mock usage declaration.
+func (capture *MockWorkerUsageCapture) Record(usage *workers.MockWorkerUsageConfig) {
+	if capture == nil || usage == nil {
+		return
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if capture.usage == nil {
+		capture.usage = usage.Clone()
+	}
+}
+
+// Usage returns a detached declaration, if a matched mock recorded one.
+func (capture *MockWorkerUsageCapture) Usage() *workers.MockWorkerUsageConfig {
+	if capture == nil {
+		return nil
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.usage.Clone()
+}
+
+// WithMockWorkerUsageCapture attaches the request-scoped usage hand-off.
+func WithMockWorkerUsageCapture(ctx context.Context, capture *MockWorkerUsageCapture) context.Context {
+	if ctx == nil || capture == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, mockWorkerUsageCaptureKey{}, capture)
+}
+
+// MockWorkerUsageCaptureFromContext resolves the request-scoped usage
+// hand-off, if one was installed by Workers execution.
+func MockWorkerUsageCaptureFromContext(ctx context.Context) *MockWorkerUsageCapture {
+	if ctx == nil {
+		return nil
+	}
+	capture, _ := ctx.Value(mockWorkerUsageCaptureKey{}).(*MockWorkerUsageCapture)
+	return capture
+}
 
 // WithMockWorkersConfig attaches a cloned, request-scoped mock override to a
 // detached Workers execution. The process-scoped Workers service retains no
@@ -100,10 +153,14 @@ func ScriptEventRecorderFromContext(ctx context.Context, fallback workers.Script
 	return fallback
 }
 
-// WithCommandRunnerOverride attaches a runtime-scoped command effect to one
-// detached execution. The override is consumed by the Script Runner only and
-// does not mutate the process-scoped runner registry.
-func WithCommandRunnerOverride(ctx context.Context, runner workers.CommandRunner) context.Context {
+// WithWorkerCommandRunnerOverride is the owner-internal counterpart used by
+// private runner tests and adapters that already operate on the enriched
+// Workers request. Peer services pass platform process effects through the
+// composition boundary instead.
+func WithWorkerCommandRunnerOverride(
+	ctx context.Context,
+	runner workerprocess.CommandRunner,
+) context.Context {
 	if ctx == nil || runner == nil {
 		return ctx
 	}
@@ -112,10 +169,16 @@ func WithCommandRunnerOverride(ctx context.Context, runner workers.CommandRunner
 
 // CommandRunnerOverrideFromContext resolves the optional runtime-scoped
 // command effect, falling back to the construction-time runner.
-func CommandRunnerOverrideFromContext(ctx context.Context, fallback workers.CommandRunner) workers.CommandRunner {
+func CommandRunnerOverrideFromContext(
+	ctx context.Context,
+	fallback workerprocess.CommandRunner,
+) workerprocess.CommandRunner {
 	if ctx != nil {
-		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(workers.CommandRunner); ok && runner != nil {
+		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(workerprocess.CommandRunner); ok && runner != nil {
 			return runner
+		}
+		if runner, ok := ctx.Value(commandRunnerOverrideKey{}).(platformprocess.CommandRunner); ok && runner != nil {
+			return workerprocess.AdaptPlatformCommandRunner(runner)
 		}
 	}
 	return fallback

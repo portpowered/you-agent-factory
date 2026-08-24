@@ -90,3 +90,19 @@ func (a *Adapter) InvokeGenericModel(
 	}
 	return a.models.InvokeModel(ctx, mapped)
 }
+
+// RemoveModel decodes the explicit model path, invokes the scoped Models
+// removal contract, and returns detached removal facts for HTTP encoding.
+func (a *Adapter) RemoveModel(ctx context.Context, modelName string) (models.RemoveModelAssetsResult, error) {
+	if a == nil || a.models == nil {
+		return models.RemoveModelAssetsResult{}, errModelsServiceRequired
+	}
+	if a.scope.IsZero() {
+		return models.RemoveModelAssetsResult{}, models.ErrRuntimeScopeInvalid
+	}
+	request := models.RemoveModelAssetsRequest{Scope: a.scope, Name: modelName}
+	if err := request.Validate(); err != nil {
+		return models.RemoveModelAssetsResult{}, err
+	}
+	return a.models.RemoveModelAssets(ctx, request)
+}

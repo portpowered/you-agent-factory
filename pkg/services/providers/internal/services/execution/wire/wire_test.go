@@ -15,7 +15,6 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordingWorkersRunner struct {
@@ -24,10 +23,10 @@ type recordingWorkersRunner struct {
 
 func (r *recordingWorkersRunner) Run(
 	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	r.calls++
-	return workers.CommandResult{Stdout: []byte("ok")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
 }
 
 type recordingPlatformRunner struct {

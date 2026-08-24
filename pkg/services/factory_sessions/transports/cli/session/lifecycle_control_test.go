@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -667,4 +668,208 @@ func encodeLifecycleControlHTTPResponse(
 
 func lifecycleControlStringPtr(value string) *string {
 	return &value
+}
+
+func TestNewLocalLifecycleControlsUsesLiveStopCapability(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-live-stop"
+	root := &localLifecycleServiceStub{}
+	controls := NewLocalLifecycleControls(root)
+	if controls == nil {
+		t.Fatal("NewLocalLifecycleControls = nil, want local controls")
+	}
+
+	assertLocalLifecycleControl(t, sessionID,
+		factoryapi.FactorySessionLifecycleControlKindCancel, "cancel-1", "operator cancel",
+		controls.Cancel, &root.liveCancelCalls, &root.durableCancelCalls, &root.lastCancel)
+	assertLocalLifecycleControl(t, sessionID,
+		factoryapi.FactorySessionLifecycleControlKindTerminate, "terminate-1", "operator terminate",
+		controls.Terminate, &root.liveTerminateCalls, &root.durableTerminateCalls, &root.lastTerminate)
+}
+
+func assertLocalLifecycleControl(
+	t *testing.T,
+	sessionID string,
+	kind factoryapi.FactorySessionLifecycleControlKind,
+	requestID string,
+	reason string,
+	invoke func(LifecycleControlConfig) error,
+	liveCalls *int,
+	durableCalls *int,
+	lastRequest *factorysessions.ControlRequest,
+) {
+	t.Helper()
+	var output bytes.Buffer
+	if err := invoke(LifecycleControlConfig{
+		Context: context.Background(), SessionID: sessionID, RequestID: requestID,
+		Reason: reason, JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("local %s: %v", kind, err)
+	}
+	if *liveCalls != 1 || *durableCalls != 0 || lastRequest.RequestID != requestID || lastRequest.Reason != reason {
+		t.Fatalf("%s routing = live:%d durable:%d request:%#v, want live capability", kind, *liveCalls, *durableCalls, *lastRequest)
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode local %s: %v", kind, err)
+	}
+	if response.Operation != kind || response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("local %s response = %#v, want accepted", kind, response)
+	}
+}
+
+type localLifecycleServiceStub struct {
+	factorysessions.Service
+	liveCancelCalls       int
+	liveTerminateCalls    int
+	durableCancelCalls    int
+	durableTerminateCalls int
+	lastCancel            factorysessions.ControlRequest
+	lastTerminate         factorysessions.ControlRequest
+}
+
+func (s *localLifecycleServiceStub) Cancel(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	s.durableCancelCalls++
+	return s.liveResult(sessionID, factorysessions.LifecycleControlCancel), nil
+}
+
+func (s *localLifecycleServiceStub) Terminate(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	s.durableTerminateCalls++
+	return s.liveResult(sessionID, factorysessions.LifecycleControlTerminate), nil
+}
+
+func (s *localLifecycleServiceStub) CancelLiveFactorySession(_ context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	s.liveCancelCalls++
+	s.lastCancel = request
+	return s.liveResult(sessionID, factorysessions.LifecycleControlCancel), nil
+}
+
+func (s *localLifecycleServiceStub) TerminateLiveFactorySession(_ context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	s.liveTerminateCalls++
+	s.lastTerminate = request
+	return s.liveResult(sessionID, factorysessions.LifecycleControlTerminate), nil
+}
+
+func (s *localLifecycleServiceStub) liveResult(sessionID string, operation factorysessions.LifecycleControlKind) factorysessions.LifecycleControlResult {
+	return factorysessions.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: operation,
+		Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
+		Status:    factorysessions.LifecycleStatusSucceeded,
+	}
+}
+
+var _ factorysessions.Service = (*localLifecycleServiceStub)(nil)
+var _ factorysessions.LiveLifecycleControlService = (*localLifecycleServiceStub)(nil)
+
+func TestRemoteCancelAndTerminateUseLiveEndpoints(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		path   string
+		kind   factoryapi.FactorySessionLifecycleControlKind
+		invoke func(LifecycleControlConfig) error
+	}{
+		{name: "cancel", path: "cancel", kind: factoryapi.FactorySessionLifecycleControlKindCancel, invoke: func(cfg LifecycleControlConfig) error { return Cancel(cfg) }},
+		{name: "terminate", path: "terminate", kind: factoryapi.FactorySessionLifecycleControlKindTerminate, invoke: func(cfg LifecycleControlConfig) error { return Terminate(cfg) }},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			const sessionID = "session-live-stop"
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/"+sessionID+"/"+test.path {
+					t.Fatalf("request = %s %s, want POST live %s endpoint", r.Method, r.URL.Path, test.path)
+				}
+				encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+					SessionId: sessionID,
+					Operation: test.kind,
+					Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+					Status:    factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+				})
+			}))
+			defer server.Close()
+
+			var output bytes.Buffer
+			if err := test.invoke(LifecycleControlConfig{
+				Context: context.Background(), Server: server.URL, SessionID: sessionID, HTTP: testHTTPProtocol(t),
+				JSON: true, Output: &output,
+			}); err != nil {
+				t.Fatalf("%s: %v", test.name, err)
+			}
+			var response factoryapi.FactorySessionLifecycleControlResponse
+			if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+				t.Fatalf("decode %s response: %v", test.name, err)
+			}
+			if response.Operation != test.kind || response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+				t.Fatalf("%s response = %#v, want accepted %s", test.name, response, test.kind)
+			}
+		})
+	}
+}
+
+func TestRemoteCancelAndTerminatePreserveTerminalConflictAndNotFoundOutcomes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		path     string
+		kind     factoryapi.FactorySessionLifecycleControlKind
+		status   int
+		outcome  factoryapi.FactorySessionLifecycleControlOutcome
+		invoke   func(LifecycleControlConfig) error
+		notFound bool
+	}{
+		{name: "cancel-terminal", path: "cancel", kind: factoryapi.FactorySessionLifecycleControlKindCancel, status: http.StatusConflict, outcome: factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession, invoke: func(cfg LifecycleControlConfig) error { return Cancel(cfg) }},
+		{name: "terminate-conflict", path: "terminate", kind: factoryapi.FactorySessionLifecycleControlKindTerminate, status: http.StatusConflict, outcome: factoryapi.FactorySessionLifecycleControlOutcomeConflict, invoke: func(cfg LifecycleControlConfig) error { return Terminate(cfg) }},
+		{name: "cancel-not-found", path: "cancel", kind: factoryapi.FactorySessionLifecycleControlKindCancel, status: http.StatusNotFound, notFound: true, invoke: func(cfg LifecycleControlConfig) error { return Cancel(cfg) }},
+		{name: "terminate-not-found", path: "terminate", kind: factoryapi.FactorySessionLifecycleControlKindTerminate, status: http.StatusNotFound, notFound: true, invoke: func(cfg LifecycleControlConfig) error { return Terminate(cfg) }},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			const sessionID = "session-live-stop"
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/factory-sessions/"+sessionID+"/"+test.path {
+					t.Fatalf("path = %q, want %s", r.URL.Path, test.path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(test.status)
+				if test.notFound {
+					_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Code: factoryapi.ErrorResponseCodeNOTFOUND, Message: "factory session not found"})
+					return
+				}
+				_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+					SessionId: sessionID,
+					Operation: test.kind,
+					Outcome:   test.outcome,
+					Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+				})
+			}))
+			defer server.Close()
+
+			var output bytes.Buffer
+			err := test.invoke(LifecycleControlConfig{
+				Context: context.Background(), Server: server.URL, SessionID: sessionID, HTTP: testHTTPProtocol(t),
+				JSON: true, Output: &output,
+			})
+			if test.notFound {
+				if err == nil || !strings.Contains(err.Error(), `factory session "`+sessionID+`" not found`) {
+					t.Fatalf("%s error = %v, want stable not-found diagnostic", test.name, err)
+				}
+				return
+			}
+			var rejected *LifecycleControlRejectedError
+			if !errors.As(err, &rejected) {
+				t.Fatalf("%s error = %v, want typed lifecycle rejection", test.name, err)
+			}
+			if rejected.Response.Operation != test.kind || rejected.Response.Outcome != test.outcome {
+				t.Fatalf("%s rejection = %#v, want %s/%s", test.name, rejected.Response, test.kind, test.outcome)
+			}
+		})
+	}
 }

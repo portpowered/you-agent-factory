@@ -74,6 +74,13 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	if any(liveControl) != any(root) {
 		t.Fatalf("LiveControlService = %T, want the same authoritative Service instance %T", liveControl, root)
 	}
+	deletion, ok := service.(factorysessions.LiveDeletionService)
+	if !ok || deletion == nil {
+		t.Fatal("constructed root does not publish the live deletion capability")
+	}
+	if any(deletion) != any(root) {
+		t.Fatalf("LiveDeletionService = %T, want the same authoritative Service instance %T", deletion, root)
+	}
 }
 
 func TestNewServiceRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {

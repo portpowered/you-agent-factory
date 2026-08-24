@@ -125,6 +125,40 @@ func TestRunScopedServerIntentIncludesInvocationAndSiteDashboard(t *testing.T) {
 	}
 }
 
+func TestDelegateRunInitializationCarriesInvocationCancellation(t *testing.T) {
+	t.Parallel()
+
+	want := &rootInvocationCancellationStub{}
+	var got startupcli.RunIntent
+	options := CommandFactory{
+		cancellation: want,
+		initializer: startupcli.Functions{
+			RunFunc: func(_ context.Context, intent startupcli.RunIntent, _ startupcli.RunSelection) error {
+				got = intent
+				return nil
+			},
+		},
+		openRunSelection: func(runcli.RunConfig) startupcli.RunSelection {
+			return testRunSelection{}
+		},
+	}
+	if err := delegateRunInitialization(
+		t.Context(),
+		runcli.RunConfig{Continuously: true, WithServer: true, Port: 7437},
+		false,
+		options,
+	); err != nil {
+		t.Fatalf("delegateRunInitialization: %v", err)
+	}
+	if got.Cancellation != want {
+		t.Fatalf("RunIntent cancellation = %p, want %p", got.Cancellation, want)
+	}
+}
+
+type rootInvocationCancellationStub struct{}
+
+func (*rootInvocationCancellationStub) Cancel() {}
+
 func TestResolveRunNamedFactorySelectionHonorsCancellationWithoutSelection(t *testing.T) {
 	t.Parallel()
 

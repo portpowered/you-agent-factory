@@ -11,10 +11,10 @@ import (
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const scriptPollerRestartBackoffMax = 250 * time.Millisecond
@@ -106,7 +106,7 @@ func (s *service) superviseScriptPoller(
 
 func (s *service) RunScriptPoller(
 	ctx context.Context,
-	runner workers.CommandRunner,
+	runner platformprocess.CommandRunner,
 	runtimeCfg factorydefinitions.RuntimeConfigLookup,
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
@@ -298,7 +298,7 @@ func (s *service) pollerLogger(workstationName, workerName string) *zap.Logger {
 	return zap.NewNop()
 }
 
-func (s *service) commandRunner() workers.CommandRunner {
+func (s *service) commandRunner() platformprocess.CommandRunner {
 	if s.dependencies.CommandRunner != nil {
 		if runner := s.dependencies.CommandRunner(); runner != nil {
 			return runner
@@ -309,8 +309,8 @@ func (s *service) commandRunner() workers.CommandRunner {
 
 type unavailableCommandRunner struct{}
 
-func (unavailableCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, errors.New("automation command runner is required")
+func (unavailableCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("automation command runner is required")
 }
 
 func (s *service) supervisorClock() clockwork.Clock {

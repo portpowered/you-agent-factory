@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 // DefaultReportedFactorySessionID is the customer-visible session token used
@@ -24,6 +25,7 @@ type InvocationRequest struct {
 	DisableDefaultRecording bool
 	HomeDir                 string
 	RecordingTargetPlanner  recordings.LiveRecordingTargetPlanner
+	CanonicalSessionID      string
 	ReportedSessionID       string
 }
 
@@ -78,8 +80,9 @@ func (defaultAdapter) ResolveRecordPathWithContext(
 		reportedSessionID = DefaultReportedFactorySessionID
 	}
 	target, err := request.RecordingTargetPlanner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
-		HomeDir:           request.HomeDir,
-		ReportedSessionID: reportedSessionID,
+		HomeDir:            request.HomeDir,
+		CanonicalSessionID: request.CanonicalSessionID,
+		ReportedSessionID:  reportedSessionID,
 	})
 	if err != nil {
 		if resumePath != "" {
@@ -127,16 +130,19 @@ func (defaultAdapter) RecordingDiagnosticsLabel(resolved ResolvedRecordPath, rep
 // before runtime opening begins.
 func ValidateInvocationFlags(request InvocationRequest) error {
 	if strings.TrimSpace(request.ResumePath) != "" && strings.TrimSpace(request.ReplayPath) != "" {
-		return fmt.Errorf("--resume cannot be used with --replay")
+		return clidiag.NewFlagConflictFailure("--resume", "--replay", nil)
 	}
 	if strings.TrimSpace(request.ResumePath) != "" && request.DisableDefaultRecording {
-		return fmt.Errorf("--resume cannot be used with --no-record")
+		return clidiag.NewFlagConflictFailure("--resume", "--no-record", nil)
 	}
 	if request.DisableDefaultRecording && strings.TrimSpace(request.RecordPath) != "" {
-		return fmt.Errorf("--no-record cannot be used with --record")
+		return clidiag.NewFlagConflictFailure("--no-record", "--record", nil)
 	}
 	if strings.TrimSpace(request.RecordPath) != "" && strings.TrimSpace(request.ReplayPath) != "" {
-		return fmt.Errorf("--record and --replay cannot be used together")
+		return &clidiag.LocalFailure{
+			Code:    clidiag.FlagConflictFailureCode,
+			Message: "--record and --replay cannot be used together",
+		}
 	}
 	return nil
 }

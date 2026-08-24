@@ -23,38 +23,48 @@ type metricProviderEvidence struct {
 	completionProviders map[string]struct{}
 }
 
-func newMetricProviderAttribution(records []RuntimeMetricRecord) metricProviderAttribution {
-	evidenceByDispatch := make(map[string]*metricProviderEvidence)
-	for _, record := range records {
-		if !isProviderAttributionMetric(recordStringValue(record, "metric_name")) {
-			continue
-		}
-		dispatchID := recordStringValue(record, "dispatch_id")
-		if dispatchID == "" {
-			continue
-		}
-		provider := concreteMetricProvider(recordStringValue(record, "provider"))
-		if provider == "" {
-			continue
-		}
-		evidence := evidenceByDispatch[dispatchID]
-		if evidence == nil {
-			evidence = &metricProviderEvidence{
-				providers:           make(map[string]struct{}),
-				completionProviders: make(map[string]struct{}),
-			}
-			evidenceByDispatch[dispatchID] = evidence
-		}
-		evidence.providers[provider] = struct{}{}
-		if recordStringValue(record, "metric_name") == factoryruntime.RuntimeDispatchComplete {
-			evidence.completionProviders[provider] = struct{}{}
-		}
+type metricProviderAttributionBuilder struct {
+	evidenceByDispatch map[string]*metricProviderEvidence
+}
+
+func newMetricProviderAttributionBuilder() metricProviderAttributionBuilder {
+	return metricProviderAttributionBuilder{
+		evidenceByDispatch: make(map[string]*metricProviderEvidence),
 	}
+}
+
+func (builder *metricProviderAttributionBuilder) add(record RuntimeMetricRecord) {
+	if builder == nil || !isProviderAttributionMetric(recordStringValue(record, "metric_name")) {
+		return
+	}
+	dispatchID := recordStringValue(record, "dispatch_id")
+	if dispatchID == "" {
+		return
+	}
+	provider := concreteMetricProvider(recordStringValue(record, "provider"))
+	if provider == "" {
+		return
+	}
+	evidence := builder.evidenceByDispatch[dispatchID]
+	if evidence == nil {
+		evidence = &metricProviderEvidence{
+			providers:           make(map[string]struct{}),
+			completionProviders: make(map[string]struct{}),
+		}
+		builder.evidenceByDispatch[dispatchID] = evidence
+	}
+	evidence.providers[provider] = struct{}{}
+	if recordStringValue(record, "metric_name") == factoryruntime.RuntimeDispatchComplete {
+		evidence.completionProviders[provider] = struct{}{}
+	}
+}
+
+func (builder metricProviderAttributionBuilder) result() metricProviderAttribution {
 
 	attribution := metricProviderAttribution{
-		byDispatch: make(map[string]metricDispatchProvider, len(evidenceByDispatch)),
+		byDispatch: make(map[string]metricDispatchProvider, len(builder.evidenceByDispatch)),
 	}
-	for dispatchID, evidence := range evidenceByDispatch {
+	for dispatchID, evidence := range builder.evidenceByDispatch {
 		completionProviders := metricProviderKeys(evidence.completionProviders)
 		providers := metricProviderKeys(evidence.providers)
 		switch {
@@ -127,6 +137,20 @@ func isProviderAttributionMetric(name string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func providerAttributionMetricNames() []string {
+	return []string{
+		factoryruntime.RuntimeProviderInputTokens,
+		factoryruntime.RuntimeProviderOutputTokens,
+		factoryruntime.RuntimeProviderCachedInputTokens,
+		factoryruntime.RuntimeProviderReasoningOutputTokens,
+		factoryruntime.RuntimeProviderComplete,
+		factoryruntime.RuntimeProviderFailed,
+		factoryruntime.RuntimeProviderDuration,
+		factoryruntime.RuntimeDispatchComplete,
+		factoryruntime.RuntimeDispatchDuration,
 	}
 }
 

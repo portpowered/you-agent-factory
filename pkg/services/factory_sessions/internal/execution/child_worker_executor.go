@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,7 +31,7 @@ type childWorkerExecutionBinding struct {
 	generationID          string
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
-	commandRunnerOverride workers.CommandRunner
+	commandRunnerOverride platformprocess.CommandRunner
 	progressPublisher     workers.ProgressPublisher
 	publish               childWorkerProgressPublisher
 }
@@ -82,7 +83,7 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunnerOverride workers.CommandRunner,
+	commandRunnerOverride platformprocess.CommandRunner,
 ) {
 	if s == nil {
 		return
@@ -230,7 +231,7 @@ type childWorkerExecutor struct {
 	generationID          string
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
-	commandRunnerOverride workers.CommandRunner
+	commandRunnerOverride platformprocess.CommandRunner
 	attemptStarter        childWorkerAttemptStarter
 	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer
@@ -346,6 +347,7 @@ func (e *childWorkerExecutor) Execute(
 			}
 		}
 		invoked, err := executeChildAttempt(ctx, e.execute, request)
+		invoked = normalizeChildStructuredResult(req, invoked)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
 			if progress != nil {
 				progress.resetAttempt()
@@ -374,6 +376,13 @@ func (e *childWorkerExecutor) beginChildWorkerAttempt(
 		return complete, workers.ExecuteResult{}, nil
 	}
 	result := failedChildWorkerExecuteResult(request, err)
+	// A producer may have opened its lifecycle window before discovering a
+	// preparation failure. If it returned a completion handle alongside that
+	// error, close the window before returning the child error; dropping the
+	// handle recreates the response-bridge wait with no terminal record.
+	if complete != nil {
+		_ = complete(context.Background(), result, err)
+	}
 	if progress != nil {
 		progress.publishTerminal(result, err)
 	}
@@ -544,7 +553,16 @@ func childExecutionShouldRetry(
 	if attemptNumber >= maxAttempts || ctx.Err() != nil || executeErr != nil {
 		return false
 	}
-	return result.Outcome == workers.ExecutionOutcomeFailed && result.Failure != nil && result.Failure.RetryHint
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		return false
+	}
+	// A schema mismatch is a child-contract failure, not a provider outage.
+	// It must consume only the JavaScript child's existing attempt allowance;
+	// it must not opt into the unrelated Workers provider retry budget.
+	if result.Failure.Type == workers.WorkFailureTypeStructuredOutputSchemaViolation {
+		return true
+	}
+	return result.Failure.RetryHint
 }
 
 func (e *childWorkerExecutor) completedChild(
@@ -559,8 +577,9 @@ func (e *childWorkerExecutor) completedChild(
 	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
 	completed.Provider = provider
 	completed.ProviderSessionRef = providerSessionRef
-	output := childWorkerOutputFromExecute(req, result)
+	output, schemaValidated := childWorkerOutputFromExecute(req, result)
 	completed.Output = e.childValues.CloneOutputMap(output)
+	completed.SchemaValidated = schemaValidated
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,
 		ChildDispatch: &completed,
@@ -572,6 +591,8 @@ func (e *childWorkerExecutor) completedChild(
 		Status:             factory.JavaScriptChildDispatchStatusCompleted,
 		ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
 		Output:             output,
+		SchemaValidated:    schemaValidated,
+		SchemaDigest:       base.SchemaDigest,
 		ArtifactRef:        base.ArtifactRef,
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
@@ -600,6 +621,7 @@ func (e *childWorkerExecutor) executeRequest(
 	if progressBridge != nil {
 		progress = progressBridge.publishProgress
 	}
+	skipPermissions := effectiveChildSkipPermissions(req)
 	attemptID := fmt.Sprintf("%s/attempt/%d", workerDispatchID, attemptNumber)
 	return workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
@@ -640,7 +662,7 @@ func (e *childWorkerExecutor) executeRequest(
 				WorkingDirectory: e.workingDir,
 				FactoryDirectory: e.workingDir,
 			},
-			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+			Permissions: workers.PermissionPolicy{SkipPermissions: skipPermissions},
 			Timeout:     childAttemptTimeout(req, base.RunnerID, e.maxWorkerDuration),
 		},
 		Input: workers.ExecutionInput{
@@ -674,13 +696,42 @@ func childProviderSession(result workers.ExecuteResult) (string, string) {
 	return provider, strings.TrimSpace(session.ID)
 }
 
+func normalizeChildStructuredResult(
+	req factory.JavaScriptChildExecutionRequest,
+	result workers.ExecuteResult,
+) workers.ExecuteResult {
+	if req.OutputSchema == nil || !childExecutionSucceeded(result.Outcome) {
+		return result
+	}
+	if result.StructuredResultPresent {
+		if _, ok := result.StructuredResult.(map[string]any); ok {
+			return result
+		}
+		return childStructuredOutputFailure(result, "structured output schema violation: instance $; expected a validated JSON object")
+	}
+	return childStructuredOutputFailure(result, "structured output schema violation: instance $; validated JSON object is missing")
+}
+
+func childStructuredOutputFailure(result workers.ExecuteResult, message string) workers.ExecuteResult {
+	result.Outcome = workers.ExecutionOutcomeFailed
+	result.StructuredResult = nil
+	result.StructuredResultPresent = false
+	result.Failure = &workers.ExecutionFailure{
+		Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+		Family:  workers.WorkFailureFamilyTerminal,
+		Message: message,
+		Detail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeStructuredOutputSchemaViolation, Message: message},
+	}
+	return result
+}
+
 func childWorkerOutputFromExecute(
 	req factory.JavaScriptChildExecutionRequest,
 	result workers.ExecuteResult,
-) map[string]any {
+) (map[string]any, bool) {
 	if result.StructuredResultPresent {
 		if structured, ok := result.StructuredResult.(map[string]any); ok {
-			return structured
+			return structured, req.OutputSchema != nil
 		}
 	}
 	var text strings.Builder
@@ -689,7 +740,7 @@ func childWorkerOutputFromExecute(
 			text.WriteString(part.Text)
 		}
 	}
-	return childWorkerOutput(req, text.String())
+	return childWorkerOutput(req, text.String()), false
 }
 
 func (e *childWorkerExecutor) acquireResourceLease(
@@ -745,7 +796,7 @@ func (e *childWorkerExecutor) openChild(
 		ReasoningEffort: req.ReasoningEffort,
 		ResourceID:      req.ResourceID,
 		FactoryRevision: req.FactoryRevision,
-		SkipPermissions: req.SkipPermissions,
+		SkipPermissions: effectiveChildSkipPermissions(req),
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
@@ -854,16 +905,9 @@ func childOutputSchemaJSON(schema map[string]any) string {
 
 func childWorkerOutput(req factory.JavaScriptChildExecutionRequest, content string) map[string]any {
 	trimmed := strings.TrimSpace(content)
-	if req.OutputSchema != nil && trimmed != "" {
-		var decoded map[string]any
-		if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
-			return decoded
-		}
-	}
 	return map[string]any{
-		"text":            trimmed,
-		"subject":         req.ArgsSubject,
-		"schemaValidated": req.OutputSchema != nil,
+		"text":    trimmed,
+		"subject": req.ArgsSubject,
 	}
 }
 

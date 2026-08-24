@@ -138,6 +138,18 @@ func (h *Handler) PullModel(w http.ResponseWriter, r *http.Request, modelName st
 	h.writeJSON(w, http.StatusOK, modelPullResponseFromService(result))
 }
 
+func (h *Handler) RemoveModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	if h.guardModelsRequestContext(w, r) {
+		return
+	}
+	result, err := h.adapter.RemoveModel(r.Context(), modelName)
+	if err != nil {
+		h.writeRootOrInternalError(w, modelsHTTPOperationRemove, err, removeFailedMessage)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, modelRemoveResponseFromService(result))
+}
+
 func isModelPullError(err error) bool {
 	var pullErr *modelinference.PullError
 	return errors.As(err, &pullErr) && pullErr != nil

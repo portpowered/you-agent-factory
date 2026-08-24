@@ -38,7 +38,7 @@ func TestProvideAPIServerStarterHonorsRootEdgeOverride(t *testing.T) {
 		}
 		return nil
 	})
-	starter, err := provideAPIServerStarter(serviceedges.Edges{APIServerStarter: override})
+	starter, err := provideAPIServerStarter(serviceedges.Edges{APIServerStarter: override}, nil)
 	if err != nil {
 		t.Fatalf("provideAPIServerStarter: %v", err)
 	}

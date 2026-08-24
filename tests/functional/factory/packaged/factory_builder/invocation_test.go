@@ -444,8 +444,8 @@ func assertRepresentativeJavaScriptDefinition(t *testing.T, definition map[strin
 		t.Fatalf("JavaScript argsSchema = %#v, want required briefs object input", javascript["argsSchema"])
 	}
 	defaultPolicy, ok := javascript["defaultPolicy"].(map[string]any)
-	if !ok || defaultPolicy["mode"] != "READ_ONLY" || defaultPolicy["maxAgents"] != float64(2) || defaultPolicy["concurrency"] != float64(2) || defaultPolicy["allowNetwork"] != false {
-		t.Fatalf("JavaScript defaultPolicy = %#v, want bounded read-only two-agent policy", javascript["defaultPolicy"])
+	if !ok || !hasStringValue(defaultPolicy["allowedPermissions"], "DEFAULT") || defaultPolicy["maxAgents"] != float64(2) || defaultPolicy["concurrency"] != float64(2) {
+		t.Fatalf("JavaScript defaultPolicy = %#v, want bounded DEFAULT two-agent policy", javascript["defaultPolicy"])
 	}
 	signature, ok := definition["invocationSignature"].(map[string]any)
 	if !ok || !hasInvocationParameter(signature["parameters"], "briefs") {
@@ -896,10 +896,10 @@ orchestrator:
           type: string
       additionalProperties: false
     defaultPolicy:
-      mode: READ_ONLY
+      allowedPermissions:
+        - DEFAULT
       maxAgents: 2
       concurrency: 2
-      allowNetwork: false
     inlineSource:
       encoding: utf-8
       inline: |

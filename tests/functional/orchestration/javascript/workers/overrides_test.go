@@ -106,7 +106,7 @@ func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *
   modelProvider: "ANTIGRAVITY",
   model: "` + agyJavaScriptChildModel + `",
   reasoningEffort: "high",
-  skipPermissions: true
+  permissions: "SKIP_PERMISSIONS"
 });
 })();`
 			started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-"+strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")), workflow)
@@ -153,7 +153,7 @@ func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *
     label: "javascript-antigravity-rejection",
     modelProvider: "ANTIGRAVITY",
     model: "gemini-3.6-flash-medium",
-    skipPermissions: true
+    permissions: "SKIP_PERMISSIONS"
   });
 })();`)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
@@ -269,6 +269,94 @@ func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) 
 		dispatch.ModelProvider == nil || *dispatch.ModelProvider != "codex" ||
 		dispatch.Model == nil || *dispatch.Model != "live-child-model" {
 		t.Fatalf("live provider dispatch = %#v, want completed codex/live-child-model dispatch", dispatch)
+	}
+
+	exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t)
+	exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t)
+}
+
+func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		fields     string
+		dynamic    bool
+		wantBypass bool
+	}{
+		{name: "permissions default dynamic", fields: `permissions: "DEFAULT"`, dynamic: true, wantBypass: false},
+		{name: "permissions skip dynamic", fields: `permissions: "SKIP_PERMISSIONS"`, dynamic: true, wantBypass: true},
+		{name: "permissions default static", fields: `permissions: "DEFAULT"`, wantBypass: false},
+		{name: "permissions skip static", fields: `permissions: "SKIP_PERMISSIONS"`, wantBypass: true},
+		{name: "neither", fields: "", wantBypass: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			workflow := permissionsOverrideWorkflow(test.fields, test.dynamic)
+			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(workflow))
+			runner := support.NewRecordingCommandRunner("permissions provider output")
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "--json", "run",
+				"--factory", filepath.Join(dir, "factory.json"),
+				"--output", "primary",
+				"--no-record",
+				"permissions matrix prompt",
+			})
+			inputs.Input.WorkingDirectory = dir
+			homeDir := t.TempDir()
+			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+			if err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			}).Execute(inputs.Input); err != nil {
+				t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+			}
+			if runner.CallCount() != 1 {
+				t.Fatalf("provider command calls = %d, want one child invocation", runner.CallCount())
+			}
+			request := runner.LastRequest()
+			if request.Command != "codex" {
+				t.Fatalf("provider command = %q, want codex", request.Command)
+			}
+			gotBypass := containsArg(request.Args, "--dangerously-bypass-approvals-and-sandbox")
+			if gotBypass != test.wantBypass {
+				t.Fatalf("provider argv = %#v, want bypass flag present=%v", request.Args, test.wantBypass)
+			}
+		})
+	}
+}
+
+func exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t *testing.T) {
+	for _, source := range []string{
+		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = "READ_ONLY"; return await agent.run(child); })();`,
+		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = true; return await agent.run(child); })();`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(source))
+			runner := support.NewRecordingCommandRunner("unexpected provider execution")
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "--json", "run",
+				"--factory", filepath.Join(dir, "factory.json"),
+				"--output", "primary",
+				"--no-record",
+				"invalid permissions prompt",
+			})
+			inputs.Input.WorkingDirectory = dir
+			homeDir := t.TempDir()
+			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			}).Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute() error = nil, want invalid permissions failure")
+			}
+			diagnostic := strings.ToLower(err.Error() + "\n" + inputs.Stderr())
+			if !strings.Contains(diagnostic, "permissions") {
+				t.Fatalf("invalid permissions diagnostic = %q, want field-specific permissions detail", diagnostic)
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf("provider command calls = %d, want zero for invalid permissions", runner.CallCount())
+			}
+		})
 	}
 }
 
@@ -671,6 +759,54 @@ func overridesFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+func permissionsOverrideFactoryConfig(source string) map[string]any {
+	config := map[string]any{
+		"name": "javascript-permissions",
+	}
+	config["invocationSignature"] = map[string]any{
+		"parameters": []any{map[string]any{
+			"name": "prompt", "required": false,
+			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+		}},
+	}
+	config["orchestrator"] = map[string]any{
+		"kind": "JAVASCRIPT",
+		"javascript": map[string]any{
+			"inlineSource": map[string]any{
+				"encoding": "utf-8",
+				"inline":   source,
+			},
+			"argsSchema": map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+				"additionalProperties": false,
+			},
+		},
+	}
+	return config
+}
+
+func permissionsOverrideWorkflow(fields string, dynamic bool) string {
+	child := `{
+    prompt: "prove the provider permission mapping",
+    label: "permissions-child",
+    modelProvider: "codex",
+    model: "permissions-child-model"`
+	if fields != "" {
+		child += ",\n    " + fields
+	}
+	child += "\n  }"
+
+	workflow := `return (async function () {
+  `
+	if dynamic {
+		workflow += "const child = " + child + ";\n  return await agent.run(child);\n"
+	} else {
+		workflow += "return await agent.run(" + child + ");\n"
+	}
+	return workflow + "})();"
 }
 
 func startOverridesWorkflow(

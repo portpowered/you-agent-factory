@@ -4,7 +4,10 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -162,6 +165,7 @@ func detach(
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, err
 	}
+	sensitivePointers := invocationSensitiveJSONPointers(loaded.FactoryConfig(), invocation.Arguments)
 	if invocation.Arguments != nil {
 		resolved, err := workstationexecution.ResolveExecutionDefinition(ctx, factorydefinitions.ResolveExecutionCatalogRequest{
 			EffectiveDefinition: config,
@@ -176,9 +180,85 @@ func detach(
 		config = resolved
 	}
 	snapshot := newRuntimeSnapshot(loaded, invocation, *config)
+	snapshot.InvocationSensitiveJSONPointers = sensitivePointers
 	appendRuntimeSnapshotWorkersAndSources(&snapshot, *config)
 	appendRuntimeSnapshotPromptSources(&snapshot, loaded)
 	return snapshot, nil
+}
+
+func invocationSensitiveJSONPointers(
+	config *factorydefinitions.FactoryConfig,
+	arguments *work.InvocationArguments,
+) []string {
+	if config == nil || arguments == nil || len(arguments.Arguments) == 0 {
+		return nil
+	}
+	sensitiveNames := make(map[string]struct{})
+	for name, argument := range arguments.Arguments {
+		if argument.Sensitive {
+			sensitiveNames[name] = struct{}{}
+		}
+	}
+	if len(sensitiveNames) == 0 {
+		return nil
+	}
+	payload, err := json.Marshal(config)
+	if err != nil {
+		return nil
+	}
+	var document any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		return nil
+	}
+	pointers := make([]string, 0)
+	collectInvocationSensitiveJSONPointers(document, "", sensitiveNames, &pointers)
+	sort.Strings(pointers)
+	return pointers
+}
+
+func collectInvocationSensitiveJSONPointers(
+	document any,
+	pointer string,
+	sensitiveNames map[string]struct{},
+	pointers *[]string,
+) {
+	switch value := document.(type) {
+	case string:
+		for name := range sensitiveNames {
+			if strings.Contains(value, "${"+name+"}") {
+				*pointers = append(*pointers, pointer)
+				return
+			}
+		}
+	case []any:
+		for index, child := range value {
+			collectInvocationSensitiveJSONPointers(
+				child,
+				pointer+"/"+strconv.Itoa(index),
+				sensitiveNames,
+				pointers,
+			)
+		}
+	case map[string]any:
+		keys := make([]string, 0, len(value))
+		for key := range value {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			collectInvocationSensitiveJSONPointers(
+				value[key],
+				pointer+"/"+escapeJSONPointerToken(key),
+				sensitiveNames,
+				pointers,
+			)
+		}
+	}
+}
+
+func escapeJSONPointerToken(value string) string {
+	value = strings.ReplaceAll(value, "~", "~0")
+	return strings.ReplaceAll(value, "/", "~1")
 }
 
 func cloneRuntimeSnapshotConfig(

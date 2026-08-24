@@ -60,7 +60,7 @@ func TestDiscoverAcceptsStandaloneJavaScriptRoot(t *testing.T) {
   "id":"id-js",
   "description":{"type":"LOCALIZABLE_ASSET","value":"One-file workflow."},
   "argsSchema":{"type":"object","properties":{"request":{"type":"string"}}},
-  "defaultPolicy":{"mode":"READ_ONLY","maxAgents":1,"concurrency":1,"maxDepth":1,"maxRetries":0,"allowNetwork":false,"allowConnectors":false,"allowDangerFullAccess":false,"writableRoots":[]}
+  "defaultPolicy":{"maxAgents":1,"concurrency":1,"maxDepth":1,"maxRetries":0,"allowedPermissions":["SKIP_PERMISSIONS"]}
 }
 */
 return { request: args.request };`)},

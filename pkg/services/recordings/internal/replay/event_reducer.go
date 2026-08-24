@@ -568,6 +568,7 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 			DispatchID:                  dispatchID,
 			TransitionID:                payload.TransitionID,
 			Outcome:                     payload.Outcome,
+			Cancellation:                payload.Cancellation.Clone(),
 			Output:                      stringValue(payload.Output),
 			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
 			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),

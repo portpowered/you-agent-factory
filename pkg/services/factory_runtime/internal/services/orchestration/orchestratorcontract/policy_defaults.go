@@ -8,19 +8,14 @@ const (
 	DefaultConcurrencyCap = 4
 )
 
-// DefaultEffectivePolicy returns the bounded read-only MVP policy defaults.
+// DefaultEffectivePolicy returns the bounded JavaScript workflow policy defaults.
 func DefaultEffectivePolicy() EffectivePolicy {
 	return EffectivePolicy{
-		Mode:                  ModeReadOnly,
-		MaxAgents:             DefaultMaxAgents,
-		Concurrency:           defaultConcurrencyForMaxAgents(DefaultMaxAgents),
-		MaxDepth:              DefaultMaxDepth,
-		MaxRetries:            DefaultMaxRetries,
-		AllowNetwork:          false,
-		AllowConnectors:       false,
-		AllowDangerFullAccess: false,
-		WritableRoots:         []string{},
-		OutputAuditMode:       OutputAuditModeAuto,
+		MaxAgents:       DefaultMaxAgents,
+		Concurrency:     defaultConcurrencyForMaxAgents(DefaultMaxAgents),
+		MaxDepth:        DefaultMaxDepth,
+		MaxRetries:      DefaultMaxRetries,
+		OutputAuditMode: OutputAuditModeAuto,
 	}
 }
 

@@ -12,6 +12,9 @@
  * Semantic families are status-only; do not substitute for accent emphasis.
  */
 
+/* Palette-aware role treatments stay scoped to the selected palette subtree. */
+@custom-variant factory-light (&:where([data-color-palette="factory-light"] *));
+
 /*
  * Keep the public role vocabulary in the compiled bundle even when a host
  * consumes a role through var() rather than a generated utility class.
@@ -36,6 +39,8 @@
     from var(--color-af-foundation-overlay) r g b /
     0.1
   );
+  /* Modal scrims follow the active palette while preserving the dark baseline. */
+  --color-scrim: rgb(from var(--color-af-foundation-background) r g b / 0.7);
   /* on-surface text roles: text-color-role-tokens.css */
   --color-outline: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
   --color-outline-variant: rgb(
@@ -108,6 +113,19 @@
   );
   --color-on-info-container: var(--color-af-foundation-info-ink);
 
+  /* --- Graph visual-state emphasis --- */
+  --color-af-graph-selected-ring: rgb(from var(--color-primary) r g b / 0.3);
+  --color-af-graph-selected-outline: rgb(
+    from var(--color-primary) r g b /
+    0.28
+  );
+  --color-af-graph-selected-glow: rgb(from var(--color-primary) r g b / 0.08);
+  --color-af-graph-error-ring: rgb(from var(--color-error) r g b / 0.4);
+  --shadow-af-graph-selected:
+    0 0 0 1px var(--color-af-graph-selected-outline),
+    0 0 0 4px var(--color-af-graph-selected-glow);
+  --shadow-af-graph-error: 0 0 0 3px var(--color-error-container);
+
   /* --- Product af-* keys (role-backed; formerly color-role-aliases.css) --- */
   --color-af-background: var(--color-background);
   --color-af-surface: var(--color-surface);
@@ -164,4 +182,17 @@
     from var(--color-af-foundation-info) r g b /
     0.28
   );
+}
+
+/*
+ * Factory Light uses light-surface-appropriate ink for solid semantic fills.
+ * Keep the shared Factory Dark roles and foundation palette values unchanged.
+ */
+[data-color-palette="factory-light"] {
+  --color-on-primary-container: var(--color-af-foundation-accent-ink);
+  --color-on-secondary: var(--color-af-foundation-surface);
+  --color-on-success: var(--color-af-foundation-overlay);
+  --color-on-warning: var(--color-af-foundation-overlay);
+  --color-on-error: var(--color-af-foundation-overlay);
+  --color-on-info: var(--color-af-foundation-overlay);
 }

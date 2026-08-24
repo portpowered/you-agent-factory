@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 )
 
 const assetSourceMaxAttempts = 3
@@ -27,10 +28,13 @@ type remoteManifest struct {
 }
 
 type remoteFile struct {
-	path   string
-	bytes  int64
-	sha256 string
-	url    string
+	modelName  string
+	repository string
+	revision   string
+	path       string
+	bytes      int64
+	sha256     string
+	url        string
 }
 
 type upstreamModel struct {
@@ -52,6 +56,33 @@ type upstreamLFS struct {
 func (s *service) PrepareModelAssets(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
+) (result models.PrepareModelAssetsResult, resultErr error) {
+	if err := request.Validate(); err != nil {
+		return models.PrepareModelAssetsResult{}, err
+	}
+	expected := append([]models.AssetRequirement(nil), request.Artifacts...)
+	expected = append(expected, request.BackendArtifacts...)
+	s.beginActivePull(request.Scope, request.Name, expected)
+	defer func() {
+		s.finishActivePull(request.Scope, request.Name, resultErr)
+	}()
+	result, resultErr = s.prepareModelAssets(ctx, request)
+	if resultErr != nil && !errors.Is(resultErr, context.Canceled) &&
+		!errors.Is(resultErr, context.DeadlineExceeded) {
+		stage := pullsupport.PullStageForError(resultErr)
+		if stage == "" {
+			stage = models.PullStageAssembly
+		}
+		resultErr = pullsupport.WrapPullStage(
+			stage, request.Name, "prepare model assets", "", resultErr,
+		)
+	}
+	return result, resultErr
+}
+
+func (s *service) prepareModelAssets(
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
 	if shouldPrepareGenericAssets(request) {
 		return s.prepareGenericAssets(ctx, request)
@@ -67,6 +98,7 @@ func (s *service) PrepareModelAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	s.updateActivePull(request.Scope, request.Name, assetRequirementsForSpec(spec), "")
 	if err := assetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
@@ -85,6 +117,7 @@ func (s *service) PrepareModelAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	s.updateActivePull(request.Scope, request.Name, requirementsFromManifest(manifest), manifest.revision)
 	if snapshot, available, inspectErr := s.inspectManifestCache(
 		ctx, scope.CacheDirectory, spec, source, manifest,
 	); inspectErr != nil {
@@ -101,6 +134,24 @@ func (s *service) PrepareModelAssets(
 	return models.PrepareModelAssetsResult{
 		Asset: snapshot.Clone(), Outcome: models.AssetPreparationPrepared,
 	}, nil
+}
+
+func assetRequirementsForSpec(spec assetSpec) []models.AssetRequirement {
+	result := make([]models.AssetRequirement, 0, len(spec.requiredArtifacts))
+	for _, name := range spec.requiredArtifacts {
+		result = append(result, models.AssetRequirement{Name: name})
+	}
+	return result
+}
+
+func requirementsFromManifest(manifest remoteManifest) []models.AssetRequirement {
+	result := make([]models.AssetRequirement, 0, len(manifest.files))
+	for _, file := range manifest.files {
+		result = append(result, models.AssetRequirement{
+			Name: file.path, Bytes: file.bytes, SHA256: file.sha256,
+		})
+	}
+	return result
 }
 
 // inspectManifestCache reconciles complete caches written by the retired
@@ -242,29 +293,41 @@ func (s *service) verifyCachedFile(
 
 func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteManifest, error) {
 	requestURL := strings.TrimRight(s.endpoints.APIBaseURL, "/") + "/models/" + spec.repository
+	diagnostics := models.PullDiagnostics{
+		ModelName:          spec.modelName,
+		ResolvedRepository: spec.repository,
+		Operation:          "fetch model asset manifest",
+		RequestURL:         requestURL,
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return remoteManifest{}, fmt.Errorf("build model asset manifest request: %w", err)
+		return remoteManifest{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: build model asset manifest request", models.ErrSourceFetchFailed),
+		)
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return remoteManifest{}, contextErr
 		}
-		return remoteManifest{}, fmt.Errorf("%w: fetch model asset manifest: %v", models.ErrSourceFetchFailed, err)
+		return remoteManifest{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: fetch model asset manifest", models.ErrSourceFetchFailed),
+		)
 	}
 	defer response.Body.Close()
 	if contextErr := assetContextError(ctx); contextErr != nil {
 		return remoteManifest{}, contextErr
 	}
 	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return remoteManifest{}, contextErr
 		}
-		return remoteManifest{}, fmt.Errorf(
-			"%w: fetch model asset manifest failed (%d): %s",
-			models.ErrSourceFetchFailed, response.StatusCode, strings.TrimSpace(string(body)),
+		diagnostics.UpstreamStatusCode = response.StatusCode
+		return remoteManifest{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: fetch model asset manifest failed", models.ErrSourceFetchFailed),
 		)
 	}
 	var payload upstreamModel
@@ -272,7 +335,11 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return remoteManifest{}, contextErr
 		}
-		return remoteManifest{}, fmt.Errorf("%w: decode model asset manifest: %v", models.ErrSourceFetchFailed, err)
+		diagnostics.Operation = "decode model asset manifest"
+		return remoteManifest{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: decode model asset manifest", models.ErrSourceFetchFailed),
+		)
 	}
 	revision := strings.TrimSpace(payload.SHA)
 	if revision == "" {
@@ -286,8 +353,16 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 	for _, name := range spec.requiredArtifacts {
 		sibling, ok := byPath[name]
 		if !ok {
-			return remoteManifest{}, fmt.Errorf(
-				"%w: manifest is missing required asset %q", models.ErrSourceFetchFailed, name,
+			missing := diagnostics
+			missing.File = name
+			missing.Operation = "resolve manifest artifact"
+			return remoteManifest{}, pullsupport.WrapPullDiagnostics(
+				missing,
+				pullsupport.WrapPullStage(
+					models.PullStageSourceResolution, spec.modelName,
+					missing.Operation, name,
+					fmt.Errorf("%w: manifest is missing required asset", models.ErrModelReferenceUnknown),
+				),
 			)
 		}
 		size := sibling.Size
@@ -299,6 +374,7 @@ func (s *service) fetchManifest(ctx context.Context, spec assetSpec) (remoteMani
 			checksum = strings.ToLower(strings.TrimSpace(sibling.LFS.OID))
 		}
 		files = append(files, remoteFile{
+			modelName: spec.modelName, repository: spec.repository, revision: revision,
 			path: name, bytes: size, sha256: checksum,
 			url: strings.TrimRight(s.endpoints.BaseURL, "/") + "/" + spec.repository +
 				"/resolve/" + url.PathEscape(revision) + "/" +
@@ -420,13 +496,19 @@ func (s *service) promoteAttempt(
 	metadataPath string,
 ) (bool, error) {
 	if err := s.renamePath(stagePath, finalPath); err != nil {
-		return false, interruptedAssetError("publish verified asset revision", err)
+		return false, pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, "", "publish verified asset revision", "",
+			interruptedAssetError("publish verified asset revision", err),
+		)
 	}
 	if err := assetContextError(ctx); err != nil {
 		return true, err
 	}
 	if err := s.renamePath(metadataStagePath, metadataPath); err != nil {
-		return true, interruptedAssetError("publish verified asset metadata", err)
+		return true, pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, "", "publish verified asset metadata", "",
+			interruptedAssetError("publish verified asset metadata", err),
+		)
 	}
 	return true, nil
 }
@@ -448,47 +530,69 @@ func (s *service) downloadFile(
 	stagePath string,
 	remote remoteFile,
 ) (models.AssetArtifact, error) {
+	diagnostics := models.PullDiagnostics{
+		ModelName:          remote.modelName,
+		ResolvedRepository: remote.repository,
+		Revision:           remote.revision,
+		File:               remote.path,
+		Operation:          "download asset",
+		RequestURL:         remote.url,
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, remote.url, nil)
 	if err != nil {
-		return models.AssetArtifact{}, fmt.Errorf("build asset request for %q: %w", remote.path, err)
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: build asset request", models.ErrSourceFetchFailed),
+		)
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return models.AssetArtifact{}, contextErr
 		}
-		return models.AssetArtifact{}, fmt.Errorf(
-			"%w: download asset %q: %v", models.ErrSourceFetchFailed, remote.path, err,
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: download asset", models.ErrSourceFetchFailed),
 		)
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		diagnostics.UpstreamStatusCode = response.StatusCode
+	}
 	if err := validateDownloadResponse(ctx, response, remote.path); err != nil {
-		return models.AssetArtifact{}, err
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(diagnostics, err)
 	}
 
 	target := filepath.Join(stagePath, filepath.FromSlash(remote.path))
 	if err := s.makeDirectory(filepath.Dir(target), 0o755); err != nil {
-		return models.AssetArtifact{},
-			interruptedAssetError("prepare asset directory for "+remote.path, err)
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			interruptedAssetError("prepare asset directory", err),
+		)
 	}
 	output, err := s.createFile(target)
 	if err != nil {
-		return models.AssetArtifact{},
-			interruptedAssetError("create staged asset "+remote.path, err)
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			interruptedAssetError("create staged asset", err),
+		)
 	}
 	written, checksum, err := copyStagedAsset(ctx, output, response.Body, remote.path)
 	if err != nil {
-		return models.AssetArtifact{}, err
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(diagnostics, err)
 	}
 	if remote.bytes > 0 && written != remote.bytes {
-		return models.AssetArtifact{}, fmt.Errorf(
-			"%w: asset %q contains %d bytes, expected %d",
-			models.ErrAssetIntegrityFailed, remote.path, written, remote.bytes,
+		diagnostics.Operation = "verify downloaded asset"
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: asset size does not match", models.ErrAssetIntegrityFailed),
 		)
 	}
 	if remote.sha256 != "" && checksum != remote.sha256 {
-		return models.AssetArtifact{}, fmt.Errorf(
-			"%w: asset %q checksum does not match", models.ErrAssetIntegrityFailed, remote.path,
+		diagnostics.Operation = "verify downloaded asset"
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: asset checksum does not match", models.ErrAssetIntegrityFailed),
 		)
 	}
 	if remote.sha256 == "" {
@@ -523,7 +627,10 @@ func copyStagedAsset(
 	assetPath string,
 ) (int64, string, error) {
 	hasher := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(output, hasher), input)
+	written, copyErr := io.Copy(
+		io.MultiWriter(output, hasher),
+		contextAssetReader{ctx: ctx, input: input},
+	)
 	closeErr := output.Close()
 	if copyErr != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {

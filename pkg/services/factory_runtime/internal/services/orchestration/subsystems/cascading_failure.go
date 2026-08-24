@@ -3,6 +3,7 @@ package subsystems
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -37,6 +38,13 @@ func NewCascadingFailure(n *state.Net, logger logging.Logger, now func() time.Ti
 }
 
 var _ Subsystem = (*CascadingFailureSubsystem)(nil)
+
+func transitionRoutingError(ctx context.Context, transitionID string, outcome workerexecution.WorkOutcome) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fmt.Errorf("transition %s has no arcs for outcome %s", transitionID, outcome)
+}
 
 // TickGroup returns CascadingFailure (15), after Transitioner so newly failed
 // tokens are visible, before the Tracer.
@@ -125,7 +133,8 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 }
 
 func shouldRouteTerminalFailureToFailedState(result resolvedWorkResult) bool {
-	if result.outcome != workerexecution.OutcomeFailed || result.failureMetadata == nil {
+	if result.cancellation != nil || result.outcome == workerexecution.OutcomeCanceled ||
+		result.outcome != workerexecution.OutcomeFailed || result.failureMetadata == nil {
 		return false
 	}
 	// Cancellation is a terminal dispatch lifecycle result, but its late-result
@@ -278,4 +287,144 @@ func (cf *CascadingFailureSubsystem) failedPlaceForToken(token *factorytoken.Tok
 		}
 	}
 	return ""
+}
+
+func (t *TransitionerSubsystem) restoreCanceledDispatchMutations(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	dispatchID string,
+	result resolvedWorkResult,
+	now time.Time,
+) []interfaces.MarkingMutation {
+	entry := completedDispatchEntry(snapshot, dispatchID)
+	if entry == nil || len(entry.HeldMutations) == 0 {
+		return nil
+	}
+	tokens := make(map[string]factorytoken.Token, len(entry.ConsumedTokens))
+	for _, workerToken := range entry.ConsumedTokens {
+		token := factorytoken.FromWorker(workerToken)
+		tokens[token.ID] = token
+	}
+	mutations := make([]interfaces.MarkingMutation, 0, len(entry.HeldMutations))
+	for _, held := range entry.HeldMutations {
+		if held.Type != interfaces.MutationConsume {
+			continue
+		}
+		token, ok := tokens[held.TokenID]
+		if !ok {
+			continue
+		}
+		restored := factorytoken.Clone(token)
+		if held.FromPlace != "" {
+			restored.PlaceID = held.FromPlace
+		}
+		restored.EnteredAt = now
+		mutations = append(mutations, interfaces.MarkingMutation{
+			Type:     interfaces.MutationCreate,
+			TokenID:  restored.ID,
+			ToPlace:  restored.PlaceID,
+			NewToken: workerTokenPointer(&restored),
+			Reason: fmt.Sprintf(
+				"restore %s dispatch claim for canceled result (%s)",
+				restored.ID,
+				completedDispatchCancellationReason(result),
+			),
+		})
+	}
+	return mutations
+}
+
+func completedDispatchCancellationReason(result resolvedWorkResult) string {
+	if result.cancellation == nil || result.cancellation.Reason == "" {
+		return string(workerexecution.DispatchCancellationReasonCanceled)
+	}
+	return string(result.cancellation.Reason)
+}
+
+func (t *TransitionerSubsystem) logArcSelection(
+	result *workerexecution.WorkResult,
+	resolved resolvedWorkResult,
+	consumedTokens []factorytoken.Token,
+) {
+	workID, workName := dispatchWorkIdentity(consumedTokens)
+	fields := []any{
+		"event_name", "factory_runtime.dispatch_result",
+		"dispatch_id", result.DispatchID,
+		"transition_id", result.TransitionID,
+		"work_id", workID,
+		"work_name", workName,
+		"outcome", string(resolved.outcome),
+	}
+	switch resolved.outcome {
+	case workerexecution.OutcomeAccepted:
+		t.logger.Info("transitioner: result accepted", fields...)
+	case workerexecution.OutcomeContinue:
+		t.logger.Info("transitioner: result continued", fields...)
+	case workerexecution.OutcomeRejected:
+		t.logger.Info("transitioner: result rejected", fields...)
+	case workerexecution.OutcomeFailed:
+		fields = append(fields,
+			"status", "error",
+			"failure_reason", safeDispatchFailureReason(result, resolved),
+		)
+		if message := safeDispatchFailureMessage(result); message != "" {
+			fields = append(fields, "failure_message", message)
+		}
+		t.logger.Error("transitioner: result failed", fields...)
+	case workerexecution.OutcomeCanceled:
+		cancellationReason := string(workerexecution.DispatchCancellationReasonCanceled)
+		if resolved.cancellation != nil && resolved.cancellation.Reason != "" {
+			cancellationReason = string(resolved.cancellation.Reason)
+		}
+		fields = append(fields,
+			"status", "canceled",
+			"cancellation_reason", cancellationReason,
+		)
+		t.logger.Info("transitioner: result canceled", fields...)
+	}
+}
+
+func dispatchWorkIdentity(tokens []factorytoken.Token) (workID, workName string) {
+	for _, token := range tokens {
+		if token.Color.WorkID == "" {
+			continue
+		}
+		return token.Color.WorkID, token.Color.Name
+	}
+	return "", ""
+}
+
+func safeDispatchFailureReason(result *workerexecution.WorkResult, resolved resolvedWorkResult) string {
+	if result != nil && result.FailureMetadata != nil {
+		if failureType := strings.TrimSpace(string(result.FailureMetadata.Type)); failureType != "" {
+			return failureType
+		}
+		if family := strings.TrimSpace(string(result.FailureMetadata.Family)); family != "" {
+			return family
+		}
+	}
+	if result != nil && result.FailureDetail != nil {
+		if failureType := strings.TrimSpace(string(result.FailureDetail.Reason)); failureType != "" {
+			return failureType
+		}
+	}
+	if value := strings.ToLower(strings.TrimSpace(resolved.err)); value != "" {
+		switch {
+		case strings.Contains(value, "deadline"), strings.Contains(value, "timeout"):
+			return string(workerexecution.WorkFailureTypeTimeout)
+		case strings.Contains(value, "process"):
+			return "process_error"
+		}
+	}
+	return "execution_failure"
+}
+
+func safeDispatchFailureMessage(result *workerexecution.WorkResult) string {
+	if result == nil || result.FailureDetail == nil {
+		return ""
+	}
+	message := strings.Join(strings.Fields(result.FailureDetail.Message), " ")
+	if len(message) > 160 {
+		message = message[:160] + "..."
+	}
+	return message
 }

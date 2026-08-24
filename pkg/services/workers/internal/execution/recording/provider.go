@@ -181,17 +181,28 @@ func inferenceEvent(
 	responsePayload *workers.InferenceResponseEventPayload,
 ) workers.InferenceEvent {
 	return workers.InferenceEvent{
-		ID:         id,
-		Kind:       kind,
-		EventTime:  eventTime.UTC(),
-		Tick:       executionTick(request.Dispatch.Execution),
-		DispatchID: request.Dispatch.DispatchID,
-		RequestID:  request.Dispatch.Execution.RequestID,
-		TraceIDs:   stringsIfPresent(request.Dispatch.Execution.TraceID),
-		WorkIDs:    stringsIfPresent(request.Dispatch.Execution.WorkIDs...),
-		Request:    requestPayload,
-		Response:   responsePayload,
+		ID:                         id,
+		Kind:                       kind,
+		EventTime:                  eventTime.UTC(),
+		Tick:                       executionTick(request.Dispatch.Execution),
+		DispatchID:                 request.Dispatch.DispatchID,
+		RequestID:                  request.Dispatch.Execution.RequestID,
+		TraceIDs:                   stringsIfPresent(request.Dispatch.Execution.TraceID),
+		WorkIDs:                    stringsIfPresent(request.Dispatch.Execution.WorkIDs...),
+		Request:                    requestPayload,
+		Response:                   responsePayload,
+		DeclaredSecretJSONPointers: declaredSecretPromptPointers(request),
 	}
+}
+
+func declaredSecretPromptPointers(request workers.RunnerExecutionRequest) []string {
+	if len(request.DeclaredSecretInvocationParameters) == 0 || request.UserMessage == "" {
+		return nil
+	}
+	// The canonical inference request payload has one prompt field. The
+	// invocation parameter list is the explicit classification; no content
+	// matching is used to decide whether the field is redacted.
+	return []string{"/prompt"}
 }
 
 func providerFailureDetail(err error) *workers.InferenceResponseFailureDetail {

@@ -6,9 +6,9 @@ import (
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewServiceIsInert(t *testing.T) {
@@ -27,7 +27,7 @@ func TestNewServiceIsInert(t *testing.T) {
 			clockCalls++
 			return clockwork.NewFakeClock()
 		},
-		CommandRunner: func() workers.CommandRunner {
+		CommandRunner: func() platformprocess.CommandRunner {
 			runnerCalls++
 			return nil
 		},

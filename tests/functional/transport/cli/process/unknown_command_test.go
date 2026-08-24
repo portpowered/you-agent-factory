@@ -2,7 +2,6 @@ package process_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -13,8 +12,8 @@ import (
 
 const unknownCommandProbeToken = "not-a-command"
 
-// TestCLIUnknownCommandWritesSafeCodedStderr proves that mistyping a root
-// command through the public built you CLI writes one safe typed diagnostic.
+// TestCLIUnknownCommandWritesCobraUsageStderr proves that mistyping a root
+// command through the public built you CLI preserves Cobra's correction hint.
 func TestCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
 	t.Parallel()
 
@@ -34,18 +33,16 @@ func TestCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
 		t.Fatal("unknown command stderr was empty; want actionable diagnostic")
 	}
 
-	var diagnostic struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+	for _, want := range []string{
+		`Error: unknown command "not-a-command" for "you"`,
+		"Run 'you --help' for usage.",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("unknown-command stderr = %q, want Cobra text %q", stderr, want)
+		}
 	}
-	if err := json.Unmarshal([]byte(stderr), &diagnostic); err != nil {
-		t.Fatalf("decode one unknown-command diagnostic: %v; stderr=%q", err, stderr)
-	}
-	if diagnostic.Code != "CLI_COMMAND_FAILED" || diagnostic.Message != "command failed" {
-		t.Fatalf("unknown-command diagnostic = %#v, want safe CLI_COMMAND_FAILED diagnostic", diagnostic)
-	}
-	if strings.Count(stderr, "CLI_COMMAND_FAILED") != 1 {
-		t.Fatalf("stderr = %q, want exactly one coded diagnostic", stderr)
+	if strings.Contains(stderr, "CLI_COMMAND_FAILED") || strings.Contains(stderr, "INTERNAL_SERVER_ERROR") {
+		t.Fatalf("unknown-command stderr used an internal failure envelope: %q", stderr)
 	}
 
 	for _, forbidden := range forbiddenRootDiscoveryCommands {

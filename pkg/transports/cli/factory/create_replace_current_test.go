@@ -124,7 +124,7 @@ func TestReplaceCurrent_UsesSessionScopedPath(t *testing.T) {
 	}
 }
 
-func TestReplaceCurrent_SurfacesUnexpectedHTTPErrorBody(t *testing.T) {
+func TestReplaceCurrent_UsesSafeSummaryForUnexpectedHTTPErrorBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -147,8 +147,8 @@ func TestReplaceCurrent_SurfacesUnexpectedHTTPErrorBody(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	want := "replace current factory failed (502): upstream unavailable"
+	want := "replace current factory failed (502)"
 	if err.Error() != want {
-		t.Fatalf("error = %q, want %q", err.Error(), want)
+		t.Fatalf("error = %q, want body-free status summary %q", err.Error(), want)
 	}
 }

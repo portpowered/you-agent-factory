@@ -207,7 +207,7 @@ func TestConstructedService_DeleteHumanAndJSONMatchPackageCommands(t *testing.T)
 	service := constructedService(t)
 	protocol := testHTTPProtocol(t)
 	baseCfg := DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "session-beta",
 	}
 	for name, jsonMode := range map[string]bool{"human": false, "json": true} {
@@ -246,7 +246,7 @@ func TestConstructedService_DeleteNotFoundMatchesPackageCommand(t *testing.T) {
 	service := constructedService(t)
 	protocol := testHTTPProtocol(t)
 	cfg := DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "missing-session",
 		Output:    ioDiscardWriter{t},
 	}

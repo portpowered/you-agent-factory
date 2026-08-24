@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -52,12 +52,14 @@ type executeCapability interface {
 }
 
 type activeAttempt struct {
-	dispatchID  string
-	attemptID   string
-	cancel      context.CancelFunc
-	done        chan struct{}
-	canceled    bool
-	processGone bool
+	dispatchID   string
+	attemptID    string
+	ctx          context.Context
+	cancel       context.CancelCauseFunc
+	cancelReason workers.DispatchCancellationReason
+	done         chan struct{}
+	canceled     bool
+	processGone  bool
 }
 
 // attemptLifecycle is the Runtime-owned lifecycle boundary for stateless
@@ -141,16 +143,17 @@ func (l *attemptLifecycle) startWithPreparation(
 	if err != nil {
 		return err
 	}
-	execCtx, cancel := context.WithCancel(ctx)
+	execCtx, cancel := context.WithCancelCause(ctx)
 	attempt := &activeAttempt{
 		dispatchID: request.Correlation.DispatchID,
 		attemptID:  request.Correlation.AttemptID,
+		ctx:        execCtx,
 		cancel:     cancel,
 		done:       make(chan struct{}),
 	}
 	admitted, err := l.admitAttempt(attempt, allowRetry)
 	if err != nil || !admitted {
-		cancel()
+		cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 		return err
 	}
 	request = attachAttemptProcessObserver(request, l, attempt)
@@ -159,7 +162,7 @@ func (l *attemptLifecycle) startWithPreparation(
 		preparedTerminal, err = prepare(context.WithoutCancel(execCtx), &request)
 		if err != nil {
 			l.finish(attempt)
-			cancel()
+			cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 			close(attempt.done)
 			return err
 		}
@@ -177,7 +180,7 @@ func (l *attemptLifecycle) startWithPreparation(
 			result = processGoneAttemptResult(request, result)
 			err = workers.ErrWorkstationDispatchProcessGone
 		} else if canceled {
-			result = canceledAttemptResult(request, result)
+			result = canceledAttemptResult(request, result, attempt.cancelReason)
 			err = nil
 		}
 		if preparedTerminal != nil {
@@ -270,7 +273,7 @@ func (l *attemptLifecycle) executeSafely(
 			// Keep panic detail out of the detached customer-facing result.
 			err = nil
 		}
-		result = normalizeAttemptResult(request, result, err)
+		result = normalizeAttemptResult(request, result, err, platformprocess.CancellationReasonFromContext(ctx))
 		if result.Outcome == workers.ExecutionOutcomeCanceled {
 			err = nil
 		}
@@ -283,70 +286,41 @@ func normalizeAttemptResult(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
 	executeErr error,
+	cancellationReason platformprocess.CancellationReason,
 ) workers.ExecuteResult {
 	result, conflicts := normalizeAttemptCorrelation(request, result)
 	if conflicts {
 		return conflictingAttemptResult(request)
 	}
-	return normalizeAttemptOutcome(request, result, executeErr)
-}
-
-func normalizeAttemptCorrelation(
-	request workers.ExecuteRequest,
-	result workers.ExecuteResult,
-) (workers.ExecuteResult, bool) {
-	if result.Correlation.DispatchID == "" {
-		result.Correlation = request.Correlation
-		return result, false
-	}
-	if result.Correlation.AttemptID == "" {
-		result.Correlation.AttemptID = request.Correlation.AttemptID
-	}
-	if result.Correlation.FactorySessionID == "" {
-		result.Correlation.FactorySessionID = request.Correlation.FactorySessionID
-	}
-	if result.Correlation.RuntimeID == "" {
-		result.Correlation.RuntimeID = request.Correlation.RuntimeID
-	}
-	if result.Correlation.GenerationID == "" {
-		result.Correlation.GenerationID = request.Correlation.GenerationID
-	}
-	if result.Correlation.RequestID == "" {
-		result.Correlation.RequestID = request.Correlation.RequestID
-	}
-	if result.Correlation.TraceID == "" {
-		result.Correlation.TraceID = request.Correlation.TraceID
-	}
-	return result, result.Correlation.DispatchID != request.Correlation.DispatchID ||
-		result.Correlation.AttemptID != request.Correlation.AttemptID ||
-		correlationValueConflicts(result.Correlation.FactorySessionID, request.Correlation.FactorySessionID) ||
-		correlationValueConflicts(result.Correlation.RuntimeID, request.Correlation.RuntimeID) ||
-		correlationValueConflicts(result.Correlation.GenerationID, request.Correlation.GenerationID) ||
-		correlationValueConflicts(result.Correlation.RequestID, request.Correlation.RequestID) ||
-		correlationValueConflicts(result.Correlation.TraceID, request.Correlation.TraceID)
-}
-
-func conflictingAttemptResult(request workers.ExecuteRequest) workers.ExecuteResult {
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     workers.ExecutionOutcomeFailed,
-		Failure: &workers.ExecutionFailure{
-			Type:    workers.WorkFailureTypeUnknown,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: "worker execution returned conflicting correlation",
-		},
-	}
+	return normalizeAttemptOutcome(request, result, executeErr, cancellationReason)
 }
 
 func normalizeAttemptOutcome(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
 	executeErr error,
+	cancellationReason platformprocess.CancellationReason,
 ) workers.ExecuteResult {
+	if result.Cancellation != nil {
+		result.Correlation = request.Correlation
+		result.Outcome = workers.ExecutionOutcomeCanceled
+		result.Output = workers.ProposedOutput{}
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+		result.Continuation = nil
+		if result.Failure == nil {
+			result.Failure = &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeUnknown,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: "execution canceled",
+			}
+		}
+		return result
+	}
 	if executeErr == nil && result.Outcome != "" {
 		return result
 	}
-	if errors.Is(executeErr, context.Canceled) ||
+	if cancellationReason != "" ||
 		errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) ||
 		result.Outcome == workers.ExecutionOutcomeCanceled {
 		result.Correlation = request.Correlation
@@ -354,6 +328,9 @@ func normalizeAttemptOutcome(
 		result.Output = workers.ProposedOutput{}
 		result.StructuredResult = nil
 		result.StructuredResultPresent = false
+		if result.Cancellation == nil {
+			result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
 		if result.Failure == nil {
 			result.Failure = &workers.ExecutionFailure{
 				Type:    workers.WorkFailureTypeUnknown,
@@ -382,9 +359,14 @@ func normalizeAttemptOutcome(
 func canceledAttemptResult(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
+	reason workers.DispatchCancellationReason,
 ) workers.ExecuteResult {
 	result.Correlation = request.Correlation
 	result.Outcome = workers.ExecutionOutcomeCanceled
+	if reason != workers.DispatchCancellationReasonSuperseded {
+		reason = workers.DispatchCancellationReasonCanceled
+	}
+	result.Cancellation = &workers.DispatchCancellation{Reason: reason}
 	// A provider may have returned output just as Runtime cancellation won the
 	// terminal race. That output is not an eligible proposal and must not reach
 	// Work materialization or downstream Runtime routing.
@@ -431,15 +413,26 @@ func (l *attemptLifecycle) reconcileProcessGone(attempt *activeAttempt) {
 		return
 	}
 	attempt.canceled = true
-	attempt.processGone = true
+	processGone := true
+	if attempt.ctx == nil || attempt.ctx.Err() != context.Canceled {
+		attempt.processGone = true
+	} else {
+		processGone = false
+		attempt.cancelReason = dispatchCancellationReasonFromContext(attempt.ctx)
+	}
 	cancel := attempt.cancel
 	l.mu.Unlock()
-	cancel()
+	if processGone {
+		cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonProcessGone))
+		return
+	}
+	cancel(platformprocess.NewCancellationCause(platformCancellationReason(attempt.cancelReason)))
 }
 
 func (l *attemptLifecycle) cancel(
 	ctx context.Context,
 	dispatchID string,
+	reasons ...workers.WorkstationDispatchCancelReason,
 ) (workers.WorkstationDispatchCancelOutcome, error) {
 	if l == nil {
 		return "", ErrAttemptLifecycleUnavailable
@@ -460,6 +453,7 @@ func (l *attemptLifecycle) cancel(
 			return workers.WorkstationDispatchCancelOutcomeAlreadyCanceled, nil
 		}
 		attempt.canceled = true
+		attempt.cancelReason = dispatchCancellationReasonFromCancelRequest(reasons...)
 	}
 	l.mu.Unlock()
 	if attempt == nil {
@@ -468,7 +462,7 @@ func (l *attemptLifecycle) cancel(
 		}
 		return "", fmt.Errorf("cancel worker attempt %q: dispatch is unknown", dispatchID)
 	}
-	attempt.cancel()
+	attempt.cancel(platformprocess.NewCancellationCause(platformCancellationReason(attempt.cancelReason)))
 	return workers.WorkstationDispatchCancelOutcomeCanceled, nil
 }
 
@@ -483,11 +477,12 @@ func (l *attemptLifecycle) stop(ctx context.Context) error {
 	attempts := make([]*activeAttempt, 0, len(l.active))
 	for _, attempt := range l.active {
 		attempt.canceled = true
+		attempt.cancelReason = workers.DispatchCancellationReasonCanceled
 		attempts = append(attempts, attempt)
 	}
 	l.mu.Unlock()
 	for _, attempt := range attempts {
-		attempt.cancel()
+		attempt.cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 	}
 	for _, attempt := range attempts {
 		select {
@@ -675,26 +670,6 @@ func (f *factoryImpl) ControlMoveWork(ctx context.Context, req factory.MoveWorkR
 	}, nil
 }
 
-func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
-	if !validObservationScope(req.Scope) {
-		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
-	}
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
-		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
-	default:
-		return factory.ObserveResult{}, factory.ErrNotRunning
-	}
-	snapshot, err := f.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return factory.ObserveResult{}, err
-	}
-	return factory.ObserveResult{Observation: rootobservation.Project(snapshot, req.Scope)}, nil
-}
-
 func (f *factoryImpl) PlanDispatch(
 	ctx context.Context,
 	req factory.PlanDispatchRequest,
@@ -844,17 +819,6 @@ func mapDispatchPlanningError(err error) error {
 	}
 }
 
-func validObservationScope(scope factory.ObservationScope) bool {
-	switch scope {
-	case "", factory.ObservationScopeFull, factory.ObservationScopeStatus, factory.ObservationScopeProgress,
-		factory.ObservationScopeDispatches, factory.ObservationScopeResults, factory.ObservationScopeResources,
-		factory.ObservationScopeHealth:
-		return true
-	default:
-		return false
-	}
-}
-
 func interpolateRuntimeWorkerPrompt(
 	cfg *runtimeConfig,
 	body string,
@@ -902,93 +866,4 @@ func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities
 	}
 	clone := *value
 	return &clone
-}
-
-const detachedAgentRunTranscriptSummaryLimit = 160
-
-func recordDetachedAgentRunResponse(
-	cfg *runtimeConfig,
-	request workers.ExecuteRequest,
-	result workers.ExecuteResult,
-	executeErr error,
-) {
-	if cfg == nil || cfg.eventHistory == nil || !runtimeRequestUsesAgentRun(cfg, request) {
-		return
-	}
-	recorder, ok := cfg.eventHistory.(recordings.WorkerEventRecorder)
-	if !ok || recorder == nil {
-		return
-	}
-	dispatchID := strings.TrimSpace(request.Correlation.DispatchID)
-	if dispatchID == "" {
-		return
-	}
-
-	transcript := make([]workers.AgentRunTranscriptEntry, 0, 3)
-	appendTranscriptEntry(&transcript, "system", request.Target.Prompt.SystemPrompt)
-	appendTranscriptEntry(&transcript, "user", request.Target.Prompt.UserMessage)
-	appendTranscriptEntry(&transcript, "assistant", primaryOutputText(result.Output.Primary))
-	safeDiagnostics := workers.SafeWorkDiagnosticsFromWorkDiagnostics(result.Diagnostics.ToWorkDiagnostics())
-	if safeDiagnostics == nil {
-		safeDiagnostics = &workers.SafeWorkDiagnostics{}
-	}
-	safeDiagnostics.AgentRun = &workers.SafeAgentRunDiagnostic{
-		ExecutionBehavior: workers.AgentRunExecutionBehavior,
-		Transcript:        transcript,
-	}
-	diagnostics, err := workers.SafeWorkDiagnosticsEventPayload(safeDiagnostics)
-	if err != nil {
-		return
-	}
-	outcome := result.Outcome
-	if outcome == "" && executeErr != nil {
-		outcome = workers.ExecutionOutcomeFailed
-	}
-	eventTime := cfg.clock.Now()
-	recorder.RecordAgentRunEvent(workers.AgentRunResponseEvent{
-		ID:         fmt.Sprintf("factory-event/agent-run-response/%s", dispatchID),
-		DispatchID: dispatchID,
-		EventTime:  eventTime,
-		Tick:       detachedExecutionTick(request.Input.Dispatch.Execution),
-		Payload: workers.AgentRunResponseEventPayload{
-			AgentRunID:     fmt.Sprintf("%s/agent-run/1", dispatchID),
-			Diagnostics:    diagnostics,
-			DurationMillis: result.Metrics.Duration.Milliseconds(),
-			Outcome:        string(outcome),
-		},
-	})
-}
-
-func detachedExecutionTick(metadata work.ExecutionMetadata) int {
-	if metadata.CurrentTick != 0 {
-		return metadata.CurrentTick
-	}
-	return metadata.DispatchCreatedTick
-}
-
-func runtimeRequestUsesAgentRun(cfg *runtimeConfig, request workers.ExecuteRequest) bool {
-	lookup, ok := runtimeDefinitionLookup(cfg)
-	if !ok || lookup == nil {
-		return false
-	}
-	workstation, found := lookup.Workstation(strings.TrimSpace(request.Target.WorkstationName))
-	return found && workstation != nil && interfaces.IsAgentRunWorkstationType(workstation.Type)
-}
-
-func appendTranscriptEntry(
-	transcript *[]workers.AgentRunTranscriptEntry,
-	role string,
-	content string,
-) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return
-	}
-	if len(content) > detachedAgentRunTranscriptSummaryLimit {
-		content = content[:detachedAgentRunTranscriptSummaryLimit] + "..."
-	}
-	*transcript = append(*transcript, workers.AgentRunTranscriptEntry{
-		Role:    role,
-		Summary: content,
-	})
 }

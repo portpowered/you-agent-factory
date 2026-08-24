@@ -601,6 +601,13 @@ func TestLoggingCommandRunner_LogsRequestAndCompletionStatuses(t *testing.T) {
 			wantStatus:      "error",
 			wantCommandData: false,
 		},
+		{
+			name:            "superseded cancellation",
+			result:          CommandResult{CancellationReason: CancellationReasonSuperseded},
+			err:             context.Canceled,
+			wantStatus:      "canceled",
+			wantCommandData: false,
+		},
 	}
 
 	for _, tc := range cases {
@@ -627,15 +634,30 @@ func assertLoggingCommandRunnerCase(t *testing.T, tc loggingCommandRunnerCase) {
 
 	result, err := runner.Run(context.Background(), req)
 	assertLoggingCommandRunnerOutcome(t, result, err, tc)
-	if len(logger.infos) != 2 {
-		t.Fatalf("logged info records = %d, want 2", len(logger.infos))
+	wantInfoRecords := 2
+	if commandStatusIsFailure(tc.wantStatus) {
+		wantInfoRecords = 1
+		if len(logger.errors) != 1 {
+			t.Fatalf("logged error records = %d, want 1", len(logger.errors))
+		}
+	} else if len(logger.errors) != 0 {
+		t.Fatalf("logged error records = %d, want 0", len(logger.errors))
+	}
+	if len(logger.infos) != wantInfoRecords {
+		t.Fatalf("logged info records = %d, want %d", len(logger.infos), wantInfoRecords)
 	}
 	if len(logger.verboses) != 2 {
 		t.Fatalf("logged verbose records = %d, want 2", len(logger.verboses))
 	}
 
 	assertLoggingCommandRunnerRequestLog(t, logger.infos[0].fields)
-	assertLoggingCommandRunnerCompletionLog(t, logger.infos[1].fields, req, tc)
+	var completionLog recordedCommandLog
+	if commandStatusIsFailure(tc.wantStatus) {
+		completionLog = logger.errors[0]
+	} else {
+		completionLog = logger.infos[1]
+	}
+	assertLoggingCommandRunnerCompletionLog(t, completionLog.fields, req, tc)
 	assertLoggingCommandRunnerVerboseRequestLog(t, logger.verboses[0].fields)
 	assertLoggingCommandRunnerVerboseCompletionLog(t, logger.verboses[1].fields, req)
 }
@@ -693,6 +715,19 @@ func assertLoggingCommandRunnerCompletionLog(t *testing.T, fields map[string]any
 	}
 	if fields["status"] != tc.wantStatus {
 		t.Fatalf("completion status = %#v, want %q", fields["status"], tc.wantStatus)
+	}
+	if fields["outcome"] != tc.wantStatus {
+		t.Fatalf("completion outcome = %#v, want %q", fields["outcome"], tc.wantStatus)
+	}
+	if wantReason := commandFailureReason(tc.wantStatus); wantReason != "" {
+		if fields["failure_reason"] != wantReason {
+			t.Fatalf("completion failure_reason = %#v, want %q", fields["failure_reason"], wantReason)
+		}
+	} else if _, ok := fields["failure_reason"]; ok {
+		t.Fatalf("cancellation completion unexpectedly has failure_reason: %#v", fields["failure_reason"])
+	}
+	if tc.wantStatus == "canceled" && fields["cancellation_reason"] != string(CancellationReasonSuperseded) {
+		t.Fatalf("cancellation_reason = %#v, want %q", fields["cancellation_reason"], CancellationReasonSuperseded)
 	}
 	assertLoggingCommandRunnerCommandData(t, fields, tc)
 }

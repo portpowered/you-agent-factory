@@ -15,6 +15,9 @@ func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime
 	}
 	return factoryapi.ManagedRuntime{
 		Identity:            runtime.Identity,
+		Revision:            runtime.Revision,
+		CachePath:           runtime.CachePath,
+		CacheBytes:          runtime.CacheBytes,
 		ReadinessState:      factoryapi.ManagedRuntimeReadinessState(runtime.ReadinessState),
 		LifecycleState:      factoryapi.ManagedRuntimeLifecycleState(runtime.LifecycleState),
 		Locality:            factoryapi.WorkerModelLocality(runtime.Locality),
@@ -42,11 +45,45 @@ func managedRuntimePullResultToGenerated(result models.PullResult, files []facto
 	if diagnostics := managedRuntimePullSourceDiagnostics(result); diagnostics != nil {
 		pull.SourceDiagnostics = diagnostics
 	}
+	if diagnostics := managedRuntimePullDiagnostics(result); diagnostics != nil {
+		pull.PullDiagnostics = diagnostics
+	}
 	if strings.TrimSpace(result.ProviderLocality) == workerconfig.ModelLocalityCloud {
 		pull.ReadinessState = factoryapi.ManagedRuntimeReadinessStateREADY
 		pull.PullOutcome = factoryapi.ManagedRuntimePullOutcomeALREADYREADY
 	}
 	return pull
+}
+
+func managedRuntimePullDiagnostics(result models.PullResult) *factoryapi.ManagedRuntimePullDiagnostics {
+	diagnostics := result.PullDiagnostics.Normalize()
+	if !diagnostics.HasDetails() {
+		return nil
+	}
+	generated := factoryapi.ManagedRuntimePullDiagnostics{}
+	if value := diagnostics.ModelName; value != "" {
+		generated.ModelName = &value
+	}
+	if value := diagnostics.ResolvedRepository; value != "" {
+		generated.ResolvedRepository = &value
+	}
+	if value := diagnostics.Revision; value != "" {
+		generated.Revision = &value
+	}
+	if value := diagnostics.File; value != "" {
+		generated.File = &value
+	}
+	if value := diagnostics.Operation; value != "" {
+		generated.Operation = &value
+	}
+	if value := diagnostics.RequestURL; value != "" {
+		generated.RequestUrl = &value
+	}
+	if diagnostics.UpstreamStatusCode != 0 {
+		value := int32(diagnostics.UpstreamStatusCode)
+		generated.UpstreamStatusCode = &value
+	}
+	return &generated
 }
 
 func managedRuntimePullOutcome(result models.PullResult) factoryapi.ManagedRuntimePullOutcome {

@@ -9,8 +9,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/testkit"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestNewMockProductionRegistryIsInertAndResolvesWithoutExecution(t *testing.T) {
@@ -39,6 +41,11 @@ func TestNewMockProductionRegistryIsInertAndResolvesWithoutExecution(t *testing.
 }
 
 func TestMockRunnerThroughProductionRegistryConformsToCommonContract(t *testing.T) {
+	inputTokens, outputTokens := int64(10), int64(5)
+	usage := &workers.MockWorkerUsageConfig{
+		Provider: "codex", Model: "gpt-5-codex",
+		InputTokens: &inputTokens, OutputTokens: &outputTokens,
+	}
 	registry := newExplicitMockRegistry(t, &workers.MockWorkersConfig{
 		MockWorkers: []workers.MockWorkerConfig{{
 			WorkerName: "writer",
@@ -46,6 +53,7 @@ func TestMockRunnerThroughProductionRegistryConformsToCommonContract(t *testing.
 		}, {
 			WorkerName: "failing",
 			RunType:    workers.MockWorkerRunTypeReject,
+			Usage:      usage,
 		}},
 	}, nil)
 
@@ -64,6 +72,24 @@ func TestMockRunnerThroughProductionRegistryConformsToCommonContract(t *testing.
 		workers.RunnerOptionalCapabilityImageInput,
 	}
 	failure := mockRequest("failing")
+	capture := &workerexecution.MockWorkerUsageCapture{}
+	failureResult, failureErr := registry.Execute(
+		workerexecution.WithMockWorkerUsageCapture(t.Context(), capture),
+		runners.ExecuteRequest{Identity: runners.MockIdentity, Attempt: failure},
+	)
+	if failureErr == nil {
+		t.Fatal("reject Execute() error = nil, want mock rejection")
+	}
+	if got := capture.Usage(); got == nil || got.Provider != usage.Provider || got.Model != usage.Model {
+		t.Fatalf("captured reject usage = %#v, want declared provider/model", got)
+	}
+	if failureResult.Diagnostics == nil || failureResult.Diagnostics.Provider == nil ||
+		failureResult.Diagnostics.Provider.Provider != usage.Provider ||
+		failureResult.Diagnostics.Provider.Model != usage.Model ||
+		failureResult.Diagnostics.Provider.ResponseMetadata[workers.ProviderResponseMetadataInputTokens] != "10" ||
+		failureResult.Diagnostics.Provider.ResponseMetadata[workers.ProviderResponseMetadataOutputTokens] != "5" {
+		t.Fatalf("reject diagnostics = %#v, want declared provider usage", failureResult.Diagnostics)
+	}
 
 	testkit.RunService(t, testkit.ServiceSubject{
 		Service:            registry,
@@ -137,7 +163,7 @@ func TestNewMockProductionRegistryRejectsMissingConfig(t *testing.T) {
 func newExplicitMockRegistry(
 	t *testing.T,
 	config *workers.MockWorkersConfig,
-	next workers.CommandRunner,
+	next workerprocess.CommandRunner,
 ) runners.Service {
 	t.Helper()
 	registry, err := NewMockProductionRegistry(
@@ -192,10 +218,10 @@ type mockCommandSpy struct {
 
 func (spy *mockCommandSpy) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
+	workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	if spy.calls != nil {
 		spy.calls.Add(1)
 	}
-	return workers.CommandResult{Stdout: []byte("unused")}, nil
+	return workerprocess.CommandResult{Stdout: []byte("unused")}, nil
 }

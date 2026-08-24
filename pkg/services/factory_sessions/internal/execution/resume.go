@@ -59,11 +59,14 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	state.session.Lifecycle.ResumedAt = &resumingAt
 	resumed := cloneRuntimeSessionState(&state)
 	resumed.events = rebuildRuntimeSessionCanonicalEvents(&resumed)
+	resumed.runDone = make(chan struct{})
 	s.sessions[id] = &resumed
 	s.mu.Unlock()
 	if err := s.ensureSessionResponseEventsIfNeeded(&resumed); err != nil {
 		s.mu.Lock()
 		if active, ok := s.sessions[id]; ok && active == &resumed {
+			active.runCancel = nil
+			close(resumed.runDone)
 			delete(s.sessions, id)
 		}
 		s.mu.Unlock()
@@ -83,6 +86,7 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	if active, ok := s.sessions[id]; ok {
 		active.runCancel = runCancel
 	}
+	runDone := resumed.runDone
 	s.mu.Unlock()
 
 	go s.runResumedAsyncSession(
@@ -95,6 +99,7 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 		state.checkpointSummary,
 		state.runtimeRecords,
 		resumingAt,
+		runDone,
 	)
 
 	snapshot, err := s.snapshotSessionState(id)
@@ -353,12 +358,14 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 	checkpointSummary *workflowresult.JavaScriptCheckpointSummary,
 	priorRecords []workflowresult.JavaScriptRuntimeRecord,
 	startedAt time.Time,
+	runDone chan struct{},
 ) {
 	defer func() {
 		s.mu.Lock()
 		if state, ok := s.sessions[sessionID]; ok {
 			state.runCancel = nil
 		}
+		close(runDone)
 		s.mu.Unlock()
 	}()
 
@@ -434,14 +441,15 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 		return workflowresult.JavaScriptRuntimeOutcome{}, err
 	}
 	return s.orchestration.RunJavaScript(ctx, workflowresult.JavaScriptRuntimeRequest{
-		Source:     sourceContent,
-		SourceRef:  resolved.SourceRef,
-		SessionID:  sessionID,
-		Args:       argsJSON,
-		ArgsSchema: resolved.ArgsSchema,
-		Metadata:   workflowMetadataFromResolved(resolved, normalized),
-		Policy:     policyResolution.Policy,
-		Resume:     resume,
+		Source:      sourceContent,
+		SourceRef:   resolved.SourceRef,
+		SessionID:   sessionID,
+		Args:        argsJSON,
+		ArgsSchema:  resolved.ArgsSchema,
+		Metadata:    workflowMetadataFromResolved(resolved, normalized),
+		FactoryName: factoryNameFromStart(normalized, resolved),
+		Policy:      policyResolution.Policy,
+		Resume:      resume,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))
 }
 

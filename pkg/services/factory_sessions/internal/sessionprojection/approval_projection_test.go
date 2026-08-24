@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestBuildProjectionContextDetachesPendingHumanApprovalsInStableOrder(t *testing.T) {
@@ -65,6 +66,35 @@ func TestBuildProjectionContextDetachesPendingHumanApprovalsInStableOrder(t *tes
 	runtime := sessionprojection.ProjectRuntimeContract(ctx)
 	if len(runtime.PendingHumanApprovals) != 2 || runtime.PendingHumanApprovals[0].ApprovalID != "approval-a" {
 		t.Fatalf("runtime pending approvals = %#v, want projected approval list", runtime.PendingHumanApprovals)
+	}
+}
+
+func TestBuildProjectionContextUsesDetachedIncrementalSessionFacts(t *testing.T) {
+	description := interfaces.NameValueConfig{
+		Type:   interfaces.NameValueTypeLocalizableAsset,
+		Value:  "Review release",
+		Values: map[string]string{"fr-FR": "Examiner la release"},
+	}
+	facts := recordings.SessionProjectionFacts{
+		PendingHumanApprovals: map[string]interfaces.FactoryWorldHumanApproval{
+			"approval-b": {ApprovalID: "approval-b", WorkItemIDs: []string{"work-b"}},
+			"approval-a": {ApprovalID: "approval-a", WorkItemIDs: []string{"work-a"}, WorkstationDescription: &description},
+		},
+	}
+	ctx, err := sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
+		Now:               time.Date(2026, 8, 12, 20, 0, 0, 0, time.UTC),
+		SessionProjection: &facts,
+	})
+	if err != nil {
+		t.Fatalf("BuildProjectionContext() error = %v", err)
+	}
+	if len(ctx.PendingHumanApprovals) != 2 || ctx.PendingHumanApprovals[0].ApprovalID != "approval-a" || ctx.PendingHumanApprovals[1].ApprovalID != "approval-b" {
+		t.Fatalf("pending approvals = %#v, want stable incremental projection order", ctx.PendingHumanApprovals)
+	}
+	ctx.PendingHumanApprovals[0].WorkItemIDs[0] = "mutated-work"
+	ctx.PendingHumanApprovals[0].WorkstationDescription.Values["fr-FR"] = "mutated description"
+	if facts.PendingHumanApprovals["approval-a"].WorkItemIDs[0] != "work-a" || facts.PendingHumanApprovals["approval-a"].WorkstationDescription.Values["fr-FR"] != "Examiner la release" {
+		t.Fatalf("incremental session facts were aliased by projection context: %#v", facts.PendingHumanApprovals["approval-a"])
 	}
 }
 

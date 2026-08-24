@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +22,7 @@ import (
 const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
 
 // TestFactorySessionCreateListShowDelete proves the public CLI Factory Session
-// boundary supports a full create → list → show → delete lifecycle: a newly
+// boundary supports a full create → list → show → terminate → delete lifecycle: a newly
 // created session returns a stable public session ID, appears in session list
 // and session show with matching folder identity and live runtime status markers,
 // and session delete removes it so subsequent list/show no longer treat it as
@@ -38,7 +37,6 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	serverPort := portFromServerURL(t, baseURL)
 	processHarness := newRootProcessHarness(t)
 
 	newFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory")
@@ -118,10 +116,17 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session show missing runtime status markers: %#v", shown)
 	}
 
-	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, "",
+	terminateOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+		"--json",
+		"session", "terminate", sessionID,
+	)
+	if err != nil {
+		t.Fatalf("you session terminate: %v\noutput:\n%s", err, terminateOut)
+	}
+
+	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "delete", sessionID,
-		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	if err != nil {
 		t.Fatalf("you session delete: %v\noutput:\n%s", err, deleteOut)
@@ -144,7 +149,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("you session show after delete unexpectedly succeeded:\n%s", showAfterDeleteOut)
 	}
 	showAfterDelete := string(showAfterDeleteOut)
-	support.RequireSafeCLIDiagnostic(t, showAfterDelete)
+	support.RequireNotFoundCLIDiagnostic(t, showAfterDelete)
 	if strings.Contains(showAfterDelete, sessionID) && strings.Contains(showAfterDelete, `"id"`) {
 		t.Fatalf("session show after delete must not emit a success session payload:\n%s", showAfterDelete)
 	}
@@ -231,7 +236,6 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	serverPort := portFromServerURL(t, baseURL)
 	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -249,10 +253,9 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 	)
 	assertCLISessionNotFoundFailure(t, "show", showOut, err, sessionLifecycleCRUDMissingSessionID, false)
 
-	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, "",
+	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "delete", sessionLifecycleCRUDMissingSessionID,
-		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionLifecycleCRUDMissingSessionID, true)
 
@@ -352,6 +355,7 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 		t.Fatalf("get session missing runtime status markers: %#v", resolved)
 	}
 
+	terminateSessionViaAPI(t, baseURL, sessionID)
 	closeSessionViaAPI(t, baseURL, sessionID)
 	assertAPISessionNotFound(t, baseURL, sessionID)
 
@@ -430,8 +434,8 @@ func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
 
 // TestAPIMultipleFactorySessionsRemainIsolated proves the public HTTP Factory Session
 // boundary keeps concurrently open sessions isolated: opening at least two live sessions
-// lists both as distinct entries, and closing one session leaves the other gettable and
-// listable with its original public identity without adopting the closed session's state.
+// lists both as distinct entries, and stopping then deleting one session leaves the other
+// gettable and listable with its original public identity without adopting stopped state.
 func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -467,6 +471,7 @@ func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
 	}
 	assertDistinctSessionListEntries(t, listed.Sessions, firstSession.id, secondSession.id)
 
+	terminateSessionViaAPI(t, baseURL, firstSession.id)
 	closeSessionViaAPI(t, baseURL, firstSession.id)
 	assertAPISessionNotFound(t, baseURL, firstSession.id)
 
@@ -652,24 +657,6 @@ func runYouCLI(
 	return cmd.CombinedOutput()
 }
 
-func portFromServerURL(t *testing.T, serverURL string) int {
-	t.Helper()
-
-	parsed, err := url.Parse(serverURL)
-	if err != nil {
-		t.Fatalf("parse server URL %q: %v", serverURL, err)
-	}
-	port := parsed.Port()
-	if port == "" {
-		t.Fatalf("server URL %q missing port", serverURL)
-	}
-	var portNumber int
-	if _, err := fmt.Sscanf(port, "%d", &portNumber); err != nil {
-		t.Fatalf("parse server port %q: %v", port, err)
-	}
-	return portNumber
-}
-
 func sessionListContains(
 	sessions []factoryapi.FactorySessionSummary,
 	sessionID string,
@@ -708,6 +695,29 @@ func postSessionLifecycleJSON[T any](t *testing.T, endpoint string, request any,
 		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
 	}
 	return decoded
+}
+
+func terminateSessionViaAPI(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+
+	request, err := http.NewRequest(
+		http.MethodPost,
+		baseURL+"/factory-sessions/"+sessionID+"/terminate",
+		bytes.NewReader([]byte(`{}`)),
+	)
+	if err != nil {
+		t.Fatalf("construct terminate session request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST terminate Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST terminate Factory Session %q status = %d, want success: %s", sessionID, response.StatusCode, payload)
+	}
 }
 
 func closeSessionViaAPI(t *testing.T, baseURL, sessionID string) {
@@ -825,7 +835,7 @@ func assertCLISessionNotFoundFailure(
 	}
 
 	text := string(output)
-	support.RequireSafeCLIDiagnostic(t, text)
+	support.RequireNotFoundCLIDiagnostic(t, text)
 	if strings.Contains(text, sessionID) {
 		t.Fatalf("session %s leaked session id %q in safe diagnostic:\n%s", operation, sessionID, text)
 	}

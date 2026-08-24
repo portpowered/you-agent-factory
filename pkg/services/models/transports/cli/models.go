@@ -10,21 +10,28 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
 const modelsErrorBodyPreviewSize = 200
 
-var ErrModelNotFound = errors.New("model not found")
+var (
+	ErrModelNotFound      = errors.New("model not found")
+	ErrModelCacheNotFound = errors.New("model cache not found")
+	ErrModelCacheInUse    = errors.New("model cache is in use")
+	ErrModelCacheUnsafe   = errors.New("model cache path is unsafe")
+)
+
+const managedRuntimePullFailureCode = "CLI_MODEL_PULL_FAILED"
 
 type ListConfig struct {
 	Context     context.Context
@@ -52,6 +59,7 @@ type InvokeConfig struct {
 	ModelName        string
 	Operation        string
 	Text             string
+	InputMappings    []string
 	OutputPath       string
 	OutputMappings   []string
 	Server           string
@@ -77,17 +85,31 @@ type PullConfig struct {
 	Diagnostics io.Writer
 }
 
+type RemoveConfig struct {
+	Context     context.Context
+	ModelName   string
+	Server      string
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
+}
+
 // Service exposes the Models CLI command operations to Cobra composition.
 type Service interface {
 	List(ListConfig) error
 	Inspect(InspectConfig) error
 	Invoke(InvokeConfig) error
 	Pull(PullConfig) error
+	Remove(RemoveConfig) error
 }
 
 type httpService struct {
 	http       clihttp.Protocol
+	pullHTTP   clihttp.Protocol
 	invocation InvocationOperation
+	now        func() time.Time
 }
 
 // New constructs the composition-stable Models CLI service injected into Cobra
@@ -111,7 +133,57 @@ func NewWithOutputFileSystem(
 	outputFileSystem OutputFileSystem,
 	providers ...CompositionScopeProvider,
 ) Service {
-	return bindCompositionService(httpProtocol, invocation, outputFileSystem, providers...)
+	return NewWithOutputFileSystemAndPullProtocol(
+		httpProtocol, httpProtocol, invocation, outputFileSystem, providers...,
+	)
+}
+
+// NewWithOutputFileSystemAndPullProtocol constructs the Models CLI service
+// with an operation-appropriate HTTP protocol for synchronous pulls. The
+// pull protocol is expected to rely on caller cancellation rather than the
+// ordinary short CLI request deadline.
+func NewWithOutputFileSystemAndPullProtocol(
+	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	providers ...CompositionScopeProvider,
+) Service {
+	return NewWithOutputFileSystemAndPullProtocolAndClock(
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, nil, providers...,
+	)
+}
+
+// NewWithOutputFileSystemAndPullProtocolAndClock constructs the Models CLI
+// service with the clock used for long-pull progress elapsed time.
+func NewWithOutputFileSystemAndPullProtocolAndClock(
+	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	now func() time.Time,
+	providers ...CompositionScopeProvider,
+) Service {
+	return NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, now, nil, providers...,
+	)
+}
+
+// NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader constructs
+// the Models CLI service with the host effect used by explicit generic input
+// mappings.
+func NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	now func() time.Time,
+	inputFileReader InputFileReader,
+	providers ...CompositionScopeProvider,
+) Service {
+	return bindCompositionService(
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, inputFileReader, now, providers...,
+	)
 }
 
 func (service *httpService) List(cfg ListConfig) error {
@@ -177,8 +249,11 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" {
+	if text == "" && len(cfg.InputMappings) == 0 {
 		return fmt.Errorf("--text is required")
+	}
+	if len(cfg.InputMappings) > 0 {
+		return fmt.Errorf("explicit input mappings require the local Models composition")
 	}
 	if len(cfg.OutputMappings) > 0 {
 		return fmt.Errorf("explicit output mappings require the local Models composition")
@@ -241,13 +316,19 @@ func (service *httpService) Pull(cfg PullConfig) error {
 	if modelName == "" {
 		return fmt.Errorf("model name is required")
 	}
+	pullHTTP := service.pullHTTP
+	if pullHTTP == nil {
+		pullHTTP = service.http
+	}
 	response, err := pullModel(pullOptions{
-		Context:     cfg.Context,
-		Server:      cfg.Server,
-		ModelName:   modelName,
-		Verbose:     cfg.Verbose,
-		Diagnostics: cfg.Diagnostics,
-		HTTP:        service.http,
+		Context:          cfg.Context,
+		Server:           cfg.Server,
+		ModelName:        modelName,
+		Verbose:          cfg.Verbose,
+		Diagnostics:      cfg.Diagnostics,
+		HTTP:             pullHTTP,
+		ProgressInterval: modelPullProgressInterval,
+		Now:              service.now,
 	})
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
@@ -261,6 +342,30 @@ func (service *httpService) Pull(cfg PullConfig) error {
 		return nil
 	}
 	return renderPull(response, cfg.Output)
+}
+
+func (service *httpService) Remove(cfg RemoveConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	response, err := removeModel(removeOptions{
+		Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
+		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+	})
+	if err != nil {
+		return err
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+	return renderRemove(response, cfg.Output)
 }
 
 type queryOptions struct {
@@ -366,20 +471,27 @@ func invokeModelAudio(cfg invokeOptions) error {
 }
 
 type pullOptions struct {
-	Context     context.Context
-	Server      string
-	ModelName   string
-	Verbose     bool
-	Diagnostics io.Writer
-	HTTP        clihttp.Protocol
+	Context          context.Context
+	Server           string
+	ModelName        string
+	Verbose          bool
+	Diagnostics      io.Writer
+	HTTP             clihttp.Protocol
+	ProgressInterval time.Duration
+	Now              func() time.Time
 }
 
 func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 	var response factoryapi.ModelPullResponse
 	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/pull"
-	if err := doModelsPOST(cfg.Context, cfg.HTTP, cfg.Server, path, map[string]any{}, &response, requestDiagnostics{
+	diagnostics := newSynchronizedWriter(cfg.Diagnostics)
+	stopProgress := startPullProgress(
+		cfg.Context, cfg.ModelName, diagnostics, cfg.ProgressInterval, cfg.Now,
+	)
+	defer stopProgress()
+	err := doModelsPOST(cfg.Context, cfg.HTTP, cfg.Server, path, map[string]any{}, &response, requestDiagnostics{
 		Enabled:   cfg.Verbose,
-		Output:    cfg.Diagnostics,
+		Output:    diagnostics,
 		Command:   "models pull",
 		Server:    cfg.Server,
 		ModelName: strings.TrimSpace(cfg.ModelName),
@@ -391,10 +503,19 @@ func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 				len(response.DownloadedFiles),
 			)
 		},
-	}); err != nil {
+	})
+	projectPullResponseOutcome(&response)
+	if err != nil {
 		return response, err
 	}
 	return response, nil
+}
+
+func projectPullResponseOutcome(response *factoryapi.ModelPullResponse) {
+	if response == nil || strings.TrimSpace(string(response.ManagedRuntimePull.PullOutcome)) == "" {
+		return
+	}
+	response.Outcome = modelPullOutcomeFromManagedRuntime(response.ManagedRuntimePull.PullOutcome)
 }
 
 type requestDiagnostics struct {
@@ -434,7 +555,10 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 		out,
 	)
 	if err != nil {
-		logModelsResponse(diagnostics, endpoint, 0, response.Duration, "error=unreachable")
+		logModelsResponse(
+			diagnostics, endpoint, 0, response.Duration,
+			modelsTransportErrorSummary(err),
+		)
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
@@ -443,25 +567,39 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 	if resp.StatusCode != http.StatusOK {
 		responseBody, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			return fmt.Errorf("read models response: %w", readErr)
+			return clihttp.WithHTTPResponse(resp, fmt.Errorf("read models response: %w", readErr))
 		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, response.Duration, fmt.Sprintf("responseBytes=%d", len(responseBody)))
 		if pullErr := managedRuntimePullResponseError(resp.StatusCode, responseBody); pullErr != nil {
 			if out != nil {
 				if err := json.Unmarshal(responseBody, out); err != nil {
-					return fmt.Errorf("decode managed runtime pull response: %w", err)
+					return clihttp.WithHTTPResponse(resp, fmt.Errorf("decode managed runtime pull response: %w", err))
 				}
+				sanitizeManagedRuntimePullResponse(out)
 			}
-			return pullErr
+			return clihttp.WithHTTPResponse(resp, pullErr)
 		}
-		return modelsRequestError(resp.StatusCode, responseBody)
+		return modelsRequestError(resp.StatusCode, responseBody, resp)
 	}
 	responseBytes, err := modelsResponseBytes(out)
 	if err != nil {
 		return err
 	}
+	sanitizeManagedRuntimePullResponse(out)
 	logModelsResponse(diagnostics, endpoint, resp.StatusCode, response.Duration, fmt.Sprintf("responseBytes=%d %s", responseBytes, diagnostics.summary()))
 	return nil
+}
+
+func sanitizeManagedRuntimePullResponse(out any) {
+	response, ok := out.(*factoryapi.ModelPullResponse)
+	if !ok || response == nil || response.ManagedRuntimePull.PullDiagnostics == nil {
+		return
+	}
+	diagnosticsError := managedRuntimePullDiagnosticsFromGenerated(response.ManagedRuntimePull.PullDiagnostics)
+	diagnostics := pullsupport.PullDiagnosticsFromError(diagnosticsError)
+	response.ManagedRuntimePull.PullDiagnostics = managedRuntimePullDiagnostics(
+		modelinference.PullResult{PullDiagnostics: diagnostics},
+	)
 }
 
 func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.URL, out any, diagnostics requestDiagnostics) error {
@@ -478,7 +616,10 @@ func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.U
 		out,
 	)
 	if err != nil {
-		logModelsResponse(diagnostics, endpoint, 0, response.Duration, "error=unreachable")
+		logModelsResponse(
+			diagnostics, endpoint, 0, response.Duration,
+			modelsTransportErrorSummary(err),
+		)
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
@@ -487,10 +628,10 @@ func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.U
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return fmt.Errorf("read models response: %w", err)
+			return clihttp.WithHTTPResponse(resp, fmt.Errorf("read models response: %w", err))
 		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, response.Duration, fmt.Sprintf("responseBytes=%d", len(body)))
-		return modelsRequestError(resp.StatusCode, body)
+		return modelsRequestError(resp.StatusCode, body, resp)
 	}
 	responseBytes, err := modelsResponseBytes(out)
 	if err != nil {
@@ -506,6 +647,17 @@ func modelsResponseBytes(out any) (int, error) {
 		return 0, fmt.Errorf("marshal models response: %w", err)
 	}
 	return len(body), nil
+}
+
+func modelsTransportErrorSummary(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "error=timeout"
+	case errors.Is(err, context.Canceled):
+		return "error=canceled"
+	default:
+		return "error=unreachable"
+	}
 }
 
 func (diagnostics requestDiagnostics) summary() string {
@@ -537,227 +689,4 @@ func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusC
 		return
 	}
 	clidiag.Printf(diagnostics.Output, diagnostics.Enabled, "%s response endpointPath=%s status=%d durationMillis=%d %s", diagnostics.Command, endpoint.Path, statusCode, elapsed.Milliseconds(), summary)
-}
-
-func renderList(response factoryapi.ListModelsResponse, output io.Writer) error {
-	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES"); err != nil {
-		return err
-	}
-	results := append([]factoryapi.ModelSummary(nil), response.Results...)
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
-	})
-	for _, model := range results {
-		if _, err := fmt.Fprintf(
-			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
-			model.Name,
-			managedRuntimeReadiness(model.ManagedRuntime),
-			managedRuntimeLifecycle(model.ManagedRuntime),
-			model.ProviderLocality,
-			modelOperationNames(model.Operations),
-			modelModalities(model.Modalities),
-			len(model.Resources),
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func renderPull(response factoryapi.ModelPullResponse, output io.Writer) error {
-	if _, err := fmt.Fprintf(
-		output,
-		"MODEL\tPULL OUTCOME\tREADINESS\tLIFECYCLE\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\t%s\t%s\n",
-		response.ModelName,
-		response.ManagedRuntimePull.PullOutcome,
-		response.ManagedRuntimePull.ReadinessState,
-		managedRuntimeLifecycleFromPull(response),
-		response.Revision,
-		response.CachePath,
-	); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(output, "FILES"); err != nil {
-		return err
-	}
-	files := append([]factoryapi.ModelPullDownloadedFile(nil), response.DownloadedFiles...)
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Path < files[j].Path
-	})
-	for _, file := range files {
-		if _, err := fmt.Fprintf(output, "%s\t%d\n", file.Path, file.Bytes); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func renderModel(model factoryapi.ModelDetail, output io.Writer) error {
-	if _, err := fmt.Fprintf(output, "Name:\t%s\n", model.Name); err != nil {
-		return err
-	}
-	for _, row := range []struct {
-		label string
-		value string
-	}{
-		{label: "Readiness", value: managedRuntimeReadiness(model.ManagedRuntime)},
-		{label: "Lifecycle", value: managedRuntimeLifecycle(model.ManagedRuntime)},
-		{label: "Locality", value: string(model.ProviderLocality)},
-		{label: "Operations", value: modelOperationNames(model.Operations)},
-		{label: "Modalities", value: modelModalities(model.Modalities)},
-	} {
-		if _, err := fmt.Fprintf(output, "%s:\t%s\n", row.label, row.value); err != nil {
-			return err
-		}
-	}
-	if _, err := fmt.Fprintf(output, "Resources:\t%d\n", len(model.Resources)); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(output, "Capabilities:"); err != nil {
-		return err
-	}
-	for _, capability := range model.Capabilities {
-		if _, err := fmt.Fprintf(
-			output,
-			"- %s\t%s\t%s\n",
-			capability.Worker,
-			capability.ProviderLocality,
-			modelOperationNames(capability.Operations),
-		); err != nil {
-			return err
-		}
-	}
-	diagnostics := managedRuntimeDiagnosticsMap(model)
-	if len(diagnostics) > 0 {
-		keys := make([]string, 0, len(diagnostics))
-		for key := range diagnostics {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		if _, err := fmt.Fprintln(output, "Diagnostics:"); err != nil {
-			return err
-		}
-		for _, key := range keys {
-			if _, err := fmt.Fprintf(output, "- %s=%s\n", key, diagnostics[key]); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func managedRuntimeReadiness(runtime factoryapi.ManagedRuntime) string {
-	if strings.TrimSpace(string(runtime.ReadinessState)) == "" {
-		return "UNKNOWN"
-	}
-	return string(runtime.ReadinessState)
-}
-
-func managedRuntimeLifecycle(runtime factoryapi.ManagedRuntime) string {
-	if strings.TrimSpace(string(runtime.LifecycleState)) == "" {
-		return "UNKNOWN"
-	}
-	return string(runtime.LifecycleState)
-}
-
-func managedRuntimeLifecycleFromPull(response factoryapi.ModelPullResponse) string {
-	switch response.ManagedRuntimePull.PullOutcome {
-	case factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
-		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
-	case factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
-		factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT,
-		factoryapi.ManagedRuntimePullOutcomeALREADYREADY:
-		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	default:
-		return "UNKNOWN"
-	}
-}
-
-func managedRuntimeDiagnosticsMap(model factoryapi.ModelDetail) factoryapi.StringMap {
-	if model.ManagedRuntime.Diagnostics != nil && len(*model.ManagedRuntime.Diagnostics) > 0 {
-		return *model.ManagedRuntime.Diagnostics
-	}
-	return model.Diagnostics
-}
-
-func modelOperationNames(operations []factoryapi.ModelInvocationOperation) string {
-	names := make([]string, 0, len(operations))
-	for _, operation := range operations {
-		names = append(names, operation.Name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ",")
-}
-
-func modelModalities(modalities []factoryapi.ModelInvocationContentType) string {
-	values := make([]string, 0, len(modalities))
-	for _, modality := range modalities {
-		values = append(values, string(modality))
-	}
-	sort.Strings(values)
-	return strings.Join(values, ",")
-}
-
-func managedRuntimePullResponseError(statusCode int, body []byte) error {
-	if statusCode != http.StatusUnprocessableEntity && statusCode != http.StatusGatewayTimeout {
-		return nil
-	}
-	var response factoryapi.ModelPullResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil
-	}
-	switch response.ManagedRuntimePull.PullOutcome {
-	case factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
-		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
-		factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
-		return fmt.Errorf(
-			"managed runtime pull failed (%s readiness %s)",
-			response.ManagedRuntimePull.PullOutcome,
-			response.ManagedRuntimePull.ReadinessState,
-		)
-	default:
-		return nil
-	}
-}
-
-func modelsRequestError(statusCode int, body []byte) error {
-	var errResp factoryapi.ErrorResponse
-	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
-		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
-			return fmt.Errorf("%w: %s", ErrModelNotFound, errResp.Message)
-		}
-		return fmt.Errorf("models request failed (%d): %s", statusCode, errResp.Message)
-	}
-	preview := strings.TrimSpace(string(body))
-	if len(preview) > modelsErrorBodyPreviewSize {
-		preview = preview[:modelsErrorBodyPreviewSize] + "..."
-	}
-	if preview == "" {
-		return fmt.Errorf("models request failed (%d)", statusCode)
-	}
-	return fmt.Errorf("models request failed (%d): %s", statusCode, preview)
-}
-
-func modelsEndpoint(server, path string) (url.URL, error) {
-	endpointURL, err := cliserver.RequestURL(server, path)
-	if err != nil {
-		return url.URL{}, err
-	}
-	endpoint, err := url.Parse(endpointURL)
-	if err != nil {
-		return url.URL{}, fmt.Errorf("parse models endpoint: %w", err)
-	}
-	return *endpoint, nil
-}
-
-func mustGeneratedTextContentPart(text string) factoryapi.WorkContentPart {
-	var part factoryapi.WorkContentPart
-	slot := "text"
-	_ = part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeTextUpper,
-		Text: text,
-		Slot: &slot,
-	})
-	return part
 }

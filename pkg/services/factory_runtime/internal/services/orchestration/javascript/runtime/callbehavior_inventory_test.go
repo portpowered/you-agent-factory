@@ -1,6 +1,8 @@
 package workflowruntime_test
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,6 +10,162 @@ import (
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior"
 )
+
+func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `agent.run({
+  prompt: "  review  ",
+  label: "  reviewer  ",
+  preset: "  careful  ",
+  executorProvider: "  cursor-acp  ",
+  modelProvider: "  codex  ",
+  model: "  gpt-test  ",
+  reasoningEffort: "  high  ",
+  resourceId: "  reviewers  ",
+  permissions: "SKIP_PERMISSIONS"
+}); return { ok: true };`,
+		SourceRef: "agent-run-closed-contract",
+		SessionID: "agent-run-closed-contract-valid",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+		WorkerSettings: factory.JavaScriptWorkerSettings{Presets: map[string]factory.JavaScriptWorkerPreset{
+			"careful": {},
+		}},
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+
+	requests := stub.executionRequests()
+	if len(requests) != 1 {
+		t.Fatalf("child executor request count = %d, want 1", len(requests))
+	}
+	want := factory.JavaScriptChildExecutionRequest{
+		Prompt:           "review",
+		Label:            "reviewer",
+		Preset:           "careful",
+		ExecutorProvider: "cursor-acp",
+		ModelProvider:    "codex",
+		Model:            "gpt-test",
+		ReasoningEffort:  "high",
+		ResourceID:       "reviewers",
+		Permissions:      workflowpolicy.JavaScriptChildPermissionSkipPermissions,
+		SkipPermissions:  true,
+	}
+	got := requests[0]
+	if got.Prompt != want.Prompt ||
+		got.Label != want.Label ||
+		got.Preset != want.Preset ||
+		got.ExecutorProvider != want.ExecutorProvider ||
+		got.ModelProvider != want.ModelProvider ||
+		got.Model != want.Model ||
+		got.ReasoningEffort != want.ReasoningEffort ||
+		got.ResourceID != want.ResourceID ||
+		got.Permissions != want.Permissions ||
+		got.SkipPermissions != want.SkipPermissions {
+		t.Fatalf("child executor request = %#v, want %#v", requests[0], want)
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidArgumentShapesBeforeDispatch(t *testing.T) {
+	cases := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{name: "non-object argument", source: `agent.run("review");`, wantError: "agent.run() requires an object argument"},
+		{name: "missing prompt", source: `agent.run({ label: "reviewer" });`, wantError: `agent.run() requires an object argument with a string "prompt" property`},
+		{name: "empty prompt", source: `agent.run({ prompt: "   " });`, wantError: `agent.run() requires a non-empty string "prompt" property`},
+		{name: "non-string prompt", source: `agent.run({ prompt: 42 });`, wantError: `agent.run() requires "prompt" to be a string`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			assertAgentRunContractFailure(t, test.source, test.wantError)
+		})
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidOptionalValuesBeforeDispatch(t *testing.T) {
+	fields := []string{"label", "preset", "executorProvider", "modelProvider", "model", "reasoningEffort", "resourceId"}
+	for _, field := range fields {
+		t.Run(field, func(t *testing.T) {
+			source := fmt.Sprintf(`agent.run({ prompt: "review", %q: 42 });`, field)
+			wantError := `agent.run() requires "` + field + `" to be a string`
+			assertAgentRunContractFailure(t, source, wantError)
+		})
+	}
+}
+
+func TestRun_AgentRunNormalizesOmittedAndDefaultPermission(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+	}{
+		{name: "omitted", source: `agent.run({ prompt: "review" }); return { ok: true };`},
+		{name: "explicit default", source: `agent.run({ prompt: "review", permissions: "DEFAULT" }); return { ok: true };`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			outcome, stub := runAgentRunWithStub(t, test.source, factory.JavaScriptWorkerSettings{})
+			if !outcome.OK {
+				t.Fatalf("Run() failure = %#v", outcome.Failure)
+			}
+			requests := stub.executionRequests()
+			if len(requests) != 1 {
+				t.Fatalf("child executor request count = %d, want 1", len(requests))
+			}
+			if requests[0].SkipPermissions {
+				t.Fatalf("child executor request = %#v, want default permission", requests[0])
+			}
+		})
+	}
+}
+
+func TestRun_AgentRunRejectsUnsupportedPropertyBeforeDispatch(t *testing.T) {
+	outcome, stub := runAgentRunWithStub(t, `const child = { prompt: "review" }; child.unexpected = "value-secret"; agent.run(child);`, factory.JavaScriptWorkerSettings{})
+	const wantError = `agent.run() does not support field "unexpected"`
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, wantError) {
+		t.Fatalf("Run() outcome = %#v, want failure containing %q", outcome, wantError)
+	}
+	if strings.Contains(outcome.Failure.Message, "value-secret") {
+		t.Fatalf("Run() failure = %q, want unsupported-field diagnostic without value", outcome.Failure.Message)
+	}
+	if len(stub.executionRequests()) != 0 {
+		t.Fatalf("child executor requests = %#v, want none", stub.executionRequests())
+	}
+	assertNoChildDispatchRecords(t, outcome.Records)
+}
+
+func assertAgentRunContractFailure(t *testing.T, source, wantError string) {
+	t.Helper()
+	outcome, stub := runAgentRunWithStub(t, source, factory.JavaScriptWorkerSettings{})
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, wantError) {
+		t.Fatalf("Run() outcome = %#v, want failure containing %q", outcome, wantError)
+	}
+	if len(stub.executionRequests()) != 0 {
+		t.Fatalf("child executor requests = %#v, want none", stub.executionRequests())
+	}
+	assertNoChildDispatchRecords(t, outcome.Records)
+}
+
+func runAgentRunWithStub(t *testing.T, source string, settings factory.JavaScriptWorkerSettings) (factory.JavaScriptRuntimeOutcome, *stubChildExecutor) {
+	t.Helper()
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:         source,
+		SourceRef:      "agent-run-closed-contract",
+		SessionID:      "agent-run-closed-contract-case",
+		Policy:         workflowpolicy.DefaultEffectivePolicy(),
+		WorkerSettings: settings,
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	return outcome, stub
+}
 
 func TestCallBehavior_WorkflowFinalInventoryMatchesExecution(t *testing.T) {
 	record := callBehaviorRecord(t, "workflow.final")
@@ -199,7 +357,7 @@ func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 	t.Run("records the child-scoped permission bypass request", func(t *testing.T) {
 		outcome := runInlineWorkflow(t, "agent-run-skip-permissions", `
 return (async function () {
-  const child = await agent.run({ prompt: "review", skipPermissions: true });
+  const child = await agent.run({ prompt: "review", permissions: "SKIP_PERMISSIONS" });
   return { child };
 })();
 `)
@@ -208,7 +366,7 @@ return (async function () {
 				continue
 			}
 			if !record.ChildDispatch.SkipPermissions {
-				t.Fatalf("child dispatch record = %#v, want skipPermissions=true", record.ChildDispatch)
+				t.Fatalf("child dispatch record = %#v, want SKIP_PERMISSIONS", record.ChildDispatch)
 			}
 			return
 		}
@@ -220,12 +378,42 @@ return (async function () {
 
 func assertAgentRunInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
 	t.Helper()
+	assertAgentRunParameterInventory(t, record)
+	assertAgentRunReturnInventory(t, record)
+	assertAgentRunEmissionInventory(t, record)
+}
+
+func assertAgentRunParameterInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("agent.run parameters = %#v, want one required object", record.Parameters)
 	}
+	var schema, permissions callbehavior.ObjectProperty
+	for _, property := range record.Parameters[0].ObjectProperties {
+		switch property.Name {
+		case "schema":
+			schema = property
+		case "permissions":
+			permissions = property
+		}
+	}
+	if schema.Type != "object" {
+		t.Fatalf("agent.run schema property = %#v, want optional object", schema)
+	}
+	if permissions.Type != "string" || len(permissions.Enum) != 2 || permissions.Enum[0] != "DEFAULT" || permissions.Enum[1] != "SKIP_PERMISSIONS" {
+		t.Fatalf("agent.run permissions property = %#v, want DEFAULT/SKIP_PERMISSIONS string enum", permissions)
+	}
+}
+
+func assertAgentRunReturnInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if record.Return == nil || !record.Return.Async || record.Return.PromiseType != "child-result-object" {
 		t.Fatalf("agent.run return = %#v, want async child-result-object promise", record.Return)
 	}
+}
+
+func assertAgentRunEmissionInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.EmittedRecords) != 1 || record.EmittedRecords[0] != "child_dispatch" {
 		t.Fatalf("agent.run emittedRecords = %v, want [child_dispatch]", record.EmittedRecords)
 	}
@@ -410,10 +598,16 @@ func TestCallBehavior_PipelineInventoryMatchesExecution(t *testing.T) {
 func assertPipelineInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
 	t.Helper()
 	if len(record.Parameters) != 3 {
-		t.Fatalf("pipeline parameters = %#v, want items, worker, optional next", record.Parameters)
+		t.Fatalf("pipeline parameters = %#v, want items, required stage1, variadic stages", record.Parameters)
 	}
-	if record.Callback == nil || record.Callback.Role != "worker" || len(record.Callback.Parameters) < 3 {
-		t.Fatalf("pipeline callback = %#v, want worker callback with item and index", record.Callback)
+	if record.Parameters[1].Name != "stage1" || !record.Parameters[1].Required || record.Parameters[1].Rest {
+		t.Fatalf("pipeline first stage parameter = %#v, want required non-rest stage1", record.Parameters[1])
+	}
+	if record.Parameters[2].Name != "stages" || record.Parameters[2].Required || !record.Parameters[2].Rest {
+		t.Fatalf("pipeline variadic stages parameter = %#v, want optional rest stages", record.Parameters[2])
+	}
+	if record.Callback == nil || record.Callback.Role != "stage" || len(record.Callback.Parameters) < 3 {
+		t.Fatalf("pipeline callback = %#v, want stage callback with item and index", record.Callback)
 	}
 	if record.Return == nil || !record.Return.Async || record.Return.PromiseType != "pipeline-result-array" {
 		t.Fatalf("pipeline return = %#v, want async pipeline-result-array promise", record.Return)
@@ -613,8 +807,13 @@ func agentRunErrorSource(condition string) string {
 		return `return agent.run({ prompt: "review", modelProvider: "Not_A_Provider" });`
 	case "unsupported-reasoning-effort":
 		return `return agent.run({ prompt: "review", reasoningEffort: "not-an-effort" });`
-	case "non-boolean-skip-permissions":
-		return `return agent.run({ prompt: "review", skipPermissions: "true" });`
+	case "invalid-permissions":
+		return `return agent.run({ prompt: "review", permissions: "READ_ONLY" });`
+	case "retired-permissions-field":
+		retiredField := "skip" + "Permissions"
+		return `const child = { prompt: "review" }; child["` + retiredField + `"] = true; return agent.run(child);`
+	case "non-object-schema":
+		return `return agent.run({ prompt: "review", schema: "schema-secret" });`
 	default:
 		return ""
 	}
@@ -643,6 +842,8 @@ func pipelineErrorSource(condition string) string {
 		return `return pipeline([], 1);`
 	case "invalid-next-function":
 		return `return pipeline([], function () {}, 1);`
+	case "invalid-stage-function":
+		return `return pipeline([], function () {}, function () {}, 1);`
 	case "null-or-undefined-item":
 		return `return pipeline([null], function () { return { ok: true }; });`
 	default:

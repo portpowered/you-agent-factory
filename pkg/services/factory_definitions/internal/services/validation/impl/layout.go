@@ -229,46 +229,6 @@ func layoutGeometrySubjectID(path string) string {
 	return trimmed
 }
 
-// LayoutSaveOutcomes prunes stale layout references for save, then merges
-// recoverable validation warnings (such as unsupported schemaVersion) that
-// pruning does not report. Prune outcomes take precedence when both phases
-// target the same code/path pair.
-func LayoutSaveOutcomes(cfg *factorydefinitions.FactoryConfig, topology factorydefinitions.PendingFactoryGraphTopology) Result {
-	pruneResult := PruneLayout(cfg, topology)
-	validateResult := ValidateLayout(cfg, topology)
-	return Result{Targets: MergeLayoutSaveOutcomes(pruneResult.Targets, validateResult.Targets)}
-}
-
-// MergeLayoutSaveOutcomes combines prune/reject targets with recoverable layout
-// validation warnings while deduplicating by code and path.
-func MergeLayoutSaveOutcomes(pruneTargets, validateTargets []Target) []Target {
-	if len(validateTargets) == 0 {
-		return pruneTargets
-	}
-	if len(pruneTargets) == 0 {
-		return validateTargets
-	}
-
-	seen := make(map[string]struct{}, len(pruneTargets))
-	for _, target := range pruneTargets {
-		seen[layoutSaveOutcomeKey(target)] = struct{}{}
-	}
-	merged := append([]Target(nil), pruneTargets...)
-	for _, target := range validateTargets {
-		key := layoutSaveOutcomeKey(target)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		merged = append(merged, target)
-		seen[key] = struct{}{}
-	}
-	return merged
-}
-
-func layoutSaveOutcomeKey(target Target) string {
-	return target.Code + "\x00" + target.Path
-}
-
 // PruneLayout removes stale layout references and rejects non-finite geometry
 // against pending graph topology indexes. Callers must build topology indexes
 // before invoking this function.

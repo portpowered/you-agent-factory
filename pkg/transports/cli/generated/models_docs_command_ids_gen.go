@@ -11,4 +11,5 @@ var ModelsDocsFamilyCommandIDs = []string{
 	"you.models.inspect",
 	"you.models.invoke",
 	"you.models.pull",
+	"you.models.remove",
 }

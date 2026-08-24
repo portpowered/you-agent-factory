@@ -30,7 +30,7 @@ const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
   "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
 
 const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
-  "border-primary bg-primary-container text-on-primary";
+  "border-primary bg-primary-container text-on-primary factory-light:text-on-primary-container";
 
 const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
   "border-af-success-border bg-success-container text-on-success-container";

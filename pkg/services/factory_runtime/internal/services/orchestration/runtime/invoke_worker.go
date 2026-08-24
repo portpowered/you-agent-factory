@@ -141,24 +141,6 @@ func failedWorkstationDispatchResult(
 	}, dispatchErr
 }
 
-func startStatelessAttempt(
-	ctx context.Context,
-	cfg *runtimeConfig,
-	request workers.WorkstationDispatchRequest,
-	async bool,
-	accept workers.WorkstationDispatchAcceptFunc,
-) error {
-	if cfg == nil || cfg.attempts == nil {
-		return ErrAttemptLifecycleUnavailable
-	}
-	request = runtimeRecordingRequest(cfg, request)
-	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
-	if err != nil {
-		return err
-	}
-	return startStatelessAttemptWithRequest(ctx, cfg, request, executeRequest, async, accept)
-}
-
 func startStatelessAttemptWithRequest(
 	ctx context.Context,
 	cfg *runtimeConfig,
@@ -252,7 +234,7 @@ func cancelStatelessAttempt(
 	if cfg == nil || cfg.attempts == nil {
 		return workers.WorkstationDispatchCancelResult{}, ErrAttemptLifecycleUnavailable
 	}
-	outcome, err := cfg.attempts.cancel(ctx, request.DispatchID)
+	outcome, err := cfg.attempts.cancel(ctx, request.DispatchID, request.Reason)
 	if err != nil {
 		return workers.WorkstationDispatchCancelResult{}, err
 	}

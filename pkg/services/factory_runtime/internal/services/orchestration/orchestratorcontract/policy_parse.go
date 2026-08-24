@@ -3,7 +3,6 @@ package orchestratorcontract
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 func parsePolicyDocument(raw json.RawMessage) (map[string]any, error) {
@@ -30,10 +29,6 @@ func policyFromMap(document map[string]any) (EffectivePolicy, error) {
 }
 
 func normalizePolicy(policy EffectivePolicy) EffectivePolicy {
-	policy.Mode = strings.TrimSpace(policy.Mode)
-	if policy.Mode == "" {
-		policy.Mode = ModeReadOnly
-	}
 	if policy.MaxAgents <= 0 {
 		policy.MaxAgents = DefaultMaxAgents
 	}
@@ -48,9 +43,6 @@ func normalizePolicy(policy EffectivePolicy) EffectivePolicy {
 	}
 	if policy.OutputAuditMode == "" {
 		policy.OutputAuditMode = OutputAuditModeAuto
-	}
-	if policy.WritableRoots == nil {
-		policy.WritableRoots = []string{}
 	}
 	return policy
 }

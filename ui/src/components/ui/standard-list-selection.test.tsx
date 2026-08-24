@@ -12,7 +12,7 @@ const SOLID_ACCENT_SELECTED_TOKENS = [
   "shadow-af-accent-selected",
 ] as const;
 const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
-  "border-primary bg-primary-container text-on-primary";
+  "border-primary bg-primary-container text-on-primary factory-light:text-on-primary-container";
 const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
   "border-af-danger-border bg-error-container text-on-error";
 const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =

@@ -14,21 +14,7 @@ import (
 //   - Deadline exhaustion returns 504 with a public ErrorResponse.
 //   - Context cancellation and deadline exhaustion must not be mapped to
 //     INTERNAL_ERROR.
-func isRequestContextEnded(err error) bool {
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-func requestContextEnded(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-	return isRequestContextEnded(ctx.Err())
-}
-
-func shouldEndOnRequestContext(ctx context.Context, err error) bool {
-	return requestContextEnded(ctx) || isRequestContextEnded(err)
-}
-
+//
 // automationsRequestContextErrorResponse maps request-context cancellation and
 // deadline failures to the adapter's documented HTTP outcomes.
 func automationsRequestContextErrorResponse(err error) (status int, response any, handled bool) {
@@ -59,10 +45,6 @@ func (a *Adapter) writeAutomationsRequestContextOutcome(w http.ResponseWriter, e
 	}
 	a.writeJSON(w, status, response)
 	return true
-}
-
-func (a *Adapter) guardAutomationsRequestContext(w http.ResponseWriter, r *http.Request) bool {
-	return a.writeAutomationsRequestContextOutcome(w, r.Context().Err())
 }
 
 func guardRequestContext(ctx context.Context) error {

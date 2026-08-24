@@ -136,8 +136,17 @@ func assertParallelCallbackPromiseRecord(t *testing.T, record callbehavior.CallB
 
 func assertPipelineCallbackStagesRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
 	t.Helper()
-	if record.Callback == nil || len(record.Parameters) < 2 {
+	if record.Callback == nil || len(record.Parameters) != 3 {
 		t.Fatalf("pipeline record = %#v, want callback shape and ordered parameters", record)
+	}
+	if record.Parameters[1].Name != "stage1" || !record.Parameters[1].Required || record.Parameters[1].Rest {
+		t.Fatalf("pipeline first stage parameter = %#v, want required non-rest stage1", record.Parameters[1])
+	}
+	if record.Parameters[2].Name != "stages" || record.Parameters[2].Required || !record.Parameters[2].Rest {
+		t.Fatalf("pipeline variadic stages parameter = %#v, want optional rest stages", record.Parameters[2])
+	}
+	if record.Callback.Role != "stage" || !strings.Contains(record.Callback.Notes, "every later stage receives") {
+		t.Fatalf("pipeline callback = %#v, want stage callback notes for later stages", record.Callback)
 	}
 }
 

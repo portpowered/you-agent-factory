@@ -27,3 +27,15 @@
   /* Product extension: monospace and code blocks beside Material body roles */
   --color-code: var(--color-af-foundation-code-ink);
 }
+
+/*
+ * Factory Light needs a slightly stronger supporting-text opacity on both
+ * white surfaces and the warm dashboard background. Other palettes retain
+ * the shared text-role opacity.
+ */
+[data-color-palette="factory-light"] {
+  --color-on-surface-subtle: rgb(
+    from var(--color-af-foundation-ink) r g b /
+    0.64
+  );
+}

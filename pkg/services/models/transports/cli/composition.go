@@ -2,8 +2,17 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"mime"
+	"net/http"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
 
@@ -94,4 +103,281 @@ func (exporter compositionArtifactExporter) ExportInvocationArtifact(sourcePath,
 		return nil
 	}
 	return exporter.invocation.ExportModelInvocationArtifact(sourcePath, destinationPath)
+}
+
+type genericCLIInputMapping struct {
+	slot  string
+	value string
+}
+
+func (service *rootService) prepareGenericCLIInputs(
+	cfg InvokeConfig,
+	operation string,
+	catalog modelinference.Detail,
+) ([]modelinference.InferenceInput, error) {
+	if len(cfg.InputMappings) == 0 {
+		return nil, nil
+	}
+	selected, ok := catalogOperationForName(catalog, operation)
+	if !ok {
+		return nil, genericCLIInputFailure(
+			modelinference.InvocationFailureClassInvalidOperation,
+			fmt.Sprintf("unknown operation %q", operation), operation, nil,
+		)
+	}
+	mappings, err := parseGenericCLIInputMappings(cfg.InputMappings)
+	if err != nil {
+		return nil, err
+	}
+	slots, validNames := genericCLIInputSlots(selected.Inputs)
+	counts, err := validateGenericCLIInputMappings(mappings, slots, validNames)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMissingGenericCLIInputSlots(selected.Inputs, counts, validNames); err != nil {
+		return nil, err
+	}
+	return service.bindGenericCLIInputs(cfg, mappings, slots)
+}
+
+func genericCLIInputSlots(inputSlots []modelinference.OperationSlot) (map[string]modelinference.OperationSlot, []string) {
+	slots := make(map[string]modelinference.OperationSlot, len(inputSlots))
+	validNames := make([]string, 0, len(inputSlots))
+	for _, slot := range inputSlots {
+		name := strings.TrimSpace(slot.Name)
+		if name == "" {
+			continue
+		}
+		slots[name] = slot
+		validNames = append(validNames, name)
+	}
+	sort.Strings(validNames)
+	return slots, validNames
+}
+
+func validateGenericCLIInputMappings(
+	mappings []genericCLIInputMapping,
+	slots map[string]modelinference.OperationSlot,
+	validNames []string,
+) (map[string]int, error) {
+	counts := make(map[string]int, len(mappings))
+	for _, mapping := range mappings {
+		slot, exists := slots[mapping.slot]
+		if !exists {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidSlot,
+				fmt.Sprintf("unknown input slot %q; valid slots: %s", mapping.slot, strings.Join(validNames, ", ")),
+				mapping.slot, validNames,
+			)
+		}
+		counts[mapping.slot]++
+		if !slot.Repeatable && counts[mapping.slot] > 1 {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassSlotArity,
+				fmt.Sprintf("input slot %q accepts at most one value", mapping.slot),
+				mapping.slot, []string{"1"},
+			)
+		}
+	}
+	return counts, nil
+}
+
+func validateMissingGenericCLIInputSlots(
+	slots []modelinference.OperationSlot,
+	counts map[string]int,
+	validNames []string,
+) error {
+	missing := make([]string, 0)
+	for _, slot := range slots {
+		if slot.Required == nil || !*slot.Required || counts[strings.TrimSpace(slot.Name)] != 0 {
+			continue
+		}
+		missing = append(missing, strings.TrimSpace(slot.Name))
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return genericCLIInputFailure(
+		modelinference.InvocationFailureClassInvalidSlot,
+		"required input slot is missing: "+strings.Join(missing, ", "), missing[0], validNames,
+	)
+}
+
+func (service *rootService) bindGenericCLIInputs(
+	cfg InvokeConfig,
+	mappings []genericCLIInputMapping,
+	slots map[string]modelinference.OperationSlot,
+) ([]modelinference.InferenceInput, error) {
+	inputs := make([]modelinference.InferenceInput, 0, len(mappings))
+	for _, mapping := range mappings {
+		if err := cfg.Context.Err(); err != nil {
+			return nil, err
+		}
+		input, err := service.genericCLIInput(cfg, mapping, slots[mapping.slot])
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, input)
+	}
+	return inputs, nil
+}
+
+func parseGenericCLIInputMappings(values []string) ([]genericCLIInputMapping, error) {
+	mappings := make([]genericCLIInputMapping, 0, len(values))
+	for _, value := range values {
+		parts := strings.SplitN(value, "=", 2)
+		if len(parts) != 2 {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidSlot,
+				fmt.Sprintf("invalid input mapping %q: expected slot=value", value), "", nil,
+			)
+		}
+		slot := strings.TrimSpace(parts[0])
+		if slot == "" {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidSlot,
+				fmt.Sprintf("invalid input mapping %q: slot is required", value), "", nil,
+			)
+		}
+		if strings.TrimSpace(parts[1]) == "" {
+			return nil, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("input slot %q requires a value", slot), slot, nil,
+			)
+		}
+		mappings = append(mappings, genericCLIInputMapping{slot: slot, value: parts[1]})
+	}
+	return mappings, nil
+}
+
+func (service *rootService) genericCLIInput(
+	cfg InvokeConfig,
+	mapping genericCLIInputMapping,
+	slot modelinference.OperationSlot,
+) (modelinference.InferenceInput, error) {
+	value := mapping.value
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(trimmed, "@") {
+		path := strings.TrimSpace(strings.TrimPrefix(trimmed, "@"))
+		if path == "" {
+			return modelinference.InferenceInput{}, genericCLIInputFailure(
+				modelinference.InvocationFailureClassInvalidParameter,
+				fmt.Sprintf("input slot %q requires a file path after @", mapping.slot), mapping.slot, nil,
+			)
+		}
+		if service.inputFileReader == nil {
+			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(
+				"--input", path, errors.New("Models CLI input filesystem is not configured"),
+			)
+		}
+		data, err := service.inputFileReader(path)
+		if err != nil {
+			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure("--input", path, err)
+		}
+		mediaType := genericCLIInputMediaType(path, data)
+		if !genericCLIInputAcceptsMediaType(slot, mediaType) {
+			return modelinference.InferenceInput{}, genericCLIInputFailure(
+				modelinference.InvocationFailureClassMediaCapability,
+				fmt.Sprintf("input slot %q does not accept media type %q", mapping.slot, mediaType),
+				mapping.slot, slot.MediaTypes,
+			)
+		}
+		return modelinference.InferenceInput{
+			Name: mapping.slot, Modality: slot.Modality, ContentType: mediaType,
+			MediaType: mediaType, Content: string(data),
+		}, nil
+	}
+	if slot.Modality == modelinference.ModalityAudio ||
+		slot.Modality == modelinference.ModalityImage ||
+		slot.Modality == modelinference.ModalityVideo ||
+		slot.Modality == modelinference.ModalityBinary {
+		return modelinference.InferenceInput{}, genericCLIInputFailure(
+			modelinference.InvocationFailureClassMediaCapability,
+			fmt.Sprintf("input slot %q requires a file value prefixed with @", mapping.slot),
+			mapping.slot, slot.MediaTypes,
+		)
+	}
+	contentType := genericCLIInputContentType(slot)
+	if slot.Modality == modelinference.ModalityJSON && !json.Valid([]byte(value)) {
+		return modelinference.InferenceInput{}, genericCLIInputFailure(
+			modelinference.InvocationFailureClassInvalidParameter,
+			fmt.Sprintf("input slot %q must contain valid JSON", mapping.slot), mapping.slot, nil,
+		)
+	}
+	return modelinference.InferenceInput{
+		Name: mapping.slot, Modality: slot.Modality, ContentType: contentType,
+		MediaType: contentType, Content: value,
+	}, nil
+}
+
+func genericCLIInputFailure(
+	class modelinference.InvocationFailureClass,
+	message string,
+	slot string,
+	validNames []string,
+) error {
+	return &modelinference.InvocationFailure{
+		Class: class, Message: message, Operation: "", Slot: slot,
+		ValidNames: append([]string(nil), validNames...),
+	}
+}
+
+func genericCLIInputContentType(slot modelinference.OperationSlot) string {
+	for _, mediaType := range slot.MediaTypes {
+		mediaType = strings.TrimSpace(mediaType)
+		if mediaType != "" && !strings.HasSuffix(mediaType, "/*") {
+			return mediaType
+		}
+	}
+	switch slot.Modality {
+	case modelinference.ModalityJSON:
+		return "application/json"
+	default:
+		return "text/plain"
+	}
+}
+
+var genericCLIInputMediaTypes = map[string]string{
+	".wav": "audio/wav", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
+	".flac": "audio/flac", ".ogg": "audio/ogg", ".oga": "audio/ogg", ".opus": "audio/opus",
+	".webm": "audio/webm", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+	".gif": "image/gif", ".webp": "image/webp", ".mp4": "video/mp4", ".mov": "video/quicktime",
+	".json": "application/json", ".txt": "text/plain", ".md": "text/plain",
+}
+
+func genericCLIInputMediaType(path string, data []byte) string {
+	extension := strings.ToLower(filepath.Ext(path))
+	if mediaType, ok := genericCLIInputMediaTypes[extension]; ok {
+		return mediaType
+	}
+	if detected := mime.TypeByExtension(filepath.Ext(path)); strings.TrimSpace(detected) != "" {
+		return genericCLIInputNormalizeMediaType(detected)
+	}
+	return genericCLIInputNormalizeMediaType(http.DetectContentType(data))
+}
+
+func genericCLIInputNormalizeMediaType(value string) string {
+	value = strings.TrimSpace(strings.SplitN(value, ";", 2)[0])
+	if strings.EqualFold(value, "audio/x-wav") {
+		return "audio/wav"
+	}
+	if strings.EqualFold(value, "application/ogg") {
+		return "audio/ogg"
+	}
+	return strings.ToLower(value)
+}
+
+func genericCLIInputAcceptsMediaType(slot modelinference.OperationSlot, mediaType string) bool {
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	for _, declared := range slot.MediaTypes {
+		declared = strings.ToLower(strings.TrimSpace(declared))
+		if declared == "" || declared == "*/*" || declared == mediaType {
+			return true
+		}
+		if strings.HasSuffix(declared, "/*") && strings.HasPrefix(mediaType, strings.TrimSuffix(declared, "*")) {
+			return true
+		}
+	}
+	return false
 }

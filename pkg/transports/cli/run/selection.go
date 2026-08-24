@@ -2,7 +2,9 @@ package run
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -11,6 +13,36 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
+
+// prepareCanonicalSessionIDForRun allocates the identity used by the
+// automatic recording target and by explicit append-only JSONL recordings.
+// Keeping allocation at the CLI boundary means the recording path can be
+// reserved before runtime construction without deriving a second identity.
+func prepareCanonicalSessionIDForRun(cfg RunConfig) (RunConfig, error) {
+	if !usesCanonicalRecording(cfg) || strings.TrimSpace(cfg.CanonicalSessionID) != "" {
+		return cfg, nil
+	}
+	generator := cfg.CanonicalSessionIDGenerator
+	if generator == nil {
+		return RunConfig{}, errors.New("prepare recording: canonical Factory Session ID generator is required")
+	}
+	canonicalID := strings.TrimSpace(generator())
+	if canonicalID == "" {
+		return RunConfig{}, fmt.Errorf("canonical Factory Session ID generator returned an empty identity")
+	}
+	cfg.CanonicalSessionID = canonicalID
+	return cfg, nil
+}
+
+func usesCanonicalRecording(cfg RunConfig) bool {
+	if strings.TrimSpace(cfg.ReplayPath) != "" || cfg.DisableDefaultRecording {
+		return false
+	}
+	if strings.TrimSpace(cfg.RecordPath) == "" {
+		return true
+	}
+	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(cfg.RecordPath)), ".jsonl")
+}
 
 // InvocationOperation is the exact Factory invocation capability consumed by
 // the run transport.
@@ -28,6 +60,7 @@ type DirectJavaScriptRunOperation interface {
 	Open(
 		context.Context,
 		factorysessions.DirectJavaScriptRunRequest,
+		initializer.InvocationCancellation,
 	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
@@ -99,57 +132,74 @@ func (s *selection) Open(
 		return nil, err
 	}
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
-		request := factorysessions.DirectJavaScriptRunRequest{
-			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
-			JSONOutput: cfg.JSONOutput,
-		}
-		var observer factorysessions.RuntimeHostObserver
-		if intent.APIEnabled {
-			request.Host = &factorysessions.RuntimeHostRequest{
-				Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
-			}
-			observer = newRuntimeHostObserver(
-				ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
-				func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
-			)
-		}
-		var scopeID factorysessions.OpeningScopeID
-		if s.presentations != nil {
-			scopeID, err = s.presentations.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{
-				Output: cfg.Output, RuntimeHostObserver: observer,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("register direct JavaScript presentation: %w", err)
-			}
-			request.ScopeID = scopeID
-		}
-		runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := s.directJavaScript.Open(openCtx, request)
-			if err != nil && s.presentations != nil {
-				s.presentations.Close(scopeID)
-			}
-			return initializer.OpenedApplication{Plan: opened.Plan}, err
-		})
-		if err != nil {
-			if s.presentations != nil {
-				s.presentations.Close(scopeID)
-			}
-			return nil, err
-		}
-		if runner == nil {
-			if s.presentations != nil {
-				s.presentations.Close(scopeID)
-			}
-			return nil, fmt.Errorf("direct JavaScript application builder returned nil runner")
-		}
-		if s.presentations == nil {
-			return runner, nil
-		}
-		return closeOnRun{application: runner, close: func() {
-			s.presentations.Close(scopeID)
-		}}, nil
+		return s.openDirectJavaScript(ctx, cfg, intent)
 	}
 	return s.open(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
+}
+
+func (s *selection) openDirectJavaScript(
+	ctx context.Context,
+	cfg RunConfig,
+	intent processcontract.RunIntent,
+) (initializer.RunApplication, error) {
+	startupDisclosure, err := prepareStartupBeforeRuntime(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	request := factorysessions.DirectJavaScriptRunRequest{
+		SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
+		JSONOutput: cfg.JSONOutput,
+	}
+	var observer factorysessions.RuntimeHostObserver
+	if intent.APIEnabled {
+		request.Host = &factorysessions.RuntimeHostRequest{
+			Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
+			Pprof: cfg.Pprof,
+		}
+		observer = newRuntimeHostObserver(
+			ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
+			func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
+			startupDisclosure,
+		)
+	}
+	var scopeID factorysessions.OpeningScopeID
+	if s.presentations != nil {
+		scopeID, err = s.presentations.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{
+			Output: cfg.Output, RuntimeHostObserver: observer,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("register direct JavaScript presentation: %w", err)
+		}
+		request.ScopeID = scopeID
+	}
+	runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
+		opened, err := s.directJavaScript.Open(openCtx, request, cfg.Cancellation)
+		if err != nil && s.presentations != nil {
+			s.presentations.Close(scopeID)
+		}
+		return initializer.OpenedApplication{Plan: opened.Plan}, err
+	})
+	if err != nil {
+		if s.presentations != nil {
+			s.presentations.Close(scopeID)
+		}
+		return nil, err
+	}
+	if runner == nil {
+		if s.presentations != nil {
+			s.presentations.Close(scopeID)
+		}
+		return nil, fmt.Errorf("direct JavaScript application builder returned nil runner")
+	}
+	if !intent.APIEnabled || s.presentations == nil {
+		startupDisclosure.commit()
+	}
+	if s.presentations == nil {
+		return runner, nil
+	}
+	return closeOnRun{application: runner, close: func() {
+		s.presentations.Close(scopeID)
+	}}, nil
 }
 
 type closeOnRun struct {
@@ -163,6 +213,7 @@ func (application closeOnRun) Run(ctx context.Context) error {
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {
+	cfg.Cancellation = intent.Cancellation
 	if intent.DashboardEnabled && !intent.APIEnabled {
 		return RunConfig{}, fmt.Errorf("dashboard sidecar requires API transport")
 	}

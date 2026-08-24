@@ -964,6 +964,7 @@ type recordedDispatchObservation struct {
 	state           workersessions.State
 	failure         *workersessions.FailureCause
 	provider        *providers.SessionMetadata
+	tokenUsage      *workersessions.TokenUsage
 }
 
 type recordedDispatchAssociation struct {

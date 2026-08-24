@@ -155,14 +155,6 @@ func executeInputSchema() map[string]any {
 	}, "provider", "attemptId")
 }
 
-func sessionRefInputSchema() map[string]any {
-	return objectSchema(map[string]any{
-		"provider": stringProperty("Providers-owned provider identity for the session ref."),
-		"kind":     stringProperty("Session ref kind such as session_id."),
-		"id":       stringProperty("Detached provider session identifier."),
-	})
-}
-
 func executeResultSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"Content":     stringProperty("Detached provider attempt content."),

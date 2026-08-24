@@ -50,18 +50,8 @@ func requestFieldValidationMessage(err error) (string, bool) {
 	return "", false
 }
 
-func decodeStrictJSON[T any](body io.Reader) (T, error) {
-	result, err := decodeJSONWithDiagnostics[T](body)
-	return result.Value, err
-}
-
 func decodeJSONWithDiagnostics[T any](body io.Reader) (httpcompat.DecodeResult[T], error) {
 	return httpcompat.Decode[T](body)
-}
-
-func decodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
-	result, err := decodeOptionalJSONWithDiagnostics(body, zero)
-	return result.Value, err
 }
 
 func decodeOptionalJSONWithDiagnostics[T any](body io.Reader, zero func() T) (httpcompat.DecodeResult[T], error) {

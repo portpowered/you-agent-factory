@@ -468,7 +468,8 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusConflict, ControlErrorToAPI(sessionID, controlErr), true
 	}
 
-	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) ||
+		errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
 		errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "factory session not found",
@@ -495,4 +496,24 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 	}
 
 	return 0, nil, false
+}
+
+// SessionDeletionErrorResponse maps the Factory Sessions deletion policy to
+// the DELETE route's stable conflict error shape.
+func SessionDeletionErrorResponse(sessionID string, err error) (int, factoryapi.ErrorResponse, bool) {
+	if err == nil {
+		return 0, factoryapi.ErrorResponse{}, false
+	}
+	var deletionErr *factorysessionexecution.SessionDeletionError
+	if errors.As(err, &deletionErr) {
+		if strings.TrimSpace(sessionID) == "" {
+			sessionID = deletionErr.SessionID
+		}
+		return http.StatusConflict, factoryapi.ErrorResponse{
+			Message: deletionErr.Error(),
+			Family:  factoryapi.ErrorFamilyConflict,
+			Code:    factoryapi.ErrorResponseCodeLIFECYCLECONFLICT,
+		}, true
+	}
+	return 0, factoryapi.ErrorResponse{}, false
 }

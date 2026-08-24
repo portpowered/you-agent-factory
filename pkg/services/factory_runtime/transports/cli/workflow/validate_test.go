@@ -184,7 +184,7 @@ func TestValidate_InvalidArgsSchemaHumanOutput(t *testing.T) {
 	}
 }
 
-func TestValidate_PolicyDeniedHostAccessHumanOutput(t *testing.T) {
+func TestValidate_RetiredPolicyFieldHumanOutput(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
@@ -203,8 +203,8 @@ func TestValidate_PolicyDeniedHostAccessHumanOutput(t *testing.T) {
 		t.Fatal("expected validation failure")
 	}
 	text := output.String()
-	if !strings.Contains(text, factory.JavaScriptPolicyCodeDeniedCapability) {
-		t.Fatalf("output = %q, want policy denied capability diagnostic", text)
+	if !strings.Contains(text, factory.JavaScriptPolicyCodeUnsupportedPolicyField) {
+		t.Fatalf("output = %q, want retired policy field diagnostic", text)
 	}
 	if strings.Contains(text, factory.WorkflowValidationCodeSyntaxError) {
 		t.Fatalf("output = %q, want policy denial rather than syntax failure", text)
@@ -439,7 +439,7 @@ func jsonBlockingDiagnosticCases() []jsonBlockingDiagnosticCase {
 			wantCode: factory.WorkflowValidationCodeInvalidArgsSchema,
 		},
 		{
-			name: "policy denied host access",
+			name: "retired policy field",
 			setup: func(t *testing.T, projectRoot string) workflow.SourceConfig {
 				writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 				return workflow.SourceConfig{
@@ -449,7 +449,7 @@ func jsonBlockingDiagnosticCases() []jsonBlockingDiagnosticCase {
 					RequestedPolicyJSON: `{"allowNetwork":true}`,
 				}
 			},
-			wantCode: factory.JavaScriptPolicyCodeDeniedCapability,
+			wantCode: factory.JavaScriptPolicyCodeUnsupportedPolicyField,
 		},
 	}
 }

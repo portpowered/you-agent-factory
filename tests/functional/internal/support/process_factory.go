@@ -160,26 +160,6 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	return session, work, events
 }
 
-// RunFactoryToCompletionWithEdgesAndObservationsStable is the retained
-// watcher/repeater fallback for scenarios whose Work set can grow after a
-// transient idle projection.
-func RunFactoryToCompletionWithEdgesAndObservationsStable(
-	t testing.TB,
-	dir string,
-	overrides serviceedges.Edges,
-	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
-	session, work, events, _ := runFactoryToCompletionWithMode(
-		t,
-		dir,
-		overrides,
-		timeout,
-		false,
-		terminalObservationStableWindow,
-	)
-	return session, work, events
-}
-
 // RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose observes
 // terminal Work and invokes beforeClose immediately before shutting down the
 // process. The hook is for process-boundary fixtures that must remain alive

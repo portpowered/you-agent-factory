@@ -1,12 +1,13 @@
 package mockworkers
 
 func topologyFieldRecords() []FieldRecord {
-	fields := make([]FieldRecord, 0, 26)
+	fields := make([]FieldRecord, 0, 31)
 	fields = append(fields, topologyTopLevelFields()...)
 	fields = append(fields, topologyMockWorkerEntryFields()...)
 	fields = append(fields, topologyWorkInputSelectorFields()...)
 	fields = append(fields, topologyScriptConfigFields()...)
 	fields = append(fields, topologyRejectConfigFields()...)
+	fields = append(fields, topologyUsageFields()...)
 	return fields
 }
 
@@ -106,6 +107,16 @@ func topologyMockWorkerEntryFields() []FieldRecord {
 			ParentField:          "mockWorkers[]",
 			Required:             "optional",
 			DefaultEmptyBehavior: "omitted rejectConfig is allowed when runType is reject",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].usage",
+			JSONPath:             "mockWorkers[].usage",
+			JSONName:             "usage",
+			ValueType:            "object",
+			ParentField:          "mockWorkers[]",
+			Required:             "optional",
+			DefaultEmptyBehavior: "omitted usage emits no token usage observation; when present provider and model are required",
 			ValidationOwner:      ownerValidate,
 		},
 	}
@@ -236,6 +247,71 @@ func topologyRejectConfigFields() []FieldRecord {
 			ParentField:          "mockWorkers[].rejectConfig",
 			Required:             "optional",
 			DefaultEmptyBehavior: "omitted exitCode leaves rejected exit code unset; when set must be between 1 and 255",
+			ValidationOwner:      ownerValidate,
+		},
+	}
+}
+
+func topologyUsageFields() []FieldRecord {
+	return []FieldRecord{
+		{
+			ID:                   "mockWorkers[].usage.provider",
+			JSONPath:             "mockWorkers[].usage.provider",
+			JSONName:             "provider",
+			ValueType:            "string",
+			ParentField:          "mockWorkers[].usage",
+			Required:             "required when usage is present",
+			DefaultEmptyBehavior: "missing or blank provider fails usage validation",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].usage.model",
+			JSONPath:             "mockWorkers[].usage.model",
+			JSONName:             "model",
+			ValueType:            "string",
+			ParentField:          "mockWorkers[].usage",
+			Required:             "required when usage is present",
+			DefaultEmptyBehavior: "missing or blank model fails usage validation",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].usage.inputTokens",
+			JSONPath:             "mockWorkers[].usage.inputTokens",
+			JSONName:             "inputTokens",
+			ValueType:            "integer",
+			ParentField:          "mockWorkers[].usage",
+			Required:             "optional",
+			DefaultEmptyBehavior: "omitted input token class is absent from diagnostics and usage payload; explicit zero is retained",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].usage.outputTokens",
+			JSONPath:             "mockWorkers[].usage.outputTokens",
+			JSONName:             "outputTokens",
+			ValueType:            "integer",
+			ParentField:          "mockWorkers[].usage",
+			Required:             "optional",
+			DefaultEmptyBehavior: "omitted output token class is absent from diagnostics and usage payload; explicit zero is retained",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].usage.cachedInputTokens",
+			JSONPath:             "mockWorkers[].usage.cachedInputTokens",
+			JSONName:             "cachedInputTokens",
+			ValueType:            "integer",
+			ParentField:          "mockWorkers[].usage",
+			Required:             "optional",
+			DefaultEmptyBehavior: "omitted cached-input token class is absent; when set it must not exceed inputTokens",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].usage.reasoningOutputTokens",
+			JSONPath:             "mockWorkers[].usage.reasoningOutputTokens",
+			JSONName:             "reasoningOutputTokens",
+			ValueType:            "integer",
+			ParentField:          "mockWorkers[].usage",
+			Required:             "optional",
+			DefaultEmptyBehavior: "omitted reasoning-output token class is absent; when set it must not exceed outputTokens",
 			ValidationOwner:      ownerValidate,
 		},
 	}

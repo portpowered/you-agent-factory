@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sync"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
@@ -41,7 +42,7 @@ type HostedSourceInputs struct {
 func NewRoot(
 	logger *zap.Logger,
 	clock automations.Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hosted HostedSourceInputs,
@@ -75,7 +76,7 @@ func NewRoot(
 func NewService(
 	logger *zap.Logger,
 	clock automations.Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
@@ -102,7 +103,7 @@ func NewService(
 func newService(
 	logger *zap.Logger,
 	clock automations.Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
@@ -206,7 +207,7 @@ func adaptSecretResolver(
 func validateDirectDependencies(
 	logger *zap.Logger,
 	clock automations.Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,

@@ -373,6 +373,7 @@ export function CurrentActivityGraphViewport({
   addControls,
   canDeleteGraphSelection,
   clearGraphSelection,
+  clearSelectedVisualGroup,
   deleteGraphSelection,
   editorControls,
   graphSelectionToolbarState,
@@ -421,6 +422,7 @@ export function CurrentActivityGraphViewport({
   addControls: CurrentActivityGraphViewportAddControls;
   canDeleteGraphSelection?: boolean;
   clearGraphSelection?: () => void;
+  clearSelectedVisualGroup?: () => void;
   deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
   graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
@@ -602,6 +604,7 @@ export function CurrentActivityGraphViewport({
     (event: KeyboardEvent<HTMLElement>) => {
       if (event.key === "Escape") {
         clearGraphSelection?.();
+        clearSelectedVisualGroup?.();
         return;
       }
 
@@ -643,10 +646,31 @@ export function CurrentActivityGraphViewport({
       canDeleteGraphSelection,
       canEditGraph,
       clearGraphSelection,
+      clearSelectedVisualGroup,
       deleteGraphSelection,
       layoutControls,
     ],
   );
+  const handleReactFlowSelectionChange = useCallback<OnSelectionChangeFunc>(
+    (params) => {
+      if (params.nodes.length > 0 || params.edges.length > 0) {
+        clearSelectedVisualGroup?.();
+      }
+
+      handleGraphSelectionChange?.(params);
+    },
+    [clearSelectedVisualGroup, handleGraphSelectionChange],
+  );
+  const handleGraphPaneClick = useCallback(() => {
+    clearSelectedVisualGroup?.();
+    if (editorControls.activeTool !== "delete") {
+      clearGraphSelection?.();
+    }
+  }, [
+    clearGraphSelection,
+    clearSelectedVisualGroup,
+    editorControls.activeTool,
+  ]);
 
   return (
     <div
@@ -729,6 +753,7 @@ export function CurrentActivityGraphViewport({
               onError={handleCurrentActivityReactFlowError}
               onEdgeClick={(_event, edge) => {
                 if (canEditGraph && editorControls.activeTool === "delete") {
+                  clearSelectedVisualGroup?.();
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
                   );
@@ -762,6 +787,7 @@ export function CurrentActivityGraphViewport({
               nodesDraggable={canPersistLayoutChanges}
               onNodeClick={(_, node) => {
                 if (canEditGraph && editorControls.activeTool === "delete") {
+                  clearSelectedVisualGroup?.();
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
@@ -851,12 +877,8 @@ export function CurrentActivityGraphViewport({
               }}
               onEdgesChange={handleEdgesChange}
               onNodesChange={handleAuthorizedNodesChange}
-              onPaneClick={() => {
-                if (editorControls.activeTool !== "delete") {
-                  clearGraphSelection?.();
-                }
-              }}
-              onSelectionChange={handleGraphSelectionChange}
+              onPaneClick={handleGraphPaneClick}
+              onSelectionChange={handleReactFlowSelectionChange}
               onSelectionStart={(event) => {
                 handleGraphSelectionStart?.({
                   shiftKey: event.shiftKey,

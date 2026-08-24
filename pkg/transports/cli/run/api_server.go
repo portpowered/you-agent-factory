@@ -10,5 +10,5 @@ import (
 // to one process-owned listener. The listener is consumed at most once and the
 // normal API server remains responsible for serving and closing it.
 func APIServerStarterWithListener(listener net.Listener) platformhttpserver.Starter {
-	return platformhttpserver.StarterWithListener(listener)
+	return platformhttpserver.StarterWithListener(listener, nil, nil)
 }

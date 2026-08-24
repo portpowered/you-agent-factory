@@ -21,8 +21,6 @@ func (b *compiledBinding) OrchestrationKind() Kind {
 	return b.kind
 }
 
-func (b *compiledBinding) isOrchestrationBinding() {}
-
 // NewPetriBinding constructs an opaque Petri orchestration binding.
 func NewPetriBinding(net *state.Net) Binding {
 	return &compiledBinding{kind: KindPetri, petriNet: net}

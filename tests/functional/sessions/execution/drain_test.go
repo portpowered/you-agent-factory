@@ -276,8 +276,12 @@ func TestHostedFiniteRunsKeepEmptyAndTerminalSuccess(t *testing.T) {
 				if err != nil {
 					t.Fatalf("finite hosted run error = %v; stdout=%q stderr=%q", err, stdout, stderr)
 				}
-				if stdout != "" || stderr != "" {
-					t.Fatalf("finite success output = stdout:%q stderr:%q, want quiet output", stdout, stderr)
+				wantStdout := ""
+				if workFile != "" {
+					wantStdout = "Batch completed successfully.\n"
+				}
+				if stdout != wantStdout || stderr != "" {
+					t.Fatalf("finite success output = stdout:%q stderr:%q, want stdout:%q and quiet stderr", stdout, stderr, wantStdout)
 				}
 				if listenerStarts != 1 || listenerStops != 1 {
 					t.Fatalf("listener lifecycle = starts:%d stops:%d, want one joined listener", listenerStarts, listenerStops)

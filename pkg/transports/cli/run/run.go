@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,19 +15,17 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -37,6 +33,17 @@ import (
 )
 
 type RunConfig = runconfig.Config
+
+// ValidateRecordingInvocationFlags exposes the pure Recordings input-shape
+// check to the process startup boundary before any local activation effects.
+func ValidateRecordingInvocationFlags(cfg RunConfig) error {
+	return recordingscli.ValidateInvocationFlags(recordingscli.InvocationRequest{
+		RecordPath:              cfg.RecordPath,
+		ReplayPath:              cfg.ReplayPath,
+		ResumePath:              cfg.ResumePath,
+		DisableDefaultRecording: cfg.DisableDefaultRecording,
+	})
+}
 
 // ModelCacheDirEnvironment selects the managed local-model cache root at the
 // customer process boundary.
@@ -242,6 +249,7 @@ type RuntimeRunner = factoryServiceRunner
 type RuntimeRunnerBuilder func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
+	initializer.InvocationCancellation,
 	factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error)
 
@@ -302,20 +310,23 @@ type resolvedRunRecordPath struct {
 // Operation is one invocation-local run selected by the customer command.
 // Its runtime state is opened through injected service operations.
 type Operation struct {
-	cfg                  RunConfig
-	logger               *zap.Logger
-	runner               RuntimeRunner
-	invocationRequest    *factoryapi.InvocationRequest
-	invocationTarget     factorysessions.InvocationTarget
-	invocation           InvocationOperation
-	presentation         factoryvisualization.ResponsePresentation
-	invocationMode       bool
-	recordPath           resolvedRunRecordPath
-	hostedInvocation     HostedInvocationOperation
-	historicalReplay     *factorysessions.HistoricalReplayInspection
-	openingPresentations factorysessions.OpeningPresentationOwner
-	visualizations       factoryvisualization.RuntimeSinkOwner
-	visualizationSinkID  factoryvisualization.RuntimeSinkID
+	cfg                    RunConfig
+	logger                 *zap.Logger
+	runner                 RuntimeRunner
+	batchReportProvider    batchReportProvider
+	invocationRequest      *factoryapi.InvocationRequest
+	invocationTarget       factorysessions.InvocationTarget
+	invocation             InvocationOperation
+	presentation           factoryvisualization.ResponsePresentation
+	invocationMode         bool
+	startupPrepared        bool
+	recordPath             resolvedRunRecordPath
+	hostedInvocation       HostedInvocationOperation
+	historicalReplay       *factorysessions.HistoricalReplayInspection
+	replayMetadataWarnings []recordings.MetadataMismatchWarning
+	openingPresentations   factorysessions.OpeningPresentationOwner
+	visualizations         factoryvisualization.RuntimeSinkOwner
+	visualizationSinkID    factoryvisualization.RuntimeSinkID
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -337,25 +348,6 @@ func Open(
 	}
 	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
 		loadMockWorkers, nil, buildRuntimeRequest, presentationOwner, nil)
-}
-
-// OpenWithVisualizationOwner is the canonical CLI composition entrypoint.
-// Visualization sink state is retained by its own owner and represented in
-// the application-opening request by an opaque value ID.
-func OpenWithVisualizationOwner(
-	ctx context.Context,
-	cfg RunConfig,
-	buildRunner RuntimeRunnerBuilder,
-	invocation InvocationOperation,
-	presentation factoryvisualization.ResponsePresentation,
-	prepareWorkTarget work.SingleWorkTargetPreparation,
-	loadMockWorkers workers.MockWorkersConfigLoader,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
-	presentations factorysessions.OpeningPresentationOwner,
-	visualizations factoryvisualization.RuntimeSinkOwner,
-) (*Operation, error) {
-	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
-		loadMockWorkers, nil, buildRuntimeRequest, presentations, visualizations)
 }
 
 // OpenWithVisualizationOwnerAndDiagnostics is the canonical composition entry
@@ -439,11 +431,12 @@ func open(
 		)
 	}
 
-	return openHostedRuntime(
+	operation, err := openHostedRuntime(
 		ctx, cfg, logger, invocationRequest, recordPath, invocation, presentation,
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
 		buildRunner, buildRuntimeRequest, presentationOwner, visualizations,
 	)
+	return operation, classifyRunInputFailure(cfg, err)
 }
 
 // NormalizeWorkerReasoningEffort validates and canonicalizes the run-scoped
@@ -468,12 +461,18 @@ func (operation *Operation) Run(ctx context.Context) error {
 		if operation.runner == nil {
 			return fmt.Errorf("run historical replay: runtime runner is required")
 		}
+		if err := operation.prepareStartup(ctx, true); err != nil {
+			return err
+		}
 		if err := operation.runner.Run(ctx); err != nil {
 			return err
 		}
 		return emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay)
 	}
 	if operation.invocationMode {
+		if err := operation.prepareStartup(ctx, false); err != nil {
+			return err
+		}
 		if operation.runner != nil {
 			if runner, ok := operation.runner.(initializer.CompletionRuntimeRunner); ok {
 				return runner.RunWithCompletion(ctx, operation.runInvocation)
@@ -484,15 +483,46 @@ func (operation *Operation) Run(ctx context.Context) error {
 	}
 
 	if operation.cfg.Port <= 0 {
-		emitStartupMessages(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
+		if err := operation.prepareStartup(ctx, true); err != nil {
+			return err
+		}
+		emitStartupDetails(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
 	}
 
-	return runFactoryServiceAndEmitResult(
+	if err := runFactoryServiceAndEmitResult(
 		ctx,
 		operation.cfg,
 		operation.runner,
 		operation.recordPath,
-	)
+		operation.batchReportProvider,
+	); err != nil {
+		return err
+	}
+	if operation.cfg.JSONOutput {
+		return nil
+	}
+	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), operation.replayMetadataWarnings)
+}
+
+func (operation *Operation) prepareStartup(ctx context.Context, discloseHome bool) error {
+	if operation == nil {
+		return fmt.Errorf("prepare local startup: operation is required")
+	}
+	if operation.startupPrepared {
+		return nil
+	}
+	if operation.cfg.StartupPreparation != nil {
+		if err := operation.cfg.StartupPreparation(ctx, discloseHome, operation.cfg.StartupOutput); err != nil {
+			return err
+		}
+		operation.startupPrepared = true
+		return nil
+	}
+	if discloseHome {
+		emitHomeDirectoryDisclosure(operation.cfg)
+	}
+	operation.startupPrepared = true
+	return nil
 }
 
 func emitHistoricalReplayInspection(
@@ -627,6 +657,10 @@ func prepareRunConfig(
 		}
 	}
 
+	cfg, err := prepareCanonicalSessionIDForRun(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
 	recordPath, err := resolveRecordPathForRun(cfg)
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
@@ -643,12 +677,21 @@ func prepareRunConfig(
 	return cfg, invocationRequest, invocationMode, recordPath, nil
 }
 
-func loadSelectedMockWorkersConfig(
-	cfg RunConfig,
-	load workers.MockWorkersConfigLoader,
-) (*workers.MockWorkersConfig, error) {
-	config, _, err := loadSelectedMockWorkersConfigWithDiagnostics(cfg, load, nil)
-	return config, err
+// classifyRunInputFailure keeps a submitted replay/resume path actionable
+// when runtime opening fails before the command can produce a richer coded
+// diagnostic. The underlying error remains available to callers, but the
+// default CLI renderer receives only the safe flag/path context.
+func classifyRunInputFailure(cfg RunConfig, err error) error {
+	if err == nil || clidiag.HasCodedDiagnostic(err) || errors.Is(err, context.Canceled) {
+		return err
+	}
+	if path := strings.TrimSpace(cfg.ReplayPath); path != "" {
+		return clidiag.NewLocalInputFailure("--replay", path, err)
+	}
+	if path := strings.TrimSpace(cfg.ResumePath); path != "" {
+		return clidiag.NewLocalInputFailure("--resume", path, err)
+	}
+	return err
 }
 
 func loadSelectedMockWorkersConfigWithDiagnostics(
@@ -681,6 +724,7 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 		DisableDefaultRecording: cfg.DisableDefaultRecording,
 		HomeDir:                 cfg.HomeDir,
 		RecordingTargetPlanner:  cfg.RecordingTargetPlanner,
+		CanonicalSessionID:      cfg.CanonicalSessionID,
 		ReportedSessionID:       defaultFactorySessionID,
 	})
 	if err != nil {
@@ -705,8 +749,16 @@ func runFactoryServiceAndEmitResult(
 	cfg RunConfig,
 	factorySvc factoryServiceRunner,
 	recordPath resolvedRunRecordPath,
+	batchProvider batchReportProvider,
 ) error {
-	err := factorySvc.Run(ctx)
+	var snapshot state.CleanInvocationSnapshot
+	var snapshotReady bool
+	var err error
+	if shouldReportBatchResult(cfg) {
+		err = runFactoryService(ctx, factorySvc, batchProvider, &snapshot, &snapshotReady)
+	} else {
+		err = factorySvc.Run(ctx)
+	}
 	logRunServiceOutcome(ctx, cfg, err)
 	if err == nil {
 		reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath, cfg.RecordingsCLI)
@@ -714,234 +766,63 @@ func runFactoryServiceAndEmitResult(
 	if err != nil {
 		return err
 	}
-	return nil
+	if !shouldReportBatchResult(cfg) {
+		return nil
+	}
+	if batchProvider == nil {
+		return fmt.Errorf("report batch result: clean invocation snapshot provider is required")
+	}
+	if !snapshotReady {
+		var snapshotErr error
+		snapshot, snapshotErr = batchProvider.CleanInvocationSnapshot(ctx)
+		if snapshotErr != nil {
+			return fmt.Errorf("read batch result: %w", snapshotErr)
+		}
+	}
+	return reportBatchResult(cfg, snapshot)
 }
 
-func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
-	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir, cfg.ResolveCurrentFactoryDir)
-	diagnosticsEnabled := terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose)
-	clidiag.Printf(
-		cfg.Diagnostics,
-		diagnosticsEnabled,
-		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
-		resolvedFactoryDir,
-		cfg.Dir,
-		runtimeModeForRun(cfg),
-		workflowLabel(cfg.Workflow),
-		cfg.MockWorkersEnabled,
-		cfg.MockWorkersConfigPath,
-		recordingDiagnostics(cfg.RecordingsCLI, recordPath, cfg.ReplayPath),
-		runtimeLogDirLabel(cfg.RuntimeLogDir),
-		rollingPolicyDiagnostics(cfg.RuntimeLogConfig.MaxSize, cfg.RuntimeLogConfig.MaxBackups, cfg.RuntimeLogConfig.MaxAge, cfg.RuntimeLogConfig.Compress),
-		runtimeMetricsDirLabel(cfg.RuntimeMetricsDir),
-		rollingPolicyDiagnostics(cfg.RuntimeMetricsConfig.MaxSize, cfg.RuntimeMetricsConfig.MaxBackups, cfg.RuntimeMetricsConfig.MaxAge, cfg.RuntimeMetricsConfig.Compress),
-		cfg.Port,
-		requestedPort,
-		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
-	)
-	clidiag.Printf(cfg.Diagnostics, diagnosticsEnabled, "%s", cfg.OperatorDefaults.DiagnosticsLine())
+func shouldReportBatchResult(cfg RunConfig) bool {
+	return strings.TrimSpace(cfg.WorkFile) != "" && !cfg.CleanInvocation && !cfg.Continuously
 }
 
-func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
-	resolution := cfg.NamedFactoryResolution
-	if resolution == nil {
-		return
-	}
-
-	clidiag.Printf(
-		cfg.Diagnostics,
-		terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose),
-		"run named-factory resolution name=%q source=%s resolvedFactoryDir=%q projectRoot=%q globalRoot=%q precedence=%s",
-		resolution.Name,
-		resolution.Source,
-		resolution.FactoryDir,
-		resolution.ProjectRoot,
-		resolution.GlobalRoot,
-		resolution.PrecedenceDecision,
-	)
-	logger.Info(
-		"named factory resolved",
-		zap.String("named_factory_name", resolution.Name),
-		zap.String("named_factory_resolution_source", string(resolution.Source)),
-		zap.String("named_factory_dir", resolution.FactoryDir),
-		zap.String("named_factory_project_root", resolution.ProjectRoot),
-		zap.String("named_factory_global_root", resolution.GlobalRoot),
-		zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
-	)
-	if resolution.PrecedenceDecision == interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal {
-		logger.Info(
-			"named factory precedence selected",
-			zap.String("named_factory_name", resolution.Name),
-			zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
-			zap.String("named_factory_resolution_source", string(resolution.Source)),
-		)
-	}
-}
-
-func resolveFactoryDirForDiagnostics(
-	dir string,
-	resolve interfaces.CurrentFactoryDirectoryResolver,
-) string {
-	if resolve == nil {
-		return "unresolved"
-	}
-	resolved, err := resolve(dir)
-	if err != nil {
-		return "unresolved"
-	}
-	return resolved
-}
-
-func workflowLabel(workflow string) string {
-	if strings.TrimSpace(workflow) == "" {
-		return "all"
-	}
-	return workflow
-}
-
-func runtimeLogDirLabel(dir string) string {
-	if strings.TrimSpace(dir) == "" {
-		return "default"
-	}
-	return dir
-}
-
-func runtimeMetricsDirLabel(dir string) string {
-	if strings.TrimSpace(dir) == "" {
-		return "default"
-	}
-	return dir
-}
-
-func rollingPolicyDiagnostics(maxSize, maxBackups, maxAge int, compress bool) string {
-	return fmt.Sprintf("size_mb=%d backups=%d age_days=%d compress=%t", maxSize, maxBackups, maxAge, compress)
-}
-
-func recordingDiagnostics(
-	adapter recordingscli.Adapter,
-	recordPath resolvedRunRecordPath,
-	replayPath string,
-) string {
-	if adapter == nil {
-		return "disabled"
-	}
-	return adapter.RecordingDiagnosticsLabel(recordingscli.ResolvedRecordPath{
-		ServicePath:   recordPath.servicePath,
-		ReportedPath:  recordPath.reportedPath,
-		AutoGenerated: recordPath.autoGenerated,
-	}, replayPath)
-}
-
-func autoPortDiagnostics(autoPort bool, requestedPort, resolvedPort int) string {
-	switch {
-	case requestedPort <= 0:
-		return "dashboard-disabled"
-	case !autoPort:
-		return "disabled"
-	case requestedPort == resolvedPort:
-		return "preferred-available"
-	default:
-		return "fallback"
-	}
-}
-
-func bindDashboardHost(cfg RunConfig) string {
-	if strings.TrimSpace(cfg.BindHost) != "" {
-		return cfg.BindHost
-	}
-	return "localhost"
-}
-
-// DashboardURL returns the embedded browser dashboard URL for the configured
-// local factory server host and port.
-func DashboardURL(host string, port int) string {
-	if port <= 0 {
-		return ""
-	}
-	if strings.TrimSpace(host) == "" {
-		host = "localhost"
-	}
-	authority := net.JoinHostPort(host, strconv.Itoa(port))
-	return "http://" + authority + "/dashboard/ui"
-}
-
-func emitStartupMessages(
-	cfg RunConfig,
-	runtimeLog runtimeartifact.Diagnostics,
-) bool {
-	if cfg.StartupOutput == nil {
-		return false
-	}
-
-	fmt.Fprintf(cfg.StartupOutput, "Factory initiated: %s\n", cfg.Dir)
-	if cfg.Bootstrap {
-		fmt.Fprintf(cfg.StartupOutput, "Factory directory ready: %s\n", cfg.Dir)
-	}
-	if cfg.Continuously {
-		fmt.Fprintln(cfg.StartupOutput, "Runtime mode: continuous")
-	}
-	if strings.TrimSpace(runtimeLog.Path) != "" {
-		fmt.Fprintf(cfg.StartupOutput, "Runtime log: %s\n", runtimeLog.Path)
-		fmt.Fprintf(cfg.StartupOutput, "Runtime log start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.StartTimeUTC))
-	}
-	if strings.TrimSpace(runtimeLog.MetricsPath) != "" {
-		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics: %s\n", runtimeLog.MetricsPath)
-		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.MetricsStartTimeUTC))
-	}
-	if cfg.Port <= 0 {
-		fmt.Fprintln(cfg.StartupOutput, "Dashboard server disabled")
-		return false
-	}
-
-	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
-	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
-	if !cfg.OpenDashboard {
-		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
-		return false
-	}
-	return true
-}
-
-func shouldOpenDashboard(cfg RunConfig) bool {
-	return cfg.OpenDashboard
-}
-
-func reportRecordingPathOnShutdown(
-	output io.Writer,
-	recordPath resolvedRunRecordPath,
-	adapter recordingscli.Adapter,
-) {
-	if adapter == nil {
-		return
-	}
-	adapter.ReportRecordingPathOnShutdown(output, recordingscli.ResolvedRecordPath{
-		ServicePath:   recordPath.servicePath,
-		ReportedPath:  recordPath.reportedPath,
-		AutoGenerated: recordPath.autoGenerated,
-	})
-}
-
-func openDashboardAtBoundEndpoint(
+func runFactoryService(
 	ctx context.Context,
-	cfg RunConfig,
-	openDashboard func(context.Context, string) error,
-) {
-	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
-	if openDashboard == nil {
-		if cfg.StartupOutput != nil {
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: browser opener is required\nOpen the dashboard at %s\n", url)
+	factorySvc factoryServiceRunner,
+	batchProvider batchReportProvider,
+	snapshot *state.CleanInvocationSnapshot,
+	snapshotReady *bool,
+) error {
+	if batchProvider == nil {
+		return factorySvc.Run(ctx)
+	}
+	managed, supportsCompletion := factorySvc.(initializer.CompletionRuntimeRunner)
+	if !supportsCompletion {
+		return factorySvc.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
+		if waiter, ok := batchProvider.(batchCompletionWaiter); ok {
+			waitResult := waiter.ControlWaitToComplete(state.WaitToCompleteRequest{})
+			if waitResult.Done != nil {
+				select {
+				case <-waitResult.Done:
+				case <-completionCtx.Done():
+					return completionCtx.Err()
+				}
+			}
 		}
-		return
-	}
-	if err := openDashboard(ctx, url); err != nil {
-		if cfg.StartupOutput != nil {
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+		captured, err := batchProvider.CleanInvocationSnapshot(completionCtx)
+		if err != nil {
+			return fmt.Errorf("read batch result: %w", err)
 		}
-		return
-	}
-	if cfg.StartupOutput != nil {
-		fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
-	}
+		if snapshot != nil {
+			*snapshot = captured
+		}
+		if snapshotReady != nil {
+			*snapshotReady = true
+		}
+		return nil
+	})
 }
 
 // CountTokenStates counts tokens by their state category based on place ID conventions.

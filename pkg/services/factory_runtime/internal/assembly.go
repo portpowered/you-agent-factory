@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -23,6 +25,7 @@ type Assembly struct {
 	runtimeFactory        *RuntimeFactory
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory
 	workerService         workers.Service
+	metricsClock          platformclock.TimerSource
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
@@ -34,6 +37,7 @@ func NewAssembly(
 	runtimeFactory *RuntimeFactory,
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
 	workerService workers.Service,
+	metricsClock platformclock.TimerSource,
 ) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
@@ -46,7 +50,7 @@ func NewAssembly(
 	}
 	return &Assembly{
 		runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory,
-		workerService: workerService,
+		workerService: workerService, metricsClock: metricsClock,
 	}, nil
 }
 
@@ -65,8 +69,8 @@ func (a *Assembly) Assemble(
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factoryruntime.LoadedFactoryLoader,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler factoryruntime.Scheduler,
@@ -171,12 +175,16 @@ func (a *Assembly) Assemble(
 			"Recordings runtime opening is required",
 		)
 	}
-	replayProvider, replayCommandRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
+	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
 		replayArtifact,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	// Recordings owns replay as a platform process effect. Factory Runtime keeps
+	// that low-level effect at the composition boundary and Workers adapts it
+	// privately when Execute receives the runtime-scoped override.
+	replayCommandRunner := replayProcessRunner
 	spec, err := builder.BuildSpec(
 		ctx,
 		dir,
@@ -222,7 +230,7 @@ func (a *Assembly) Assemble(
 		instance,
 		spec,
 		lifecycle,
-		NewRuntimeSidecars(automationService, serviceMode),
+		NewRuntimeSidecars(automationService, serviceMode, a.metricsClock),
 		nil
 }
 
@@ -317,15 +325,42 @@ func reconstructRestoredWorldState(
 	if opening == nil {
 		return nil, fmt.Errorf("Recordings runtime opening is required to reconstruct restored world state")
 	}
-	selectedTick := 0
-	for _, event := range events {
-		if event.Context.Tick > selectedTick {
-			selectedTick = event.Context.Tick
-		}
-	}
+	selectedTick := restoredWorldStateTick(events)
 	worldState, err := opening.ReconstructCanonicalFactoryWorldState(events, selectedTick)
 	if err != nil {
 		return nil, fmt.Errorf("reconstruct restored Factory world state: %w", err)
 	}
 	return &worldState, nil
+}
+
+func restoredWorldStateTick(events []factorydefinitions.FactoryEvent) int {
+	latestTick := events[0].Context.Tick
+	for _, event := range events[1:] {
+		if event.Context.Tick > latestTick {
+			latestTick = event.Context.Tick
+		}
+	}
+	if successorRecordingRestartsLogicalClock(events) {
+		// A resumed runtime starts its logical tick counter again. The
+		// predecessor prefix can therefore contain a larger tick than the
+		// successor's final event; use event order after the interruption so
+		// projection does not restore the stale predecessor state.
+		return events[len(events)-1].Context.Tick
+	}
+	return latestTick
+}
+
+func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryEvent) bool {
+	interruptionSeen := false
+	previousTick := events[0].Context.Tick
+	for _, event := range events {
+		if event.Type == factorydefinitions.FactoryEventTypeDispatchInterrupted {
+			interruptionSeen = true
+		}
+		if interruptionSeen && event.Context.Tick < previousTick {
+			return true
+		}
+		previousTick = event.Context.Tick
+	}
+	return false
 }

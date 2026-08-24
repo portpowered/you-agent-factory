@@ -271,6 +271,7 @@ type strictModelsServiceFake struct {
 	modelinference.Service
 	list          func(context.Context) (modelinference.List, error)
 	get           func(context.Context, string) (modelinference.Detail, error)
+	readiness     func(context.Context, string) (modelinference.Runtime, error)
 	invoke        func(context.Context, string, modelinference.Request) (modelinference.Result, error)
 	genericInvoke func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 	pull          func(context.Context, string) (modelinference.PullResult, error)
@@ -290,6 +291,14 @@ func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request
 	}
 	detail, err := fake.get(ctx, request.Name)
 	return modelinference.GetModelResult{Model: detail}, err
+}
+
+func (fake strictModelsServiceFake) GetModelReadiness(ctx context.Context, request modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+	if fake.readiness == nil {
+		panic("unexpected models.Service.GetModelReadiness call")
+	}
+	readiness, err := fake.readiness(ctx, request.Name)
+	return modelinference.GetModelReadinessResult{ModelName: request.Name, Readiness: readiness}, err
 }
 
 func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
@@ -842,42 +851,4 @@ func TestServer_ListModels_RoutesThroughInjectedModelsService(t *testing.T) {
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("models = %#v, want one OMNIVOICE summary", response.Results)
 	}
-}
-
-func modelWiringFactoryConfig(includeResource bool) map[string]any {
-	worker := map[string]any{
-		"name":          "voice-local",
-		"type":          interfaces.WorkerTypeModel,
-		"modelProvider": "CODEX",
-		"model":         "OMNIVOICE_Q4_K_M",
-		"modelLocality": interfaces.ModelLocalityLocal,
-		"operations": []map[string]any{{
-			"name": "TTS",
-			"inputs": []map[string]any{{
-				"name":         "text",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
-				"required":     true,
-			}},
-			"outputs": []map[string]any{{
-				"name":         "audio",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
-			}},
-		}},
-	}
-	cfg := map[string]any{
-		"name":    "factory",
-		"workers": []map[string]any{worker},
-	}
-	if includeResource {
-		worker["resources"] = []map[string]any{{"name": "omnivoice-cache", "capacity": 1}}
-		cfg["resources"] = []map[string]any{{
-			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
-			"capacity":   1,
-			"model":      "OMNIVOICE_Q4_K_M",
-			"backend":    "LLAMACPP",
-			"loadPolicy": "ON_DEMAND",
-		}}
-	}
-	return cfg
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const Identity = "script"
@@ -39,7 +40,7 @@ type Config struct {
 
 // Dependencies are the exact effects used by one Script Runner.
 type Dependencies struct {
-	CommandRunner workers.CommandRunner
+	CommandRunner workerprocess.CommandRunner
 	FactoryDocs   workers.FactoryDocsLoader
 	Now           func() time.Time
 	Publish       workers.ProgressPublisher
@@ -50,7 +51,7 @@ type runner struct {
 	command          string
 	args             []string
 	factoryDirectory string
-	commandRunner    streamingCommandRunner
+	commandRunner    workerprocess.StreamingCommandRunner
 	factoryDocs      workers.FactoryDocsLoader
 	now              func() time.Time
 	publish          workers.ProgressPublisher
@@ -58,11 +59,7 @@ type runner struct {
 }
 
 type streamingCommandRunner interface {
-	RunStreaming(
-		context.Context,
-		workers.CommandRequest,
-		platformprocess.OutputChunkObserver,
-	) (workers.CommandResult, error)
+	workerprocess.StreamingCommandRunner
 }
 
 var _ workers.Runner = (*runner)(nil)
@@ -75,7 +72,7 @@ func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 	if dependencies.CommandRunner == nil {
 		return nil, misconfigured("script command runner is required", nil)
 	}
-	commandRunner, ok := dependencies.CommandRunner.(streamingCommandRunner)
+	commandRunner, ok := dependencies.CommandRunner.(workerprocess.StreamingCommandRunner)
 	if !ok {
 		return nil, misconfigured("script command runner must support streaming", nil)
 	}
@@ -109,10 +106,12 @@ func (r *runner) Execute(
 ) (workers.RunnerExecutionResult, error) {
 	effective := *r
 	if override := workerexecution.CommandRunnerOverrideFromContext(ctx, nil); override != nil {
-		if streaming, ok := override.(streamingCommandRunner); ok {
+		if streaming, ok := override.(workerprocess.StreamingCommandRunner); ok {
 			effective.commandRunner = streaming
 		} else {
-			effective.commandRunner = commandRunnerWithStreamingFallback{runner: override}
+			effective.commandRunner = commandRunnerWithStreamingFallback{
+				runner: override,
+			}
 		}
 	}
 	effective.publish = workerexecution.ProgressPublisherFromContext(ctx, r.publish)
@@ -125,14 +124,21 @@ func (r *runner) Execute(
 // streaming boundary. One complete chunk preserves the same observable
 // output and lets the effect remain policy-free.
 type commandRunnerWithStreamingFallback struct {
-	runner workers.CommandRunner
+	runner workerprocess.CommandRunner
+}
+
+func (runner commandRunnerWithStreamingFallback) Run(
+	ctx context.Context,
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
+	return runner.runner.Run(ctx, request)
 }
 
 func (runner commandRunnerWithStreamingFallback) RunStreaming(
 	ctx context.Context,
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
+) (workerprocess.CommandResult, error) {
 	result, err := runner.runner.Run(ctx, request)
 	if observer != nil {
 		if len(result.Stdout) > 0 {
@@ -171,7 +177,7 @@ func (r *runner) execute(
 	observer := r.outputObserver(commandRequest.DispatchID, request.Correlation)
 	result, err := r.commandRunner.RunStreaming(
 		ctx,
-		workers.CloneSubprocessExecutionRequest(commandRequest),
+		workerprocess.CloneCommandRequest(commandRequest),
 		observer,
 	)
 	finished := r.now()
@@ -189,11 +195,11 @@ func (r *runner) execute(
 
 func (r *runner) completeExecution(
 	ctx context.Context,
-	commandRequest workers.CommandRequest,
+	commandRequest workerprocess.CommandRequest,
 	requestID string,
 	started time.Time,
 	finished time.Time,
-	result workers.CommandResult,
+	result workerprocess.CommandResult,
 	runErr error,
 	transitionID string,
 ) (workers.RunnerExecutionResult, error) {
@@ -283,7 +289,7 @@ func classifyInterruption(ctx context.Context, runErr error) *scriptInterruption
 }
 
 func failureResult(
-	result workers.CommandResult,
+	result workerprocess.CommandResult,
 	diagnostics *workers.WorkDiagnostics,
 ) workers.RunnerExecutionResult {
 	return workers.RunnerExecutionResult{
@@ -330,7 +336,7 @@ func executionFailure(
 	return failure
 }
 
-func nonZeroExitMessage(result workers.CommandResult) string {
+func nonZeroExitMessage(result workerprocess.CommandResult) string {
 	if message := strings.TrimSpace(string(result.Stderr)); message != "" {
 		return message
 	}
@@ -340,7 +346,7 @@ func nonZeroExitMessage(result workers.CommandResult) string {
 func (r *runner) resolveCommandRequest(
 	request workers.RunnerExecutionRequest,
 	tokens []workers.Token,
-) (workers.CommandRequest, error) {
+) (workerprocess.CommandRequest, error) {
 	workDir := effectiveWorkDir(request)
 	command := r.command
 	argsTemplate := r.args
@@ -369,7 +375,7 @@ func (r *runner) resolveCommandRequest(
 		request.SessionID,
 	)
 	if strings.TrimSpace(command) == "" {
-		return workers.CommandRequest{}, fmt.Errorf("script command is required")
+		return workerprocess.CommandRequest{}, fmt.Errorf("script command is required")
 	}
 	templateContext := &workers.Context{
 		FactoryDirectory: workflowContext.FactoryDirectory,
@@ -385,20 +391,21 @@ func (r *runner) resolveCommandRequest(
 		r.factoryDocs,
 	)
 	if err != nil {
-		return workers.CommandRequest{}, err
+		return workerprocess.CommandRequest{}, err
 	}
 	args, err := resolveArgs(argsTemplate, data)
 	if err != nil {
-		return workers.CommandRequest{}, err
+		return workerprocess.CommandRequest{}, err
 	}
 
 	dispatch := request.Dispatch
-	return workers.CommandRequest{
+	return workerprocess.CommandRequest{
 		Command:                  resolveFactoryScript(factoryDirectory, command),
 		Args:                     resolveFactoryScripts(factoryDirectory, args),
 		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),
 		WorkDir:                  workDir,
 		DispatchID:               dispatch.DispatchID,
+		TransitionID:             dispatch.TransitionID,
 		WorkerType:               firstNonEmpty(request.WorkerType, dispatch.WorkerType),
 		WorkstationName:          firstNonEmpty(request.WorkstationType, dispatch.WorkstationName),
 		ProjectID:                firstNonEmpty(projectID, dispatch.ProjectID),

@@ -58,6 +58,18 @@ func rootErrorMappingCases() []rootErrorMappingCase {
 			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE", wantFamily: factoryapi.ErrorFamilyNotFound,
 		},
 		{
+			name: "remove cache not found", operation: modelsHTTPOperationRemove, err: models.ErrModelCacheNotFound,
+			wantStatus: http.StatusNotFound, wantCode: "MODEL_CACHE_NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name: "remove cache in use", operation: modelsHTTPOperationRemove, err: models.ErrModelCacheInUse,
+			wantStatus: http.StatusConflict, wantCode: "MODEL_CACHE_IN_USE", wantFamily: factoryapi.ErrorFamilyConflict,
+		},
+		{
+			name: "remove unsafe cache", operation: modelsHTTPOperationRemove, err: models.ErrModelCacheUnsafe,
+			wantStatus: http.StatusBadRequest, wantCode: "BAD_REQUEST", wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
 			name: "invoke missing runtime", operation: modelsHTTPOperationInvoke, err: models.ErrMissing,
 			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE", wantFamily: factoryapi.ErrorFamilyNotFound,
 		},

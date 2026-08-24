@@ -10,13 +10,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -455,84 +450,6 @@ func TestRuntimeOpeningCleanupPreservesPrimaryErrorAndAggregatesCleanupFailures(
 	}
 }
 
-func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Factory {
-	t.Helper()
-	sessionsRoot := openingCoordinatorSessionsRoot{
-		RuntimeAssembly: openingCoordinatorBoundSessions{},
-	}
-	return &Factory{
-		durableExecutionFactory:        openingCoordinatorDurableExecution,
-		workerService:                  openingCoordinatorWorkersService{},
-		modelService:                   modelService,
-		factorySessionsService:         sessionsRoot,
-		factorySessionsRuntimeAssembly: sessionsRoot,
-		recordingsService:              &recordingsRootConstructionStub{},
-		recordingsRuntime:              &recordingsRootConstructionStub{},
-		factoryScaffoldInitializer:     openingCoordinatorInitializeScaffold,
-		editableFactoryValidator:       openingCoordinatorValidateEditable,
-		workService:                    work.MaterializationService(openingCoordinatorContentMaterializer{}),
-		factoryDefinitionValidator:     openingCoordinatorValidator{},
-		namedPaths:                     openingCoordinatorNamedPaths{},
-		loadFactory:                    openingCoordinatorLoadFactory,
-		resolveClock:                   openingCoordinatorResolveClock,
-		newSessionLogger:               openingCoordinatorSessionLogger,
-		generateRuntimeInstanceID:      func() string { return "runtime-opening-cleanup-test" },
-		resolveHome:                    func() (string, error) { return t.TempDir(), nil },
-		providerIdentities:             func(identity string) (string, error) { return identity, nil },
-	}
-}
-
-func openingCoordinatorDurableExecution(
-	_ factorydefinitions.RuntimeOpeningRequest,
-	_ factorysessions.SessionRuntimeOpeningRequest,
-	_ operatorconfig.ResolvedDefaults,
-	_ RuntimeRoot,
-	_ factoryruntime.Clock,
-	_ providers.Service,
-	_ *workers.MockWorkersConfig,
-	_ FactorySessionExecutionFactory,
-	_ factorysessions.ProviderIdentityResolver,
-) (DurableExecution, error) {
-	return DurableExecution{}, nil
-}
-
-func openingCoordinatorInitializeScaffold(string) error {
-	return nil
-}
-
-func openingCoordinatorValidateEditable(
-	context.Context,
-	*factorydefinitions.FactorySnapshot,
-	factorydefinitions.WorkstationLoader,
-) error {
-	return nil
-}
-
-func openingCoordinatorLoadFactory(
-	string,
-	factorydefinitions.WorkstationLoader,
-) (factorydefinitions.MutableLoadedFactorySource, error) {
-	return nil, nil
-}
-
-func openingCoordinatorResolveClock(clock factoryruntime.Clock) factoryruntime.Clock {
-	if clock != nil {
-		return clock
-	}
-	return openingCoordinatorClock{}
-}
-
-func openingCoordinatorSessionLogger(*zap.Logger, string, string, string) *zap.Logger {
-	return zap.NewNop()
-}
-
-type openingCoordinatorWorkersService struct{ workers.Service }
-
-type openingCoordinatorSessionsRoot struct {
-	factorysessions.Service
-	roles.RuntimeAssembly
-}
-
 type runtimeProductsSessionsRole struct {
 	factorysessions.Service
 	readSession     func(string) factorysessions.SessionReadResult
@@ -567,37 +484,8 @@ func (role *runtimeProductsSessionsRole) CloseFactorySession(context.Context, st
 	return errors.New("not implemented")
 }
 
-type openingCoordinatorBoundSessions struct {
-	factorysessions.Service
-	roles.RuntimeAssembly
-}
-
-func (openingCoordinatorBoundSessions) CurrentRuntime() *factorysessions.LiveRuntime {
-	return nil
-}
-
-func (openingCoordinatorBoundSessions) InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher {
-	return nil
-}
-
 type openingCoordinatorProjection struct {
 	recordings.ProjectionService
-}
-
-type openingCoordinatorContentMaterializer struct {
-	work.ContentMaterializer
-}
-
-type openingCoordinatorValidator struct {
-	factorydefinitions.Validator
-}
-
-type openingCoordinatorNamedPaths struct {
-	factorydefinitions.NamedPathResolver
-}
-
-func (openingCoordinatorNamedPaths) ResolveCurrentDir(rootDir string) (string, error) {
-	return rootDir, nil
 }
 
 type openingCoordinatorClock struct{}

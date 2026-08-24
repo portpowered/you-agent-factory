@@ -27,6 +27,10 @@ type modelAPIFake struct {
 		context.Context,
 		modelcontract.GetModelRequest,
 	) (modelcontract.GetModelResult, error)
+	readiness func(
+		context.Context,
+		modelcontract.GetModelReadinessRequest,
+	) (modelcontract.GetModelReadinessResult, error)
 	pullForScope func(
 		context.Context,
 		modelcontract.PullModelRequest,
@@ -65,6 +69,36 @@ func (fake modelAPIFake) GetCatalogModel(
 		return modelcontract.GetModelResult{Model: detail}, err
 	}
 	return fake.getCatalog(ctx, request)
+}
+
+func (fake modelAPIFake) GetModelReadiness(
+	ctx context.Context,
+	request modelcontract.GetModelReadinessRequest,
+) (modelcontract.GetModelReadinessResult, error) {
+	if fake.readiness != nil {
+		return fake.readiness(ctx, request)
+	}
+	if fake.getCatalog != nil {
+		model, err := fake.getCatalog(ctx, modelcontract.GetModelRequest{
+			Scope: request.Scope, Name: request.Name, Operation: request.Operation,
+		})
+		if err != nil {
+			return modelcontract.GetModelReadinessResult{}, err
+		}
+		return modelcontract.GetModelReadinessResult{
+			ModelName: model.Model.Name, Readiness: model.Model.ManagedRuntime,
+		}, nil
+	}
+	if fake.get != nil {
+		model, err := fake.get(ctx, request.Name)
+		if err != nil {
+			return modelcontract.GetModelReadinessResult{}, err
+		}
+		return modelcontract.GetModelReadinessResult{
+			ModelName: model.Name, Readiness: model.ManagedRuntime,
+		}, nil
+	}
+	return modelcontract.GetModelReadinessResult{}, modelcontract.ErrUnsupportedOperation
 }
 
 func (fake modelAPIFake) PullModelForScope(

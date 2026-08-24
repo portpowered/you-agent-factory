@@ -24,6 +24,18 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// maxRunInvocationStdinBytes is the inclusive byte limit for intentional
+// Factory invocation stdin. The extra byte read by collectRunInvocationStdin
+// is only an overflow sentinel and is never passed to Work or retained after
+// rejection.
+const maxRunInvocationStdinBytes = 1 << 20
+
+type resolvedProcessHomeDirectoryContextKey struct{}
+
+type resolvedProcessHomeDirectory struct {
+	path string
+}
+
 func scalarTarget[T bool | string | int](value T) *T {
 	return &value
 }
@@ -42,7 +54,7 @@ func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 	boolInputs := []string{
 		"you.run.flag.continuously", "you.run.flag.no-record",
 		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
-		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.pprof", "you.server.flag.pprof", "you.run.flag.quiet",
 		"you.run.flag.skip-permissions",
 	}
 	intInputs := []string{
@@ -95,6 +107,7 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 		{"you.run.flag.runtime-metrics-compress", &cfg.RuntimeMetricsConfig.Compress},
 		{"you.run.flag.with-server", &cfg.WithServer},
 		{"you.run.flag.with-site", &cfg.WithSite},
+		{"you.run.flag.pprof", &cfg.Pprof},
 		{"you.run.flag.quiet", &cfg.SuppressDashboardRendering},
 	}
 	intFields := []struct {
@@ -335,6 +348,29 @@ func resolveProcessHomeDir(options CommandFactory) (string, error) {
 	return homeDir, nil
 }
 
+func resolveProcessHomeDirForCommand(cmd *cobra.Command, options CommandFactory) (string, error) {
+	if cmd != nil {
+		ctx := cmd.Context()
+		if ctx != nil {
+			if resolved, ok := ctx.Value(resolvedProcessHomeDirectoryContextKey{}).(resolvedProcessHomeDirectory); ok {
+				return resolved.path, nil
+			}
+		}
+	}
+	homeDir, err := resolveProcessHomeDir(options)
+	if err != nil {
+		return "", err
+	}
+	if cmd != nil {
+		ctx := cmd.Context()
+		if ctx == nil {
+			return "", fmt.Errorf("resolve process home directory: command context is required")
+		}
+		cmd.SetContext(context.WithValue(ctx, resolvedProcessHomeDirectoryContextKey{}, resolvedProcessHomeDirectory{path: homeDir}))
+	}
+	return homeDir, nil
+}
+
 func lookupProcessEnvironment(
 	options CommandFactory,
 	name string,
@@ -344,13 +380,6 @@ func lookupProcessEnvironment(
 	}
 	value, ok := options.lookupEnv(name)
 	return value, ok, nil
-}
-
-func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string {
-	if cmd.Root().PersistentFlags().Changed(name) {
-		return value
-	}
-	return ""
 }
 
 func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool {
@@ -365,27 +394,6 @@ func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool 
 		}
 	}
 	return cmd.Root().PersistentFlags().Changed(legacyName)
-}
-
-func resolvedPersistentStringIfCLI(
-	cmd *cobra.Command,
-	inputID string,
-	legacyName string,
-	legacyValue string,
-) string {
-	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
-	if err == nil {
-		state, found := inputs.State(inputID)
-		if !found || state.Provenance != resolvedinput.SourceCLIFlag {
-			return ""
-		}
-		value, valueErr := inputs.String(inputID)
-		if valueErr == nil {
-			return value
-		}
-		return ""
-	}
-	return persistentFlagValueIfChanged(cmd, legacyName, legacyValue)
 }
 
 func representativeSourceValues(options CommandFactory) climanifestcobra.SourceCandidateProvider {
@@ -723,7 +731,11 @@ func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, prep
 			return fmt.Errorf("unknown flag: %s", arg)
 		}
 	}
-	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
+	// Directory-selected runs do not have a documented implicit stdin
+	// invocation. Only an explicit positional argument or a `-` token asks
+	// this compatibility path to inspect process stdin; otherwise a quiet pipe
+	// must not delay Factory startup.
+	if len(promptArgs) == 0 {
 		return nil
 	}
 	input, err := prepareRunInvocationInputWithFile(cmd, promptArgs, nil, nil, preparation)
@@ -906,9 +918,15 @@ func collectRunInvocationStdin(
 	if stdin == nil {
 		return nil, fmt.Errorf("read invocation stdin: process stdin is required")
 	}
-	data, err := io.ReadAll(stdin)
+	data, err := io.ReadAll(io.LimitReader(stdin, maxRunInvocationStdinBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read invocation stdin: %w", err)
+	}
+	if len(data) > maxRunInvocationStdinBytes {
+		return nil, fmt.Errorf(
+			"invocation stdin exceeds the %d-byte limit; use --to-file for larger input",
+			maxRunInvocationStdinBytes,
+		)
 	}
 	if len(data) == 0 && !explicitStdin {
 		return nil, nil
@@ -927,10 +945,6 @@ func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input work.Prepar
 		cfg.InvocationStdinText = &payload
 	}
 	cfg.CleanInvocationInputSource = source
-}
-
-func runCommandInputIsTTY(ctx context.Context) bool {
-	return startupcli.StdinIsTTY(ctx)
 }
 
 func mapRunInvocationInputError(err error, factoryName string) error {

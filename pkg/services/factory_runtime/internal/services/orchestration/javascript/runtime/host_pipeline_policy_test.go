@@ -2,7 +2,6 @@ package workflowruntime_test
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -64,219 +63,6 @@ func completedForLabel(records []factory.JavaScriptRuntimeRecord, label string) 
 		}
 	}
 	return false
-}
-
-func TestRun_PipelineStagedFakeChildren_PreservesItemStageOrder(t *testing.T) {
-	source := readFixture(t, "pipeline-staged-fake-children.workflow.js")
-	policy := workflowpolicy.DefaultEffectivePolicy()
-	policy.MaxAgents = 16
-
-	req := factory.JavaScriptRuntimeRequest{
-		Source:    source,
-		SourceRef: "pipeline-staged-fake-children.workflow.js",
-		SessionID: "session-pipeline-staged-fake-children",
-		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
-		Metadata: map[string]string{
-			"name": "pipeline-staged-fake-children",
-		},
-		Policy: policy,
-	}
-
-	first := runSuccessful(t, req)
-	second := runSuccessful(t, req)
-
-	assertPipelineItemOrder(t, first, []string{"alpha", "beta", "gamma"})
-	assertPipelineStageTransitions(t, first, 3, 2)
-	assertPipelineReviewUsesEditOutput(t, first)
-
-	if string(first.Value.JSON) != string(second.Value.JSON) {
-		t.Fatalf("value drift across runs: first=%s second=%s", first.Value.JSON, second.Value.JSON)
-	}
-}
-
-func TestRun_PipelineStagedFakeChildren_RepresentsStageFailureExplicitly(t *testing.T) {
-	source := readFixture(t, "pipeline-stage-failure.workflow.js")
-	policy := workflowpolicy.DefaultEffectivePolicy()
-	policy.MaxAgents = 16
-
-	req := factory.JavaScriptRuntimeRequest{
-		Source:    source,
-		SourceRef: "pipeline-stage-failure.workflow.js",
-		SessionID: "session-pipeline-stage-failure",
-		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
-		Metadata: map[string]string{
-			"name": "pipeline-stage-failure",
-		},
-		Policy: policy,
-	}
-
-	outcome := runSuccessful(t, req)
-	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
-	results, ok := projected["results"].([]any)
-	if !ok || len(results) != 2 {
-		t.Fatalf("projected results = %#v, want 2 entries", projected["results"])
-	}
-
-	successItem, ok := results[0].(map[string]any)
-	if !ok || successItem["status"] != factory.JavaScriptChildDispatchStatusCompleted {
-		t.Fatalf("results[0] = %#v, want completed item", results[0])
-	}
-	failedItem, ok := results[1].(map[string]any)
-	if !ok || failedItem["status"] != factory.JavaScriptChildDispatchStatusFailed {
-		t.Fatalf("results[1].status = %#v, want FAILED", failedItem["status"])
-	}
-	stages, ok := failedItem["stages"].([]any)
-	if !ok || len(stages) != 2 {
-		t.Fatalf("results[1].stages = %#v, want 2 stages", failedItem["stages"])
-	}
-	editStage, ok := stages[0].(map[string]any)
-	if !ok || editStage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
-		t.Fatalf("results[1].stages[0] = %#v, want completed edit stage", stages[0])
-	}
-	reviewStage, ok := stages[1].(map[string]any)
-	if !ok || reviewStage["status"] != factory.JavaScriptChildDispatchStatusFailed {
-		t.Fatalf("results[1].stages[1] = %#v, want failed review stage", stages[1])
-	}
-	if reviewStage["diagnostic"] == "" {
-		t.Fatal("results[1].stages[1].diagnostic is empty")
-	}
-}
-
-func assertPipelineItemOrder(t *testing.T, outcome factory.JavaScriptRuntimeOutcome, wantItems []string) {
-	t.Helper()
-	projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)
-	results, ok := projected["results"].([]any)
-	if !ok || len(results) != len(wantItems) {
-		t.Fatalf("projected results = %#v, want %d entries", projected["results"], len(wantItems))
-	}
-	for i, wantItem := range wantItems {
-		itemResult, ok := results[i].(map[string]any)
-		if !ok {
-			t.Fatalf("results[%d] = %#v, want object", i, results[i])
-		}
-		if itemResult["item"] != wantItem {
-			t.Fatalf("results[%d].item = %#v, want %q", i, itemResult["item"], wantItem)
-		}
-		if itemResult["status"] != factory.JavaScriptChildDispatchStatusCompleted {
-			t.Fatalf("results[%d].status = %#v, want COMPLETED", i, itemResult["status"])
-		}
-	}
-}
-
-func assertPipelineStageTransitions(t *testing.T, outcome factory.JavaScriptRuntimeOutcome, wantItems, wantStages int) {
-	t.Helper()
-	childRecords := childDispatchRecords(outcome.Records)
-	wantChildCount := wantItems * wantStages
-	if len(childRecords) != wantChildCount*3 {
-		t.Fatalf("child_dispatch record count = %d, want %d transitions", len(childRecords), wantChildCount*3)
-	}
-
-	labels := completedChildLabels(childRecords)
-	wantLabels := make([]string, 0, wantChildCount)
-	for i := 0; i < wantItems; i++ {
-		wantLabels = append(wantLabels, "edit-"+itoa(i), "review-"+itoa(i))
-	}
-	if len(labels) != len(wantLabels) {
-		t.Fatalf("completed child labels = %#v, want %#v", labels, wantLabels)
-	}
-	for i, wantLabel := range wantLabels {
-		if labels[i] != wantLabel {
-			t.Fatalf("completed child labels[%d] = %q, want %q", i, labels[i], wantLabel)
-		}
-	}
-}
-
-func assertPipelineReviewUsesEditOutput(t *testing.T, outcome factory.JavaScriptRuntimeOutcome) {
-	t.Helper()
-	projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)
-	editResult, reviewResult := pipelineFirstItemStageResults(t, projected)
-	assertPipelineStageOutputsDiffer(t, editResult, reviewResult)
-}
-
-func pipelineFirstItemStageResults(t *testing.T, projected map[string]any) (map[string]any, map[string]any) {
-	t.Helper()
-	results, ok := projected["results"].([]any)
-	if !ok || len(results) == 0 {
-		t.Fatalf("projected results = %#v, want non-empty", projected["results"])
-	}
-	itemResult, ok := results[0].(map[string]any)
-	if !ok {
-		t.Fatalf("results[0] = %#v, want object", results[0])
-	}
-	stages, ok := itemResult["stages"].([]any)
-	if !ok || len(stages) != 2 {
-		t.Fatalf("results[0].stages = %#v, want 2 stages", itemResult["stages"])
-	}
-	editStage, ok := stages[0].(map[string]any)
-	if !ok || editStage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
-		t.Fatalf("results[0].stages[0] = %#v, want completed edit stage", stages[0])
-	}
-	reviewStage, ok := stages[1].(map[string]any)
-	if !ok || reviewStage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
-		t.Fatalf("results[0].stages[1] = %#v, want completed review stage", stages[1])
-	}
-	editResult, ok := editStage["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("results[0].stages[0].result = %#v, want object", editStage["result"])
-	}
-	reviewResult, ok := reviewStage["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("results[0].stages[1].result = %#v, want object", reviewStage["result"])
-	}
-	return editResult, reviewResult
-}
-
-func assertPipelineStageOutputsDiffer(t *testing.T, editResult, reviewResult map[string]any) {
-	t.Helper()
-	editOutput, ok := editResult["output"].(map[string]any)
-	if !ok {
-		t.Fatalf("edit output = %#v, want object", editResult["output"])
-	}
-	reviewOutput, ok := reviewResult["output"].(map[string]any)
-	if !ok {
-		t.Fatalf("review output = %#v, want object", reviewResult["output"])
-	}
-	editText, _ := editOutput["text"].(string)
-	reviewText, _ := reviewOutput["text"].(string)
-	if editText == "" || reviewText == "" {
-		t.Fatal("edit or review output text is empty")
-	}
-	if reviewText == editText {
-		t.Fatalf("review output %q should differ from edit output %q", reviewText, editText)
-	}
-	if editResult["label"] != "edit-0" || reviewResult["label"] != "review-0" {
-		t.Fatalf("stage labels = edit %#v review %#v, want edit-0 and review-0", editResult["label"], reviewResult["label"])
-	}
-}
-
-func childDispatchRecords(records []factory.JavaScriptRuntimeRecord) []factory.JavaScriptRuntimeRecord {
-	var childRecords []factory.JavaScriptRuntimeRecord
-	for _, record := range records {
-		if record.Kind == factory.JavaScriptRecordKindChildDispatch {
-			childRecords = append(childRecords, record)
-		}
-	}
-	return childRecords
-}
-
-func completedChildLabels(records []factory.JavaScriptRuntimeRecord) []string {
-	var labels []string
-	for _, record := range records {
-		if record.ChildDispatch == nil {
-			continue
-		}
-		if record.ChildDispatch.Status != factory.JavaScriptChildDispatchStatusCompleted {
-			continue
-		}
-		if record.ChildDispatch.Label != "" {
-			labels = append(labels, record.ChildDispatch.Label)
-		}
-	}
-	return labels
-}
-
-func itoa(value int) string {
-	return strconv.Itoa(value)
 }
 
 func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
@@ -354,7 +140,7 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 	}
 }
 
-func TestRun_SkipPermissionsIsChildScopedAndDoesNotBypassRoutingPolicy(t *testing.T) {
+func TestRun_SkipPermissionsPermissionIsChildScopedAndDoesNotBypassRoutingPolicy(t *testing.T) {
 	policy := workflowpolicy.DefaultEffectivePolicy()
 	policy.MaxAgents = 4
 	policy.AllowedModels = []string{"gpt-allowed"}
@@ -365,7 +151,7 @@ func TestRun_SkipPermissionsIsChildScopedAndDoesNotBypassRoutingPolicy(t *testin
     prompt: "autonomous review",
     label: "autonomous-child",
     model: "gpt-allowed",
-    skipPermissions: true,
+    permissions: "SKIP_PERMISSIONS",
   });
 agent.run({
     prompt: "ordinary review",
@@ -394,7 +180,41 @@ return { autonomous };`,
 		t.Fatalf("Run() outcome = %#v, want ordinary sibling policy denial", outcome)
 	}
 	if len(requests) != 1 || !requests[0].SkipPermissions || requests[0].Label != "autonomous-child" {
-		t.Fatalf("provider requests = %#v, want only the first child with skipPermissions=true", requests)
+		t.Fatalf("provider requests = %#v, want only the first child with SKIP_PERMISSIONS", requests)
+	}
+}
+
+func TestRun_AllowedPermissionsRejectsSkipPermissionsBeforeDispatch(t *testing.T) {
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.AllowedPermissions = []string{workflowpolicy.PermissionModeDefault}
+
+	called := false
+	outcome, err := runtimeWorkflows.Run(t.Context(), factory.JavaScriptRuntimeRequest{
+		Source: `return (async () => {
+  await agent.run({ prompt: "autonomous review", label: "blocked-child", permissions: "SKIP_PERMISSIONS" });
+  return { ok: true };
+})();`,
+		SourceRef:   "allowed-permissions.workflow.js",
+		SessionID:   "session-allowed-permissions",
+		FactoryName: "policy-factory",
+		Policy:      policy,
+	}, factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+				called = true
+				return factory.JavaScriptChildExecutionResult{Status: factory.JavaScriptChildDispatchStatusCompleted, Request: req}, nil
+			})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	want := `policy denied: Factory "policy-factory" child "blocked-child" requested permission "SKIP_PERMISSIONS" not listed in allowedPermissions`
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, want) {
+		t.Fatalf("Run() outcome = %#v, want pre-dispatch permission denial", outcome)
+	}
+	if called || len(outcome.Records) != 0 {
+		t.Fatalf("executor called=%v records=%#v, want no dispatch side effects", called, outcome.Records)
 	}
 }
 
@@ -846,5 +666,53 @@ func TestRun_ParallelFakeChildren_RepresentsFailedChildExplicitly(t *testing.T) 
 	}
 	if completedForLabel(outcome.Records, "child-1") {
 		t.Fatal("failed child should not emit COMPLETED child_dispatch record")
+	}
+}
+
+func TestRun_AgentRunPermissionsResolveCanonicalValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		wantBypass bool
+		permission factory.JavaScriptChildPermission
+	}{
+		{
+			name:       "static default",
+			source:     `return agent.run({ prompt: "review", permissions: "DEFAULT" });`,
+			permission: factory.JavaScriptChildPermissionDefault,
+		},
+		{
+			name:       "dynamic skip",
+			source:     `const child = { prompt: "review", permissions: "SKIP_PERMISSIONS" }; return agent.run(child);`,
+			wantBypass: true,
+			permission: factory.JavaScriptChildPermissionSkipPermissions,
+		},
+		{
+			name:       "omitted",
+			source:     `return agent.run({ prompt: "review" });`,
+			permission: factory.JavaScriptChildPermissionDefault,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: test.source, SourceRef: "inline", SessionID: "permissions-resolution-" + test.name,
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
+			}
+			requests := stub.executionRequests()
+			if len(requests) != 1 {
+				t.Fatalf("executor request count = %d, want 1", len(requests))
+			}
+			request := requests[0]
+			if request.SkipPermissions != test.wantBypass || request.Permissions != test.permission {
+				t.Fatalf("executor request = %#v, want permission=%q bypass=%v", request, test.permission, test.wantBypass)
+			}
+		})
 	}
 }

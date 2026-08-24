@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -23,13 +25,14 @@ const defaultMockWorkerAcceptedOutput = "mock worker accepted"
 type MockWorkerCommandRunner struct {
 	Config        *MockWorkersConfig
 	RuntimeConfig interfaces.RuntimeDefinitionLookup
-	Next          workers.CommandRunner
+	OutputPolicy  workers.OutputPolicy
+	Next          workerprocess.CommandRunner
 }
 
-var _ workers.CommandRunner = (*MockWorkerCommandRunner)(nil)
+var _ workerprocess.CommandRunner = (*MockWorkerCommandRunner)(nil)
 
 // Run implements CommandRunner.
-func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	if r.Config == nil {
 		return r.runNext(ctx, req)
 	}
@@ -38,30 +41,72 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workers.CommandRe
 		if r.Config.UnmatchedDispatchPolicy.PassthroughUnmatched() {
 			return r.runNext(ctx, req)
 		}
-		return r.acceptResult(req), nil
+		return r.acceptResult(req, nil), nil
+	}
+	if capture := workerexecution.MockWorkerUsageCaptureFromContext(ctx); capture != nil {
+		capture.Record(entry.Usage)
+	} else {
+		// A provider command runner can be composed outside the detached
+		// Workers attempt boundary (for example, the durable mock provider).
+		// Preserve the same public usage observation even when the attempt-level
+		// capture hand-off is unavailable.
+		workerexecution.PublishMockWorkerUsage(ctx, workers.ExecutionCorrelation{
+			DispatchID: req.DispatchID,
+			RequestID:  req.Execution.RequestID,
+			TraceID:    req.Execution.TraceID,
+		}, entry.Usage)
 	}
 
 	switch entry.RunType {
 	case MockWorkerRunTypeAccept:
-		return r.acceptResult(req), nil
+		return r.acceptResult(req, entry.Usage), nil
 	case MockWorkerRunTypeReject:
-		return mockRejectResult(req.Command, entry.RejectConfig), nil
+		result := mockRejectResult(req.Command, entry.RejectConfig, entry.Usage)
+		// Codex reports a structured turn.failed event on stdout. Keep the
+		// subprocess result successful so the provider adapter can interpret
+		// that event; CommandResultForLogging restores a configured mock exit
+		// code in diagnostics when one was requested.
+		if strings.TrimSpace(req.Command) == "codex" {
+			result.ExitCode = 0
+		}
+		return result, nil
 	case MockWorkerRunTypeScript:
 		return r.runScript(ctx, req, entry.ScriptConfig)
 	default:
-		return r.acceptResult(req), nil
+		return r.acceptResult(req, entry.Usage), nil
 	}
 }
 
-func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req workers.CommandRequest, cfg *MockWorkerScriptConfig) (workers.CommandResult, error) {
+// CommandResultForLogging preserves a configured mock exit code in diagnostics
+// when a Codex rejection is encoded as a successful structured provider
+// response for adapter parsing.
+func (r *MockWorkerCommandRunner) CommandResultForLogging(
+	_ context.Context,
+	request workerprocess.CommandRequest,
+	result workerprocess.CommandResult,
+) workerprocess.CommandResult {
+	if r == nil || r.Config == nil || strings.TrimSpace(request.Command) != "codex" {
+		return result
+	}
+	entry, matched := r.match(request)
+	if !matched || entry.RunType != MockWorkerRunTypeReject ||
+		entry.RejectConfig == nil || entry.RejectConfig.ExitCode == nil ||
+		*entry.RejectConfig.ExitCode == 0 {
+		return result
+	}
+	result.ExitCode = *entry.RejectConfig.ExitCode
+	return result
+}
+
+func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req workerprocess.CommandRequest, cfg *MockWorkerScriptConfig) (workerprocess.CommandResult, error) {
 	if cfg == nil {
-		return workers.CommandResult{Stderr: []byte("mock scriptConfig is required"), ExitCode: 1}, nil
+		return workerprocess.CommandResult{Stderr: []byte("mock scriptConfig is required"), ExitCode: 1}, nil
 	}
 	scriptCtx := ctx
 	if cfg.Timeout != "" {
 		timeout, err := time.ParseDuration(cfg.Timeout)
 		if err != nil {
-			return workers.CommandResult{
+			return workerprocess.CommandResult{
 				Stderr:   []byte(fmt.Sprintf("invalid mock script timeout %q: %v", cfg.Timeout, err)),
 				ExitCode: 1,
 			}, nil
@@ -88,7 +133,7 @@ func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req workers.Com
 	return r.runNext(scriptCtx, scriptReq)
 }
 
-func mockWorkerOriginalCommandEnv(req workers.CommandRequest) map[string]string {
+func mockWorkerOriginalCommandEnv(req workerprocess.CommandRequest) map[string]string {
 	// CommandRequest.Args is []string, so JSON encoding cannot fail.
 	args, _ := json.Marshal(req.Args)
 	return map[string]string{
@@ -98,21 +143,28 @@ func mockWorkerOriginalCommandEnv(req workers.CommandRequest) map[string]string 
 	}
 }
 
-func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	next := r.Next
 	if next == nil {
-		return workers.CommandResult{}, errors.New("mock worker next command runner is required")
+		return workerprocess.CommandResult{}, errors.New("mock worker next command runner is required")
 	}
 	return next.Run(ctx, req)
 }
 
-func (r *MockWorkerCommandRunner) acceptResult(req workers.CommandRequest) workers.CommandResult {
+func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest, usage *MockWorkerUsageConfig) workerprocess.CommandResult {
 	output := defaultMockWorkerAcceptedOutput
+	if r.OutputPolicy.GoalRoutingDecisionEnvelope {
+		output = `{"decision":"accepted","output":"` + defaultMockWorkerAcceptedOutput + `"}`
+	} else if r.OutputPolicy.DecisionEnvelope || strings.EqualFold(strings.TrimSpace(r.OutputPolicy.Format), "decision-envelope") {
+		output = `{"decision":"ACCEPTED","output":"` + defaultMockWorkerAcceptedOutput + `"}`
+	} else if stopToken := strings.TrimSpace(r.OutputPolicy.StopToken); stopToken != "" {
+		output += "\n" + stopToken
+	}
 	if r.RuntimeConfig != nil && req.WorkstationName != "" {
 		if def, ok := r.RuntimeConfig.Workstation(req.WorkstationName); ok &&
 			def != nil && def.OutcomeFormat == interfaces.WorkstationOutcomeFormatDecisionEnvelope {
 			output = `{"decision":"ACCEPTED","output":"` + defaultMockWorkerAcceptedOutput + `"}`
-			return workers.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output))}
+			return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output, usage))}
 		}
 	}
 	if r.RuntimeConfig != nil && req.WorkerType != "" {
@@ -120,13 +172,13 @@ func (r *MockWorkerCommandRunner) acceptResult(req workers.CommandRequest) worke
 			output += "\n" + def.StopToken
 		}
 	}
-	return workers.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output))}
+	return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output, usage))}
 }
 
-func rejectResult(cfg *MockWorkerRejectConfig) workers.CommandResult {
+func rejectResult(cfg *MockWorkerRejectConfig) workerprocess.CommandResult {
 	exitCode := 1
 	if cfg == nil {
-		return workers.CommandResult{ExitCode: exitCode}
+		return workerprocess.CommandResult{ExitCode: exitCode}
 	}
 	if cfg.ExitCode != nil {
 		exitCode = *cfg.ExitCode
@@ -134,14 +186,14 @@ func rejectResult(cfg *MockWorkerRejectConfig) workers.CommandResult {
 			exitCode = 1
 		}
 	}
-	return workers.CommandResult{
+	return workerprocess.CommandResult{
 		Stdout:   []byte(cfg.Stdout),
 		Stderr:   []byte(cfg.Stderr),
 		ExitCode: exitCode,
 	}
 }
 
-func (r *MockWorkerCommandRunner) match(req workers.CommandRequest) (MockWorkerConfig, bool) {
+func (r *MockWorkerCommandRunner) match(req workerprocess.CommandRequest) (MockWorkerConfig, bool) {
 	for _, candidate := range r.Config.MockWorkers {
 		if mockWorkerMatches(candidate, req) {
 			return candidate, true
@@ -150,7 +202,7 @@ func (r *MockWorkerCommandRunner) match(req workers.CommandRequest) (MockWorkerC
 	return MockWorkerConfig{}, false
 }
 
-func mockWorkerMatches(candidate MockWorkerConfig, req workers.CommandRequest) bool {
+func mockWorkerMatches(candidate MockWorkerConfig, req workerprocess.CommandRequest) bool {
 	if candidate.WorkerName != "" && candidate.WorkerName != req.WorkerType {
 		return false
 	}
@@ -178,7 +230,7 @@ type mockInputToken struct {
 	} `json:"color"`
 }
 
-func commandRequestInputTokens(request workers.CommandRequest) []mockInputToken {
+func commandRequestInputTokens(request workerprocess.CommandRequest) []mockInputToken {
 	if len(request.Inputs) == 0 {
 		return nil
 	}

@@ -73,11 +73,14 @@ func GetLiveFactorySession(
 	host LiveReadHost,
 	sessionID string,
 ) (factorysessions.SessionProjection, error) {
-	if IsDurableExecutionSessionID(sessionID) {
-		return factorysessions.SessionProjection{}, fmt.Errorf("%w: %s", factorysessions.ErrNotFound, sessionID)
-	}
 	if host == nil {
 		return factorysessions.SessionProjection{}, fmt.Errorf("factory session gateway is required")
+	}
+	// A live registry entry is authoritative even when an injected or restored
+	// identity happens to use the durable prefix. Durable routing is only the
+	// fallback for identities that are not live-owned.
+	if host.GetLiveSession(sessionID) == nil && IsDurableExecutionSessionID(sessionID) {
+		return factorysessions.SessionProjection{}, fmt.Errorf("%w: %s", factorysessions.ErrNotFound, sessionID)
 	}
 	session, err := host.RequireSession(sessionID)
 	if err != nil {

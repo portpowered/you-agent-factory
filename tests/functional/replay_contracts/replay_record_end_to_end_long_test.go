@@ -102,6 +102,56 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	})
 }
 
+func TestReplayDriftDisclosureOnStdoutForChangedWorkerDefinition(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay drift disclosure CLI end-to-end smoke")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	helperPath := writeRecordReplayScriptHelper(t)
+	writeRecordReplayScriptWorker(t, dir, helperPath)
+
+	workFile := filepath.Join(t.TempDir(), "initial-work.json")
+	writeRecordReplayWorkFile(t, workFile)
+	artifactPath := filepath.Join(t.TempDir(), "cli-recording.replay.json")
+
+	t.Setenv(recordReplayLiveScriptEnv, "1")
+	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
+	if _, err := runRecordReplayCLIWithCapturedStdout(t, dir, "--work", workFile, "--record", artifactPath); err != nil {
+		t.Fatalf("record run failed: %v", err)
+	}
+	t.Setenv(recordReplayLiveScriptEnv, "")
+	t.Setenv(recordReplayScriptSecretEnv, "")
+
+	unchanged, err := runReplayCLIWithCapturedStreams(t, dir, artifactPath)
+	if err != nil {
+		t.Fatalf("unchanged replay failed: %v", err)
+	}
+	if unchanged.Stdout() != "" {
+		t.Fatalf("unchanged replay stdout = %q, want no drift warning", unchanged.Stdout())
+	}
+
+	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
+	agents, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read worker AGENTS.md: %v", err)
+	}
+	agents = append(agents, []byte("worker prompt drift\n")...)
+	if err := os.WriteFile(agentsPath, agents, 0o644); err != nil {
+		t.Fatalf("edit worker AGENTS.md: %v", err)
+	}
+
+	drifted, err := runReplayCLIWithCapturedStreams(t, dir, artifactPath)
+	if err != nil {
+		t.Fatalf("drifted replay failed: %v", err)
+	}
+	if drifted.Stdout() == unchanged.Stdout() {
+		t.Fatalf("drifted replay stdout = %q, want output different from unchanged replay", drifted.Stdout())
+	}
+	wantDriftedStdout := "Replay warning: current Factory Definition differs from the recording; affected components: Factory Definition, runtime configuration, workers. Replay continues with recorded inputs.\n"
+	if drifted.Stdout() != wantDriftedStdout {
+		t.Fatalf("drifted replay stdout = %q, want %q", drifted.Stdout(), wantDriftedStdout)
+	}
+}
+
 func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow(t *testing.T) {
 	support.SkipLongFunctional(t, "slow default record/replay CLI end-to-end smoke")
 
@@ -525,6 +575,26 @@ func runRecordReplayCLIWithCapturedStdout(
 	return inputs.Stdout(), runErr
 }
 
+func runReplayCLIWithCapturedStreams(
+	t *testing.T,
+	workingDirectory string,
+	artifactPath string,
+) (*support.CapturedInputs, error) {
+	t.Helper()
+
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: api.Start,
+	})
+	args := []string{
+		"you", "run", "--dir", workingDirectory, "--server", "http://127.0.0.1:1",
+		"--quiet", "--replay", artifactPath, "--no-record",
+	}
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.WorkingDirectory = workingDirectory
+	return inputs, process.Execute(inputs.Input)
+}
+
 func singleRecordedArtifactPath(t *testing.T, root string) string {
 	t.Helper()
 
@@ -577,4 +647,101 @@ func commandEnvContains(env []string, want string) bool {
 		}
 	}
 	return false
+}
+
+type scriptBoundaryEventIndices struct {
+	dispatch  int
+	request   int
+	response  int
+	completed int
+}
+
+func requireScriptResponseEventIndices(t *testing.T, events []factoryapi.FactoryEvent) scriptBoundaryEventIndices {
+	t.Helper()
+
+	indices := scriptBoundaryEventIndices{
+		dispatch:  indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0),
+		request:   indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeScriptRequest, 0),
+		response:  indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeScriptResponse, 0),
+		completed: indexOfReplayContractEventType(events, factoryapi.FactoryEventTypeDispatchResponse, 0),
+	}
+	if indices.dispatch < 0 || indices.request < 0 || indices.response < 0 || indices.completed < 0 {
+		t.Fatalf("event order = %v, want dispatch-request, script-request, script-response, dispatch-response", replayContractEventTypes(events))
+	}
+	return indices
+}
+
+func assertScriptEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, recordedEvents []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	recordedByID := make(map[string]factoryapi.FactoryEvent, len(recordedEvents))
+	for _, event := range recordedEvents {
+		recordedByID[event.Id] = event
+	}
+
+	for _, live := range liveEvents {
+		if live.Type != factoryapi.FactoryEventTypeScriptRequest && live.Type != factoryapi.FactoryEventTypeScriptResponse {
+			continue
+		}
+
+		recorded, ok := recordedByID[live.Id]
+		if !ok {
+			t.Fatalf("recorded artifact missing script event %s from live history; artifact events=%v", live.Id, replayContractEventTypes(recordedEvents))
+		}
+		if recorded.Type != live.Type {
+			t.Fatalf("recorded script event %s = type %s, live type %s", live.Id, recorded.Type, live.Type)
+		}
+
+		liveJSON, err := json.Marshal(live)
+		if err != nil {
+			t.Fatalf("marshal live script event %s: %v", live.Id, err)
+		}
+		recordedJSON, err := json.Marshal(recorded)
+		if err != nil {
+			t.Fatalf("marshal recorded script event %s: %v", recorded.Id, err)
+		}
+		if string(recordedJSON) != string(liveJSON) {
+			t.Fatalf("recorded script event %s does not match live history\nrecorded=%s\nlive=%s", live.Id, recordedJSON, liveJSON)
+		}
+	}
+}
+
+func normalizeReplayContractStdout(stdout string, trim bool) string {
+	if trim {
+		return strings.TrimSpace(stdout)
+	}
+	return stdout
+}
+
+func assertReplayArtifactDoesNotContainRawValue(t *testing.T, artifactPath, rawValue string) {
+	t.Helper()
+
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("read replay artifact %s: %v", artifactPath, err)
+	}
+	if strings.Contains(string(data), rawValue) {
+		t.Fatalf("replay artifact %s leaked raw environment value %q", artifactPath, rawValue)
+	}
+}
+
+func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
+	count := 0
+	for _, event := range artifact.Events {
+		if string(event.Type) == string(eventType) {
+			count++
+		}
+	}
+	return count
+}
+
+func factoryRelationsValue(value *[]factoryapi.Relation) []factoryapi.Relation {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func strPtr(value string) *string {
+	return &value
 }

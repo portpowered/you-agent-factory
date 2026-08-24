@@ -524,15 +524,6 @@ func readMCPSessionDurableReadModel(
 	return *response.Result
 }
 
-func mcpControlResume(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-) factoryapi.FactorySessionLifecycleControlResponse {
-	t.Helper()
-	return mcpControlResumeExpectingOutcome(t, client, sessionID, factoryapi.FactorySessionLifecycleControlOutcomeAccepted)
-}
-
 func mcpControlResumeWhenInterrupted(
 	t *testing.T,
 	client *stdioMCPClient,

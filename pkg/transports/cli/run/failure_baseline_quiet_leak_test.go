@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/fs"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -79,8 +77,8 @@ func TestFailureBaseline_QuietLeak_OneShotBatchQuietSuppressesStartupChatter(t *
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if output != "" {
-		t.Fatalf("stdout = %q, want empty quiet success terminal output", output)
+	if output != "Batch completed successfully.\n" {
+		t.Fatalf("stdout = %q, want truthful quiet batch success result", output)
 	}
 	assertQuietLeakContractForbidden(t, output)
 }
@@ -100,8 +98,8 @@ func TestFailureBaseline_QuietLeak_OneShotBatchRunSuppressesDashboardMarkers(t *
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if output != "" {
-		t.Fatalf("stdout = %q, want empty dashboard output with quiet suppression", output)
+	if output != "Batch completed successfully.\n" {
+		t.Fatalf("stdout = %q, want truthful batch success result with quiet suppression", output)
 	}
 	assertQuietLeakContractForbidden(t, output)
 }
@@ -350,40 +348,4 @@ func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string
 	runErr := runWithTestRuntimeRunner(context.Background(), cfg, adaptTestRuntimeRunnerOpener(buildTransportTestRuntime))
 
 	return stdoutBuffer.String(), stderrBuffer.String(), runErr
-}
-
-func requireQuietRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
-	t.Helper()
-
-	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-runtime-log-"+runtimeInstanceID+"-*.log"))
-	if err != nil {
-		t.Fatalf("glob runtime log path: %v", err)
-	}
-	if len(matches) != 1 {
-		logFiles := collectQuietRuntimeLogFiles(t, logDir)
-		t.Fatalf("runtime log paths for %q under %s = %v, all log files = %v, want exactly one", runtimeInstanceID, logDir, matches, logFiles)
-	}
-	return matches[0]
-}
-
-func collectQuietRuntimeLogFiles(t *testing.T, dir string) []string {
-	t.Helper()
-
-	var logFiles []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) == ".log" {
-			logFiles = append(logFiles, path)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("WalkDir(%s): %v", dir, err)
-	}
-	return logFiles
 }

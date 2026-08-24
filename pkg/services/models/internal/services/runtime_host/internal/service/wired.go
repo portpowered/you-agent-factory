@@ -4,7 +4,6 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
-	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
@@ -40,9 +39,4 @@ func NewWired(
 	).(*service)
 	adapter.host = host
 	return host, nil
-}
-
-// LeasesOwner returns the nested leases capability for focused integration tests.
-func LeasesOwner(host runtimehost.Service) hostleases.Service {
-	return host.(*service).leases
 }

@@ -75,8 +75,11 @@ describe("ActivityGraphNodeShell z-axis incomplete hints", () => {
     expect(shell?.getAttribute("data-graph-node-shape")).toBe("worker");
 
     const content = screen.getByText("Worker").parentElement;
-    expect(content?.className).toContain("pl-6");
-    expect(content?.className).toContain("pr-6");
+    expect(content?.className).toContain("pl-5");
+    expect(content?.className).toContain("pr-5");
+    expect(content?.getAttribute("data-graph-node-content-inset")).toBe(
+      "compact",
+    );
   });
 
   it("renders Continue and Reject hint orbs when zAxisIncompleteHints is set on workstations", () => {
@@ -187,9 +190,7 @@ describe("ActivityGraphNodeShell resize visibility", () => {
         </ActivityGraphNodeShell>,
       );
 
-      const resizeControl = container.querySelector(
-        "[data-testid^='resize-']",
-      );
+      const resizeControl = container.querySelector("[data-testid^='resize-']");
       if (selected) {
         expect(resizeControl).toBeTruthy();
       } else {

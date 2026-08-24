@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-21
+last-modified: 2026-08-23
 doc-id: agent-factory/guides/operations
 ---
 
@@ -19,7 +19,7 @@ Session has a configured Recordings record path, startup restores its retained
 current-board state through the public Recordings history contract before the
 session is ready; this does not make arbitrary in-memory queues durable.
 
-## Use a continuous server for real pipelines
+## Use continuous hosting for real pipelines
 
 For a real pipeline that accepts or retains Work across idle periods, use the
 server-enabled continuous shape:
@@ -27,6 +27,7 @@ server-enabled continuous shape:
 ```bash
 you run --dir ./factory --with-server --continuously
 you run --dir ./factory --with-server --continuously --listen 127.0.0.1:7437
+you run --dir ./factory --with-server --continuously --record ./recordings/factory.json
 ```
 
 `--with-server` keeps the Factory Session API available for submitters and
@@ -42,6 +43,92 @@ The continuous shape is the production-oriented default for long-running
 pipelines. Submit initial or later Work through the existing submitted-Work
 surfaces described by `you docs work`; use `you docs sessions` to confirm that
 the addressed Factory Session is still live.
+
+## Stop a local server gracefully on Windows
+
+Use this procedure when a Windows terminal cannot deliver a usable console
+cancellation event. The command uses the selected loopback server's
+administrative control. It does not use forced process termination.
+
+Choose one target in PowerShell terminal 1:
+
+```powershell
+# Serve the Current Factory continuously.
+you server --listen 127.0.0.1:7437
+
+# Or keep a server-enabled run alive while its queue is idle.
+you run --dir ./factory --with-server --continuously --listen 127.0.0.1:7437
+```
+
+Run the stop command in PowerShell terminal 2:
+
+```powershell
+you --server http://127.0.0.1:7437 server stop
+```
+
+The same stop command applies to both target commands. It sends one
+`POST /shutdown` request and waits for the selected listener to stop. A
+successful command prints:
+
+```text
+Server stopped: http://127.0.0.1:7437
+```
+
+The stop request enters normal invocation cancellation. Application close
+keeps the existing five-second bound. This path does not guarantee
+synchronous Recording flush.
+
+Confirm that the target PID is absent after the command returns. Replace the
+sample PID with the PID from your target process.
+
+The measured `you server` sample was:
+
+```powershell
+PS> tasklist /FI "PID eq 50632" /FO CSV /NH
+"you.exe","50632","Console","2","38,116 K"
+PS> you --server http://127.0.0.1:12090 server stop
+Server stopped: http://127.0.0.1:12090
+PS> tasklist /FI "PID eq 50632" /FO CSV /NH
+INFO: No tasks are running which match the specified criteria.
+```
+
+The measured continuous-run sample was:
+
+```powershell
+PS> tasklist /FI "PID eq 16928" /FO CSV /NH
+"you.exe","16928","Console","2","39,804 K"
+PS> you --server http://127.0.0.1:25317 server stop
+Server stopped: http://127.0.0.1:25317
+PS> tasklist /FI "PID eq 16928" /FO CSV /NH
+INFO: No tasks are running which match the specified criteria.
+```
+
+The process-boundary check ran each target ten consecutive times. The server
+target passed `10/10` iterations in `416ms` to `502ms`. The continuous run
+target passed `10/10` iterations in `375ms` to `451ms`.
+
+If the command reports `SERVER_STOP_UNREACHABLE`, confirm the selected server
+URI and its loopback listener. If it reports
+`SERVER_STOP_OBSERVATION_TIMEOUT`, inspect the target process before retrying.
+
+Keep forceful termination as a last-resort fallback:
+
+```powershell
+taskkill /PID 33724 /F
+```
+
+`taskkill /F` terminates the target without the orderly application-close
+path. The measured fallback output was:
+
+```text
+SUCCESS: The process with PID 33724 has been terminated.
+INFO: No tasks are running which match the specified criteria.
+```
+
+`you server` is continuous, non-resumable hosting for the exact Current Factory.
+It does not accept recording, resume, or replay flags. Use
+`you run --with-server --continuously --record <path>` when the host must keep
+an explicit recording for restart recovery with `you run --resume <recording>`.
 
 ## Read the queue state correctly
 
@@ -234,17 +321,45 @@ durable watch cursor or replay lost session state. See `you docs work` for the
 transition schema and reconnect boundary.
 
 When a model-backed dispatch needs provider-level diagnosis, inspect its
-Worker Session through its stable identity. Direct Worker Sessions do not need
-a Factory Session or Work correlation:
+Worker Session through its stable identity. Use the unscoped fleet list or a
+Work-scoped list to discover the identity, then use the direct inspection
+commands:
 
 ```bash
-you --server http://localhost:7437 worker-sessions list
-you --server http://localhost:7437 worker-sessions list --state RUNNING --state FAILED --limit 25
-you --server http://localhost:7437 worker-sessions list --scope direct --state COMPLETED
+you --server http://localhost:7437 worker-sessions list --output json
+you --server http://localhost:7437 worker-sessions list --work-id <work-id>
 you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions stream --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
 ```
+
+The unscoped top-level list is the fleet-wide view: it includes direct and
+Factory-originated observations across the process. Use `--scope direct`,
+`--scope factory`, or `--scope all` when an origin-specific view is needed.
+Repeat `--state` to select multiple lifecycle states; the values are combined
+with OR. `--limit` is a positive result bound applied after scope and state
+filters; `--next-token` resumes from the opaque cursor returned in JSON
+`paginationContext`. The legacy `--max-results` flag remains accepted for
+compatibility when `--limit` is omitted. These filters are fleet-wide only.
+When `--work-id` is supplied, the Work-scoped endpoint preserves its
+established unfiltered behavior and returns a typed error if a fleet-wide
+filter is supplied. Omit `--work-id` to filter the fleet-wide view.
+
+The human fleet table includes Work name and ID, the stable Worker Session ID,
+provider and provider-session kind, provider-session ID when available, state,
+start time, duration, and exit/failure kind. A `-` means that the observation
+does not expose that fact. The Worker Session ID is the canonical identity for
+`show`, `stream`, and `read`; a provider-session ID is a separate
+provider-issued correlation value. JSON output preserves these identities and
+includes `workId` and `workName` when Work attribution can be resolved.
+
+Direct Worker Session stdin is limited to 1,048,576 bytes, inclusive. This
+limit applies to `--execution -` and to non-terminal stdin used for direct
+Worker messages, continuation input, or replacement input.
+
+Input at the limit is accepted. Larger input fails before Worker Session
+admission. Use `--execution FILE`, `--user-message`, or
+`--replacement-message` when the selected command supports those alternatives.
 
 To resume a terminal direct Worker Session, continue it through the server-owned
 Provider Session association. The command reserves a distinct successor and
@@ -340,22 +455,13 @@ topic, and observation guidance needed for later `show`, `read`, or `stream`
 operations. A source must be terminal and have a valid server-recorded Provider
 Session that supports continuation.
 
-The unscoped top-level list is the fleet-wide view: it includes direct and
-Factory-originated observations across the process. Use `--scope direct`,
-`--scope factory`, or `--scope all` when an origin-specific view is needed.
-Repeat `--state` to select multiple lifecycle states (the values are combined
-with OR). `--limit` is a positive result bound applied after scope and state
-filters; `--next-token` resumes from the opaque cursor returned in JSON
-`paginationContext`. The legacy `--max-results` flag remains accepted for
-compatibility when `--limit` is omitted. These filters are fleet-wide only.
-When `--work-id` is supplied, the Work-scoped endpoint preserves its established
-unfiltered behavior and returns a typed error if `--state`, `--limit`,
-`--max-results`, or `--next-token` is supplied. Omit `--work-id` to filter the
-fleet-wide view.
+The Work-scoped list returns observations correlated with one Work item.
+Supply `--work-id` for this view. It returns a typed error when fleet-wide
+filters are supplied.
 
-The human fleet table includes Work name and ID, the stable Worker Session ID,
-provider and provider-session kind, provider-session ID when available, state,
-start time, duration, and exit/failure kind. A `-` means that the observation
+The human Work-scoped table includes Work name and ID, the stable Worker Session
+ID, provider, and provider-session kind. It also includes provider-session ID,
+state, start time, duration, and exit/failure kind. A `-` means that the observation
 does not expose that fact. The Worker Session ID is the canonical identity for
 `show`, `stream`, and `read`; a provider-session ID is a separate
 provider-issued correlation value. JSON output preserves these identities and
@@ -471,9 +577,13 @@ Verify recovery with the same session target used for submission:
 
 1. Run `you work list` and `you work show <work-id>` to confirm Work identity,
    state, payload, and relations.
-2. Run `you session dispatches <session-id>` or inspect the Factory Session
-   dispatch API to confirm the prior dispatch is interrupted, not running.
-3. Read the Factory Session events or Worker Session observation when the
+2. Run `you worker-sessions list --work-id <work-id>` to inspect the Worker
+   Session attempts attributed to that Work.
+3. Inspect `GET /factory-sessions/<session-id>/dispatches` for exact
+   session-level dispatch records, or call `you.factory_session.list_dispatches`
+   through MCP. The Work-scoped Worker Session list does not replace these
+   Factory Session dispatch reads.
+4. Read the Factory Session events or Worker Session observation when the
    interruption reason and original attempt identity are needed.
 
 If no current-board Recording was configured, the live Factory Session queue

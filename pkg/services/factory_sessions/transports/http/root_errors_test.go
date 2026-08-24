@@ -21,7 +21,7 @@ func TestHandlerFromRoot_CloseFactorySessionNotFoundReturnsTypedErrorResponse(t 
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onClose: func(context.Context, string) error {
+		onDelete: func(context.Context, string) error {
 			return factorysessions.ErrSessionNotFound
 		},
 	}
@@ -34,6 +34,29 @@ func TestHandlerFromRoot_CloseFactorySessionNotFoundReturnsTypedErrorResponse(t 
 		t.Fatalf("status = %d, want 404", recorder.Code)
 	}
 	assertErrorResponse(t, recorder.Body.Bytes(), factoryapi.ErrorFamilyNotFound, factoryapi.ErrorResponseCodeNOTFOUND, "factory session not found")
+}
+
+func TestHandlerFromRoot_DeleteFactorySessionConflictReturnsTypedErrorResponse(t *testing.T) {
+	t.Parallel()
+
+	root := &httpSessionsRootFake{
+		onDelete: func(context.Context, string) error {
+			return &factorysessions.SessionDeletionError{
+				SessionID: "~default",
+				Reason:    factorysessions.SessionDeletionReasonDefault,
+				Message:   "factory session \"~default\" cannot be deleted: the default session cannot be deleted; make a different session the default first",
+			}
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.CloseFactorySession(recorder, httptest.NewRequest(http.MethodDelete, "/factory-sessions/~default", nil), "~default")
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", recorder.Code)
+	}
+	assertErrorResponse(t, recorder.Body.Bytes(), factoryapi.ErrorFamilyConflict, factoryapi.ErrorResponseCodeLIFECYCLECONFLICT, "factory session \"~default\" cannot be deleted: the default session cannot be deleted; make a different session the default first")
 }
 
 func TestHandlerFromRoot_StartDurableFactorySessionAsyncValidationErrorReturnsTypedErrorResponse(t *testing.T) {

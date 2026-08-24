@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -57,6 +58,20 @@ func TestProcessExecuteUsesInjectedLifecycleAndInvocationInputs(t *testing.T) {
 	}
 	if lifecycleCalls != 1 || stopCalls != 1 {
 		t.Fatalf("lifecycle calls/stops = %d/%d, want 1/1", lifecycleCalls, stopCalls)
+	}
+}
+
+func TestProcessExecuteProvidesIdempotentInvocationCancellation(t *testing.T) {
+	t.Parallel()
+
+	process := newProcessForTest(t, cancellationCommandFactory{}, startupcli.Functions{})
+	err := process.Execute(Input{
+		Args:             []string{"you", "server"},
+		Env:              homeEnvironmentForProcessTest(t.TempDir()),
+		WorkingDirectory: t.TempDir(),
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Process.Execute() error = %v, want context.Canceled after invocation cancellation", err)
 	}
 }
 
@@ -217,6 +232,18 @@ func TestProcessPropagatesInvocationWorkingDirectoryWithoutChangingHostProcess(t
 
 type processCommandFactory struct {
 	newCommand func(func(string) (string, bool)) *cobra.Command
+}
+
+type cancellationCommandFactory struct{}
+
+func (cancellationCommandFactory) ExecuteCommand(input startupcli.CommandInvocation) error {
+	if input.Cancellation == nil {
+		return fmt.Errorf("invocation cancellation is required")
+	}
+	input.Cancellation.Cancel()
+	input.Cancellation.Cancel()
+	<-input.Context.Done()
+	return input.Context.Err()
 }
 
 func newProcessForTest(

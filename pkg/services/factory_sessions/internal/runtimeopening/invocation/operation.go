@@ -208,6 +208,9 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 		projection, projectionErr := projectionReader.GetFactorySession(
 			ctx, factorysessions.DefaultSessionID,
 		)
+		if projectionErr != nil && ctx.Err() != nil {
+			return outcome, ctx.Err()
+		}
 		if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 			return o.invokeFactoryOnEphemeralRuntime(ctx, target, request)
 		}
@@ -270,6 +273,9 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 	projection, projectionErr := opened.Sessions.GetFactorySession(
 		runContext, factorysessions.DefaultSessionID,
 	)
+	if projectionErr != nil && runContext.Err() != nil {
+		return outcome, runContext.Err()
+	}
 	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		result, err := invokeJavaScriptFactory(
 			runContext, opened, projection.Context, target, request, o.generateSessionID,
@@ -427,7 +433,7 @@ func javaScriptWorkflowSource(
 		source.Kind = factoryruntime.WorkflowSourceKindInlineWorkflow
 		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
 			Dialect: js.Dialect, InlineSource: js.InlineSource.Inline, Entrypoint: js.Entrypoint,
-			Metadata: cloneStringMap(js.Metadata), Agents: cloneJavaScriptAgents(js.Agents),
+			Metadata: javaScriptFactoryMetadata(js, projection), Agents: cloneJavaScriptAgents(js.Agents),
 			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
 			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
 		}
@@ -445,14 +451,33 @@ func javaScriptWorkflowSource(
 		}
 		source.WorkflowFile = filepath.Join(factoryDir, source.WorkflowFile)
 	}
-	if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 {
+	metadata := javaScriptFactoryMetadata(js, projection)
+	if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 || len(metadata) > 0 {
 		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
+			Metadata:      metadata,
 			Agents:        cloneJavaScriptAgents(js.Agents),
 			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
 			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
 		}
 	}
 	return source, nil
+}
+
+func javaScriptFactoryMetadata(
+	js *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	projection factorysessions.ProjectionContext,
+) map[string]string {
+	metadata := cloneStringMap(js.Metadata)
+	if projection.FactoryCfg == nil {
+		return metadata
+	}
+	if factoryName := strings.TrimSpace(projection.FactoryCfg.Name); factoryName != "" {
+		if metadata == nil {
+			metadata = make(map[string]string)
+		}
+		metadata["factoryName"] = factoryName
+	}
+	return metadata
 }
 
 func factoryDefaultPolicyMap(raw json.RawMessage) map[string]any {
@@ -650,6 +675,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	}
 	config.FactoryRuntime.MetricsConfig = target.RuntimeMetricsConfig
 	config.FactorySession.SystemConfigHome = target.HomeDir
+	config.FactorySession.CanonicalSessionID = target.CanonicalSessionID
 	config.FactorySession.WorkFile = ""
 	config.FactorySession.Host.Port = 0
 	config.FactorySession.Host.RuntimeMode = factorydefinitions.RuntimeModeService

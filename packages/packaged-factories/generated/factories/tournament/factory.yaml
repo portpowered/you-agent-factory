@@ -94,15 +94,12 @@ orchestrator:
                 - request
             type: object
         defaultPolicy:
-            allowConnectors: false
-            allowDangerFullAccess: false
-            allowNetwork: false
+            allowedPermissions:
+                - SKIP_PERMISSIONS
             concurrency: 8
             maxAgents: 15
             maxDepth: 1
             maxRetries: 0
-            mode: READ_ONLY
-            writableRoots: []
         inlineSource:
             encoding: utf-8
             inline: |
@@ -266,15 +263,13 @@ orchestrator:
                     "additionalProperties": false
                   },
                   "defaultPolicy": {
-                    "mode": "READ_ONLY",
                     "maxAgents": 15,
                     "concurrency": 8,
                     "maxDepth": 1,
                     "maxRetries": 0,
-                    "allowNetwork": false,
-                    "allowConnectors": false,
-                    "allowDangerFullAccess": false,
-                    "writableRoots": []
+                    "allowedPermissions": [
+                      "SKIP_PERMISSIONS"
+                    ]
                   }
                 }
                 */
@@ -296,7 +291,7 @@ orchestrator:
                       executorProvider: args.executorProvider || "",
                       modelProvider: args.modelProvider || "",
                       model: args.model || "",
-                      skipPermissions: true,
+                      permissions: "SKIP_PERMISSIONS",
                     });
                   }
 
@@ -326,7 +321,7 @@ orchestrator:
                         executorProvider: args.judgeExecutorProvider || args.executorProvider || "",
                         modelProvider: args.judgeModelProvider || args.modelProvider || "",
                         model: args.judgeModel || args.model || "",
-                        skipPermissions: true,
+                        permissions: "SKIP_PERMISSIONS",
                       });
                     }
 

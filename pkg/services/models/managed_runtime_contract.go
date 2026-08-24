@@ -60,13 +60,20 @@ const (
 type PullOutcome string
 
 const (
-	PullOutcomeAlreadyPresent        PullOutcome = "ALREADY_PRESENT"
-	PullOutcomeAlreadyReady          PullOutcome = "ALREADY_READY"
-	PullOutcomeInstalledSuccessfully PullOutcome = "INSTALLED_SUCCESSFULLY"
-	PullOutcomeSourceFetchFailed     PullOutcome = "SOURCE_FETCH_FAILED"
-	PullOutcomeStillLoading          PullOutcome = "STILL_LOADING"
-	PullOutcomeTimedOut              PullOutcome = "TIMED_OUT"
-	PullOutcomeUnsupportedRuntime    PullOutcome = "UNSUPPORTED_RUNTIME"
+	PullOutcomeAlreadyPresent              PullOutcome = "ALREADY_PRESENT"
+	PullOutcomeAlreadyReady                PullOutcome = "ALREADY_READY"
+	PullOutcomeInstalledSuccessfully       PullOutcome = "INSTALLED_SUCCESSFULLY"
+	PullOutcomeSourceFetchFailed           PullOutcome = "SOURCE_FETCH_FAILED"
+	PullOutcomeStillLoading                PullOutcome = "STILL_LOADING"
+	PullOutcomeTimedOut                    PullOutcome = "TIMED_OUT"
+	PullOutcomeCancelled                   PullOutcome = "CANCELLED"
+	PullOutcomeUnsupportedRuntime          PullOutcome = "UNSUPPORTED_RUNTIME"
+	PullOutcomeSourceResolutionFailed      PullOutcome = "SOURCE_RESOLUTION_FAILED"
+	PullOutcomeIntegrityVerificationFailed PullOutcome = "INTEGRITY_VERIFICATION_FAILED"
+	PullOutcomeAssemblyFailed              PullOutcome = "ASSEMBLY_FAILED"
+	PullOutcomeCacheInstallationFailed     PullOutcome = "CACHE_INSTALLATION_FAILED"
+	PullOutcomeReadinessEvaluationFailed   PullOutcome = "READINESS_EVALUATION_FAILED"
+	PullOutcomeAssetPreparationFailed      PullOutcome = "ASSET_PREPARATION_FAILED"
 )
 
 // Locality identifies whether a model executes locally or through a remote provider.
@@ -265,19 +272,80 @@ func cloneOperationSlots(slots []OperationSlot) []OperationSlot {
 // Runtime is the model-owned readiness projection consumed by service and
 // transport adapters.
 type Runtime struct {
-	Identity            string
-	ReadinessState      ReadinessState
-	LifecycleState      LifecycleState
-	Locality            Locality
+	Identity       string
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+	Locality       Locality
+	// Revision is the installed managed-cache revision when cache facts are
+	// available. It remains nil for cloud runtimes and models without an
+	// installed managed cache.
+	Revision *string
+	// CachePath is the resolved managed-cache revision directory when cache
+	// facts are available. It remains nil for cloud runtimes and models without
+	// an installed managed cache.
+	CachePath *string
+	// CacheBytes is the exact recursive byte count of regular files in the
+	// installed managed-cache revision. It remains nil when no installed cache
+	// was observed.
+	CacheBytes          *int64
 	SupportedOperations []Operation
 	Diagnostics         map[string]string
 }
 
 // Clone returns detached readiness facts safe for a peer to retain or mutate.
 func (runtime Runtime) Clone() Runtime {
+	runtime.Revision = cloneStringPointer(runtime.Revision)
+	runtime.CachePath = cloneStringPointer(runtime.CachePath)
+	runtime.CacheBytes = cloneInt64Pointer(runtime.CacheBytes)
 	runtime.SupportedOperations = cloneOperations(runtime.SupportedOperations)
 	runtime.Diagnostics = cloneStringMap(runtime.Diagnostics)
 	return runtime
+}
+
+// ManagedRuntimeCacheFacts are the Models-owned observations used to derive
+// managed local-model installation state. Expected artifacts come from the
+// cache manifest or the active preparation plan; observed artifacts come from
+// the cache inspection effect. Installed is retained as a compatibility fact
+// for older adapters that cannot provide manifest details yet.
+type ManagedRuntimeCacheFacts struct {
+	Locality           Locality
+	Supported          bool
+	Installed          bool
+	ManifestPresent    bool
+	ManifestValid      bool
+	ExpectedArtifacts  []AssetRequirement
+	ObservedArtifacts  []AssetArtifact
+	InstalledFileCount int
+	PartialArtifacts   bool
+	ActivePull         bool
+	IntegrityVerified  bool
+	FailureReason      string
+}
+
+// ManagedRuntimeHostFacts are the detached runtime-host observations layered
+// over verified installation facts. A host cannot make an uninstalled model
+// ready; the projection falls back to cache state when the facts conflict.
+type ManagedRuntimeHostFacts struct {
+	Observed       bool
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+}
+
+// ManagedRuntimeStateProjection is the canonical compatible state pair for a
+// managed runtime. FailureReason is safe diagnostic context owned by Models,
+// not a transport error or provider-native message.
+type ManagedRuntimeStateProjection struct {
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+	FailureReason  string
+}
+
+func cloneInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 const genericInvocationOutputLimitBytes int64 = 16 << 20

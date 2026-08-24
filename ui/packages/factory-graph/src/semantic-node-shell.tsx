@@ -153,6 +153,7 @@ export function FactoryGraphNodeShell({
         }
         handles={packageHandles}
         nodeKind={nodeType}
+        contentInset="compact"
         showStateIndicator={false}
       >
         {children}

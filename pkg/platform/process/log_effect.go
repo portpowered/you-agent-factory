@@ -29,10 +29,13 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 	started := r.Clock.Now()
 	result, err := r.Runner.Run(ctx, req)
 	duration := r.Clock.Now().Sub(started)
-	if result.ExitCode != 0 {
-		logger.Error("command runner: request failed", commandOutputDetailsLogFields(req, result, duration)...)
+	status := commandResultStatus(ctx, result, err)
+	completionFields := commandCompletionLogFields(req, result, duration, status, err)
+	if commandStatusIsFailure(status) {
+		logger.Error("command runner: request failed", completionFields...)
+	} else {
+		logger.Info("command runner: request completed", completionFields...)
 	}
-	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
 	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
 	return result, err
 }
@@ -65,21 +68,65 @@ func commandRequestDetailsLogFields(req CommandRequest) []any {
 	return []any{"event_name", workLogEventCommandRunnerRequestDetails, "status", "verbose", "command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "stdin_bytes", len(req.Stdin)}
 }
 func commandCompletionLogFields(req CommandRequest, result CommandResult, duration time.Duration, status string, err error) []any {
-	fields := []any{"event_name", workLogEventCommandRunnerCompleted, "status", status, "command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "exit_code", result.ExitCode, "duration_ms", duration.Milliseconds()}
-	if err != nil {
+	fields := []any{"event_name", workLogEventCommandRunnerCompleted, "status", status, "outcome", status, "command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "exit_code", result.ExitCode, "duration_ms", duration.Milliseconds()}
+	if reason := commandFailureReason(status); reason != "" {
+		fields = append(fields, "failure_reason", reason)
+	}
+	if result.CancellationReason != "" {
+		fields = append(fields, "cancellation_reason", string(result.CancellationReason))
+	}
+	if err != nil && status != "canceled" {
 		fields = append(fields, "has_error", true)
 	}
 	return fields
+}
+
+func commandStatusIsFailure(status string) bool {
+	switch status {
+	case "failed", "timed_out", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func commandFailureReason(status string) string {
+	switch status {
+	case "failed":
+		return "non_zero_exit"
+	case "timed_out":
+		return "timeout"
+	case "error":
+		return "execution_error"
+	default:
+		return ""
+	}
 }
 func commandOutputDetailsLogFields(req CommandRequest, result CommandResult, duration time.Duration) []any {
 	return []any{"event_name", workLogEventCommandRunnerOutputDetails, "status", "verbose", "command", req.Command, "exit_code", result.ExitCode, "duration_ms", duration.Milliseconds(), "stdout_bytes", len(result.Stdout), "stderr_bytes", len(result.Stderr)}
 }
 func commandResultStatus(ctx context.Context, result CommandResult, err error) string {
+	reason := firstCancellationReason(result.CancellationReason, CancellationReasonFromContext(ctx))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
 			return "timed_out"
 		}
+		if reason == CancellationReasonProcessGone {
+			return "error"
+		}
+		if reason != "" {
+			return "canceled"
+		}
+		if errors.Is(err, context.Canceled) {
+			return "canceled"
+		}
 		return "error"
+	}
+	if reason == CancellationReasonProcessGone {
+		return "error"
+	}
+	if reason != "" {
+		return "canceled"
 	}
 	if result.ExitCode != 0 {
 		return "failed"

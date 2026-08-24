@@ -145,7 +145,7 @@ func (a *sourceAnalyzer) inspectIdentifierUse(v *js.Var) {
 func callCalleeName(expr js.IExpr) (string, bool) {
 	switch callee := expr.(type) {
 	case *js.Var:
-		if callee.Decl != js.NoDecl {
+		if isDeclaredLocalBinding(callee) {
 			return "", false
 		}
 		return string(callee.Name()), true

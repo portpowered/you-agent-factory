@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -75,7 +77,7 @@ func (s *Service) SetWorkerExecution(
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunnerOverride workers.CommandRunner,
+	commandRunnerOverride platformprocess.CommandRunner,
 ) {
 	if s == nil || s.Service == nil {
 		return
@@ -90,7 +92,7 @@ func (s *Service) SetWorkerExecution(
 			string,
 			providers.Service,
 			*workers.MockWorkersConfig,
-			workers.CommandRunner,
+			platformprocess.CommandRunner,
 		)
 	})
 	if !ok {

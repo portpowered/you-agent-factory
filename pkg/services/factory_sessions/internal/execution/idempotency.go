@@ -434,11 +434,13 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 		startedAt,
 	)
 	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+	runDone := make(chan struct{})
 	s.mu.Lock()
 	reserved.state.session = running.session
 	reserved.state.result = running.result
 	reserved.state.events = running.events
 	reserved.state.runCancel = runCancel
+	reserved.state.runDone = runDone
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
@@ -452,6 +454,7 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 		sourceContent,
 		policyResolution,
 		startedAt,
+		runDone,
 	)
 
 	result, err := s.waitSyncCompletion(

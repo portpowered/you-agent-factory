@@ -116,10 +116,11 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 			argumentPosition: -1,
 		},
 		{
-			name:        "work retains local state filtering",
-			commandPath: "you work list",
-			argv:        []string{"work", "list", "--state-name", "ready"},
-			flagLong:    "state-name",
+			name:             "work retains local state filtering",
+			commandPath:      "you work list",
+			argv:             []string{"work", "list", "--state-name", "ready"},
+			flagLong:         "state-name",
+			argumentPosition: -1,
 		},
 		{
 			name:             "server global remains parseable after deep descendant",
@@ -140,11 +141,12 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 			},
 		},
 		{
-			name:         "unknown local input fails before dispatch",
-			commandPath:  "you work list",
-			argv:         []string{"work", "list", "--missing-local"},
-			wantParseErr: true,
-			errContains:  "unknown flag: --missing-local",
+			name:             "unknown local input fails before dispatch",
+			commandPath:      "you work list",
+			argv:             []string{"work", "list", "--missing-local"},
+			argumentPosition: -1,
+			wantParseErr:     true,
+			errContains:      "unknown flag: --missing-local",
 		},
 		{
 			name:         "unknown global input fails before dispatch",

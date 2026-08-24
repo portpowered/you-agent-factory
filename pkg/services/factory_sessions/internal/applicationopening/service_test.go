@@ -95,7 +95,69 @@ func TestOpenApplicationUsesValueRequestAndForwardsTheSinkSelection(t *testing.T
 	if gotPlan.Close != nil {
 		t.Fatal("lifecycle plan unexpectedly received a completion callback")
 	}
+	if gotPlan.OrderlyStop != nil {
+		t.Fatal("lifecycle plan unexpectedly received an orderly-stop callback")
+	}
 }
+
+func TestOpenApplicationWithCancellationPublishesInvocationAuthority(t *testing.T) {
+	resolve, open, _, plan := validApplicationOpeningDependencies()
+	want := &applicationOpeningCancellationStub{}
+	var got initializer.InvocationCancellation
+	adapt := RuntimeAdapter(func(opened roles.OpenedApplicationRuntime, _ factorysessions.VisualizationSinkID) (factorysessions.BoundProcessComponents, error) {
+		got = opened.Cancellation
+		return factorysessions.BoundProcessComponents{}, nil
+	})
+	service, err := New(resolve, open, adapt, plan)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := service.OpenApplicationWithCancellation(
+		context.Background(), &factorysessions.RuntimeOpeningRequest{}, want, "",
+	); err != nil {
+		t.Fatalf("OpenApplicationWithCancellation: %v", err)
+	}
+	if got != want {
+		t.Fatalf("opened cancellation = %p, want %p", got, want)
+	}
+}
+
+func TestOpenApplicationForwardsInjectedOrderlyStopOperation(t *testing.T) {
+	resolve, open, adapt, _ := validApplicationOpeningDependencies()
+	called := false
+	want := lifecycle.OrderlyStopOperation(func(context.Context) error {
+		called = true
+		return nil
+	})
+	open = runtimeOpenerFunc(func(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
+		return roles.OpenedApplicationRuntime{OrderlyStop: want}, nil
+	})
+	var got lifecycle.OrderlyStopOperation
+	plan := roles.LifecyclePlanOperation(func(request roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+		got = request.OrderlyStop
+		return lifecycle.Plan{}, nil
+	})
+	service, err := New(resolve, open, adapt, plan)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := service.OpenApplication(context.Background(), &factorysessions.RuntimeOpeningRequest{}, ""); err != nil {
+		t.Fatalf("OpenApplication: %v", err)
+	}
+	if got == nil {
+		t.Fatal("lifecycle plan did not receive the injected orderly-stop operation")
+	}
+	if err := got(context.Background()); err != nil {
+		t.Fatalf("forwarded orderly-stop operation: %v", err)
+	}
+	if !called {
+		t.Fatal("forwarded orderly-stop operation did not invoke the opened runtime operation")
+	}
+}
+
+type applicationOpeningCancellationStub struct{}
+
+func (*applicationOpeningCancellationStub) Cancel() {}
 
 func TestOpenApplicationReturnsDetachedHistoricalReplay(t *testing.T) {
 	inspection := &factorysessions.HistoricalReplayInspection{

@@ -10,12 +10,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // DeleteConfig holds parameters for the session delete command.
 type DeleteConfig struct {
-	Port        int
+	Server      string
 	SessionID   string
 	JSON        bool
 	Verbose     bool
@@ -29,12 +31,12 @@ func NewDelete(transport clihttp.Protocol) func(DeleteConfig) error {
 	return func(cfg DeleteConfig) error { cfg.HTTP = transport; return Delete(cfg) }
 }
 
-// DeleteResult is the CLI JSON confirmation emitted after a successful close.
+// DeleteResult is the CLI JSON confirmation emitted after a successful delete.
 type DeleteResult struct {
 	SessionID string `json:"sessionId"`
 }
 
-// Delete closes one live factory session on a running host via HTTP.
+// Delete removes one already-stopped live factory session from a running host via HTTP.
 func Delete(cfg DeleteConfig) error {
 	sessionID := strings.TrimSpace(cfg.SessionID)
 	if sessionID == "" {
@@ -47,14 +49,17 @@ func Delete(cfg DeleteConfig) error {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
-	endpoint := deleteEndpoint(cfg.Port, sessionID)
+	endpoint, err := deleteEndpoint(cfg.Server, sessionID)
+	if err != nil {
+		return fmt.Errorf("resolve factory session delete endpoint: %w", err)
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"session delete request endpointPath=%s endpoint=%s port=%d session=%s",
+		"session delete request endpointPath=%s endpoint=%s server=%s session=%s",
 		endpoint.Path,
 		endpoint.String(),
-		cfg.Port,
+		cfg.Server,
 		sessionID,
 	)
 
@@ -92,34 +97,48 @@ func Delete(cfg DeleteConfig) error {
 	}
 }
 
-func deleteEndpoint(port int, sessionID string) url.URL {
-	return url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", port),
-		Path:   fmt.Sprintf("/factory-sessions/%s", url.PathEscape(sessionID)),
+func deleteEndpoint(server, sessionID string) (url.URL, error) {
+	endpointURL, err := cliserver.RequestURL(server, sessionpath.ScopedPath("", sessionID))
+	if err != nil {
+		return url.URL{}, err
 	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse factory session delete endpoint: %w", err)
+	}
+	return *endpoint, nil
 }
 
 func renderDeleteSuccess(cfg DeleteConfig, sessionID string) error {
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(DeleteResult{SessionID: sessionID})
 	}
-	_, err := fmt.Fprintf(cfg.Output, "Closed factory session %s\n", sessionID)
+	_, err := fmt.Fprintf(cfg.Output, "Deleted factory session %s\n", sessionID)
 	return err
 }
 
 func deleteNotFoundError(sessionID string, resp *http.Response) error {
 	var errResp factoryapi.ErrorResponse
 	if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
-		return fmt.Errorf("factory session not found (%s): %s", sessionID, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("factory session not found (%s): %s", sessionID, errResp.Message),
+			nil,
+		)
 	}
-	return fmt.Errorf("factory session not found: %s", sessionID)
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session not found: %s", sessionID))
 }
 
 func deleteStatusError(resp *http.Response) error {
 	var errResp factoryapi.ErrorResponse
 	if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
-		return fmt.Errorf("close factory session failed (%d): %s", resp.StatusCode, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("delete factory session failed (%d): %s", resp.StatusCode, errResp.Message),
+			nil,
+		)
 	}
-	return fmt.Errorf("close factory session failed (%d)", resp.StatusCode)
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("delete factory session failed (%d)", resp.StatusCode))
 }

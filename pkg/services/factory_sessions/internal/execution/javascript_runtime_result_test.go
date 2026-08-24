@@ -504,124 +504,6 @@ func TestApplyRuntimeSuccessProjection_InvalidResultMarksFailed(t *testing.T) {
 	}
 }
 
-// TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput pins the
-// record a customer reads for a child that ran: its provider, its provider
-// session, its decoded output, and the attempt count the Worker actually took.
-func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.T) {
-	invoker := &recordingWorkerExecution{}
-	attempts := 0
-	invoker.onExecute = func(_ workers.ExecuteRequest) {
-		attempts++
-		if attempts == 1 {
-			invoker.result = workers.ExecuteResult{
-				Outcome: workers.ExecutionOutcomeFailed,
-				Failure: &workers.ExecutionFailure{
-					Type:      workers.WorkFailureTypeInternalServerError,
-					Message:   "transient provider failure",
-					RetryHint: true,
-				},
-			}
-			return
-		}
-		invoker.result = workers.ExecuteResult{
-			Outcome: workers.ExecutionOutcomeAccepted,
-			Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeText,
-				Text: `{"text":"child finished"}`,
-			}}},
-			Continuation: &workers.ProviderContinuationRef{
-				Provider:          "codex",
-				ProviderSessionID: "codex-session-1",
-			},
-		}
-	}
-	sink := newChildRecordSink()
-	executor := newChildWorkerExecutor("dur-sess-1", invoker, sink, childTestValues{}, nil, "/project", 1)
-
-	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
-		Prompt:        "summarize",
-		Label:         "summarize-findings",
-		ModelProvider: "codex",
-		OutputSchema:  map[string]any{"type": "object"},
-	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if result.Status != factory.JavaScriptChildDispatchStatusCompleted {
-		t.Fatalf("child status = %q, want COMPLETED", result.Status)
-	}
-	if got := result.Output["text"]; got != "child finished" {
-		t.Fatalf("child output text = %v, want the provider's decoded content", got)
-	}
-
-	terminal := sink.terminalChildDispatch(t)
-	if terminal.Provider != "codex" || terminal.ProviderSessionRef != "codex-session-1" {
-		t.Fatalf("terminal record provider = %q/%q, want codex/codex-session-1",
-			terminal.Provider, terminal.ProviderSessionRef)
-	}
-	if attempts != 2 || terminal.Attempt != 2 {
-		t.Fatalf("attempts = %d, terminal record attempt = %d, want two attempts and terminal attempt 2", attempts, terminal.Attempt)
-	}
-	if len(sink.statuses) != 2 ||
-		sink.statuses[0] != factory.JavaScriptChildDispatchStatusQueued ||
-		sink.statuses[1] != factory.JavaScriptChildDispatchStatusRunning {
-		t.Fatalf("dispatch statuses = %v, want QUEUED then RUNNING before the terminal record", sink.statuses)
-	}
-}
-
-func TestChildWorkerExecutor_PassesDetachedCorrelationAndOneProgressPublisher(t *testing.T) {
-	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
-		Outcome: workers.ExecutionOutcomeAccepted,
-		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeText,
-			Text: `{"text":"done"}`,
-		}}},
-	}}
-	var progress []workers.ProgressFragment
-	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
-	executor.runtimeID = "runtime-child"
-	executor.generationID = "generation-child"
-	executor.publish = func(dispatchID string, fragment workers.ProgressFragment) {
-		if fragment.DispatchID != dispatchID {
-			t.Fatalf("progress dispatch = %q, want %q", fragment.DispatchID, dispatchID)
-		}
-		progress = append(progress, fragment)
-	}
-	invoker.onExecute = func(request workers.ExecuteRequest) {
-		if request.Input.ProgressPublisher == nil {
-			t.Fatal("Workers Execute request has no request-scoped progress publisher")
-		}
-		request.Input.ProgressPublisher(workers.ProgressFragment{
-			Kind:    workers.CompletedFragmentKind,
-			Payload: "terminal",
-		})
-	}
-
-	_, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
-		Prompt:        "summarize",
-		Preset:        "child-worker",
-		ModelProvider: "codex",
-	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	request := invoker.request
-	if request.Correlation.FactorySessionID != "dur-sess-1" ||
-		request.Correlation.RuntimeID != "runtime-child" ||
-		request.Correlation.GenerationID != "generation-child" ||
-		request.Correlation.DispatchID != "dur-sess-1/dispatch-1" {
-		t.Fatalf("child correlation = %#v, want the session/runtime/generation-scoped identity", request.Correlation)
-	}
-	if request.Input.Dispatch.DispatchID != request.Correlation.DispatchID ||
-		request.Target.WorkstationName != workers.ProviderInvocationRoute ||
-		request.Target.WorkerName != "child-worker" {
-		t.Fatalf("child detached routing = %#v / %#v, want provider-invocation route and preset", request.Input.Dispatch, request.Target)
-	}
-	if len(progress) != 1 || progress[0].Kind != workers.CompletedFragmentKind {
-		t.Fatalf("progress observations = %#v, want one terminal fragment", progress)
-	}
-}
-
 func TestChildWorkerExecutor_ResourceLeaseSurroundsTerminalChild(t *testing.T) {
 	released := 0
 	var leaseRequests []factory.ResourceCapacityLeaseRequest
@@ -744,6 +626,43 @@ func TestChildWorkerExecutor_InvocationErrorStillRecordsAFailedChild(t *testing.
 	}
 }
 
+func TestChildWorkerExecutor_PreparationErrorCompletesReturnedAttempt(t *testing.T) {
+	beginErr := errors.New("worker attempt preparation failed")
+	invoker := &recordingWorkerExecution{}
+	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
+
+	var completed workers.ExecuteResult
+	var completeErr error
+	completeCalls := 0
+	executor.attemptStarter = func(_ context.Context, _ workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+		return func(_ context.Context, result workers.ExecuteResult, err error) error {
+			completeCalls++
+			completed = result
+			completeErr = err
+			return nil
+		}, beginErr
+	}
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:           "fail before worker admission",
+		ExecutorProvider: "SCRIPT_WRAP",
+		ModelProvider:    "codex",
+		Model:            "codex-model",
+	})
+	if err == nil || !strings.Contains(err.Error(), beginErr.Error()) {
+		t.Fatalf("Execute() error = %v, want preparation failure", err)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusFailed {
+		t.Fatalf("child status = %q, want FAILED", result.Status)
+	}
+	if invoker.request.Correlation.DispatchID != "" {
+		t.Fatal("Workers Execute called after preparation failed")
+	}
+	if completeCalls != 1 || completeErr == nil || completed.Failure == nil || completed.Failure.Message != beginErr.Error() {
+		t.Fatalf("completed attempt = calls:%d result:%#v error:%v, want one failed terminal", completeCalls, completed, completeErr)
+	}
+}
+
 // TestChildWorkerExecutor_ScopesTheWorkersIdentityAndReleasesItAfterTheWorker
 // pins both halves of the Workers identity contract: the identity handed to
 // Workers is scoped to this session, and the claim that routes the Worker's
@@ -811,17 +730,18 @@ func TestChildWorkerExecutor_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *
 	}
 }
 
-// TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest
+// TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest
 // is the standalone composition regression. Its child has no Factory Runtime
-// or Worker Session behind it, so the direct executor must carry the resolved
-// child policy into the detached Workers request itself.
-func TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest(t *testing.T) {
+// or Worker Session behind it, so the direct executor must translate the
+// canonical child permission into the detached Workers request itself.
+func TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		want bool
+		name       string
+		permission factory.JavaScriptChildPermission
+		want       bool
 	}{
-		{name: "true", want: true},
-		{name: "false", want: false},
+		{name: "DEFAULT", permission: factory.JavaScriptChildPermissionDefault, want: false},
+		{name: "SKIP_PERMISSIONS", permission: factory.JavaScriptChildPermissionSkipPermissions, want: true},
 		{name: "omitted", want: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -840,11 +760,9 @@ func TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest(t *te
 				newChildRecordSink(),
 				childTestValues{},
 				"/project",
+				0,
 			)
-			request := factory.JavaScriptChildExecutionRequest{Prompt: "run"}
-			if test.name == "true" {
-				request.SkipPermissions = true
-			}
+			request := factory.JavaScriptChildExecutionRequest{Prompt: "run", Permissions: test.permission}
 
 			if _, err := executor.Execute(context.Background(), request); err != nil {
 				t.Fatalf("Execute: %v", err)

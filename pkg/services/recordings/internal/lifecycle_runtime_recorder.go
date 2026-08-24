@@ -2,9 +2,14 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -12,9 +17,6 @@ import (
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -34,6 +36,7 @@ type lifecycleRuntimeRecorder struct {
 	startedAt          time.Time
 	streamGenerationID string
 	initialEvent       recordings.FactoryEvent
+	initialProvenance  []recordings.RecordingSecret
 	seen               map[string]struct{}
 	nextSequence       recordings.CanonicalEventSequence
 	finalizeErr        error
@@ -42,11 +45,13 @@ type lifecycleRuntimeRecorder struct {
 }
 
 type pendingRuntimeRecording struct {
-	event *recordings.FactoryEvent
-	err   error
+	event      *recordings.FactoryEvent
+	provenance []recordings.RecordingSecret
+	err        error
 }
 
 var _ recordings.RuntimeRecorder = (*lifecycleRuntimeRecorder)(nil)
+var _ recordings.RuntimeRecorderWithProvenance = (*lifecycleRuntimeRecorder)(nil)
 var _ recordings.RuntimeRecordingBinder = (*lifecycleRuntimeRecorder)(nil)
 
 // NewLifecycleRuntimeRecorder prepares a runtime recorder whose lifecycle is
@@ -137,7 +142,10 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	recorder.lifecycle = lifecycle
 	recorder.recordingID = result.Status.RecordingID
 	recorder.scope = scope
-	if err := recorder.recordEventLocked(recorder.initialEvent); err != nil {
+	if err := recorder.recordEventLockedWithProvenance(
+		recorder.initialEvent,
+		recorder.initialProvenance,
+	); err != nil {
 		appendErr := fmt.Errorf("record initial Factory snapshot: %w", err)
 		recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
 			RecordingID: recorder.recordingID,
@@ -146,7 +154,7 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	}
 	for _, pending := range recorder.pending {
 		if pending.event != nil {
-			if err := recorder.recordEventLocked(*pending.event); err != nil {
+			if err := recorder.recordEventLockedWithProvenance(*pending.event, pending.provenance); err != nil {
 				recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
 			}
 		} else {
@@ -178,6 +186,13 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 }
 
 func (recorder *lifecycleRuntimeRecorder) RecordEvent(event recordings.FactoryEvent) {
+	recorder.RecordEventWithProvenance(event, nil)
+}
+
+func (recorder *lifecycleRuntimeRecorder) RecordEventWithProvenance(
+	event recordings.FactoryEvent,
+	provenance []recordings.RecordingSecret,
+) {
 	if recorder == nil {
 		return
 	}
@@ -185,16 +200,26 @@ func (recorder *lifecycleRuntimeRecorder) RecordEvent(event recordings.FactoryEv
 	defer recorder.mu.Unlock()
 	if recorder.lifecycle == nil {
 		event.Payload = append([]byte(nil), event.Payload...)
-		recorder.pending = append(recorder.pending, pendingRuntimeRecording{event: &event})
+		recorder.pending = append(recorder.pending, pendingRuntimeRecording{
+			event:      &event,
+			provenance: append([]recordings.RecordingSecret(nil), provenance...),
+		})
 		return
 	}
-	if err := recorder.recordEventLocked(event); err != nil {
+	if err := recorder.recordEventLockedWithProvenance(event, provenance); err != nil {
 		recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
 	}
 }
 
 func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	event recordings.FactoryEvent,
+) error {
+	return recorder.recordEventLockedWithProvenance(event, nil)
+}
+
+func (recorder *lifecycleRuntimeRecorder) recordEventLockedWithProvenance(
+	event recordings.FactoryEvent,
+	provenance []recordings.RecordingSecret,
 ) error {
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
@@ -221,8 +246,9 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	canonical.Sequence = nextSequence
 	canonical.Cursor.Sequence = nextSequence
 	result, err := recorder.lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
-		RecordingID: recorder.recordingID,
-		Event:       lifecycleEventFromCanonical(canonical),
+		RecordingID:      recorder.recordingID,
+		Event:            lifecycleEventFromCanonical(canonical),
+		SecretProvenance: append([]recordings.RecordingSecret(nil), provenance...),
 	})
 	if err != nil {
 		return err
@@ -382,37 +408,20 @@ func NewRuntimeRootWithHistoricalQuery(
 	historicalQuery historicalquery.Service,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
-	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
-	projection := NewProjectionService()
-	var writer recordings.RecordingSnapshotWriter
-	var tickers recordings.RecordingFlushTickerFactory
-	if writeFile != nil {
-		writer = NewReplayRecordingSnapshotWriter(writeFile)
-		tickers = NewRecordingFlushTickerFactory()
-	}
-	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
-		router,
-		projection,
+	return NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
-		writer,
-		tickers,
-		publication,
-		historicalQuery,
+		writeFile,
+		nil,
 		readFile,
+		publication,
+		captureSnapshot,
 		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
 		logger,
+		historicalQuery,
 		clocks...,
 	)
-	root, ok := service.(*combinedService)
-	if !ok || root == nil {
-		return nil
-	}
-	root.runtimeRouter = router
-	root.runtimeSnapshotCapture = captureSnapshot
-	root.replaySnapshotDecoder = decodeSnapshot
-	root.replayConfigDecoder = decodeRuntimeConfig
-	root.replayInputs = replayInputs
-	return root
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -448,7 +457,7 @@ func (service *combinedService) ReplayExecution(
 	artifact *recordings.ReplayArtifact,
 ) (
 	providers.Service,
-	workers.CommandRunner,
+	platformprocess.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,
 	error,
@@ -589,7 +598,117 @@ func (service *combinedService) newLifecycleRuntimeRecorder(
 	if !ok || lifecycleRecorder == nil {
 		return nil, fmt.Errorf("Recordings runtime recorder has unsupported implementation")
 	}
+	if initialEvent, ok := resumeRunRequestEvent(request.ReplayEvents); ok {
+		// A successor recording must retain the source RUN_REQUEST payload.
+		// Re-capturing the rehydrated RuntimeSnapshot is not hash-idempotent
+		// and would disclose drift for an unchanged checkout.
+		lifecycleRecorder.initialEvent = initialEvent
+	}
+	if source, ok := request.LoadedFactory.(interface {
+		InvocationSensitiveJSONPointers() []string
+	}); ok {
+		lifecycleRecorder.initialProvenance = recordingSecretsForEventPayload(
+			lifecycleRecorder.initialEvent.Payload,
+			source.InvocationSensitiveJSONPointers(),
+		)
+	}
 	return lifecycleRecorder, nil
+}
+
+func recordingSecretsForEventPayload(
+	payload json.RawMessage,
+	pointers []string,
+) []recordings.RecordingSecret {
+	if len(payload) == 0 || len(pointers) == 0 {
+		return nil
+	}
+	var document any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		return nil
+	}
+	secrets := make([]recordings.RecordingSecret, 0, len(pointers))
+	for _, pointer := range pointers {
+		jsonPointer := "/factory"
+		if pointer != "" {
+			jsonPointer += pointer
+		}
+		if !recordingJSONPointerExists(document, jsonPointer) {
+			continue
+		}
+		secrets = append(secrets, recordings.RecordingSecret{
+			JSONPointer: jsonPointer,
+			Provenance:  recordings.RecordingSecretProvenanceDeclared,
+		})
+	}
+	return secrets
+}
+
+func recordingJSONPointerExists(document any, pointer string) bool {
+	if pointer == "" {
+		return true
+	}
+	if !strings.HasPrefix(pointer, "/") {
+		return false
+	}
+	current := document
+	for _, encoded := range strings.Split(pointer[1:], "/") {
+		segment, ok := decodeRecordingJSONPointerToken(encoded)
+		if !ok {
+			return false
+		}
+		switch value := current.(type) {
+		case map[string]any:
+			var exists bool
+			current, exists = value[segment]
+			if !exists {
+				return false
+			}
+		case []any:
+			index, err := strconv.Atoi(segment)
+			if err != nil || index < 0 || index >= len(value) {
+				return false
+			}
+			current = value[index]
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func decodeRecordingJSONPointerToken(token string) (string, bool) {
+	if !strings.Contains(token, "~") {
+		return token, true
+	}
+	var builder strings.Builder
+	for index := 0; index < len(token); index++ {
+		if token[index] != '~' {
+			builder.WriteByte(token[index])
+			continue
+		}
+		if index+1 >= len(token) {
+			return "", false
+		}
+		index++
+		switch token[index] {
+		case '0':
+			builder.WriteByte('~')
+		case '1':
+			builder.WriteByte('/')
+		default:
+			return "", false
+		}
+	}
+	return builder.String(), true
+}
+
+func resumeRunRequestEvent(events []factorydefinitions.FactoryEvent) (recordings.FactoryEvent, bool) {
+	for _, event := range events {
+		if event.Type == factorydefinitions.FactoryEventTypeRunRequest {
+			return event.Clone(), true
+		}
+	}
+	return recordings.FactoryEvent{}, false
 }
 
 func (service *combinedService) bindRuntimeRecorder(
@@ -693,6 +812,20 @@ func (recorder *runtimeScopeRecorder) RecordEvent(event recordings.FactoryEvent)
 	}
 }
 
+func (recorder *runtimeScopeRecorder) RecordEventWithProvenance(
+	event recordings.FactoryEvent,
+	provenance []recordings.RecordingSecret,
+) {
+	if recorder == nil || recorder.inner == nil {
+		return
+	}
+	if withProvenance, ok := recorder.inner.(recordings.RuntimeRecorderWithProvenance); ok {
+		withProvenance.RecordEventWithProvenance(event, provenance)
+		return
+	}
+	recorder.inner.RecordEvent(event)
+}
+
 func (recorder *runtimeScopeRecorder) RecordError(err error) {
 	if recorder != nil && recorder.inner != nil {
 		recorder.inner.RecordError(err)
@@ -753,224 +886,3 @@ func (recorder *runtimeScopeRecorder) Finalize(finishedAt time.Time) error {
 }
 
 var _ recordings.RuntimeRecorder = (*runtimeScopeRecorder)(nil)
-
-// runtimeLedgerRouter keeps the public Recordings root stable while routing
-// session-scoped event operations to the private runtime ledgers it owns.
-// The fallback ledger preserves the root contract for callers that append
-// factory-wide events before a runtime scope has been opened.
-type runtimeLedgerRouter struct {
-	mu            sync.RWMutex
-	fallback      recordings.Ledger
-	routes        map[string]recordings.RuntimeEventLedger
-	recorders     []func(factorydefinitions.FactoryEvent)
-	typeRecorders []func(factorydefinitions.FactoryEventType)
-}
-
-func newRuntimeLedgerRouter(now func() time.Time) *runtimeLedgerRouter {
-	fallback := recordingevents.NewRuntimeLedger(nil, now, "recordings-root", nil)
-	return &runtimeLedgerRouter{
-		fallback: fallback,
-		routes:   make(map[string]recordings.RuntimeEventLedger),
-	}
-}
-
-func (router *runtimeLedgerRouter) register(
-	scope string,
-	ledger recordings.RuntimeEventLedger,
-) error {
-	if router == nil || ledger == nil {
-		return recordings.ErrInvalidRecordingScope
-	}
-	scope = strings.TrimSpace(scope)
-	if scope == "" {
-		scope = ledger.StreamGenerationID()
-	}
-	router.mu.Lock()
-	router.routes[scope] = ledger
-	recorders := append([]func(factorydefinitions.FactoryEvent){}, router.recorders...)
-	typeRecorders := append([]func(factorydefinitions.FactoryEventType){}, router.typeRecorders...)
-	router.mu.Unlock()
-	for _, recorder := range recorders {
-		ledger.AddEventRecorder(recorder)
-	}
-	for _, recorder := range typeRecorders {
-		ledger.AddEventTypeRecorder(recorder)
-	}
-	return nil
-}
-
-func (router *runtimeLedgerRouter) unregister(
-	scope string,
-	ledger recordings.RuntimeEventLedger,
-) {
-	if router == nil || ledger == nil {
-		return
-	}
-	scope = strings.TrimSpace(scope)
-	router.mu.Lock()
-	current, ok := router.routes[scope]
-	if ok && current != nil && current.StreamGenerationID() == ledger.StreamGenerationID() {
-		delete(router.routes, scope)
-	}
-	router.mu.Unlock()
-}
-
-func (router *runtimeLedgerRouter) route(scope string) recordings.Ledger {
-	if router == nil {
-		return nil
-	}
-	scope = strings.TrimSpace(scope)
-	router.mu.RLock()
-	defer router.mu.RUnlock()
-	if scope != "" {
-		return router.routes[scope]
-	}
-	if len(router.routes) == 1 {
-		for _, ledger := range router.routes {
-			return ledger
-		}
-	}
-	return router.fallback
-}
-
-func (router *runtimeLedgerRouter) CanonicalEvents() []factorydefinitions.FactoryEvent {
-	if router == nil {
-		return nil
-	}
-	router.mu.RLock()
-	ledgers := make([]recordings.RuntimeEventLedger, 0, len(router.routes))
-	for _, ledger := range router.routes {
-		ledgers = append(ledgers, ledger)
-	}
-	fallback := router.fallback
-	router.mu.RUnlock()
-	if len(ledgers) == 0 {
-		if fallback == nil {
-			return nil
-		}
-		return fallback.CanonicalEvents()
-	}
-	events := make([]factorydefinitions.FactoryEvent, 0)
-	for _, ledger := range ledgers {
-		events = append(events, ledger.CanonicalEvents()...)
-	}
-	sort.SliceStable(events, func(left, right int) bool {
-		return events[left].Context.EventTime.Before(events[right].Context.EventTime)
-	})
-	return events
-}
-
-func (router *runtimeLedgerRouter) Subscribe(
-	ctx context.Context,
-	reconnect *factorydefinitions.FactoryEventReconnectCursor,
-	scope factorydefinitions.FactoryEventReconnectScope,
-) (factorydefinitions.FactoryEventStream, error) {
-	ledger := router.route(scope.SessionID)
-	if ledger == nil {
-		return factorydefinitions.FactoryEventStream{}, recordings.ErrReconnectCursorUnavailable
-	}
-	return ledger.Subscribe(ctx, reconnect, scope)
-}
-
-func (router *runtimeLedgerRouter) StreamGenerationID() string {
-	if router == nil {
-		return ""
-	}
-	router.mu.RLock()
-	defer router.mu.RUnlock()
-	if len(router.routes) == 1 {
-		for _, ledger := range router.routes {
-			return ledger.StreamGenerationID()
-		}
-	}
-	if router.fallback == nil {
-		return ""
-	}
-	return router.fallback.StreamGenerationID()
-}
-
-func (router *runtimeLedgerRouter) AddEventRecorder(
-	recorder func(factorydefinitions.FactoryEvent),
-) {
-	if router == nil || recorder == nil {
-		return
-	}
-	router.mu.Lock()
-	router.recorders = append(router.recorders, recorder)
-	ledgers := make([]recordings.RuntimeEventLedger, 0, len(router.routes))
-	for _, ledger := range router.routes {
-		ledgers = append(ledgers, ledger)
-	}
-	fallback := router.fallback
-	router.mu.Unlock()
-	if fallback != nil {
-		fallback.AddEventRecorder(recorder)
-	}
-	for _, ledger := range ledgers {
-		ledger.AddEventRecorder(recorder)
-	}
-}
-
-func (router *runtimeLedgerRouter) AddEventTypeRecorder(
-	recorder func(factorydefinitions.FactoryEventType),
-) {
-	if router == nil || recorder == nil {
-		return
-	}
-	router.mu.Lock()
-	router.typeRecorders = append(router.typeRecorders, recorder)
-	ledgers := make([]recordings.RuntimeEventLedger, 0, len(router.routes))
-	for _, ledger := range router.routes {
-		ledgers = append(ledgers, ledger)
-	}
-	fallback := router.fallback
-	router.mu.Unlock()
-	if fallback != nil {
-		fallback.AddEventTypeRecorder(recorder)
-	}
-	for _, ledger := range ledgers {
-		ledger.AddEventTypeRecorder(recorder)
-	}
-}
-
-func (router *runtimeLedgerRouter) AppendRecordedEvent(
-	event factorydefinitions.FactoryEvent,
-) {
-	if router == nil {
-		return
-	}
-	scope := ""
-	if event.Context.SessionID != nil {
-		scope = strings.TrimSpace(*event.Context.SessionID)
-	}
-	ledger := router.route(scope)
-	if ledger != nil {
-		ledger.AppendRecordedEvent(event)
-	}
-}
-
-func (router *runtimeLedgerRouter) AppendRecordedEventWithValidation(
-	event factorydefinitions.FactoryEvent,
-	validate func(factorydefinitions.FactoryEvent) error,
-) (factorydefinitions.FactoryEvent, error) {
-	if router == nil {
-		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings ledger router is unavailable")
-	}
-	scope := ""
-	if event.Context.SessionID != nil {
-		scope = strings.TrimSpace(*event.Context.SessionID)
-	}
-	ledger := router.route(scope)
-	appender, ok := ledger.(interface {
-		AppendRecordedEventWithValidation(
-			factorydefinitions.FactoryEvent,
-			func(factorydefinitions.FactoryEvent) error,
-		) (factorydefinitions.FactoryEvent, error)
-	})
-	if !ok {
-		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings ledger does not support atomic append")
-	}
-	return appender.AppendRecordedEventWithValidation(event, validate)
-}
-
-var _ recordings.Ledger = (*runtimeLedgerRouter)(nil)

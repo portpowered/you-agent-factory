@@ -1,0 +1,24 @@
+type: object
+required:
+  - modelName
+  - revision
+  - cachePath
+  - outcome
+  - bytesRemoved
+properties:
+  modelName:
+    type: string
+    description: Stable managed runtime identity whose cache revision was removed.
+  revision:
+    type: string
+    description: Exact managed cache revision removed by the operation.
+  cachePath:
+    type: string
+    description: Validated absolute path of the removed managed cache revision.
+  outcome:
+    $ref: './ModelRemoveOutcome.yaml'
+  bytesRemoved:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Total size of regular files measured immediately before removal.

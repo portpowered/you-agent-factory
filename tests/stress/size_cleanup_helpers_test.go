@@ -746,3 +746,71 @@ func buildSingleInputArc(placeID string, guard *factoryruntime.PetriVisitCountGu
 func singleArcCardinality() factoryruntime.PetriArcCardinality {
 	return factoryruntime.PetriArcCardinality{Mode: factoryruntime.PetriCardinalityOne}
 }
+
+func logWorkListLatencyProfile(t *testing.T, profile workListLatencyProfile) {
+	t.Helper()
+	pageDurations := make([]time.Duration, 0, len(profile.pages))
+	pageBytes := make([]int, 0, len(profile.pages))
+	for _, page := range profile.pages {
+		pageDurations = append(pageDurations, page.duration)
+		pageBytes = append(pageBytes, page.bytes)
+	}
+	t.Logf(
+		"work list profile scenario=%s board_rows=%d worker_load=%d accumulated_dispatches=%d retained_events=%d pages=%d rows=%d total_walk=%s page_durations=%s page_bytes=%v snapshot_read=%s/%dB event_subscription=%s/%dB observed_operations=snapshot_reads:%d,snapshot_rows:%d,event_subscriptions:%d,event_records_visited:%d,admission_rows:%d,work_rows_projected:%d,projection_events_visited:%d observed_phases=snapshot:%s,mapping:%s,admission:%s,projection_catchup:%s,projection_lock_wait:%s first_id=%q last_id=%q",
+		profile.scenario,
+		profile.boardRows,
+		profile.workerLoad,
+		profile.accumulatedDispatches,
+		profile.retainedEvents,
+		len(profile.pages),
+		len(profile.returnedWorkIDs),
+		profile.totalWalk,
+		formatDurationSamples(pageDurations),
+		pageBytes,
+		profile.snapshotRead.duration,
+		profile.snapshotRead.bytes,
+		profile.eventSubscription.duration,
+		profile.eventSubscription.bytes,
+		profile.observedOperations.snapshotReads,
+		profile.observedOperations.snapshotRows,
+		profile.observedOperations.eventSubscriptions,
+		profile.observedOperations.eventRecordsVisited,
+		profile.observedOperations.admissionRows,
+		profile.observedOperations.workRowsProjected,
+		profile.observedPhases.projectionEventsVisited,
+		profile.observedPhases.snapshotDuration,
+		profile.observedPhases.mappingDuration,
+		profile.observedPhases.admissionDuration,
+		profile.observedPhases.projectionCatchup,
+		profile.observedPhases.projectionLockWait,
+		profile.returnedWorkIDs[0],
+		profile.returnedWorkIDs[len(profile.returnedWorkIDs)-1],
+	)
+	if len(profile.returnedWorkIDs) != len(profile.expectedWorkIDs) {
+		t.Fatalf("profile Work ID census = %d, want %d", len(profile.returnedWorkIDs), len(profile.expectedWorkIDs))
+	}
+	if profile.observedOperations.snapshotReads != len(profile.pages) {
+		t.Fatalf("profile observed snapshot reads = %d, want %d", profile.observedOperations.snapshotReads, len(profile.pages))
+	}
+	wantProjectedRows := len(profile.returnedWorkIDs) * len(profile.pages)
+	if profile.observedOperations.workRowsProjected != wantProjectedRows {
+		t.Fatalf("profile observed projected rows = %d, want %d", profile.observedOperations.workRowsProjected, wantProjectedRows)
+	}
+}
+
+func assertWorkListLatencyTarget(t *testing.T, profile workListLatencyProfile) {
+	t.Helper()
+	assertWorkListLatencyTimingTarget(t, profile.pages, profile.totalWalk)
+}
+
+func assertWorkListLatencyTimingTarget(t *testing.T, pages []workListProfilePage, totalWalk time.Duration) {
+	t.Helper()
+	for _, page := range pages {
+		if page.duration >= workListProfilePageLimit {
+			t.Errorf("Work list profile page %d = %s, want < %s", page.number, page.duration, workListProfilePageLimit)
+		}
+	}
+	if totalWalk >= workListProfileWalkLimit {
+		t.Errorf("Work list profile walk = %s, want < %s", totalWalk, workListProfileWalkLimit)
+	}
+}

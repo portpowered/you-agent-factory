@@ -18,9 +18,12 @@ import {
 } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
 import {
+  type FactoryGraphWorkerIconKind,
   factoryGraphUnknownWorkerType,
   factoryGraphWorkerIconClassName,
   factoryGraphWorkerIconKind,
+  factoryGraphWorkerProviderKind,
+  factoryGraphWorkerProviderLabel,
 } from "./worker-icon.js";
 
 /** The portion of a Factory place needed by the original semantic node views. */
@@ -106,9 +109,17 @@ export function FactoryGraphWorkerNodeView({
 }: NodeProps<FactoryGraphWorkerNode>) {
   const workerName = resolveWorkerName(data);
   const unknownWorkerType = factoryGraphUnknownWorkerType(data.workerType);
-  const label = unknownWorkerType
-    ? `worker:${workerName} (${unknownWorkerType})`
-    : `worker:${workerName}`;
+  const providerKind = factoryGraphWorkerProviderKind(data.runnerId);
+  const providerLabel = factoryGraphWorkerProviderLabel(providerKind);
+  const rawProviderLabel = normalizedRawProviderLabel(data.runnerId);
+  const providerAccessibleLabel = providerLabel ?? rawProviderLabel;
+  const providerSuffix = providerAccessibleLabel
+    ? ` (${providerAccessibleLabel})`
+    : "";
+  const accessibleWorkerName = unknownWorkerType
+    ? `${workerName} (${unknownWorkerType})${providerSuffix}`
+    : `${workerName}${providerSuffix}`;
+  const label = `worker:${accessibleWorkerName}`;
   const workerLabel = semanticLabel("worker", data.locale);
   const workerKindLabel = unknownWorkerType ?? workerLabel;
   const workerIconKind = factoryGraphWorkerIconKind(
@@ -126,6 +137,85 @@ export function FactoryGraphWorkerNodeView({
     validation: data.validationError,
   });
   const content = (
+    <FactoryGraphWorkerNodeContent
+      data={data}
+      label={label}
+      unknownWorkerType={unknownWorkerType}
+      providerLabel={providerLabel}
+      visualState={visualState}
+      workerIconKind={workerIconKind}
+      workerKindLabel={workerKindLabel}
+      workerLabel={workerLabel}
+      workerName={workerName}
+    />
+  );
+  return (
+    <FactoryGraphNodeShell
+      className={classNames(
+        factoryGraphNodeSurfaceClassName(
+          unknownWorkerType ? "neutral" : "info",
+        ),
+        "justify-center text-left text-on-surface",
+        factoryGraphNodeHoverClassName({
+          activeFlow: data.activeFlow,
+          muted: data.muted,
+          selected,
+        }),
+      )}
+      handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
+      nodeType="worker"
+      resizeControls={data.resizeControls}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
+    >
+      {selectable ? (
+        <GraphNodeButton
+          aria-label={selectLabel("worker", accessibleWorkerName, data.locale)}
+          aria-pressed={selected}
+          className="grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden"
+          data-selected-worker={selected ? "true" : undefined}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onSelectWorker?.(workerName);
+          }}
+        >
+          {content}
+        </GraphNodeButton>
+      ) : (
+        content
+      )}
+    </FactoryGraphNodeShell>
+  );
+}
+
+function FactoryGraphWorkerNodeContent({
+  data,
+  label,
+  providerLabel,
+  unknownWorkerType,
+  visualState,
+  workerIconKind,
+  workerKindLabel,
+  workerLabel,
+  workerName,
+}: {
+  data: FactoryGraphWorkerNodeData;
+  label: string;
+  providerLabel: string | undefined;
+  unknownWorkerType: string | undefined;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
+  workerIconKind: FactoryGraphWorkerIconKind;
+  workerKindLabel: string;
+  workerLabel: string;
+  workerName: string;
+}) {
+  return (
     <>
       <span
         aria-label={label}
@@ -145,7 +235,9 @@ export function FactoryGraphWorkerNodeView({
             ),
           )}
           kind={workerIconKind}
-          label={workerLabel}
+          label={
+            providerLabel ? `${workerLabel} (${providerLabel})` : workerLabel
+          }
         />
         <span className="grid min-w-0 gap-px overflow-hidden">
           <span
@@ -183,55 +275,6 @@ export function FactoryGraphWorkerNodeView({
         </FactoryGraphNodeExpandedContent>
       ) : null}
     </>
-  );
-  return (
-    <FactoryGraphNodeShell
-      className={classNames(
-        factoryGraphNodeSurfaceClassName(
-          unknownWorkerType ? "neutral" : "info",
-        ),
-        "justify-center text-left text-on-surface",
-        factoryGraphNodeHoverClassName({
-          activeFlow: data.activeFlow,
-          muted: data.muted,
-          selected,
-        }),
-      )}
-      handles={data.handles}
-      interactionOverlay={data.interactionOverlay}
-      nodeType="worker"
-      resizeControls={data.resizeControls}
-      visualState={{
-        activeFlow: data.activeFlow,
-        focused: data.focused,
-        muted: data.muted,
-        selected,
-        validation: data.validationError,
-      }}
-    >
-      {selectable ? (
-        <GraphNodeButton
-          aria-label={selectLabel(
-            "worker",
-            unknownWorkerType
-              ? `${workerName} (${unknownWorkerType})`
-              : workerName,
-            data.locale,
-          )}
-          aria-pressed={selected}
-          className="grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden"
-          data-selected-worker={selected ? "true" : undefined}
-          onClick={(event) => {
-            event.stopPropagation();
-            data.onSelectWorker?.(workerName);
-          }}
-        >
-          {content}
-        </GraphNodeButton>
-      ) : (
-        content
-      )}
-    </FactoryGraphNodeShell>
   );
 }
 
@@ -521,7 +564,7 @@ export function FactoryGraphNodeBadge({
     success:
       "border-af-success-border bg-success-container text-on-success-container",
     warning:
-      "border-af-warning-border bg-warning-container text-on-warning-container",
+      "border-af-warning-border bg-warning-container text-on-warning-container factory-light:bg-warning factory-light:text-on-warning",
   }[tone];
   return (
     <span
@@ -547,6 +590,14 @@ function resolveWorkerName(data: FactoryGraphWorkerNodeData): string {
     data.place.place_id.replace(/^place:worker:/, "").replace(/^worker:/, "")
   );
 }
+
+function normalizedRawProviderLabel(
+  providerId: string | null | undefined,
+): string | undefined {
+  const trimmed = typeof providerId === "string" ? providerId.trim() : "";
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function workTypeName(place: FactoryGraphPlaceRef): string {
   return typeof place.state_value === "string" &&
     place.state_value.trim().length > 0

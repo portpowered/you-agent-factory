@@ -63,7 +63,7 @@ paths:
         - Metrics
       operationId: getMetricsCosts
       summary: Get exact runtime cost rollups
-      description: Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+      description: Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero. The server bounds one cost query at eight seconds and returns a typed timeout response when the canonical read does not complete in that window.
       parameters:
         - name: session_id
           in: query
@@ -80,8 +80,12 @@ paths:
                 $ref: '#/components/schemas/CostsReport'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
         '500':
           $ref: '#/components/responses/InternalError'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
   /worker-sessions:
     get:
       tags:
@@ -1051,6 +1055,26 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /shutdown:
+    post:
+      tags:
+        - Runtime
+      operationId: shutdownServer
+      summary: Request graceful shutdown of the local server
+      description: Accepts a loopback-only administrative shutdown request for the invocation that owns this listener. The server acknowledges the request before it invokes the invocation-local cancellation authority; the caller remains responsible for observing that the selected listener has stopped.
+      responses:
+        '202':
+          description: The invocation-local shutdown request was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShutdownAcceptedResponse'
+        '403':
+          $ref: '#/components/responses/ShutdownControlRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ShutdownControlUnavailable'
   /models:
     get:
       tags:
@@ -1116,6 +1140,38 @@ paths:
                 $ref: '#/components/schemas/ModelDetail'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Models
+      operationId: removeModel
+      summary: Remove one managed model cache revision
+      description: Explicitly removes the selected managed cache revision for one model. The operation never follows links outside the managed cache root, refuses caches held by an active host or invocation, and reports the validated cache path and measured bytes removed.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The selected managed model cache revision was removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelRemoveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The managed model cache is held by an active host or invocation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /models/{model_name}/invocations:
@@ -1840,20 +1896,22 @@ paths:
       tags:
         - Factory
       operationId: closeFactorySession
-      summary: Close one live factory session
-      description: Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+      summary: Delete one stopped live factory session
+      description: Deletes the selected non-default live factory session only after its runtime has already stopped. The request never implicitly stops an active runtime; default and active sessions return a typed conflict and remain registered.
       parameters:
         - name: session_id
           in: path
           required: true
           schema:
             type: string
-          description: Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly.
+          description: Stable live factory session identifier. The reserved `~default` compatibility session cannot be deleted.
       responses:
         '204':
-          description: Session was stopped and removed from the live workspace.
+          description: A stopped non-default session was removed from the live workspace.
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionDeletionConflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/factory:
@@ -2590,6 +2648,12 @@ components:
             oneOf:
               - $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
               - $ref: '#/components/schemas/ErrorResponse'
+    FactorySessionDeletionConflict:
+      description: The selected Factory Session cannot be deleted while it is the default session or its runtime is active.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     FactorySessionResourceCapacityConflict:
       description: Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use.
       content:
@@ -2600,6 +2664,18 @@ components:
               - $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: Server failed while reading or building runtime state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ShutdownControlRejected:
+      description: The shutdown control is restricted to a loopback peer on this local server.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ShutdownControlUnavailable:
+      description: The server cannot expose its invocation-local shutdown control.
       content:
         application/json:
           schema:
@@ -2651,6 +2727,18 @@ components:
                 code: RESPONSE_EVENT_STREAM_EXPIRED
     MetricsSessionScopeUnavailable:
       description: The selected live Factory Session has no retained metrics scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RequestTimeout:
+      description: The metrics cost query was canceled before it completed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    GatewayTimeout:
+      description: The metrics cost query exceeded the server-side completion bound.
       content:
         application/json:
           schema:
@@ -4082,6 +4170,12 @@ components:
             - PRICED
             - UNPRICED
           description: PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+        price_source:
+          type: string
+          enum:
+            - BUILT_IN
+            - OPERATOR_SUPPLIED
+          description: Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
         priced_amount:
           type: string
           description: Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.
@@ -4698,6 +4792,17 @@ components:
           type: string
           description: |
             Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+        cachePath:
+          type: string
+          description: Resolved managed-cache revision directory when a local cache is installed.
+        revision:
+          type: string
+          description: Installed managed-cache revision when a local cache is present.
+        cacheBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Exact recursive byte count of regular files in the installed managed-cache revision.
         readinessState:
           $ref: '#/components/schemas/ManagedRuntimeReadinessState'
         lifecycleState:
@@ -4733,14 +4838,21 @@ components:
     ManagedRuntimePullOutcome:
       type: string
       description: |
-        Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+        Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
       enum:
         - ALREADY_READY
         - INSTALLED_SUCCESSFULLY
         - ALREADY_PRESENT
         - STILL_LOADING
         - TIMED_OUT
+        - CANCELLED
         - SOURCE_FETCH_FAILED
+        - SOURCE_RESOLUTION_FAILED
+        - INTEGRITY_VERIFICATION_FAILED
+        - ASSEMBLY_FAILED
+        - CACHE_INSTALLATION_FAILED
+        - READINESS_EVALUATION_FAILED
+        - ASSET_PREPARATION_FAILED
         - UNSUPPORTED_RUNTIME
       x-enum-descriptions:
         - The managed runtime was already ready and no additional install work was required.
@@ -4748,7 +4860,14 @@ components:
         - Required managed runtime assets were already present in the managed cache at the requested revision.
         - Managed runtime install or preparation is still in progress.
         - Managed runtime install or preparation timed out before reaching a terminal readiness state.
+        - The pull was cancelled before reaching a terminal readiness state.
         - Required managed runtime assets could not be fetched from the configured backend source.
+        - The configured source could not be resolved for the requested model assets.
+        - Prepared asset bytes failed size or digest verification.
+        - Asset assembly or staging failed after source resolution.
+        - Installation of the prepared asset snapshot into the managed cache failed.
+        - The final managed-cache readiness evaluation failed after preparation.
+        - Asset preparation failed without a more specific stage classification.
         - The requested managed runtime does not support pull or install in the current configuration.
     ManagedRuntimePullResult:
       type: object
@@ -4777,6 +4896,36 @@ components:
             $ref: '#/components/schemas/ModelPullDownloadedFile'
         sourceDiagnostics:
           $ref: '#/components/schemas/ManagedRuntimeSourceDiagnostics'
+        pullDiagnostics:
+          $ref: '#/components/schemas/ManagedRuntimePullDiagnostics'
+    ManagedRuntimePullDiagnostics:
+      type: object
+      description: |
+        Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included.
+      properties:
+        modelName:
+          type: string
+          description: Model identity associated with the failed pull.
+        resolvedRepository:
+          type: string
+          description: Resolved upstream repository or other safe source identifier.
+        revision:
+          type: string
+          description: Source revision selected for the pull.
+        file:
+          type: string
+          description: Logical asset file involved in the failed operation, when applicable.
+        operation:
+          type: string
+          description: Safe logical operation that failed.
+        requestUrl:
+          type: string
+          format: uri
+          description: Sanitized HTTP request URL, when an HTTP request failed.
+        upstreamStatusCode:
+          type: integer
+          format: int32
+          description: Upstream HTTP status code, when the server returned one.
     ManagedRuntimeReadinessState:
       type: string
       description: |
@@ -5253,10 +5402,11 @@ components:
     ModelPullOutcome:
       type: string
       description: |
-        Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+        Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
       enum:
         - PULLED
         - ALREADY_PRESENT
+        - FAILED
     ModelPullResponse:
       type: object
       required:
@@ -5291,6 +5441,36 @@ components:
           description: Files that were downloaded or verified as already present for the managed cache entry.
           items:
             $ref: '#/components/schemas/ModelPullDownloadedFile'
+    ModelRemoveOutcome:
+      type: string
+      description: Outcome of removing the selected managed model cache revision.
+      enum:
+        - REMOVED
+    ModelRemoveResponse:
+      type: object
+      required:
+        - modelName
+        - revision
+        - cachePath
+        - outcome
+        - bytesRemoved
+      properties:
+        modelName:
+          type: string
+          description: Stable managed runtime identity whose cache revision was removed.
+        revision:
+          type: string
+          description: Exact managed cache revision removed by the operation.
+        cachePath:
+          type: string
+          description: Validated absolute path of the removed managed cache revision.
+        outcome:
+          $ref: '#/components/schemas/ModelRemoveOutcome'
+        bytesRemoved:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total size of regular files measured immediately before removal.
     ResolvedModelOperationBinding:
       type: object
       additionalProperties: false
@@ -5473,8 +5653,16 @@ components:
             - METRICS_INVALID_REQUEST
             - METRICS_SESSION_NOT_FOUND
             - METRICS_SESSION_SCOPE_UNAVAILABLE
+            - MODEL_CACHE_NOT_FOUND
+            - MODEL_CACHE_IN_USE
             - NOT_FOUND
             - INTERNAL_ERROR
+            - COSTS_INVALID_REQUEST
+            - COSTS_QUERY_CANCELED
+            - COSTS_QUERY_FAILED
+            - COSTS_QUERY_TIMEOUT
+            - SHUTDOWN_CONTROL_REJECTED
+            - SHUTDOWN_CONTROL_UNAVAILABLE
           x-enum-descriptions:
             - Request payload or parameter validation failed.
             - Factory session discovery found a readable factory target whose config could not be loaded.
@@ -5527,8 +5715,16 @@ components:
             - The metrics request could not be interpreted by the canonical metrics route.
             - The requested live Factory Session identity was not discoverable.
             - The live Factory Session was discoverable, but no retained metrics scope was available.
+            - The selected managed model cache revision does not exist.
+            - The selected managed model cache revision is held by an active model host or invocation.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
+            - The metrics costs request contained invalid configuration or selection input.
+            - The metrics costs request was canceled before the report completed.
+            - The metrics costs query failed while reading or valuing runtime usage.
+            - The metrics costs query exceeded its server-side completion bound.
+            - The shutdown control request came from a non-loopback peer.
+            - The invocation-local shutdown control is unavailable.
         targets:
           type: array
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
@@ -5537,6 +5733,20 @@ components:
         resourceCapacity:
           $ref: '#/components/schemas/FactorySessionResourceCapacityErrorDetails'
           description: Resource accounting for a rejected capacity reduction.
+    ShutdownAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          enum:
+            - accepted
+        message:
+          type: string
+          description: Human-readable acknowledgment that graceful shutdown was accepted.
     ErrorTarget:
       type: object
       additionalProperties: false
@@ -10298,6 +10508,8 @@ components:
         - outcome
       description: Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.
       properties:
+        cancellation:
+          $ref: '#/components/schemas/DispatchCancellation'
         completionId:
           type: string
         transitionId:
@@ -10480,16 +10692,19 @@ components:
         - WorkOutcomeContinue
         - WorkOutcomeRejected
         - WorkOutcomeFailed
+        - WorkOutcomeCanceled
       enum:
         - ACCEPTED
         - CONTINUE
         - REJECTED
         - FAILED
+        - CANCELED
       x-enum-descriptions:
         - The workstation accepted the input and completed its intended work.
         - The workstation made partial progress and should follow the continue route for another iteration.
         - The workstation completed normally but rejected the input for business reasons.
         - The workstation could not complete because execution crashed, timed out, or hit a system error.
+        - The dispatch was deliberately canceled or superseded before producing a business result.
     WorkFailureFamily:
       type: string
       description: Stable machine-readable failure family used to decide retry and routing behavior for failed work.
@@ -13929,7 +14144,6 @@ components:
         - policyHash
         - maxChildCount
         - maxConcurrency
-        - deniedCapabilities
         - validationIssues
       properties:
         effectivePolicy:
@@ -13945,11 +14159,6 @@ components:
         maxConcurrency:
           type: integer
           description: Maximum concurrent child dispatches allowed by effective policy.
-        deniedCapabilities:
-          type: array
-          description: Capabilities denied by the effective policy before runtime execution.
-          items:
-            $ref: '#/components/schemas/WorkflowDiagnostic'
         validationIssues:
           type: array
           description: Policy validation issues for the requested or factory default policy.
@@ -15331,6 +15540,18 @@ components:
         spawnedBy:
           type: string
           description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    DispatchCancellation:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      description: Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.
+      properties:
+        reason:
+          type: string
+          enum:
+            - CANCELED
+            - SUPERSEDED
     GlobalConfigACPIntegration:
       type: object
       additionalProperties: false

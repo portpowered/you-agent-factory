@@ -7,6 +7,7 @@ import (
 
 // ChildRequest is the policy-relevant subset of one child-agent host request.
 type ChildRequest struct {
+	FactoryName     string
 	Label           string
 	Model           string
 	ReasoningEffort string
@@ -14,10 +15,8 @@ type ChildRequest struct {
 	Sandbox         string
 	// SkipPermissions is a child-scoped provider permission override. It may
 	// bypass provider sandbox restrictions for this child, but it does not
-	// weaken routing, capability, or resource policy.
+	// weaken routing, permission, or resource policy.
 	SkipPermissions bool
-	WritableRoots   []string
-	AllowNetwork    bool
 	Concurrency     int
 }
 
@@ -25,6 +24,9 @@ type ChildRequest struct {
 // before runtime side effects. It returns a stable diagnostic naming the denied
 // policy field or capability and including safe request context.
 func ValidateChildRequest(policy EffectivePolicy, req ChildRequest) error {
+	if err := validateChildPermission(policy, req); err != nil {
+		return err
+	}
 	if err := validateChildModel(policy, req); err != nil {
 		return err
 	}
@@ -37,16 +39,32 @@ func ValidateChildRequest(policy EffectivePolicy, req ChildRequest) error {
 	if err := validateChildSandbox(policy, req); err != nil {
 		return err
 	}
-	if err := validateChildWritableRoots(policy, req); err != nil {
-		return err
-	}
-	if err := validateChildNetwork(policy, req); err != nil {
-		return err
-	}
 	if err := validateChildConcurrency(policy, req); err != nil {
 		return err
 	}
 	return nil
+}
+
+func validateChildPermission(policy EffectivePolicy, req ChildRequest) error {
+	if len(policy.AllowedPermissions) == 0 {
+		return nil
+	}
+
+	requested := PermissionModeDefault
+	if req.SkipPermissions {
+		requested = PermissionModeSkipPermissions
+	}
+	for _, allowed := range policy.AllowedPermissions {
+		if strings.TrimSpace(allowed) == requested {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"policy denied: Factory %q child %q requested permission %q not listed in allowedPermissions",
+		safeFactoryName(req.FactoryName),
+		safeChildLabel(req.Label),
+		requested,
+	)
 }
 
 func validateChildModel(policy EffectivePolicy, req ChildRequest) error {
@@ -115,13 +133,6 @@ func validateChildSandbox(policy EffectivePolicy, req ChildRequest) error {
 	if req.SkipPermissions {
 		return nil
 	}
-	if sandbox == "workspace-write" && policy.Mode == ModeReadOnly {
-		return fmt.Errorf(
-			"policy denied: sandbox %q is not allowed when policy.mode is READ_ONLY (label=%q)",
-			sandbox,
-			safeChildLabel(req.Label),
-		)
-	}
 	if policySandbox := strings.TrimSpace(policy.SandboxMode); policySandbox != "" && sandbox != policySandbox {
 		return fmt.Errorf(
 			"policy denied: sandbox %q does not match effective sandboxMode %q (label=%q)",
@@ -131,46 +142,6 @@ func validateChildSandbox(policy EffectivePolicy, req ChildRequest) error {
 		)
 	}
 	return nil
-}
-
-func validateChildWritableRoots(policy EffectivePolicy, req ChildRequest) error {
-	if len(req.WritableRoots) == 0 {
-		return nil
-	}
-	if req.SkipPermissions {
-		return nil
-	}
-	if policy.Mode == ModeReadOnly || len(policy.WritableRoots) == 0 {
-		return fmt.Errorf(
-			"policy denied: writableRoots are not allowed by effective policy (label=%q roots=%v)",
-			safeChildLabel(req.Label),
-			req.WritableRoots,
-		)
-	}
-	for _, root := range req.WritableRoots {
-		root = strings.TrimSpace(root)
-		if root == "" {
-			continue
-		}
-		if !writableRootAllowed(policy.WritableRoots, root) {
-			return fmt.Errorf(
-				"policy denied: writableRoot %q is not listed in policy.writableRoots (label=%q)",
-				root,
-				safeChildLabel(req.Label),
-			)
-		}
-	}
-	return nil
-}
-
-func validateChildNetwork(policy EffectivePolicy, req ChildRequest) error {
-	if !req.AllowNetwork || policy.AllowNetwork {
-		return nil
-	}
-	return fmt.Errorf(
-		"policy denied: network access is not allowed by effective policy (label=%q)",
-		safeChildLabel(req.Label),
-	)
 }
 
 func validateChildConcurrency(policy EffectivePolicy, req ChildRequest) error {
@@ -188,19 +159,14 @@ func validateChildConcurrency(policy EffectivePolicy, req ChildRequest) error {
 	)
 }
 
-func writableRootAllowed(allowed []string, root string) bool {
-	for _, candidate := range allowed {
-		if strings.TrimSpace(candidate) == root {
-			return true
-		}
-	}
-	return false
-}
-
 func safeChildLabel(label string) string {
 	label = strings.TrimSpace(label)
 	if label == "" {
 		return "-"
 	}
 	return label
+}
+
+func safeFactoryName(name string) string {
+	return safeChildLabel(name)
 }

@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,10 +19,207 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestChildWorkerExecutor_PassesDetachedCorrelationAndOneProgressPublisher(t *testing.T) {
+	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: `{"text":"done"}`,
+		}}},
+	}}
+	var progress []workers.ProgressFragment
+	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
+	executor.runtimeID = "runtime-child"
+	executor.generationID = "generation-child"
+	executor.publish = func(dispatchID string, fragment workers.ProgressFragment) {
+		if fragment.DispatchID != dispatchID {
+			t.Fatalf("progress dispatch = %q, want %q", fragment.DispatchID, dispatchID)
+		}
+		progress = append(progress, fragment)
+	}
+	invoker.onExecute = func(request workers.ExecuteRequest) {
+		if request.Input.ProgressPublisher == nil {
+			t.Fatal("Workers Execute request has no request-scoped progress publisher")
+		}
+		request.Input.ProgressPublisher(workers.ProgressFragment{
+			Kind:    workers.CompletedFragmentKind,
+			Payload: "terminal",
+		})
+	}
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "summarize",
+		Preset:        "child-worker",
+		ModelProvider: "codex",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	assertSchemaLessChildResult(t, result)
+	assertDetachedChildRequest(t, invoker.request)
+	if len(progress) != 1 || progress[0].Kind != workers.CompletedFragmentKind {
+		t.Fatalf("progress observations = %#v, want one terminal fragment", progress)
+	}
+}
+
+func assertSchemaLessChildResult(t *testing.T, result factory.JavaScriptChildExecutionResult) {
+	t.Helper()
+	if result.SchemaValidated {
+		t.Fatal("schema-less child schemaValidated = true, want false")
+	}
+	if result.Output["text"] != `{"text":"done"}` {
+		t.Fatalf("schema-less child output = %#v, want prose-compatible text", result.Output)
+	}
+	if _, exists := result.Output["schemaValidated"]; exists {
+		t.Fatalf("schema-less child output = %#v, want metadata outside customer output", result.Output)
+	}
+}
+
+func assertDetachedChildRequest(t *testing.T, request workers.ExecuteRequest) {
+	t.Helper()
+	assertChildCorrelation(t, request)
+	if request.Input.Dispatch.DispatchID != request.Correlation.DispatchID {
+		t.Fatalf("child dispatch input = %#v, want correlation dispatch ID", request.Input.Dispatch)
+	}
+	if request.Target.WorkstationName != workers.ProviderInvocationRoute || request.Target.WorkerName != "child-worker" {
+		t.Fatalf("child detached routing = %#v, want provider-invocation route and preset", request.Target)
+	}
+}
+
+func assertChildCorrelation(t *testing.T, request workers.ExecuteRequest) {
+	t.Helper()
+	correlation := request.Correlation
+	if correlation.FactorySessionID != "dur-sess-1" || correlation.RuntimeID != "runtime-child" {
+		t.Fatalf("child correlation session/runtime = %#v, want session/runtime identity", correlation)
+	}
+	if correlation.GenerationID != "generation-child" || correlation.DispatchID != "dur-sess-1/dispatch-1" {
+		t.Fatalf("child correlation generation/dispatch = %#v, want generation/dispatch identity", correlation)
+	}
+}
+
+func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T) {
+	const diagnostic = "structured output schema violation: instance /answer; expected string"
+	attempts := 0
+	var requests []workers.ExecuteRequest
+	involver := &recordingWorkerExecution{
+		result: workers.ExecuteResult{
+			Outcome: workers.ExecutionOutcomeFailed,
+			Failure: &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: diagnostic,
+				Detail: &workers.FailureDetail{
+					Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+					Message: diagnostic,
+				},
+			},
+		},
+	}
+	involver.onExecute = func(request workers.ExecuteRequest) {
+		attempts++
+		requests = append(requests, request)
+		if attempts == 2 {
+			involver.result = workers.ExecuteResult{
+				Outcome: workers.ExecutionOutcomeAccepted,
+				StructuredResult: map[string]any{
+					"answer": "validated answer",
+				},
+				StructuredResultPresent: true,
+			}
+		}
+	}
+	sink := newChildRecordSink()
+	service := &JavaScriptRuntimeService{
+		projectRoot: "/project",
+		childValues: childTestValues{},
+	}
+	service.SetDirectWorkerExecution(involver)
+	policy := factory.DefaultJavaScriptPolicy()
+	policy.MaxRetries = 1
+	hooks := service.childExecutorHooks(ChildExecutorModeLive, "direct-structured-retry")
+	executor := hooks.NewChildExecutor("direct-structured-retry", sink, policy)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "return a structured answer",
+		ModelProvider: "codex",
+		OutputSchema:  map[string]any{"type": "object"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if attempts != 2 || len(requests) != 2 {
+		t.Fatalf("attempts = %d, requests = %d, want two", attempts, len(requests))
+	}
+	if requests[0].Attempt.Number != 1 || requests[1].Attempt.Number != 2 || requests[0].Correlation.AttemptID != "dispatch-1/attempt/1" || requests[1].Correlation.AttemptID != "dispatch-1/attempt/2" {
+		t.Fatalf("attempt requests = %#v, want numbered detached attempts", requests)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusCompleted || !result.SchemaValidated {
+		t.Fatalf("child result = %#v, want completed schema-validated result", result)
+	}
+	if result.Output["answer"] != "validated answer" {
+		t.Fatalf("child answer = %#v, want validated native output", result.Output["answer"])
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Attempt != 2 || !terminal.SchemaValidated {
+		t.Fatalf("terminal record = %#v, want final attempt 2 and validated metadata", terminal)
+	}
+	if len(sink.statuses) != 2 {
+		t.Fatalf("dispatch statuses = %v, want one queued and one running record", sink.statuses)
+	}
+}
+
+func TestDirectChildExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *testing.T) {
+	const diagnostic = "structured output schema violation: instance /answer; expected string"
+	attempts := 0
+	involver := &recordingWorkerExecution{result: workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: diagnostic,
+			Detail: &workers.FailureDetail{
+				Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Message: diagnostic,
+			},
+		},
+	}}
+	involver.onExecute = func(_ workers.ExecuteRequest) { attempts++ }
+	sink := newChildRecordSink()
+	executor := newDirectChildExecutor(
+		"direct-structured-exhausted",
+		involver,
+		sink,
+		childTestValues{},
+		"/project",
+		2,
+	)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "do not expose invalid output",
+		ModelProvider: "codex",
+		OutputSchema:  map[string]any{"type": "object"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "/answer") {
+		t.Fatalf("Execute error = %v, want the safe schema path diagnostic", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want initial attempt plus two retries", attempts)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusFailed || len(result.Output) != 0 || result.SchemaValidated {
+		t.Fatalf("child result = %#v, want failed with no output or validation metadata", result)
+	}
+	if strings.Contains(err.Error(), "do not expose invalid output") {
+		t.Fatalf("Execute error = %q, must not expose the prompt", err)
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Attempt != 3 || terminal.Output != nil || terminal.SchemaValidated {
+		t.Fatalf("terminal record = %#v, want final failed attempt without output", terminal)
+	}
+}
 
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
 	t.Parallel()
@@ -279,14 +474,14 @@ func TestResumeHelperFunctions_CoverMergeCloneAndPolicyPaths(t *testing.T) {
 
 	policy := workflowPolicyFromSessionPolicy(PolicyProjection{})
 	defaultPolicy := factory.DefaultJavaScriptPolicy()
-	if policy.Mode != defaultPolicy.Mode {
-		t.Fatalf("policy mode = %q, want default %q", policy.Mode, defaultPolicy.Mode)
+	if policy.MaxAgents != defaultPolicy.MaxAgents || policy.Concurrency != defaultPolicy.Concurrency {
+		t.Fatalf("policy budgets = %d/%d, want default %d/%d", policy.MaxAgents, policy.Concurrency, defaultPolicy.MaxAgents, defaultPolicy.Concurrency)
 	}
 	customPolicy := workflowPolicyFromSessionPolicy(PolicyProjection{
-		Effective: map[string]any{"mode": factory.JavaScriptPolicyModeReadOnly},
+		Effective: map[string]any{"allowedPermissions": []any{factory.JavaScriptPolicyPermissionDefault}},
 	})
-	if customPolicy.Mode != factory.JavaScriptPolicyModeReadOnly {
-		t.Fatalf("policy mode = %q, want %q", customPolicy.Mode, factory.JavaScriptPolicyModeReadOnly)
+	if len(customPolicy.AllowedPermissions) != 1 || customPolicy.AllowedPermissions[0] != factory.JavaScriptPolicyPermissionDefault {
+		t.Fatalf("allowedPermissions = %#v, want DEFAULT", customPolicy.AllowedPermissions)
 	}
 
 	summary := &factory.JavaScriptCheckpointSummary{
@@ -481,105 +676,6 @@ func completeResumeCoverage(
 	}
 }
 
-type resumeCoverageBlockingProvider struct {
-	mu              sync.Mutex
-	callCount       int
-	blockedOnce     bool
-	contextCanceled int
-}
-
-func newResumeCoverageBlockingProvider() *resumeCoverageBlockingProvider {
-	return &resumeCoverageBlockingProvider{}
-}
-
-func (p *resumeCoverageBlockingProvider) Execute(
-	ctx context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
-	p.mu.Lock()
-	p.callCount++
-	call := p.callCount
-	alreadyBlocked := p.blockedOnce
-	p.mu.Unlock()
-
-	if call == 1 {
-		session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}
-		continuation := (session).ContinuationRef()
-		response := workerexecution.InferenceResponse{
-			Content:      `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
-			Continuation: continuation,
-		}
-		return workerexecution.InvocationResult{
-			Response: response, Attempt: input.Attempt,
-			Continuation: (response.Continuation).ClonePtr(),
-		}, nil
-	}
-
-	if !alreadyBlocked {
-		p.mu.Lock()
-		p.blockedOnce = true
-		p.mu.Unlock()
-
-		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
-		return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
-	}
-
-	session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}
-	continuation := (session).ContinuationRef()
-	response := workerexecution.InferenceResponse{
-		Content:      `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
-		Continuation: continuation,
-	}
-	return workerexecution.InvocationResult{
-		Response: response, Attempt: input.Attempt,
-		Continuation: (response.Continuation).ClonePtr(),
-	}, nil
-}
-
-func (p *resumeCoverageBlockingProvider) resumeCoverageCallCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.callCount
-}
-
-var _ workerexecution.InvocationExecutor = (*resumeCoverageBlockingProvider)(nil)
-
-func (p *resumeCoverageBlockingProvider) waitForCanceledResumeCoverageInfer(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled > 0
-		p.mu.Unlock()
-		if canceled {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for blocked provider infer cancellation")
-}
-
-func setupResumeCoverageWorkflowFixture(t *testing.T) string {
-	t.Helper()
-	projectRoot := t.TempDir()
-	workflowDir := filepath.Join(projectRoot, factory.WorkflowSourceProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	path := filepath.Join("..", "..", "..", "..", "..", "tests", "fixtures", "javascript_runtime", "resumable-two-step-fake-children.workflow.js")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read workflow fixture: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, "resumable-two-step-fake-children.js"), raw, 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	return projectRoot
-}
-
 func waitForResumeCoverageSessionStatus(
 	t *testing.T,
 	service *JavaScriptRuntimeService,
@@ -603,25 +699,6 @@ func waitForResumeCoverageSessionStatus(
 	return SessionReadResult{}
 }
 
-func waitForResumeCoverageDispatchStatus(
-	t *testing.T,
-	service Service,
-	sessionID, dispatchID string,
-	want DispatchStatus,
-	timeout time.Duration,
-) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		dispatch, err := service.GetDispatch(context.Background(), sessionID, dispatchID)
-		if err == nil && dispatch.Status == want {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("dispatch %s did not reach status %s within %s", dispatchID, want, timeout)
-}
-
 func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	t.Helper()
 
@@ -640,14 +717,6 @@ func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
 	}
 	return service
-}
-
-type progressCapturingChildExecutor struct {
-	publisher workers.ProgressPublisher
-}
-
-func (e *progressCapturingChildExecutor) Execute(context.Context, workers.InvocationInput) (workers.InvocationResult, error) {
-	return workers.InvocationResult{}, nil
 }
 
 func seedResponseEventSession(t *testing.T, service *JavaScriptRuntimeService, sessionID string) *runtimeSessionState {

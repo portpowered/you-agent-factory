@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -128,6 +129,96 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 }
 
+func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *testing.T) {
+	beginErr := errors.New("worker attempt preparation failed")
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+	sessions := &beginRuntimeAttemptService{
+		Service:  &fakeWorkerSessionsService{},
+		beginErr: beginErr,
+	}
+	f := &factoryImpl{
+		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		eventHistory: ledger,
+	}
+	request := detachedTargetRequest()
+
+	terminal, err := f.BeginWorkerAttempt(nil, request)
+	if !errors.Is(err, beginErr) {
+		t.Fatalf("BeginWorkerAttempt() error = %v, want %v", err, beginErr)
+	}
+	if terminal != nil {
+		t.Fatal("BeginWorkerAttempt() returned a terminal callback after preparation failed")
+	}
+	associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
+	if len(associations) != 0 {
+		t.Fatalf("recorded associations = %#v, want no association before Worker preparation succeeds", associations)
+	}
+	if sessions.completed != nil {
+		t.Fatalf("Worker Session terminal result = %#v, want no callback after BeginRuntimeAttempt failed", sessions.completed)
+	}
+}
+
+func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
+	tests := []struct {
+		name        string
+		result      workers.ExecuteResult
+		executeErr  error
+		wantOutcome workers.WorkstationDispatchTerminalOutcome
+	}{
+		{
+			name:        "ordinary completion",
+			result:      workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted},
+			wantOutcome: workers.WorkstationDispatchTerminalOutcomeCompleted,
+		},
+		{
+			name:        "caller cancellation",
+			result:      workers.ExecuteResult{},
+			executeErr:  context.Canceled,
+			wantOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
+		},
+		{
+			name:        "provider failure",
+			result:      workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted},
+			executeErr:  errors.New("provider failed"),
+			wantOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		},
+		{
+			name:        "empty result",
+			result:      workers.ExecuteResult{},
+			wantOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
+			f := &factoryImpl{
+				cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+				eventHistory: ledger,
+			}
+
+			terminal, err := f.BeginWorkerAttempt(nil, detachedTargetRequest())
+			if err != nil {
+				t.Fatalf("BeginWorkerAttempt() error = %v", err)
+			}
+			if err := terminal(context.Background(), test.result, test.executeErr); err != nil {
+				t.Fatalf("first terminal callback error = %v", err)
+			}
+			if err := terminal(context.Background(), workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, nil); err != nil {
+				t.Fatalf("duplicate terminal callback error = %v", err)
+			}
+
+			if sessions.completeCalls != 1 {
+				t.Fatalf("terminal callback calls = %d, want exactly one", sessions.completeCalls)
+			}
+			if sessions.completed == nil || sessions.completed.TerminalOutcome != test.wantOutcome {
+				t.Fatalf("completed dispatch = %#v, want terminal outcome %q", sessions.completed, test.wantOutcome)
+			}
+		})
+	}
+}
+
 func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *testing.T) {
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 	sessions := &beginRuntimeAttemptService{
@@ -199,11 +290,13 @@ func detachedTargetRequest() workers.ExecuteRequest {
 
 type beginRuntimeAttemptService struct {
 	workersessions.Service
-	request     workersessions.RuntimeAttemptRequest
-	completed   *workers.WorkstationDispatchResult
-	completeErr error
-	existing    workersessions.Session
-	getErr      error
+	request       workersessions.RuntimeAttemptRequest
+	completed     *workers.WorkstationDispatchResult
+	completeErr   error
+	completeCalls int
+	beginErr      error
+	existing      workersessions.Session
+	getErr        error
 }
 
 func (service *beginRuntimeAttemptService) Get(context.Context, workersessions.GetRequest) (workersessions.Session, error) {
@@ -218,13 +311,19 @@ func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 	request workersessions.RuntimeAttemptRequest,
 ) (workersessions.RuntimeAttempt, error) {
 	service.request = request
+	if service.beginErr != nil {
+		return nil, service.beginErr
+	}
 	return workersessions.RuntimeAttempt(func(
 		_ context.Context,
 		result workers.WorkstationDispatchResult,
 		err error,
 	) error {
-		service.completed = &result
-		service.completeErr = err
+		service.completeCalls++
+		if service.completed == nil {
+			service.completed = &result
+			service.completeErr = err
+		}
 		return nil
 	}), nil
 }

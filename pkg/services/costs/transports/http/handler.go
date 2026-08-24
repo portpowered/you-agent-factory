@@ -4,31 +4,57 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
+const (
+	// DefaultQueryTimeout bounds one Costs HTTP request. It is shorter than the
+	// standard CLI HTTP timeout so the server can return a typed response before
+	// a client-side transport deadline expires.
+	DefaultQueryTimeout = 8 * time.Second
+
+	costsQueryCanceledCode  = "COSTS_QUERY_CANCELED"
+	costsQueryFailedCode    = "COSTS_QUERY_FAILED"
+	costsInvalidRequestCode = "COSTS_INVALID_REQUEST"
+	costsQueryTimeoutCode   = "COSTS_QUERY_TIMEOUT"
+)
+
 // Handler owns HTTP error mapping and response encoding for Costs operations.
 // Route registration remains in the top-level HTTP transport.
 type Handler struct {
-	adapter *Adapter
-	logger  *zap.Logger
+	adapter      *Adapter
+	logger       *zap.Logger
+	queryTimeout time.Duration
 }
 
 // NewHandler constructs the Costs HTTP handler with its injected adapter.
 func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
+	return NewHandlerWithQueryTimeout(adapter, logger, DefaultQueryTimeout)
+}
+
+// NewHandlerWithQueryTimeout constructs the Costs HTTP handler with an
+// explicit server-side completion bound. Tests and isolated hosts can choose a
+// shorter bound; production uses DefaultQueryTimeout through NewHandler.
+func NewHandlerWithQueryTimeout(adapter *Adapter, logger *zap.Logger, queryTimeout time.Duration) *Handler {
 	if adapter == nil {
 		return nil
 	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &Handler{adapter: adapter, logger: logger}
+	if queryTimeout <= 0 {
+		queryTimeout = DefaultQueryTimeout
+	}
+	return &Handler{adapter: adapter, logger: logger, queryTimeout: queryTimeout}
 }
 
 // GetMetricsCosts serves the typed cost-report operation.
@@ -46,11 +72,21 @@ func (h *Handler) GetMetricsCosts(
 		writeResponseJSON(w, http.StatusInternalServerError, response, zap.NewNop())
 		return
 	}
+	if err := r.Context().Err(); err != nil {
+		h.writeQueryError(w, err)
+		return
+	}
 	sessionID := ""
 	if params.SessionId != nil {
 		sessionID = *params.SessionId
 	}
-	report, err := h.adapter.GetMetricsCosts(r.Context(), sessionID)
+	queryTimeout := h.queryTimeout
+	if queryTimeout <= 0 {
+		queryTimeout = DefaultQueryTimeout
+	}
+	queryContext, cancel := context.WithTimeout(r.Context(), queryTimeout)
+	defer cancel()
+	report, err := h.adapter.GetMetricsCosts(queryContext, sessionID)
 	if err != nil {
 		h.writeQueryError(w, err)
 		return
@@ -60,14 +96,28 @@ func (h *Handler) GetMetricsCosts(
 
 func (h *Handler) writeQueryError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
-	code := "COSTS_QUERY_FAILED"
+	code := costsQueryFailedCode
 	message := "failed to query runtime costs"
+	switch {
+	case errors.Is(err, context.Canceled):
+		status = http.StatusRequestTimeout
+		code = costsQueryCanceledCode
+		message = "metrics costs query was canceled before completion"
+	case errors.Is(err, context.DeadlineExceeded):
+		status = http.StatusGatewayTimeout
+		code = costsQueryTimeoutCode
+		queryTimeout := h.queryTimeout
+		if queryTimeout <= 0 {
+			queryTimeout = DefaultQueryTimeout
+		}
+		message = fmt.Sprintf("metrics costs query exceeded the server timeout of %s; narrow the session scope or retry", queryTimeout)
+	}
 	var queryErr *costs.QueryError
-	if errors.As(err, &queryErr) && queryErr != nil {
+	if status == http.StatusInternalServerError && errors.As(err, &queryErr) && queryErr != nil {
 		message = queryErr.Error()
 		if queryErr.Kind == costs.QueryErrorInvalidInput {
 			status = http.StatusBadRequest
-			code = "COSTS_INVALID_REQUEST"
+			code = costsInvalidRequestCode
 		}
 	}
 	h.writeJSON(w, status, factoryapi.ErrorResponse{

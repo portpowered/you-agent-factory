@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 	"testing"
@@ -205,6 +207,67 @@ func TestResolveBatchInput_ReadsPipedStdinWithNoArgs(t *testing.T) {
 	}
 }
 
+func TestReadBatchStdinAcceptsInclusiveByteLimit(t *testing.T) {
+	t.Parallel()
+
+	data := exactValidBatchJSON(maxSubmitBatchStdinBytes)
+	reader := &countingStdinReader{
+		reader: bytes.NewReader(data),
+	}
+	got, err := readBatchStdin(BatchConfig{Stdin: reader})
+	if err != nil {
+		t.Fatalf("readBatchStdin(exact limit): %v", err)
+	}
+	if len(got) != maxSubmitBatchStdinBytes || !json.Valid(got) {
+		t.Fatalf("batch bytes = %d, valid = %t, want valid JSON of %d bytes", len(got), json.Valid(got), maxSubmitBatchStdinBytes)
+	}
+	if reader.bytesRead > maxSubmitBatchStdinBytes+1 {
+		t.Fatalf("bytes read = %d, want <= %d", reader.bytesRead, maxSubmitBatchStdinBytes+1)
+	}
+}
+
+func exactValidBatchJSON(size int) []byte {
+	const prefix = `{"requestId":"batch-boundary","type":"FACTORY_REQUEST_BATCH","currentChainingTraceId":"`
+	const suffix = `","works":[{"name":"alpha","workTypeName":"task"}]}`
+	if size < len(prefix)+len(suffix) {
+		panic(fmt.Sprintf("batch boundary size %d is too small", size))
+	}
+	return []byte(prefix + strings.Repeat("x", size-len(prefix)-len(suffix)) + suffix)
+}
+
+func TestSubmitBatchRejectsOverflowAfterOneSentinelByteBeforePreparation(t *testing.T) {
+	t.Parallel()
+
+	reader := &countingStdinReader{
+		reader: bytes.NewReader(bytes.Repeat([]byte("x"), maxSubmitBatchStdinBytes+1)),
+	}
+	prepareCalls := 0
+	prepare := factoryRequestBatchPreparationFunc(func(context.Context, []byte) (workservice.PreparedFactoryRequestBatch, error) {
+		prepareCalls++
+		return workservice.PreparedFactoryRequestBatch{}, nil
+	})
+	err := SubmitBatch(prepare, BatchConfig{
+		Context:    context.Background(),
+		Stdin:      reader,
+		StdinIsTTY: func() bool { return false },
+		DryRun:     true,
+		Output:     io.Discard,
+		Server:     "http://127.0.0.1:1",
+	})
+	if err == nil {
+		t.Fatal("SubmitBatch(overflow): want limit error")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("batch stdin exceeds the %d-byte limit", maxSubmitBatchStdinBytes)) {
+		t.Fatalf("error = %q, want actionable batch limit", err)
+	}
+	if prepareCalls != 0 {
+		t.Fatalf("preparation calls = %d, want 0 before overflow rejection", prepareCalls)
+	}
+	if reader.bytesRead != maxSubmitBatchStdinBytes+1 {
+		t.Fatalf("bytes read = %d, want exactly %d", reader.bytesRead, maxSubmitBatchStdinBytes+1)
+	}
+}
+
 func TestResolveBatchInput_ReadsExplicitStdinDash(t *testing.T) {
 	t.Parallel()
 
@@ -227,7 +290,8 @@ func TestResolveBatchInput_ReadsInlineJSONPositional(t *testing.T) {
 	t.Parallel()
 
 	json := validBatchJSON("batch-inline", "alpha")
-	cfg := BatchConfig{Context: context.Background(), Args: []string{json}}
+	reader := &countingStdinReader{reader: strings.NewReader("unrelated stdin")}
+	cfg := BatchConfig{Context: context.Background(), Args: []string{json}, Stdin: reader}
 
 	resolved, err := resolveBatchInput(cfg)
 	if err != nil {
@@ -238,6 +302,9 @@ func TestResolveBatchInput_ReadsInlineJSONPositional(t *testing.T) {
 	}
 	if resolved.label != "inline JSON" {
 		t.Fatalf("label = %q, want inline JSON", resolved.label)
+	}
+	if reader.bytesRead != 0 {
+		t.Fatalf("inline JSON stdin bytes read = %d, want 0", reader.bytesRead)
 	}
 	if !bytes.Contains(resolved.data, []byte("batch-inline")) {
 		t.Fatalf("data = %q, want inline batch JSON", resolved.data)
@@ -351,9 +418,10 @@ func TestResolveBatchInput_FileFlagIgnoresStdin(t *testing.T) {
 	t.Parallel()
 
 	path := "batch-file-flag-ignores-stdin.json"
+	reader := &countingStdinReader{reader: strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`)}
 	cfg := BatchConfig{Context: context.Background(),
 		FileFlag: path,
-		Stdin:    strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`),
+		Stdin:    reader,
 		FileSystem: batchInputFileSystemFake{files: map[string][]byte{
 			path: []byte(validBatchJSON("batch-file-flag-ignores-stdin", "alpha")),
 		}},
@@ -369,15 +437,19 @@ func TestResolveBatchInput_FileFlagIgnoresStdin(t *testing.T) {
 	if !bytes.Contains(resolved.data, []byte("batch-file-flag-ignores-stdin")) {
 		t.Fatalf("data = %q, want --file contents", resolved.data)
 	}
+	if reader.bytesRead != 0 {
+		t.Fatalf("file flag stdin bytes read = %d, want 0", reader.bytesRead)
+	}
 }
 
 func TestResolveBatchInput_FilePathIgnoresStdin(t *testing.T) {
 	t.Parallel()
 
 	path := "batch-file-wins.json"
+	reader := &countingStdinReader{reader: strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`)}
 	cfg := BatchConfig{Context: context.Background(),
 		Args:  []string{path},
-		Stdin: strings.NewReader(`{"requestId":"wrong","type":"FACTORY_REQUEST_BATCH","works":[]}`),
+		Stdin: reader,
 		FileSystem: batchInputFileSystemFake{files: map[string][]byte{
 			path: []byte(validBatchJSON("batch-file-wins", "alpha")),
 		}},
@@ -392,5 +464,8 @@ func TestResolveBatchInput_FilePathIgnoresStdin(t *testing.T) {
 	}
 	if !bytes.Contains(resolved.data, []byte("batch-file-wins")) {
 		t.Fatalf("data = %q, want file contents", resolved.data)
+	}
+	if reader.bytesRead != 0 {
+		t.Fatalf("file path stdin bytes read = %d, want 0", reader.bytesRead)
 	}
 }

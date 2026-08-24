@@ -10,6 +10,7 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 )
 
 // Process construction can legitimately take longer on Windows when the
@@ -74,7 +75,9 @@ func (server *ProcessAPIServer) Start(
 	}
 	server.started = true
 	close(server.startedSignal)
-	httpServer := httptest.NewServer(request.Handler)
+	httpServer := httptest.NewServer(platformhttpserver.HandlerWithDiagnostics(
+		request.Handler, request.Pprof, platformprocessmemory.CurrentCommit, nil,
+	))
 	server.url = httpServer.URL
 	if request.OnBound != nil {
 		boundPort := request.Port
@@ -109,16 +112,6 @@ func (server *ProcessAPIServer) BaseURL() (string, bool) {
 		return "", false
 	}
 	return server.url, true
-}
-
-// Ready is closed after the httptest server is accepting requests.
-func (server *ProcessAPIServer) Ready() <-chan struct{} {
-	if server == nil {
-		closed := make(chan struct{})
-		close(closed)
-		return closed
-	}
-	return server.ready
 }
 
 // WaitForURL waits for the injected transport to start and returns its dynamic

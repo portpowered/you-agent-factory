@@ -55,13 +55,20 @@ as soon as tests are added there.
 
 The required functional coverage gate is subtractive. Its versioned manifest is
 `tests/functional/functional-quarantine.json`; each entry names a discovered
-package or an exact top-level test, an `ENVIRONMENT-DEPENDENT` or `GENUINELY
-FAILING` bucket, and a reason. Genuine failures must also name a follow-up.
+package or an exact top-level test, an `ENVIRONMENT-DEPENDENT`, `GENUINELY
+FAILING`, or `FLAKY` bucket, and a reason. Genuine failures must also name a
+follow-up. FLAKY entries must name a non-empty `followUpIssue` or
+`followUpLane`; they use the existing failure measurement path, so a repeated
+isolated measurement is appropriate when the selector is intermittent.
 Package-plus-test entries become package-specific `-run` selectors, while
 package entries remove the whole package. Duplicate, malformed, stale, or
 overlapping selectors fail closed before the instrumented run, so a new
 functional package or test is selected automatically without a manifest edit.
-Entries normally use one isolated observation, while unreliable selectors may
+The canonical strict validator is available without running coverage through
+`go run ./cmd/gocoveragecheck -suite functional -functional-quarantine
+tests/functional/functional-quarantine.json -validate-functional-quarantine`.
+The Linux quarantine inventory verifier invokes this validator before its
+package evidence checks. Entries normally use one isolated observation, while unreliable selectors may
 declare `"measurement": "repeated-isolated"` and an explicit `"attempts"`
 count from 2 through 15. Each repeated attempt starts a fresh exact-selector
 `go test` process; the ratchet reports aggregate pass, fail, and skip counts,

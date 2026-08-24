@@ -497,13 +497,6 @@ func safeAgentRunFailureClassValue(class string) string {
 	}
 }
 
-func formatTokens(usage *factoryapi.ProviderSessionTokenUsage) string {
-	if usage == nil || usage.TotalTokens == nil {
-		return "-"
-	}
-	return strconv.Itoa(*usage.TotalTokens)
-}
-
 func formatDuration(millis *int64) string {
 	if millis == nil {
 		return "-"

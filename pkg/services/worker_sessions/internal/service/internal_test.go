@@ -3782,11 +3782,11 @@ func TestAwaitContinueReplayReturnsCompletedReplayAfterCallerCancellation(t *tes
 		result: workersessions.ContinueResult{RequestID: "replayed"},
 		err:    replayErr,
 	}
-	ctxDone := make(chan struct{})
+	ctxDone := make(chan struct{}, 1)
 	ctx := signaledCancellationContext{done: ctxDone}
 	go func() {
-		ctxDone <- struct{}{}
 		close(replay.done)
+		ctxDone <- struct{}{}
 	}()
 
 	result, err := awaitContinueReplay(ctx, replay)
@@ -4618,36 +4618,33 @@ func TestWorkerExecutionHandoff_MapsWorkerOutcomesAndDetachesProcessGoneResults(
 	t.Run("detaches process-gone results", testWorkerExecutionHandoffDetachesProcessGoneResults)
 }
 
+type workerExecutionHandoffOutcomeCase struct {
+	name           string
+	result         workers.ExecuteResult
+	executeErr     error
+	terminal       workers.WorkstationDispatchTerminalOutcome
+	outcome        workers.WorkOutcome
+	cancellation   workers.DispatchCancellationReason
+	reconciliation workers.WorkstationDispatchReconciliationReason
+	wantError      error
+}
+
 func testWorkerExecutionHandoffMapsWorkerOutcomes(t *testing.T) {
 	request := dispatchHandoff("result-dispatch")
 	output := workers.ProposedOutput{Primary: []work.WorkContentPart{
 		{Type: work.WorkContentPartTypeText, Text: "primary output"},
 	}}
-	cases := []struct {
-		name           string
-		result         workers.ExecuteResult
-		executeErr     error
-		terminal       workers.WorkstationDispatchTerminalOutcome
-		outcome        workers.WorkOutcome
-		reconciliation workers.WorkstationDispatchReconciliationReason
-		wantError      error
-	}{
+	cases := []workerExecutionHandoffOutcomeCase{
 		{name: "continue", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeContinue, Output: output}, terminal: workers.WorkstationDispatchTerminalOutcomeCompleted, outcome: workers.OutcomeContinue},
 		{name: "rejected", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeRejected}, terminal: workers.WorkstationDispatchTerminalOutcomeCompleted, outcome: workers.OutcomeRejected},
 		{name: "failed result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed, Failure: &workers.ExecutionFailure{Message: "failed", Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypeUnknown}}, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeFailed},
-		{name: "canceled result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeFailed},
-		{name: "context cancellation", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: context.Canceled, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeAccepted, wantError: context.Canceled},
+		{name: "canceled result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeCanceled, cancellation: workers.DispatchCancellationReasonCanceled},
+		{name: "provider returns context cancellation", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: context.Canceled, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeFailed, wantError: context.Canceled},
 		{name: "process gone", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: workers.ErrWorkstationDispatchProcessGone, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeAccepted, reconciliation: workers.WorkstationDispatchReconciliationReasonProcessGone, wantError: workers.ErrWorkstationDispatchProcessGone},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			result, err := dispatchResultFromExecute(request, test.result, test.executeErr)
-			if result.TerminalOutcome != test.terminal || result.Result.Outcome != test.outcome || result.ReconciliationReason != test.reconciliation {
-				t.Fatalf("dispatchResultFromExecute() = %#v, want terminal=%q outcome=%q reconciliation=%q", result, test.terminal, test.outcome, test.reconciliation)
-			}
-			if test.wantError != nil && !errors.Is(err, test.wantError) {
-				t.Fatalf("dispatchResultFromExecute() error = %v, want %v", err, test.wantError)
-			}
+			assertWorkerExecutionHandoffOutcome(t, request, test)
 		})
 	}
 
@@ -4655,6 +4652,29 @@ func testWorkerExecutionHandoffMapsWorkerOutcomes(t *testing.T) {
 	result, err := dispatchResultFromExecute(requestWithOutput, workers.ExecuteResult{Output: output}, nil)
 	if err != nil || result.Result.Output != "primary output" {
 		t.Fatalf("dispatchResultFromExecute(primary text) = %#v, %v, want copied text", result, err)
+	}
+}
+
+func assertWorkerExecutionHandoffOutcome(
+	t *testing.T,
+	request workers.WorkstationDispatchRequest,
+	test workerExecutionHandoffOutcomeCase,
+) {
+	t.Helper()
+	result, err := dispatchResultFromExecute(request, test.result, test.executeErr)
+	if result.TerminalOutcome != test.terminal || result.Result.Outcome != test.outcome || result.ReconciliationReason != test.reconciliation {
+		t.Fatalf("dispatchResultFromExecute() = %#v, want terminal=%q outcome=%q reconciliation=%q", result, test.terminal, test.outcome, test.reconciliation)
+	}
+	if test.cancellation == "" {
+		if result.Result.Cancellation != nil || result.Cancellation != nil {
+			t.Fatalf("dispatchResultFromExecute() cancellation = %#v/%#v, want nil", result.Result.Cancellation, result.Cancellation)
+		}
+	} else if result.Result.Cancellation == nil || result.Result.Cancellation.Reason != test.cancellation ||
+		result.Cancellation == nil || result.Cancellation.Reason != test.cancellation {
+		t.Fatalf("dispatchResultFromExecute() cancellation = %#v/%#v, want %q", result.Result.Cancellation, result.Cancellation, test.cancellation)
+	}
+	if test.wantError != nil && !errors.Is(err, test.wantError) {
+		t.Fatalf("dispatchResultFromExecute() error = %v, want %v", err, test.wantError)
 	}
 }
 

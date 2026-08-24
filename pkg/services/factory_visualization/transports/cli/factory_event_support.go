@@ -255,14 +255,6 @@ func stringPointerValue(value *string) string {
 	return *value
 }
 
-func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
-	message, ok := formatHumanFactoryEventMessage(event)
-	if !ok {
-		return nil, false
-	}
-	return formatHumanFactoryEventLine(event, message), true
-}
-
 func formatHumanFactoryEventMessage(event interfaces.FactoryEvent) (string, bool) {
 	var message string
 	switch event.Type {
@@ -302,15 +294,6 @@ func formatHumanFactoryEventLine(event interfaces.FactoryEvent, message string) 
 		sequence = *event.Context.SessionSequence
 	}
 	return []byte(fmt.Sprintf("[%d] %s", sequence, message))
-}
-
-func formatColorHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
-	message, ok := formatHumanFactoryEventMessage(event)
-	if !ok {
-		return nil, false
-	}
-	line := formatHumanFactoryEventLine(event, message)
-	return colorizeHumanFactoryEventLine(event, line), true
 }
 
 func colorizeHumanFactoryEventLine(event interfaces.FactoryEvent, line []byte) []byte {
@@ -468,18 +451,6 @@ func observeInterruptedDispatch(
 ) humanDispatchPresentation {
 	details.workIDs = mergeHumanWorkIDs(details.workIDs, factoryEventWorkIDs(event))
 	return details
-}
-
-func formatHumanWorkerAssociated(event interfaces.FactoryEvent, details humanDispatchPresentation) (string, bool) {
-	if details.workerID == "" {
-		return "", false
-	}
-	message := withHumanLifecycleSubject("worker active", details.workerID)
-	if details.workstation != "" {
-		message += " at " + details.workstation
-	}
-	message = withHumanLifecycleWorkIDs(message, details.workIDs)
-	return withHumanLifecycleDispatchID(message, event), true
 }
 
 func formatHumanDispatchStartedWithPresentation(

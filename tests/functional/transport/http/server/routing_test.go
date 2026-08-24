@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -24,8 +25,13 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 	defer ctx.server.Stop(t)
 
 	client := &http.Client{Timeout: routingReachabilityRequestTimeout}
+	var shutdownOperation *contractinventory.Operation
 	for _, operation := range inventory.Operations {
 		operation := operation
+		if operation.OperationID == "shutdownServer" {
+			shutdownOperation = &operation
+			continue
+		}
 		t.Run(operation.OperationID, func(t *testing.T) {
 			request, err := ctx.safeRequest(operation)
 			if err != nil {
@@ -39,7 +45,8 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 			defer response.Body.Close()
 
 			if response.StatusCode == http.StatusNotFound {
-				if operation.OperationID == "getHumanApprovalBySessionId" {
+				switch operation.OperationID {
+				case "getHumanApprovalBySessionId":
 					body, readErr := io.ReadAll(response.Body)
 					if readErr != nil {
 						t.Fatalf("read expected human-approval not-found response: %v", readErr)
@@ -47,6 +54,9 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 					if !strings.Contains(string(body), "human approval not found") {
 						t.Fatalf("%s %s (%s) returned an unrelated 404 response: %s", operation.Method, request.URL.String(), operation.OperationID, strings.TrimSpace(string(body)))
 					}
+					return
+				case "removeModel":
+					assertModelCacheNotFoundResponse(t, response)
 					return
 				}
 				t.Fatalf(
@@ -62,6 +72,50 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 
 	if len(inventory.Operations) == 0 {
 		t.Fatal("OpenAPI operation inventory is empty")
+	}
+	if shutdownOperation == nil {
+		t.Fatal("OpenAPI operation inventory does not contain shutdownServer")
+	}
+
+	// Shutdown cancels the shared functional server after acknowledging the
+	// request, so it must be the final operation exercised by this fixture.
+	t.Run(shutdownOperation.OperationID, func(t *testing.T) {
+		request, err := ctx.safeRequest(*shutdownOperation)
+		if err != nil {
+			t.Fatalf("build safe request for %s %s (%s): %v", shutdownOperation.Method, shutdownOperation.Path, shutdownOperation.OperationID, err)
+		}
+
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatalf("%s %s (%s): %v", shutdownOperation.Method, request.URL.String(), shutdownOperation.OperationID, err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusAccepted {
+			body, _ := io.ReadAll(response.Body)
+			t.Fatalf("%s %s (%s) status = %d, want %d: %s", shutdownOperation.Method, request.URL.String(), shutdownOperation.OperationID, response.StatusCode, http.StatusAccepted, strings.TrimSpace(string(body)))
+		}
+
+		timer := time.NewTimer(routingReachabilityRequestTimeout)
+		defer timer.Stop()
+		select {
+		case <-ctx.server.Done():
+		case <-timer.C:
+			t.Fatal("shutdownServer acknowledged but functional server did not stop")
+		}
+	})
+}
+
+func assertModelCacheNotFoundResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+	if !strings.Contains(response.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("removeModel 404 Content-Type = %q, want JSON", response.Header.Get("Content-Type"))
+	}
+	var body factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode removeModel 404 response: %v", err)
+	}
+	if body.Family != factoryapi.ErrorFamilyNotFound || string(body.Code) != "MODEL_CACHE_NOT_FOUND" {
+		t.Fatalf("removeModel 404 response = %#v, want MODEL_CACHE_NOT_FOUND not-found error", body)
 	}
 }
 

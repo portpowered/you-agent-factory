@@ -33,7 +33,7 @@ export interface paths {
     };
     /**
      * Get exact runtime cost rollups
-     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero. The server bounds one cost query at eight seconds and returns a typed timeout response when the canonical read does not complete in that window.
      */
     get: operations["getMetricsCosts"];
     put?: never;
@@ -640,6 +640,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/shutdown": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request graceful shutdown of the local server
+     * @description Accepts a loopback-only administrative shutdown request for the invocation that owns this listener. The server acknowledges the request before it invokes the invocation-local cancellation authority; the caller remains responsible for observing that the selected listener has stopped.
+     */
+    post: operations["shutdownServer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/models": {
     parameters: {
       query?: never;
@@ -694,7 +714,11 @@ export interface paths {
     get: operations["getModel"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Remove one managed model cache revision
+     * @description Explicitly removes the selected managed cache revision for one model. The operation never follows links outside the managed cache root, refuses caches held by an active host or invocation, and reports the validated cache path and measured bytes removed.
+     */
+    delete: operations["removeModel"];
     options?: never;
     head?: never;
     patch?: never;
@@ -1199,8 +1223,8 @@ export interface paths {
     put?: never;
     post?: never;
     /**
-     * Close one live factory session
-     * @description Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+     * Delete one stopped live factory session
+     * @description Deletes the selected non-default live factory session only after its runtime has already stopped. The request never implicitly stops an active runtime; default and active sessions return a typed conflict and remain registered.
      */
     delete: operations["closeFactorySession"];
     options?: never;
@@ -1923,6 +1947,11 @@ export interface components {
        * @enum {string}
        */
       status: CostsLineItemStatus;
+      /**
+       * @description Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+       * @enum {string}
+       */
+      price_source?: CostsLineItemPrice_source;
       /** @description Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage. */
       priced_amount?: string;
       /** @description Actionable reason when status is UNPRICED. */
@@ -2191,6 +2220,15 @@ export interface components {
     ManagedRuntime: {
       /** @description Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces. */
       identity: string;
+      /** @description Resolved managed-cache revision directory when a local cache is installed. */
+      cachePath?: string;
+      /** @description Installed managed-cache revision when a local cache is present. */
+      revision?: string;
+      /**
+       * Format: int64
+       * @description Exact recursive byte count of regular files in the installed managed-cache revision.
+       */
+      cacheBytes?: number;
       readinessState: components["schemas"]["ManagedRuntimeReadinessState"];
       lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
       locality: components["schemas"]["WorkerModelLocality"];
@@ -2205,7 +2243,7 @@ export interface components {
      */
     ManagedRuntimeLifecycleState: ManagedRuntimeLifecycleState;
     /**
-     * @description Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+     * @description Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
      * @enum {string}
      */
     ManagedRuntimePullOutcome: ManagedRuntimePullOutcome;
@@ -2221,6 +2259,30 @@ export interface components {
       /** @description Files downloaded or verified as already present for the managed cache entry. */
       downloadedFiles?: components["schemas"]["ModelPullDownloadedFile"][];
       sourceDiagnostics?: components["schemas"]["ManagedRuntimeSourceDiagnostics"];
+      pullDiagnostics?: components["schemas"]["ManagedRuntimePullDiagnostics"];
+    };
+    /** @description Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included. */
+    ManagedRuntimePullDiagnostics: {
+      /** @description Model identity associated with the failed pull. */
+      modelName?: string;
+      /** @description Resolved upstream repository or other safe source identifier. */
+      resolvedRepository?: string;
+      /** @description Source revision selected for the pull. */
+      revision?: string;
+      /** @description Logical asset file involved in the failed operation, when applicable. */
+      file?: string;
+      /** @description Safe logical operation that failed. */
+      operation?: string;
+      /**
+       * Format: uri
+       * @description Sanitized HTTP request URL, when an HTTP request failed.
+       */
+      requestUrl?: string;
+      /**
+       * Format: int32
+       * @description Upstream HTTP status code, when the server returned one.
+       */
+      upstreamStatusCode?: number;
     };
     /**
      * @description Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
@@ -2445,7 +2507,7 @@ export interface components {
       sha256?: string;
     };
     /**
-     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
      * @enum {string}
      */
     ModelPullOutcome: ModelPullOutcome;
@@ -2461,6 +2523,25 @@ export interface components {
       revision: string;
       /** @description Files that were downloaded or verified as already present for the managed cache entry. */
       downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
+    };
+    /**
+     * @description Outcome of removing the selected managed model cache revision.
+     * @enum {string}
+     */
+    ModelRemoveOutcome: ModelRemoveOutcome;
+    ModelRemoveResponse: {
+      /** @description Stable managed runtime identity whose cache revision was removed. */
+      modelName: string;
+      /** @description Exact managed cache revision removed by the operation. */
+      revision: string;
+      /** @description Validated absolute path of the removed managed cache revision. */
+      cachePath: string;
+      outcome: components["schemas"]["ModelRemoveOutcome"];
+      /**
+       * Format: int64
+       * @description Total size of regular files measured immediately before removal.
+       */
+      bytesRemoved: number;
     };
     ResolvedModelOperationBinding: {
       /** @description Stable input slot name declared by the worker capability. */
@@ -2526,6 +2607,12 @@ export interface components {
       targets?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Resource accounting for a rejected capacity reduction. */
       resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
+    };
+    ShutdownAcceptedResponse: {
+      /** @enum {string} */
+      status: ShutdownAcceptedResponseStatus;
+      /** @description Human-readable acknowledgment that graceful shutdown was accepted. */
+      message: string;
     };
     ErrorTarget: {
       /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -4882,6 +4969,7 @@ export interface components {
     };
     /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
     DispatchResponseEventPayload: {
+      cancellation?: components["schemas"]["DispatchCancellation"];
       completionId?: string;
       transitionId: string;
       /**
@@ -6800,8 +6888,6 @@ export interface components {
       maxChildCount: number;
       /** @description Maximum concurrent child dispatches allowed by effective policy. */
       maxConcurrency: number;
-      /** @description Capabilities denied by the effective policy before runtime execution. */
-      deniedCapabilities: components["schemas"]["WorkflowDiagnostic"][];
       /** @description Policy validation issues for the requested or factory default policy. */
       validationIssues: components["schemas"]["WorkflowDiagnostic"][];
       /** @description Optional runner allowlist decision for preview surfaces. */
@@ -7570,6 +7656,11 @@ export interface components {
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
     };
+    /** @description Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs. */
+    DispatchCancellation: {
+      /** @enum {string} */
+      reason: DispatchCancellationReason;
+    };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */
       id: string;
@@ -7812,6 +7903,15 @@ export interface components {
           | components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The selected Factory Session cannot be deleted while it is the default session or its runtime is active. */
+    FactorySessionDeletionConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
     FactorySessionResourceCapacityConflict: {
       headers: {
@@ -7825,6 +7925,24 @@ export interface components {
     };
     /** @description Server failed while reading or building runtime state. */
     InternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The shutdown control is restricted to a loopback peer on this local server. */
+    ShutdownControlRejected: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The server cannot expose its invocation-local shutdown control. */
+    ShutdownControlUnavailable: {
       headers: {
         [name: string]: unknown;
       };
@@ -7861,6 +7979,24 @@ export interface components {
     };
     /** @description The selected live Factory Session has no retained metrics scope. */
     MetricsSessionScopeUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The metrics cost query was canceled before it completed. */
+    RequestTimeout: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The metrics cost query exceeded the server-side completion bound. */
+    GatewayTimeout: {
       headers: {
         [name: string]: unknown;
       };
@@ -7995,7 +8131,9 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      408: components["responses"]["RequestTimeout"];
       500: components["responses"]["InternalError"];
+      504: components["responses"]["GatewayTimeout"];
     };
   };
   listWorkerSessions: {
@@ -8996,6 +9134,29 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  shutdownServer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The invocation-local shutdown request was accepted. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShutdownAcceptedResponse"];
+        };
+      };
+      403: components["responses"]["ShutdownControlRejected"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["ShutdownControlUnavailable"];
+    };
+  };
   listModels: {
     parameters: {
       query?: never;
@@ -9066,6 +9227,41 @@ export interface operations {
         };
       };
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  removeModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
+        model_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The selected managed model cache revision was removed. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelRemoveResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The managed model cache is held by an active host or invocation. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
@@ -9871,14 +10067,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly. */
+        /** @description Stable live factory session identifier. The reserved `~default` compatibility session cannot be deleted. */
         session_id: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Session was stopped and removed from the live workspace. */
+      /** @description A stopped non-default session was removed from the live workspace. */
       204: {
         headers: {
           [name: string]: unknown;
@@ -9886,6 +10082,7 @@ export interface operations {
         content?: never;
       };
       404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionDeletionConflict"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -10264,6 +10461,12 @@ export const CostsLineItemStatus = {
 } as const;
 export type CostsLineItemStatus =
   (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsLineItemPrice_source = {
+  BUILT_IN: "BUILT_IN",
+  OPERATOR_SUPPLIED: "OPERATOR_SUPPLIED",
+} as const;
+export type CostsLineItemPrice_source =
+  (typeof CostsLineItemPrice_source)[keyof typeof CostsLineItemPrice_source];
 export const CostsRollupCurrency = {
   USD: "USD",
 } as const;
@@ -10330,8 +10533,22 @@ export const ManagedRuntimePullOutcome = {
   STILL_LOADING: "STILL_LOADING",
   // Managed runtime install or preparation timed out before reaching a terminal readiness state.
   TIMED_OUT: "TIMED_OUT",
+  // The pull was cancelled before reaching a terminal readiness state.
+  CANCELLED: "CANCELLED",
   // Required managed runtime assets could not be fetched from the configured backend source.
   SOURCE_FETCH_FAILED: "SOURCE_FETCH_FAILED",
+  // The configured source could not be resolved for the requested model assets.
+  SOURCE_RESOLUTION_FAILED: "SOURCE_RESOLUTION_FAILED",
+  // Prepared asset bytes failed size or digest verification.
+  INTEGRITY_VERIFICATION_FAILED: "INTEGRITY_VERIFICATION_FAILED",
+  // Asset assembly or staging failed after source resolution.
+  ASSEMBLY_FAILED: "ASSEMBLY_FAILED",
+  // Installation of the prepared asset snapshot into the managed cache failed.
+  CACHE_INSTALLATION_FAILED: "CACHE_INSTALLATION_FAILED",
+  // The final managed-cache readiness evaluation failed after preparation.
+  READINESS_EVALUATION_FAILED: "READINESS_EVALUATION_FAILED",
+  // Asset preparation failed without a more specific stage classification.
+  ASSET_PREPARATION_FAILED: "ASSET_PREPARATION_FAILED",
   // The requested managed runtime does not support pull or install in the current configuration.
   UNSUPPORTED_RUNTIME: "UNSUPPORTED_RUNTIME",
 } as const;
@@ -10396,9 +10613,15 @@ export type ModelInvocationResponseMode =
 export const ModelPullOutcome = {
   PULLED: "PULLED",
   ALREADY_PRESENT: "ALREADY_PRESENT",
+  FAILED: "FAILED",
 } as const;
 export type ModelPullOutcome =
   (typeof ModelPullOutcome)[keyof typeof ModelPullOutcome];
+export const ModelRemoveOutcome = {
+  REMOVED: "REMOVED",
+} as const;
+export type ModelRemoveOutcome =
+  (typeof ModelRemoveOutcome)[keyof typeof ModelRemoveOutcome];
 export const ResolvedModelOperationBindingSource = {
   INPUT: "INPUT",
   CONFIG: "CONFIG",
@@ -10547,16 +10770,37 @@ export const ErrorResponseCode = {
   // The live Factory Session was discoverable, but no retained metrics scope was available.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
-  // The requested resource does not exist.
+  // The selected managed model cache revision does not exist.
   METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
-  // The server failed while handling an otherwise valid request.
+  // The selected managed model cache revision is held by an active model host or invocation.
   METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
+  // The requested resource does not exist.
   METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
+  // The server failed while handling an otherwise valid request.
+  MODEL_CACHE_NOT_FOUND: "MODEL_CACHE_NOT_FOUND",
+  // The metrics costs request contained invalid configuration or selection input.
+  MODEL_CACHE_IN_USE: "MODEL_CACHE_IN_USE",
+  // The metrics costs request was canceled before the report completed.
   NOT_FOUND: "NOT_FOUND",
+  // The metrics costs query failed while reading or valuing runtime usage.
   INTERNAL_ERROR: "INTERNAL_ERROR",
+  // The metrics costs query exceeded its server-side completion bound.
+  COSTS_INVALID_REQUEST: "COSTS_INVALID_REQUEST",
+  // The shutdown control request came from a non-loopback peer.
+  COSTS_QUERY_CANCELED: "COSTS_QUERY_CANCELED",
+  // The invocation-local shutdown control is unavailable.
+  COSTS_QUERY_FAILED: "COSTS_QUERY_FAILED",
+  COSTS_QUERY_TIMEOUT: "COSTS_QUERY_TIMEOUT",
+  SHUTDOWN_CONTROL_REJECTED: "SHUTDOWN_CONTROL_REJECTED",
+  SHUTDOWN_CONTROL_UNAVAILABLE: "SHUTDOWN_CONTROL_UNAVAILABLE",
 } as const;
 export type ErrorResponseCode =
   (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];
+export const ShutdownAcceptedResponseStatus = {
+  accepted: "accepted",
+} as const;
+export type ShutdownAcceptedResponseStatus =
+  (typeof ShutdownAcceptedResponseStatus)[keyof typeof ShutdownAcceptedResponseStatus];
 export const FactorySessionTargetRefKind = {
   default: "default",
   named: "named",
@@ -11126,6 +11370,8 @@ export const WorkOutcome = {
   WorkOutcomeRejected: "REJECTED",
   // The workstation could not complete because execution crashed, timed out, or hit a system error.
   WorkOutcomeFailed: "FAILED",
+  // The dispatch was deliberately canceled or superseded before producing a business result.
+  WorkOutcomeCanceled: "CANCELED",
 } as const;
 export type WorkOutcome = (typeof WorkOutcome)[keyof typeof WorkOutcome];
 export const WorkFailureFamily = {
@@ -11925,6 +12171,12 @@ export const WorkstationGuardType = {
 } as const;
 export type WorkstationGuardType =
   (typeof WorkstationGuardType)[keyof typeof WorkstationGuardType];
+export const DispatchCancellationReason = {
+  CANCELED: "CANCELED",
+  SUPERSEDED: "SUPERSEDED",
+} as const;
+export type DispatchCancellationReason =
+  (typeof DispatchCancellationReason)[keyof typeof DispatchCancellationReason];
 export const GlobalConfigACPIntegrationTransport = {
   stdio: "stdio",
 } as const;

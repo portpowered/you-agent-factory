@@ -1,13 +1,21 @@
 package runtimeopening
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestResolveRuntimeRootNormalizesSharedProcessInputs(t *testing.T) {
@@ -119,5 +127,208 @@ func TestResolveDefinitionPathResolvesCurrentFactoryAndErrors(t *testing.T) {
 		func() (string, error) { return "", want },
 	); !errors.Is(err, want) {
 		t.Fatalf("source home resolver error = %v, want %v", err, want)
+	}
+}
+
+func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *testing.T) {
+	t.Parallel()
+
+	root := &cleanupRoutingRoot{}
+	factory := &Factory{
+		runtimeRoot:               root,
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+	}
+
+	products, err := factory.openActivatedRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+	})
+	if err != nil {
+		t.Fatalf("openActivatedRuntime() error = %v", err)
+	}
+	if root.activations != 1 {
+		t.Fatalf("Runtime root activations = %d, want exactly one", root.activations)
+	}
+
+	roleCleanups := []struct {
+		name  string
+		close func() error
+	}{
+		{name: "application", close: products.application.Resources.Close},
+		{name: "invocation", close: products.invocation.CloseArtifacts},
+		{name: "execution", close: products.execution.Resources.Close},
+	}
+	for _, role := range roleCleanups {
+		if role.close == nil {
+			t.Fatalf("%s cleanup edge = nil, want the Runtime deactivation operation", role.name)
+		}
+	}
+	if root.deactivations != 0 {
+		t.Fatalf("Runtime deactivations before cleanup = %d, want zero", root.deactivations)
+	}
+
+	for _, role := range roleCleanups {
+		if err := role.close(); err != nil {
+			t.Fatalf("%s cleanup error = %v", role.name, err)
+		}
+	}
+	if root.deactivations != 1 {
+		t.Fatalf(
+			"Runtime deactivations after draining every role cleanup = %d, want exactly one Runtime-routed deactivation",
+			root.deactivations,
+		)
+	}
+
+	// Opening publishes the Runtime root itself; it does not hand callers a
+	// Sessions-retained runtime handle recovered from the opening products.
+	if products.application.FactoryRuntime != factoryruntime.Service(root) {
+		t.Fatalf(
+			"opened application FactoryRuntime = %T, want the Runtime root %T",
+			products.application.FactoryRuntime,
+			root,
+		)
+	}
+}
+
+type cleanupRoutingRoot struct {
+	factoryruntime.Service
+	activations   int
+	deactivations int
+}
+
+func (root *cleanupRoutingRoot) Activate(
+	context.Context,
+	factoryruntime.RuntimeActivationRequest,
+) (factoryruntime.RuntimeActivationResult, error) {
+	root.activations++
+	return factoryruntime.RuntimeActivationResult{
+		RuntimeID: "runtime-1",
+		Runtime: factoryruntime.RuntimeActivationView{
+			RuntimeID: "runtime-1",
+			Service:   &activatedRuntimeService{products: runtimeProducts{}},
+		},
+	}, nil
+}
+
+func (root *cleanupRoutingRoot) Deactivate(
+	context.Context,
+	factoryruntime.RuntimeDeactivationRequest,
+) (factoryruntime.RuntimeDeactivationResult, error) {
+	root.deactivations++
+	return factoryruntime.RuntimeDeactivationResult{}, nil
+}
+
+func TestWarnReplayMetadataMismatchesResolvesCurrentOperatorDefaults(t *testing.T) {
+	t.Parallel()
+
+	defaults := operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "CODEX",
+		WorkerModel:         "replay-model",
+	}
+	factoryConfig := &factorydefinitions.FactoryConfig{
+		Name: "factory",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: "worker",
+			Type: factorydefinitions.WorkerTypeModel,
+		}},
+	}
+	factoryDir := t.TempDir()
+	recorded, err := factorydefinitionfixtures.NewLoadedSource(
+		factoryDir, factoryConfig, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("construct recorded source: %v", err)
+	}
+	if err := applyOperatorDefaults(recorded, defaults); err != nil {
+		t.Fatalf("apply recorded operator defaults: %v", err)
+	}
+	capture := runtimeLoadedFactorySnapshotCapturer()
+	artifactFactory, err := capture(recorded, factoryDir, nil)
+	if err != nil {
+		t.Fatalf("capture recorded source: %v", err)
+	}
+
+	current, err := factorydefinitionfixtures.NewLoadedSource(
+		factoryDir, factoryConfig, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("construct current source: %v", err)
+	}
+	core, logs := observer.New(zapcore.WarnLevel)
+	warnReplayMetadataMismatches(
+		factoryDir,
+		"recording.replay.json",
+		nil,
+		&factorydefinitions.ReplayArtifact{Factory: artifactFactory},
+		zap.New(core),
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return current, nil
+		},
+		capture,
+		defaults,
+	)
+	if logs.Len() != 0 {
+		t.Fatalf("equivalent effective config emitted replay metadata warnings: %v", logs.All())
+	}
+}
+
+func TestWarnReplayMetadataMismatchesReturnsStructuredComponentWarnings(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	recordedConfig := &factorydefinitions.FactoryConfig{
+		Name: "factory",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: "worker", Type: factorydefinitions.WorkerTypeModel, Body: "recorded prompt",
+		}},
+	}
+	currentConfig := &factorydefinitions.FactoryConfig{
+		Name: "factory",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: "worker", Type: factorydefinitions.WorkerTypeModel, Body: "changed prompt",
+		}},
+	}
+	recorded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, recordedConfig, nil, nil)
+	if err != nil {
+		t.Fatalf("construct recorded source: %v", err)
+	}
+	current, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, currentConfig, nil, nil)
+	if err != nil {
+		t.Fatalf("construct current source: %v", err)
+	}
+	capture := runtimeLoadedFactorySnapshotCapturer()
+	artifactFactory, err := capture(recorded, factoryDir, nil)
+	if err != nil {
+		t.Fatalf("capture recorded source: %v", err)
+	}
+	core, logs := observer.New(zapcore.WarnLevel)
+	warnings := warnReplayMetadataMismatches(
+		factoryDir,
+		"recording.replay.json",
+		nil,
+		&factorydefinitions.ReplayArtifact{Factory: artifactFactory},
+		zap.New(core),
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return current, nil
+		},
+		capture,
+		operatorconfig.ResolvedDefaults{},
+	)
+	gotKeys := make(map[string]bool, len(warnings))
+	for _, warning := range warnings {
+		gotKeys[warning.Key] = true
+	}
+	for _, key := range []string{"factory_hash", "workers_hash", "runtime_config_hash"} {
+		if !gotKeys[key] {
+			t.Fatalf("metadata warnings = %#v, missing %q", warnings, key)
+		}
+	}
+	if logs.Len() != len(warnings) {
+		t.Fatalf("structured warning log count = %d, want %d", logs.Len(), len(warnings))
+	}
+	for _, entry := range logs.All() {
+		if entry.ContextMap()["metadata_key"] == nil {
+			t.Fatalf("structured warning omitted metadata_key: %#v", entry)
+		}
 	}
 }

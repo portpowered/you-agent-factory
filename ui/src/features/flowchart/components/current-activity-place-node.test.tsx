@@ -315,8 +315,11 @@ describe("CurrentActivity work-state node fill by held work", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).not.toContain(
+    expect(shellClassTokens(shell)).not.toContain(
       "[&_[data-state-value]]:!text-on-warning",
+    );
+    expect(shellClassTokens(shell)).toContain(
+      "factory-light:[&_[data-state-value]]:!text-on-warning",
     );
     expect(
       container.querySelector("[data-state-value]")?.getAttribute("class"),

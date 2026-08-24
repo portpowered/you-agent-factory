@@ -249,13 +249,6 @@ func postPackagedSubagentArgs(
 	return decoded
 }
 
-func packagedSubagentTextInvocationRequest(requestText string) factoryapi.InvocationRequest {
-	args := map[string]interface{}{"input": requestText}
-	return factoryapi.InvocationRequest{
-		Args: &args,
-	}
-}
-
 func assertPackagedSubagentChildResponseEvents(
 	t *testing.T,
 	events []factoryapi.FactoryResponseEvent,

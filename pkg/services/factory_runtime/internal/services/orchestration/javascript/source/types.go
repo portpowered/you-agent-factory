@@ -63,10 +63,13 @@ type ArtifactRootDecision struct {
 
 // Resolution is the shared workflow source resolution contract.
 type Resolution struct {
-	RequestKind      Kind
-	RequestValue     string
-	ResolvedKind     Kind
-	LookupStage      LookupStage
+	RequestKind  Kind
+	RequestValue string
+	ResolvedKind Kind
+	LookupStage  LookupStage
+	// FactoryName is the authoritative name of the named JavaScript Factory
+	// that owns the resolved source, when the source came from one.
+	FactoryName      string
 	SourceRef        string
 	SourceHash       string
 	OrchestratorKind string

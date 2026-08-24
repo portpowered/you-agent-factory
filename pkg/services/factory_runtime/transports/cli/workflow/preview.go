@@ -124,9 +124,6 @@ func renderPreviewPolicyDiagnostics(result factoryapi.FactoryPreviewResult, outp
 	for _, issue := range result.PolicyPreview.ValidationIssues {
 		fmt.Fprintf(output, "%s\n", formatWorkflowDiagnostic(issue))
 	}
-	for _, diagnostic := range result.PolicyPreview.DeniedCapabilities {
-		fmt.Fprintf(output, "Denied capability: %s: %s\n", diagnostic.Code, diagnostic.Message)
-	}
 }
 
 func formatWorkflowDiagnostic(issue factoryapi.WorkflowDiagnostic) string {

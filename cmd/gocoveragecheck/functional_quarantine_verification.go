@@ -61,6 +61,11 @@ func startFunctionalQuarantineSelectorVerification(cfg config, targetOS string, 
 		verification.done <- err
 		return verification
 	}
+	if err := validateFunctionalQuarantineMetadata(manifest); err != nil {
+		verification := newFunctionalQuarantineSelectorVerification(0)
+		verification.done <- err
+		return verification
+	}
 	selectorPackages := functionalTestSelectorPackages(manifest)
 	if len(selectorPackages) == 0 {
 		return nil

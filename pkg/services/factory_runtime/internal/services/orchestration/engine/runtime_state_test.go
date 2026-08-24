@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -9,8 +10,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -48,6 +51,74 @@ func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *t
 	}
 	if decoded.Type != interfaces.MutationMove || decoded.TransitionID != "transition-review" {
 		t.Fatalf("decoded mutation lost explicit Petri type or transition: %#v", decoded)
+	}
+}
+
+func TestFactoryEngine_FallbackRetiresSupersededCancellation(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+
+	alreadyDispatched := false
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if alreadyDispatched {
+				return nil, nil
+			}
+			alreadyDispatched = true
+			return &interfaces.TickResult{
+				Dispatches: []interfaces.DispatchRecord{{
+					Dispatch: work.WorkDispatch{DispatchID: "superseded-fallback", TransitionID: "t1", WorkerType: "test-worker"},
+					Mutations: []interfaces.MarkingMutation{{
+						Type:      interfaces.MutationConsume,
+						TokenID:   "tok-1",
+						FromPlace: "task:init",
+						Reason:    "consumed by transition t1",
+					}},
+				}},
+			}, nil
+		},
+	}
+
+	var completions []interfaces.FactoryCompletionRecord
+	eng := newTestFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
+		WithDispatchHandler(func(work.WorkDispatch) {}),
+		WithCompletionRecorder(func(record interfaces.FactoryCompletionRecord) {
+			completions = append(completions, record)
+		}),
+	)
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("initial Tick() error: %v", err)
+	}
+
+	eng.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{
+		DispatchID:   "superseded-fallback",
+		TransitionID: "t1",
+		Outcome:      workerexecution.OutcomeCanceled,
+		Cancellation: &workerexecution.DispatchCancellation{
+			Reason: workerexecution.DispatchCancellationReasonSuperseded,
+		},
+	})
+	eng.NotifyResult()
+	if err := eng.Tick(context.Background()); err != nil {
+		t.Fatalf("cancellation Tick() error: %v", err)
+	}
+
+	history := eng.GetRuntimeStateSnapshot().DispatchHistory
+	if len(history) != 1 {
+		t.Fatalf("dispatch history = %#v, want one fallback completion", history)
+	}
+	completed := history[0]
+	if completed.Outcome != workerexecution.OutcomeCanceled || completed.Cancellation == nil ||
+		completed.Cancellation.Reason != workerexecution.DispatchCancellationReasonSuperseded {
+		t.Fatalf("fallback completion = %#v, want SUPERSEDED cancellation", completed)
+	}
+	if completed.Reason != string(workerexecution.DispatchCancellationReasonSuperseded) {
+		t.Fatalf("fallback reason = %q, want SUPERSEDED", completed.Reason)
+	}
+	if len(completions) != 1 || completions[0].Result.Cancellation == nil ||
+		completions[0].Result.Cancellation.Reason != workerexecution.DispatchCancellationReasonSuperseded {
+		t.Fatalf("recorded completion = %#v, want SUPERSEDED cancellation", completions)
 	}
 }
 

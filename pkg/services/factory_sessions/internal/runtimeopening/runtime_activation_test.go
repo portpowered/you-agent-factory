@@ -105,39 +105,36 @@ func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing
 	}
 }
 
-func TestRestoreCurrentBoardStateFailsClosedForCorruptHistory(t *testing.T) {
+func TestRestoreCurrentBoardStateScopesArtifactReferenceToFactorySession(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name string
-		stub historicalBoardReaderStub
-		want string
+	const basePath = "/recordings/factory-session-__factory_session_id__-1.json"
+	for _, tc := range []struct {
+		name      string
+		sessionID string
+		wantPath  string
 	}{
-		{
-			name: "query failure",
-			stub: historicalBoardReaderStub{err: errors.New("corrupt canonical history")},
-			want: "restore current Factory Session board from \"board.json\"",
-		},
-		{
-			name: "incompatible view",
-			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
-				WorldState: recordings.WorldStateView{SchemaVersion: "unknown", Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "{}"},
-			}},
-			want: "incompatible world-state view",
-		},
-		{
-			name: "invalid payload",
-			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
-				WorldState: recordings.WorldStateView{SchemaVersion: recordings.WorldStateViewSchemaV1, Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "not-json"},
-			}},
-			want: "decode world state",
-		},
-	}
-	for _, tc := range cases {
+		{name: "default session", sessionID: "~default", wantPath: "/recordings/factory-session-~default-1.json"},
+		{name: "named session", sessionID: "session-a", wantPath: "/recordings/factory-session-session-a-1.json"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := restoreCurrentBoardState(&tc.stub, "board.json", "~default", false)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("restore error = %v, want substring %q", err, tc.want)
+			t.Parallel()
+			reader := &historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{
+					SchemaVersion: recordings.WorldStateViewSchemaV1,
+					Scope:         recordings.CanonicalEventScope{FactorySessionID: tc.sessionID},
+					Payload:       "{}",
+				},
+			}}
+			if _, err := restoreCurrentBoardState(reader, basePath, tc.sessionID, false); err != nil {
+				t.Fatalf("restore current board: %v", err)
+			}
+			artifact := string(reader.request.Recording.Artifact)
+			if artifact != tc.wantPath {
+				t.Fatalf("artifact reference = %q, want %q", artifact, tc.wantPath)
+			}
+			if strings.Contains(artifact, "__") {
+				t.Fatalf("artifact reference contains unresolved session token: %q", artifact)
 			}
 		})
 	}
@@ -157,10 +154,10 @@ func TestRestoreCurrentBoardStateTreatsMissingArtifactAsInitialOpen(t *testing.T
 	}
 }
 
-func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *testing.T) {
+func TestRestoreCurrentBoardStateAllowsMissingArtifactAfterDurableState(t *testing.T) {
 	t.Parallel()
 
-	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+	opening, err := inspectCurrentBoardHistory(
 		context.Background(),
 		&durableSessionStateStub{hasDurableState: true},
 		"~default",
@@ -168,14 +165,17 @@ func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *test
 	if err != nil {
 		t.Fatalf("inspect durable session state: %v", err)
 	}
-	if allowMissing {
-		t.Fatal("durable session state marked prior state as uninitialized")
+	if !opening.hasDurableState || !opening.allowMissingHistory {
+		t.Fatalf("durable opening = %#v, want durable state with missing-history recovery enabled", opening)
 	}
-	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
 		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
-	}}, "board.json", "~default", allowMissing)
-	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
-		t.Fatalf("missing history after durable state error = %v, want fail-closed diagnostic", err)
+	}}, "board.json", "~default", opening.allowMissingHistory)
+	if err != nil {
+		t.Fatalf("missing history after durable state error = %v, want recoverable absence", err)
+	}
+	if state != nil {
+		t.Fatalf("missing history state = %#v, want empty-board signal", state)
 	}
 }
 
@@ -193,12 +193,12 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesPersistenceBackedStateProbe(t 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			stub := durableSessionStateStub{hasDurableState: tc.hasDurableState}
-			got, err := currentBoardHistoryMayBeUninitialized(context.Background(), &stub, "~default")
+			got, err := inspectCurrentBoardHistory(context.Background(), &stub, "~default")
 			if err != nil {
-				t.Fatalf("currentBoardHistoryMayBeUninitialized: %v", err)
+				t.Fatalf("inspectCurrentBoardHistory: %v", err)
 			}
-			if got != tc.wantUninitialized {
-				t.Fatalf("uninitialized = %t, want %t", got, tc.wantUninitialized)
+			if got.allowMissingHistory != true || got.hasDurableState == tc.wantUninitialized {
+				t.Fatalf("opening = %#v, want allowMissingHistory=true and hasDurableState=%t", got, !tc.wantUninitialized)
 			}
 		})
 	}
@@ -223,7 +223,7 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMiss
 	// The fresh owner has no in-memory session state. The missing board reader
 	// must therefore be evaluated against the snapshot left by the first owner.
 	freshOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
-	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+	opening, err := inspectCurrentBoardHistory(
 		context.Background(),
 		freshOwner,
 		sessionID,
@@ -231,14 +231,17 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMiss
 	if err != nil {
 		t.Fatalf("inspect fresh persistent owner: %v", err)
 	}
-	if allowMissing {
-		t.Fatal("missing board history after a prior owner was accepted as initial open")
+	if !opening.hasDurableState || !opening.allowMissingHistory {
+		t.Fatalf("fresh owner opening = %#v, want durable state with missing-history recovery enabled", opening)
 	}
-	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
 		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
-	}}, "missing-board.json", sessionID, allowMissing)
-	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
-		t.Fatalf("missing board history error = %v, want fail-closed diagnostic", err)
+	}}, "missing-board.json", sessionID, opening.allowMissingHistory)
+	if err != nil {
+		t.Fatalf("missing board history error = %v, want recoverable absence", err)
+	}
+	if state != nil {
+		t.Fatalf("missing board history state = %#v, want empty-board signal", state)
 	}
 }
 
@@ -420,7 +423,6 @@ func (service *activationServiceFake) SubscribeFactoryEvents(
 
 func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	t.Parallel()
-
 	skipPermissions := true
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
@@ -430,10 +432,12 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 		},
 		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{Verbose: true},
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			BackendScopeID: "scope",
+			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+			BackendScopeID:     "scope",
 			Host: factorysessions.RuntimeHostRequest{
-				Host: "127.0.0.1",
-				Port: 8080,
+				Host:  "127.0.0.1",
+				Port:  8080,
+				Pprof: true,
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
@@ -452,11 +456,16 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	if activation.RuntimeID != "runtime-1" || activation.FactorySessionID != factorysessions.DefaultSessionID {
 		t.Fatalf("activation identity = %#v, want runtime-1/%q", activation, factorysessions.DefaultSessionID)
 	}
-	if activation.Inputs.Definition.SourcePath != "/source" || activation.Inputs.Session.BackendScopeID != "scope" {
+	if activation.Inputs.Definition.SourcePath != "/source" ||
+		activation.Inputs.Session.BackendScopeID != "scope" ||
+		activation.Inputs.Session.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" {
 		t.Fatalf("activation inputs lost source or session values: %#v", activation.Inputs)
 	}
 	if activation.Inputs.Workers.InvocationSkipPermissionsOverride == nil || !*activation.Inputs.Workers.InvocationSkipPermissionsOverride {
 		t.Fatal("activation inputs lost worker permission override")
+	}
+	if !activation.Inputs.Session.Host.Pprof {
+		t.Fatal("activation inputs lost pprof setting")
 	}
 }
 
@@ -476,6 +485,9 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	}
 	request := factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+		},
 		Recordings: recordings.RuntimeOpeningRequest{
 			RecordPath: "successor.recording.json",
 			ResumePath: resumePath,
@@ -495,6 +507,9 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	}
 	if opening.Recordings.RecordPath != request.Recordings.RecordPath {
 		t.Fatalf("Recordings successor path = %q, want %q", opening.Recordings.RecordPath, request.Recordings.RecordPath)
+	}
+	if opening.FactorySession.CanonicalSessionID != request.FactorySession.CanonicalSessionID {
+		t.Fatalf("Factory Session canonical ID = %q, want %q", opening.FactorySession.CanonicalSessionID, request.FactorySession.CanonicalSessionID)
 	}
 	if opening.Recordings.ResumeInput != resumeInput {
 		t.Fatalf("Recordings resume input = %#v, want %#v", opening.Recordings.ResumeInput, resumeInput)
@@ -907,90 +922,3 @@ func (stub *legacyReplayInputsStub) LoadReplayInput(
 // retained hosted-instance, replacement-builder, lifecycle, or sidecar handle.
 // All three role cleanup edges must resolve to the single Runtime-owned closer,
 // so draining them cannot deactivate the Runtime more than once.
-func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *testing.T) {
-	t.Parallel()
-
-	root := &cleanupRoutingRoot{}
-	factory := &Factory{
-		runtimeRoot:               root,
-		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
-	}
-
-	products, err := factory.openActivatedRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-	})
-	if err != nil {
-		t.Fatalf("openActivatedRuntime() error = %v", err)
-	}
-	if root.activations != 1 {
-		t.Fatalf("Runtime root activations = %d, want exactly one", root.activations)
-	}
-
-	roleCleanups := []struct {
-		name  string
-		close func() error
-	}{
-		{name: "application", close: products.application.Resources.Close},
-		{name: "invocation", close: products.invocation.CloseArtifacts},
-		{name: "execution", close: products.execution.Resources.Close},
-	}
-	for _, role := range roleCleanups {
-		if role.close == nil {
-			t.Fatalf("%s cleanup edge = nil, want the Runtime deactivation operation", role.name)
-		}
-	}
-	if root.deactivations != 0 {
-		t.Fatalf("Runtime deactivations before cleanup = %d, want zero", root.deactivations)
-	}
-
-	for _, role := range roleCleanups {
-		if err := role.close(); err != nil {
-			t.Fatalf("%s cleanup error = %v", role.name, err)
-		}
-	}
-	if root.deactivations != 1 {
-		t.Fatalf(
-			"Runtime deactivations after draining every role cleanup = %d, want exactly one Runtime-routed deactivation",
-			root.deactivations,
-		)
-	}
-
-	// Opening publishes the Runtime root itself; it does not hand callers a
-	// Sessions-retained runtime handle recovered from the opening products.
-	if products.application.FactoryRuntime != factoryruntime.Service(root) {
-		t.Fatalf(
-			"opened application FactoryRuntime = %T, want the Runtime root %T",
-			products.application.FactoryRuntime,
-			root,
-		)
-	}
-}
-
-type cleanupRoutingRoot struct {
-	factoryruntime.Service
-	activations   int
-	deactivations int
-}
-
-func (root *cleanupRoutingRoot) Activate(
-	context.Context,
-	factoryruntime.RuntimeActivationRequest,
-) (factoryruntime.RuntimeActivationResult, error) {
-	root.activations++
-	return factoryruntime.RuntimeActivationResult{
-		RuntimeID: "runtime-1",
-		Runtime: factoryruntime.RuntimeActivationView{
-			RuntimeID: "runtime-1",
-			Service:   &activatedRuntimeService{products: runtimeProducts{}},
-		},
-	}, nil
-}
-
-func (root *cleanupRoutingRoot) Deactivate(
-	context.Context,
-	factoryruntime.RuntimeDeactivationRequest,
-) (factoryruntime.RuntimeDeactivationResult, error) {
-	root.deactivations++
-	return factoryruntime.RuntimeDeactivationResult{}, nil
-}

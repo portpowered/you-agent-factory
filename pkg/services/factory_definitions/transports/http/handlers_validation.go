@@ -1,7 +1,6 @@
 package http
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
@@ -46,9 +45,4 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 
 	s.writeCompatibilityWarning(w, "validate_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, apisurface.FactoryValidationResultToAPI(result))
-}
-
-func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	result, err := decodeJSONWithDiagnostics[factoryapi.Factory](body)
-	return result.Value, err
 }

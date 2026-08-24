@@ -64,6 +64,13 @@ func (g localAssetGateway) InspectRuntimeCache(
 		InstalledFileCount: inspection.InstalledFileCount,
 		MissingAssets:      append([]string(nil), inspection.MissingAssets...),
 		PartialArtifacts:   inspection.PartialArtifacts,
+		ManifestPresent:    inspection.ManifestPresent,
+		ManifestValid:      inspection.ManifestValid,
+		ExpectedArtifacts:  append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+		ObservedArtifacts:  append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
+		ActivePull:         inspection.ActivePull,
+		IntegrityVerified:  inspection.IntegrityVerified,
+		FailureReason:      inspection.FailureReason,
 	}, nil
 }
 

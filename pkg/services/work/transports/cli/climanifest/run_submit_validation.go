@@ -20,12 +20,12 @@ var runSubmitFamilySpecs = []struct {
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
 			"runtime-metrics-max-age-days", "runtime-metrics-max-backups", "runtime-metrics-max-size-mb",
 			"remote", "server", "skip-permissions", "verbose", "with-mock-workers", "with-server", "with-site", "work",
-			"worker-reasoning-effort", "worktree",
+			"worker-reasoning-effort", "worktree", "pprof",
 		},
 	},
 	{
 		id: "you.server", path: "you server",
-		flags: []string{"debug", "json", "listen", "remote", "server", "verbose"},
+		flags: []string{"debug", "json", "listen", "pprof", "remote", "server", "verbose"},
 	},
 	{
 		id: "you.submit", path: "you submit", operationID: "submitWorkBySessionId",
@@ -171,6 +171,7 @@ func validateRunInputPolicy(run Command) error {
 		"you.run.rel.quiet-json",
 		"you.run.rel.quiet-output",
 		"you.run.rel.listen-server",
+		"you.run.rel.pprof-server",
 		"you.run.rel.remote-with-server",
 		"you.run.rel.remote-with-site",
 	} {

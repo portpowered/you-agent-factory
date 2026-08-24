@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 )
 
 func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T) {
@@ -35,6 +36,21 @@ func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T
 		}, RuntimeCacheInspection{Supported: true, Installed: false, MissingAssets: []string{"model.gguf"}})
 		if outcome != managedPullOutcomeStillLoading || readiness != managedReadinessLoading || lifecycle != managedLifecycleInstalling {
 			t.Fatalf("classified = (%s, %s, %s), want still loading LOADING INSTALLING", outcome, readiness, lifecycle)
+		}
+	})
+
+	t.Run("installed flag cannot hide a failed cache projection", func(t *testing.T) {
+		outcome, readiness, lifecycle := classifySuccessfulPull(apisurface.PullResult{
+			Outcome: legacyPullOutcomePulled,
+		}, RuntimeCacheInspection{
+			Supported: true, Installed: true,
+			ManifestPresent: true, ManifestValid: true,
+			ExpectedArtifacts: []apisurface.AssetRequirement{{Name: "model.gguf", Bytes: 4}},
+			ObservedArtifacts: []apisurface.AssetArtifact{{Name: "model.gguf", Bytes: 3}},
+			FailureReason:     "managed cache artifact \"model.gguf\" has unexpected size",
+		})
+		if outcome != managedPullOutcomeIntegrityVerificationFailed || readiness != managedReadinessFailed || lifecycle != managedLifecycleNotInstalled {
+			t.Fatalf("classified = (%s, %s, %s), want integrity failure FAILED NOT_INSTALLED", outcome, readiness, lifecycle)
 		}
 	})
 }
@@ -66,9 +82,29 @@ func TestClassifyPullFailure_MapsErrorsToManagedOutcomes(t *testing.T) {
 			wantReady: managedReadinessFailed,
 		},
 		{
+			name: "post-download cache installation",
+			err: pullsupport.WrapPullStage(
+				apisurface.PullStageCacheInstallation, "model", "install cache", "", apisurface.ErrNotAvailable,
+			),
+			wantPull:  managedPullOutcomeCacheInstallationFailed,
+			wantReady: managedReadinessFailed,
+		},
+		{
+			name:      "caller cancellation",
+			err:       context.Canceled,
+			wantPull:  managedPullOutcomeCancelled,
+			wantReady: managedReadinessFailed,
+		},
+		{
 			name:      "download failure message",
 			err:       errors.New("download model asset \"model.gguf\" failed (502): upstream unavailable"),
 			wantPull:  managedPullOutcomeSourceFetchFailed,
+			wantReady: managedReadinessFailed,
+		},
+		{
+			name:      "integrity failure message",
+			err:       errors.New("checksum verification failed for model.gguf"),
+			wantPull:  managedPullOutcomeIntegrityVerificationFailed,
 			wantReady: managedReadinessFailed,
 		},
 	}

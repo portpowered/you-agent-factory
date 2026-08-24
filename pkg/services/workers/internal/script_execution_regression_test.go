@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
@@ -21,36 +22,36 @@ var testFactoryDocsLoader workers.FactoryDocsLoader = func(string) (map[string]s
 }
 
 // recordingScriptCommandRunner is a thread-safe fake implementing both
-// workers.CommandRunner and the streaming edge the Script Runner requires.
+// workerprocess.CommandRunner and the streaming edge the Script Runner requires.
 // The tests below exercise the request-scoped Workers service, so every
 // assertion proves the injected command effect is reached without a
 // per-worker Workstation adapter.
 type recordingScriptCommandRunner struct {
 	mu       sync.Mutex
-	callList []workers.CommandRequest
+	callList []workerprocess.CommandRequest
 	stdout   []byte
 	exitCode int
 }
 
 func (r *recordingScriptCommandRunner) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	return r.RunStreaming(ctx, request, nil)
 }
 
 func (r *recordingScriptCommandRunner) RunStreaming(
 	_ context.Context,
-	request workers.CommandRequest,
-	observer workers.OutputChunkObserver,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+	observer workerprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.callList = append(r.callList, request)
 	r.mu.Unlock()
 	if observer != nil && len(r.stdout) > 0 {
 		observer("stdout", append([]byte(nil), r.stdout...))
 	}
-	return workers.CommandResult{Stdout: append([]byte(nil), r.stdout...), ExitCode: r.exitCode}, nil
+	return workerprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...), ExitCode: r.exitCode}, nil
 }
 
 func (r *recordingScriptCommandRunner) calls() int {
@@ -59,15 +60,15 @@ func (r *recordingScriptCommandRunner) calls() int {
 	return len(r.callList)
 }
 
-func (r *recordingScriptCommandRunner) requests() []workers.CommandRequest {
+func (r *recordingScriptCommandRunner) requests() []workerprocess.CommandRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]workers.CommandRequest(nil), r.callList...)
+	return append([]workerprocess.CommandRequest(nil), r.callList...)
 }
 
 func scriptInvocationWorkersService(
 	t *testing.T,
-	scriptRunner workers.CommandRunner,
+	scriptRunner workerprocess.CommandRunner,
 	publisher workers.ProgressPublisher,
 ) *executeservice.Service {
 	t.Helper()

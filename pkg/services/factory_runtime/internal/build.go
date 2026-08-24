@@ -27,6 +27,15 @@ import (
 
 const defaultSessionID = "~default"
 
+// inputFileSystem is the Factory Runtime-owned input-tree effect. It stays
+// below the service root; the wire package exposes only the construction seam
+// needed by the process composition boundary.
+type inputFileSystem interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+}
+
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 
 type RuntimeFactory struct {
@@ -43,7 +52,7 @@ type RuntimeFactory struct {
 	newID                    factory.IDGenerator
 	workRequestIDs           work.RequestIDGenerator
 	runtimeDirs              factory.RuntimeDirectoryFileSystem
-	inputFiles               factory.InputFileSystem
+	inputFiles               inputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
 	providerSessions         providersessions.Service
@@ -63,7 +72,7 @@ func NewRuntimeFactory(
 	newID factory.IDGenerator,
 	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
-	inputFiles factory.InputFileSystem,
+	inputFiles inputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
 	providerSessions providersessions.Service,
@@ -245,6 +254,15 @@ func (f *RuntimeFactory) Build(
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)
 	}
+	if source, ok := loadedFactoryCfg.(interface {
+		InvocationSensitiveJSONPointers() []string
+	}); ok {
+		if setter, ok := eventHistory.(interface {
+			SetInvocationSensitiveJSONPointers([]string)
+		}); ok {
+			setter.SetInvocationSensitiveJSONPointers(source.InvocationSensitiveJSONPointers())
+		}
+	}
 	var mockWorkersConfig *workers.MockWorkersConfig
 	if len(mockWorkersConfigs) > 0 {
 		mockWorkersConfig = mockWorkersConfigs[0]
@@ -344,7 +362,7 @@ func assembleRuntimeBundle(
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
-	inputFiles factory.InputFileSystem,
+	inputFiles inputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 	invocationInterpolation interfaces.InvocationInterpolationService,
@@ -358,6 +376,16 @@ func assembleRuntimeBundle(
 	if recordPath != "" {
 		factoryEventRecorder = func(event interfaces.FactoryEvent) {
 			if recording == nil {
+				return
+			}
+			var provenance []recordings.RecordingSecret
+			if lookup, ok := eventHistory.(interface {
+				SecretProvenanceDuringAppend(interfaces.FactoryEvent) []recordings.RecordingSecret
+			}); ok {
+				provenance = lookup.SecretProvenanceDuringAppend(event)
+			}
+			if withProvenance, ok := recording.(recordings.RuntimeRecorderWithProvenance); ok {
+				withProvenance.RecordEventWithProvenance(event, provenance)
 				return
 			}
 			recording.RecordEvent(event)
@@ -434,7 +462,7 @@ func assembleRuntimeBundle(
 	return bundle, nil
 }
 
-func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {
+func invocationFileReader(inputFiles inputFileSystem) interfaces.FileReader {
 	if inputFiles == nil {
 		return nil
 	}
@@ -502,7 +530,7 @@ func RuntimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 }
 
 type inputWorkflowSourceFiles struct {
-	files factory.InputFileSystem
+	files inputFileSystem
 }
 
 func (f inputWorkflowSourceFiles) ReadDir(path string) ([]fs.DirEntry, error) {

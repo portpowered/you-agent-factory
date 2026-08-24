@@ -11,12 +11,12 @@ import (
 	"github.com/jonboulle/clockwork"
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -189,7 +189,7 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 		"checkpoint":"checkpoint-root"
 	}`)
 	runner := &internalScriptPollerRunner{
-		outcomes: []internalScriptPollerOutcome{{result: workers.CommandResult{Stdout: stdout}}},
+		outcomes: []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &internalScriptPollerSubmitter{}
 	service := NewService(
@@ -247,7 +247,7 @@ func (s *internalScriptPollerSubmitter) submit(context.Context, work.WorkRequest
 }
 
 type internalScriptPollerOutcome struct {
-	result workers.CommandResult
+	result platformprocess.CommandResult
 	err    error
 }
 
@@ -255,9 +255,9 @@ type internalScriptPollerRunner struct {
 	outcomes []internalScriptPollerOutcome
 }
 
-func (r *internalScriptPollerRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (r *internalScriptPollerRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	if len(r.outcomes) == 0 {
-		return workers.CommandResult{}, errors.New("no scripted outcomes")
+		return platformprocess.CommandResult{}, errors.New("no scripted outcomes")
 	}
 	outcome := r.outcomes[0]
 	r.outcomes = r.outcomes[1:]

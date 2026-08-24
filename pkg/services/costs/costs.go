@@ -39,9 +39,9 @@ func (query CostsQuery) QueryCosts(ctx context.Context, request QueryRequest) (R
 // Query is the short compatibility name for the Costs operation type.
 type Query = CostsQuery
 
-// QueryRequest identifies the canonical metrics input and optional scope
-// filters. OperatorSettingsPath is retained as an ignored compatibility field
-// for existing CLI/API callers; pricing is now read only from Providers.
+// QueryRequest identifies the canonical metrics input, the explicit operator
+// settings document, and optional scope filters. The settings path is read on
+// every query so changes take effect without rebuilding the process.
 // FactorySessionID and RuntimeInstanceID are optional independent filters;
 // both are passed to the canonical Factory Visualization query.
 type QueryRequest struct {
@@ -86,6 +86,15 @@ const (
 	StatusPartial  Status = "PARTIAL"
 	StatusUnpriced Status = "UNPRICED"
 	StatusNoUsage  Status = "NO_USAGE"
+)
+
+// PriceSource identifies the complete pricing row used for a priced line
+// item. An empty value is reserved for unpriced rows.
+type PriceSource string
+
+const (
+	PriceSourceBuiltIn          PriceSource = "BUILT_IN"
+	PriceSourceOperatorSupplied PriceSource = "OPERATOR_SUPPLIED"
 )
 
 // Coverage counts encountered and fully priced usage rows and distinct
@@ -141,9 +150,10 @@ type LineItem struct {
 	Provider         string `json:"provider,omitempty"`
 	Model            string `json:"model,omitempty"`
 	TokenCounts
-	Status       Status  `json:"status"`
-	PricedAmount *string `json:"priced_amount,omitempty"`
-	Reason       string  `json:"reason,omitempty"`
+	Status       Status      `json:"status"`
+	PriceSource  PriceSource `json:"price_source,omitempty"`
+	PricedAmount *string     `json:"priced_amount,omitempty"`
+	Reason       string      `json:"reason,omitempty"`
 }
 
 // Rollup is a monetary and usage summary for one Work item, Worker Session,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,22 @@ func RequireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorRespo
 	return response
 }
 
+// RequireNotFoundCLIDiagnostic verifies the server-owned not-found response
+// preserved by the public CLI boundary.
+func RequireNotFoundCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode CLI not-found diagnostic: %v\nstderr=%q", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+		response.Family != factoryapi.ErrorFamilyNotFound ||
+		strings.TrimSpace(response.Message) == "" {
+		t.Fatalf("CLI not-found diagnostic = %#v, want NOT_FOUND code/family and a message", response)
+	}
+	return response
+}
+
 // CleanupProcess closes a caller-owned reusable process after its sequential
 // public invocations finish. Process wiring is immutable, but lifecycle-owned
 // resources may be retained by commands until the process is closed.
@@ -106,6 +123,48 @@ func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 		t.Fatalf("initializer omitted packaged Factory %q at %s: %v", name, factoryDir, err)
 	}
 	return factoryDir
+}
+
+// CopyFactoryAsNamed copies a customized fixture to a customer-owned named
+// Factory. Bundled @you directories are refreshed during every initialization,
+// so tests that intentionally edit a packaged payload must invoke the copy.
+func CopyFactoryAsNamed(t testing.TB, sourceDir, homeDir, name string) string {
+	t.Helper()
+	targetDir := filepath.Join(
+		append([]string{homeDir, ".you-agent-factory", "factories"}, strings.Split(name, "/")...)...,
+	)
+	if err := copyFactoryDirectory(sourceDir, targetDir); err != nil {
+		t.Fatalf("copy Factory fixture %q to %q: %v", sourceDir, targetDir, err)
+	}
+	return targetDir
+}
+
+func copyFactoryDirectory(sourceDir, targetDir string) error {
+	return filepath.WalkDir(sourceDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		if relative == "." {
+			return os.MkdirAll(targetDir, 0o755)
+		}
+		targetPath := filepath.Join(targetDir, relative)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode().Perm())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(targetPath, data, info.Mode().Perm())
+	})
 }
 
 // InstallPackagedFactoryWithProcess materializes a packaged Factory through a
@@ -177,35 +236,6 @@ func CreateNamedFactoryWithProcess(
 		name,
 		factoryConfigPath,
 		false,
-	)
-}
-
-// CreateAndActivateNamedFactoryWithProcess executes the public named Factory
-// create flow with --set-current on a caller-owned reusable process.
-func CreateAndActivateNamedFactoryWithProcess(
-	t testing.TB,
-	process Process,
-	homeDir string,
-	workingDirectory string,
-	name string,
-	factoryConfigPath string,
-) string {
-	t.Helper()
-	env := append(
-		os.Environ(),
-		"HOME="+homeDir,
-		"USERPROFILE="+homeDir,
-	)
-	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
-	return createNamedFactoryAtRootWithProcess(
-		t,
-		process,
-		env,
-		workingDirectory,
-		namedFactoriesRoot,
-		name,
-		factoryConfigPath,
-		true,
 	)
 }
 
@@ -301,26 +331,6 @@ func CreateAndActivateNamedFactoryAtRootWithProcess(
 		name,
 		factoryConfigPath,
 		true,
-	)
-}
-
-func createNamedFactoryAtRoot(
-	t testing.TB,
-	env []string,
-	workingDirectory string,
-	namedFactoriesRoot string,
-	name string,
-	factoryConfigPath string,
-) string {
-	return createNamedFactoryAtRootWithProcess(
-		t,
-		BuildProcess(t, serviceedges.Edges{}),
-		env,
-		workingDirectory,
-		namedFactoriesRoot,
-		name,
-		factoryConfigPath,
-		false,
 	)
 }
 

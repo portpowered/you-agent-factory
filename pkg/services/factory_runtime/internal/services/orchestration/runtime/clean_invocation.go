@@ -11,14 +11,84 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 var _ factory.Service = (*factoryImpl)(nil)
+
+func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
+	if !validObservationScope(req.Scope) {
+		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
+	}
+	if f == nil {
+		return factory.ObserveResult{}, factory.ErrNotRunning
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return factory.ObserveResult{}, err
+		}
+	}
+	f.mu.RLock()
+	state := f.state
+	startedAt := f.startedAt
+	f.mu.RUnlock()
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
+		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+	default:
+		return factory.ObserveResult{}, factory.ErrNotRunning
+	}
+	if f.engine == nil {
+		return factory.ObserveResult{}, factory.ErrNotRunning
+	}
+	// Runtime observation deliberately reads only the engine-owned detached
+	// boundary. GetEngineStateSnapshot also reconstructs canonical world state
+	// and evaluates enablement for migration-only callers; neither operation is
+	// part of a live status read.
+	snapshot := f.engine.GetRuntimeStateSnapshot()
+	snapshot.FactoryState = string(state)
+	snapshot.Topology = f.topology
+	snapshot.RuntimeStatus = f.deriveRuntimeStatus(state, snapshot)
+	snapshot.LifecycleControlStatus = string(durableLifecycleStatus(state))
+	snapshot.StreamGenerationID = ""
+	if f.eventHistory != nil {
+		snapshot.StreamGenerationID = f.eventHistory.StreamGenerationID()
+	}
+	if !startedAt.IsZero() && f.clock != nil {
+		snapshot.Uptime = f.clock.Now().Sub(startedAt)
+	}
+	result := factory.ObserveResult{Observation: rootobservation.Project(&snapshot, req.Scope)}
+	f.recordRuntimeObservationMetric(req.Scope)
+	return result, nil
+}
+
+const runtimeReadObservationMetricName = "factory_runtime.read.observation"
+
+func (f *factoryImpl) recordRuntimeObservationMetric(scope factory.ObservationScope) {
+	recorder, ok := f.eventHistory.(interface {
+		RecordRuntimeReadMetric(recordings.RuntimeReadMetric)
+	})
+	if !ok || recorder == nil {
+		return
+	}
+	recorder.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
+		Name: runtimeReadObservationMetricName,
+		Labels: map[string]string{
+			"scope":                    string(scope),
+			"runtime_snapshot_reads":   "1",
+			"operation_count":          "1",
+			"canonical_history_visits": "0",
+			"canonical_events_copied":  "0",
+			"full_history_reductions":  "0",
+		},
+	})
+}
 
 // GetEngineStateSnapshot returns the aggregate observability snapshot for
 // service-facing callers.
@@ -37,7 +107,7 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 	worldStateStartedAt := f.clock.Now()
 	worldState := f.currentWorldState(runtimeSnap.TickCount)
 	worldStateDuration := f.clock.Now().Sub(worldStateStartedAt)
-	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap, worldState)
+	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap)
 	uptime := time.Duration(0)
 	if !startedAt.IsZero() {
 		uptime = now.Sub(startedAt)
@@ -66,6 +136,35 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 		"enabled_transition_count", len(snap.EnabledTransitions),
 	)
 	return &snap, nil
+}
+
+// GetWorkStateSnapshot returns the published runtime boundary needed by the
+// Work read adapter. Work list reads do not need enablement, uptime, or the
+// unrelated Factory world-state projection; keeping those calculations out of
+// this path avoids replaying the complete canonical history for every page.
+func (f *factoryImpl) GetWorkStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if f == nil || f.engine == nil {
+		return nil, factory.ErrNotRunning
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+	}
+	runtimeSnap := f.engine.GetRuntimeStateSnapshot()
+	runtimeSnap.Topology = f.topology
+	if f.eventHistory != nil {
+		runtimeSnap.StreamGenerationID = f.eventHistory.StreamGenerationID()
+	}
+	f.mu.RLock()
+	currentState := f.state
+	f.mu.RUnlock()
+	runtimeSnap.FactoryState = string(currentState)
+	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap)
+	if currentState == interfaces.FactoryStatePaused {
+		runtimeSnap.LifecycleControlStatus = string(interfaces.FactorySessionLifecycleStatusPaused)
+	}
+	return &runtimeSnap, nil
 }
 
 // CleanInvocationSnapshot projects the engine-owned invocation facts into the
@@ -140,10 +239,17 @@ func cleanInvocationWorkFromToken(topology *state.Net, token *factorytoken.Token
 	if topology != nil {
 		category = topology.StateCategoryForPlace(token.PlaceID)
 	}
+	workTypeID, stateValue := state.SplitPlaceID(token.PlaceID)
+	if strings.TrimSpace(token.Color.WorkTypeID) != "" {
+		workTypeID = token.Color.WorkTypeID
+	}
 	return factory.CleanInvocationWork{
 		WorkID:        token.Color.WorkID,
-		WorkTypeID:    token.Color.WorkTypeID,
+		Name:          token.Color.Name,
+		WorkTypeID:    workTypeID,
+		State:         stateValue,
 		StateCategory: string(category),
+		FailureReason: token.History.LastError,
 		Output:        string(token.Color.Payload),
 		TraceID:       token.Color.TraceID,
 		DataType:      string(token.Color.DataType),
@@ -880,19 +986,4 @@ func orderedRuntimeWorkDispatchTokens(
 		ordered = append(ordered, token)
 	}
 	return ordered, nil
-}
-
-func workerTokenPlaceKey(token workerexecution.Token) string {
-	prefix := strings.TrimSpace(token.Color.WorkTypeID)
-	if prefix == "" {
-		prefix = strings.TrimSpace(token.Color.Name)
-	}
-	stateName := strings.TrimSpace(token.State)
-	if prefix == "" {
-		return stateName
-	}
-	if stateName == "" {
-		return prefix
-	}
-	return prefix + ":" + stateName
 }

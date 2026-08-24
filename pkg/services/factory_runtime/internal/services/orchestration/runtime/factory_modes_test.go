@@ -31,38 +31,6 @@ func (s *orderedWorkerSessionsLifecycle) Stop(context.Context) error {
 	return nil
 }
 
-type orderedRuntimeBoundary struct {
-	order *[]string
-}
-
-func (b *orderedRuntimeBoundary) Start(context.Context) error { return nil }
-
-func (b *orderedRuntimeBoundary) Publish(
-	context.Context,
-	workerexecution.WorkstationDispatchRequest,
-	workerexecution.WorkstationDispatchAcceptFunc,
-) error {
-	return nil
-}
-
-func (b *orderedRuntimeBoundary) PublishWithAdmission(
-	context.Context,
-	workerexecution.WorkstationDispatchRequest,
-	workerexecution.WorkstationDispatchAdmissionFunc,
-	workerexecution.WorkstationDispatchAcceptFunc,
-) error {
-	return nil
-}
-
-func (*orderedRuntimeBoundary) Cancel(context.Context, workerexecution.WorkstationDispatchCancelRequest) (workerexecution.WorkstationDispatchCancelResult, error) {
-	return workerexecution.WorkstationDispatchCancelResult{}, nil
-}
-
-func (b *orderedRuntimeBoundary) Stop(context.Context) error {
-	*b.order = append(*b.order, "workers")
-	return nil
-}
-
 func TestFactoryRuntimeShutdownStopsWorkerSessionsBeforeWorkers(t *testing.T) {
 	order := make([]string, 0, 2)
 	f := &factoryImpl{

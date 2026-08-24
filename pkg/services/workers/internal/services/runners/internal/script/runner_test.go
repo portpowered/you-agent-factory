@@ -14,11 +14,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 	commandEdge := &captureCommandRunner{
-		result: workers.CommandResult{Stdout: []byte("  completed  \n")},
+		result: workerprocess.CommandResult{Stdout: []byte("  completed  \n")},
 	}
 	factoryDirectory := filepath.Join("factory-root", "selected")
 	scriptRunner, err := New(Config{
@@ -94,7 +95,7 @@ func TestRunnerResolvesConfiguredInvocationDeterministically(t *testing.T) {
 }
 
 func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
-	commandEdge := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("completed")}}
+	commandEdge := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("completed")}}
 	contextFactoryDirectory := filepath.Join("factory-root", "detached")
 	scriptRunner, err := New(Config{
 		Command:          "scripts/run.sh",
@@ -150,7 +151,7 @@ func TestRunnerUsesDetachedWorkflowContextForPromptAndCommand(t *testing.T) {
 
 func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
 	t.Run("non-streaming override preserves output and correlation", func(t *testing.T) {
-		constructionRunner := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("construction")}}
+		constructionRunner := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("construction")}}
 		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
 		request := validRequest()
 		request.Correlation = workers.ExecutionCorrelation{
@@ -160,13 +161,13 @@ func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
 			DispatchID:       "dispatch-detached",
 			AttemptID:        "attempt-detached",
 		}
-		override := nonStreamingCommandRunner{result: workers.CommandResult{
+		override := nonStreamingCommandRunner{result: workerprocess.CommandResult{
 			Stdout: []byte("override stdout"),
 			Stderr: []byte("override stderr"),
 		}}
 		var fragments []workers.ProgressFragment
 		var events []workers.ScriptEvent
-		ctx := workerexecution.WithCommandRunnerOverride(t.Context(), override)
+		ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), override)
 		ctx = workerexecution.WithProgressPublisher(ctx, func(fragment workers.ProgressFragment) {
 			fragments = append(fragments, fragment)
 		})
@@ -198,13 +199,13 @@ func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
 	})
 
 	t.Run("streaming override keeps streaming boundary", func(t *testing.T) {
-		constructionRunner := &captureCommandRunner{result: workers.CommandResult{Stdout: []byte("construction")}}
+		constructionRunner := &captureCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("construction")}}
 		scriptRunner := newTestRunner(t, Config{Command: "echo"}, constructionRunner)
 		override := &streamingCommandEdge{
 			chunks: []outputChunk{{stream: platformprocess.OutputStreamStdout, payload: "streamed"}},
-			result: workers.CommandResult{Stdout: []byte("streamed")},
+			result: workerprocess.CommandResult{Stdout: []byte("streamed")},
 		}
-		ctx := workerexecution.WithCommandRunnerOverride(t.Context(), override)
+		ctx := workerexecution.WithWorkerCommandRunnerOverride(t.Context(), override)
 		result, err := scriptRunner.Execute(ctx, validRequest())
 		if err != nil {
 			t.Fatalf("Execute() error = %v", err)
@@ -216,9 +217,9 @@ func TestRunnerUsesRequestScopedEffectsAndCommandOverrides(t *testing.T) {
 }
 
 func TestCommandRunnerWithStreamingFallbackPreservesResultWithoutObserver(t *testing.T) {
-	want := workers.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr"), ExitCode: 3}
+	want := workerprocess.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr"), ExitCode: 3}
 	runner := commandRunnerWithStreamingFallback{runner: nonStreamingCommandRunner{result: want}}
-	got, err := runner.RunStreaming(context.Background(), workers.CommandRequest{}, nil)
+	got, err := runner.RunStreaming(context.Background(), workerprocess.CommandRequest{}, nil)
 	if err != nil {
 		t.Fatalf("RunStreaming() error = %v", err)
 	}
@@ -237,7 +238,7 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 			{stream: platformprocess.OutputStreamStdout, payload: "second\n"},
 			{stream: platformprocess.OutputStreamStderr, payload: "warn-2"},
 		},
-		result: workers.CommandResult{
+		result: workerprocess.CommandResult{
 			Stdout:   []byte("firstsecond\n"),
 			Stderr:   []byte("warn-1warn-2"),
 			ExitCode: 0,
@@ -309,7 +310,7 @@ func TestRunnerReturnsSuccessfulOutputWithOrderedSafeDiagnostics(t *testing.T) {
 
 func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t *testing.T) {
 	commandEdge := &streamingCommandEdge{
-		result: workers.CommandResult{Stdout: []byte("stable"), Stderr: []byte("note")},
+		result: workerprocess.CommandResult{Stdout: []byte("stable"), Stderr: []byte("note")},
 	}
 	scriptRunner, err := New(Config{Command: "echo", Args: []string{"one"}}, Dependencies{
 		CommandRunner: commandEdge,
@@ -369,7 +370,7 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 	processFailure := errors.New("exec: executable file not found")
 	tests := []struct {
 		name            string
-		result          workers.CommandResult
+		result          workerprocess.CommandResult
 		commandErr      error
 		wantMessage     string
 		wantOutcome     workers.ScriptExecutionOutcome
@@ -379,7 +380,7 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 	}{
 		{
 			name: "non-zero exit",
-			result: workers.CommandResult{
+			result: workerprocess.CommandResult{
 				Stdout:   []byte("partial stdout\n"),
 				Stderr:   []byte("command rejected input\n"),
 				ExitCode: 17,
@@ -390,7 +391,7 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 		},
 		{
 			name: "process start failure",
-			result: workers.CommandResult{
+			result: workerprocess.CommandResult{
 				Stdout: []byte("partial stdout"),
 				Stderr: []byte("partial stderr"),
 			},
@@ -402,7 +403,7 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 		},
 		{
 			name: "missing executable",
-			result: workers.CommandResult{
+			result: workerprocess.CommandResult{
 				Stdout: []byte("partial stdout"),
 				Stderr: []byte("partial stderr"),
 			},
@@ -435,7 +436,7 @@ func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResp
 
 func runCommandFailureCase(
 	t *testing.T,
-	commandResult workers.CommandResult,
+	commandResult workerprocess.CommandResult,
 	commandErr error,
 	wantMessage string,
 	wantOutcome workers.ScriptExecutionOutcome,
@@ -499,7 +500,7 @@ func runCommandFailureCase(
 func assertFailureObservation(
 	t *testing.T,
 	observations *observationLog,
-	result workers.CommandResult,
+	result workerprocess.CommandResult,
 	wantOutcome workers.ScriptExecutionOutcome,
 	wantFailureType *workers.ScriptFailureType,
 	wantExitCode *int,
@@ -553,7 +554,7 @@ func TestRunnerValidationFailureDoesNotRecordOrStartCommand(t *testing.T) {
 func assertFailureDiagnostics(
 	t *testing.T,
 	diagnostics *workers.WorkDiagnostics,
-	commandResult workers.CommandResult,
+	commandResult workerprocess.CommandResult,
 	wantDuration time.Duration,
 ) {
 	t.Helper()
@@ -959,7 +960,7 @@ func validRequest() workers.RunnerExecutionRequest {
 func newTestRunner(
 	t *testing.T,
 	config Config,
-	commandRunner workers.CommandRunner,
+	commandRunner workerprocess.CommandRunner,
 ) workers.Runner {
 	t.Helper()
 	scriptRunner, err := New(config, testDependencies(commandRunner, emptyDocs))

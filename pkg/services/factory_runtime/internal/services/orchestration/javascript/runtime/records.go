@@ -126,22 +126,25 @@ type CheckpointRecord struct {
 // status transition. Multiple records per child prove queued/running/completed
 // ordering without starting real provider sessions.
 type ChildDispatchRecord struct {
-	DispatchID            string                          `json:"dispatchId"`
-	ChildIndex            int                             `json:"childIndex"`
-	Attempt               int                             `json:"attempt,omitempty"`
-	Status                string                          `json:"status"`
-	Label                 string                          `json:"label,omitempty"`
-	PromptDigest          string                          `json:"promptDigest,omitempty"`
-	Preset                string                          `json:"preset,omitempty"`
-	ModelProvider         string                          `json:"modelProvider,omitempty"`
-	Model                 string                          `json:"model,omitempty"`
-	ReasoningEffort       string                          `json:"reasoningEffort,omitempty"`
-	ResourceID            string                          `json:"resourceId,omitempty"`
-	FactoryRevision       int                             `json:"factoryRevision,omitempty"`
-	SkipPermissions       bool                            `json:"skipPermissions,omitempty"`
-	Command               string                          `json:"command,omitempty"`
-	Sandbox               string                          `json:"sandbox,omitempty"`
-	SchemaDigest          string                          `json:"schemaDigest,omitempty"`
+	DispatchID      string `json:"dispatchId"`
+	ChildIndex      int    `json:"childIndex"`
+	Attempt         int    `json:"attempt,omitempty"`
+	Status          string `json:"status"`
+	Label           string `json:"label,omitempty"`
+	PromptDigest    string `json:"promptDigest,omitempty"`
+	Preset          string `json:"preset,omitempty"`
+	ModelProvider   string `json:"modelProvider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	ResourceID      string `json:"resourceId,omitempty"`
+	FactoryRevision int    `json:"factoryRevision,omitempty"`
+	SkipPermissions bool   `json:"skipPermissions,omitempty"`
+	Command         string `json:"command,omitempty"`
+	Sandbox         string `json:"sandbox,omitempty"`
+	SchemaDigest    string `json:"schemaDigest,omitempty"`
+	// SchemaValidated is durable child metadata, kept outside Output so a
+	// customer's structured object cannot overwrite it.
+	SchemaValidated       bool                            `json:"schemaValidated,omitempty"`
 	RunnerID              string                          `json:"runnerId,omitempty"`
 	ExecutionMode         string                          `json:"executionMode,omitempty"`
 	Provider              string                          `json:"provider,omitempty"`

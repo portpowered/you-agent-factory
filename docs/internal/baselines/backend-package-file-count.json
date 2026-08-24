@@ -297,7 +297,7 @@
     },
     {
       "packagePath": "pkg/services/workers",
-      "fileCount": 40,
+      "fileCount": 35,
       "owner": "worker-maintainers",
       "removalReason": "Continue extracting worker policy and execution capabilities."
     },
@@ -321,7 +321,7 @@
     },
     {
       "packagePath": "pkg/transports/cli/baseline",
-      "fileCount": 20,
+      "fileCount": 18,
       "owner": "cli-maintainers",
       "removalReason": "Consolidate baseline command fixtures and split durable behaviors."
     },

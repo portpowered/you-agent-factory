@@ -12,6 +12,8 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -36,6 +38,15 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 		Edges: serviceedges.Edges{
 			PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
 			ProvidersExecutableLocator:    availableExecutableLocator{},
+			ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{
+				Provider: "cursor-acp",
+				Capabilities: []providers.Capability{
+					providers.CapabilityPromptSubmission,
+					providers.CapabilityImageInput,
+					providers.CapabilityStructuredOutput,
+					providers.CapabilityPermissionBypass,
+				},
+			}},
 		},
 	})
 	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")

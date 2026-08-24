@@ -18,15 +18,6 @@ const (
 	ResourceCapacitySourceCLI     = "cli"
 )
 
-// ResourceCapacityRequestFromAPI maps the public capacity body and stable path
-// identity into the shared live-change request contract.
-func ResourceCapacityRequestFromAPI(
-	resourceID string,
-	request factoryapi.FactorySessionResourceCapacityRequest,
-) (factorysessions.LiveChangeRequest, error) {
-	return ResourceCapacityRequestFromAPIWithSource(resourceID, request, ResourceCapacitySourceAPI)
-}
-
 // ResourceCapacityRequestFromAPIWithSource maps a public capacity body and a
 // trusted transport source into the shared live-change request contract.
 // Only known transport labels are retained; arbitrary caller headers cannot

@@ -110,7 +110,7 @@ CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
-ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process
+ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process ./tests/functional/recordings/process
 ROOT_PROCESS_ACCEPTANCE_TIMEOUT ?= 300s
 
 ifeq ($(OS),Windows_NT)
@@ -138,6 +138,10 @@ FUNCTIONAL_TEST_TIER ?= pr-short
 FUNCTIONAL_TEST_TRIGGER ?= local
 FUNCTIONAL_TEST_BUDGET ?= 35m
 FUNCTIONAL_SHORT ?= true
+CHANGED_TEST_STABILITY_BASE ?=
+CHANGED_TEST_STABILITY_HEAD ?= HEAD
+CHANGED_TEST_STABILITY_ATTEMPTS ?= 20
+CHANGED_TEST_STABILITY_BUDGET ?= 15m
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_UNIT_COVERAGE_JSON_OUTPUT ?=
 GO_UNIT_COVERAGE_TIMING_OUTPUT ?=
@@ -177,7 +181,7 @@ LINT_JOBS ?= $(GO_LANE_BUDGET)
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check contracts-check
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -488,7 +492,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -498,6 +502,13 @@ test-unit:
 
 test-unit-fresh:
 	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# Merge-base-aware changed-test flake prevention. The caller must provide the
+# pull-request base ref/SHA; the command resolves its merge-base with head,
+# then gives every selected top-level Go test 20 isolated attempts within one
+# 15-minute total budget.
+test-changed-test-stability:
+	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET)
 
 test-lane-audit:
 	$(GO) run ./cmd/testlanecheck

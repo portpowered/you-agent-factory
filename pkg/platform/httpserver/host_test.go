@@ -23,7 +23,7 @@ func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 			bound <- listener
 		}
 		return listener, err
-	})
+	}, nil, CommandLineReader(func() []string { return []string{"you", "test"} }))
 	if err != nil {
 		t.Fatalf("NewStarter: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 			Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 				_, _ = io.WriteString(writer, "ready")
 			}),
-			Port: 8123, Logger: zap.NewNop(),
+			Port: 8123, Pprof: true, Logger: zap.NewNop(),
 		})
 	}()
 
@@ -51,6 +51,10 @@ func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 	if got := string(payload); got != "ready" {
 		t.Fatalf("response = %q, want ready", got)
 	}
+	pprofResponse := getPprofTestResponse(t, "http://"+listener.Addr().String()+"/debug/pprof/heap")
+	if pprofResponse.StatusCode != http.StatusOK || len(pprofResponse.Body) == 0 {
+		t.Fatalf("NewStarter pprof heap = (%d, %q), want non-empty HTTP 200 response", pprofResponse.StatusCode, pprofResponse.Body)
+	}
 
 	cancel()
 	if err := receiveBefore(t, exit); err != nil {
@@ -62,7 +66,7 @@ func TestNewStarterReturnsListenerFailure(t *testing.T) {
 	wantErr := errors.New("address unavailable")
 	starter, err := NewStarter(func(string, string) (net.Listener, error) {
 		return nil, wantErr
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter: %v", err)
 	}
@@ -73,7 +77,7 @@ func TestNewStarterReturnsListenerFailure(t *testing.T) {
 }
 
 func TestNewStarterRequiresInjectedListenerFactory(t *testing.T) {
-	starter, err := NewStarter(nil)
+	starter, err := NewStarter(nil, nil, nil)
 	if err == nil || starter != nil {
 		t.Fatalf("NewStarter(nil) = (%v, %v), want nil starter and error", starter, err)
 	}
@@ -89,7 +93,7 @@ func TestNewStarterAutoPortReportsSelectedFallback(t *testing.T) {
 			return nil, busyErr
 		}
 		return listener, nil
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter: %v", err)
 	}
@@ -114,7 +118,7 @@ func TestNewStarterBindsOnlyRequestedLoopbackHost(t *testing.T) {
 	starter, err := NewStarter(func(_ string, candidate string) (net.Listener, error) {
 		address = candidate
 		return listener, nil
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter: %v", err)
 	}
@@ -141,12 +145,12 @@ func TestNewStarterRejectsNonLoopbackHostBeforeListenerEffect(t *testing.T) {
 	starter, err := NewStarter(func(string, string) (net.Listener, error) {
 		calls++
 		return nil, errors.New("unexpected listener call")
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter: %v", err)
 	}
 	err = starter(t.Context(), StartRequest{
-		Handler: http.NotFoundHandler(), Host: "0.0.0.0", Port: 8123,
+		Handler: http.NotFoundHandler(), Host: "0.0.0.0", Port: 8123, Pprof: true,
 		Logger: zap.NewNop(),
 	})
 	if !IsBindError(err) {
@@ -165,7 +169,7 @@ func TestNewStarterAutoPortTriesThrough65535WithoutWrapping(t *testing.T) {
 	starter, err := NewStarter(func(_ string, address string) (net.Listener, error) {
 		requests = append(requests, address)
 		return nil, busyErr
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter: %v", err)
 	}
@@ -355,7 +359,7 @@ func TestStarterWithListenerReportsBindingServesAndRejectsReuse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	starter := StarterWithListener(listener)
+	starter := StarterWithListener(listener, nil, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	exit := make(chan error, 1)
 	// OnBound fires on the starter's goroutine while this one polls for the
@@ -400,7 +404,7 @@ func TestStarterWithListenerReportsBindingServesAndRejectsReuse(t *testing.T) {
 }
 
 func TestStarterWithListenerRejectsNilListenerAndBindErrorFormatsCause(t *testing.T) {
-	starter := StarterWithListener(nil)
+	starter := StarterWithListener(nil, nil, nil)
 	err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler()})
 	if err == nil || err.Error() != "process-owned API server listener is required" {
 		t.Fatalf("nil listener error = %v", err)

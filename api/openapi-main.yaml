@@ -75,7 +75,9 @@ paths:
         price table. The default scope covers all Factory Sessions. Supplying
         an unknown-but-valid Factory Session ID returns a successful no-usage
         report for that scope rather than unrelated usage. Missing prices are
-        returned as UNPRICED rows and are never treated as zero.
+        returned as UNPRICED rows and are never treated as zero. The server
+        bounds one cost query at eight seconds and returns a typed timeout
+        response when the canonical read does not complete in that window.
       parameters:
         - name: session_id
           in: query
@@ -92,8 +94,12 @@ paths:
                 $ref: '#/components/schemas/CostsReport'
         '400':
           $ref: './components/responses/BadRequest.yaml'
+        '408':
+          $ref: './components/responses/RequestTimeout.yaml'
         '500':
           $ref: './components/responses/InternalError.yaml'
+        '504':
+          $ref: './components/responses/GatewayTimeout.yaml'
   /worker-sessions:
     get:
       tags:
@@ -1255,6 +1261,31 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /shutdown:
+    post:
+      tags:
+        - Runtime
+      operationId: shutdownServer
+      summary: Request graceful shutdown of the local server
+      description: >-
+        Accepts a loopback-only administrative shutdown request for the
+        invocation that owns this listener. The server acknowledges the
+        request before it invokes the invocation-local cancellation authority;
+        the caller remains responsible for observing that the selected
+        listener has stopped.
+      responses:
+        '202':
+          description: The invocation-local shutdown request was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShutdownAcceptedResponse'
+        '403':
+          $ref: '#/components/responses/ShutdownControlRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ShutdownControlUnavailable'
   /models:
     get:
       tags:
@@ -1320,6 +1351,38 @@ paths:
                 $ref: '#/components/schemas/ModelDetail'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Models
+      operationId: removeModel
+      summary: Remove one managed model cache revision
+      description: Explicitly removes the selected managed cache revision for one model. The operation never follows links outside the managed cache root, refuses caches held by an active host or invocation, and reports the validated cache path and measured bytes removed.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The selected managed model cache revision was removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelRemoveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The managed model cache is held by an active host or invocation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /models/{model_name}/invocations:
@@ -2152,20 +2215,22 @@ paths:
       tags:
         - Factory
       operationId: closeFactorySession
-      summary: Close one live factory session
-      description: Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+      summary: Delete one stopped live factory session
+      description: Deletes the selected non-default live factory session only after its runtime has already stopped. The request never implicitly stops an active runtime; default and active sessions return a typed conflict and remain registered.
       parameters:
         - name: session_id
           in: path
           required: true
           schema:
             type: string
-          description: Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly.
+          description: Stable live factory session identifier. The reserved `~default` compatibility session cannot be deleted.
       responses:
         '204':
-          description: Session was stopped and removed from the live workspace.
+          description: A stopped non-default session was removed from the live workspace.
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionDeletionConflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/factory:
@@ -2483,10 +2548,16 @@ components:
       $ref: './components/responses/WorkerSessionRecordingUnavailable.yaml'
     FactorySessionLifecycleControlConflict:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
+    FactorySessionDeletionConflict:
+      $ref: './components/responses/FactorySessionDeletionConflict.yaml'
     FactorySessionResourceCapacityConflict:
       $ref: './components/responses/FactorySessionResourceCapacityConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
+    ShutdownControlRejected:
+      $ref: './components/responses/ShutdownControlRejected.yaml'
+    ShutdownControlUnavailable:
+      $ref: './components/responses/ShutdownControlUnavailable.yaml'
     ResponseEventBadRequest:
       $ref: './components/responses/ResponseEventBadRequest.yaml'
     ResponseEventSessionNotFound:
@@ -2646,6 +2717,8 @@ components:
       $ref: './components/schemas/api/ManagedRuntimePullOutcome.yaml'
     ManagedRuntimePullResult:
       $ref: './components/schemas/api/ManagedRuntimePullResult.yaml'
+    ManagedRuntimePullDiagnostics:
+      $ref: './components/schemas/api/ManagedRuntimePullDiagnostics.yaml'
     ManagedRuntimeReadinessState:
       $ref: './components/schemas/api/ManagedRuntimeReadinessState.yaml'
     ManagedRuntimeSourceDiagnostics:
@@ -2694,6 +2767,10 @@ components:
       $ref: './components/schemas/api/ModelPullOutcome.yaml'
     ModelPullResponse:
       $ref: './components/schemas/api/ModelPullResponse.yaml'
+    ModelRemoveOutcome:
+      $ref: './components/schemas/api/ModelRemoveOutcome.yaml'
+    ModelRemoveResponse:
+      $ref: './components/schemas/api/ModelRemoveResponse.yaml'
     ResolvedModelOperationBinding:
       $ref: './components/schemas/api/ResolvedModelOperationBinding.yaml'
     ResolvedModelOperationBindingSource:
@@ -2710,6 +2787,8 @@ components:
       $ref: './components/schemas/api/ErrorFamily.yaml'
     ErrorResponse:
       $ref: './components/schemas/api/ErrorResponse.yaml'
+    ShutdownAcceptedResponse:
+      $ref: './components/schemas/api/ShutdownAcceptedResponse.yaml'
     ErrorTarget:
       $ref: './components/schemas/api/ErrorTarget.yaml'
     HybridLogicalTimestamp:

@@ -28,7 +28,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the exact Current Factory at ./factory/factory.json with explicit Work and no local server.\nUse you server to serve that Current Factory API and dashboard continuously, or add --with-server or --with-site to own a server only for one run. See you <cmd> --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs.",
+            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the exact Current Factory at ./factory/factory.json with explicit Work and no local server.\nUse you server for continuous, non-resumable hosting of the Current Factory API and dashboard. For restart-surviving hosting, use you run --with-server --continuously --record <path>. Add --with-server or --with-site to host one run. See you <cmd> --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs.",
             "id": "you.description"
           },
           "title": {
@@ -3975,7 +3975,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the same default --port as work list. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the shared --server selection; --port remains only for session list and create. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
             "id": "you.session.description"
           },
           "title": {
@@ -4126,7 +4126,7 @@
       "path": "you session",
       "runnable": false,
       "usage": {
-        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
+        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open a session on a non-default port and delete through a selected server.\n  you session create --dir /workspace/fleet --port 9090\n  you --server http://localhost:9090 session delete session-beta --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
         "line": "session"
       },
       "visibility": "visible"
@@ -4601,7 +4601,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\nUse the same --port selection as session list. Use --json to emit a JSON confirmation on stdout.",
+            "canonicalEnglish": "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\nUse global --server to select the exact factory API base URI. The legacy --port flag is rejected with guidance to use --server. Use --json to emit a JSON confirmation on stdout.",
             "id": "you.session.delete.description"
           },
           "title": {
@@ -4610,7 +4610,8 @@
           }
         },
         "examples": [
-          "you session delete session-beta"
+          "you session delete session-beta",
+          "you --server http://factory.example:7437 session delete session-beta"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.delete",
@@ -4688,7 +4689,7 @@
           "binding": "",
           "changedDefault": false,
           "completion": "none",
-          "default": "7437",
+          "default": "0",
           "id": "you.session.delete.flag.port",
           "lifecycle": {
             "formatVersion": "1.0.0",
@@ -4703,9 +4704,9 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
-          "usage": "HTTP server port",
+          "usage": "deprecated; use --server",
           "valueType": "int",
-          "visibility": "visible"
+          "visibility": "hidden"
         },
         "you.session.delete.flag.remote": {
           "aliases": [],
@@ -5515,7 +5516,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Pause one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports paused, already-paused, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
+            "canonicalEnglish": "Pause one live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports paused, already-paused, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
             "id": "you.session.pause.description"
           },
           "title": {
@@ -5527,6 +5528,7 @@
           "you session pause",
           "you session pause session-beta",
           "you session pause dur-sess-js-run-n-001",
+          "you --server http://factory.example:7437 session pause session-beta",
           "you --remote --server http://factory.example:7437 session pause session-beta",
           "you session pause session-beta --remote --server http://factory.example:7437",
           "you --json session pause session-beta"
@@ -5801,7 +5803,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Resume one paused live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports resumed, already-running, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
+            "canonicalEnglish": "Resume one paused live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports resumed, already-running, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
             "id": "you.session.resume.description"
           },
           "title": {
@@ -5813,6 +5815,7 @@
           "you session resume",
           "you session resume session-beta",
           "you session resume dur-sess-js-run-n-001",
+          "you --server http://factory.example:7437 session resume session-beta",
           "you --remote --server http://factory.example:7437 session resume session-beta",
           "you session resume session-beta --remote --server http://factory.example:7437",
           "you --json session resume session-beta"
@@ -6065,11 +6068,12 @@
       "constraints": {"platforms": ["linux", "darwin", "windows"], "runtime": ["local"]},
       "documentation": {
         "documentation": {
-          "description": {"canonicalEnglish": "Cancel one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.cancel.description"},
+          "description": {"canonicalEnglish": "Cancel one live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.cancel.description"},
           "title": {"canonicalEnglish": "Cancel one live or durable Factory Session", "id": "you.session.cancel.title"}
         },
         "examples": [
           "you session cancel session-beta",
+          "you --server http://factory.example:7437 session cancel session-beta",
           "you --remote --server http://factory.example:7437 session cancel session-beta",
           "you session cancel session-beta --remote --server http://factory.example:7437",
           "you --json session cancel session-beta"
@@ -6105,7 +6109,7 @@
       "runnable": true,
       "placement": "dual",
       "sideEffects": {"you.session.cancel.side-effect.network": {"id": "you.session.cancel.side-effect.network", "kind": "network"}},
-      "usage": {"example": "  # Cancel one Factory Session locally by default.\n  you session cancel session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session cancel session-beta\n  you session cancel session-beta --remote --server http://factory.example:7437", "line": "cancel [session-id]"},
+      "usage": {"example": "  # Cancel one Factory Session locally by default.\n  you session cancel session-beta\n\n  # Select an exact already-running server explicitly.\n  you --server http://factory.example:7437 session cancel session-beta\n  you session cancel session-beta --remote --server http://factory.example:7437", "line": "cancel [session-id]"},
       "visibility": "visible"
     },
     "you.session.terminate": {
@@ -6133,11 +6137,12 @@
       "constraints": {"platforms": ["linux", "darwin", "windows"], "runtime": ["local"]},
       "documentation": {
         "documentation": {
-          "description": {"canonicalEnglish": "Terminate one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.terminate.description"},
+          "description": {"canonicalEnglish": "Terminate one live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.terminate.description"},
           "title": {"canonicalEnglish": "Terminate one live or durable Factory Session", "id": "you.session.terminate.title"}
         },
         "examples": [
           "you session terminate session-beta",
+          "you --server http://factory.example:7437 session terminate session-beta",
           "you --remote --server http://factory.example:7437 session terminate session-beta",
           "you session terminate session-beta --remote --server http://factory.example:7437",
           "you --json session terminate session-beta"
@@ -6173,7 +6178,7 @@
       "runnable": true,
       "placement": "dual",
       "sideEffects": {"you.session.terminate.side-effect.network": {"id": "you.session.terminate.side-effect.network", "kind": "network"}},
-      "usage": {"example": "  # Terminate one Factory Session locally by default.\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session terminate session-beta\n  you session terminate session-beta --remote --server http://factory.example:7437", "line": "terminate [session-id]"},
+      "usage": {"example": "  # Terminate one Factory Session locally by default.\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --server http://factory.example:7437 session terminate session-beta\n  you session terminate session-beta --remote --server http://factory.example:7437", "line": "terminate [session-id]"},
       "visibility": "visible"
     },
     "you.session.show": {
@@ -9204,14 +9209,15 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.title",
-            "canonicalEnglish": "Inspect Worker Sessions for Work"
+            "canonicalEnglish": "Inspect Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.description",
-            "canonicalEnglish": "Inspect authoritative Worker Session attempts correlated with one Work item."
+            "canonicalEnglish": "Inspect authoritative Worker Session attempts by fleet-wide scope or one Work item. Omit --work-id for the fleet-wide view."
           }
         },
         "examples": [
+          "you worker-sessions list",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json",
           "you worker-sessions stream --provider codex --kind session_id --id session-123"
@@ -9229,7 +9235,7 @@
       "runnable": false,
       "usage": {
         "line": "worker-sessions",
-        "example": "  you worker-sessions list --work-id work-123"
+        "example": "  you worker-sessions list"
       }
     },
     "you.worker-sessions.list": {
@@ -9271,7 +9277,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "list",
-        "example": "  you worker-sessions list --work-id work-123 --output json"
+        "example": "  you worker-sessions list --output json\n\n  # Work-scoped:\n  you worker-sessions list --work-id work-123 --output json"
       },
       "flags": {
         "you.worker-sessions.list.flag.work-id": {
@@ -12638,13 +12644,14 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, non-empty --text, and either --output for streamed audio, repeatable --output-map slot=path mappings for named generic outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
+            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable named --input slot=value values (use @path for file bytes), and either repeatable --output paths or repeatable --output slot=path mappings for named outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
           }
         },
         "examples": [
           "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav",
           "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"",
-          "you models invoke omni --operation OMNI --text \"Summarize this.\" --output-map text=./answer.txt --output-map usage=./usage.json"
+          "you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json",
+          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
         ],
         "visibility": "public",
         "sourceHash": "b469b217b664304f713e17511a3cb96c37ba5cc8cca78419a699575f309fcd54"
@@ -12660,7 +12667,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "invoke <model-name>",
-        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output-map text=./answer.txt --output-map usage=./usage.json"
+        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json\n\n  # Transcribe audio into canonical transcript and timestamped segments files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
       },
       "arguments": {
         "you.models.invoke.arg.0": {
@@ -12914,6 +12921,38 @@
           "valueType": "string",
           "visibility": "visible"
         },
+        "you.models.invoke.flag.input": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "stringArray": []
+          },
+          "handlerBindingId": "you.models.invoke.binding.input",
+          "id": "you.models.invoke.flag.input",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.input",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "long": "input",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": true,
+          "required": false,
+          "sensitivity": "sensitive",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "named model input in the form slot=value; prefix value with @ to read a file (repeatable)",
+          "valueType": "stringArray",
+          "visibility": "visible"
+        },
         "you.models.invoke.flag.output": {
           "acceptedSources": [
             "cli",
@@ -12922,7 +12961,7 @@
           "aliases": [],
           "completion": "none",
           "defaultValue": {
-            "string": ""
+            "stringArray": []
           },
           "handlerBindingId": "you.models.invoke.binding.output",
           "id": "you.models.invoke.flag.output",
@@ -12934,16 +12973,16 @@
             "since": "1.0.0"
           },
           "long": "output",
-          "maxCardinality": 1,
+          "maxCardinality": -1,
           "minCardinality": 0,
-          "normalization": "trim",
-          "repeatable": false,
+          "normalization": "",
+          "repeatable": true,
           "required": false,
           "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
-          "usage": "path for streamed model output",
-          "valueType": "string",
+          "usage": "output path or named output mapping in the form slot=path (repeatable)",
+          "valueType": "stringArray",
           "visibility": "visible"
         },
         "you.models.invoke.flag.output-map": {
@@ -13024,6 +13063,10 @@
           "id": "you.models.invoke.binding.output-map",
           "inputId": "you.models.invoke.flag.output-map"
         },
+        "you.models.invoke.binding.input": {
+          "id": "you.models.invoke.binding.input",
+          "inputId": "you.models.invoke.flag.input"
+        },
         "you.models.invoke.binding.port": {
           "id": "you.models.invoke.binding.port",
           "inputId": "you.models.invoke.flag.port"
@@ -13089,6 +13132,283 @@
       "handler": {
         "id": "you.models.invoke.handler",
         "operationId": "invokeModel"
+      }
+    },
+    "you.models.remove": {
+      "id": "you.models.remove",
+      "name": "remove",
+      "path": "you models remove",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.remove",
+        "documentation": {
+          "title": {
+            "id": "you.models.remove.title",
+            "canonicalEnglish": "Remove one installed model cache revision"
+          },
+          "description": {
+            "id": "you.models.remove.description",
+            "canonicalEnglish": "Explicitly remove one installed managed model cache revision through DELETE /models/{model_name}. The operation reports the selected revision, validated cache path, outcome, and measured bytes removed; it refuses active model hosts or invocation leases and never follows links outside the managed cache root. Use global --json for API-shaped output and global --server to target a non-default factory API base URI."
+          }
+        },
+        "examples": [
+          "you models remove OMNIVOICE_Q4_K_M",
+          "you --json models remove OMNIVOICE_Q4_K_M"
+        ],
+        "visibility": "public",
+        "sourceHash": "cb8ee2af65b102201dab00c728a3430b160a8b0daa1e96409aeba318c187dbc1"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.remove",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "remove <model-name>",
+        "example": "  # Remove one installed managed cache revision.\n  you models remove OMNIVOICE_Q4_K_M\n\n  # Emit deterministic JSON for automation.\n  you --json models remove OMNIVOICE_Q4_K_M"
+      },
+      "arguments": {
+        "you.models.remove.arg.0": {
+          "id": "you.models.remove.arg.0",
+          "name": "model-name",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "scope": "local",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "acceptedSources": [
+            "cli"
+          ],
+          "handlerBindingId": "you.models.remove.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.models.remove.flag.debug": {
+          "id": "you.models.remove.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.json": {
+          "id": "you.models.remove.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.remote": {
+          "id": "you.models.remove.flag.remote",
+          "long": "remote",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.remote",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.server": {
+          "id": "you.models.remove.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.verbose": {
+          "id": "you.models.remove.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "handlerBindings": {
+        "you.models.remove.binding.model-name": {
+          "id": "you.models.remove.binding.model-name",
+          "inputId": "you.models.remove.arg.0"
+        }
+      },
+      "outputs": {
+        "you.models.remove.output.human": {
+          "id": "you.models.remove.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.models.remove.output.json": {
+          "id": "you.models.remove.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.models.remove.exit.success": {
+          "id": "you.models.remove.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.models.remove.exit.failure": {
+          "id": "you.models.remove.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.models.remove.exit.usage": {
+          "id": "you.models.remove.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.models.remove.side-effect.network": {
+          "id": "you.models.remove.side-effect.network",
+          "kind": "network"
+        },
+        "you.models.remove.side-effect.filesystem": {
+          "id": "you.models.remove.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.models.remove.handler",
+        "operationId": "removeModel"
       }
     },
     "you.models.pull": {
@@ -13407,7 +13727,7 @@
           },
           "description": {
             "id": "you.metrics.description",
-            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API."
+            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API. The base command reports token and latency metrics. Costs are reported separately."
           }
         },
         "examples": [
@@ -13695,7 +14015,7 @@
           },
           "description": {
             "id": "you.metrics.costs.description",
-            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. Missing prices remain visible as UNPRICED usage; this command does not fetch live vendor pricing or enforce billing."
+            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. PRICED rows include price_source as BUILT_IN or OPERATOR_SUPPLIED. Missing prices remain visible as UNPRICED usage. This command does not fetch live vendor pricing or enforce billing."
           }
         },
         "examples": [
@@ -14536,6 +14856,30 @@
             "itemId": "you.run.flag.listen",
             "since": "1.0.0",
             "state": "active"
+          }
+        },
+        "you.run.flag.pprof": {
+          "id": "you.run.flag.pprof",
+          "long": "pprof",
+          "usage": "enable loopback-only Go pprof HTTP diagnostics for this local server; requires --with-server or --with-site",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.pprof",
+            "state": "active",
+            "since": "1.0.0"
           }
         },
         "you.run.flag.provider": {
@@ -15394,6 +15738,20 @@
             }
           ]
         },
+        "you.run.rel.pprof-server": {
+          "id": "you.run.rel.pprof-server",
+          "kind": "dependency",
+          "when": {
+            "type": "flag",
+            "id": "you.run.flag.pprof"
+          },
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.with-server"
+            }
+          ]
+        },
         "you.run.rel.remote-with-server": {
           "id": "you.run.rel.remote-with-server",
           "kind": "conflict",
@@ -15609,7 +15967,7 @@
           },
           "description": {
             "id": "you.server.description",
-            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation. Use `you server acp` for the ACP stdio host or `you server mcp` for the MCP stdio host."
+            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command provides continuous, non-resumable hosting and does not accept recording, resume, or replay flags. For restart-surviving hosting, use you run --with-server --continuously --record <path>. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation. Use `you server acp` for the ACP stdio host or `you server mcp` for the MCP stdio host."
           }
         },
         "examples": [
@@ -15706,6 +16064,30 @@
             "itemId": "you.server.flag.listen",
             "since": "1.0.0",
             "state": "active"
+          }
+        },
+        "you.server.flag.pprof": {
+          "id": "you.server.flag.pprof",
+          "long": "pprof",
+          "usage": "enable loopback-only Go pprof HTTP diagnostics for this local server; never available on ACP or MCP stdio",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.flag.pprof",
+            "state": "active",
+            "since": "1.0.0"
           }
         },
         "you.server.flag.remote": {
@@ -15882,6 +16264,147 @@
       },
       "handler": {
         "id": "you.server.handler"
+      }
+    },
+    "you.server.stop": {
+      "id": "you.server.stop",
+      "name": "stop",
+      "path": "you server stop",
+      "aliases": [],
+      "completeness": "authoritative",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.server.stop",
+        "documentation": {
+          "title": {
+            "id": "you.server.stop.title",
+            "canonicalEnglish": "Gracefully stop a local Factory API server"
+          },
+          "description": {
+            "id": "you.server.stop.description",
+            "canonicalEnglish": "Request graceful shutdown of the selected loopback Factory API server through its administrative control. The command waits for the selected listener to stop and never falls back to local process termination. Use --server to select the loopback server URI."
+          }
+        },
+        "examples": [
+          "you --server http://127.0.0.1:7437 server stop",
+          "you --server http://localhost:7437 server stop --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.server.stop",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "local-only",
+      "usage": {
+        "line": "stop",
+        "example": "  you --server http://127.0.0.1:7437 server stop"
+      },
+      "flags": {},
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.server.stop.output.human": {
+          "id": "you.server.stop.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.server.stop.output.json": {
+          "id": "you.server.stop.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.server.stop.error.invalid-target": {
+          "id": "you.server.stop.error.invalid-target",
+          "code": "SERVER_STOP_INVALID_TARGET"
+        },
+        "you.server.stop.error.unreachable": {
+          "id": "you.server.stop.error.unreachable",
+          "code": "SERVER_STOP_UNREACHABLE"
+        },
+        "you.server.stop.error.rejected": {
+          "id": "you.server.stop.error.rejected",
+          "code": "SHUTDOWN_CONTROL_REJECTED"
+        },
+        "you.server.stop.error.unavailable": {
+          "id": "you.server.stop.error.unavailable",
+          "code": "SHUTDOWN_CONTROL_UNAVAILABLE"
+        },
+        "you.server.stop.error.request-timeout": {
+          "id": "you.server.stop.error.request-timeout",
+          "code": "SERVER_STOP_REQUEST_TIMEOUT"
+        },
+        "you.server.stop.error.observation-timeout": {
+          "id": "you.server.stop.error.observation-timeout",
+          "code": "SERVER_STOP_OBSERVATION_TIMEOUT"
+        }
+      },
+      "exits": {
+        "you.server.stop.exit.success": {
+          "id": "you.server.stop.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.server.stop.exit.failure": {
+          "id": "you.server.stop.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.server.stop.exit.usage": {
+          "id": "you.server.stop.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.server.stop.side-effect.network": {
+          "id": "you.server.stop.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.server.stop.handler",
+        "operationId": "shutdownServer"
       }
     },
     "you.submit": {

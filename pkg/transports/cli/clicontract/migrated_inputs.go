@@ -127,10 +127,10 @@ func validateMigratedFlags(
 // isConstructedProtocolCompatibilityInput identifies a hidden collision guard
 // added only when the protocol leaves are attached beneath the runnable HTTP
 // server. It is deliberately absent from the authored MCP leaf contract: the
-// flag exists to reject the parent's HTTP-only listener input, not to widen
-// the protocol command's public input surface.
+// flags exist to reject the parent's HTTP-only inputs, not to widen the
+// protocol command's public input surface.
 func isConstructedProtocolCompatibilityInput(id string) bool {
-	return id == "you.server.mcp.flag.listen"
+	return id == "you.server.mcp.flag.listen" || id == "you.server.mcp.flag.pprof"
 }
 
 func firstArgumentMismatch(want climanifest.Argument, got cliinputs.ArgumentRecord) string {

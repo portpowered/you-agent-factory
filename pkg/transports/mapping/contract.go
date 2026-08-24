@@ -52,6 +52,8 @@ type LiveSessionAPI interface {
 	CloseFactorySession(ctx context.Context, sessionID string) error
 	PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	ResumeLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	SubscribeFactoryResponseEventsForSession(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (FactoryResponseEventSubscription, error)
 }
 

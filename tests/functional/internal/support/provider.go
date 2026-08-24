@@ -40,11 +40,6 @@ func providerErrorCommandResult(t *testing.T, name string) platformprocess.Comma
 	return entry
 }
 
-func ProviderErrorCommandResult(t *testing.T, name string) platformprocess.CommandResult {
-	t.Helper()
-	return providerErrorCommandResult(t, name)
-}
-
 func RepeatedProviderErrorCommandResults(t *testing.T, name string, count int) []platformprocess.CommandResult {
 	t.Helper()
 	entry := providerErrorCommandResult(t, name)
@@ -61,33 +56,6 @@ func AcceptedProviderResponse() workerexecution.InferenceResponse {
 
 func RejectedProviderResponse(content string) workerexecution.InferenceResponse {
 	return workerexecution.InferenceResponse{Content: content}
-}
-
-func CursorProviderSuccessStdout(result string) []byte {
-	if result == "" {
-		result = "Done. COMPLETE"
-	}
-	systemPayload := map[string]any{
-		"type":       "system",
-		"subtype":    "init",
-		"session_id": "cursor-functional-test-session",
-	}
-	resultPayload := map[string]any{
-		"type":       "result",
-		"subtype":    "success",
-		"is_error":   false,
-		"result":     result,
-		"session_id": "cursor-functional-test-session",
-	}
-	systemEncoded, err := json.Marshal(systemPayload)
-	if err != nil {
-		panic(err)
-	}
-	resultEncoded, err := json.Marshal(resultPayload)
-	if err != nil {
-		panic(err)
-	}
-	return append(append(systemEncoded, '\n'), resultEncoded...)
 }
 
 func CodexSuccessStdout(result string) []byte {

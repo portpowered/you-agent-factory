@@ -16,6 +16,7 @@ import (
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -34,9 +35,10 @@ func compositionHTTPProtocol(t *testing.T) clihttp.Protocol {
 }
 
 type compositionModelsRoot struct {
-	listModels func(context.Context) (modelinference.List, error)
-	getModel   func(context.Context, string) (modelinference.Detail, error)
-	pullModel  func(context.Context, string) (modelinference.PullResult, error)
+	listModels  func(context.Context) (modelinference.List, error)
+	getModel    func(context.Context, string) (modelinference.Detail, error)
+	pullModel   func(context.Context, string) (modelinference.PullResult, error)
+	invokeModel func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 
 func (stub compositionModelsRoot) OpenRuntimeScope(context.Context, modelinference.OpenRuntimeScopeRequest) (modelinference.OpenRuntimeScopeResult, error) {
@@ -124,7 +126,10 @@ func (stub compositionModelsRoot) InvokeModelWithLease(context.Context, modelinf
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+func (stub compositionModelsRoot) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if stub.invokeModel != nil {
+		return stub.invokeModel(ctx, request)
+	}
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -713,6 +718,222 @@ func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *tes
 	assertMappedCLIResponse(t, out.Bytes())
 }
 
+func TestRootAdapter_InvokeGenericFileInputsPreservesOrderBytesAndMedia(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	wantBytes := []byte{0x00, 0xff, 0x10, 0x80, 0x7f}
+	var gotRequest modelinference.InvokeModelRequest
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModelWithInputs("asr", modelinference.OperationASR,
+					modelinference.OperationSlot{Name: "audio", Modality: modelinference.ModalityAudio, Required: boolPointer(true), MediaTypes: []string{"audio/*"}},
+					modelinference.OperationSlot{Name: "prompt", Modality: modelinference.ModalityText, MediaTypes: []string{"text/plain"}},
+					modelinference.OperationSlot{Name: "transcript", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "segments", Modality: modelinference.ModalityJSON},
+				), nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				gotRequest = request
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+					{Name: "transcript", Modality: modelinference.ModalityText, Content: "heard"},
+					{Name: "segments", Modality: modelinference.ModalityJSON, Content: "[]"},
+				}}, nil
+			},
+		},
+		InputFileReader: func(path string) ([]byte, error) {
+			if path != "meeting.wav" {
+				return nil, fmt.Errorf("unexpected input path %q", path)
+			}
+			return wantBytes, nil
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings: []string{"audio=@meeting.wav", "prompt=transcribe exactly"}, JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if len(gotRequest.Inputs) != 2 {
+		t.Fatalf("generic inputs = %#v, want two ordered inputs", gotRequest.Inputs)
+	}
+	audio, prompt := gotRequest.Inputs[0], gotRequest.Inputs[1]
+	if audio.Name != "audio" || audio.Modality != modelinference.ModalityAudio || audio.ContentType != "audio/wav" || audio.MediaType != "audio/wav" || audio.Content != string(wantBytes) {
+		t.Fatalf("audio input = %#v, want exact bytes and audio/wav metadata", audio)
+	}
+	if prompt.Name != "prompt" || prompt.Modality != modelinference.ModalityText || prompt.ContentType != "text/plain" || prompt.MediaType != "text/plain" || prompt.Content != "transcribe exactly" {
+		t.Fatalf("prompt input = %#v, want ordered text input", prompt)
+	}
+}
+
+func TestRootAdapter_InvokeGenericInlineJSONInputPreservesContent(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	var gotInputs []modelinference.InferenceInput
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIOperationModel("asr", modelinference.OperationASR,
+					[]modelinference.OperationSlot{
+						{Name: "audio", Modality: modelinference.ModalityAudio, Required: boolPointer(true), MediaTypes: []string{"audio/*"}},
+						{Name: "parameters", Modality: modelinference.ModalityJSON, MediaTypes: []string{"application/json"}},
+					},
+					[]modelinference.OperationSlot{
+						{Name: "transcript", Modality: modelinference.ModalityText},
+						{Name: "segments", Modality: modelinference.ModalityJSON},
+					}), nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				gotInputs = append([]modelinference.InferenceInput(nil), request.Inputs...)
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+					{Name: "transcript", Modality: modelinference.ModalityText, Content: "heard"},
+					{Name: "segments", Modality: modelinference.ModalityJSON, Content: "[]"},
+				}}, nil
+			},
+		},
+		InputFileReader: func(string) ([]byte, error) { return []byte("RIFF"), nil },
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings: []string{"audio=@meeting.wav", `parameters={"language":"en"}`}, JSON: true, Output: io.Discard,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if len(gotInputs) != 2 || gotInputs[1].Name != "parameters" || gotInputs[1].ContentType != "application/json" || gotInputs[1].MediaType != "application/json" || gotInputs[1].Content != `{"language":"en"}` {
+		t.Fatalf("inline JSON input = %#v, want exact ordered JSON input", gotInputs)
+	}
+}
+
+func TestRootAdapter_InvokeGenericInputPreflightRejectsBeforeBackend(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		mappings    []string
+		readErr     error
+		readBytes   []byte
+		wantClass   modelinference.InvocationFailureClass
+		wantReads   int
+		wantInvokes int
+	}{
+		{name: "missing assignment", mappings: []string{"audio"}, wantClass: modelinference.InvocationFailureClassInvalidSlot},
+		{name: "empty slot", mappings: []string{"=audio.wav"}, wantClass: modelinference.InvocationFailureClassInvalidSlot},
+		{name: "unknown slot", mappings: []string{"unknown=@audio.wav"}, wantClass: modelinference.InvocationFailureClassInvalidSlot},
+		{name: "duplicate nonrepeatable", mappings: []string{"audio=@one.wav", "audio=@two.wav"}, wantClass: modelinference.InvocationFailureClassSlotArity},
+		{name: "missing required slot", mappings: []string{"prompt=hint"}, wantClass: modelinference.InvocationFailureClassInvalidSlot},
+		{name: "unreadable file", mappings: []string{"audio=@audio.wav"}, readErr: errors.New("not readable"), wantReads: 1},
+		{name: "unsupported media", mappings: []string{"audio=@notes.txt"}, readBytes: []byte("not audio"), wantClass: modelinference.InvocationFailureClassMediaCapability, wantReads: 1},
+	}
+
+	for _, test := range cases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			scope := testRuntimeScope(t)
+			reads := 0
+			invokes := 0
+			service := modelscli.NewService(modelscli.Config{
+				Models: stubModelsRoot{
+					getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+						return genericCLIModelWithInputs("asr", modelinference.OperationASR,
+							modelinference.OperationSlot{Name: "audio", Modality: modelinference.ModalityAudio, Required: boolPointer(true), MediaTypes: []string{"audio/*"}},
+							modelinference.OperationSlot{Name: "prompt", Modality: modelinference.ModalityText, MediaTypes: []string{"text/plain"}},
+							modelinference.OperationSlot{Name: "transcript", Modality: modelinference.ModalityText},
+							modelinference.OperationSlot{Name: "segments", Modality: modelinference.ModalityJSON},
+						), nil
+					},
+					invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+						invokes++
+						return modelinference.InvokeModelResult{}, nil
+					},
+				},
+				InputFileReader: func(string) ([]byte, error) {
+					reads++
+					return test.readBytes, test.readErr
+				},
+				OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+					return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+				},
+			})
+
+			err := service.Invoke(modelscli.InvokeConfig{
+				Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+				InputMappings: test.mappings, JSON: true, Output: io.Discard,
+			})
+			if test.readErr != nil {
+				var failure *clidiag.LocalFailure
+				if !errors.As(err, &failure) {
+					t.Fatalf("Invoke() error = %v, want local input failure", err)
+				}
+			} else {
+				var failure *modelinference.InvocationFailure
+				if !errors.As(err, &failure) || failure.Class != test.wantClass {
+					t.Fatalf("Invoke() error = %v, want invocation failure class %q", err, test.wantClass)
+				}
+			}
+			if reads != test.wantReads || invokes != test.wantInvokes {
+				t.Fatalf("preflight effects = reads:%d invokes:%d, want reads:%d invokes:%d", reads, invokes, test.wantReads, test.wantInvokes)
+			}
+		})
+	}
+}
+
+func TestRootAdapter_InvokeASRRequiresEveryNamedOutputBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	reads := 0
+	invokes := 0
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIOperationModel("asr", modelinference.OperationASR,
+					[]modelinference.OperationSlot{{
+						Name: "audio", Modality: modelinference.ModalityAudio,
+						Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+					}},
+					[]modelinference.OperationSlot{
+						{Name: "transcript", Modality: modelinference.ModalityText, Required: boolPointer(true)},
+						{Name: "segments", Modality: modelinference.ModalityJSON, Required: boolPointer(true)},
+					}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokes++
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		InputFileReader: func(string) ([]byte, error) {
+			reads++
+			return []byte("audio"), nil
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings:  []string{"audio=@meeting.wav"},
+		OutputMappings: []string{"transcript=" + filepath.Join(t.TempDir(), "transcript.txt")},
+		Output:         io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "transcript, segments") {
+		t.Fatalf("ASR incomplete output mapping error = %v, want both output slots", err)
+	}
+	if reads != 0 || invokes != 0 {
+		t.Fatalf("ASR incomplete mapping effects = reads:%d invokes:%d, want 0/0", reads, invokes)
+	}
+}
+
 type localOutputFileSystem struct{}
 
 func (localOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
@@ -757,4 +978,21 @@ func genericCLIModel(name, operation string, outputs ...modelinference.Operation
 	return modelinference.GetModelResult{Model: modelinference.Detail{
 		Summary: modelinference.Summary{Name: name, Operations: []modelinference.Operation{{Name: operation, Outputs: outputs}}},
 	}}
+}
+
+func genericCLIModelWithInputs(name, operation string, inputsAndOutputs ...modelinference.OperationSlot) modelinference.GetModelResult {
+	return genericCLIOperationModel(name, operation,
+		append([]modelinference.OperationSlot(nil), inputsAndOutputs[:2]...),
+		append([]modelinference.OperationSlot(nil), inputsAndOutputs[2:]...),
+	)
+}
+
+func genericCLIOperationModel(name, operation string, inputs, outputs []modelinference.OperationSlot) modelinference.GetModelResult {
+	return modelinference.GetModelResult{Model: modelinference.Detail{
+		Summary: modelinference.Summary{Name: name, Operations: []modelinference.Operation{{Name: operation, Inputs: inputs, Outputs: outputs}}},
+	}}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }

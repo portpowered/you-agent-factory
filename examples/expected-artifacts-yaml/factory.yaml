@@ -1,0 +1,32 @@
+workTypes:
+  - name: task
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+    expectedArtifacts:
+      - name: task-report
+        pattern: 'reports/{{ (index .Inputs 0).Name }}.json'
+        nonEmpty: true
+workers:
+  - name: processor
+workstations:
+  - name: process-task
+    worker: processor
+    inputs:
+      - workType: task
+        state: init
+    outputs:
+      - workType: task
+        state: complete
+    onFailure:
+      - workType: task
+        state: failed
+    expectedArtifacts:
+      - name: manifest
+        pattern: 'reports/{{ (index .Inputs 0).Name }}.manifest.json'

@@ -14,7 +14,6 @@ import (
 type Service interface {
 	List(ListConfig) error
 	Show(ShowConfig) error
-	isProvidersCLIService()
 }
 
 type service struct {
@@ -30,8 +29,6 @@ func New(root providers.Service) Service {
 	}
 	return &service{root: root}
 }
-
-func (s *service) isProvidersCLIService() {}
 
 // CommandHandler owns Cobra-to-Providers request transformation for the
 // public `you providers` family. The top-level CLI only attaches its methods

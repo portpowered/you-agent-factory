@@ -12,6 +12,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -37,7 +38,7 @@ type Service interface {
 	)
 	RunScriptPoller(
 		context.Context,
-		workers.CommandRunner,
+		platformprocess.CommandRunner,
 		factorydefinitions.RuntimeConfigLookup,
 		factorydefinitions.FactoryWorkstationConfig,
 		*factorydefinitions.FactoryWorkerConfig,
@@ -51,7 +52,7 @@ type Service interface {
 type Dependencies struct {
 	Logger           func(workstationName, workerName string) *zap.Logger
 	Clock            func() clockwork.Clock
-	CommandRunner    func() workers.CommandRunner
+	CommandRunner    func() platformprocess.CommandRunner
 	ResolveTemplates workers.TemplateFieldResolver
 	ExecutionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 	CursorRecorder   CursorRecorder
@@ -64,7 +65,7 @@ func ScriptPollerCommandRequest(
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 	resolveTemplates workers.TemplateFieldResolver,
 	resume ResumeCursor,
-) (workers.CommandRequest, error) {
+) (platformprocess.CommandRequest, error) {
 	return scriptPollerCommandRequest(runtimeCfg, workstation, workerDef, resolveTemplates, resume)
 }
 

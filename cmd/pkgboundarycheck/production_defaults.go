@@ -151,7 +151,22 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.CreateTemp", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
+	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
+	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ReadFile", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
+
+	// Runtime metrics coordination is a policy-free host adapter selected by
+	// Wire. Its stable OS-held locks are the external effect behind the public
+	// RuntimeMetricsCoordination contract.
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination.go", operation: "acquireRuntimeMetricsFile", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination.go", operation: "openRuntimeMetricsLockFile", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination.go", operation: "openRuntimeMetricsLockFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination.go", operation: "package", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination.go", operation: "prepareRuntimeMetricsCoordinationRoot", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination_unix.go", operation: "tryLockRuntimeMetricsFile", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination_unix.go", operation: "unlockRuntimeMetricsFile", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination_windows.go", operation: "tryLockRuntimeMetricsFile", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
+	{filePath: "pkg/platform/metrics/runtime_metrics_coordination_windows.go", operation: "unlockRuntimeMetricsFile", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/metrics.NewRuntimeMetricsCoordination"},
 
 	// rollingfile is the shared policy-free writer used by the Wire-selected
 	// runtime log, metrics, and ACP transcript openers. Keep these as exact

@@ -2,7 +2,9 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"sync"
 	"time"
 
@@ -17,6 +19,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// InputFileSystem is the host bundle's private view of the runtime input-tree
+// effect. It is intentionally not part of the Factory Runtime service root.
+type InputFileSystem interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+}
+
 // Bundle is the runtime wiring produced by Build and referenced from live handles.
 type Bundle struct {
 	Dir                  string
@@ -26,7 +36,7 @@ type Bundle struct {
 	StartedAtUTC         time.Time
 	EventHistory         recordings.RuntimeLedger
 	Factory              Engine
-	InputFiles           factory.InputFileSystem
+	InputFiles           InputFileSystem
 	InputDirectoryWalker factory.InputDirectoryWalker
 	WorkRequestIDs       work.RequestIDGenerator
 	Net                  *state.Net
@@ -38,6 +48,10 @@ type Bundle struct {
 	RecordPath           string
 	dispatchMetricFields sync.Map
 	dispatchCompleted    func(string)
+	metricsMu            sync.Mutex
+	metricsClosed        bool
+	metricsErrMu         sync.Mutex
+	metricsErr           error
 }
 
 // NewBundle constructs one inert runtime host from direct collaborators.
@@ -239,5 +253,14 @@ func (r *Bundle) CloseArtifacts() error {
 	if r == nil {
 		return nil
 	}
-	return CloseBundleSinks(r.LogSink, r.MetricsSink)
+	var errs []error
+	if r.LogSink != nil {
+		if err := r.LogSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := r.closeMetricsSink(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }

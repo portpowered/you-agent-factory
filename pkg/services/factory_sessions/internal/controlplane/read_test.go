@@ -298,6 +298,24 @@ func TestGetLiveFactorySession_RejectsDurableIDs(t *testing.T) {
 	}
 }
 
+func TestGetLiveFactorySession_PrefersRegisteredLiveDurablePrefixedID(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "dur-sess-live-owned-001"
+	host := &readTestHost{
+		sessions: map[string]*livesession.LiveSession{
+			sessionID: {ID: sessionID},
+		},
+	}
+	got, err := controlplane.GetLiveFactorySession(context.Background(), host, sessionID)
+	if err != nil {
+		t.Fatalf("GetLiveFactorySession: %v", err)
+	}
+	if got.Context.Session == nil || got.Context.Session.ID != sessionID {
+		t.Fatalf("session = %#v, want live session %q", got.Context.Session, sessionID)
+	}
+}
+
 func TestGetLiveFactorySession_ReturnsProjectedSession(t *testing.T) {
 	t.Parallel()
 

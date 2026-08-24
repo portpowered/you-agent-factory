@@ -22,37 +22,80 @@ const (
 // ReconstructCanonicalFactoryWorldState applies the Factory-owned event
 // envelope directly. Generated event conversion belongs at compatibility and
 // transport boundaries, not in the canonical reducer.
+//
+// Callers that obtain events from a ledger receive a detached append-ordered
+// slice. The reducer treats that slice as read-only, so the common ordered
+// replay path can avoid copying and sorting it a second time. Out-of-order
+// callers retain the compatibility behavior: the reducer clones before
+// sorting, preserving both caller input and deterministic replay semantics.
 func ReconstructCanonicalFactoryWorldState(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+	return reconstructCanonicalFactoryWorldState(events, selectedTick, nil)
+}
+
+type worldStateReplayStats struct {
+	eventCopies   int
+	sortPasses    int
+	eventsApplied int
+}
+
+func reconstructCanonicalFactoryWorldState(
+	events []interfaces.FactoryEvent,
+	selectedTick int,
+	stats *worldStateReplayStats,
+) (interfaces.FactoryWorldState, error) {
 	reducer := newFactoryWorldReducer(selectedTick)
-	ordered := make([]interfaces.FactoryEvent, len(events))
-	for index, event := range events {
-		ordered[index] = event.Clone()
+	ordered := events
+	if !factoryEventsInReplayOrder(events) {
+		ordered = make([]interfaces.FactoryEvent, len(events))
+		for index, event := range events {
+			ordered[index] = event.Clone()
+		}
+		if stats != nil {
+			stats.eventCopies += len(events)
+		}
+		sort.SliceStable(ordered, func(i, j int) bool {
+			return factoryEventBefore(ordered[i], ordered[j])
+		})
+		if stats != nil {
+			stats.sortPasses++
+		}
 	}
-	sort.SliceStable(ordered, func(i, j int) bool {
-		left := ordered[i]
-		right := ordered[j]
-		if left.Context.Tick != right.Context.Tick {
-			return left.Context.Tick < right.Context.Tick
-		}
-		if left.Context.Sequence != right.Context.Sequence {
-			return left.Context.Sequence < right.Context.Sequence
-		}
-		if !left.Context.EventTime.Equal(right.Context.EventTime) {
-			return left.Context.EventTime.Before(right.Context.EventTime)
-		}
-		return left.Id < right.Id
-	})
 
 	for _, event := range ordered {
 		if event.Context.Tick > selectedTick {
-			continue
+			break
 		}
 		if err := reducer.apply(event); err != nil {
 			return interfaces.FactoryWorldState{}, err
 		}
+		if stats != nil {
+			stats.eventsApplied++
+		}
 	}
 
 	return reducer.state(), nil
+}
+
+func factoryEventsInReplayOrder(events []interfaces.FactoryEvent) bool {
+	for index := 1; index < len(events); index++ {
+		if factoryEventBefore(events[index], events[index-1]) {
+			return false
+		}
+	}
+	return true
+}
+
+func factoryEventBefore(left, right interfaces.FactoryEvent) bool {
+	if left.Context.Tick != right.Context.Tick {
+		return left.Context.Tick < right.Context.Tick
+	}
+	if left.Context.Sequence != right.Context.Sequence {
+		return left.Context.Sequence < right.Context.Sequence
+	}
+	if !left.Context.EventTime.Equal(right.Context.EventTime) {
+		return left.Context.EventTime.Before(right.Context.EventTime)
+	}
+	return left.Id < right.Id
 }
 
 type factoryWorldReducer struct {

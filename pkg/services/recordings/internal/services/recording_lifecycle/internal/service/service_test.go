@@ -17,19 +17,30 @@ type unusedLedger struct {
 	recordings.Ledger
 }
 
+type namedTargetReserver struct {
+	path  string
+	calls int
+}
+
+func (reserver *namedTargetReserver) ReserveNamed(string, time.Time, string, string) (string, error) {
+	reserver.calls++
+	return reserver.path, nil
+}
+
 func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 	t.Parallel()
 
-	identityCalls := 0
+	canonicalID := "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba"
+	reservedPath := filepath.Join(
+		"home", "operator", ".you-agent-factory", "recordings", "2026", "07", "27", canonicalID+".jsonl",
+	)
+	reserver := &namedTargetReserver{path: reservedPath}
 	planner := lifecycleservice.NewTargetPlanner(
 		platformclock.NewDeterministic(
 			time.Date(2026, 7, 27, 15, 4, 5, 0, time.UTC),
 			time.Second,
 		),
-		func() string {
-			identityCalls++
-			return "identity-" + string(rune('0'+identityCalls))
-		},
+		reserver,
 		filepath.Join,
 	)
 	root := recordingsinternal.NewService(
@@ -44,8 +55,9 @@ func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 			FactorySessionID: "session-1",
 		},
 		Target: recordings.RecordingTargetRequest{
-			HomeDir:           filepath.Join("home", "operator"),
-			ReportedSessionID: "~default",
+			HomeDir:            filepath.Join("home", "operator"),
+			CanonicalSessionID: canonicalID,
+			ReportedSessionID:  "~default",
 		},
 	}
 
@@ -62,32 +74,24 @@ func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 		first.Status.State != recordings.RecordingActive {
 		t.Fatalf("repeated binding = %#v then %#v, want same active binding", first, second)
 	}
-	if identityCalls != 1 {
-		t.Fatalf("identity calls = %d, want one target selection", identityCalls)
+	if reserver.calls != 1 {
+		t.Fatalf("reservation calls = %d, want one target selection", reserver.calls)
 	}
-	want := filepath.Join(
-		"home",
-		"operator",
-		".you-agent-factory",
-		"recordings",
-		"2026-07",
-		"2026-07-27",
-		"factory-session-~default-150405-identity-1.json",
-	)
+	want := reservedPath
 	if first.Status.Artifact != recordings.RecordingArtifactReference(want) {
 		t.Fatalf("reported target = %q, want %q", first.Status.Artifact, want)
 	}
 
 	conflict := request
-	conflict.Target.ReportedSessionID = "session-other"
+	conflict.Target.CanonicalSessionID = "550e8400-e29b-41d4-a716-446655440000"
 	if _, err := root.StartRecording(conflict); !errors.Is(
 		err,
 		recordings.ErrRecordingBindingConflict,
 	) {
 		t.Fatalf("conflicting rebind error = %v, want ErrRecordingBindingConflict", err)
 	}
-	if identityCalls != 1 {
-		t.Fatalf("conflicting rebind selected another target: %d calls", identityCalls)
+	if reserver.calls != 1 {
+		t.Fatalf("conflicting rebind selected another target: %d calls", reserver.calls)
 	}
 }
 

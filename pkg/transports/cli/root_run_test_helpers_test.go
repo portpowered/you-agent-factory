@@ -167,9 +167,6 @@ func (rootModelInvocationOperation) InvokeModel(context.Context, modelscli.Invoc
 
 var rootModelsCLI = modelscli.New(rootTestHTTPProtocol(), rootModelInvocationOperation{})
 
-func ShowSessionAccessor() func(sessioncli.ShowConfig) error      { return showSession }
-func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) { showSession = fn }
-
 func newLegacyTestRootCommand() *cobra.Command {
 	return newLegacyTestRootCommandWithCatalog(rootNamedFactoryCatalogFake{})
 }

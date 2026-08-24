@@ -8,8 +8,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -20,13 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// BeginWorkerAttempt opens the Worker Session observation window around a
-// detached Execute request. Factory Runtime remains the admission and
-// execution owner; the returned callback only commits the durable Worker
-// Session terminal observation after the caller's Execute operation returns.
-// This optional capability is used by the direct JavaScript child route, whose
-// request is already fully resolved and therefore does not go through the
-// Runtime stateless attempt driver.
+// BeginWorkerAttempt prepares a direct-child Worker Session terminal callback.
 func (f *factoryImpl) BeginWorkerAttempt(
 	ctx context.Context,
 	executeRequest workers.ExecuteRequest,
@@ -42,6 +38,19 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
 	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID)
 	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
+	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
+	if prepare == nil {
+		return nil, factory.ErrNotRunning
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	terminal, err := prepare(context.WithoutCancel(ctx), &executeRequest)
+	if err != nil {
+		return nil, err
+	}
+	// Publish the association only after setup returns a terminal callback;
+	// failed setup must not strand a response bridge on a Worker topic.
 	recordDispatchWorkerSessionAssociation(
 		f.eventHistory,
 		f.currentTick(),
@@ -54,28 +63,20 @@ func (f *factoryImpl) BeginWorkerAttempt(
 		},
 		f.cfg.clock.Now(),
 	)
-	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
-	if prepare == nil {
-		return nil, factory.ErrNotRunning
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	terminal, err := prepare(context.WithoutCancel(ctx), &executeRequest)
-	if err != nil {
-		return nil, err
-	}
+	var completeOnce sync.Once
 	return func(
 		callbackCtx context.Context,
 		result workers.ExecuteResult,
 		executeErr error,
 	) error {
-		if callbackCtx == nil {
-			callbackCtx = context.Background()
-		}
-		if terminal != nil {
-			terminal(callbackCtx, executeRequest, result, executeErr)
-		}
+		completeOnce.Do(func() {
+			if callbackCtx == nil {
+				callbackCtx = context.Background()
+			}
+			if terminal != nil {
+				terminal(callbackCtx, executeRequest, result, executeErr)
+			}
+		})
 		return nil
 	}, nil
 }
@@ -224,10 +225,21 @@ func processGoneAttemptResult(
 	result.StructuredResult = nil
 	result.StructuredResultPresent = false
 	result.Continuation = nil
+	message := workers.ErrWorkstationDispatchProcessGone.Error()
+	if strings.EqualFold(strings.TrimSpace(request.Target.RunnerID), "script") && result.Failure != nil {
+		if failureMessage := strings.TrimSpace(result.Failure.Message); failureMessage != "" &&
+			!strings.EqualFold(failureMessage, "execution canceled") {
+			message = failureMessage
+		} else if result.Diagnostics != nil && result.Diagnostics.Command != nil {
+			if stderr := strings.TrimSpace(result.Diagnostics.Command.Stderr); stderr != "" {
+				message = stderr
+			}
+		}
+	}
 	result.Failure = &workers.ExecutionFailure{
 		Type:    workers.WorkFailureTypeUnknown,
 		Family:  workers.WorkFailureFamilyRetryable,
-		Message: workers.ErrWorkstationDispatchProcessGone.Error(),
+		Message: message,
 	}
 	return result
 }
@@ -242,7 +254,9 @@ func processGoneDispatchResult(
 	}
 	*terminal = workers.WorkstationDispatchTerminalOutcomeFailed
 	result.Outcome = workers.OutcomeFailed
-	result.Error = workers.ErrWorkstationDispatchProcessGone.Error()
+	if processGoneResultError(result.Error) == "" {
+		result.Error = workers.ErrWorkstationDispatchProcessGone.Error()
+	}
 	result.FailureMetadata = &workers.WorkFailureMetadata{
 		Family: workers.WorkFailureFamilyRetryable,
 		Type:   workers.WorkFailureTypeUnknown,
@@ -253,6 +267,14 @@ func processGoneDispatchResult(
 		workers.ProviderResponseMetadataFailureStage:          "process",
 	}}
 	return workers.WorkstationDispatchReconciliationReasonProcessGone
+}
+
+func processGoneResultError(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" || strings.Contains(normalized, "cancel") || strings.Contains(normalized, "context canceled") {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 type PromptRenderer = runtimePromptRenderer
@@ -406,6 +428,217 @@ func wrapRuntimePromptRenderError(err error) error {
 		return err
 	}
 	return &runtimePromptRenderError{cause: err}
+}
+
+func workstationDispatchResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+	executeErr error,
+) (workers.WorkstationDispatchResult, error) {
+	dispatch := request.Execution.Dispatch
+	workResult := workstationWorkResultFromExecute(request, result)
+	terminal, reconciliationReason := classifyWorkstationDispatchResult(result, executeErr, &workResult)
+	proposedOutput := result.Output.Clone()
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		clearWorkstationCanceledResult(&workResult, &proposedOutput)
+	}
+	reconciliationReason = processGoneDispatchResult(&workResult, &terminal, executeErr)
+	return workers.WorkstationDispatchResult{
+		DispatchID:           dispatch.DispatchID,
+		WorkstationName:      request.WorkstationName,
+		TerminalOutcome:      terminal,
+		ReconciliationReason: reconciliationReason,
+		Cancellation:         workResult.Cancellation.Clone(),
+		Result:               workResult,
+		ProposedOutput:       &proposedOutput,
+	}, executeErr
+}
+
+func workstationWorkResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+) workers.WorkResult {
+	dispatch := request.Execution.Dispatch
+	workResult := workers.WorkResult{
+		DispatchID:                  dispatch.DispatchID,
+		TransitionID:                dispatch.TransitionID,
+		Outcome:                     workers.OutcomeAccepted,
+		Cancellation:                result.Cancellation.Clone(),
+		Output:                      primaryOutputText(result.Output.Primary),
+		StructuredResult:            jsonvalue.Clone(result.StructuredResult),
+		StructuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
+		ArtifactVerification:        result.ArtifactVerification.Clone(),
+		Feedback:                    result.Output.Feedback,
+		SelectedClassificationLabel: result.Output.Classification,
+		Metrics: workers.WorkMetrics{
+			Duration:   result.Metrics.Duration,
+			Cost:       result.Metrics.Cost,
+			RetryCount: result.Metrics.RetryCount,
+		},
+		Continuation: result.Continuation,
+		Diagnostics:  result.Diagnostics.ToWorkDiagnostics(),
+	}
+	switch result.Outcome {
+	case workers.ExecutionOutcomeContinue:
+		workResult.Outcome = workers.OutcomeContinue
+	case workers.ExecutionOutcomeRejected:
+		workResult.Outcome = workers.OutcomeRejected
+	case workers.ExecutionOutcomeFailed:
+		workResult.Outcome = workers.OutcomeFailed
+	case workers.ExecutionOutcomeCanceled:
+		workResult.Outcome = workers.OutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
+	default:
+		if result.Outcome != workers.ExecutionOutcomeAccepted {
+			workResult.Outcome = workers.OutcomeFailed
+		}
+	}
+	if result.Failure == nil {
+		return workResult
+	}
+	workResult.Error = strings.TrimSpace(result.Failure.Message)
+	workResult.FailureDetail = workFailureDetail(result.Failure, workResult.Error)
+	if shouldPropagateFailureMetadata(request, result.Failure) {
+		workResult.FailureMetadata = &workers.WorkFailureMetadata{
+			Family: result.Failure.Family,
+			Type:   result.Failure.Type,
+		}
+	}
+	return workResult
+}
+
+func classifyWorkstationDispatchResult(
+	result workers.ExecuteResult,
+	executeErr error,
+	workResult *workers.WorkResult,
+) (workers.WorkstationDispatchTerminalOutcome, workers.WorkstationDispatchReconciliationReason) {
+	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
+	if result.Outcome == workers.ExecutionOutcomeFailed {
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	}
+	if result.Outcome != "" && !isKnownExecutionOutcome(result.Outcome) {
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	}
+	if workResult.Cancellation != nil {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+	}
+	if errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
+	}
+	if executeErr != nil && terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		workResult.Outcome = workers.OutcomeFailed
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+		if strings.TrimSpace(workResult.Error) == "" {
+			workResult.Error = executeErr.Error()
+		}
+	}
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled &&
+		strings.TrimSpace(workResult.Error) == "" {
+		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+	}
+	return terminal, ""
+}
+
+func isKnownExecutionOutcome(outcome workers.ExecutionOutcome) bool {
+	switch outcome {
+	case workers.ExecutionOutcomeAccepted, workers.ExecutionOutcomeContinue,
+		workers.ExecutionOutcomeRejected, workers.ExecutionOutcomeFailed,
+		workers.ExecutionOutcomeCanceled:
+		return true
+	default:
+		return false
+	}
+}
+
+func clearWorkstationCanceledResult(
+	workResult *workers.WorkResult,
+	proposedOutput *workers.ProposedOutput,
+) {
+	workResult.Outcome = workers.OutcomeCanceled
+	workResult.Output = ""
+	workResult.StructuredResult = nil
+	workResult.StructuredResultPresent = false
+	workResult.Continuation = nil
+	workResult.FailureDetail = nil
+	workResult.FailureMetadata = nil
+	*proposedOutput = workers.ProposedOutput{}
+}
+
+func normalizeAttemptCorrelation(
+	request workers.ExecuteRequest,
+	result workers.ExecuteResult,
+) (workers.ExecuteResult, bool) {
+	if result.Correlation.DispatchID == "" {
+		result.Correlation = request.Correlation
+		return result, false
+	}
+	if result.Correlation.AttemptID == "" {
+		result.Correlation.AttemptID = request.Correlation.AttemptID
+	}
+	if result.Correlation.FactorySessionID == "" {
+		result.Correlation.FactorySessionID = request.Correlation.FactorySessionID
+	}
+	if result.Correlation.RuntimeID == "" {
+		result.Correlation.RuntimeID = request.Correlation.RuntimeID
+	}
+	if result.Correlation.GenerationID == "" {
+		result.Correlation.GenerationID = request.Correlation.GenerationID
+	}
+	if result.Correlation.RequestID == "" {
+		result.Correlation.RequestID = request.Correlation.RequestID
+	}
+	if result.Correlation.TraceID == "" {
+		result.Correlation.TraceID = request.Correlation.TraceID
+	}
+	return result, result.Correlation.DispatchID != request.Correlation.DispatchID ||
+		result.Correlation.AttemptID != request.Correlation.AttemptID ||
+		correlationValueConflicts(result.Correlation.FactorySessionID, request.Correlation.FactorySessionID) ||
+		correlationValueConflicts(result.Correlation.RuntimeID, request.Correlation.RuntimeID) ||
+		correlationValueConflicts(result.Correlation.GenerationID, request.Correlation.GenerationID) ||
+		correlationValueConflicts(result.Correlation.RequestID, request.Correlation.RequestID) ||
+		correlationValueConflicts(result.Correlation.TraceID, request.Correlation.TraceID)
+}
+
+func conflictingAttemptResult(request workers.ExecuteRequest) workers.ExecuteResult {
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypeUnknown,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: "worker execution returned conflicting correlation",
+		},
+	}
+}
+
+func dispatchCancellationReasonFromCancelRequest(
+	reasons ...workers.WorkstationDispatchCancelReason,
+) workers.DispatchCancellationReason {
+	if len(reasons) > 0 && reasons[0] == workers.WorkstationDispatchCancelReasonSuperseded {
+		return workers.DispatchCancellationReasonSuperseded
+	}
+	return workers.DispatchCancellationReasonCanceled
+}
+
+func dispatchCancellationReasonFromContext(ctx context.Context) workers.DispatchCancellationReason {
+	if platformprocess.CancellationReasonFromContext(ctx) == platformprocess.CancellationReasonSuperseded {
+		return workers.DispatchCancellationReasonSuperseded
+	}
+	return workers.DispatchCancellationReasonCanceled
+}
+
+func platformCancellationReason(reason workers.DispatchCancellationReason) platformprocess.CancellationReason {
+	if reason == workers.DispatchCancellationReasonSuperseded {
+		return platformprocess.CancellationReasonSuperseded
+	}
+	return platformprocess.CancellationReasonCanceled
 }
 
 func (executor workstationRequestExecutor) Execute(
@@ -736,52 +969,4 @@ func recordDispatchWorkerSessionAssociation(
 		return
 	}
 	ledger.RecordDispatchWorkerSessionAssociation(tick, dispatchID, workerSessionID, requestID, eventTime)
-}
-
-func recordedObservationFromFact(fact recordedDispatchObservation, clock factory.Clock) workersessions.Observation {
-	state := fact.state
-	if state == "" {
-		state = workersessions.StateStarting
-	}
-	observation := workersessions.Observation{
-		WorkerSessionID:          fact.workerSessionID,
-		Model:                    cloneRecordedString(fact.model),
-		ReasoningEffort:          cloneRecordedString(fact.reasoningEffort),
-		ProviderSessionAvailable: fact.provider != nil && fact.provider.ID != "",
-		WorkIDs:                  append([]string(nil), fact.workIDs...),
-		TurnID:                   fact.turnID,
-		AttemptID:                fact.dispatchID,
-		State:                    state,
-		DurationBasis:            workersessions.DurationBasisUnavailable,
-		Transcript:               workersessions.TranscriptAvailabilityUnavailable,
-	}
-	if fact.provider != nil {
-		observation.ProviderSession = providerSessionRef(*fact.provider)
-	}
-	if !fact.startedAt.IsZero() {
-		started := fact.startedAt.UTC()
-		observation.StartedAt = &started
-		if fact.endedAt != nil {
-			ended := fact.endedAt.UTC()
-			observation.EndedAt = &ended
-			duration := ended.Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			observation.Duration = &duration
-			observation.DurationBasis = workersessions.DurationBasisRecordedTimestamps
-		} else if !state.Terminal() && clock != nil {
-			duration := clock.Now().Sub(started)
-			if duration < 0 {
-				duration = 0
-			}
-			observation.Duration = &duration
-			observation.DurationBasis = workersessions.DurationBasisActiveClock
-		}
-	}
-	if fact.failure != nil {
-		failure := *fact.failure
-		observation.Failure = &failure
-	}
-	return observation
 }

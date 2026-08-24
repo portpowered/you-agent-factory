@@ -100,20 +100,20 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 
 	startedAt := time.Date(2026, 7, 27, 16, 0, 0, 0, time.UTC)
 	finishedAt := startedAt.Add(time.Minute)
-	path := filepath.Join(t.TempDir(), "recording.json")
+	path := filepath.Join(t.TempDir(), "recording.jsonl")
 	storage := platformreplay.NewLocal(runtime.GOOS)
 	root := NewServiceWithLifecycleEffects(
 		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
 		NewProjectionService(),
 		nil,
-		NewReplayRecordingSnapshotWriter(storage.WriteFile),
+		NewReplayRecordingSnapshotWriter(storage.WriteFile, storage.AppendFile),
 		nil,
 		nil,
 		runtimeRecorderTestClock{now: startedAt},
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, path)
 	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), recordings.CanonicalEventScope{
-		FactorySessionID: "~default",
+		FactorySessionID: "00000000-0000-4000-8000-000000000005",
 	}); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
@@ -145,8 +145,8 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 		)
 	}
 	for index, event := range artifact.Events {
-		if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
-			t.Fatalf("replay artifact event %d session id = %v, want ~default", index, event.Context.SessionID)
+		if event.Context.SessionID == nil || *event.Context.SessionID != "00000000-0000-4000-8000-000000000005" {
+			t.Fatalf("replay artifact event %d session id = %v, want canonical UUID", index, event.Context.SessionID)
 		}
 	}
 }

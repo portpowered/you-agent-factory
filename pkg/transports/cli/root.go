@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -41,6 +42,7 @@ import (
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +51,8 @@ const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
 	runListenInputID                     = "you.run.flag.listen"
 	serverListenInputID                  = "you.server.flag.listen"
+	runPprofInputID                      = "you.run.flag.pprof"
+	serverPprofInputID                   = "you.server.flag.pprof"
 )
 
 const cliBinaryName = "you"
@@ -63,6 +67,10 @@ type cliGlobalOptions struct {
 type cliOperatorDefaultsOptions struct {
 	providerOverride string
 	modelOverride    string
+}
+
+type commandExecutionState struct {
+	persistentPreRunReached bool
 }
 
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
@@ -135,6 +143,7 @@ type CommandOperations struct {
 	BuildTerminalLogger               terminalpolicy.LoggerBuilder
 	RunDefaults                       runcli.RunConfig
 	BatchInputFileSystem              submitcli.BatchInputFileSystem
+	RunInputPathInspector             platformfilesystem.PathInspector
 	RunDirectoryCreator               platformfilesystem.DirectoryCreator
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
@@ -186,6 +195,7 @@ type CommandOperations struct {
 	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
 	MetricsCLI                        factoryvisualizationcli.Operation
 	CostsCLI                          costscli.Operation
+	ServerStopCLI                     serverstopcli.Operation
 }
 
 // CommandFactory constructs a fresh Cobra tree for each invocation from
@@ -210,6 +220,7 @@ type CommandFactory struct {
 	buildTerminalLogger               terminalpolicy.LoggerBuilder
 	runDefaults                       runcli.RunConfig
 	batchInputFileSystem              submitcli.BatchInputFileSystem
+	runInputPathInspector             platformfilesystem.PathInspector
 	runDirectoryCreator               platformfilesystem.DirectoryCreator
 	browserOpener                     platformbrowser.Opener
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
@@ -259,9 +270,11 @@ type CommandFactory struct {
 	responsePresentation       factoryvisualization.ResponsePresentation
 	acp                        acpcli.Operations
 	acpServer                  acp.Server
+	cancellation               initializer.InvocationCancellation
 	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
 	metricsCLI                 factoryvisualizationcli.Operation
 	costsCLI                   costscli.Operation
+	serverStopCLI              serverstopcli.Operation
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -283,6 +296,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		buildTerminalLogger:               operations.BuildTerminalLogger,
 		runDefaults:                       operations.RunDefaults,
 		batchInputFileSystem:              operations.BatchInputFileSystem,
+		runInputPathInspector:             operations.RunInputPathInspector,
 		runDirectoryCreator:               operations.RunDirectoryCreator,
 		browserOpener:                     operations.BrowserOpener,
 		resolveOperatorDefaults:           operations.ResolveOperatorDefaults,
@@ -334,6 +348,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		runtimeMetricsQuery:               operations.RuntimeMetricsQuery,
 		metricsCLI:                        operations.MetricsCLI,
 		costsCLI:                          operations.CostsCLI,
+		serverStopCLI:                     operations.ServerStopCLI,
 	}
 }
 
@@ -357,7 +372,8 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	factory.homeDir = input.HomeDir
 	factory.lookupEnv = input.LookupEnv
 	factory.initializer = input.Initializer
-	diagnostics := clidiag.NewDiagnosticWriter(input.Stderr)
+	factory.cancellation = input.Cancellation
+	diagnostics := clidiag.NewDiagnosticWriter(input.Stderr, clidiag.DebugFlagEnabled(input.Arguments))
 	root := newRootCommandWithFactory(factory)
 	if root == nil {
 		return executeCommandFailure(diagnostics, fmt.Errorf("execute CLI command: command is required"))
@@ -369,8 +385,14 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetContext(clidiag.WithCentralDiagnostics(input.Context, true))
+	state := &commandExecutionState{}
+	installCobraUsageBoundary(root, state)
 	if factory.observeCLI == nil {
-		return executeCommandResult(diagnostics, cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root))
+		if err := cobracompletion.RegisterPowerShellFilesystemDelegation(root); err != nil {
+			return executeCommandFailure(diagnostics, err)
+		}
+		command, err := root.ExecuteC()
+		return executeCommandResult(diagnostics, classifyCobraExecutionFailure(root, command, state, err))
 	}
 	snapshot, err := cliobservation.CaptureSnapshot(root)
 	if err != nil {
@@ -395,7 +417,57 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	if err := factory.observeCLI(edgeObservation); err != nil {
 		return executeCommandFailure(diagnostics, fmt.Errorf("observe CLI command: %w", err))
 	}
+	parseErr = clidiag.NewUsageError(usageCommandPath(command, root), parseErr)
 	return executeCommandResult(diagnostics, parseErr)
+}
+
+func installCobraUsageBoundary(root *cobra.Command, state *commandExecutionState) {
+	if root == nil {
+		return
+	}
+	previousPersistentPreRun := root.PersistentPreRunE
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if state != nil {
+			state.persistentPreRunReached = true
+		}
+		if previousPersistentPreRun == nil {
+			return nil
+		}
+		return previousPersistentPreRun(cmd, args)
+	}
+	previousFlagError := root.FlagErrorFunc()
+	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		if previousFlagError != nil {
+			err = previousFlagError(cmd, err)
+		}
+		return clidiag.NewUsageError(usageCommandPath(cmd, root), err)
+	})
+}
+
+func classifyCobraExecutionFailure(
+	root *cobra.Command,
+	command *cobra.Command,
+	state *commandExecutionState,
+	err error,
+) error {
+	if err == nil || (state != nil && state.persistentPreRunReached) {
+		return err
+	}
+	return clidiag.NewUsageError(usageCommandPath(command, root), err)
+}
+
+func usageCommandPath(command, root *cobra.Command) string {
+	if command != nil {
+		if path := strings.TrimSpace(command.CommandPath()); path != "" {
+			return path
+		}
+	}
+	if root != nil {
+		if path := strings.TrimSpace(root.CommandPath()); path != "" {
+			return path
+		}
+	}
+	return cliBinaryName
 }
 
 func executeCommandResult(diagnostics *clidiag.DiagnosticWriter, err error) error {
@@ -423,14 +495,31 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 			_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
 			clidiag.MarkDiagnosticRendered(diagnostics)
 		}
+		writeDebugFailure(diagnostics, err)
 		return context.Canceled
+	}
+	if clidiag.DiagnosticRendered(diagnostics) {
+		writeDebugFailure(diagnostics, err)
+		return err
+	}
+	if clidiag.WriteUsageError(diagnostics, err) {
+		writeDebugFailure(diagnostics, err)
+		return err
 	}
 	normalized := clidiag.Normalize(err)
 	if clidiag.DiagnosticRendered(diagnostics) {
+		writeDebugFailure(diagnostics, err)
 		return err
 	}
 	clidiag.WriteFailure(diagnostics, normalized)
+	writeDebugFailure(diagnostics, err)
 	return normalized
+}
+
+func writeDebugFailure(diagnostics io.Writer, err error) {
+	if clidiag.DebugEnabled(diagnostics) {
+		clidiag.WriteDebugFailure(diagnostics, err)
+	}
 }
 
 func buildWorkflowExecutionService(
@@ -504,90 +593,14 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	}))
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
-	cfg = applyRunScopedServerMode(cfg)
-	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
-		cfg.ListenExplicit = true
-		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
-			return fmt.Errorf("--listen requires --with-server or --with-site on you run")
-		}
-	}
-	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
+	preparedCfg, err := prepareRunFactoryConfig(
+		cmd, cfg, promptArgs, globals, operatorDefaults, policy, rootOptions, defaultInvocation,
+	)
 	if err != nil {
 		return err
 	}
-	cfg.Logger = logger
-	cfg.Verbose = policy.VerboseEnabled()
-	cfg.TerminalPolicy = policy
-	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
-
-	if !remotePlacementSelected(globals) {
-		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
-			return err
-		}
-		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
-	}
-	homeDir, err := resolveProcessHomeDir(rootOptions)
-	if err != nil {
-		return err
-	}
-	cfg.HomeDir = homeDir
-	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
-		return err
-	}
-	if err := resolveRunFactorySelection(
-		cmd,
-		&cfg,
-		homeDir,
-		rootOptions.namedFactoryCatalog,
-		rootOptions.resolveNamedFactoryRoots,
-		rootOptions.resolveNamedFactoryCandidatePaths,
-	); err != nil {
-		return err
-	}
-
-	runOperatorDefaults := *operatorDefaults
-	runOperatorDefaults.providerOverride = cfg.ProviderOverride
-	runOperatorDefaults.modelOverride = cfg.ModelOverride
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, &runOperatorDefaults, rootOptions, homeDir)
-	if err != nil {
-		return err
-	}
-	cfg.OperatorDefaults = resolvedOperatorDefaults
-	cfg.Stdin = cmd.InOrStdin()
-	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
-	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
-	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
-		runcli.ObserveInvocationRejection(logger, err)
-		return err
-	}
-	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
-	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") || cfg.InvocationFileExplicit
-	defaultResponseStream := !cfg.SuppressDashboardRendering &&
-		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
-	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
-		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
-	}
-	cfg.CleanInvocation = cleanInvocation
-	cfg.JSON = globals.json
-	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
-	cfg.TerminalPolicy = runPolicy
-	cfg.Verbose = runPolicy.VerboseEnabled()
-	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
-	configureRunProgressOutput(cmd, &cfg, policy)
-	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
-	if cleanInvocation || textInvocation {
-		cfg.Output = cmd.OutOrStdout()
-	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" ||
-		(strings.TrimSpace(cfg.ReplayPath) != "" && !cfg.SuppressDashboardRendering) {
-		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = humanTerminal
-	} else {
-		cfg.StartupOutput = humanTerminal
-	}
-	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
-	cfg.JSONOutput = globals.json
+	cfg = preparedCfg
 	if remotePlacementSelected(globals) {
 		return runcli.RunRemoteInvocationWithWorkTarget(
 			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
@@ -699,6 +712,7 @@ func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaul
 		APIEnabled:            (defaultInvocation || cfg.WithServer) && cfg.Port > 0,
 		DashboardEnabled:      (defaultInvocation || cfg.WithSite) && cfg.Port > 0,
 		WorkerSidecarsEnabled: true,
+		Cancellation:          options.cancellation,
 	}
 	if options.openRunSelection == nil {
 		return fmt.Errorf("run selection operation is required")

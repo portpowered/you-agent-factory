@@ -46,6 +46,12 @@ const (
 	UNKNOWN      CheckpointResumabilityStatus = "UNKNOWN"
 )
 
+// Defines values for CostsLineItemPriceSource.
+const (
+	BUILTIN          CostsLineItemPriceSource = "BUILT_IN"
+	OPERATORSUPPLIED CostsLineItemPriceSource = "OPERATOR_SUPPLIED"
+)
+
 // Defines values for CostsLineItemStatus.
 const (
 	CostsLineItemStatusPRICED   CostsLineItemStatus = "PRICED"
@@ -97,6 +103,12 @@ const (
 	FACTORYSESSION     CostsScopeKind = "FACTORY_SESSION"
 )
 
+// Defines values for DispatchCancellationReason.
+const (
+	CANCELED   DispatchCancellationReason = "CANCELED"
+	SUPERSEDED DispatchCancellationReason = "SUPERSEDED"
+)
+
 // Defines values for DispatchReconciliationSource.
 const (
 	DURABLESTATE      DispatchReconciliationSource = "DURABLE_STATE"
@@ -118,6 +130,10 @@ const (
 const (
 	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                     ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
 	ErrorResponseCodeBADREQUEST                                     ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeCOSTSINVALIDREQUEST                            ErrorResponseCode = "COSTS_INVALID_REQUEST"
+	ErrorResponseCodeCOSTSQUERYCANCELED                             ErrorResponseCode = "COSTS_QUERY_CANCELED"
+	ErrorResponseCodeCOSTSQUERYFAILED                               ErrorResponseCode = "COSTS_QUERY_FAILED"
+	ErrorResponseCodeCOSTSQUERYTIMEOUT                              ErrorResponseCode = "COSTS_QUERY_TIMEOUT"
 	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                     ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeFACTORYALREADYEXISTS                           ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
 	ErrorResponseCodeFACTORYNOTIDLE                                 ErrorResponseCode = "FACTORY_NOT_IDLE"
@@ -133,6 +149,8 @@ const (
 	ErrorResponseCodeMETRICSINVALIDREQUEST                          ErrorResponseCode = "METRICS_INVALID_REQUEST"
 	ErrorResponseCodeMETRICSSESSIONNOTFOUND                         ErrorResponseCode = "METRICS_SESSION_NOT_FOUND"
 	ErrorResponseCodeMETRICSSESSIONSCOPEUNAVAILABLE                 ErrorResponseCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
+	ErrorResponseCodeMODELCACHEINUSE                                ErrorResponseCode = "MODEL_CACHE_IN_USE"
+	ErrorResponseCodeMODELCACHENOTFOUND                             ErrorResponseCode = "MODEL_CACHE_NOT_FOUND"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
@@ -143,6 +161,8 @@ const (
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                     ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeREVISIONCONFLICT                               ErrorResponseCode = "REVISION_CONFLICT"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                         ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
+	ErrorResponseCodeSHUTDOWNCONTROLREJECTED                        ErrorResponseCode = "SHUTDOWN_CONTROL_REJECTED"
+	ErrorResponseCodeSHUTDOWNCONTROLUNAVAILABLE                     ErrorResponseCode = "SHUTDOWN_CONTROL_UNAVAILABLE"
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
@@ -877,13 +897,20 @@ const (
 
 // Defines values for ManagedRuntimePullOutcome.
 const (
-	ManagedRuntimePullOutcomeALREADYPRESENT        ManagedRuntimePullOutcome = "ALREADY_PRESENT"
-	ManagedRuntimePullOutcomeALREADYREADY          ManagedRuntimePullOutcome = "ALREADY_READY"
-	ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ManagedRuntimePullOutcome = "INSTALLED_SUCCESSFULLY"
-	ManagedRuntimePullOutcomeSOURCEFETCHFAILED     ManagedRuntimePullOutcome = "SOURCE_FETCH_FAILED"
-	ManagedRuntimePullOutcomeSTILLLOADING          ManagedRuntimePullOutcome = "STILL_LOADING"
-	ManagedRuntimePullOutcomeTIMEDOUT              ManagedRuntimePullOutcome = "TIMED_OUT"
-	ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME    ManagedRuntimePullOutcome = "UNSUPPORTED_RUNTIME"
+	ManagedRuntimePullOutcomeALREADYPRESENT              ManagedRuntimePullOutcome = "ALREADY_PRESENT"
+	ManagedRuntimePullOutcomeALREADYREADY                ManagedRuntimePullOutcome = "ALREADY_READY"
+	ManagedRuntimePullOutcomeASSEMBLYFAILED              ManagedRuntimePullOutcome = "ASSEMBLY_FAILED"
+	ManagedRuntimePullOutcomeASSETPREPARATIONFAILED      ManagedRuntimePullOutcome = "ASSET_PREPARATION_FAILED"
+	ManagedRuntimePullOutcomeCACHEINSTALLATIONFAILED     ManagedRuntimePullOutcome = "CACHE_INSTALLATION_FAILED"
+	ManagedRuntimePullOutcomeCANCELLED                   ManagedRuntimePullOutcome = "CANCELLED"
+	ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY       ManagedRuntimePullOutcome = "INSTALLED_SUCCESSFULLY"
+	ManagedRuntimePullOutcomeINTEGRITYVERIFICATIONFAILED ManagedRuntimePullOutcome = "INTEGRITY_VERIFICATION_FAILED"
+	ManagedRuntimePullOutcomeREADINESSEVALUATIONFAILED   ManagedRuntimePullOutcome = "READINESS_EVALUATION_FAILED"
+	ManagedRuntimePullOutcomeSOURCEFETCHFAILED           ManagedRuntimePullOutcome = "SOURCE_FETCH_FAILED"
+	ManagedRuntimePullOutcomeSOURCERESOLUTIONFAILED      ManagedRuntimePullOutcome = "SOURCE_RESOLUTION_FAILED"
+	ManagedRuntimePullOutcomeSTILLLOADING                ManagedRuntimePullOutcome = "STILL_LOADING"
+	ManagedRuntimePullOutcomeTIMEDOUT                    ManagedRuntimePullOutcome = "TIMED_OUT"
+	ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME          ManagedRuntimePullOutcome = "UNSUPPORTED_RUNTIME"
 )
 
 // Defines values for ManagedRuntimeReadinessState.
@@ -955,7 +982,13 @@ const (
 // Defines values for ModelPullOutcome.
 const (
 	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
+	ModelPullOutcomeFAILED         ModelPullOutcome = "FAILED"
 	ModelPullOutcomePULLED         ModelPullOutcome = "PULLED"
+)
+
+// Defines values for ModelRemoveOutcome.
+const (
+	REMOVED ModelRemoveOutcome = "REMOVED"
 )
 
 // Defines values for ModelStatus.
@@ -1258,6 +1291,11 @@ const (
 	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
 )
 
+// Defines values for ShutdownAcceptedResponseStatus.
+const (
+	Accepted ShutdownAcceptedResponseStatus = "accepted"
+)
+
 // Defines values for SubmitWorkItemType.
 const (
 	SubmitWorkItemTypeAudio    SubmitWorkItemType = "audio"
@@ -1310,6 +1348,7 @@ const (
 // Defines values for WorkOutcome.
 const (
 	WorkOutcomeAccepted WorkOutcome = "ACCEPTED"
+	WorkOutcomeCanceled WorkOutcome = "CANCELED"
 	WorkOutcomeContinue WorkOutcome = "CONTINUE"
 	WorkOutcomeFailed   WorkOutcome = "FAILED"
 	WorkOutcomeRejected WorkOutcome = "REJECTED"
@@ -1680,6 +1719,9 @@ type CostsLineItem struct {
 	Model             *string `json:"model,omitempty"`
 	OutputTokens      *int64  `json:"output_tokens,omitempty"`
 
+	// PriceSource Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+	PriceSource *CostsLineItemPriceSource `json:"price_source,omitempty"`
+
 	// PricedAmount Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.
 	PricedAmount *string `json:"priced_amount,omitempty"`
 	Provider     *string `json:"provider,omitempty"`
@@ -1693,6 +1735,9 @@ type CostsLineItem struct {
 	WorkId          *string             `json:"work_id,omitempty"`
 	WorkerSessionId *string             `json:"worker_session_id,omitempty"`
 }
+
+// CostsLineItemPriceSource Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+type CostsLineItemPriceSource string
 
 // CostsLineItemStatus PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
 type CostsLineItemStatus string
@@ -1874,6 +1919,14 @@ type Diagnostics struct {
 	Workers *map[string]SafeWorkDiagnostics `json:"workers,omitempty"`
 }
 
+// DispatchCancellation Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.
+type DispatchCancellation struct {
+	Reason DispatchCancellationReason `json:"reason"`
+}
+
+// DispatchCancellationReason defines model for DispatchCancellation.Reason.
+type DispatchCancellationReason string
+
 // DispatchConsumedWorkRef Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context.
 type DispatchConsumedWorkRef struct {
 	// WorkId Canonical work identity for one consumed dispatch input.
@@ -2009,7 +2062,10 @@ type DispatchRequestEventPayload struct {
 type DispatchResponseEventPayload struct {
 	// ArtifactVerification Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations.
 	ArtifactVerification *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
-	CompletionId         *string                       `json:"completionId,omitempty"`
+
+	// Cancellation Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.
+	Cancellation *DispatchCancellation `json:"cancellation,omitempty"`
+	CompletionId *string               `json:"completionId,omitempty"`
 
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
@@ -5916,6 +5972,11 @@ type LogicalRoundTrip struct {
 
 // ManagedRuntime defines model for ManagedRuntime.
 type ManagedRuntime struct {
+	// CacheBytes Exact recursive byte count of regular files in the installed managed-cache revision.
+	CacheBytes *int64 `json:"cacheBytes,omitempty"`
+
+	// CachePath Resolved managed-cache revision directory when a local cache is installed.
+	CachePath   *string    `json:"cachePath,omitempty"`
 	Diagnostics *StringMap `json:"diagnostics,omitempty"`
 
 	// Identity Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
@@ -5930,6 +5991,9 @@ type ManagedRuntime struct {
 	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
 	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
 
+	// Revision Installed managed-cache revision when a local cache is present.
+	Revision *string `json:"revision,omitempty"`
+
 	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
 	SupportedOperations []ModelInvocationOperation `json:"supportedOperations"`
 }
@@ -5937,7 +6001,31 @@ type ManagedRuntime struct {
 // ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
 type ManagedRuntimeLifecycleState string
 
-// ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+// ManagedRuntimePullDiagnostics Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included.
+type ManagedRuntimePullDiagnostics struct {
+	// File Logical asset file involved in the failed operation, when applicable.
+	File *string `json:"file,omitempty"`
+
+	// ModelName Model identity associated with the failed pull.
+	ModelName *string `json:"modelName,omitempty"`
+
+	// Operation Safe logical operation that failed.
+	Operation *string `json:"operation,omitempty"`
+
+	// RequestUrl Sanitized HTTP request URL, when an HTTP request failed.
+	RequestUrl *string `json:"requestUrl,omitempty"`
+
+	// ResolvedRepository Resolved upstream repository or other safe source identifier.
+	ResolvedRepository *string `json:"resolvedRepository,omitempty"`
+
+	// Revision Source revision selected for the pull.
+	Revision *string `json:"revision,omitempty"`
+
+	// UpstreamStatusCode Upstream HTTP status code, when the server returned one.
+	UpstreamStatusCode *int32 `json:"upstreamStatusCode,omitempty"`
+}
+
+// ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
 type ManagedRuntimePullOutcome string
 
 // ManagedRuntimePullResult defines model for ManagedRuntimePullResult.
@@ -5951,7 +6039,10 @@ type ManagedRuntimePullResult struct {
 	// Identity Stable managed runtime identity targeted by the pull or install request.
 	Identity string `json:"identity"`
 
-	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+	// PullDiagnostics Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included.
+	PullDiagnostics *ManagedRuntimePullDiagnostics `json:"pullDiagnostics,omitempty"`
+
+	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
 	PullOutcome ManagedRuntimePullOutcome `json:"pullOutcome"`
 
 	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
@@ -6314,7 +6405,7 @@ type ModelPullDownloadedFile struct {
 	Sha256 *string `json:"sha256,omitempty"`
 }
 
-// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
 type ModelPullOutcome string
 
 // ModelPullResponse defines model for ModelPullResponse.
@@ -6329,7 +6420,7 @@ type ModelPullResponse struct {
 	// ModelName Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields.
 	ModelName string `json:"modelName"`
 
-	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
 	Outcome ModelPullOutcome `json:"outcome"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
@@ -6343,6 +6434,27 @@ type ModelPullResponse struct {
 type ModelReference struct {
 	// NameOrUri Configured model name or source URI. Resolution is owned by Models.
 	NameOrUri string `json:"nameOrUri"`
+}
+
+// ModelRemoveOutcome Outcome of removing the selected managed model cache revision.
+type ModelRemoveOutcome string
+
+// ModelRemoveResponse defines model for ModelRemoveResponse.
+type ModelRemoveResponse struct {
+	// BytesRemoved Total size of regular files measured immediately before removal.
+	BytesRemoved int64 `json:"bytesRemoved"`
+
+	// CachePath Validated absolute path of the removed managed cache revision.
+	CachePath string `json:"cachePath"`
+
+	// ModelName Stable managed runtime identity whose cache revision was removed.
+	ModelName string `json:"modelName"`
+
+	// Outcome Outcome of removing the selected managed model cache revision.
+	Outcome ModelRemoveOutcome `json:"outcome"`
+
+	// Revision Exact managed cache revision removed by the operation.
+	Revision string `json:"revision"`
 }
 
 // ModelRequestEventPayload Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.
@@ -7767,6 +7879,16 @@ type SessionStartedEventPayload struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// ShutdownAcceptedResponse defines model for ShutdownAcceptedResponse.
+type ShutdownAcceptedResponse struct {
+	// Message Human-readable acknowledgment that graceful shutdown was accepted.
+	Message string                         `json:"message"`
+	Status  ShutdownAcceptedResponseStatus `json:"status"`
+}
+
+// ShutdownAcceptedResponseStatus defines model for ShutdownAcceptedResponse.Status.
+type ShutdownAcceptedResponseStatus string
+
 // StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
 type StageSubmitWorkFileRequest struct {
 	// ContentBase64 Base64-encoded file payload to stage behind a backend-owned reference.
@@ -9041,9 +9163,6 @@ type WorkflowPolicyPreview struct {
 	// BudgetDecisions Child and concurrency budget decisions for preview surfaces.
 	BudgetDecisions *map[string]interface{} `json:"budgetDecisions,omitempty"`
 
-	// DeniedCapabilities Capabilities denied by the effective policy before runtime execution.
-	DeniedCapabilities []WorkflowDiagnostic `json:"deniedCapabilities"`
-
 	// EffectivePolicy Effective bounded workflow policy for preview or session start.
 	EffectivePolicy map[string]interface{} `json:"effectivePolicy"`
 
@@ -9455,6 +9574,9 @@ type CurrentFactoryNotFound = ErrorResponse
 // ExecutionRequestIdConflict defines model for ExecutionRequestIdConflict.
 type ExecutionRequestIdConflict = ErrorResponse
 
+// FactorySessionDeletionConflict defines model for FactorySessionDeletionConflict.
+type FactorySessionDeletionConflict = ErrorResponse
+
 // FactorySessionLifecycleControlConflict defines model for FactorySessionLifecycleControlConflict.
 type FactorySessionLifecycleControlConflict struct {
 	union json.RawMessage
@@ -9464,6 +9586,9 @@ type FactorySessionLifecycleControlConflict struct {
 type FactorySessionResourceCapacityConflict struct {
 	union json.RawMessage
 }
+
+// GatewayTimeout defines model for GatewayTimeout.
+type GatewayTimeout = ErrorResponse
 
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
@@ -9476,6 +9601,9 @@ type MoveWorkConflict = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// RequestTimeout defines model for RequestTimeout.
+type RequestTimeout = ErrorResponse
 
 // ResponseEventBadRequest defines model for ResponseEventBadRequest.
 type ResponseEventBadRequest = ErrorResponse
@@ -9491,6 +9619,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
+
+// ShutdownControlRejected defines model for ShutdownControlRejected.
+type ShutdownControlRejected = ErrorResponse
+
+// ShutdownControlUnavailable defines model for ShutdownControlUnavailable.
+type ShutdownControlUnavailable = ErrorResponse
 
 // WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
 type WorkerSessionContinuationConflict = ErrorResponse
@@ -18208,6 +18342,9 @@ type ClientInterface interface {
 	// GetMetricsCosts request
 	GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ShutdownServer request
+	ShutdownServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetStatus request
 	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -18268,6 +18405,18 @@ func (c *Client) GetMetrics(ctx context.Context, params *GetMetricsParams, reqEd
 
 func (c *Client) GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsCostsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ShutdownServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewShutdownServerRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -18683,6 +18832,33 @@ func NewGetMetricsCostsRequest(server string, params *GetMetricsCostsParams) (*h
 	return req, nil
 }
 
+// NewShutdownServerRequest generates requests for ShutdownServer
+func NewShutdownServerRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/shutdown")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetStatusRequest generates requests for GetStatus
 func NewGetStatusRequest(server string) (*http.Request, error) {
 	var err error
@@ -18836,6 +19012,9 @@ type ClientWithResponsesInterface interface {
 	// GetMetricsCostsWithResponse request
 	GetMetricsCostsWithResponse(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*GetMetricsCostsClientResponse, error)
 
+	// ShutdownServerWithResponse request
+	ShutdownServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ShutdownServerClientResponse, error)
+
 	// GetStatusWithResponse request
 	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error)
 
@@ -18951,7 +19130,9 @@ type GetMetricsCostsClientResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *CostsReport
 	JSON400      *BadRequest
+	JSON408      *RequestTimeout
 	JSON500      *InternalError
+	JSON504      *GatewayTimeout
 }
 
 // Status returns HTTPResponse.Status
@@ -18964,6 +19145,31 @@ func (r GetMetricsCostsClientResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetMetricsCostsClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ShutdownServerClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *ShutdownAcceptedResponse
+	JSON403      *ShutdownControlRejected
+	JSON500      *InternalError
+	JSON503      *ShutdownControlUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r ShutdownServerClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ShutdownServerClientResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -19087,6 +19293,15 @@ func (c *ClientWithResponses) GetMetricsCostsWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetMetricsCostsClientResponse(rsp)
+}
+
+// ShutdownServerWithResponse request returning *ShutdownServerClientResponse
+func (c *ClientWithResponses) ShutdownServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ShutdownServerClientResponse, error) {
+	rsp, err := c.ShutdownServer(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseShutdownServerClientResponse(rsp)
 }
 
 // GetStatusWithResponse request returning *GetStatusClientResponse
@@ -19335,12 +19550,73 @@ func ParseGetMetricsCostsClientResponse(rsp *http.Response) (*GetMetricsCostsCli
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest RequestTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseShutdownServerClientResponse parses an HTTP response from a ShutdownServerWithResponse call
+func ParseShutdownServerClientResponse(rsp *http.Response) (*ShutdownServerClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ShutdownServerClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ShutdownAcceptedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ShutdownControlRejected
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ShutdownControlUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

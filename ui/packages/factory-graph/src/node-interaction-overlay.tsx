@@ -80,7 +80,7 @@ function badgeClassName(
     success:
       "border-af-success-border bg-success-container text-on-success-container",
     warning:
-      "border-af-warning-border bg-warning-container text-on-warning-container",
+      "border-af-warning-border bg-warning-container text-on-warning-container factory-light:bg-warning factory-light:text-on-warning",
   }[tone];
   return [
     "inline-flex min-h-6 w-fit items-center justify-center rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",

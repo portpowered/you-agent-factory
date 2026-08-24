@@ -214,14 +214,6 @@ func stringSliceValue(values *[]string) []string {
 	return append([]string(nil), (*values)...)
 }
 
-func runtimeConfigAlignmentComparableFactory(factory factoryapi.Factory) factoryapi.Factory {
-	comparable := factory
-	comparable.FactoryDirectory = nil
-	comparable.SourceDirectory = nil
-	comparable.Metadata = nil
-	return comparable
-}
-
 func runtimeConfigAlignmentHasGeneratedResource(resources *[]factoryapi.ResourceRequirement, name string, capacity int) bool {
 	if resources == nil {
 		return false

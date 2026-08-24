@@ -87,9 +87,3 @@ func RecordingsRootContractInventory() []string {
 	slices.Sort(inventory)
 	return inventory
 }
-
-// RecordingsRootContractFoldCondition names the CLN packet that performs the
-// fold for one inventoried excess cluster.
-func RecordingsRootContractFoldCondition(cluster string) string {
-	return "CLN-REC-CONTRACT-ROOTS cutover: fold excess " + cluster + " root contract cluster into private subservice"
-}

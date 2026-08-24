@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func (r *registry) ListWorkerSessionObservations(
@@ -518,6 +520,7 @@ func baseObservation(id string, session workersessions.Session, metadata *observ
 		SuccessorWorkerSessionID:   session.SuccessorWorkerSessionID,
 		Model:                      cloneOptionalExecutionFact(session.Model),
 		ReasoningEffort:            cloneOptionalExecutionFact(session.ReasoningEffort),
+		TokenUsage:                 cloneObservationTokenUsage(metadata.tokenUsage),
 		Direct:                     metadata.direct,
 		FactorySessionID:           metadata.factorySessionID,
 		WorkIDs:                    append([]string(nil), metadata.workIDs...),
@@ -526,6 +529,10 @@ func baseObservation(id string, session workersessions.Session, metadata *observ
 		State:                      session.State,
 		DurationBasis:              workersessions.DurationBasisUnavailable,
 		Transcript:                 workersessions.TranscriptAvailabilityUnavailable,
+	}
+	if strings.TrimSpace(metadata.usageModel) != "" {
+		model := strings.TrimSpace(metadata.usageModel)
+		projected.Model = &model
 	}
 	if session.ProviderSessionAssociation != nil {
 		projected.ProviderSession = session.ProviderSessionAssociation.Reference.Clone()
@@ -563,6 +570,62 @@ func nonNegativeDuration(duration time.Duration) *time.Duration {
 	return &duration
 }
 
+type usageProjectionPayload struct {
+	InputTokens           *int64 `json:"inputTokens"`
+	CachedInputTokens     *int64 `json:"cachedInputTokens"`
+	OutputTokens          *int64 `json:"outputTokens"`
+	ReasoningOutputTokens *int64 `json:"reasoningOutputTokens"`
+	TotalTokens           *int64 `json:"totalTokens"`
+	Model                 string `json:"model"`
+}
+
+func (r *registry) updateUsageProjection(sessionID string, draft workers.Draft) {
+	usage, model, ok := usageProjectionFromDraft(draft)
+	if !ok {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	metadata := r.observations[strings.TrimSpace(sessionID)]
+	if metadata == nil {
+		return
+	}
+	metadata.tokenUsage = usage
+	if strings.TrimSpace(model) != "" {
+		metadata.usageModel = strings.TrimSpace(model)
+	}
+}
+
+func usageProjectionFromDraft(draft workers.Draft) (*workersessions.TokenUsage, string, bool) {
+	if draft.Kind != workers.KindUsage || draft.Phase != workers.PhaseUpdated {
+		return nil, "", false
+	}
+	var payload usageProjectionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		return nil, "", false
+	}
+	if payload.InputTokens == nil && payload.CachedInputTokens == nil &&
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil &&
+		payload.TotalTokens == nil {
+		return nil, "", false
+	}
+	return &workersessions.TokenUsage{
+		InputTokens:           int64PointerToInt(payload.InputTokens),
+		CachedInputTokens:     int64PointerToInt(payload.CachedInputTokens),
+		OutputTokens:          int64PointerToInt(payload.OutputTokens),
+		ReasoningOutputTokens: int64PointerToInt(payload.ReasoningOutputTokens),
+		TotalTokens:           int64PointerToInt(payload.TotalTokens),
+	}, payload.Model, true
+}
+
+func int64PointerToInt(value *int64) *int {
+	if value == nil {
+		return nil
+	}
+	converted := int(*value)
+	return &converted
+}
+
 // enrichWithProviderSessionsProjection adds transcript availability, token
 // usage, and parse diagnostics from the Provider Sessions root. It is only
 // called when projected already carries an available Provider Session
@@ -582,7 +645,9 @@ func (r *registry) enrichWithProviderSessionsProjection(ctx context.Context, pro
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	projected.Transcript = workersessions.TranscriptAvailabilityAvailable
-	projected.TokenUsage = observationTokenUsage(result.Detail.Parse.TokenUsage)
+	if usage := observationTokenUsage(result.Detail.Parse.TokenUsage); usage != nil {
+		projected.TokenUsage = usage
+	}
 	projected.TurnUsage = observationTurnUsage(result.Detail.Parse.CumulativeInputTokens)
 	projected.Parse = observationParseDiagnostics(result.Detail.Parse)
 	return projected, nil
@@ -608,6 +673,15 @@ func cloneObservation(value *observation) *observation {
 		ended := *value.endedAt
 		clone.endedAt = &ended
 	}
+	clone.tokenUsage = cloneObservationTokenUsage(value.tokenUsage)
+	return &clone
+}
+
+func cloneObservationTokenUsage(value *workersessions.TokenUsage) *workersessions.TokenUsage {
+	if value == nil {
+		return nil
+	}
+	clone := value.Clone()
 	return &clone
 }
 

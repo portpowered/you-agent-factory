@@ -2,7 +2,6 @@ package http
 
 import (
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -49,8 +48,4 @@ func (s *Server) InvokeFactorySessionBySessionId(
 
 	s.writeCompatibilityWarning(w, "invoke_factory_session", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, apisurface.InvocationResponseFromResult(result))
-}
-
-func decodeInvocationRequestBody(body io.Reader) (factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](body)
 }

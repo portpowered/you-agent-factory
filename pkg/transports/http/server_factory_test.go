@@ -81,6 +81,8 @@ type strictLiveSessionAPIFake struct {
 	close     func(context.Context, string) error
 	pause     func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	resume    func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	cancel    func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	terminate func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	subscribe func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
 }
 
@@ -145,6 +147,20 @@ func (fake strictLiveSessionAPIFake) ResumeLiveFactorySession(ctx context.Contex
 		panic("unexpected LiveSessionAPI.ResumeLiveFactorySession call")
 	}
 	return fake.resume(ctx, sessionID, request)
+}
+
+func (fake strictLiveSessionAPIFake) CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	if fake.cancel == nil {
+		panic("unexpected LiveSessionAPI.CancelLiveFactorySession call")
+	}
+	return fake.cancel(ctx, sessionID, request)
+}
+
+func (fake strictLiveSessionAPIFake) TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	if fake.terminate == nil {
+		panic("unexpected LiveSessionAPI.TerminateLiveFactorySession call")
+	}
+	return fake.terminate(ctx, sessionID, request)
 }
 
 func (fake strictLiveSessionAPIFake) SubscribeFactoryResponseEventsForSession(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
@@ -379,38 +395,40 @@ func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
 }
 
 func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
-	srv := newStrictModelTestServer(strictModelsServiceFake{get: func(_ context.Context, name string) (modelinference.Detail, error) {
-		if name != "OMNIVOICE_Q4_K_M" {
-			return modelinference.Detail{}, modelinference.ErrNotFound
-		}
-		return modelinference.Detail{
-			Summary: modelinference.Summary{
-				Name: "OMNIVOICE_Q4_K_M",
-				ManagedRuntime: modelinference.Runtime{
-					Identity:       "OMNIVOICE_Q4_K_M",
-					ReadinessState: modelinference.ReadinessStateReady,
-					LifecycleState: modelinference.LifecycleStateNotInstalled,
-					Locality:       modelinference.LocalityLocal,
-					SupportedOperations: []modelinference.Operation{{
-						Name: "TTS",
-					}},
+	srv := newStrictModelTestServer(strictModelsServiceFake{
+		get: func(_ context.Context, name string) (modelinference.Detail, error) {
+			if name != "OMNIVOICE_Q4_K_M" {
+				return modelinference.Detail{}, modelinference.ErrNotFound
+			}
+			return modelinference.Detail{
+				Summary: modelinference.Summary{
+					Name: "OMNIVOICE_Q4_K_M",
+					ManagedRuntime: modelinference.Runtime{
+						Identity:       "OMNIVOICE_Q4_K_M",
+						ReadinessState: modelinference.ReadinessStateReady,
+						LifecycleState: modelinference.LifecycleStateInstalled,
+						Locality:       modelinference.LocalityLocal,
+						SupportedOperations: []modelinference.Operation{{
+							Name: "TTS",
+						}},
+					},
+					ProviderLocality: modelinference.LocalityLocal,
+					Status:           modelinference.StatusReady,
+					LoadState:        modelinference.LoadStateUnloaded,
+					Operations:       []modelinference.Operation{{Name: "TTS"}},
+					Modalities:       []string{"AUDIO", "TEXT"},
+					Resources:        []modelinference.ResourceSummary{{Name: "omnivoice-cache", Type: "MODEL", Capacity: 1}},
 				},
-				ProviderLocality: modelinference.LocalityLocal,
-				Status:           modelinference.StatusReady,
-				LoadState:        modelinference.LoadStateUnloaded,
-				Operations:       []modelinference.Operation{{Name: "TTS"}},
-				Modalities:       []string{"AUDIO", "TEXT"},
-				Resources:        []modelinference.ResourceSummary{{Name: "omnivoice-cache", Type: "MODEL", Capacity: 1}},
-			},
-			Capabilities: []modelinference.Capability{{
-				Worker:           "voice-local",
-				ProviderLocality: modelinference.LocalityLocal,
-				Operations:       []modelinference.Operation{{Name: "TTS"}},
-				ResourceNames:    []string{"omnivoice-cache"},
-			}},
-			Diagnostics: map[string]string{"workerCount": "1"},
-		}, nil
-	}})
+				Capabilities: []modelinference.Capability{{
+					Worker:           "voice-local",
+					ProviderLocality: modelinference.LocalityLocal,
+					Operations:       []modelinference.Operation{{Name: "TTS"}},
+					ResourceNames:    []string{"omnivoice-cache"},
+				}},
+				Diagnostics: map[string]string{"workerCount": "1"},
+			}, nil
+		},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil)
 	rec := httptest.NewRecorder()
@@ -422,6 +440,10 @@ func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
 	model := decodeJSONResponse[factoryapi.ModelDetail](t, rec)
 	if model.Name != "OMNIVOICE_Q4_K_M" || len(model.Capabilities) != 1 {
 		t.Fatalf("model detail = %#v, want OMNIVOICE model capability detail", model)
+	}
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
+		model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+		t.Fatalf("managed runtime = %#v, want READY/INSTALLED", model.ManagedRuntime)
 	}
 }
 

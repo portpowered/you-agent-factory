@@ -1,7 +1,9 @@
 package workflowruntime_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,6 +11,92 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
+
+func TestRun_AgentRunDisallowedPermissionFailsBeforeDispatch(t *testing.T) {
+	const want = `policy denied: Factory "named-factory" child "skip-child" requested permission "SKIP_PERMISSIONS" not listed in allowedPermissions`
+
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.AllowedPermissions = []string{workflowpolicy.PermissionModeDefault}
+	calls := 0
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:      `agent.run({ prompt: "review", label: "skip-child", permissions: "SKIP_PERMISSIONS" }); return { ok: true };`,
+		SourceRef:   "inline",
+		SessionID:   "session-disallowed-permission",
+		FactoryName: "named-factory",
+		Policy:      policy,
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return childExecutorFunc(func(_ context.Context, _ factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+			calls++
+			return factory.JavaScriptChildExecutionResult{}, nil
+		})
+	}})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || outcome.Failure.Message != want {
+		t.Fatalf("Run() outcome = %#v, want exact diagnostic %q", outcome, want)
+	}
+	if calls != 0 {
+		t.Fatalf("child executor calls = %d, want zero before dispatch admission", calls)
+	}
+	assertNoChildDispatchRecords(t, outcome.Records)
+}
+
+func TestRun_AgentRunAllowedAndOmittedPermissionPoliciesPreserveExecution(t *testing.T) {
+	tests := []struct {
+		name       string
+		allowed    []string
+		permission string
+		wantSkip   bool
+	}{
+		{
+			name:    "allowed default",
+			allowed: []string{workflowpolicy.PermissionModeDefault},
+		},
+		{
+			name:       "allowed skip permissions",
+			allowed:    []string{workflowpolicy.PermissionModeSkipPermissions},
+			permission: workflowpolicy.PermissionModeSkipPermissions,
+			wantSkip:   true,
+		},
+		{
+			name:       "omitted allowlist",
+			permission: workflowpolicy.PermissionModeSkipPermissions,
+			wantSkip:   true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			policy := workflowpolicy.DefaultEffectivePolicy()
+			policy.AllowedPermissions = test.allowed
+			calls := 0
+			var captured factory.JavaScriptChildExecutionRequest
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: func() string {
+					if test.permission == "" {
+						return fmt.Sprintf(`return agent.run({ prompt: "review", label: %q, permissions: "DEFAULT" });`, test.name)
+					}
+					return fmt.Sprintf(`return agent.run({ prompt: "review", label: %q, permissions: %q });`, test.name, test.permission)
+				}(),
+				Policy: policy,
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+					calls++
+					captured = req
+					return factory.JavaScriptChildExecutionResult{Status: factory.JavaScriptChildDispatchStatusCompleted, Request: req}, nil
+				})
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+			}
+			if calls != 1 || captured.SkipPermissions != test.wantSkip {
+				t.Fatalf("child executor calls=%d request=%#v, want one call with provider bypass=%t", calls, captured, test.wantSkip)
+			}
+		})
+	}
+}
 
 func TestResolveChildWorkerSettings_AntigravityUsesModelEmbeddedEffort(t *testing.T) {
 	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
@@ -272,5 +360,68 @@ func assertProgressPrimitiveProjection(
 	}
 	if budgetValue["maxTokens"] != float64(maxTokens) {
 		t.Fatalf("projected budget maxTokens = %#v", budgetValue["maxTokens"])
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidPermissionsBeforeDispatch(t *testing.T) {
+	for _, source := range []string{
+		`return agent.run({ prompt: "review", permissions: "READ_ONLY" });`,
+		`return agent.run({ prompt: "review", permissions: true });`,
+		`const child = { prompt: "review" }; child.permissions = "READ_ONLY"; return agent.run(child);`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: source, SourceRef: "inline", SessionID: "invalid-permissions",
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if outcome.OK || !strings.Contains(outcome.Failure.Message, `"permissions"`) {
+				t.Fatalf("Run() outcome = %#v, want field-specific permissions failure", outcome)
+			}
+			if len(stub.executionRequests()) != 0 {
+				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
+			}
+		})
+	}
+}
+
+func TestRun_AgentRunDynamicObjectRejectsUnsupportedFieldsBeforeDispatch(t *testing.T) {
+	unsupported := []string{
+		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
+		"outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+	}
+	for _, field := range unsupported {
+		t.Run(field, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			source := fmt.Sprintf(`const child = { prompt: "prompt-secret" }; child[%q] = "value-secret"; agent.run(child);`, field)
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: source, SourceRef: "inline", SessionID: "unsupported-child-field",
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if outcome.OK {
+				t.Fatalf("Run() outcome = %#v, want script failure", outcome)
+			}
+			want := `agent.run() does not support field "` + field + `"`
+			if !strings.Contains(outcome.Failure.Message, want) {
+				t.Fatalf("failure message = %q, want %q", outcome.Failure.Message, want)
+			}
+			if strings.Contains(outcome.Failure.Message, "value-secret") || strings.Contains(outcome.Failure.Message, "prompt-secret") {
+				t.Fatalf("failure message = %q, want redacted diagnostic", outcome.Failure.Message)
+			}
+			if len(stub.executionRequests()) != 0 {
+				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
+			}
+			assertNoChildDispatchRecords(t, outcome.Records)
+		})
 	}
 }

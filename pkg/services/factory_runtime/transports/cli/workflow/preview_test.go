@@ -111,8 +111,8 @@ func scriptedTransportWorkflowPreview(
 	if request.RequestedPolicy["allowNetwork"] == true {
 		preview.Valid = false
 		preview.PolicyPreview.ValidationIssues = []factory.JavaScriptPolicyIssue{{
-			Code:    factory.JavaScriptPolicyCodeDeniedCapability,
-			Message: "network capability denied",
+			Code:    factory.JavaScriptPolicyCodeUnsupportedPolicyField,
+			Message: "allowNetwork is no longer supported; use allowedPermissions",
 			Path:    "allowNetwork",
 		}}
 		return preview

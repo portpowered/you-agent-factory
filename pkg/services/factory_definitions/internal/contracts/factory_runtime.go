@@ -334,6 +334,7 @@ type CompletedDispatch struct {
 	WorkstationName             string                                        `json:"workstation_name,omitempty"`
 	ExpectedArtifactContext     *work.ExpectedArtifactTemplateContext         `json:"expected_artifact_context,omitempty"`
 	Outcome                     workerexecution.WorkOutcome                   `json:"outcome"`
+	Cancellation                *workerexecution.DispatchCancellation         `json:"cancellation,omitempty"`
 	SelectedClassificationLabel string                                        `json:"selected_classification_label,omitempty"`
 	Reason                      string                                        `json:"reason,omitempty"`
 	ArtifactVerification        *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`

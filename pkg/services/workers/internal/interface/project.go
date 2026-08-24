@@ -44,7 +44,7 @@ func topologyRunTypeUnion() RunTypeUnion {
 		Values: []RunTypeRecord{
 			{
 				Value:              string(MockWorkerRunTypeAccept),
-				NestedConfigPolicy: "no nested config required; scriptConfig and rejectConfig are ignored when present",
+				NestedConfigPolicy: "no nested config required; scriptConfig, rejectConfig, and usage are optional",
 			},
 			{
 				Value:              string(MockWorkerRunTypeScript),
@@ -54,7 +54,7 @@ func topologyRunTypeUnion() RunTypeUnion {
 			{
 				Value:              string(MockWorkerRunTypeReject),
 				NestedConfig:       "rejectConfig",
-				NestedConfigPolicy: "rejectConfig is optional; rejectConfig.exitCode when set must be between 1 and 255",
+				NestedConfigPolicy: "rejectConfig is optional; rejectConfig.exitCode when set must be between 1 and 255; usage is optional",
 			},
 		},
 	}
@@ -91,6 +91,26 @@ func topologyValidationBoundaries() []ValidationBoundary {
 			Condition:    "rejectConfig.exitCode outside 1-255 when set",
 			Owner:        ownerValidate,
 			ErrorPattern: "rejectConfig.exitCode must be between 1 and 255",
+		},
+		{
+			Condition:    "usage provider or model is blank",
+			Owner:        ownerValidate,
+			ErrorPattern: "usage: provider is required",
+		},
+		{
+			Condition:    "usage token count is negative",
+			Owner:        ownerValidate,
+			ErrorPattern: "usage: inputTokens must be non-negative",
+		},
+		{
+			Condition:    "usage cached input exceeds input",
+			Owner:        ownerValidate,
+			ErrorPattern: "usage: cachedInputTokens must not exceed inputTokens",
+		},
+		{
+			Condition:    "usage reasoning output exceeds output",
+			Owner:        ownerValidate,
+			ErrorPattern: "usage: reasoningOutputTokens must not exceed outputTokens",
 		},
 	}
 }

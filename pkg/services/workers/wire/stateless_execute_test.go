@@ -391,7 +391,7 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 			Command:          "fixture-script",
 			FactoryDirectory: "factory-root",
 		},
-		runners.ScriptDependencies{
+		ScriptDependencies{
 			CommandRunner: command,
 			FactoryDocs:   func(string) (map[string]string, error) { return nil, nil },
 			Now:           func() time.Time { return time.Unix(1, 0) },
@@ -498,7 +498,7 @@ func TestNewServiceRejectsMissingExecuteClock(t *testing.T) {
 type statelessConstructionInputs struct {
 	agentDependencies     runners.AgentDependencies
 	scriptConfig          runners.ScriptConfig
-	scriptDependencies    runners.ScriptDependencies
+	scriptDependencies    ScriptDependencies
 	inferenceConfig       runners.InferenceConfig
 	inferenceDependencies runners.InferenceDependencies
 }
@@ -514,7 +514,7 @@ func newStatelessConstructionInputs() statelessConstructionInputs {
 			Command:          "fixture-script",
 			FactoryDirectory: "factory-root",
 		},
-		scriptDependencies: runners.ScriptDependencies{
+		scriptDependencies: ScriptDependencies{
 			CommandRunner: &statelessTestCommandRunner{},
 			FactoryDocs:   func(string) (map[string]string, error) { return nil, nil },
 			Now:           func() time.Time { return time.Unix(1, 0) },
@@ -633,43 +633,51 @@ func assertStatelessHappyPath(
 type statelessTestCommandRunner struct {
 	calls atomic.Int32
 	mu    sync.Mutex
-	seen  []workers.CommandRequest
+	seen  []platformprocess.CommandRequest
 }
 
 func (runner *statelessTestCommandRunner) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	runner.record(request)
 	_ = ctx
-	return workers.CommandResult{Stdout: []byte("script-output")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("script-output")}, nil
 }
 
 func (runner *statelessTestCommandRunner) RunStreaming(
 	ctx context.Context,
-	request workers.CommandRequest,
+	request platformprocess.CommandRequest,
 	_ platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
+) (platformprocess.CommandResult, error) {
 	runner.record(request)
 	_ = ctx
-	return workers.CommandResult{Stdout: []byte("script-output")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("script-output")}, nil
 }
 
-func (runner *statelessTestCommandRunner) record(request workers.CommandRequest) {
+func (runner *statelessTestCommandRunner) record(request platformprocess.CommandRequest) {
 	runner.calls.Add(1)
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	runner.seen = append(runner.seen, workers.CloneSubprocessExecutionRequest(request))
+	runner.seen = append(runner.seen, clonePlatformCommandRequest(request))
 }
 
-func (runner *statelessTestCommandRunner) Requests() []workers.CommandRequest {
+func (runner *statelessTestCommandRunner) Requests() []platformprocess.CommandRequest {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	result := make([]workers.CommandRequest, len(runner.seen))
+	result := make([]platformprocess.CommandRequest, len(runner.seen))
 	for index, request := range runner.seen {
-		result[index] = workers.CloneSubprocessExecutionRequest(request)
+		result[index] = clonePlatformCommandRequest(request)
 	}
 	return result
+}
+
+func clonePlatformCommandRequest(request platformprocess.CommandRequest) platformprocess.CommandRequest {
+	clone := request
+	clone.Args = append([]string(nil), request.Args...)
+	clone.Stdin = append([]byte(nil), request.Stdin...)
+	clone.Env = append([]string(nil), request.Env...)
+	return clone
 }
 
 type statelessTestLocalInvoker struct {

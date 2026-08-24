@@ -16,12 +16,12 @@ export function graphNodeShellStateClassName(state: GraphNodeState): string {
     case "selected":
       return cn(
         "border-2 border-primary bg-primary-container",
-        "shadow-[0_0_0_1px_rgb(from_var(--color-primary)_r_g_b_/_0.28),0_0_0_4px_rgb(from_var(--color-primary)_r_g_b_/_0.08)]",
+        "shadow-af-graph-selected",
       );
     case "error":
       return cn(
         "border-2 border-dashed border-error bg-error-container",
-        "shadow-[0_0_0_3px_var(--color-error-container)]",
+        "shadow-af-graph-error",
       );
     case "disabled":
       return "border-outline-variant bg-surface-container text-on-surface";
@@ -35,9 +35,9 @@ export function graphNodeShellStateClassName(state: GraphNodeState): string {
 export function graphNodeButtonStateClassName(state: GraphNodeState): string {
   switch (state) {
     case "selected":
-      return "ring-2 ring-primary/30";
+      return "ring-2 ring-af-graph-selected-ring";
     case "error":
-      return "ring-2 ring-error/40";
+      return "ring-2 ring-af-graph-error-ring";
     case "disabled":
     case "loading":
       return "cursor-not-allowed";

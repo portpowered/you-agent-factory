@@ -19,67 +19,80 @@ var (
 		"read-only":       {},
 		"workspace-write": {},
 	}
+	knownPermissionModes = map[string]struct{}{
+		PermissionModeDefault:         {},
+		PermissionModeSkipPermissions: {},
+	}
 )
 
 func validatePolicyMap(document map[string]any, deploymentCap int) []Issue {
 	var issues []Issue
-	issues = append(issues, validatePolicyModeOverride(document)...)
-	issues = append(issues, validatePolicyDeniedFlagOverrides(document)...)
-	issues = append(issues, validatePolicyWritableRootOverride(document)...)
+	issues = append(issues, validateRetiredPolicyFields(document)...)
 	issues = append(issues, validatePolicyConcurrencyOverride(document)...)
 	issues = append(issues, validatePolicyMaxAgentsOverride(document, deploymentCap)...)
+	issues = append(issues, validatePolicyAllowedPermissionsShape(document)...)
 	return issues
 }
 
-func validatePolicyModeOverride(document map[string]any) []Issue {
-	value, ok := document["mode"]
-	if !ok {
-		return nil
-	}
-	mode, ok := value.(string)
-	if ok && strings.TrimSpace(mode) == ModeReadOnly {
-		return nil
-	}
-	return []Issue{{
-		Code:    CodeUnsupportedPolicyMode,
-		Message: fmt.Sprintf("policy.mode must be %q for the read-only MVP default", ModeReadOnly),
-		Path:    "policy.mode",
-	}}
-}
-
-func validatePolicyDeniedFlagOverrides(document map[string]any) []Issue {
+func validateRetiredPolicyFields(document map[string]any) []Issue {
+	const replacement = "allowedPermissions"
+	fields := []string{"mode", "allowNetwork", "allowConnectors", "allowDangerFullAccess", "writableRoots"}
 	var issues []Issue
-	for field, capability := range map[string]string{
-		"allowNetwork":          "network access",
-		"allowConnectors":       "connectors",
-		"allowDangerFullAccess": "danger-full-access",
-	} {
-		value, ok := document[field]
-		if !ok {
+	for _, field := range fields {
+		if _, ok := document[field]; !ok {
 			continue
 		}
-		allowed, ok := value.(bool)
-		if ok && allowed {
-			issues = append(issues, validateDeniedFlag(field, capability))
-		}
+		issues = append(issues, Issue{
+			Code:    CodeUnsupportedPolicyField,
+			Message: fmt.Sprintf("policy.%s is no longer supported; use policy.%s to authorize DEFAULT or SKIP_PERMISSIONS", field, replacement),
+			Path:    "policy." + field,
+		})
 	}
 	return issues
 }
 
-func validatePolicyWritableRootOverride(document map[string]any) []Issue {
-	value, ok := document["writableRoots"]
+func validatePolicyAllowedPermissionsShape(document map[string]any) []Issue {
+	value, ok := document["allowedPermissions"]
 	if !ok {
 		return nil
 	}
-	roots, ok := value.([]any)
-	if !ok || len(roots) == 0 {
-		return nil
+
+	values, ok := policyAllowlistValues(value)
+	if !ok {
+		return []Issue{{
+			Code:    CodeUnsupportedPermission,
+			Message: fmt.Sprintf("allowedPermissions must be an array containing only %q or %q", PermissionModeDefault, PermissionModeSkipPermissions),
+			Path:    "policy.allowedPermissions",
+		}}
 	}
-	return []Issue{{
-		Code:    CodeWritableRootsReadOnly,
-		Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
-		Path:    "policy.writableRoots",
-	}}
+
+	var issues []Issue
+	for index, value := range values {
+		if _, ok := value.(string); ok {
+			continue
+		}
+		issues = append(issues, Issue{
+			Code:    CodeUnsupportedPermission,
+			Message: fmt.Sprintf("allowedPermissions[%d] must be a string containing %q or %q", index, PermissionModeDefault, PermissionModeSkipPermissions),
+			Path:    fmt.Sprintf("policy.allowedPermissions[%d]", index),
+		})
+	}
+	return issues
+}
+
+func policyAllowlistValues(value any) ([]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		return typed, true
+	case []string:
+		values := make([]any, len(typed))
+		for index, value := range typed {
+			values[index] = value
+		}
+		return values, true
+	default:
+		return nil, false
+	}
 }
 
 func validatePolicyConcurrencyOverride(document map[string]any) []Issue {
@@ -153,32 +166,7 @@ func Validate(policy EffectivePolicy, deploymentCap int) []Issue {
 		})
 	}
 
-	if policy.Mode == ModeReadOnly {
-		if len(policy.WritableRoots) > 0 {
-			issues = append(issues, Issue{
-				Code:    CodeWritableRootsReadOnly,
-				Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
-				Path:    "policy.writableRoots",
-			})
-		}
-		if policy.AllowNetwork {
-			issues = append(issues, validateDeniedFlag("allowNetwork", "network access"))
-		}
-		if policy.AllowConnectors {
-			issues = append(issues, validateDeniedFlag("allowConnectors", "connectors"))
-		}
-		if policy.AllowDangerFullAccess {
-			issues = append(issues, validateDeniedFlag("allowDangerFullAccess", "danger-full-access"))
-		}
-		if sandbox := strings.TrimSpace(policy.SandboxMode); sandbox == "workspace-write" {
-			issues = append(issues, Issue{
-				Code:    CodeUnsupportedSandboxMode,
-				Message: `sandboxMode "workspace-write" is not allowed when policy.mode is READ_ONLY`,
-				Path:    "policy.sandboxMode",
-			})
-		}
-	}
-
+	issues = append(issues, validateStringAllowlist("allowedPermissions", policy.AllowedPermissions, validatePermission)...)
 	issues = append(issues, validateStringAllowlist("allowedRunners", policy.AllowedRunners, validateRunner)...)
 	issues = append(issues, validateStringAllowlist("allowedModels", policy.AllowedModels, validateModel)...)
 	issues = append(issues, validateStringAllowlist("allowedReasoningEfforts", policy.AllowedReasoningEfforts, validateReasoningEffort)...)
@@ -195,14 +183,6 @@ func Validate(policy EffectivePolicy, deploymentCap int) []Issue {
 	}
 
 	return issues
-}
-
-func validateDeniedFlag(field, capability string) Issue {
-	return Issue{
-		Code:    CodeDeniedCapability,
-		Message: fmt.Sprintf("%s is denied for policy.mode READ_ONLY (%s)", field, capability),
-		Path:    "policy." + field,
-	}
 }
 
 type allowlistValidator func(string) *Issue
@@ -271,4 +251,14 @@ func validateCommand(value string) *Issue {
 		}
 	}
 	return nil
+}
+
+func validatePermission(value string) *Issue {
+	if _, ok := knownPermissionModes[value]; ok {
+		return nil
+	}
+	return &Issue{
+		Code:    CodeUnsupportedPermission,
+		Message: fmt.Sprintf("unsupported permission %q; allowedPermissions accepts only %q or %q", value, PermissionModeDefault, PermissionModeSkipPermissions),
+	}
 }

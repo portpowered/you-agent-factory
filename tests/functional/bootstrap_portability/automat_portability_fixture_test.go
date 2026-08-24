@@ -499,18 +499,6 @@ func assertAutomatBundledFileContent(t *testing.T, bundledFiles map[string]inter
 	}
 }
 
-func assertAutomatBundledFileEntryWithoutInline(t *testing.T, bundledFiles map[string]interfaces.BundledFileConfig, targetLocation string) {
-	t.Helper()
-
-	bundledFile, ok := bundledFiles[targetLocation]
-	if !ok {
-		t.Fatalf("expected bundled file %s", targetLocation)
-	}
-	if bundledFile.Content.Inline != "" {
-		t.Fatalf("expected bundled file %s to omit inline content, got %q", targetLocation, bundledFile.Content.Inline)
-	}
-}
-
 func assertAutomatBundledFileEntryWithoutInlineAPI(t *testing.T, bundledFiles map[string]factoryapi.BundledFile, targetLocation string) {
 	t.Helper()
 	bundledFile, ok := bundledFiles[targetLocation]

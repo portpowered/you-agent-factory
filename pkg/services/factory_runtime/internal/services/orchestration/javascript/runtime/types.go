@@ -21,12 +21,15 @@ const (
 
 // Request carries explicit runtime inputs for one simple workflow execution.
 type Request struct {
-	Source         string
-	SourceRef      string
-	SessionID      string
-	Args           json.RawMessage
-	ArgsSchema     json.RawMessage
-	Metadata       map[string]string
+	Source     string
+	SourceRef  string
+	SessionID  string
+	Args       json.RawMessage
+	ArgsSchema json.RawMessage
+	Metadata   map[string]string
+	// FactoryName identifies the named Factory owning this runtime. Direct
+	// callers may omit it; runtime execution falls back to request metadata.
+	FactoryName    string
 	Policy         workflowpolicy.EffectivePolicy
 	Resume         *ResumeContext
 	Agents         map[string]interfaces.FactoryOrchestratorJavaScriptAgent

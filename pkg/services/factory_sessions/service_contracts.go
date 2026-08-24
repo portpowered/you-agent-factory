@@ -163,6 +163,20 @@ type LiveControlService interface {
 	CloseFactorySession(context.Context, string) error
 }
 
+// LiveLifecycleControlService is the owner-published capability for stopping a
+// live Factory Session without evicting it from the session registry. Cancel
+// preserves the Runtime's graceful CANCEL fan-out, while terminate preserves
+// the Runtime's forced TERMINATE fan-out. Both controls leave the stopped
+// session inspectable so a later delete can apply its own safety policy.
+//
+// It is separate from LiveControlService to preserve the existing narrow
+// capability for callers that only open, inspect, pause, resume, or close live
+// sessions. The canonical Factory Sessions root implements both capabilities.
+type LiveLifecycleControlService interface {
+	CancelLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+	TerminateLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+}
+
 // LiveResultService is the owner-published Factory Sessions capability for
 // complete and partial live-session result inspection. It is retained as the
 // P5B live-result transport compatibility capability. Result inspection is
@@ -804,3 +818,47 @@ func (wait SessionOperationWait) SessionOperationTimeout() time.Duration {
 }
 
 var _ DetachedService = (*DetachedOperations)(nil)
+
+// ErrSessionDeletionConflict identifies a deletion request that is unsafe for
+// the selected Factory Session's current identity or runtime lifecycle.
+var ErrSessionDeletionConflict = errors.New("factory session deletion conflicts with the current session state")
+
+// SessionDeletionReason identifies the policy branch that refused deletion.
+type SessionDeletionReason string
+
+const (
+	SessionDeletionReasonDefault       SessionDeletionReason = "DEFAULT_SESSION"
+	SessionDeletionReasonRuntimeActive SessionDeletionReason = "RUNTIME_ACTIVE"
+)
+
+// SessionDeletionError is the typed Factory Sessions outcome for a deletion
+// request that must not remove or stop the selected session.
+type SessionDeletionError struct {
+	SessionID string
+	Reason    SessionDeletionReason
+	Status    LifecycleStatus
+	Message   string
+}
+
+func (err *SessionDeletionError) Error() string {
+	if err == nil {
+		return ""
+	}
+	if message := strings.TrimSpace(err.Message); message != "" {
+		return message
+	}
+	if reason := strings.TrimSpace(string(err.Reason)); reason != "" {
+		return reason
+	}
+	return ErrSessionDeletionConflict.Error()
+}
+
+func (err *SessionDeletionError) Unwrap() error { return ErrSessionDeletionConflict }
+
+// LiveDeletionService is the owner-published capability used by the DELETE
+// Factory Session route. It deliberately remains separate from
+// LiveControlService.CloseFactorySession, whose destructive close operation is
+// retained for internal process lifecycle teardown.
+type LiveDeletionService interface {
+	DeleteFactorySession(context.Context, string) error
+}

@@ -3,8 +3,9 @@ package orchestratorcontract
 import "encoding/json"
 
 const (
-	ModeReadOnly        = "READ_ONLY"
-	OutputAuditModeAuto = "AUTO"
+	OutputAuditModeAuto           = "AUTO"
+	PermissionModeDefault         = "DEFAULT"
+	PermissionModeSkipPermissions = "SKIP_PERMISSIONS"
 )
 
 // Issue is one workflow policy validation diagnostic.
@@ -14,36 +15,20 @@ type Issue struct {
 	Path    string
 }
 
-// Diagnostic is a structured policy or capability diagnostic.
+// Diagnostic is a structured policy diagnostic.
 type Diagnostic struct {
 	Code    string
 	Message string
 }
 
-// Capability names one host capability checked against effective policy.
-type Capability string
-
-const (
-	CapabilityWorkspaceWrite   Capability = "workspace-write"
-	CapabilityFilesystemWrite  Capability = "filesystem-write"
-	CapabilityShellProcess     Capability = "shell-process"
-	CapabilityNetwork          Capability = "network"
-	CapabilityConnectors       Capability = "connectors"
-	CapabilityDangerFullAccess Capability = "danger-full-access"
-)
-
 // EffectivePolicy is the resolved bounded orchestrator policy contract.
 type EffectivePolicy struct {
-	Mode                    string   `json:"mode"`
 	MaxAgents               int      `json:"maxAgents"`
 	Concurrency             int      `json:"concurrency"`
 	MaxDepth                int      `json:"maxDepth"`
 	MaxRetries              int      `json:"maxRetries"`
-	AllowNetwork            bool     `json:"allowNetwork"`
-	AllowConnectors         bool     `json:"allowConnectors"`
-	AllowDangerFullAccess   bool     `json:"allowDangerFullAccess"`
-	WritableRoots           []string `json:"writableRoots"`
 	OutputAuditMode         string   `json:"outputAuditMode"`
+	AllowedPermissions      []string `json:"allowedPermissions,omitempty"`
 	AllowedRunners          []string `json:"allowedRunners,omitempty"`
 	AllowedModels           []string `json:"allowedModels,omitempty"`
 	AllowedReasoningEfforts []string `json:"allowedReasoningEfforts,omitempty"`
@@ -119,15 +104,14 @@ type BudgetDecisions struct {
 
 // Preview is the shared preview/session-start policy projection contract.
 type Preview struct {
-	EffectivePolicy    EffectivePolicy
-	PolicyHash         string
-	MaxChildCount      int
-	MaxConcurrency     int
-	RunnerDecision     *RunnerDecision
-	ModelDecision      *ModelDecision
-	ProfileDecision    *ProfileDecision
-	TimeoutDecisions   TimeoutDecisions
-	BudgetDecisions    BudgetDecisions
-	DeniedCapabilities []Diagnostic
-	ValidationIssues   []Issue
+	EffectivePolicy  EffectivePolicy
+	PolicyHash       string
+	MaxChildCount    int
+	MaxConcurrency   int
+	RunnerDecision   *RunnerDecision
+	ModelDecision    *ModelDecision
+	ProfileDecision  *ProfileDecision
+	TimeoutDecisions TimeoutDecisions
+	BudgetDecisions  BudgetDecisions
+	ValidationIssues []Issue
 }

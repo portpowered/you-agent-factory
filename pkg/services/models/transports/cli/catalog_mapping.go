@@ -143,6 +143,9 @@ func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime
 	}
 	return factoryapi.ManagedRuntime{
 		Identity:            runtime.Identity,
+		Revision:            runtime.Revision,
+		CachePath:           runtime.CachePath,
+		CacheBytes:          runtime.CacheBytes,
 		ReadinessState:      factoryapi.ManagedRuntimeReadinessState(runtime.ReadinessState),
 		LifecycleState:      factoryapi.ManagedRuntimeLifecycleState(runtime.LifecycleState),
 		Locality:            factoryapi.WorkerModelLocality(runtime.Locality),

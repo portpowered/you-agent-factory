@@ -658,3 +658,10 @@ func (r *staticPathReserver) ReserveNamed(string, time.Time, string, string) (st
 	}
 	return r.path, nil
 }
+
+func (r *staticPathReserver) ReserveNamedWithCollision(string, time.Time, string, string) (string, error) {
+	if r.err != nil {
+		return "", r.err
+	}
+	return r.path, nil
+}

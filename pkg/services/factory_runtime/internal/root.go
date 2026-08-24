@@ -26,6 +26,13 @@ type runtimeDelegateProvider interface {
 	RuntimeDelegate() factoryruntime.Service
 }
 
+// workStateSnapshotProvider is the migration-only capability kept out of the
+// published Factory Runtime Service contract. Factory Sessions uses it for
+// Work reads that need runtime tokens without unrelated world-state replay.
+type workStateSnapshotProvider interface {
+	GetWorkStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
+}
+
 // Root retains process-scoped Factory Runtime dependencies. It is inert until
 // an injected activation operation has initialized and published a complete
 // Runtime delegate.
@@ -452,6 +459,15 @@ func (r *Root) Observe(ctx context.Context, req factoryruntime.ObserveRequest) (
 	return factoryruntime.ObserveResult{}, factoryruntime.ErrNotRunning
 }
 
+func (r *Root) GetWorkStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	if service := r.delegate(); service != nil {
+		if provider, ok := service.(workStateSnapshotProvider); ok {
+			return provider.GetWorkStateSnapshot(ctx)
+		}
+	}
+	return nil, factoryruntime.ErrNotRunning
+}
+
 func (r *Root) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
 	if service := r.delegate(); service != nil {
 		return service.CleanInvocationSnapshot(ctx)
@@ -666,6 +682,15 @@ func (service *boundRuntimeService) Observe(ctx context.Context, req factoryrunt
 		return target.Observe(ctx, req)
 	}
 	return factoryruntime.ObserveResult{}, factoryruntime.ErrNotRunning
+}
+
+func (service *boundRuntimeService) GetWorkStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	if target := service.target(); target != nil {
+		if provider, ok := target.(workStateSnapshotProvider); ok {
+			return provider.GetWorkStateSnapshot(ctx)
+		}
+	}
+	return nil, factoryruntime.ErrNotRunning
 }
 
 func (service *boundRuntimeService) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {

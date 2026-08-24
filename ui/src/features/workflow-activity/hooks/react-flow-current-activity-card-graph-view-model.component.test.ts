@@ -173,6 +173,7 @@ function renderGraphViewModelWithLayout(
     >;
     expandedNodeIds?: ReadonlySet<string>;
     renderedLayout?: FactoryLayout;
+    onGraphTargetSelected?: () => void;
     selectedWaypointEdgeId?: string | null;
     snapshot?: DashboardSnapshot;
     visibleGraphEdges?: GraphLayout["edges"];
@@ -244,6 +245,7 @@ function renderGraphViewModelWithLayout(
         onSelectWorker: noop,
         onSelectWorkType: noop,
         onSelectWorkstation: noop,
+        onGraphTargetSelected: options.onGraphTargetSelected,
         selection: null,
         snapshot: currentSnapshot ?? snapshot,
       }),
@@ -1118,6 +1120,45 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
     );
     expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeGreaterThanOrEqual(
       1000 + 120,
+    );
+  });
+
+  it("notifies the visual-group focus bridge when a semantic node is selected", () => {
+    const onGraphTargetSelected = vi.fn();
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 40,
+          y: 40,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      onGraphTargetSelected,
+    });
+    const selectWorkstation = (
+      result.current.nodes[0]?.data as
+        | { onSelectWorkstation?: (nodeId: string) => void }
+        | undefined
+    )?.onSelectWorkstation;
+
+    act(() => {
+      selectWorkstation?.("review");
+    });
+
+    expect(onGraphTargetSelected).toHaveBeenCalledTimes(1);
+    expect(result.current.graphSelection.state.selectedNodeIds).toEqual(
+      new Set(["workstation:review"]),
     );
   });
 

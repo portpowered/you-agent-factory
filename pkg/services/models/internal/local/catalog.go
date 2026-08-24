@@ -10,6 +10,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 )
 
@@ -617,6 +618,11 @@ func CanonicalModelName(model string) string {
 type PullOptions struct {
 	RuntimeCacheInspector RuntimeCacheInspector
 	SourceResolver        ManagedRuntimeSourceResolver
+	// ResolvedReference is supplied only by the Models root after its
+	// canonical resolver has accepted a name that is absent from the
+	// Factory-scoped catalog. It lets the existing pull projection continue
+	// without turning the lower-level Factory catalog into a second resolver.
+	ResolvedReference *models.ResolvedModelReference
 }
 
 // PullModel validates catalog locality and delegates asset pull to the injected puller.
@@ -638,59 +644,184 @@ func PullModelWithOptions(
 	modelName string,
 	opts PullOptions,
 ) (models.PullResult, error) {
-	if runtimeCfg == nil {
-		return models.PullResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	if puller == nil {
-		return models.PullResult{}, fmt.Errorf("model asset puller is not available")
-	}
-	catalog := BuildCatalog(runtimeCfg)
-	key := CanonicalModelName(modelName)
-	if key == "" {
-		return models.PullResult{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
-	}
-	entry, ok := catalog[key]
-	if !ok {
-		return models.PullResult{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
-	}
-	if entry.Summary.ProviderLocality != managedruntime.LocalityLocal {
-		return models.PullResult{}, fmt.Errorf("%w: model %q is not a local model", models.ErrPullUnsupported, modelName)
-	}
-
-	var resolution ManagedRuntimeSourceResolution
-	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil && opts.SourceResolver != nil {
-		resolution = opts.SourceResolver.Resolve(modelName, resource)
-	}
-
-	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
+	entry, err := pullCatalogEntry(puller, runtimeCfg, modelName, opts.ResolvedReference)
 	if err != nil {
-		switch {
-		case errors.Is(err, managedruntime.ErrNotFound), errors.Is(err, models.ErrPullUnsupported):
+		return models.PullResult{}, err
+	}
+	resolution := resolvePullSource(runtimeCfg, modelName, opts.SourceResolver)
+	if err := pullContextError(ctx); err != nil {
+		return models.PullResult{}, err
+	}
+	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
+	if opts.ResolvedReference != nil && strings.TrimSpace(entry.Summary.Name) != "" {
+		// Generic asset preparation reports the source identity for a named
+		// reference (for example, its Hugging Face repository). Pull's public
+		// identity remains the resolved model name.
+		result.ModelName = entry.Summary.Name
+	}
+	if err != nil {
+		if errors.Is(err, managedruntime.ErrNotFound) || errors.Is(err, models.ErrPullUnsupported) {
 			return models.PullResult{}, err
-		default:
-			pullOutcome, readiness := ClassifyPullFailure(err)
-			failureResult := models.PullResult{
-				ModelName:          strings.TrimSpace(entry.Summary.Name),
-				ProviderLocality:   string(entry.Summary.ProviderLocality),
-				ManagedPullOutcome: pullOutcome,
-				ReadinessState:     readiness,
-				LifecycleState:     managedLifecycleNotInstalled,
-				SourceKind:         strings.TrimSpace(resolution.SourceKind),
-				SourceID:           strings.TrimSpace(resolution.SourceID),
-				ResolverNotes:      strings.TrimSpace(resolution.ResolverNotes),
-			}
-			return failureResult, &models.PullError{Result: failureResult, Cause: err}
 		}
+		return classifiedPullFailure(
+			entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, err,
+		)
+	}
+	if err := pullContextError(ctx); err != nil {
+		return classifiedPullFailure(
+			entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, err,
+		)
 	}
 
-	inspection := RuntimeCacheInspection{}
-	if opts.RuntimeCacheInspector != nil {
-		inspected, inspectErr := opts.RuntimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
-		if inspectErr == nil {
-			inspection = inspected
-		}
+	inspection, err := inspectPullCache(ctx, runtimeCfg, modelName, opts.RuntimeCacheInspector)
+	if err != nil {
+		return classifiedPullFailure(
+			entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, err,
+		)
 	}
 	return EnrichPullResult(result, inspection, resolution), nil
+}
+
+func pullCatalogEntry(
+	puller AssetPuller,
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	resolved *models.ResolvedModelReference,
+) (CatalogEntry, error) {
+	if runtimeCfg == nil {
+		return CatalogEntry{}, fmt.Errorf("factory service runtime is not available")
+	}
+	if puller == nil {
+		return CatalogEntry{}, fmt.Errorf("model asset puller is not available")
+	}
+	key := CanonicalModelName(modelName)
+	if key == "" {
+		return CatalogEntry{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
+	}
+	entry, ok := BuildCatalog(runtimeCfg)[key]
+	if !ok {
+		if fallback := resolvedPullCatalogEntry(key, modelName, resolved); fallback != nil {
+			return *fallback, nil
+		}
+		return CatalogEntry{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
+	}
+	if entry.Summary.ProviderLocality != managedruntime.LocalityLocal {
+		return CatalogEntry{}, fmt.Errorf(
+			"%w: model %q is not a local model", models.ErrPullUnsupported, modelName,
+		)
+	}
+	return entry, nil
+}
+
+func resolvedPullCatalogEntry(
+	key string,
+	modelName string,
+	resolved *models.ResolvedModelReference,
+) *CatalogEntry {
+	if resolved == nil {
+		return nil
+	}
+	definition := resolved.Definition
+	name := strings.TrimSpace(definition.Name)
+	if name == "" {
+		name = strings.TrimSpace(modelName)
+	}
+	if CanonicalModelName(name) != key {
+		return nil
+	}
+	return &CatalogEntry{Summary: modelcatalog.Summary{
+		Name:             name,
+		ProviderLocality: managedruntime.LocalityLocal,
+	}}
+}
+
+func resolvePullSource(
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	resolver ManagedRuntimeSourceResolver,
+) ManagedRuntimeSourceResolution {
+	resource := modelScopedResource(runtimeCfg, modelName)
+	if resource == nil || resolver == nil {
+		return ManagedRuntimeSourceResolution{}
+	}
+	return resolver.Resolve(modelName, resource)
+}
+
+func pullContextError(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
+}
+
+func inspectPullCache(
+	ctx context.Context,
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	inspector RuntimeCacheInspector,
+) (RuntimeCacheInspection, error) {
+	if inspector == nil {
+		return RuntimeCacheInspection{}, nil
+	}
+	inspection, err := inspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		stage := pullsupport.PullStageForError(err)
+		if stage == "" {
+			stage = models.PullStageReadinessEvaluation
+		}
+		return RuntimeCacheInspection{}, pullsupport.WrapPullStage(
+			stage, modelName, "inspect managed runtime cache", "", err,
+		)
+	}
+	if err := pullContextError(ctx); err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	return inspection, nil
+}
+
+func classifiedPullFailure(
+	modelName string,
+	providerLocality managedruntime.Locality,
+	resolution ManagedRuntimeSourceResolution,
+	base models.PullResult,
+	cause error,
+) (models.PullResult, error) {
+	pullOutcome, readiness := ClassifyPullFailure(cause)
+	result := base
+	stage := pullsupport.PullStageForError(cause)
+	operation := "classify pull failure"
+	if stage == models.PullStageSourceResolution {
+		operation = "resolve model source"
+	}
+	diagnostics := pullsupport.MergePullDiagnostics(
+		result.PullDiagnostics,
+		pullsupport.PullDiagnosticsFromError(cause),
+	).WithDefaults(
+		modelName, result.SourceID, result.Revision, "", operation,
+	)
+	if strings.TrimSpace(result.ModelName) == "" {
+		result.ModelName = strings.TrimSpace(modelName)
+	}
+	if strings.TrimSpace(result.ProviderLocality) == "" {
+		result.ProviderLocality = string(providerLocality)
+	}
+	result.Outcome = legacyPullOutcomeFailed
+	result.ManagedPullOutcome = pullOutcome
+	result.ReadinessState = readiness
+	result.LifecycleState = managedLifecycleNotInstalled
+	result.SourceKind = strings.TrimSpace(resolution.SourceKind)
+	result.SourceID = strings.TrimSpace(resolution.SourceID)
+	result.ResolverNotes = strings.TrimSpace(resolution.ResolverNotes)
+	result.FailureStage = stage
+	if result.FailureStage == "" &&
+		pullOutcome == managedPullOutcomeAssetPreparationFailed &&
+		!errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+		result.FailureStage = models.PullStageAssembly
+	}
+	result.PullDiagnostics = diagnostics.WithDefaults(
+		result.ModelName, result.SourceID, result.Revision, "", diagnostics.Operation,
+	)
+	return result, &models.PullError{Result: result, Cause: cause}
 }
 
 func modelScopedResource(factoryCfg *models.RuntimeConfig, modelName string) *models.RuntimeResource {
@@ -750,120 +881,4 @@ func SelectInvocationWorker(
 		return nil, models.RuntimeOperation{}, fmt.Errorf("%w: worker %q for model %q does not support operation %q", modelcatalog.ErrUnsupportedOperation, matchedWorkerName, modelName, operationName)
 	}
 	return nil, models.RuntimeOperation{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
-}
-
-const (
-	legacyPullOutcomePulled         = "PULLED"
-	legacyPullOutcomeAlreadyPresent = "ALREADY_PRESENT"
-
-	managedPullOutcomeAlreadyReady          = "ALREADY_READY"
-	managedPullOutcomeInstalledSuccessfully = "INSTALLED_SUCCESSFULLY"
-	managedPullOutcomeAlreadyPresent        = "ALREADY_PRESENT"
-	managedPullOutcomeStillLoading          = "STILL_LOADING"
-	managedPullOutcomeTimedOut              = "TIMED_OUT"
-	managedPullOutcomeSourceFetchFailed     = "SOURCE_FETCH_FAILED"
-	managedPullOutcomeUnsupportedRuntime    = "UNSUPPORTED_RUNTIME"
-
-	managedReadinessReady       = "READY"
-	managedReadinessMissing     = "MISSING"
-	managedReadinessLoading     = "LOADING"
-	managedReadinessFailed      = "FAILED"
-	managedReadinessUnsupported = "UNSUPPORTED"
-
-	managedLifecycleInstalling   = "INSTALLING"
-	managedLifecycleInstalled    = "INSTALLED"
-	managedLifecycleNotInstalled = "NOT_INSTALLED"
-)
-
-// EnrichPullResult projects a service-owned pull result into managed-runtime
-// readiness, lifecycle, and source diagnostics using post-pull cache inspection.
-func EnrichPullResult(
-	result models.PullResult,
-	inspection RuntimeCacheInspection,
-	resolution ManagedRuntimeSourceResolution,
-) models.PullResult {
-	outcome, readiness, lifecycle := classifySuccessfulPull(result, inspection)
-	result.ManagedPullOutcome = outcome
-	result.ReadinessState = readiness
-	result.LifecycleState = lifecycle
-	result.SourceKind = strings.TrimSpace(resolution.SourceKind)
-	result.SourceID = strings.TrimSpace(resolution.SourceID)
-	result.ResolverNotes = strings.TrimSpace(resolution.ResolverNotes)
-	return result
-}
-
-// ClassifyPullFailure maps pull errors to managed-runtime pull outcomes and
-// readiness states for logging, metrics, and stable customer-facing vocabulary.
-func ClassifyPullFailure(err error) (pullOutcome string, readiness string) {
-	if err == nil {
-		return "", ""
-	}
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return managedPullOutcomeTimedOut, managedReadinessFailed
-	case errors.Is(err, models.ErrPullUnsupported):
-		return managedPullOutcomeUnsupportedRuntime, managedReadinessUnsupported
-	case errors.Is(err, models.ErrSourceFetchFailed):
-		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
-	case isSourceFetchFailureMessage(err.Error()):
-		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
-	default:
-		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
-	}
-}
-
-func classifySuccessfulPull(result models.PullResult, inspection RuntimeCacheInspection) (pullOutcome, readiness, lifecycle string) {
-	legacyOutcome := strings.ToUpper(strings.TrimSpace(result.Outcome))
-	switch legacyOutcome {
-	case legacyPullOutcomePulled:
-		pullOutcome = managedPullOutcomeInstalledSuccessfully
-	case legacyPullOutcomeAlreadyPresent:
-		pullOutcome = managedPullOutcomeAlreadyPresent
-	default:
-		pullOutcome = managedPullOutcomeUnsupportedRuntime
-	}
-
-	if inspection.Supported {
-		if inspection.Installed {
-			readiness = managedReadinessReady
-			lifecycle = managedLifecycleInstalled
-			if pullOutcome == managedPullOutcomeAlreadyPresent {
-				pullOutcome = managedPullOutcomeAlreadyReady
-			}
-			return pullOutcome, readiness, lifecycle
-		}
-		readiness = managedReadinessMissing
-		lifecycle = managedLifecycleNotInstalled
-		if pullOutcome == managedPullOutcomeInstalledSuccessfully {
-			readiness = managedReadinessLoading
-			lifecycle = managedLifecycleInstalling
-			pullOutcome = managedPullOutcomeStillLoading
-		}
-		return pullOutcome, readiness, lifecycle
-	}
-
-	readiness = managedReadinessReady
-	lifecycle = managedLifecycleInstalled
-	if pullOutcome == managedPullOutcomeAlreadyPresent {
-		pullOutcome = managedPullOutcomeAlreadyReady
-	}
-	return pullOutcome, readiness, lifecycle
-}
-
-func isSourceFetchFailureMessage(message string) bool {
-	trimmed := strings.ToLower(strings.TrimSpace(message))
-	if trimmed == "" {
-		return false
-	}
-	for _, fragment := range []string{
-		"pull model manifest",
-		"download model asset",
-		"model asset request failed",
-		"checksum verification",
-	} {
-		if strings.Contains(trimmed, fragment) {
-			return true
-		}
-	}
-	return false
 }

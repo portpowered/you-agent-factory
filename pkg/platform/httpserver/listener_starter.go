@@ -5,13 +5,22 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 )
 
 // StarterWithListener binds a server starter to one process-owned listener.
 // The listener is consumed at most once.
-func StarterWithListener(listener net.Listener) Starter {
+func StarterWithListener(
+	listener net.Listener,
+	commitReader platformprocessmemory.CommitReader,
+	commandLineReader CommandLineReader,
+) Starter {
 	var mu sync.Mutex
 	used := false
+	if commitReader == nil {
+		commitReader = platformprocessmemory.CurrentCommit
+	}
 	return func(ctx context.Context, request StartRequest) error {
 		mu.Lock()
 		if used {
@@ -32,6 +41,6 @@ func StarterWithListener(listener net.Listener) Starter {
 			}
 			request.OnBound(Binding{Host: host, Port: port})
 		}
-		return Serve(ctx, request.Handler, listener, request.Logger)
+		return Serve(ctx, HandlerWithDiagnostics(request.Handler, request.Pprof, commitReader, commandLineReader), listener, request.Logger)
 	}
 }

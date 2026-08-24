@@ -30,6 +30,7 @@ type modelsCLIServiceFunctions struct {
 	inspect func(modelscli.InspectConfig) error
 	invoke  func(modelscli.InvokeConfig) error
 	pull    func(modelscli.PullConfig) error
+	remove  func(modelscli.RemoveConfig) error
 }
 
 func (service modelsCLIServiceFunctions) List(cfg modelscli.ListConfig) error {
@@ -56,13 +57,19 @@ func (service modelsCLIServiceFunctions) Pull(cfg modelscli.PullConfig) error {
 	}
 	return nil
 }
+func (service modelsCLIServiceFunctions) Remove(cfg modelscli.RemoveConfig) error {
+	if service.remove != nil {
+		return service.remove(cfg)
+	}
+	return nil
+}
 
 func TestProductionModelsCommandWiresInjectedHandlers(t *testing.T) {
 	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
 	if err != nil {
 		t.Fatalf("newProductionModelsCommand() error = %v", err)
 	}
-	for _, name := range []string{"list", "inspect", "invoke", "pull"} {
+	for _, name := range []string{"list", "inspect", "invoke", "pull", "remove"} {
 		command, _, findErr := models.Find([]string{name})
 		if findErr != nil || command.RunE == nil {
 			t.Fatalf("models %s handler = %v, %v", name, command, findErr)
@@ -88,8 +95,8 @@ func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
 	if models == nil || models.RunE != nil {
 		t.Fatal("generated models parent must remain non-runnable")
 	}
-	if len(models.Commands()) != 4 {
-		t.Fatalf("models child count = %d, want 4 generated leaves", len(models.Commands()))
+	if len(models.Commands()) != 5 {
+		t.Fatalf("models child count = %d, want 5 generated leaves", len(models.Commands()))
 	}
 }
 

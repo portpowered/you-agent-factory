@@ -16,6 +16,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+const sessionStopObservationTimeout = 10 * time.Second
+
 func GetDefaultSession(t testing.TB, baseURL string) factoryapi.FactorySession {
 	t.Helper()
 	response := GetJSON[factoryapi.FactorySessionGetResponse](
@@ -247,9 +249,48 @@ func OpenFactorySessionAt(
 	return opened
 }
 
-// CloseFactorySessionAt closes one live Factory Session through the public API.
+// TerminateFactorySessionAt requests forced termination of one live Factory
+// Session through the public API. A terminal-session conflict is already a
+// safe state for callers that are preparing the session for deletion.
+func TerminateFactorySessionAt(t testing.TB, baseURL, sessionID string) {
+	t.Helper()
+
+	payload, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("marshal terminate Factory Session request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/terminate"
+	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build terminate Factory Session request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST terminate Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		return
+	}
+	body, _ := io.ReadAll(response.Body)
+	if response.StatusCode == http.StatusConflict && strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`) {
+		return
+	}
+	t.Fatalf(
+		"POST terminate Factory Session %q status = %d, want successful or terminal outcome: %s",
+		sessionID,
+		response.StatusCode,
+		strings.TrimSpace(string(body)),
+	)
+}
+
+// CloseFactorySessionAt terminates, then deletes, one live non-default
+// Factory Session through the public API.
 func CloseFactorySessionAt(t testing.TB, baseURL, sessionID string) {
 	t.Helper()
+	TerminateFactorySessionAt(t, baseURL, sessionID)
+	WaitForSessionStopped(t, baseURL, sessionID, sessionStopObservationTimeout)
 
 	request, err := http.NewRequest(
 		http.MethodDelete,
@@ -272,6 +313,24 @@ func CloseFactorySessionAt(t testing.TB, baseURL, sessionID string) {
 			response.StatusCode,
 			strings.TrimSpace(string(body)),
 		)
+	}
+}
+
+// WaitForSessionStopped observes the public status endpoint until a live
+// Factory Session reports the stopped runtime state required by deletion.
+func WaitForSessionStopped(t testing.TB, baseURL, sessionID string, timeout time.Duration) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	_, err := waitForStatusAt(endpoint, timeout, func(status factoryapi.StatusResponse) bool {
+		switch status.RuntimeStatus {
+		case string(interfaces.RuntimeStatusIdle), string(interfaces.RuntimeStatusFinished):
+			return true
+		default:
+			return false
+		}
+	})
+	if err != nil {
+		t.Fatalf("timed out waiting for Factory Session %q to stop: %v", sessionID, err)
 	}
 }
 

@@ -31,10 +31,10 @@ func productionServeCommand(options CommandFactory) *cobra.Command {
 
 // serveACPUnrelatedFlagNames are inherited root or server-parent flags with no
 // ACP-stdio meaning: --json promises structured command output on stdout,
-// which is already reserved for ACP protocol frames, while --listen and
-// --server configure an HTTP API endpoint this command never contacts (it starts no HTTP or
+// which is already reserved for ACP protocol frames, while --listen, --pprof,
+// and --server configure an HTTP API endpoint this command never contacts (it starts no HTTP or
 // dashboard listener).
-var serveACPUnrelatedFlagNames = []string{"json", "listen", "remote", "server"}
+var serveACPUnrelatedFlagNames = []string{"json", "listen", "pprof", "remote", "server"}
 
 // suppressUnrelatedServeACPFlags hides the shared server family's unrelated
 // flags from its rendered help and rejects them if explicitly
@@ -58,10 +58,12 @@ func suppressUnrelatedServeACPFlags(serve *cobra.Command) error {
 	}
 	var jsonShadow bool
 	var listenShadow string
+	var pprofShadow bool
 	var remoteShadow bool
 	var serverShadow string
 	acpCmd.Flags().BoolVar(&jsonShadow, "json", false, "")
 	acpCmd.Flags().StringVar(&listenShadow, "listen", "", "")
+	acpCmd.Flags().BoolVar(&pprofShadow, "pprof", false, "")
 	acpCmd.Flags().BoolVar(&remoteShadow, "remote", false, "")
 	acpCmd.Flags().StringVar(&serverShadow, "server", "", "")
 	for _, name := range serveACPUnrelatedFlagNames {
@@ -145,24 +147,34 @@ func sanitizeServeACPError(err error) error {
 	}
 }
 
-// suppressUnrelatedServerProtocolListener hides the HTTP-only listener flag
-// after a protocol child is attached to the production server command. The
-// detached protocol constructors intentionally omit the runnable server
-// handler, but Cobra still inherits the actual parent's local --listen flag
+// suppressUnrelatedServerProtocolListener hides HTTP-only server flags after
+// a protocol child is attached to the production server command. The detached
+// protocol constructors intentionally omit the runnable server handler, but
+// Cobra still inherits the actual parent's local --listen and --pprof flags
 // when the child is composed into the final tree.
 func suppressUnrelatedServerProtocolListener(command *cobra.Command, label string) error {
 	if command == nil {
 		return fmt.Errorf("suppress %s listener: command is required", label)
 	}
 	var listen string
-	command.Flags().StringVar(&listen, "listen", "", "")
-	if err := command.Flags().MarkHidden("listen"); err != nil {
-		return fmt.Errorf("suppress %s listener: %w", label, err)
+	var pprof bool
+	if command.LocalNonPersistentFlags().Lookup("listen") == nil {
+		command.Flags().StringVar(&listen, "listen", "", "")
+	}
+	if command.LocalNonPersistentFlags().Lookup("pprof") == nil {
+		command.Flags().BoolVar(&pprof, "pprof", false, "")
+	}
+	for _, name := range []string{"listen", "pprof"} {
+		if err := command.Flags().MarkHidden(name); err != nil {
+			return fmt.Errorf("suppress %s listener: %w", label, err)
+		}
 	}
 	previous := command.PreRunE
 	command.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if cmd.Flags().Changed("listen") {
-			return fmt.Errorf("server %s: --listen is not supported; protocol stdio does not start an HTTP listener", label)
+		for _, name := range []string{"listen", "pprof"} {
+			if cmd.Flags().Changed(name) {
+				return fmt.Errorf("server %s: --%s is not supported; protocol stdio does not start an HTTP listener", label, name)
+			}
 		}
 		if previous != nil {
 			return previous(cmd, args)

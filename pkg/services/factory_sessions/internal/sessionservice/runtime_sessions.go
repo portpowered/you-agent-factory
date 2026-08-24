@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -155,27 +154,6 @@ func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID str
 	return fs.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }
 
-func (fs *SessionRuntime) openFactorySession(ctx context.Context, factoryDir string) (string, error) {
-	if fs == nil {
-		return "", fmt.Errorf("factory service is required")
-	}
-	if fs.sessionIDs == nil {
-		return "", fmt.Errorf("Factory Session ID generator is required")
-	}
-	sessionID := strings.TrimSpace(fs.sessionIDs())
-	if sessionID == "" {
-		return "", fmt.Errorf("Factory Session ID generator returned an empty identity")
-	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, factoryDir, factoryDir, sessionID)
-	if err != nil {
-		return "", err
-	}
-	if err := fs.startBackgroundSession(ctx, sessionID, replacement); err != nil {
-		return "", err
-	}
-	return sessionID, nil
-}
-
 func (fs *SessionRuntime) OpenFactorySessionFromFolder(
 	ctx context.Context,
 	folderPath string,
@@ -205,17 +183,6 @@ func (fs *SessionRuntime) openFactorySessionForTarget(ctx context.Context, targe
 		return "", err
 	}
 	return sessionID, nil
-}
-
-func (fs *SessionRuntime) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle factoryRuntimeBundle) error {
-	return fs.StartBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
-		Ref: FactorySessionTargetRef{
-			Kind: FactorySessionTargetKindDefault,
-		},
-		FactoryDir: runtimeBundle.Directory(),
-		FolderPath: runtimeBundle.Directory(),
-		Project:    filepath.Base(runtimeBundle.Directory()),
-	})
 }
 
 //nolint:contextcheck // The request context bounds startup waiting, while the active service runtime context owns the long-lived session runtime and sidecars.
@@ -251,7 +218,11 @@ func (fs *SessionRuntime) stopFactorySession(sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return runtimebinding.StopSession(fs.sessionState, &fs.runtimeState, sessionID, fs.StopLiveRuntime)
+	err := runtimebinding.StopSession(fs.sessionState, &fs.runtimeState, sessionID, fs.StopLiveRuntime)
+	if err == nil && fs.releaseWorkAdmissionProjection != nil {
+		fs.releaseWorkAdmissionProjection(sessionID)
+	}
+	return err
 }
 
 func (fs *SessionRuntime) runSessionID() string {
@@ -311,6 +282,11 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 				sessionID = session.ID
 			}
 			fs.logger.Warn("session runtime replacement warning", zap.Error(err), zap.String("session_id", sessionID))
+		},
+		func(sessionID string, runtime *factorysessions.LiveRuntime, record factory.RuntimeRecord) {
+			if fs.retireWorkAdmissionProjection != nil {
+				fs.retireWorkAdmissionProjection(sessionID, runtime, record)
+			}
 		},
 	)
 	if err != nil {

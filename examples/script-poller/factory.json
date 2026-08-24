@@ -1,0 +1,25 @@
+{
+  "name": "github-intake",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "github-poller" }
+  ],
+  "workstations": [
+    {
+      "name": "github-intake",
+      "behavior": "POLLER",
+      "worker": "github-poller",
+      "outputs": [{ "workType": "task", "state": "init" }],
+      "onFailure": [{ "workType": "task", "state": "failed" }]
+    }
+  ]
+}

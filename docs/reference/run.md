@@ -81,6 +81,12 @@ Non-interactive stdin is the alternative input source:
 printf '%s\n' 'Review the release notes' | you run --factory ./factory.json
 ```
 
+Intentional declarative-Factory invocation stdin for `--factory` and `--named`
+is limited to 1,048,576 bytes (1 MiB), inclusive. Exactly 1,048,576 bytes is
+accepted. A larger stream fails before Factory execution starts; use
+`--to-file` when a prompt needs more space. This limit applies to the stdin
+source only and does not change the Factory, HTTP, or replay contracts.
+
 Do not supply positional text and stdin together. Factories with an
 `invocationSignature` may instead define named, file-path, repeated, or
 defaulted arguments. Inspect their exact input boundary with
@@ -295,6 +301,15 @@ you server
 you server --listen 127.0.0.1:7437
 ```
 
+`you server` is continuous, non-resumable hosting. For restart-surviving
+hosting with an explicit recording, use:
+
+```bash
+you run --with-server --continuously --record <path>
+```
+
+Continue that recording after a stop with `you run --resume <recording>`.
+
 Use `--listen <host:port>` when the listener must bind one exact local address.
 The host must be `localhost` or a loopback IP, and the port must be a non-zero
 TCP port. `--listen` takes precedence when both listener controls are present;
@@ -308,6 +323,53 @@ advance monotonically through port `65535` on collisions, but prints one
 actionable deprecation warning directing scripts to `--listen`. `--server` is
 not a local listener selector for ordinary `you run`; ordinary runs remain
 serverless, and `--listen` requires `--with-server` or `--with-site`.
+
+## Capture local runtime memory diagnostics
+
+`--pprof` is off by default. Enable it only for local diagnostics, and keep
+the listener on a loopback host.
+
+1. Start the local server:
+
+   ```bash
+   you server --pprof --listen 127.0.0.1:7437
+   ```
+
+   The server accepts local requests at `127.0.0.1:7437`. The pprof routes
+   remain unavailable when `--pprof` is omitted.
+
+2. Inspect the current runtime snapshot:
+
+   ```bash
+   curl -sS http://127.0.0.1:7437/debug/runtime
+   ```
+
+   The JSON includes `heapAllocBytes`, `heapInuseBytes`, `sysBytes`, `numGC`,
+   `goroutines`, `processCommitBytes`, and `processCommitAvailable`.
+
+3. Save a heap profile while the server is running:
+
+   ```bash
+   curl -sS http://127.0.0.1:7437/debug/pprof/heap -o heap.pprof
+   ```
+
+   The command creates a non-empty `heap.pprof` file.
+
+4. Inspect the live heap profile with the Go tool:
+
+   ```bash
+   go tool pprof -top http://127.0.0.1:7437/debug/pprof/heap
+   ```
+
+   The command prints a table with allocation columns, including `flat` and
+   `cum`. Use `go tool pprof -top heap.pprof` to inspect the saved copy.
+
+On Windows, the working set can be trimmed without reducing committed process
+memory. Compare `processCommitBytes` from `GET /debug/runtime` over time. Do
+not use RSS or working set as the process-commit signal.
+
+Use pprof only for local diagnostics. Never enable it on a non-loopback
+listener. In PowerShell, use `curl.exe` when the `curl` alias is unavailable.
 
 ## Remote placement and local hosting
 

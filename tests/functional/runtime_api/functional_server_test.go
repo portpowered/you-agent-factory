@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"testing"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -34,13 +33,6 @@ func withProvider(provider any) runtimeOption {
 		default:
 			panic("withProvider requires a Providers service or legacy test provider")
 		}
-	}
-}
-
-func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunner) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) {
-		cfg.Edges.ProviderCommandRunner = providerRunner
-		cfg.Edges.ScriptCommandRunner = scriptRunner
 	}
 }
 

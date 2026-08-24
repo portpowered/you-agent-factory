@@ -375,8 +375,8 @@ func TestLoggingCommandRunnerAndStatusProjection(t *testing.T) {
 	if err == nil || failed.ExitCode != 7 || len(failedLogger.warns) != 0 {
 		t.Fatalf("logged failure = %#v, %v, warns=%d", failed, err, len(failedLogger.warns))
 	}
-	if len(failedLogger.infos) != 2 {
-		t.Fatalf("logged failure info entries = %d, want request and completion", len(failedLogger.infos))
+	if len(failedLogger.infos) != 1 || len(failedLogger.errors) != 1 {
+		t.Fatalf("logged failure info/error entries = %d/%d, want request plus error completion", len(failedLogger.infos), len(failedLogger.errors))
 	}
 
 	if got := commandResultStatus(context.Background(), CommandResult{}, context.DeadlineExceeded); got != "timed_out" {
@@ -389,6 +389,18 @@ func TestLoggingCommandRunnerAndStatusProjection(t *testing.T) {
 	}
 	if got := commandResultStatus(context.Background(), CommandResult{ExitCode: 1}, nil); got != "failed" {
 		t.Fatalf("commandResultStatus(exit) = %q", got)
+	}
+	if got := commandResultStatus(context.Background(), CommandResult{
+		ExitCode:           0,
+		CancellationReason: CancellationReasonSuperseded,
+	}, context.Canceled); got != "canceled" {
+		t.Fatalf("commandResultStatus(superseded exit zero) = %q, want canceled", got)
+	}
+	if got := commandResultStatus(context.Background(), CommandResult{
+		ExitCode:           0,
+		CancellationReason: CancellationReasonProcessGone,
+	}, context.Canceled); got != "error" {
+		t.Fatalf("commandResultStatus(process gone) = %q, want error", got)
 	}
 }
 

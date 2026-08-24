@@ -14,10 +14,7 @@ func TestRuntimeMetricsOpenerRejectsMissingExplicitSelections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opener, err := NewRuntimeMetricsOpener(paths)
-	if err != nil {
-		t.Fatal(err)
-	}
+	opener := newRetentionTestOpener(t, paths)
 	valid := RuntimeMetricsOpeningRequest{RuntimeInstanceID: "runtime", RootDirectory: t.TempDir(), StartTimeUTC: time.Now(), CollisionID: "collision"}
 	tests := []struct {
 		name string

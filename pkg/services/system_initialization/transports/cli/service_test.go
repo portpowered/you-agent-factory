@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
@@ -235,6 +236,49 @@ func TestInitializeSystemFacadePreservesExitErrors(t *testing.T) {
 	if !errors.Is(err, systeminitialization.ErrMissingHomeDir) {
 		t.Fatalf("InitializeSystem() error = %v, want ErrMissingHomeDir", err)
 	}
+}
+
+func TestInitializeHumanRenderingPreservesOutputErrorsForEachFactoryOutcome(t *testing.T) {
+	t.Parallel()
+
+	for _, outcome := range []systeminitialization.PackagedFactoryOutcome{
+		systeminitialization.PackagedFactoryCreated,
+		systeminitialization.PackagedFactorySkipped,
+		systeminitialization.PackagedFactoryCurrent,
+		systeminitialization.PackagedFactoryRefreshed,
+	} {
+		outcome := outcome
+		t.Run(string(outcome), func(t *testing.T) {
+			t.Parallel()
+			root := &fakeBootstrapRoot{
+				result: systeminitialization.Result{
+					ConfigPath:          "/home/operator/.you-agent-factory/config.json",
+					NamedFactoriesRoot:  "/home/operator/.you-agent-factory/factories",
+					SystemConfigOutcome: systeminitialization.SystemConfigCreated,
+					PackagedFactories: []systeminitialization.PackagedFactoryResult{{
+						Name:       "@you/goal",
+						FactoryDir: "/home/operator/.you-agent-factory/factories/@you/goal",
+						Outcome:    outcome,
+						BackupDir:  "/home/operator/.you-agent-factory/factories/.you-packaged-backups/goal",
+					}},
+				},
+			}
+			_, err := systeminitializationcli.Initialize(systeminitializationcli.InitializeConfig{
+				Context: context.Background(),
+				HomeDir: "/home/operator",
+				Output:  initializeErrorWriter{},
+			}, root)
+			if err == nil || !strings.Contains(err.Error(), "initialize output unavailable") {
+				t.Fatalf("Initialize(%s) error = %v, want output error", outcome, err)
+			}
+		})
+	}
+}
+
+type initializeErrorWriter struct{}
+
+func (initializeErrorWriter) Write([]byte) (int, error) {
+	return 0, errors.New("initialize output unavailable")
 }
 
 type fakeBootstrapRoot struct {

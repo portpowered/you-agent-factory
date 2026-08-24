@@ -1,6 +1,7 @@
 package replayconfig_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -86,5 +87,40 @@ func TestDecodeRejectsMissingInputs(t *testing.T) {
 				t.Fatalf("Decode error = %v, want containing %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestDecodeMaterializesTypedRedactionMarkersWithoutRestoringValues(t *testing.T) {
+	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"name": "recorded",
+		"workstations": []any{map[string]any{
+			"name": "write",
+			"body": map[string]any{
+				"redacted":   true,
+				"provenance": "DECLARED_SECRET",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	var decodedPayload []byte
+	_, err = snapshotsportabilityreplayconfig.Decode(snapshot, func(payload []byte) (*factorydefinitions.FactoryConfig, error) {
+		decodedPayload = append([]byte(nil), payload...)
+		return &factorydefinitions.FactoryConfig{Name: "recorded"}, nil
+	})
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	var document struct {
+		Workstations []struct {
+			Body any `json:"body"`
+		} `json:"workstations"`
+	}
+	if err := json.Unmarshal(decodedPayload, &document); err != nil {
+		t.Fatalf("decode materialized payload: %v", err)
+	}
+	if len(document.Workstations) != 1 || document.Workstations[0].Body != "" {
+		t.Fatalf("materialized redacted body = %#v, want empty string", document.Workstations)
 	}
 }

@@ -5,7 +5,6 @@ export const workflowPreviewPanelMessages = {
   success: "Factory preview passed.",
   error: "Factory preview failed.",
   sourceResolution: "Source resolution",
-  deniedCapabilities: "Denied capabilities",
   resultConstraints: "Result constraints",
   sourceRefLabel: "Source ref",
   sourceHashLabel: "Source hash",

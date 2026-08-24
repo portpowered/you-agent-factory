@@ -3,30 +3,10 @@
 package validationassert
 
 import (
-	"fmt"
-	"sort"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-// CanonicalAPITargetSignatures returns sorted stable signatures for generated
-// API validation targets. It belongs in test support because production domain
-// validation must not depend on generated transport contracts.
-func CanonicalAPITargetSignatures(targets []factoryapi.FactoryValidationTarget) []string {
-	signatures := make([]string, 0, len(targets))
-	for _, target := range targets {
-		signatures = append(signatures, fmt.Sprintf(
-			"%s|%s|%s|%s",
-			target.Code,
-			target.Subject.Type,
-			target.Subject.Id,
-			target.Subject.Location,
-		))
-	}
-	sort.Strings(signatures)
-	return signatures
-}
 
 // HasTarget asserts that targets contains a validation target matching code,
 // subject type, subject id, and location. want is included in the failure message.
