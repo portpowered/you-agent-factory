@@ -2265,6 +2265,30 @@ export interface components {
       /** @description Files downloaded or verified as already present for the managed cache entry. */
       downloadedFiles?: components["schemas"]["ModelPullDownloadedFile"][];
       sourceDiagnostics?: components["schemas"]["ManagedRuntimeSourceDiagnostics"];
+      pullDiagnostics?: components["schemas"]["ManagedRuntimePullDiagnostics"];
+    };
+    /** @description Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included. */
+    ManagedRuntimePullDiagnostics: {
+      /** @description Model identity associated with the failed pull. */
+      modelName?: string;
+      /** @description Resolved upstream repository or other safe source identifier. */
+      resolvedRepository?: string;
+      /** @description Source revision selected for the pull. */
+      revision?: string;
+      /** @description Logical asset file involved in the failed operation, when applicable. */
+      file?: string;
+      /** @description Safe logical operation that failed. */
+      operation?: string;
+      /**
+       * Format: uri
+       * @description Sanitized HTTP request URL, when an HTTP request failed.
+       */
+      requestUrl?: string;
+      /**
+       * Format: int32
+       * @description Upstream HTTP status code, when the server returned one.
+       */
+      upstreamStatusCode?: number;
     };
     /**
      * @description Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.

@@ -496,30 +496,56 @@ func (s *service) downloadGenericArtifact(
 	requirement models.AssetRequirement,
 ) (models.AssetArtifact, error) {
 	assetURL := s.genericAssetURL(source, requirement.Name)
+	diagnostics := models.PullDiagnostics{
+		ModelName:          source.modelName,
+		ResolvedRepository: source.owner + "/" + source.repository,
+		Revision:           source.revision,
+		File:               requirement.Name,
+		Operation:          "download asset",
+		RequestURL:         assetURL,
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
-		return models.AssetArtifact{}, fmt.Errorf("%w: asset request is invalid", models.ErrSourceFetchFailed)
+		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: asset request is invalid", models.ErrSourceFetchFailed),
+		)
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return models.AssetArtifact{}, contextErr
 		}
-		return models.AssetArtifact{}, fmt.Errorf("%w: asset download failed", models.ErrSourceFetchFailed)
+		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: asset download failed", models.ErrSourceFetchFailed),
+		)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return models.AssetArtifact{}, fmt.Errorf("%w: asset download failed", models.ErrSourceFetchFailed)
+		diagnostics.UpstreamStatusCode = response.StatusCode
+		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: asset download failed", models.ErrSourceFetchFailed),
+		)
 	}
 	output, err := s.createFile(target)
 	if err != nil {
-		return models.AssetArtifact{}, interruptedAssetError("create staged asset", err)
+		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+			diagnostics,
+			interruptedAssetError("create staged asset", err),
+		)
 	}
 	written, checksum, err := copyStagedAsset(ctx, output, response.Body, requirement.Name)
 	if err != nil {
-		return models.AssetArtifact{}, err
+		return models.AssetArtifact{}, models.WrapPullDiagnostics(diagnostics, err)
 	}
-	return verifiedGenericArtifact(requirement, written, checksum)
+	artifact, err := verifiedGenericArtifact(requirement, written, checksum)
+	if err != nil {
+		diagnostics.Operation = "verify downloaded asset"
+		return models.AssetArtifact{}, models.WrapPullDiagnostics(diagnostics, err)
+	}
+	return artifact, nil
 }
 
 func verifiedGenericArtifact(

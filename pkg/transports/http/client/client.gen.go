@@ -6001,6 +6001,30 @@ type ManagedRuntime struct {
 // ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
 type ManagedRuntimeLifecycleState string
 
+// ManagedRuntimePullDiagnostics Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included.
+type ManagedRuntimePullDiagnostics struct {
+	// File Logical asset file involved in the failed operation, when applicable.
+	File *string `json:"file,omitempty"`
+
+	// ModelName Model identity associated with the failed pull.
+	ModelName *string `json:"modelName,omitempty"`
+
+	// Operation Safe logical operation that failed.
+	Operation *string `json:"operation,omitempty"`
+
+	// RequestUrl Sanitized HTTP request URL, when an HTTP request failed.
+	RequestUrl *string `json:"requestUrl,omitempty"`
+
+	// ResolvedRepository Resolved upstream repository or other safe source identifier.
+	ResolvedRepository *string `json:"resolvedRepository,omitempty"`
+
+	// Revision Source revision selected for the pull.
+	Revision *string `json:"revision,omitempty"`
+
+	// UpstreamStatusCode Upstream HTTP status code, when the server returned one.
+	UpstreamStatusCode *int32 `json:"upstreamStatusCode,omitempty"`
+}
+
 // ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
 type ManagedRuntimePullOutcome string
 
@@ -6014,6 +6038,9 @@ type ManagedRuntimePullResult struct {
 
 	// Identity Stable managed runtime identity targeted by the pull or install request.
 	Identity string `json:"identity"`
+
+	// PullDiagnostics Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included.
+	PullDiagnostics *ManagedRuntimePullDiagnostics `json:"pullDiagnostics,omitempty"`
 
 	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
 	PullOutcome ManagedRuntimePullOutcome `json:"pullOutcome"`

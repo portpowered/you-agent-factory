@@ -36,6 +36,7 @@ const (
 
 type genericSource struct {
 	kind        genericSourceKind
+	modelName   string
 	safe        string
 	localPath   string
 	owner       string
@@ -173,6 +174,7 @@ func (s *service) genericPreparationPlan(
 	if err != nil {
 		return genericPreparationPlan{}, err
 	}
+	source.modelName = request.Name
 	modelRequirements, err := s.genericModelRequirements(ctx, source, request.Artifacts)
 	if err != nil {
 		return genericPreparationPlan{}, err
@@ -187,6 +189,7 @@ func (s *service) genericPreparationPlan(
 	if err != nil {
 		return genericPreparationPlan{}, err
 	}
+	backendSource.modelName = request.Name
 	return genericPreparationPlan{
 		source:              source,
 		modelRequirements:   modelRequirements,
@@ -553,24 +556,45 @@ func (s *service) fetchGenericManifest(
 ) ([]genericArtifact, error) {
 	requestURL := strings.TrimRight(s.endpoints.APIBaseURL, "/") + "/models/" +
 		source.owner + "/" + source.repository + "?revision=" + url.QueryEscape(source.revision)
+	diagnostics := models.PullDiagnostics{
+		ModelName:          source.modelName,
+		ResolvedRepository: source.owner + "/" + source.repository,
+		Revision:           source.revision,
+		Operation:          "fetch model manifest",
+		RequestURL:         requestURL,
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: model manifest request is invalid", models.ErrSourceFetchFailed)
+		return nil, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest request is invalid", models.ErrSourceFetchFailed),
+		)
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return nil, contextErr
 		}
-		return nil, fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed)
+		return nil, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed),
+		)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed)
+		diagnostics.UpstreamStatusCode = response.StatusCode
+		return nil, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed),
+		)
 	}
 	var payload upstreamModel
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("%w: model manifest is invalid", models.ErrSourceFetchFailed)
+		diagnostics.Operation = "decode model manifest"
+		return nil, models.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest is invalid", models.ErrSourceFetchFailed),
+		)
 	}
 	byName := make(map[string]upstreamSibling, len(payload.Siblings))
 	for _, sibling := range payload.Siblings {
@@ -592,7 +616,13 @@ func (s *service) fetchGenericManifest(
 	for _, name := range names {
 		sibling, ok := byName[name]
 		if !ok {
-			return nil, fmt.Errorf("%w: model manifest is missing an artifact", models.ErrSourceFetchFailed)
+			missing := diagnostics
+			missing.File = name
+			missing.Operation = "resolve manifest artifact"
+			return nil, models.WrapPullDiagnostics(
+				missing,
+				fmt.Errorf("%w: model manifest is missing an artifact", models.ErrSourceFetchFailed),
+			)
 		}
 		size := sibling.Size
 		digest := ""

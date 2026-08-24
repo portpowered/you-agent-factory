@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -424,5 +425,41 @@ func assertAssetTypedErrors(t *testing.T) {
 	pull := &models.PullError{Result: models.PullResult{ModelName: "model", ManagedPullOutcome: "FAILED", ReadinessState: "MISSING"}, Cause: cause}
 	if !errors.Is(pull, cause) || !strings.Contains(pull.Error(), "FAILED") {
 		t.Fatalf("pull error = %v, want classified cause and outcome", pull)
+	}
+}
+
+func TestPullDiagnosticsPreserveSafeFactsWithoutRenderingRawCause(t *testing.T) {
+	t.Parallel()
+
+	raw := errors.New("HF_TOKEN=secret body=opaque C:\\private\\weights")
+	diagnostics := models.PullDiagnostics{
+		ModelName:          "OMNIVOICE_Q4_K_M",
+		ResolvedRepository: "owner/repo",
+		Revision:           "rev-1",
+		File:               "weights/model.gguf",
+		Operation:          "verify downloaded asset",
+		RequestURL:         "https://user:password@example.test/owner/repo/resolve/rev-1/weights/model.gguf?download=true&token=secret",
+		UpstreamStatusCode: 502,
+	}
+	safe := models.NewPullDiagnosticsError(diagnostics, raw)
+	if safe == nil || strings.Contains(safe.Error(), raw.Error()) || strings.Contains(safe.Error(), "secret") ||
+		strings.Contains(safe.Error(), "C:\\private") {
+		t.Fatalf("safe diagnostics = %v, leaked raw cause", safe)
+	}
+	if !errors.Is(safe, raw) {
+		t.Fatalf("safe diagnostics = %v, want errors.Is to preserve raw cause identity", safe)
+	}
+	if got := models.PullDiagnosticsFromError(safe); got.RequestURL != "https://example.test/owner/repo/resolve/rev-1/weights/model.gguf?download=true" ||
+		got.UpstreamStatusCode != http.StatusBadGateway {
+		t.Fatalf("normalized diagnostics = %#v, want redacted URL and status", got)
+	}
+
+	stage := models.WrapPullStage(
+		models.PullStageIntegrityVerification, "OMNIVOICE_Q4_K_M", "verify downloaded asset", "weights/model.gguf", raw,
+	)
+	wrapped := models.WrapPullDiagnostics(diagnostics, stage)
+	var stageError *models.PullStageError
+	if !errors.As(wrapped, &stageError) || stageError.Stage != models.PullStageIntegrityVerification {
+		t.Fatalf("wrapped diagnostics = %v, want typed stage cause", wrapped)
 	}
 }

@@ -3,6 +3,7 @@ package local
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
@@ -184,8 +185,13 @@ func TestPullModelWithOptions_ClassifiesPostDownloadCacheFailure(t *testing.T) {
 		result.ManagedPullOutcome != managedPullOutcomeCacheInstallationFailed ||
 		result.ManagedPullOutcome == managedPullOutcomeSourceFetchFailed ||
 		result.FailureStage != apisurface.PullStageCacheInstallation || stageErr.Cause == nil ||
-		len(result.DownloadedFiles) != 1 {
+		len(result.DownloadedFiles) != 1 || result.PullDiagnostics.Operation != "resolve managed runtime cache" ||
+		result.PullDiagnostics.RequestURL != "" {
 		t.Fatalf("pull result = %#v, error = %v, want cache-installation failure with downloaded file facts", result, err)
+	}
+	if strings.Contains(result.PullDiagnostics.ErrorText(), "url=") ||
+		strings.Contains(result.PullDiagnostics.ErrorText(), "download") {
+		t.Fatalf("post-download diagnostics = %q, must not claim an HTTP download failure", result.PullDiagnostics.ErrorText())
 	}
 }
 

@@ -514,6 +514,17 @@ func TestPrepareModelAssetsClassifiesManifestFailures(t *testing.T) {
 				stageErr.Cause == nil {
 				t.Fatalf("PrepareModelAssets stage error = %#v, want source-fetch stage with cause", stageErr)
 			}
+			diagnostics := models.PullDiagnosticsFromError(err)
+			if diagnostics.ModelName != "OMNIVOICE_Q4_K_M" || diagnostics.ResolvedRepository == "" ||
+				diagnostics.Operation == "" || (test.statusCode != http.StatusOK && diagnostics.UpstreamStatusCode != test.statusCode) {
+				t.Fatalf("PrepareModelAssets diagnostics = %#v, want safe source facts", diagnostics)
+			}
+			if test.statusCode == http.StatusOK && diagnostics.File == "" {
+				t.Fatalf("PrepareModelAssets diagnostics = %#v, want missing logical artifact", diagnostics)
+			}
+			if strings.Contains(err.Error(), test.body) {
+				t.Fatalf("PrepareModelAssets error leaked response body: %v", err)
+			}
 		})
 	}
 }

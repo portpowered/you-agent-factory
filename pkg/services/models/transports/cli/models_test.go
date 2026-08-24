@@ -946,7 +946,16 @@ func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
 		"managedRuntimePull": {
 			"identity": "OMNIVOICE_Q4_K_M",
 			"pullOutcome": "SOURCE_FETCH_FAILED",
-			"readinessState": "FAILED"
+			"readinessState": "FAILED",
+			"pullDiagnostics": {
+				"modelName": "OMNIVOICE_Q4_K_M",
+				"resolvedRepository": "owner/repo",
+				"revision": "rev-1",
+				"file": "weights.gguf",
+				"operation": "download asset",
+				"requestUrl": "https://assets.example.test/owner/repo/weights.gguf?download=true",
+				"upstreamStatusCode": 502
+			}
 		}
 	}`))
 	if err == nil {
@@ -967,6 +976,15 @@ func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
 		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest ||
 		coded.CLIErrorMessage() != err.Error() {
 		t.Fatalf("coded failure = (%q, %q, %q), want safe outcome diagnostic", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
+	}
+	var diagnostics *modelinference.PullDiagnosticsError
+	if !errors.As(err, &diagnostics) || diagnostics == nil {
+		t.Fatalf("error = %T, want structured pull diagnostics cause", err)
+	}
+	if !strings.Contains(diagnostics.Error(), "repository=owner/repo") ||
+		!strings.Contains(diagnostics.Error(), "status=502") ||
+		!strings.Contains(diagnostics.Error(), "operation=download asset") {
+		t.Fatalf("diagnostics = %q, want repository, operation, and status", diagnostics)
 	}
 }
 

@@ -24,3 +24,5 @@ properties:
       $ref: './ModelPullDownloadedFile.yaml'
   sourceDiagnostics:
     $ref: './ManagedRuntimeSourceDiagnostics.yaml'
+  pullDiagnostics:
+    $ref: './ManagedRuntimePullDiagnostics.yaml'

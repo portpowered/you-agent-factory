@@ -787,6 +787,12 @@ func classifiedPullFailure(
 ) (models.PullResult, error) {
 	pullOutcome, readiness := ClassifyPullFailure(cause)
 	result := base
+	diagnostics := models.MergePullDiagnostics(
+		result.PullDiagnostics,
+		models.PullDiagnosticsFromError(cause),
+	).WithDefaults(
+		modelName, result.SourceID, result.Revision, "", "classify pull failure",
+	)
 	if strings.TrimSpace(result.ModelName) == "" {
 		result.ModelName = strings.TrimSpace(modelName)
 	}
@@ -806,6 +812,9 @@ func classifiedPullFailure(
 		!errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
 		result.FailureStage = models.PullStageAssembly
 	}
+	result.PullDiagnostics = diagnostics.WithDefaults(
+		result.ModelName, result.SourceID, result.Revision, "", diagnostics.Operation,
+	)
 	return result, &models.PullError{Result: result, Cause: cause}
 }
 

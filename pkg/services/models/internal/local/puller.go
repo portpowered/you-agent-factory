@@ -66,6 +66,9 @@ func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, mo
 		projected.ManagedPullOutcome = ""
 		projected.ReadinessState = "FAILED"
 		projected.LifecycleState = "NOT_INSTALLED"
+		projected.PullDiagnostics = models.PullDiagnosticsFromError(err).WithDefaults(
+			modelName, projected.SourceID, projected.Revision, "", "prepare model assets",
+		)
 		return projected, err
 	}
 	layout, layoutErr := p.inner.ResolveRuntimeCache(ctx, models.InspectModelAssetsRequest{
@@ -73,10 +76,14 @@ func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, mo
 		Name:  modelName,
 	})
 	if layoutErr != nil {
-		return projected, models.WrapPullStage(
+		classified := models.WrapPullStage(
 			models.PullStageCacheInstallation, modelName,
 			"resolve managed runtime cache", "", layoutErr,
 		)
+		projected.PullDiagnostics = models.PullDiagnosticsFromError(classified).WithDefaults(
+			modelName, projected.SourceID, projected.Revision, "", "resolve managed runtime cache",
+		)
+		return projected, classified
 	}
 	projected.CachePath = layout.CachePath
 	return projected, nil

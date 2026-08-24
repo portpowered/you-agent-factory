@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -529,6 +530,7 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 				if err := json.Unmarshal(responseBody, out); err != nil {
 					return clihttp.WithHTTPResponse(resp, fmt.Errorf("decode managed runtime pull response: %w", err))
 				}
+				sanitizeManagedRuntimePullResponse(out)
 			}
 			return clihttp.WithHTTPResponse(resp, pullErr)
 		}
@@ -538,8 +540,21 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 	if err != nil {
 		return err
 	}
+	sanitizeManagedRuntimePullResponse(out)
 	logModelsResponse(diagnostics, endpoint, resp.StatusCode, response.Duration, fmt.Sprintf("responseBytes=%d %s", responseBytes, diagnostics.summary()))
 	return nil
+}
+
+func sanitizeManagedRuntimePullResponse(out any) {
+	response, ok := out.(*factoryapi.ModelPullResponse)
+	if !ok || response == nil || response.ManagedRuntimePull.PullDiagnostics == nil {
+		return
+	}
+	diagnosticsError := managedRuntimePullDiagnosticsFromGenerated(response.ManagedRuntimePull.PullDiagnostics)
+	diagnostics := modelinference.PullDiagnosticsFromError(diagnosticsError)
+	response.ManagedRuntimePull.PullDiagnostics = managedRuntimePullDiagnostics(
+		modelinference.PullResult{PullDiagnostics: diagnostics},
+	)
 }
 
 func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.URL, out any, diagnostics requestDiagnostics) error {
@@ -839,22 +854,64 @@ func managedRuntimePullResponseError(statusCode int, body []byte) error {
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil
 	}
-	switch response.ManagedRuntimePull.PullOutcome {
-	case factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
-		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
-		factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
-		return &managedRuntimePullFailure{
-			Outcome:   response.ManagedRuntimePull.PullOutcome,
-			Readiness: response.ManagedRuntimePull.ReadinessState,
-		}
-	default:
+	if !isManagedRuntimePullFailure(response.ManagedRuntimePull.PullOutcome) {
 		return nil
+	}
+	return &managedRuntimePullFailure{
+		Outcome:     response.ManagedRuntimePull.PullOutcome,
+		Readiness:   response.ManagedRuntimePull.ReadinessState,
+		Diagnostics: managedRuntimePullDiagnosticsFromGenerated(response.ManagedRuntimePull.PullDiagnostics),
 	}
 }
 
+func isManagedRuntimePullFailure(outcome factoryapi.ManagedRuntimePullOutcome) bool {
+	switch outcome {
+	case "":
+		return false
+	case factoryapi.ManagedRuntimePullOutcomeALREADYREADY,
+		factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT:
+		return false
+	default:
+		return true
+	}
+}
+
+func managedRuntimePullDiagnosticsFromGenerated(
+	input *factoryapi.ManagedRuntimePullDiagnostics,
+) error {
+	if input == nil {
+		return nil
+	}
+	diagnostics := modelinference.PullDiagnostics{}
+	if input.ModelName != nil {
+		diagnostics.ModelName = *input.ModelName
+	}
+	if input.ResolvedRepository != nil {
+		diagnostics.ResolvedRepository = *input.ResolvedRepository
+	}
+	if input.Revision != nil {
+		diagnostics.Revision = *input.Revision
+	}
+	if input.File != nil {
+		diagnostics.File = *input.File
+	}
+	if input.Operation != nil {
+		diagnostics.Operation = *input.Operation
+	}
+	if input.RequestUrl != nil {
+		diagnostics.RequestURL = *input.RequestUrl
+	}
+	if input.UpstreamStatusCode != nil {
+		diagnostics.UpstreamStatusCode = int(*input.UpstreamStatusCode)
+	}
+	return modelinference.NewPullDiagnosticsError(diagnostics, nil)
+}
+
 type managedRuntimePullFailure struct {
-	Outcome   factoryapi.ManagedRuntimePullOutcome
-	Readiness factoryapi.ManagedRuntimeReadinessState
+	Outcome     factoryapi.ManagedRuntimePullOutcome
+	Readiness   factoryapi.ManagedRuntimeReadinessState
+	Diagnostics error
 }
 
 func (failure *managedRuntimePullFailure) Error() string {
@@ -878,6 +935,13 @@ func (failure *managedRuntimePullFailure) CLIErrorFamily() factoryapi.ErrorFamil
 
 func (failure *managedRuntimePullFailure) CLIErrorMessage() string {
 	return failure.Error()
+}
+
+func (failure *managedRuntimePullFailure) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return failure.Diagnostics
 }
 
 func modelsRequestError(statusCode int, body []byte, response ...*http.Response) error {

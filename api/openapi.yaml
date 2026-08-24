@@ -4888,6 +4888,36 @@ components:
             $ref: '#/components/schemas/ModelPullDownloadedFile'
         sourceDiagnostics:
           $ref: '#/components/schemas/ManagedRuntimeSourceDiagnostics'
+        pullDiagnostics:
+          $ref: '#/components/schemas/ManagedRuntimePullDiagnostics'
+    ManagedRuntimePullDiagnostics:
+      type: object
+      description: |
+        Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included.
+      properties:
+        modelName:
+          type: string
+          description: Model identity associated with the failed pull.
+        resolvedRepository:
+          type: string
+          description: Resolved upstream repository or other safe source identifier.
+        revision:
+          type: string
+          description: Source revision selected for the pull.
+        file:
+          type: string
+          description: Logical asset file involved in the failed operation, when applicable.
+        operation:
+          type: string
+          description: Safe logical operation that failed.
+        requestUrl:
+          type: string
+          format: uri
+          description: Sanitized HTTP request URL, when an HTTP request failed.
+        upstreamStatusCode:
+          type: integer
+          format: int32
+          description: Upstream HTTP status code, when the server returned one.
     ManagedRuntimeReadinessState:
       type: string
       description: |

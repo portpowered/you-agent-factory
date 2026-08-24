@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
 	"path/filepath"
 	"strings"
@@ -144,6 +145,359 @@ func PullStageForError(err error) PullStage {
 	default:
 		return ""
 	}
+}
+
+// PullDiagnostics contains safe, logical facts about one failed managed
+// runtime pull. It deliberately excludes response bodies, credentials, and
+// unrestricted local paths so callers can carry it to operator-facing
+// diagnostics without exposing implementation details.
+type PullDiagnostics struct {
+	ModelName          string
+	ResolvedRepository string
+	Revision           string
+	File               string
+	Operation          string
+	RequestURL         string
+	UpstreamStatusCode int
+}
+
+// Normalize returns a detached, safe representation suitable for transport
+// mapping or logging. Unknown URL query parameters and path-like values are
+// discarded at this boundary.
+func (diagnostics PullDiagnostics) Normalize() PullDiagnostics {
+	diagnostics.ModelName = normalizePullDiagnosticModelName(diagnostics.ModelName)
+	diagnostics.ResolvedRepository = normalizePullDiagnosticRepository(diagnostics.ResolvedRepository)
+	diagnostics.Revision = normalizePullDiagnosticRevision(diagnostics.Revision)
+	diagnostics.File = normalizePullDiagnosticFile(diagnostics.File)
+	diagnostics.Operation = normalizePullDiagnosticText(diagnostics.Operation)
+	diagnostics.RequestURL = normalizePullDiagnosticURL(diagnostics.RequestURL)
+	if diagnostics.UpstreamStatusCode < 100 || diagnostics.UpstreamStatusCode > 599 {
+		diagnostics.UpstreamStatusCode = 0
+	}
+	return diagnostics
+}
+
+func normalizePullDiagnosticModelName(value string) string {
+	value = normalizePullDiagnosticSafeField(value)
+	if value == "" || strings.ContainsRune(value, '\\') || strings.ContainsRune(value, '\x00') ||
+		path.IsAbs(value) || filepath.IsAbs(value) || hasWindowsDrivePrefix(value) ||
+		strings.HasPrefix(value, "../") || value == ".." {
+		return ""
+	}
+	return value
+}
+
+// WithDefaults fills only missing facts and then normalizes the complete
+// diagnostic. Defaults are logical labels supplied by a caller that owns the
+// surrounding pull context.
+func (diagnostics PullDiagnostics) WithDefaults(
+	modelName, resolvedRepository, revision, file, operation string,
+) PullDiagnostics {
+	if strings.TrimSpace(diagnostics.ModelName) == "" {
+		diagnostics.ModelName = modelName
+	}
+	if strings.TrimSpace(diagnostics.ResolvedRepository) == "" {
+		diagnostics.ResolvedRepository = resolvedRepository
+	}
+	if strings.TrimSpace(diagnostics.Revision) == "" {
+		diagnostics.Revision = revision
+	}
+	if strings.TrimSpace(diagnostics.File) == "" {
+		diagnostics.File = file
+	}
+	if strings.TrimSpace(diagnostics.Operation) == "" {
+		diagnostics.Operation = operation
+	}
+	return diagnostics.Normalize()
+}
+
+// MergePullDiagnostics keeps the primary diagnostic's non-empty facts and
+// fills gaps from the fallback. This is useful when the asset layer knows the
+// HTTP request while the pull layer knows the selected model identity.
+func MergePullDiagnostics(primary, fallback PullDiagnostics) PullDiagnostics {
+	primary = primary.Normalize()
+	fallback = fallback.Normalize()
+	if primary.ModelName == "" {
+		primary.ModelName = fallback.ModelName
+	}
+	if primary.ResolvedRepository == "" {
+		primary.ResolvedRepository = fallback.ResolvedRepository
+	}
+	if primary.Revision == "" {
+		primary.Revision = fallback.Revision
+	}
+	if primary.File == "" {
+		primary.File = fallback.File
+	}
+	if primary.Operation == "" {
+		primary.Operation = fallback.Operation
+	}
+	if primary.RequestURL == "" {
+		primary.RequestURL = fallback.RequestURL
+	}
+	if primary.UpstreamStatusCode == 0 {
+		primary.UpstreamStatusCode = fallback.UpstreamStatusCode
+	}
+	return primary.Normalize()
+}
+
+func (diagnostics PullDiagnostics) hasDetails() bool {
+	return strings.TrimSpace(diagnostics.ModelName) != "" ||
+		strings.TrimSpace(diagnostics.ResolvedRepository) != "" ||
+		strings.TrimSpace(diagnostics.Revision) != "" ||
+		strings.TrimSpace(diagnostics.File) != "" ||
+		strings.TrimSpace(diagnostics.Operation) != "" ||
+		strings.TrimSpace(diagnostics.RequestURL) != "" ||
+		diagnostics.UpstreamStatusCode != 0
+}
+
+// HasDetails reports whether at least one safe diagnostic fact is present.
+func (diagnostics PullDiagnostics) HasDetails() bool {
+	return diagnostics.Normalize().hasDetails()
+}
+
+// ErrorText renders only the structured facts in a stable, line-free form.
+func (diagnostics PullDiagnostics) ErrorText() string {
+	diagnostics = diagnostics.Normalize()
+	parts := make([]string, 0, 7)
+	if diagnostics.ModelName != "" {
+		parts = append(parts, "model="+diagnostics.ModelName)
+	}
+	if diagnostics.ResolvedRepository != "" {
+		parts = append(parts, "repository="+diagnostics.ResolvedRepository)
+	}
+	if diagnostics.Revision != "" {
+		parts = append(parts, "revision="+diagnostics.Revision)
+	}
+	if diagnostics.File != "" {
+		parts = append(parts, "file="+diagnostics.File)
+	}
+	if diagnostics.Operation != "" {
+		parts = append(parts, "operation="+diagnostics.Operation)
+	}
+	if diagnostics.RequestURL != "" {
+		parts = append(parts, "url="+diagnostics.RequestURL)
+	}
+	if diagnostics.UpstreamStatusCode != 0 {
+		parts = append(parts, fmt.Sprintf("status=%d", diagnostics.UpstreamStatusCode))
+	}
+	if len(parts) == 0 {
+		return "managed runtime pull diagnostic unavailable"
+	}
+	return "managed runtime pull diagnostics: " + strings.Join(parts, " ")
+}
+
+// PullDiagnosticsError carries safe facts while retaining the typed cause for
+// errors.Is/errors.As. It intentionally does not implement Unwrap: generic
+// debug renderers must not walk into arbitrary transport or filesystem text.
+type PullDiagnosticsError struct {
+	Diagnostics PullDiagnostics
+	Cause       error
+}
+
+func (failure *PullDiagnosticsError) Error() string {
+	if failure == nil {
+		return ""
+	}
+	return failure.Diagnostics.ErrorText()
+}
+
+func (failure *PullDiagnosticsError) Is(target error) bool {
+	if failure == nil || failure.Cause == nil {
+		return false
+	}
+	return errors.Is(failure.Cause, target)
+}
+
+func (failure *PullDiagnosticsError) As(target any) bool {
+	if failure == nil || failure.Cause == nil {
+		return false
+	}
+	return errors.As(failure.Cause, target)
+}
+
+// NewPullDiagnosticsError creates the safe presentation wrapper for a raw
+// pull cause. The raw cause remains available through explicit typed matching,
+// but is never rendered by Error.
+func NewPullDiagnosticsError(diagnostics PullDiagnostics, cause error) error {
+	if cause == nil && !diagnostics.Normalize().hasDetails() {
+		return nil
+	}
+	return &PullDiagnosticsError{Diagnostics: diagnostics.Normalize(), Cause: cause}
+}
+
+// WrapPullDiagnostics attaches safe facts to a cause without replacing an
+// already-present diagnostic wrapper. Missing values are filled from the new
+// facts when a wrapper is encountered through the typed error chain.
+func WrapPullDiagnostics(diagnostics PullDiagnostics, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	diagnostics = diagnostics.Normalize()
+	var existing *PullDiagnosticsError
+	if errors.As(cause, &existing) && existing != nil {
+		merged := existing.Diagnostics
+		if merged.ModelName == "" {
+			merged.ModelName = diagnostics.ModelName
+		}
+		if merged.ResolvedRepository == "" {
+			merged.ResolvedRepository = diagnostics.ResolvedRepository
+		}
+		if merged.Revision == "" {
+			merged.Revision = diagnostics.Revision
+		}
+		if merged.File == "" {
+			merged.File = diagnostics.File
+		}
+		if merged.Operation == "" {
+			merged.Operation = diagnostics.Operation
+		}
+		if merged.RequestURL == "" {
+			merged.RequestURL = diagnostics.RequestURL
+		}
+		if merged.UpstreamStatusCode == 0 {
+			merged.UpstreamStatusCode = diagnostics.UpstreamStatusCode
+		}
+		if merged.Normalize() == existing.Diagnostics.Normalize() {
+			return cause
+		}
+		return &PullDiagnosticsError{Diagnostics: merged.Normalize(), Cause: cause}
+	}
+	return &PullDiagnosticsError{Diagnostics: diagnostics, Cause: cause}
+}
+
+// PullDiagnosticsFromError recovers explicit diagnostics or derives safe
+// stage facts from a classified pull error. It never formats a raw cause.
+func PullDiagnosticsFromError(err error) PullDiagnostics {
+	if err == nil {
+		return PullDiagnostics{}
+	}
+	var pullError *PullError
+	if errors.As(err, &pullError) && pullError != nil {
+		if diagnostics := pullError.Result.PullDiagnostics.Normalize(); diagnostics.hasDetails() {
+			return diagnostics
+		}
+	}
+	var diagnosticError *PullDiagnosticsError
+	if errors.As(err, &diagnosticError) && diagnosticError != nil {
+		if diagnostics := diagnosticError.Diagnostics.Normalize(); diagnostics.hasDetails() {
+			return diagnostics
+		}
+	}
+	var stageError *PullStageError
+	if errors.As(err, &stageError) && stageError != nil {
+		return PullDiagnostics{
+			ModelName: stageError.ModelName,
+			File:      stageError.Artifact,
+			Operation: stageError.Operation,
+		}.Normalize()
+	}
+	return PullDiagnostics{}
+}
+
+func normalizePullDiagnosticText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, character := range value {
+		switch {
+		case character == '\r' || character == '\n' || character == '\t':
+			builder.WriteByte(' ')
+		case character < 0x20 || character == 0x7f:
+			// Drop control characters rather than allowing line injection.
+		default:
+			builder.WriteRune(character)
+		}
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func normalizePullDiagnosticRepository(value string) string {
+	value = normalizePullDiagnosticSafeField(value)
+	value = strings.TrimPrefix(value, "upstream-repository:")
+	if value == "" || strings.ContainsRune(value, '\\') || strings.ContainsRune(value, '\x00') ||
+		path.IsAbs(value) || filepath.IsAbs(value) || hasWindowsDrivePrefix(value) || strings.Contains(value, "://") {
+		return ""
+	}
+	clean := path.Clean(value)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean != value {
+		return ""
+	}
+	return clean
+}
+
+func normalizePullDiagnosticRevision(value string) string {
+	value = normalizePullDiagnosticSafeField(value)
+	if value == "" || strings.ContainsRune(value, '\\') || strings.ContainsRune(value, '\x00') ||
+		path.IsAbs(value) || filepath.IsAbs(value) || hasWindowsDrivePrefix(value) {
+		return ""
+	}
+	return value
+}
+
+func normalizePullDiagnosticFile(value string) string {
+	value = normalizePullDiagnosticSafeField(value)
+	if value == "" || strings.ContainsRune(value, '\\') || strings.ContainsRune(value, '\x00') || path.IsAbs(value) || filepath.IsAbs(value) || hasWindowsDrivePrefix(value) {
+		return ""
+	}
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(value)))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean != value {
+		return ""
+	}
+	return clean
+}
+
+func normalizePullDiagnosticURL(value string) string {
+	value = normalizePullDiagnosticText(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	parsed.User = nil
+	parsed.Fragment = ""
+	if containsPullDiagnosticSensitiveText(parsed.Path) {
+		return ""
+	}
+	allowed := url.Values{}
+	query := parsed.Query()
+	for _, key := range []string{"download", "revision"} {
+		for _, item := range query[key] {
+			item = normalizePullDiagnosticText(item)
+			if item != "" && !containsPullDiagnosticSensitiveText(item) &&
+				!strings.ContainsRune(item, '\\') && !strings.ContainsRune(item, '\x00') {
+				allowed.Add(key, item)
+			}
+		}
+	}
+	parsed.RawQuery = allowed.Encode()
+	return parsed.String()
+}
+
+func normalizePullDiagnosticSafeField(value string) string {
+	value = normalizePullDiagnosticText(value)
+	if containsPullDiagnosticSensitiveText(value) {
+		return ""
+	}
+	return value
+}
+
+func containsPullDiagnosticSensitiveText(value string) bool {
+	lower := strings.ToLower(value)
+	for _, marker := range []string{
+		"authorization", "bearer ", "cookie", "password=", "passwd=", "secret=",
+		"token=", "api-key=", "api_key=", "apikey=", "access-token=", "refresh-token=",
+		"hf_token=", "body=",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // AssetArtifactKind separates model payloads from backend runtime artifacts.
@@ -447,6 +801,7 @@ type PullResult struct {
 	SourceID           string
 	ResolverNotes      string
 	FailureStage       PullStage
+	PullDiagnostics    PullDiagnostics
 }
 
 // PullError preserves a classified pull result while retaining its cause.
