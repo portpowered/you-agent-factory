@@ -9,36 +9,55 @@ import (
 )
 
 func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsResponse) error {
-	hasLive := len(result.Sessions) > 0
-	hasDurable := result.DurableSessions != nil && len(*result.DurableSessions) > 0
-	hasRecorded := result.RecordedSessions != nil && len(*result.RecordedSessions) > 0
-	if !hasLive && !hasDurable && !hasRecorded {
+	if !hasListRows(result) {
 		return renderListEmptyState(output, result.Scope)
 	}
-	if hasLive {
-		if err := renderLiveSessionTable(output, result.Sessions); err != nil {
-			return err
-		}
+	return renderListSections(output, result)
+}
+
+type listResultSection struct {
+	present bool
+	render  func() error
+}
+
+func hasListRows(result factoryapi.ListFactorySessionsResponse) bool {
+	return len(result.Sessions) > 0 || hasDurableRows(result) || hasRecordedRows(result)
+}
+
+func hasDurableRows(result factoryapi.ListFactorySessionsResponse) bool {
+	return result.DurableSessions != nil && len(*result.DurableSessions) > 0
+}
+
+func hasRecordedRows(result factoryapi.ListFactorySessionsResponse) bool {
+	return result.RecordedSessions != nil && len(*result.RecordedSessions) > 0
+}
+
+func renderListSections(output io.Writer, result factoryapi.ListFactorySessionsResponse) error {
+	sections := []listResultSection{
+		{present: len(result.Sessions) > 0, render: func() error {
+			return renderLiveSessionTable(output, result.Sessions)
+		}},
+		{present: hasDurableRows(result), render: func() error {
+			return renderDurableSessionTable(output, *result.DurableSessions)
+		}},
+		{present: hasRecordedRows(result), render: func() error {
+			return renderRecordedSessionTable(output, *result.RecordedSessions)
+		}},
 	}
-	if hasDurable {
-		if hasLive {
+	wroteSection := false
+	for _, section := range sections {
+		if !section.present {
+			continue
+		}
+		if wroteSection {
 			if _, err := fmt.Fprintln(output); err != nil {
 				return err
 			}
 		}
-		if err := renderDurableSessionTable(output, *result.DurableSessions); err != nil {
+		if err := section.render(); err != nil {
 			return err
 		}
-	}
-	if hasRecorded {
-		if hasLive || hasDurable {
-			if _, err := fmt.Fprintln(output); err != nil {
-				return err
-			}
-		}
-		if err := renderRecordedSessionTable(output, *result.RecordedSessions); err != nil {
-			return err
-		}
+		wroteSection = true
 	}
 	return nil
 }

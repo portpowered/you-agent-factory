@@ -5,7 +5,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordedsessioninventory "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recorded_session_inventory"
+	recordedsessioninventorywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recorded_session_inventory/wire"
 )
 
 // NewRecordedSessionInventory constructs the Recordings-owned, read-only
@@ -16,5 +16,5 @@ func NewRecordedSessionInventory(
 	replayInputs recordings.ReplayInputLoader,
 	logger logging.Logger,
 ) recordings.RecordedSessionInventory {
-	return recordedsessioninventory.New(readDir, replayInputs, logger)
+	return recordedsessioninventorywire.New(readDir, replayInputs, logger)
 }

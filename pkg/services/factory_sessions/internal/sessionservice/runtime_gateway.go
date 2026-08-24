@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -15,6 +16,7 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
@@ -108,6 +110,122 @@ func (s *Service) ProbeFactoryEventsForSession(
 	defer cancel()
 	_, err := s.SubscribeFactoryEventsForSession(probeCtx, sessionID, reconnect)
 	return err
+}
+
+func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	scope := request.Scope
+	if scope == "" {
+		scope = factorysessions.DefaultSessionListScope
+	}
+	request.Scope = scope
+	result := factorysessions.ListSessionsResult{Scope: scope}
+	if shouldIncludeRecordedHistory(scope, request.ExcludeRecordedHistory) {
+		if scope == factorysessions.SessionListScopeHistory && (a == nil || a.recordedSessionInventory == nil) {
+			return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
+		}
+		recorded, err := a.listRecordedSessions()
+		if err != nil {
+			return factorysessions.ListSessionsResult{}, err
+		}
+		result.RecordedSessions = recorded
+	}
+	if scope == factorysessions.SessionListScopeHistory {
+		return result, nil
+	}
+	return a.mergeDetachedSessionList(ctx, request, result)
+}
+
+func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, excluded bool) bool {
+	return scope == factorysessions.SessionListScopeHistory ||
+		(scope == factorysessions.SessionListScopeAll && !excluded)
+}
+
+func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionListSummary, error) {
+	if a == nil || a.recordedSessionInventory == nil {
+		return nil, nil
+	}
+	root, err := a.recordingRoot()
+	if err != nil {
+		return nil, err
+	}
+	listed, err := a.recordedSessionInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{
+		RecordingRoot: root,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list recorded Factory Sessions: %w", err)
+	}
+	result := make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
+	for _, session := range listed.Sessions {
+		result = append(result, factorysessions.RecordedSessionListSummary{
+			SessionID:         session.FactorySessionID,
+			Source:            factorysessions.RecordedSessionListSourceHistory,
+			ArtifactReference: session.ArtifactReference,
+			Format:            string(session.Format),
+		})
+	}
+	sort.SliceStable(result, func(left, right int) bool {
+		if result[left].SessionID != result[right].SessionID {
+			return result[left].SessionID < result[right].SessionID
+		}
+		return result[left].ArtifactReference < result[right].ArtifactReference
+	})
+	return result, nil
+}
+
+func (a *Assembly) mergeDetachedSessionList(
+	ctx context.Context,
+	request factorysessions.ListSessionsRequest,
+	result factorysessions.ListSessionsResult,
+) (factorysessions.ListSessionsResult, error) {
+	owners := a.detachedOwners()
+	if len(owners) == 0 {
+		if a != nil && a.recordedSessionInventory != nil && request.Scope == factorysessions.SessionListScopeAll {
+			return result, nil
+		}
+		return factorysessions.ListSessionsResult{}, factorysessions.ErrDetachedServiceUnavailable
+	}
+	seenLive := make(map[string]struct{})
+	seenDurable := make(map[string]struct{})
+	for _, owner := range owners {
+		listed, err := owner.ListSessions(ctx, request)
+		if err != nil {
+			return factorysessions.ListSessionsResult{}, err
+		}
+		if result.Scope == "" {
+			result.Scope = listed.Scope
+		}
+		appendUniqueLiveSessions(&result, seenLive, listed.LiveSessions)
+		appendUniqueDurableSessions(&result, seenDurable, listed.DurableSessions)
+	}
+	return result, nil
+}
+
+func appendUniqueLiveSessions(
+	result *factorysessions.ListSessionsResult,
+	seen map[string]struct{},
+	sessions []factorysessions.LiveSessionSummary,
+) {
+	for _, session := range sessions {
+		if _, exists := seen[session.ID]; exists {
+			continue
+		}
+		seen[session.ID] = struct{}{}
+		result.LiveSessions = append(result.LiveSessions, session)
+	}
+}
+
+func appendUniqueDurableSessions(
+	result *factorysessions.ListSessionsResult,
+	seen map[string]struct{},
+	sessions []factorysessions.DurableSessionListSummary,
+) {
+	for _, session := range sessions {
+		if _, exists := seen[session.SessionID]; exists {
+			continue
+		}
+		seen[session.SessionID] = struct{}{}
+		result.DurableSessions = append(result.DurableSessions, session)
+	}
 }
 
 // ReadDurableFactorySessionEventStream reads and materializes one finite

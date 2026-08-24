@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 	"sync"
 
@@ -836,85 +835,6 @@ func (a *Assembly) recordingRoot() (string, error) {
 		return "", fmt.Errorf("resolve recorded session home directory: empty path")
 	}
 	return filepath.Join(home, ".you-agent-factory", "recordings"), nil
-}
-
-func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
-	scope := request.Scope
-	if scope == "" {
-		scope = factorysessions.DefaultSessionListScope
-	}
-	request.Scope = scope
-	result := factorysessions.ListSessionsResult{Scope: scope}
-	includeRecordedHistory := !request.ExcludeRecordedHistory
-	if scope == factorysessions.SessionListScopeHistory || (scope == factorysessions.SessionListScopeAll && includeRecordedHistory) {
-		if a.recordedSessionInventory == nil {
-			if scope == factorysessions.SessionListScopeHistory {
-				return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
-			}
-		} else {
-			root, err := a.recordingRoot()
-			if err != nil {
-				return factorysessions.ListSessionsResult{}, err
-			}
-			listed, err := a.recordedSessionInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{
-				RecordingRoot: root,
-			})
-			if err != nil {
-				return factorysessions.ListSessionsResult{}, fmt.Errorf("list recorded Factory Sessions: %w", err)
-			}
-			result.RecordedSessions = make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
-			for _, session := range listed.Sessions {
-				result.RecordedSessions = append(result.RecordedSessions, factorysessions.RecordedSessionListSummary{
-					SessionID:         session.FactorySessionID,
-					Source:            factorysessions.RecordedSessionListSourceHistory,
-					ArtifactReference: session.ArtifactReference,
-					Format:            string(session.Format),
-				})
-			}
-			sort.SliceStable(result.RecordedSessions, func(left, right int) bool {
-				if result.RecordedSessions[left].SessionID != result.RecordedSessions[right].SessionID {
-					return result.RecordedSessions[left].SessionID < result.RecordedSessions[right].SessionID
-				}
-				return result.RecordedSessions[left].ArtifactReference < result.RecordedSessions[right].ArtifactReference
-			})
-		}
-	}
-	if scope == factorysessions.SessionListScopeHistory {
-		return result, nil
-	}
-	owners := a.detachedOwners()
-	if len(owners) == 0 {
-		if a.recordedSessionInventory != nil && scope == factorysessions.SessionListScopeAll {
-			return result, nil
-		}
-		return factorysessions.ListSessionsResult{}, factorysessions.ErrDetachedServiceUnavailable
-	}
-	seenLive := make(map[string]struct{})
-	seenDurable := make(map[string]struct{})
-	for _, owner := range owners {
-		listed, err := owner.ListSessions(ctx, request)
-		if err != nil {
-			return factorysessions.ListSessionsResult{}, err
-		}
-		if result.Scope == "" {
-			result.Scope = listed.Scope
-		}
-		for _, session := range listed.LiveSessions {
-			if _, exists := seenLive[session.ID]; exists {
-				continue
-			}
-			seenLive[session.ID] = struct{}{}
-			result.LiveSessions = append(result.LiveSessions, session)
-		}
-		for _, session := range listed.DurableSessions {
-			if _, exists := seenDurable[session.SessionID]; exists {
-				continue
-			}
-			seenDurable[session.SessionID] = struct{}{}
-			result.DurableSessions = append(result.DurableSessions, session)
-		}
-	}
-	return result, nil
 }
 
 func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

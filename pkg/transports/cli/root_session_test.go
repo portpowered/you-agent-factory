@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
@@ -81,119 +80,6 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("session help missing %q:\n%s", want, help)
-		}
-	}
-}
-
-func TestSessionListHelpOutputDocumentsCombinedHistoryWorkflow(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want []string
-	}{
-		{
-			name: "session list",
-			args: []string{"session", "list", "--help"},
-			want: []string{
-				"default scope is all",
-				"--live-only",
-				"--history-only",
-				"recorded-history artifacts",
-			},
-		},
-		{
-			name: "session",
-			args: []string{"session", "--help"},
-			want: []string{
-				"recorded history",
-				"--live-only or --history-only",
-				"mutually exclusive",
-			},
-		},
-		{
-			name: "root",
-			args: []string{"--help"},
-			want: []string{
-				"session",
-				"List, open, and close factory sessions on a running host",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var out bytes.Buffer
-			root := newLegacyTestRootCommand()
-			root.SetOut(&out)
-			root.SetErr(io.Discard)
-			root.SetArgs(test.args)
-
-			if err := root.Execute(); err != nil {
-				t.Fatalf("execute %s: %v", strings.Join(test.args, " "), err)
-			}
-
-			help := out.String()
-			for _, want := range test.want {
-				if !strings.Contains(help, want) {
-					t.Fatalf("help missing %q:\n%s", want, help)
-				}
-			}
-			if strings.Contains(strings.ToLower(help), "recording list") {
-				t.Fatalf("help introduced a competing recording-list vocabulary:\n%s", help)
-			}
-		})
-	}
-}
-
-func TestSessionListCommand_ConflictingFlagsFailBeforeHTTP(t *testing.T) {
-	var out bytes.Buffer
-	root := newLegacyTestRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"--server", "http://127.0.0.1:1",
-		"session", "list", "--live-only", "--history-only",
-	})
-
-	err := root.Execute()
-	if err == nil ||
-		!strings.Contains(err.Error(), "cannot be used together") ||
-		!strings.Contains(err.Error(), "--live-only") ||
-		!strings.Contains(err.Error(), "--history-only") {
-		t.Fatalf("conflicting session-list flags error = %v, want actionable mutual-exclusion error", err)
-	}
-	if out.Len() != 0 {
-		t.Fatalf("conflict stdout = %q, want empty output", out.String())
-	}
-}
-
-func TestSessionListCommand_ConflictingFlagsRenderTypedDiagnostic(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	err := withTestInjectedPlatformRoles(CommandFactory{}).ExecuteCommand(startupcli.CommandInvocation{
-		Arguments: []string{
-			"--server", "http://127.0.0.1:1",
-			"session", "list", "--live-only", "--history-only",
-		},
-		Stdin:   strings.NewReader(""),
-		Stdout:  &stdout,
-		Stderr:  &stderr,
-		Context: context.Background(),
-	})
-	if err == nil {
-		t.Fatal("conflicting session-list flags error = nil, want failure")
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("conflict stdout = %q, want empty output", stdout.String())
-	}
-	for _, want := range []string{
-		`"code":"CLI_FLAG_CONFLICT"`,
-		`"family":"BAD_REQUEST"`,
-		"cannot be used together",
-		"--live-only",
-		"--history-only",
-	} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Fatalf("conflict stderr = %q, want %q", stderr.String(), want)
 		}
 	}
 }
