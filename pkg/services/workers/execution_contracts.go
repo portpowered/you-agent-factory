@@ -25,6 +25,9 @@ type InferenceResponse struct {
 	Outcome        WorkOutcome `json:"outcome,omitempty"`
 	Feedback       string      `json:"feedback,omitempty"`
 	Classification string      `json:"classification,omitempty"`
+	// ProposedOutput carries non-text model output across the runner boundary.
+	// Runtime remains the owner that validates and materializes the proposal.
+	ProposedOutput *ProposedOutput `json:"-"`
 	// RecordedOutputWork carries work a decision-envelope reviewer recorded on
 	// its envelope. Runtime validates and materializes these items, so a runner
 	// that parses an envelope must surface them instead of dropping them.

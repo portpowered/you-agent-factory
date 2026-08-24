@@ -32,11 +32,11 @@ func TestNewServiceExecuteRunsScriptInferenceAndAgentAttempts(t *testing.T) {
 	}
 }
 
-func TestNewServiceExecuteManagedInferenceFallsBackThroughProviderRunner(t *testing.T) {
+func TestNewServiceExecuteManagedInferenceUsesModelsDespiteProviderRunner(t *testing.T) {
 	t.Parallel()
 
 	input := newStatelessConstructionInputs()
-	local := &statelessDecliningLocalInvoker{}
+	local := &statelessTestLocalInvoker{}
 	delegate := &statelessInferenceDelegate{}
 	input.inferenceDependencies = runners.InferenceDependencies{
 		Models:   local,
@@ -84,19 +84,14 @@ func TestNewServiceExecuteManagedInferenceFallsBackThroughProviderRunner(t *test
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted || result.Output.Primary[0].Text != "delegate-output" {
-		t.Fatalf("Execute() result = %#v, want accepted delegate output", result)
+	if result.Outcome != workers.ExecutionOutcomeAccepted || result.Output.Primary[0].Text != "inference-output" {
+		t.Fatalf("Execute() result = %#v, want accepted Models output", result)
 	}
 	if local.calls.Load() != 1 {
-		t.Fatalf("Models calls = %d, want one managed-model attempt", local.calls.Load())
+		t.Fatalf("Models calls = %d, want one generic invocation", local.calls.Load())
 	}
-	if local.request.Worker.Name != "selected-inference-worker" || local.request.Worker.Model != "selected-model" {
-		t.Fatalf("Models worker = %#v, want request-selected identity", local.request.Worker)
-	}
-	if delegate.request.RunnerID != workers.RunnerIDCodex ||
-		delegate.request.Model != "selected-model" ||
-		delegate.request.ModelProvider != workers.RunnerIDCodex {
-		t.Fatalf("delegate request = %#v, want provider/model identity preserved", delegate.request)
+	if delegate.request.RunnerID != "" {
+		t.Fatalf("delegate request = %#v, want no provider fallback after Models success", delegate.request)
 	}
 }
 
@@ -162,8 +157,8 @@ func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 		t.Fatalf("inference requests = %d, want 2", len(models))
 	}
 	for index, want := range []string{"model-a", "model-b"} {
-		if models[index].Worker.Model != want {
-			t.Fatalf("inference request[%d].Worker.Model = %q, want %q", index, models[index].Worker.Model, want)
+		if models[index].Model.NameOrURI != want {
+			t.Fatalf("inference request[%d].Model = %q, want %q", index, models[index].Model.NameOrURI, want)
 		}
 	}
 }
@@ -400,10 +395,12 @@ func newStatelessTestFixture(t *testing.T) statelessTestFixture {
 		},
 		runners.InferenceConfig{
 			Worker: models.LocalWorker{
-				Name:  "local-inference",
-				Type:  factorydefinitions.WorkerTypeInference,
-				Model: "local-model",
+				Name:          "local-inference",
+				Type:          factorydefinitions.WorkerTypeInference,
+				Model:         "local-model",
+				ModelLocality: models.RuntimeModelLocalityLocal,
 			},
+			Scope: statelessTestScope(),
 		},
 		runners.InferenceDependencies{Models: local},
 		nil,
@@ -503,6 +500,14 @@ type statelessConstructionInputs struct {
 	inferenceDependencies runners.InferenceDependencies
 }
 
+func statelessTestScope() models.RuntimeScopeRef {
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:stateless-tests")
+	if err != nil {
+		panic(err)
+	}
+	return scope
+}
+
 func newStatelessConstructionInputs() statelessConstructionInputs {
 	return statelessConstructionInputs{
 		agentDependencies: runners.AgentDependencies{
@@ -523,10 +528,12 @@ func newStatelessConstructionInputs() statelessConstructionInputs {
 		},
 		inferenceConfig: runners.InferenceConfig{
 			Worker: models.LocalWorker{
-				Name:  "local-inference",
-				Type:  factorydefinitions.WorkerTypeInference,
-				Model: "local-model",
+				Name:          "local-inference",
+				Type:          factorydefinitions.WorkerTypeInference,
+				Model:         "local-model",
+				ModelLocality: models.RuntimeModelLocalityLocal,
 			},
+			Scope: statelessTestScope(),
 		},
 		inferenceDependencies: runners.InferenceDependencies{
 			Models: &statelessTestLocalInvoker{},
@@ -683,21 +690,7 @@ func clonePlatformCommandRequest(request platformprocess.CommandRequest) platfor
 type statelessTestLocalInvoker struct {
 	calls atomic.Int32
 	mu    sync.Mutex
-	seen  []models.LocalInvocationRequest
-}
-
-type statelessDecliningLocalInvoker struct {
-	calls   atomic.Int32
-	request models.LocalInvocationRequest
-}
-
-func (invoker *statelessDecliningLocalInvoker) InvokeLocal(
-	_ context.Context,
-	request models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	invoker.calls.Add(1)
-	invoker.request = request
-	return models.LocalInvocationResult{Handled: false}, nil
+	seen  []models.InvokeModelRequest
 }
 
 type statelessInferenceDelegate struct {
@@ -712,25 +705,28 @@ func (delegate *statelessInferenceDelegate) Execute(
 	return workers.RunnerExecutionResult{Content: "delegate-output"}, nil
 }
 
-func (invoker *statelessTestLocalInvoker) InvokeLocal(
+func (invoker *statelessTestLocalInvoker) InvokeModel(
 	ctx context.Context,
-	request models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
 	invoker.calls.Add(1)
 	invoker.mu.Lock()
 	invoker.seen = append(invoker.seen, request)
 	invoker.mu.Unlock()
 	_ = ctx
-	return models.LocalInvocationResult{
-		Handled: true,
-		Content: "inference-output",
+	return models.InvokeModelResult{
+		Status: models.ModelInvocationStatusCompleted,
+		Outputs: []models.InferenceOutput{{
+			Name: "text", Modality: models.ModalityText,
+			ContentType: "text/plain", MediaType: "text/plain", Content: "inference-output",
+		}},
 	}, nil
 }
 
-func (invoker *statelessTestLocalInvoker) Requests() []models.LocalInvocationRequest {
+func (invoker *statelessTestLocalInvoker) Requests() []models.InvokeModelRequest {
 	invoker.mu.Lock()
 	defer invoker.mu.Unlock()
-	return append([]models.LocalInvocationRequest(nil), invoker.seen...)
+	return append([]models.InvokeModelRequest(nil), invoker.seen...)
 }
 
 type statelessTestProviders struct {

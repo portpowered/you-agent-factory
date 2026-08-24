@@ -98,7 +98,7 @@ type InferenceConfig struct {
 
 // InferenceDependencies are the exact effects projected into one Inference Runner.
 type InferenceDependencies struct {
-	Models   inference.LocalInvoker
+	Models   inference.ModelInvoker
 	Delegate workers.Runner
 }
 

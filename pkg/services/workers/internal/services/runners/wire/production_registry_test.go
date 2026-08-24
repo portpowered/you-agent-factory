@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
@@ -187,17 +186,14 @@ func TestNewProductionRegistryInferenceFallsBackThroughAgentRunner(t *testing.T)
 		Identity: runners.InferenceIdentity,
 		Attempt:  request,
 	})
-	if err != nil {
-		t.Fatalf("inference fallback Execute() error = %v", err)
+	if err == nil {
+		t.Fatalf("inference failure Execute() error = nil, want Models failure")
 	}
-	if result.Content != "fixture output" {
-		t.Fatalf("inference fallback content = %q, want provider output", result.Content)
+	if result.Content != "" {
+		t.Fatalf("inference failure content = %q, want no successful output", result.Content)
 	}
-	if provider.calls.Load() != 1 {
-		t.Fatalf("provider calls = %d, want one fallback attempt", provider.calls.Load())
-	}
-	if got := provider.Request().Provider; got != providers.IDCodex {
-		t.Fatalf("fallback provider = %q, want %q", got, providers.IDCodex)
+	if provider.calls.Load() != 0 {
+		t.Fatalf("provider calls = %d, want zero after Models failure", provider.calls.Load())
 	}
 }
 
@@ -261,12 +257,12 @@ func validProductionRegistryInputs() (
 	return agentDependencies, scriptConfig, scriptDeps, inferenceConfig, inferenceDeps
 }
 
-type localInvokerFunc func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+type localInvokerFunc func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 
-func (fn localInvokerFunc) InvokeLocal(
+func (fn localInvokerFunc) InvokeModel(
 	ctx context.Context,
-	request models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
 	return fn(ctx, request)
 }
 

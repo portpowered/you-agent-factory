@@ -9,7 +9,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -22,14 +21,17 @@ type Config struct {
 	Scope     models.RuntimeScopeRef
 }
 
-// LocalInvoker is the Models-root local invocation edge required by one Runner.
-type LocalInvoker interface {
-	InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
+// ModelInvoker is the Models-root joined invocation edge required by one
+// Inference Runner. The runner deliberately consumes the generic operation
+// contract so model lifecycle, capacity, codecs, and output normalization stay
+// owned by Models.
+type ModelInvoker interface {
+	InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
 // Dependencies are the exact effects used by one Inference Runner.
 type Dependencies struct {
-	Models   LocalInvoker
+	Models   ModelInvoker
 	Delegate workers.Runner
 }
 
@@ -37,7 +39,7 @@ type runner struct {
 	worker    models.LocalWorker
 	resources []models.LocalResource
 	scope     models.RuntimeScopeRef
-	models    LocalInvoker
+	models    ModelInvoker
 	delegate  workers.Runner
 }
 
@@ -72,38 +74,56 @@ func (r *runner) Execute(
 	composition := r.delegate != nil &&
 		request.RunnerID != "" &&
 		request.RunnerID != Identity
-	if !composition {
-		if err := validateRequest(request); err != nil {
-			return workers.RunnerExecutionResult{}, err
-		}
-		if err := validateModelBindings(request.ModelBindings); err != nil {
-			return workers.RunnerExecutionResult{}, err
-		}
+	if composition {
+		return r.delegate.Execute(ctx, delegateRequest(request))
 	}
-	scope, worker, resources := modelRuntimeProjection(
+	if err := validateRequest(request); err != nil {
+		return workers.RunnerExecutionResult{}, err
+	}
+	if err := validateModelBindings(request.ModelBindings); err != nil {
+		return workers.RunnerExecutionResult{}, err
+	}
+	scope, worker, _ := modelRuntimeProjection(
 		request,
 		r.scope,
 		r.workerForRequest(request),
 		r.resources,
 	)
-	invocation := r.localInvocationRequest(request, scope, worker, resources)
-	if !composition {
-		if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
-			return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
-		}
-	}
-	result, err := r.models.InvokeLocal(ctx, invocation)
-	if !result.Handled {
+	if !worker.UsesManagedRuntime() {
 		if r.delegate != nil {
 			return r.delegate.Execute(ctx, delegateRequest(request))
 		}
+		return workers.RunnerExecutionResult{}, badRequest(
+			"inference worker requires a managed local runtime",
+			nil,
+		)
+	}
+	invocation, err := genericInvocationRequest(request, scope, worker)
+	if err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
+	if err := invocation.ValidateGeneric(); err != nil {
+		return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
+	}
+	result, err := r.models.InvokeModel(ctx, invocation)
+	if err != nil {
+		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(err, request)
+	}
+	if result.Status == models.ModelInvocationStatusFailed ||
+		result.Status == models.ModelInvocationStatusCancelled {
+		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(
+			models.ErrInferenceFailed,
+			request,
+		)
+	}
+	output, err := proposedOutputFromModelResult(result)
 	if err != nil {
 		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(err, request)
 	}
 	return workers.RunnerExecutionResult{
-		Content: result.Content,
+		Content:        textContentFromProposedOutput(output),
+		Outcome:        workers.OutcomeAccepted,
+		ProposedOutput: &output,
 		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
 			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 		}},
@@ -141,24 +161,6 @@ func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecu
 		}
 	}
 	return request
-}
-
-func (r *runner) localInvocationRequest(
-	request workers.RunnerExecutionRequest,
-	scope models.RuntimeScopeRef,
-	worker models.LocalWorker,
-	resources []models.LocalResource,
-) models.LocalInvocationRequest {
-	return models.LocalInvocationRequest{
-		Scope:            scope,
-		Holder:           invocationHolder(request),
-		Worker:           worker,
-		Resources:        resources,
-		Dispatch:         request.Dispatch,
-		ModelOperation:   request.ModelOperation,
-		ModelBindings:    modelBindingsForLocalRuntime(request.ModelBindings),
-		WorkingDirectory: effectiveWorkingDirectory(request),
-	}
 }
 
 func validateRequest(request workers.RunnerExecutionRequest) error {
@@ -216,6 +218,10 @@ func (r *runner) normalizeInvocationError(
 	if errors.Is(err, context.Canceled) {
 		return err
 	}
+	var providerErr *workers.ProviderError
+	if errors.As(err, &providerErr) && providerErr != nil {
+		return err
+	}
 	failure, ok := workers.ClassifyInferenceFailure(err, workers.InferenceFailureContext{
 		ModelName:  firstNonEmpty(request.Model, r.worker.Model),
 		WorkerName: firstNonEmpty(request.WorkerName, request.WorkerType, r.worker.Name),
@@ -245,10 +251,8 @@ func validateWorker(worker models.LocalWorker) error {
 	if strings.TrimSpace(worker.Name) == "" {
 		return misconfigured("inference worker name is required", nil)
 	}
-	if err := models.ValidateLocalInvocationRequest(models.LocalInvocationRequest{
-		Worker: worker,
-	}); err != nil {
-		return misconfigured("inference worker configuration is invalid", err)
+	if worker.UsesManagedRuntime() && strings.TrimSpace(worker.Model) == "" {
+		return misconfigured("inference worker configuration is invalid", models.ErrNotFound)
 	}
 	return nil
 }
@@ -258,30 +262,6 @@ func invocationHolder(request workers.RunnerExecutionRequest) string {
 		return dispatchID
 	}
 	return strings.TrimSpace(request.Dispatch.WorkstationName)
-}
-
-func effectiveWorkingDirectory(request workers.RunnerExecutionRequest) string {
-	if request.WorkingDirectory != "" {
-		return request.WorkingDirectory
-	}
-	return request.Worktree
-}
-
-func modelBindingsForLocalRuntime(
-	values []workers.ResolvedModelOperationBinding,
-) []models.ResolvedModelOperationBinding {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make([]models.ResolvedModelOperationBinding, len(values))
-	for index, value := range values {
-		result[index] = models.ResolvedModelOperationBinding{
-			Slot:    value.Slot,
-			Source:  string(value.Source),
-			Content: work.CloneWorkContentParts(value.Content),
-		}
-	}
-	return result
 }
 
 func snapshotWorker(worker models.LocalWorker) models.LocalWorker {

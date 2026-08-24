@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 )
@@ -43,6 +44,32 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	observationsMu.Lock()
 	defer observationsMu.Unlock()
 	assertSafeCompletedObservations(t, observations)
+}
+
+func TestExecutePreservesNonTextProposedOutput(t *testing.T) {
+	proposed := &workers.ProposedOutput{Primary: []work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
+		URL:         "data:audio/wav;base64,YXVkaW8=",
+		ContentType: "audio/wav",
+		Slot:        "audio",
+	}}}
+	service := mustExecuteService(t, &stubRunner{proposedOutput: proposed}, nil)
+
+	result, err := service.Execute(context.Background(), validExecuteRequest("dispatch-audio", "attempt-audio"))
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || len(result.Output.Primary) != 1 {
+		t.Fatalf("result = %#v, want accepted audio proposal", result)
+	}
+	part := result.Output.Primary[0]
+	if part.Type != work.WorkContentPartTypeAudio || part.URL != proposed.Primary[0].URL ||
+		part.ContentType != "audio/wav" || part.Slot != "audio" {
+		t.Fatalf("output part = %#v, want detached audio proposal", part)
+	}
+	if &result.Output.Primary[0] == &proposed.Primary[0] {
+		t.Fatal("Execute() reused the runner's mutable proposed output")
+	}
 }
 
 func TestExecuteStructuredOutputReturnsValidatedNativeValue(t *testing.T) {

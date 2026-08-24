@@ -19,37 +19,44 @@ const inferenceFixtureExecutionFailure = "fixture execution failure"
 
 type inferenceConformanceModels struct {
 	mu       sync.Mutex
-	request  models.LocalInvocationRequest
+	request  models.InvokeModelRequest
 	calls    *atomic.Int32
 	onInvoke func()
 }
 
-func (service *inferenceConformanceModels) InvokeLocal(
+func (service *inferenceConformanceModels) InvokeModel(
 	_ context.Context,
-	request models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	if service.calls != nil {
 		service.calls.Add(1)
 	}
-	service.request = snapshotConformanceInvocationRequest(request)
+	service.request = request
 	if service.onInvoke != nil {
 		service.onInvoke()
 	}
-	if request.ModelOperation == inferenceFixtureExecutionFailure {
-		return models.LocalInvocationResult{Handled: false}, nil
+	if request.Operation == inferenceFixtureExecutionFailure {
+		return models.InvokeModelResult{}, workers.NewProviderError(
+			workers.WorkFailureTypeInternalServerError,
+			"runner execution failed",
+			errors.New("deterministic fixture failure"),
+		)
 	}
-	return models.LocalInvocationResult{
-		Handled: true,
-		Content: "fixture output",
+	return models.InvokeModelResult{
+		Status: models.ModelInvocationStatusCompleted,
+		Outputs: []models.InferenceOutput{{
+			Name: "text", Modality: models.ModalityText,
+			ContentType: "text/plain", MediaType: "text/plain", Content: "fixture output",
+		}},
 	}, nil
 }
 
-func (service *inferenceConformanceModels) Request() models.LocalInvocationRequest {
+func (service *inferenceConformanceModels) Request() models.InvokeModelRequest {
 	service.mu.Lock()
 	defer service.mu.Unlock()
-	return snapshotConformanceInvocationRequest(service.request)
+	return service.request
 }
 
 type inferenceConformanceDelegate struct{}
@@ -69,7 +76,7 @@ func (delegate *inferenceConformanceDelegate) Execute(
 }
 
 func inferenceDependencies(
-	modelsEdge inference.LocalInvoker,
+	modelsEdge inference.ModelInvoker,
 	delegate workers.Runner,
 ) runners.InferenceDependencies {
 	return runners.InferenceDependencies{
@@ -79,6 +86,10 @@ func inferenceDependencies(
 }
 
 func inferenceRegistryConfig() runners.InferenceConfig {
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:inference-registry")
+	if err != nil {
+		panic(err)
+	}
 	return runners.InferenceConfig{
 		Worker: models.LocalWorker{
 			Name:          "whisper-worker",
@@ -89,6 +100,7 @@ func inferenceRegistryConfig() runners.InferenceConfig {
 		Resources: []models.LocalResource{{
 			ID: "resource-1", Name: "gpu", Type: "MODEL", Capacity: 1, Model: "WHISPER",
 		}},
+		Scope: scope,
 	}
 }
 
@@ -135,21 +147,6 @@ func inferenceRequest() workers.RunnerExecutionRequest {
 			workers.RunnerOptionalCapabilityWorkingDirectory,
 		},
 	}
-}
-
-func snapshotConformanceInvocationRequest(
-	request models.LocalInvocationRequest,
-) models.LocalInvocationRequest {
-	request.Resources = append([]models.LocalResource(nil), request.Resources...)
-	request.ModelBindings = append([]models.ResolvedModelOperationBinding(nil), request.ModelBindings...)
-	for index := range request.ModelBindings {
-		request.ModelBindings[index].Content = work.CloneWorkContentParts(
-			request.ModelBindings[index].Content,
-		)
-	}
-	request.Worker.Resources = append([]models.LocalResource(nil), request.Worker.Resources...)
-	request.Dispatch = work.CloneWorkDispatch(request.Dispatch)
-	return request
 }
 
 func assertInferenceEffectCalls(

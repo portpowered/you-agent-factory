@@ -275,13 +275,20 @@ func normalizeProviderOverrideResult(
 }
 
 func proposedOutputFromRunnerResult(result workers.RunnerExecutionResult) workers.ProposedOutput {
-	output := proposedOutputFromContent(result.Content)
+	output := workers.ProposedOutput{}
+	if result.ProposedOutput != nil {
+		output = result.ProposedOutput.Clone()
+	} else {
+		output = proposedOutputFromContent(result.Content)
+	}
 	output.Feedback = result.Feedback
 	output.Classification = result.Classification
 	// Decision-envelope reviewers record work on the envelope. The detached
 	// path must propose it just as the workstation executor did, so Runtime
 	// keeps validating and materializing those items.
-	output.ProposedWork = workers.ProposedWorkFromFactoryWorkItems(result.RecordedOutputWork)
+	if len(result.RecordedOutputWork) > 0 {
+		output.ProposedWork = workers.ProposedWorkFromFactoryWorkItems(result.RecordedOutputWork)
+	}
 	return output
 }
 

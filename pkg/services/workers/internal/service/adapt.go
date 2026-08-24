@@ -221,9 +221,11 @@ func runnerIDForRequest(request workers.ExecuteRequest, identity string) string 
 	case runners.ScriptIdentity:
 		return runners.ScriptIdentity
 	case runners.InferenceIdentity:
-		if runnerID == "" {
-			return runners.InferenceIdentity
-		}
+		// A local model is selected by the Inference Runner even when the
+		// authored worker retained a provider alias for compatibility. Keep
+		// that alias in ModelProvider for cloud fallback, but do not let it
+		// bypass the Models-root invocation edge.
+		return runners.InferenceIdentity
 	default:
 		if provider := providerIdentity(request.Target.Provider); provider != "" {
 			return provider
