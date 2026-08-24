@@ -112,24 +112,43 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 		return RuntimeMetricsQueryResult{}, callbackErr
 	}
 	if streamErr != nil {
-		q.logger.Error(
-			"Factory Runtime metrics query failed",
-			"metrics_root", root,
-			"session_id", sessionID,
-			"runtime_instance_id", runtimeID,
-			"error", streamErr,
-		)
-		return RuntimeMetricsQueryResult{}, &RuntimeMetricsQueryError{
-			Kind:    RuntimeMetricsQueryReadFailed,
-			Message: "query Factory Runtime metrics: read artifacts",
-			Cause:   streamErr,
-		}
+		return RuntimeMetricsQueryResult{}, q.handleStreamError(streamErr, root, sessionID, runtimeID)
 	}
 	if err := ctx.Err(); err != nil {
 		return RuntimeMetricsQueryResult{}, err
 	}
 
 	return q.finishQuery(accumulator, root, sessionID, runtimeID, considered)
+}
+
+func (q *metricsQuery) handleStreamError(
+	err error,
+	root string,
+	sessionID string,
+	runtimeID string,
+) error {
+	if err == nil {
+		return nil
+	}
+	var queryErr *RuntimeMetricsQueryError
+	if errors.As(err, &queryErr) {
+		return queryErr
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	q.logger.Error(
+		"Factory Runtime metrics query failed",
+		"metrics_root", root,
+		"session_id", sessionID,
+		"runtime_instance_id", runtimeID,
+		"error", err,
+	)
+	return &RuntimeMetricsQueryError{
+		Kind:    RuntimeMetricsQueryReadFailed,
+		Message: "query Factory Runtime metrics: read artifacts",
+		Cause:   err,
+	}
 }
 
 func (q *metricsQuery) streamRecords(

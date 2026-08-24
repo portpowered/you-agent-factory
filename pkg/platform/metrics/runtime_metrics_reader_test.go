@@ -162,6 +162,47 @@ func TestRuntimeMetricsReaderStreamsCancellationAndClosesArtifact(t *testing.T) 
 	}
 }
 
+func TestRuntimeMetricsReaderClosesArtifactsAfterSuccessAndVisitorFailure(t *testing.T) {
+	root := installReaderFixtureTree(t)
+	visitorErr := errors.New("stop after first record")
+
+	tests := []struct {
+		name      string
+		visitor   func(RuntimeMetricRecord) error
+		wantError error
+	}{
+		{
+			name:    "success",
+			visitor: func(RuntimeMetricRecord) error { return nil },
+		},
+		{
+			name:      "visitor failure",
+			visitor:   func(RuntimeMetricRecord) error { return visitorErr },
+			wantError: visitorErr,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			filesystem := &trackingArtifactFileSystem{}
+			reader, err := NewRuntimeMetricsReader(filesystem)
+			if err != nil {
+				t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
+			}
+			err = reader.Stream(context.Background(), root, test.visitor)
+			if test.wantError == nil && err != nil {
+				t.Fatalf("Stream() error = %v, want success", err)
+			}
+			if test.wantError != nil && !errors.Is(err, test.wantError) {
+				t.Fatalf("Stream() error = %v, want %v", err, test.wantError)
+			}
+			if filesystem.opened == 0 || filesystem.closed != filesystem.opened {
+				t.Fatalf("artifact handles opened=%d closed=%d, want every opened artifact closed", filesystem.opened, filesystem.closed)
+			}
+		})
+	}
+}
+
 func TestRuntimeMetricsReaderRequiresFilesystem(t *testing.T) {
 	if reader, err := NewRuntimeMetricsReader(nil); reader != nil || err == nil {
 		t.Fatalf("NewRuntimeMetricsReader(nil) = (%#v, %v), want construction failure", reader, err)
