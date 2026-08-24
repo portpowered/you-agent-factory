@@ -65,16 +65,23 @@ const ALL_FOUNDATION_KEYS = [
   "--color-af-foundation-worker-ink",
 ] as const;
 
+const CSS_SOURCE_DIRECTORY_EXCLUSIONS = new Set([
+  ".git",
+  ".vitest-reports",
+  ".vitest-report-timings",
+  ".warning-inventory",
+  "coverage",
+  "dist",
+  "fallback_dist",
+  "node_modules",
+  "storybook-static",
+]);
+
 function cssSourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (
-        entry.name === ".git" ||
-        entry.name === "dist" ||
-        entry.name === "fallback_dist" ||
-        entry.name === "node_modules"
-      ) {
+      if (CSS_SOURCE_DIRECTORY_EXCLUSIONS.has(entry.name)) {
         return [];
       }
       return cssSourceFiles(entryPath);
@@ -107,6 +114,21 @@ function literalFoundationOwners(): Map<string, Set<string>> {
   }
 
   return owners;
+}
+
+function nonCanonicalFoundationOwnerDiagnostics(
+  owners: Map<string, Set<string>>,
+  canonicalSourceFile: string,
+): string[] {
+  return [...owners.entries()]
+    .filter(
+      ([, tokenOwners]) =>
+        tokenOwners.size !== 1 || !tokenOwners.has(canonicalSourceFile),
+    )
+    .map(
+      ([token, tokenOwners]) =>
+        `${token}: ${[...tokenOwners].sort().join(", ")}`,
+    );
 }
 
 describe("color-palette-presets (US-008)", () => {
@@ -166,6 +188,10 @@ describe("color-palette-presets (US-008)", () => {
         ([token, tokenOwners]) =>
           `${token}: ${[...tokenOwners].sort().join(", ")}`,
       );
+    const nonCanonicalOwners = nonCanonicalFoundationOwnerDiagnostics(
+      owners,
+      canonicalSourceFile,
+    );
 
     expect(
       missingTokens,
@@ -185,5 +211,22 @@ describe("color-palette-presets (US-008)", () => {
         )
         .join("\n")}`,
     ).toEqual([]);
+    expect(
+      nonCanonicalOwners,
+      `Every literal foundation token must be owned only by ${canonicalSourceFile}; got:\n${nonCanonicalOwners.join(
+        "\n",
+      )}`,
+    ).toEqual([]);
+  });
+
+  it("reports a newly introduced literal foundation token in a non-canonical CSS file", () => {
+    const token = "--color-af-foundation-new";
+    const nonCanonicalSourceFile = path.join("src", "styles.css");
+    const canonicalSourceFile = path.relative(uiRoot, palettePresetsSourcePath);
+    const owners = new Map([[token, new Set([nonCanonicalSourceFile])]]);
+
+    expect(
+      nonCanonicalFoundationOwnerDiagnostics(owners, canonicalSourceFile),
+    ).toEqual([`${token}: ${nonCanonicalSourceFile}`]);
   });
 });
