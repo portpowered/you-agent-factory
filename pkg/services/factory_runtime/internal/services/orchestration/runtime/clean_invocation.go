@@ -987,18 +987,3 @@ func orderedRuntimeWorkDispatchTokens(
 	}
 	return ordered, nil
 }
-
-func workerTokenPlaceKey(token workerexecution.Token) string {
-	prefix := strings.TrimSpace(token.Color.WorkTypeID)
-	if prefix == "" {
-		prefix = strings.TrimSpace(token.Color.Name)
-	}
-	stateName := strings.TrimSpace(token.State)
-	if prefix == "" {
-		return stateName
-	}
-	if stateName == "" {
-		return prefix
-	}
-	return prefix + ":" + stateName
-}
