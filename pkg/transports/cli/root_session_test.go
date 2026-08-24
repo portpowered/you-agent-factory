@@ -84,6 +84,88 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	}
 }
 
+func TestSessionListHelpOutputDocumentsCombinedHistoryWorkflow(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{
+			name: "session list",
+			args: []string{"session", "list", "--help"},
+			want: []string{
+				"default scope is all",
+				"--live-only",
+				"--history-only",
+				"recorded-history artifacts",
+			},
+		},
+		{
+			name: "session",
+			args: []string{"session", "--help"},
+			want: []string{
+				"recorded history",
+				"--live-only or --history-only",
+				"mutually exclusive",
+			},
+		},
+		{
+			name: "root",
+			args: []string{"--help"},
+			want: []string{
+				"session",
+				"List, open, and close factory sessions on a running host",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var out bytes.Buffer
+			root := newLegacyTestRootCommand()
+			root.SetOut(&out)
+			root.SetErr(io.Discard)
+			root.SetArgs(test.args)
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute %s: %v", strings.Join(test.args, " "), err)
+			}
+
+			help := out.String()
+			for _, want := range test.want {
+				if !strings.Contains(help, want) {
+					t.Fatalf("help missing %q:\n%s", want, help)
+				}
+			}
+			if strings.Contains(strings.ToLower(help), "recording list") {
+				t.Fatalf("help introduced a competing recording-list vocabulary:\n%s", help)
+			}
+		})
+	}
+}
+
+func TestSessionListCommand_ConflictingFlagsFailBeforeHTTP(t *testing.T) {
+	var out bytes.Buffer
+	root := newLegacyTestRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--server", "http://127.0.0.1:1",
+		"session", "list", "--live-only", "--history-only",
+	})
+
+	err := root.Execute()
+	if err == nil ||
+		!strings.Contains(err.Error(), "cannot be used together") ||
+		!strings.Contains(err.Error(), "--live-only") ||
+		!strings.Contains(err.Error(), "--history-only") {
+		t.Fatalf("conflicting session-list flags error = %v, want actionable mutual-exclusion error", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("conflict stdout = %q, want empty output", out.String())
+	}
+}
+
 func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
