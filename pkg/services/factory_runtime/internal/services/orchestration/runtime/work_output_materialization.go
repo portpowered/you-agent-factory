@@ -456,7 +456,15 @@ func applyMaterializedWorkerOutput(
 	}
 
 	next := result
-	next.OutputContent = work.CloneWorkContentParts(proposals.Primary)
+	if fromDetachedOutput {
+		next.OutputContent = work.CloneWorkContentParts(proposals.Primary)
+	} else {
+		// Legacy provider runners return their structured Work payload in the
+		// text-shaped Output field. Leave OutputContent empty so the existing
+		// token transformer can parse that compatibility representation instead
+		// of treating the serialized JSON as literal TEXT content.
+		next.OutputContent = nil
+	}
 	if text := strings.TrimSpace(materialized.PrimaryOutput); text != "" {
 		next.Output = text
 	}

@@ -715,10 +715,16 @@ type AttemptSummary struct {
 type ProviderContinuationRef = providers.ContinuationRef
 
 type ExecuteResult struct {
-	Correlation             ExecutionCorrelation
-	Outcome                 ExecutionOutcome
-	Cancellation            *DispatchCancellation
-	Output                  ProposedOutput
+	Correlation  ExecutionCorrelation
+	Outcome      ExecutionOutcome
+	Cancellation *DispatchCancellation
+	Output       ProposedOutput
+	// ProposedOutputPresent distinguishes a runner-owned detached proposal
+	// from the compatibility text projection synthesized from legacy runner
+	// content. Runtime must only materialize the former as structured content;
+	// the latter may contain a serialized Work payload that its legacy parser
+	// still needs to decode.
+	ProposedOutputPresent   bool `json:"-"`
 	StructuredResult        any
 	StructuredResultPresent bool
 	ArtifactVerification    *ExpectedArtifactVerification

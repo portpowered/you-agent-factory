@@ -438,9 +438,17 @@ func workstationDispatchResultFromExecute(
 	dispatch := request.Execution.Dispatch
 	workResult := workstationWorkResultFromExecute(request, result)
 	terminal, reconciliationReason := classifyWorkstationDispatchResult(result, executeErr, &workResult)
-	proposedOutput := result.Output.Clone()
+	var proposedOutput *workers.ProposedOutput
+	if result.ProposedOutputPresent {
+		output := result.Output.Clone()
+		proposedOutput = &output
+	}
 	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
-		clearWorkstationCanceledResult(&workResult, &proposedOutput)
+		if proposedOutput != nil {
+			clearWorkstationCanceledResult(&workResult, proposedOutput)
+		} else {
+			clearWorkstationCanceledResult(&workResult, &workers.ProposedOutput{})
+		}
 	}
 	reconciliationReason = processGoneDispatchResult(&workResult, &terminal, executeErr)
 	return workers.WorkstationDispatchResult{
@@ -450,7 +458,7 @@ func workstationDispatchResultFromExecute(
 		ReconciliationReason: reconciliationReason,
 		Cancellation:         workResult.Cancellation.Clone(),
 		Result:               workResult,
-		ProposedOutput:       &proposedOutput,
+		ProposedOutput:       proposedOutput,
 	}, executeErr
 }
 

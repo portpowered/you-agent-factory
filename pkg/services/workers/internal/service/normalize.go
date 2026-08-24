@@ -51,6 +51,7 @@ func (s *Service) normalizeSuccessfulResult(
 ) (workers.ExecuteResult, error) {
 	result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
 	result.Output = proposedOutputFromRunnerResult(runnerResult)
+	result.ProposedOutputPresent = runnerResult.ProposedOutput != nil
 	switch result.Outcome {
 	case workers.ExecutionOutcomeFailed:
 		return result, errors.New("runner returned failed outcome")

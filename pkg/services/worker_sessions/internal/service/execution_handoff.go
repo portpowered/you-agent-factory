@@ -298,7 +298,11 @@ func dispatchResultFromExecute(
 	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
 		clearCanceledDispatchResult(&workResult)
 	}
-	output := result.Output.Clone()
+	var output *workers.ProposedOutput
+	if result.ProposedOutputPresent {
+		proposed := result.Output.Clone()
+		output = &proposed
+	}
 	return workers.WorkstationDispatchResult{
 		DispatchID:           request.Execution.Dispatch.DispatchID,
 		WorkstationName:      request.WorkstationName,
@@ -306,7 +310,7 @@ func dispatchResultFromExecute(
 		ReconciliationReason: reconciliationReason,
 		Cancellation:         workResult.Cancellation.Clone(),
 		Result:               workResult,
-		ProposedOutput:       &output,
+		ProposedOutput:       output,
 	}, dispatchErr
 }
 

@@ -277,6 +277,17 @@ func packagedTTSPrimaryAudio(
 		t.Fatal("primary result is empty, want one audio Work part")
 	}
 	for _, part := range *primaryResult {
+		if audioPart, err := part.AsWorkAudioContentPart(); err == nil {
+			const prefix = "data:audio/wav;base64,"
+			if !strings.HasPrefix(audioPart.Url, prefix) {
+				continue
+			}
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(audioPart.Url, prefix))
+			if err != nil {
+				t.Fatalf("decode joined audio Work URL: %v", err)
+			}
+			return decoded
+		}
 		textPart, err := part.AsWorkTextContentPart()
 		if err != nil {
 			continue
@@ -291,6 +302,6 @@ func packagedTTSPrimaryAudio(
 		}
 		return decoded
 	}
-	t.Fatalf("primary result = %#v, want one audio/wav data URL text part", primaryResult)
+	t.Fatalf("primary result = %#v, want one audio/wav data URL Work part", primaryResult)
 	return nil
 }
