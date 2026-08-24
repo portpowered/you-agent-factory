@@ -177,6 +177,121 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	}
 }
 
+func TestProcessModelsInvokeGenericInputsUsesEmbedContract(t *testing.T) {
+	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeReadyGenericModelCache(t, home, processEmbedModelSource)
+	writeReadyGenericBackendCache(t, home, embedBackendSelection(), []byte("localai-llamacpp/linux-amd64"))
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, processBuiltInOnlyFactory())
+	inputPath := filepath.Join(factoryDir, "notes.md")
+	if err := os.WriteFile(inputPath, []byte("Find similar work"), 0o644); err != nil {
+		t.Fatalf("write generic input fixture: %v", err)
+	}
+	assetFiles := processModelAssetFileSystem{home: home}
+
+	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelCLIInputReadFile:          assetFiles.ReadFile,
+		ModelAssetHTTPClient:           &processRejectingAssetHTTP{},
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelHostProcessLauncher:       &processModelLauncher{endpoint: modelServer.URL},
+		ModelHostProtocolNegotiator:    &processGenericProtocolNegotiator{},
+		ModelHostCompatibilityChecker:  &processGenericCompatibilityChecker{},
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			return embedBackendSelection(), nil
+		},
+		ModelAssetHostPlatform: modelservice.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:    modelServer.Client(),
+		ModelRuntimeHTTPClient: modelServer.Client(),
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := process.Close(context.Background()); closeErr != nil {
+			t.Errorf("close process: %v", closeErr)
+		}
+	})
+
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	if err := process.Execute(root.Input{
+		Args: []string{
+			"you", "--json", "models", "invoke", "embed",
+			"--input", "text=@" + inputPath,
+			"--input", `parameters=json:{"normalize":true}`,
+		},
+		Env:              homeEnvironment(home),
+		Stdout:           &output,
+		Stderr:           &diagnostics,
+		Context:          context.Background(),
+		WorkingDirectory: factoryDir,
+	}); err != nil {
+		t.Fatalf("Process.Execute(generic embed) error = %v", err)
+	}
+
+	var response factoryapi.GenericModelInvocationResponse
+	assertProcessGenericEmbedResponse(t, output.Bytes(), &response)
+	if diagnostics.Len() != 0 {
+		t.Fatalf("generic embed stderr = %q, want empty", diagnostics.String())
+	}
+
+	output.Reset()
+	diagnostics.Reset()
+	err = process.Execute(root.Input{
+		Args: []string{"you", "models", "invoke", "embed", "--input", "unknown=value"},
+		Env:  homeEnvironment(home), Stdout: &output, Stderr: &diagnostics,
+		Context: context.Background(), WorkingDirectory: factoryDir,
+	})
+	if err == nil {
+		t.Fatal("unknown generic input error = nil, want preflight failure")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("unknown generic input stdout = %q, want empty", output.String())
+	}
+	support.RequireSafeCLIDiagnostic(t, diagnostics.String())
+}
+
+func assertProcessGenericEmbedResponse(
+	t *testing.T,
+	data []byte,
+	response *factoryapi.GenericModelInvocationResponse,
+) {
+	t.Helper()
+	if err := json.Unmarshal(data, response); err != nil {
+		t.Fatalf("decode generic embed output: %v\n%s", err, data)
+	}
+	if len(response.Outputs) != 1 {
+		t.Fatalf("generic embed outputs = %#v, want one named JSON output", response.Outputs)
+	}
+	output := response.Outputs[0]
+	if output.Name != "embedding" || output.Modality != factoryapi.ModelInvocationContentTypeJSON ||
+		output.ContentType == nil || *output.ContentType != "application/json" {
+		t.Fatalf("generic embed response = %#v, want one named JSON output", *response)
+	}
+}
+
 func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testing.T) {
 	audio := []byte("RIFF....WAVE")
 	var backendMu sync.Mutex

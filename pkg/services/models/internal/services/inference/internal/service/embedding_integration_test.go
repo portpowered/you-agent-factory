@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
-	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	inferenceservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service"
 )
 
 func TestEmbeddingRuntimeMapsFixtureThroughModelsAndReleasesLease(t *testing.T) {
@@ -23,7 +23,7 @@ func TestEmbeddingRuntimeMapsFixtureThroughModelsAndReleasesLease(t *testing.T) 
 	backend := &recordingEmbeddingBackend{
 		response: codecs.EmbeddingResponse{Embeddings: []float64{0.1, 0.2, 0.3, 0.4}},
 	}
-	runtime, err := inference.NewEmbeddingInvocationRuntime(backend)
+	runtime, err := inferenceservice.NewEmbeddingInvocationRuntime(backend)
 	if err != nil {
 		t.Fatalf("construct embedding runtime: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestEmbeddingRuntimeFailuresAreTypedAtomicAndReleaseLease(t *testing.T) {
 				},
 			}
 			backend := &recordingEmbeddingBackend{backendErr: test.backendErr, response: test.response}
-			runtime, err := inference.NewEmbeddingInvocationRuntime(backend)
+			runtime, err := inferenceservice.NewEmbeddingInvocationRuntime(backend)
 			if err != nil {
 				t.Fatalf("construct embedding runtime: %v", err)
 			}
@@ -136,7 +136,7 @@ func TestEmbeddingRuntimeCancellationReleasesLease(t *testing.T) {
 		},
 	}
 	backend := &recordingEmbeddingBackend{waitForCancellation: true}
-	runtime, err := inference.NewEmbeddingInvocationRuntime(backend)
+	runtime, err := inferenceservice.NewEmbeddingInvocationRuntime(backend)
 	if err != nil {
 		t.Fatalf("construct embedding runtime: %v", err)
 	}

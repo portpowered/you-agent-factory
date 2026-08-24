@@ -237,11 +237,23 @@ func TestHandler_InvokeGenericModelEmbedReturnsCanonicalNamedJSONOutput(t *testi
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
 	}
-	if captured.Scope != binding.Scope || captured.Model.NameOrURI != "embed" || captured.Operation != "" ||
-		captured.OutputMode != models.OutputModeJSON || len(captured.Inputs) != 2 || captured.Inputs[0].Name != "text" ||
-		captured.Inputs[1].Name != "parameters" {
-		t.Fatalf("root EMBED request = %#v, want live scope, inferred operation, and ordered named inputs", captured)
+	assertCapturedEmbedRequest(t, captured, binding.Scope)
+	assertCanonicalEmbedHTTPResponse(t, recorder)
+}
+
+func assertCapturedEmbedRequest(t *testing.T, request models.InvokeModelRequest, scope models.RuntimeScopeRef) {
+	t.Helper()
+	if request.Scope != scope || request.Model.NameOrURI != "embed" || request.Operation != "" ||
+		request.OutputMode != models.OutputModeJSON || len(request.Inputs) != 2 {
+		t.Fatalf("root EMBED request = %#v, want live scope, inferred operation, and ordered named inputs", request)
 	}
+	if request.Inputs[0].Name != "text" || request.Inputs[1].Name != "parameters" {
+		t.Fatalf("root EMBED inputs = %#v, want text then parameters", request.Inputs)
+	}
+}
+
+func assertCanonicalEmbedHTTPResponse(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
 	var response factoryapi.GenericModelInvocationResponse
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode EMBED response: %v", err)

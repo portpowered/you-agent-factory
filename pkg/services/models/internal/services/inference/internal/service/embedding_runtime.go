@@ -1,4 +1,4 @@
-package inference
+package service
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
 // EmbeddingBackend is the narrow backend seam required by the EMBED runtime.
@@ -37,31 +38,34 @@ func NewEmbeddingInvocationRuntime(backend EmbeddingBackend) (EmbeddingInvocatio
 }
 
 // Invoke implements the Models inference runtime seam.
-func (runtime EmbeddingInvocationRuntime) Invoke(ctx context.Context, request InvocationRuntimeRequest) (InvocationRuntimeResult, error) {
+func (runtime EmbeddingInvocationRuntime) Invoke(
+	ctx context.Context,
+	request inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if operation := strings.TrimSpace(request.Request.Operation); !strings.EqualFold(operation, models.OperationEMBED) {
-		return InvocationRuntimeResult{}, &models.InvocationFailure{
+		return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
 			Class:     models.InvocationFailureClassInvalidOperation,
 			Operation: models.OperationEMBED,
 			Message:   "EMBED runtime received an unsupported operation",
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return InvocationRuntimeResult{}, err
+		return inference.InvocationRuntimeResult{}, err
 	}
 
 	backendRequest, err := runtime.codec.EncodeRequest(request.Request)
 	if err != nil {
-		return InvocationRuntimeResult{}, err
+		return inference.InvocationRuntimeResult{}, err
 	}
 	backendResponse, err := runtime.backend.InvokeEmbedding(ctx, backendRequest)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return InvocationRuntimeResult{}, err
+			return inference.InvocationRuntimeResult{}, err
 		}
-		return InvocationRuntimeResult{}, &models.InvocationFailure{
+		return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
 			Class:     models.InvocationFailureClassBackendProtocol,
 			Operation: models.OperationEMBED,
 			Message:   "EMBED backend invocation failed",
@@ -69,14 +73,14 @@ func (runtime EmbeddingInvocationRuntime) Invoke(ctx context.Context, request In
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return InvocationRuntimeResult{}, err
+		return inference.InvocationRuntimeResult{}, err
 	}
 
 	content, err := runtime.codec.DecodeResponseValue(backendResponse)
 	if err != nil {
-		return InvocationRuntimeResult{}, err
+		return inference.InvocationRuntimeResult{}, err
 	}
-	return InvocationRuntimeResult{Content: []models.InferenceContent{content}}, nil
+	return inference.InvocationRuntimeResult{Content: []models.InferenceContent{content}}, nil
 }
 
 func isNilEmbeddingBackend(backend EmbeddingBackend) bool {

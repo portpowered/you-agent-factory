@@ -1,6 +1,41 @@
 package apicontract_test
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestOpenAPIContract_GenericModelInvocationSupportsSoleOperationInference(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	schemas := componentSchemas(t, doc)
+
+	invokeGenericModel := pathOperation(t, paths, "/models/invocations", "post")
+	if got, _ := invokeGenericModel["operationId"].(string); got != "invokeGenericModel" {
+		t.Fatalf("paths./models/invocations.post.operationId = %q, want invokeGenericModel", got)
+	}
+	assertRequestSchemaRef(t, invokeGenericModel, "#/components/schemas/GenericModelInvocationRequest")
+	assertResponseSchemaRef(t, invokeGenericModel, "200", "#/components/schemas/GenericModelInvocationResponse")
+	assertResponseRef(t, invokeGenericModel, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, invokeGenericModel, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, invokeGenericModel, "500", "#/components/responses/InternalError")
+
+	genericRequest := schemaObject(t, schemas, "GenericModelInvocationRequest")
+	assertRequiredFields(t, genericRequest, "scope", "holder", "model")
+	if required, ok := genericRequest["required"].([]any); !ok || containsString(required, "operation") {
+		t.Fatalf("GenericModelInvocationRequest.required = %#v, want operation optional for sole-operation inference", genericRequest["required"])
+	}
+	genericProperties := schemaProperties(t, genericRequest, "GenericModelInvocationRequest")
+	operationProperty, ok := genericProperties["operation"].(map[string]any)
+	operationDescription, _ := operationProperty["description"].(string)
+	lowerOperationDescription := strings.ToLower(operationDescription)
+	if !ok || !strings.Contains(lowerOperationDescription, "omit") || !strings.Contains(lowerOperationDescription, "operation") {
+		t.Fatalf("GenericModelInvocationRequest.operation must document sole-operation inference, got %#v", genericProperties["operation"])
+	}
+}
 
 func TestOpenAPIContract_ErrorResponseTargetsUseCanonicalValidationTargetShape(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)

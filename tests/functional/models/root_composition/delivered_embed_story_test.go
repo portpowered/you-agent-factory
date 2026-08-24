@@ -170,18 +170,29 @@ func TestDeliveredEmbedHTTPArtifactReachesProtocolFixture(t *testing.T) {
 			stopServer()
 			t.Fatalf("delivered HTTP request did not become ready: error=%v status/body=%q server-stdout=%q server-stderr=%q", doErr, responseBody, serverStdout.String(), serverStderr.String())
 		}
+		// The shipped server is a real OS process; readiness is observable only
+		// through its HTTP boundary, so this bounded retry is the process-level
+		// synchronization required by this proof cell.
 		time.Sleep(100 * time.Millisecond)
 	}
 	stopServer()
 	t.Logf("delivered HTTP command: POST /models/invocations payload=%s", payload)
 	t.Logf("delivered HTTP output: response=%s server-stdout=%q server-stderr=%q", responseBody, serverStdout.String(), serverStderr.String())
-	if len(response.Outputs) != 1 || response.Outputs[0].Name != "embedding" ||
-		response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeJSON ||
-		response.Outputs[0].Content == nil || *response.Outputs[0].Content != `[0.1,0.2,0.3,0.4]` {
-		t.Fatalf("delivered HTTP response = %#v, want one named JSON vector", response)
-	}
+	assertDeliveredEmbedHTTPResponse(t, response)
 	if fixture.assetCalls() < 3 {
 		t.Fatalf("delivered HTTP cache-miss asset calls = %d, want manifest, model, and backend exchanges", fixture.assetCalls())
+	}
+}
+
+func assertDeliveredEmbedHTTPResponse(t *testing.T, response factoryapi.GenericModelInvocationResponse) {
+	t.Helper()
+	if len(response.Outputs) != 1 {
+		t.Fatalf("delivered HTTP outputs = %#v, want one named JSON vector", response.Outputs)
+	}
+	output := response.Outputs[0]
+	if output.Name != "embedding" || output.Modality != factoryapi.ModelInvocationContentTypeJSON ||
+		output.Content == nil || *output.Content != `[0.1,0.2,0.3,0.4]` {
+		t.Fatalf("delivered HTTP response = %#v, want one named JSON vector", response)
 	}
 }
 

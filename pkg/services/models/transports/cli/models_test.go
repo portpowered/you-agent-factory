@@ -86,6 +86,7 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 }
+
 func resolvedInvokeHandlerInputs(
 	t *testing.T,
 	server string,

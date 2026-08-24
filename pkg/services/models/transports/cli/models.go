@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -699,4 +701,162 @@ func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusC
 		return
 	}
 	clidiag.Printf(diagnostics.Output, diagnostics.Enabled, "%s response endpointPath=%s status=%d durationMillis=%d %s", diagnostics.Command, endpoint.Path, statusCode, elapsed.Milliseconds(), summary)
+}
+
+const maxGenericCLIInputBytes = 16 << 20
+
+func parseGenericCLIInputs(
+	ctx context.Context,
+	bindings []string,
+	readFile InputFileReader,
+) ([]modelinference.InferenceInput, error) {
+	inputs := make([]modelinference.InferenceInput, 0, len(bindings))
+	for _, binding := range bindings {
+		if err := genericCLIContextErr(ctx); err != nil {
+			return nil, err
+		}
+		parts := strings.SplitN(binding, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid --input %q: expected slot=value, slot=@path, or slot=json:value", binding)
+		}
+		slot := strings.TrimSpace(parts[0])
+		value := parts[1]
+		if slot == "" {
+			return nil, fmt.Errorf("invalid --input %q: slot name is required", binding)
+		}
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("invalid --input for slot %q: value is required", slot)
+		}
+
+		var input modelinference.InferenceInput
+		var err error
+		switch {
+		case strings.HasPrefix(value, "json:"):
+			jsonValue := strings.TrimPrefix(value, "json:")
+			if strings.TrimSpace(jsonValue) == "" {
+				return nil, fmt.Errorf("invalid JSON input for slot %q: value is required after json:", slot)
+			}
+			if err := validateSingleGenericCLIJSON(jsonValue); err != nil {
+				return nil, fmt.Errorf("invalid JSON input for slot %q: %w", slot, err)
+			}
+			input = modelinference.InferenceInput{
+				Name: slot, Modality: modelinference.ModalityJSON,
+				ContentType: "application/json", MediaType: "application/json",
+				Content: jsonValue,
+			}
+		case strings.HasPrefix(value, "@"):
+			input, err = readGenericCLIFileInput(ctx, slot, strings.TrimPrefix(value, "@"), readFile)
+			if err != nil {
+				return nil, err
+			}
+		default:
+			input = modelinference.InferenceInput{
+				Name: slot, Modality: modelinference.ModalityText,
+				ContentType: "text/plain", MediaType: "text/plain", Content: value,
+			}
+		}
+		inputs = append(inputs, input)
+	}
+	if err := genericCLIContextErr(ctx); err != nil {
+		return nil, err
+	}
+	return inputs, nil
+}
+
+func readGenericCLIFileInput(
+	ctx context.Context,
+	slot string,
+	path string,
+	readFile InputFileReader,
+) (modelinference.InferenceInput, error) {
+	if path == "" {
+		return modelinference.InferenceInput{}, fmt.Errorf("invalid file input for slot %q: path is required after @", slot)
+	}
+	if readFile == nil {
+		return modelinference.InferenceInput{}, fmt.Errorf("read file input for slot %q: file reader is not configured", slot)
+	}
+	if err := genericCLIContextErr(ctx); err != nil {
+		return modelinference.InferenceInput{}, err
+	}
+	content, err := readFile(path)
+	if err != nil {
+		return modelinference.InferenceInput{}, fmt.Errorf("read file input for slot %q: %w", slot, err)
+	}
+	if err := genericCLIContextErr(ctx); err != nil {
+		return modelinference.InferenceInput{}, err
+	}
+	if len(content) > maxGenericCLIInputBytes {
+		return modelinference.InferenceInput{}, fmt.Errorf(
+			"file input for slot %q exceeds the %d-byte limit",
+			slot, maxGenericCLIInputBytes,
+		)
+	}
+
+	mediaType := genericCLIFileMediaType(path, content)
+	modality := genericCLIFileModality(mediaType)
+	if modality == modelinference.ModalityText {
+		// A file can be named .md, .csv, or another text format while the
+		// provider-neutral operation contract accepts text/plain. The content
+		// remains detached inline text; text/plain is the compatible media
+		// representation for the generic Models contract.
+		mediaType = "text/plain"
+	}
+	return modelinference.InferenceInput{
+		Name: slot, Modality: modality, ContentType: mediaType,
+		MediaType: mediaType, Content: string(content),
+	}, nil
+}
+
+func validateSingleGenericCLIJSON(value string) error {
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err == nil {
+		return fmt.Errorf("multiple JSON values are not allowed")
+	} else if err != io.EOF {
+		return err
+	}
+	return nil
+}
+
+func genericCLIFileMediaType(path string, content []byte) string {
+	mediaType := mime.TypeByExtension(filepath.Ext(path))
+	if mediaType == "" {
+		mediaType = http.DetectContentType(content)
+	}
+	if parsed, _, err := mime.ParseMediaType(mediaType); err == nil {
+		mediaType = parsed
+	}
+	if strings.TrimSpace(mediaType) == "" {
+		return "application/octet-stream"
+	}
+	return mediaType
+}
+
+func genericCLIFileModality(mediaType string) modelinference.Modality {
+	switch {
+	case strings.HasPrefix(mediaType, "text/"):
+		return modelinference.ModalityText
+	case mediaType == "application/json" || strings.HasSuffix(mediaType, "+json"):
+		return modelinference.ModalityJSON
+	case strings.HasPrefix(mediaType, "image/"):
+		return modelinference.ModalityImage
+	case strings.HasPrefix(mediaType, "audio/"):
+		return modelinference.ModalityAudio
+	case strings.HasPrefix(mediaType, "video/"):
+		return modelinference.ModalityVideo
+	default:
+		return modelinference.ModalityBinary
+	}
+}
+
+func genericCLIContextErr(ctx context.Context) error {
+	if ctx == nil {
+		return fmt.Errorf("context is required")
+	}
+	return ctx.Err()
 }

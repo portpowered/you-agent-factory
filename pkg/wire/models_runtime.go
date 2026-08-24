@@ -664,6 +664,17 @@ func provideModelsCLIInvocationOperation(
 	return modelsCLIInvocationOperation{invocation: invocation}
 }
 
+func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
+	readFile := edges.ModelCLIInputReadFile
+	if readFile == nil && edges.ModelAssetReadFile != nil {
+		readFile = serviceedges.ModelCLIInputReadFile(edges.ModelAssetReadFile)
+	}
+	if readFile == nil {
+		readFile = os.ReadFile
+	}
+	return modelscli.InputFileReader(readFile)
+}
+
 // modelsCLIInvocationOperation maps the four invocation inputs the Models CLI
 // resolves onto the fuller Factory Sessions invocation target. Owning the
 // mapping here keeps the Models CLI transport free of a Factory Sessions

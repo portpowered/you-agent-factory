@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -73,53 +74,12 @@ func (EmbedCodec) EncodeRequest(request models.InvokeModelRequest) (EmbeddingReq
 	if len(inputs) == 0 && hasInput(request.Input) {
 		inputs = []models.InferenceInput{request.Input}
 	}
-
-	var (
-		text       string
-		textSeen   bool
-		paramsSeen bool
-		parameters = make(map[string]any)
-	)
-	for _, input := range inputs {
-		switch input.Name {
-		case "text":
-			if textSeen {
-				return EmbeddingRequest{}, repeatedSlotFailure("text")
-			}
-			if err := validateTextInput(input); err != nil {
-				return EmbeddingRequest{}, err
-			}
-			text = input.Content
-			textSeen = true
-		case "parameters":
-			if paramsSeen {
-				return EmbeddingRequest{}, repeatedSlotFailure("parameters")
-			}
-			if err := validateParametersInput(input); err != nil {
-				return EmbeddingRequest{}, err
-			}
-			parsed, err := parseParameterObject(input.Content)
-			if err != nil {
-				return EmbeddingRequest{}, invalidParametersFailure()
-			}
-			for name, value := range parsed {
-				if err := addParameter(parameters, name, value); err != nil {
-					return EmbeddingRequest{}, err
-				}
-			}
-			paramsSeen = true
-		default:
-			return EmbeddingRequest{}, unknownSlotFailure(input.Name)
-		}
+	text, parameters, err := encodeEmbeddingInputs(inputs)
+	if err != nil {
+		return EmbeddingRequest{}, err
 	}
-
-	if !textSeen {
-		return EmbeddingRequest{}, missingTextFailure()
-	}
-	for _, parameter := range request.Parameters {
-		if err := addParameter(parameters, parameter.Name, parameter.Value); err != nil {
-			return EmbeddingRequest{}, err
-		}
+	if err := addEmbeddingRequestParameters(parameters, request.Parameters); err != nil {
+		return EmbeddingRequest{}, err
 	}
 
 	if len(parameters) == 0 {
@@ -129,6 +89,68 @@ func (EmbedCodec) EncodeRequest(request models.InvokeModelRequest) (EmbeddingReq
 		Prompt:     text,
 		Parameters: cloneObject(parameters),
 	}, nil
+}
+
+func encodeEmbeddingInputs(inputs []models.InferenceInput) (string, map[string]any, error) {
+	parameters := make(map[string]any)
+	var text string
+	textSeen := false
+	parametersSeen := false
+	for _, input := range inputs {
+		switch input.Name {
+		case "text":
+			if textSeen {
+				return "", nil, repeatedSlotFailure("text")
+			}
+			if err := validateTextInput(input); err != nil {
+				return "", nil, err
+			}
+			text = input.Content
+			textSeen = true
+		case "parameters":
+			if parametersSeen {
+				return "", nil, repeatedSlotFailure("parameters")
+			}
+			if err := validateParametersInput(input); err != nil {
+				return "", nil, err
+			}
+			parsed, err := parseParameterObject(input.Content)
+			if err != nil {
+				return "", nil, invalidParametersFailure()
+			}
+			if err := mergeEmbeddingParameters(parameters, parsed); err != nil {
+				return "", nil, err
+			}
+			parametersSeen = true
+		default:
+			return "", nil, unknownSlotFailure(input.Name)
+		}
+	}
+	if !textSeen {
+		return "", nil, missingTextFailure()
+	}
+	return text, parameters, nil
+}
+
+func mergeEmbeddingParameters(destination, source map[string]any) error {
+	for name, value := range source {
+		if err := addParameter(destination, name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addEmbeddingRequestParameters(
+	parameters map[string]any,
+	request []models.OperationParameter,
+) error {
+	for _, parameter := range request {
+		if err := addParameter(parameters, parameter.Name, parameter.Value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // MarshalRequest maps and serializes a request using deterministic JSON
@@ -281,38 +303,36 @@ func validateParameter(name string, value any) error {
 }
 
 func positiveInteger(value any) bool {
-	switch number := value.(type) {
-	case json.Number:
+	if number, ok := value.(json.Number); ok {
 		integer, err := number.Int64()
-		return err == nil && integer > 0 && integer <= maxEmbeddingDimensions
-	case float64:
-		return !math.IsNaN(number) && !math.IsInf(number, 0) && math.Trunc(number) == number && number > 0 && number <= maxEmbeddingDimensions
-	case float32:
-		converted := float64(number)
-		return !math.IsNaN(converted) && !math.IsInf(converted, 0) && math.Trunc(converted) == converted && converted > 0 && converted <= maxEmbeddingDimensions
-	case int:
-		return number > 0 && number <= maxEmbeddingDimensions
-	case int8:
-		return number > 0
-	case int16:
-		return number > 0
-	case int32:
-		return number > 0
-	case int64:
-		return number > 0 && number <= maxEmbeddingDimensions
-	case uint:
-		return number > 0 && number <= maxEmbeddingDimensions
-	case uint8:
-		return number > 0
-	case uint16:
-		return number > 0
-	case uint32:
-		return number > 0 && number <= maxEmbeddingDimensions
-	case uint64:
-		return number > 0 && number <= maxEmbeddingDimensions
+		return err == nil && positiveSignedInteger(integer)
+	}
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return false
+	}
+	switch kind := reflected.Kind(); {
+	case kind >= reflect.Int && kind <= reflect.Int64:
+		return positiveSignedInteger(reflected.Int())
+	case kind >= reflect.Uint && kind <= reflect.Uintptr:
+		return positiveUnsignedInteger(reflected.Uint())
+	case kind == reflect.Float32 || kind == reflect.Float64:
+		return positiveFloat(reflected.Float())
 	default:
 		return false
 	}
+}
+
+func positiveSignedInteger(value int64) bool {
+	return value > 0 && value <= maxEmbeddingDimensions
+}
+
+func positiveUnsignedInteger(value uint64) bool {
+	return value > 0 && value <= maxEmbeddingDimensions
+}
+
+func positiveFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && math.Trunc(value) == value && value > 0 && value <= maxEmbeddingDimensions
 }
 
 func cloneObject(object map[string]any) map[string]any {
