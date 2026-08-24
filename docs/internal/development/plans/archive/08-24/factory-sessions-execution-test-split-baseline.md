@@ -1,3 +1,5 @@
+Status: complete, archived 2026-08-24
+
 # Factory Sessions execution test split — story 001 baseline
 
 Captured: 2026-08-10 13:39 -07:00
