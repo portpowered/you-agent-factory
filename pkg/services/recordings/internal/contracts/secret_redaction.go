@@ -2,6 +2,8 @@ package contracts
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -126,6 +128,110 @@ func RedactDeclaredSecrets(request RecordingRedactionRequest) (RecordingRedactio
 		Payload:       encoded,
 		RedactedCount: len(paths),
 	}, nil
+}
+
+// RedactCanonicalEvents returns a detached event slice whose classified
+// payload values have been replaced before an enclosing recording is
+// serialized. The optional map is keyed by event index, and each pointer is
+// relative to that event's Payload. Provenance is not copied into the result.
+func RedactCanonicalEvents(
+	events []CanonicalEvent,
+	provenance ...map[int][]RecordingSecret,
+) ([]CanonicalEvent, int, error) {
+	redacted := make([]CanonicalEvent, len(events))
+	redactedCount := 0
+	var eventProvenance map[int][]RecordingSecret
+	if len(provenance) > 0 {
+		eventProvenance = provenance[0]
+	}
+	for index, secrets := range eventProvenance {
+		if len(secrets) == 0 {
+			continue
+		}
+		if index < 0 || index >= len(events) {
+			return nil, 0, fmt.Errorf("%w: event %d", ErrRecordingSecretPathNotFound, index)
+		}
+	}
+	for index, event := range events {
+		redacted[index] = event
+		secrets := eventProvenance[index]
+		if len(secrets) == 0 {
+			continue
+		}
+		result, err := RedactDeclaredSecrets(RecordingRedactionRequest{
+			Payload: []byte(event.Payload), Secrets: secrets,
+		})
+		if err != nil {
+			return nil, 0, fmt.Errorf("redact recording event %d: %w", index, err)
+		}
+		redacted[index].Payload = string(result.Payload)
+		redactedCount += result.RedactedCount
+	}
+	return redacted, redactedCount, nil
+}
+
+// RedactPortableArtifact applies event-local provenance before
+// portable-artifact bytes are produced. The returned artifact is detached and
+// contains no provenance handoff.
+func RedactPortableArtifact(artifact PortableArtifact) (PortableArtifact, int, error) {
+	redactedEvents, redactedCount, err := RedactCanonicalEvents(
+		artifact.Events, artifact.SecretProvenance,
+	)
+	if err != nil {
+		return PortableArtifact{}, 0, err
+	}
+	redacted := artifact
+	redacted.Events = redactedEvents
+	redacted.SecretProvenance = nil
+	return redacted, redactedCount, nil
+}
+
+// RedactPortableRecording applies document-level provenance to a portable
+// recording and updates its existing bounded secret-redaction count. The
+// result contains no original value or provenance handoff.
+func RedactPortableRecording(recording PortableRecording) (PortableRecording, int, error) {
+	secrets := cloneRecordingSecrets(recording.SecretProvenance)
+	recording.SecretProvenance = nil
+	if len(secrets) == 0 {
+		return recording, 0, nil
+	}
+	payload, err := json.Marshal(recording)
+	if err != nil {
+		return PortableRecording{}, 0, fmt.Errorf("encode portable recording for redaction: %w", err)
+	}
+	result, err := RedactDeclaredSecrets(RecordingRedactionRequest{
+		Payload: payload, Secrets: secrets,
+	})
+	if err != nil {
+		return PortableRecording{}, 0, fmt.Errorf("redact portable recording: %w", err)
+	}
+	var redacted PortableRecording
+	if err := json.Unmarshal(result.Payload, &redacted); err != nil {
+		return PortableRecording{}, 0, fmt.Errorf("decode redacted portable recording: %w", err)
+	}
+	redacted.SecretProvenance = nil
+	if redacted.Result != nil && len(redacted.Result.PrimaryResult) > 0 {
+		digest := sha256.Sum256(compactPortableRecordingJSON(redacted.Result.PrimaryResult))
+		redacted.Result.ContentHash = "sha256:" + hex.EncodeToString(digest[:])
+	}
+	redacted.Redaction.SecretsRedacted = saturatingPortableRecordingSecretsRedacted(
+		recordedSecretsCount(recording.Redaction.SecretsRedacted), int64(result.RedactedCount),
+	)
+	return redacted, result.RedactedCount, nil
+}
+
+func recordedSecretsCount(value int64) int64 {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func cloneRecordingSecrets(secrets []RecordingSecret) []RecordingSecret {
+	if len(secrets) == 0 {
+		return nil
+	}
+	return append([]RecordingSecret(nil), secrets...)
 }
 
 func validateRecordingRedactionRequest(request RecordingRedactionRequest) ([][]string, error) {

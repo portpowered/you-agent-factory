@@ -972,6 +972,8 @@ type StartRecordingResult struct {
 type RecordRecordingEventRequest struct {
 	RecordingID RecordingID
 	Event       CanonicalEvent
+	// SecretProvenance contains JSON Pointers relative to Event.Payload.
+	SecretProvenance []RecordingSecret
 }
 
 // RecordRecordingEventResult reports the detached status after acceptance.
@@ -1300,6 +1302,9 @@ type ReadPortableArtifactScopeResult struct {
 type RecordingSnapshot struct {
 	Status RecordingStatusFacts
 	Events []CanonicalEvent
+	// SecretProvenance is keyed by event index; each pointer is relative to
+	// that event's Payload and is an in-memory write-boundary handoff.
+	SecretProvenance map[int][]RecordingSecret `json:"-"`
 }
 
 // RecordingSnapshotWriter persists one consistent lifecycle snapshot at the
@@ -1425,6 +1430,9 @@ type PortableArtifact struct {
 	Summary       PortableArtifactSummary       `json:"summary"`
 	Events        []CanonicalEvent              `json:"events"`
 	Integrity     PortableArtifactIntegrity     `json:"integrity"`
+	// SecretProvenance is keyed by event index; each pointer is relative to
+	// that event's Payload and is never serialized.
+	SecretProvenance map[int][]RecordingSecret `json:"-"`
 }
 
 // BuildPortableArtifactRequest selects a closed recording by opaque identity.

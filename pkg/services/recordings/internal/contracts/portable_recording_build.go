@@ -69,7 +69,12 @@ func BuildPortableRecording(facts PortableRecordingCanonicalFacts) (PortableReco
 			value.Result.ContentHash = "sha256:" + hex.EncodeToString(digest[:])
 		}
 	}
-	return value, ValidatePortableRecording(value)
+	value.SecretProvenance = cloneRecordingSecrets(facts.SecretProvenance)
+	redacted, _, err := RedactPortableRecording(value)
+	if err != nil {
+		return PortableRecording{}, err
+	}
+	return redacted, ValidatePortableRecording(redacted)
 }
 
 func buildPortableRecordingWorkerHistory(

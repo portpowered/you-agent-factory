@@ -9,8 +9,9 @@ import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 // Replay and artifact export may read finalized facts without owning lifecycle
 // state or receiving persistence handles.
 type Snapshot struct {
-	Status recordings.RecordingStatusFacts
-	Events []recordings.CanonicalEvent
+	Status           recordings.RecordingStatusFacts
+	Events           []recordings.CanonicalEvent
+	SecretProvenance map[int][]recordings.RecordingSecret
 }
 
 // Service owns target selection, binding, and mutable recording lifecycle

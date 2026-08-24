@@ -526,6 +526,9 @@ var (
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
 	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
 	RedactDeclaredSecrets                              = recordingcontracts.RedactDeclaredSecrets
+	RedactCanonicalEvents                              = recordingcontracts.RedactCanonicalEvents
+	RedactPortableArtifact                             = recordingcontracts.RedactPortableArtifact
+	RedactPortableRecording                            = recordingcontracts.RedactPortableRecording
 )
 
 // Service is the singular cross-service Recordings authority. Historical

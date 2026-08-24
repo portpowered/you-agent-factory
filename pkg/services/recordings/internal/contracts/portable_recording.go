@@ -68,6 +68,9 @@ type PortableRecording struct {
 	Result                     *PortableRecordingResult            `json:"result,omitempty"`
 	WorkerHistory              *PortableRecordingWorkerHistory     `json:"workerHistory,omitempty"`
 	Redaction                  PortableRecordingRedactionMetadata  `json:"redaction"`
+	// SecretProvenance is an in-memory write-boundary handoff. It is never
+	// serialized; classified locations are replaced before persistence.
+	SecretProvenance []RecordingSecret `json:"-"`
 }
 
 // PortableRecordingSessionSummary exposes session facts in a portable recording.
@@ -285,6 +288,10 @@ type PortableRecordingCanonicalFacts struct {
 	Checkpoint                          *PortableRecordingCanonicalCheckpoint
 	Result                              *PortableRecordingCanonicalResult
 	WorkerHistory                       *PortableRecordingWorkerHistory
+	// SecretProvenance identifies classified values in the portable recording
+	// document before it is persisted. It contains locations and provenance,
+	// never the classified values themselves.
+	SecretProvenance []RecordingSecret
 }
 
 // PortableRecordingCanonicalCheckpoint carries canonical checkpoint facts.

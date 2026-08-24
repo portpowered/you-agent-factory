@@ -3,6 +3,7 @@
 package replay
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
 )
 
 const (
@@ -124,11 +126,16 @@ func trimmedString(value any) (string, bool) {
 }
 
 // Save validates and writes an artifact as indented JSON.
-func Save(storage platformreplay.Storage, path string, artifact *interfaces.ReplayArtifact) error {
+func Save(
+	storage platformreplay.Storage,
+	path string,
+	artifact *interfaces.ReplayArtifact,
+	declaredSecrets ...[]recordingcontracts.RecordingSecret,
+) error {
 	if storage == nil {
 		return fmt.Errorf("replay artifact storage is required")
 	}
-	data, err := MarshalArtifact(artifact)
+	data, err := MarshalArtifact(artifact, declaredSecrets...)
 	if err != nil {
 		return err
 	}
@@ -140,7 +147,10 @@ func Save(storage platformreplay.Storage, path string, artifact *interfaces.Repl
 
 // MarshalArtifact validates and serializes a replay artifact in the canonical
 // indented JSON format used by artifact files.
-func MarshalArtifact(artifact *interfaces.ReplayArtifact) ([]byte, error) {
+func MarshalArtifact(
+	artifact *interfaces.ReplayArtifact,
+	declaredSecrets ...[]recordingcontracts.RecordingSecret,
+) ([]byte, error) {
 	storageArtifact, err := artifactForStorage(artifact)
 	if err != nil {
 		return nil, err
@@ -153,7 +163,34 @@ func MarshalArtifact(artifact *interfaces.ReplayArtifact) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal replay artifact: %w", err)
 	}
+	if len(declaredSecrets) > 0 {
+		result, err := recordingcontracts.RedactDeclaredSecrets(recordingcontracts.RecordingRedactionRequest{
+			Payload: data, Secrets: flattenRecordingSecretGroups(declaredSecrets),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("redact replay artifact: %w", err)
+		}
+		var indented bytes.Buffer
+		if err := json.Indent(&indented, result.Payload, "", "  "); err != nil {
+			return nil, fmt.Errorf("format redacted replay artifact: %w", err)
+		}
+		data = indented.Bytes()
+	}
 	return append(data, '\n'), nil
+}
+
+func flattenRecordingSecretGroups(
+	groups [][]recordingcontracts.RecordingSecret,
+) []recordingcontracts.RecordingSecret {
+	var total int
+	for _, group := range groups {
+		total += len(group)
+	}
+	secrets := make([]recordingcontracts.RecordingSecret, 0, total)
+	for _, group := range groups {
+		secrets = append(secrets, group...)
+	}
+	return secrets
 }
 
 // Load reads, decodes, and validates a replay artifact before returning it to

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -241,5 +242,174 @@ func TestNewRecordingFlushTickerFactoryStopsTicker(t *testing.T) {
 	case <-ticker.Ticks:
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected flush ticker to emit")
+	}
+}
+
+func TestRecordingSnapshotWritersRedactBeforeSerialization(t *testing.T) {
+	t.Parallel()
+
+	recordedAt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	factorySnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"id":       "factory-secret-write",
+		"metadata": map[string]any{"factory_hash": "sha256:factory-secret-write"},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	started, err := replayimpl.NewEventLogArtifact(
+		recordedAt,
+		factorySnapshot,
+		nil,
+		recordings.ReplayDiagnostics{},
+	)
+	if err != nil {
+		t.Fatalf("NewEventLogArtifact: %v", err)
+	}
+	startEvent := canonical.CanonicalEventFromFactory(started.Events[0], "generation-secret-write")
+	startEvent.Scope = recordings.CanonicalEventScope{FactorySessionID: "~default"}
+	startEvent.Sequence = 0
+	startEvent.Cursor.Sequence = 0
+	event := recordings.CanonicalEvent{
+		ID:       "event-secret-write",
+		Kind:     "WORK_REQUEST",
+		Sequence: 1,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-secret-write",
+			Sequence:           1,
+		},
+		Scope:      recordings.CanonicalEventScope{FactorySessionID: "~default"},
+		RecordedAt: recordedAt.Add(time.Minute),
+		Payload:    `{"credential":"snapshot-write-secret-002","control":"keep-me"}`,
+	}
+	snapshot := recordings.RecordingSnapshot{
+		Status: recordings.RecordingStatusFacts{
+			RecordingID: "recording-secret-write",
+			State:       recordings.RecordingFinalized,
+		},
+		Events: []recordings.CanonicalEvent{startEvent, event},
+		SecretProvenance: map[int][]recordings.RecordingSecret{
+			1: {{
+				JSONPointer: "/credential",
+				Provenance:  recordings.RecordingSecretProvenanceDeclared,
+			}},
+		},
+	}
+
+	tests := []struct {
+		name   string
+		replay bool
+		assert func(*testing.T, []byte)
+	}{
+		{
+			name: "canonical snapshot",
+			assert: func(t *testing.T, payload []byte) {
+				var decoded recordings.RecordingSnapshot
+				if err := json.Unmarshal(payload, &decoded); err != nil {
+					t.Fatalf("decode snapshot: %v", err)
+				}
+				assertSnapshotEventPayloadRedacted(t, decoded.Events[1].Payload)
+			},
+		},
+		{
+			name:   "replay artifact",
+			replay: true,
+			assert: func(t *testing.T, payload []byte) {
+				var decoded struct {
+					Events []struct {
+						Payload json.RawMessage `json:"payload"`
+					} `json:"events"`
+				}
+				if err := json.Unmarshal(payload, &decoded); err != nil {
+					t.Fatalf("decode replay artifact: %v", err)
+				}
+				if len(decoded.Events) != 2 {
+					t.Fatalf("replay events = %d, want 2", len(decoded.Events))
+				}
+				assertJSONPayloadRedacted(t, decoded.Events[1].Payload)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var written []byte
+			var writer recordings.RecordingSnapshotWriter
+			if !test.replay {
+				writer = NewRecordingSnapshotWriter(func(_ string, payload []byte) error {
+					written = append([]byte(nil), payload...)
+					return nil
+				})
+			} else {
+				writer = NewReplayRecordingSnapshotWriter(func(_ string, payload []byte) error {
+					written = append([]byte(nil), payload...)
+					return nil
+				})
+			}
+			if err := writer("recording.json", snapshot); err != nil {
+				t.Fatalf("write %s: %v", test.name, err)
+			}
+			if len(written) == 0 {
+				t.Fatalf("write %s produced no bytes", test.name)
+			}
+			test.assert(t, written)
+		})
+	}
+}
+
+func TestRecordingSnapshotWriterRejectsClassifiedPathBeforeWrite(t *testing.T) {
+	t.Parallel()
+
+	const declaredSecret = "snapshot-write-failure-secret-002"
+	writes := 0
+	writer := NewRecordingSnapshotWriter(func(string, []byte) error {
+		writes++
+		return nil
+	})
+	err := writer("recording.json", recordings.RecordingSnapshot{
+		Events: []recordings.CanonicalEvent{{
+			ID:         "event-secret-write-failure",
+			Kind:       "WORK_REQUEST",
+			RecordedAt: time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC),
+			Payload:    `{"credential":"snapshot-write-failure-secret-002"}`,
+		}},
+		SecretProvenance: map[int][]recordings.RecordingSecret{
+			0: {{
+				JSONPointer: "/missing",
+				Provenance:  recordings.RecordingSecretProvenanceDeclared,
+			}},
+		},
+	})
+	if !errors.Is(err, recordings.ErrRecordingSnapshotEncoding) {
+		t.Fatalf("writer error = %v, want encoding error", err)
+	}
+	if writes != 0 {
+		t.Fatalf("storage writes = %d, want none", writes)
+	}
+	if strings.Contains(err.Error(), declaredSecret) {
+		t.Fatalf("writer error exposed declared secret: %v", err)
+	}
+}
+
+func assertSnapshotEventPayloadRedacted(t *testing.T, payload string) {
+	t.Helper()
+	assertJSONPayloadRedacted(t, json.RawMessage(payload))
+}
+
+func assertJSONPayloadRedacted(t *testing.T, payload json.RawMessage) {
+	t.Helper()
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("decode event payload: %v", err)
+	}
+	var marker recordings.RecordingRedactedValue
+	if err := json.Unmarshal(fields["credential"], &marker); err != nil {
+		t.Fatalf("decode credential marker: %v", err)
+	}
+	if err := marker.Validate(); err != nil {
+		t.Fatalf("credential marker: %v", err)
+	}
+	var control string
+	if err := json.Unmarshal(fields["control"], &control); err != nil || control != "keep-me" {
+		t.Fatalf("control = %q, want keep-me (err=%v)", control, err)
 	}
 }

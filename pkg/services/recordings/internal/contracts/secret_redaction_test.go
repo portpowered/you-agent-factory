@@ -185,6 +185,21 @@ func TestRedactDeclaredSecretsWithoutClassificationsReturnsDetachedBytes(t *test
 	}
 }
 
+func TestRedactCanonicalEventsRejectsUnknownEventProvenance(t *testing.T) {
+	_, _, err := RedactCanonicalEvents(
+		[]CanonicalEvent{{Payload: `{"credential":"classified"}`}},
+		map[int][]RecordingSecret{
+			1: {{
+				JSONPointer: "/credential",
+				Provenance:  RecordingSecretProvenanceDeclared,
+			}},
+		},
+	)
+	if !errors.Is(err, ErrRecordingSecretPathNotFound) {
+		t.Fatalf("RedactCanonicalEvents error = %v, want unknown event path", err)
+	}
+}
+
 func assertRedactedRecordingValue(t *testing.T, payload json.RawMessage, pointer string) {
 	t.Helper()
 	raw := recordingJSONRawAt(t, payload, pointer)
