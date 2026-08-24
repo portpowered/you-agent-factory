@@ -20,6 +20,7 @@ const (
 	functionalSuiteName                   = "functional"
 	functionalBucketEnvironment           = "ENVIRONMENT-DEPENDENT"
 	functionalBucketFailure               = "GENUINELY FAILING"
+	functionalBucketFlaky                 = "FLAKY"
 	functionalMeasurementIsolated         = "isolated"
 	functionalMeasurementPackageContext   = "package-context"
 	functionalMeasurementRepeatedIsolated = "repeated-isolated"
@@ -36,13 +37,15 @@ type functionalQuarantine struct {
 }
 
 type functionalQuarantineEntry struct {
-	Package     string `json:"package"`
-	Test        string `json:"test,omitempty"`
-	Bucket      string `json:"bucket"`
-	Reason      string `json:"reason"`
-	FollowUp    string `json:"followUp,omitempty"`
-	Measurement string `json:"measurement,omitempty"`
-	Attempts    int    `json:"attempts,omitempty"`
+	Package       string `json:"package"`
+	Test          string `json:"test,omitempty"`
+	Bucket        string `json:"bucket"`
+	Reason        string `json:"reason"`
+	FollowUp      string `json:"followUp,omitempty"`
+	FollowUpIssue string `json:"followUpIssue,omitempty"`
+	FollowUpLane  string `json:"followUpLane,omitempty"`
+	Measurement   string `json:"measurement,omitempty"`
+	Attempts      int    `json:"attempts,omitempty"`
 }
 
 type functionalTestInventory struct {
@@ -572,8 +575,8 @@ func formatFunctionalQuarantineMeasurement(measurement functionalQuarantineMeasu
 // a push to the default branch does not. A test that self-skips under
 // testing.Short() is therefore observed as a skip on the PR tier no matter
 // whether it fails, so asserting expected=fail there asks an unanswerable
-// question. Only a GENUINELY FAILING entry is affected; an ENVIRONMENT-DEPENDENT
-// entry already expects a skip.
+// question. Failure-oriented entries, including FLAKY, are affected; an
+// ENVIRONMENT-DEPENDENT entry already expects a skip.
 func unmeasurableFunctionalQuarantineOutcome(short bool, expected, observed string) bool {
 	return short &&
 		expected == functionalQuarantineOutcomeFail &&
@@ -584,7 +587,7 @@ func expectedFunctionalQuarantineOutcome(bucket string) (string, error) {
 	switch bucket {
 	case functionalBucketEnvironment:
 		return functionalQuarantineOutcomeSkip, nil
-	case functionalBucketFailure:
+	case functionalBucketFailure, functionalBucketFlaky:
 		return functionalQuarantineOutcomeFail, nil
 	default:
 		return "", fmt.Errorf("unsupported quarantine bucket")
@@ -839,19 +842,7 @@ func validateFunctionalQuarantineEntry(entry functionalQuarantineEntry, index in
 			return fmt.Errorf("validate functional quarantine: selector %q is not discoverable in package %q", entry.Test, entry.Package)
 		}
 	}
-	if entry.Bucket != functionalBucketEnvironment && entry.Bucket != functionalBucketFailure {
-		return fmt.Errorf("validate functional quarantine: selector %q has unsupported bucket %q; expected %s or %s", functionalSelectorDisplay(entry), entry.Bucket, functionalBucketEnvironment, functionalBucketFailure)
-	}
-	if _, err := functionalQuarantineMeasurement(entry); err != nil {
-		return fmt.Errorf("validate functional quarantine: selector %q has invalid measurement metadata: %w", functionalSelectorDisplay(entry), err)
-	}
-	if strings.TrimSpace(entry.Reason) == "" {
-		return fmt.Errorf("validate functional quarantine: selector %q requires a non-empty reason", functionalSelectorDisplay(entry))
-	}
-	if entry.Bucket == functionalBucketFailure && strings.TrimSpace(entry.FollowUp) == "" {
-		return fmt.Errorf("validate functional quarantine: genuinely failing selector %q requires a non-empty followUp", functionalSelectorDisplay(entry))
-	}
-	return nil
+	return validateFunctionalQuarantineEntryMetadata(entry)
 }
 
 func buildFunctionalCoverageSelection(manifest functionalQuarantine, inventory functionalTestInventory) (functionalCoverageSelection, error) {

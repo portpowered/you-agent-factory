@@ -226,6 +226,12 @@ function policyInputFromEnvironment() {
 			},
 			directLane("Backend", "RUN_BACKEND", "BACKEND_REASON", "BACKEND_RESULT"),
 			directLane(
+				"Backend Test Stability",
+				"RUN_BACKEND_STABILITY",
+				"BACKEND_STABILITY_REASON",
+				"BACKEND_STABILITY_RESULT",
+			),
+			directLane(
 				"Backend Lint",
 				"RUN_BACKEND_LINT",
 				"BACKEND_LINT_REASON",

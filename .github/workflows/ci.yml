@@ -482,6 +482,31 @@ jobs:
               body: publication.body,
             });
 
+  backend-test-stability:
+    name: Backend Test Stability
+    needs: classify
+    # This is a pull-request hard gate. Classification-driven skips remain
+    # observable to Verification Policy, which rejects an unexpected skip.
+    if: github.event_name == 'pull_request' && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run changed-test stability hard gate
+        env:
+          CHANGED_TEST_STABILITY_BASE: ${{ github.event.pull_request.base.sha }}
+          CHANGED_TEST_STABILITY_HEAD: ${{ github.event.pull_request.head.sha }}
+          CHANGED_TEST_STABILITY_ATTEMPTS: "20"
+          CHANGED_TEST_STABILITY_BUDGET: 15m
+        run: make test-changed-test-stability
+
   backend-lint:
     name: Backend Lint
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -701,7 +726,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-test-stability, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -743,6 +768,9 @@ jobs:
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result }}
+          RUN_BACKEND_STABILITY: ${{ github.event_name == 'pull_request' && needs.classify.outputs.run_backend != 'false' }}
+          BACKEND_STABILITY_REASON: ${{ needs.classify.outputs.backend_reason }}
+          BACKEND_STABILITY_RESULT: ${{ needs.backend-test-stability.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
