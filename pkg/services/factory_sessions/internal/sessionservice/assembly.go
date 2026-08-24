@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -787,14 +786,12 @@ func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (fac
 func (a *Assembly) GetSession(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
 	owner, err := a.detachedOwner(sessionID)
 	if err == nil {
-		result, readErr := owner.GetSession(ctx, sessionID)
-		if readErr == nil {
+		if result, readErr := owner.GetSession(ctx, sessionID); readErr == nil {
 			return result, nil
-		}
-		if !isSessionReadMiss(readErr) {
+		} else if !isSessionReadMiss(readErr) {
 			return factorysessions.SessionReadResult{}, readErr
 		}
-	} else if !errors.Is(err, factorysessions.ErrSessionNotFound) {
+	} else if !isSessionReadMiss(err) {
 		return factorysessions.SessionReadResult{}, err
 	}
 
@@ -803,37 +800,6 @@ func (a *Assembly) GetSession(ctx context.Context, sessionID string) (factoryses
 		return factorysessions.SessionReadResult{}, err
 	}
 	return owner.GetSession(ctx, sessionID)
-}
-
-// durableSessionOwner resolves a durable detail request through the same
-// persisted-scope identity published by ListSessions. Durable session IDs are
-// not required to carry an implementation-specific prefix, and a durable row
-// may belong to a runtime gateway that was not registered under that ID after
-// restart.
-func (a *Assembly) durableSessionOwner(ctx context.Context, sessionID string) (factorysessions.Service, error) {
-	id := strings.TrimSpace(sessionID)
-	if id == "" {
-		return nil, fmt.Errorf("%w: %s", factorysessions.ErrDurableSessionNotFound, id)
-	}
-	for _, owner := range a.detachedOwners() {
-		listed, err := owner.ListSessions(ctx, factorysessions.ListSessionsRequest{
-			Scope: factorysessions.SessionListScopePersisted,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, summary := range listed.DurableSessions {
-			if strings.TrimSpace(summary.SessionID) == id {
-				return owner, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("%w: %s", factorysessions.ErrDurableSessionNotFound, id)
-}
-
-func isSessionReadMiss(err error) bool {
-	return errors.Is(err, factorysessions.ErrSessionNotFound) ||
-		errors.Is(err, factorysessions.ErrDurableSessionNotFound)
 }
 
 func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {

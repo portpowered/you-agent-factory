@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -122,4 +123,35 @@ func (s *Service) GetFactorySessionPartialResult(
 		return workflowresult.PartialSessionResult{}, fmt.Errorf("factory session gateway is required")
 	}
 	return controlplane.GetLiveFactorySessionPartialResult(ctx, s.host, sessionID)
+}
+
+// durableSessionOwner resolves a durable detail request through the same
+// persisted-scope identity published by ListSessions. Durable session IDs are
+// not required to carry an implementation-specific prefix, and a durable row
+// may belong to a runtime gateway that was not registered under that ID after
+// restart.
+func (a *Assembly) durableSessionOwner(ctx context.Context, sessionID string) (factorysessions.Service, error) {
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return nil, fmt.Errorf("%w: %s", factorysessions.ErrDurableSessionNotFound, id)
+	}
+	for _, owner := range a.detachedOwners() {
+		listed, err := owner.ListSessions(ctx, factorysessions.ListSessionsRequest{
+			Scope: factorysessions.SessionListScopePersisted,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, summary := range listed.DurableSessions {
+			if strings.TrimSpace(summary.SessionID) == id {
+				return owner, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("%w: %s", factorysessions.ErrDurableSessionNotFound, id)
+}
+
+func isSessionReadMiss(err error) bool {
+	return errors.Is(err, factorysessions.ErrSessionNotFound) ||
+		errors.Is(err, factorysessions.ErrDurableSessionNotFound)
 }
