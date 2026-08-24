@@ -28,6 +28,9 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	if got := OperatorSettingsFromProcess(nil); got != nil {
 		t.Fatalf("OperatorSettingsFromProcess(nil) = %#v, want nil", got)
 	}
+	if got := RecordingsServiceFromProcess(nil); got != nil {
+		t.Fatalf("RecordingsServiceFromProcess(nil) = %#v, want nil", got)
+	}
 
 	withoutCapabilities, err := initializerapplication.NewProcess(
 		nil,
@@ -48,6 +51,9 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	}
 	if got := OperatorSettingsFromProcess(withoutCapabilities); got != nil {
 		t.Fatalf("OperatorSettingsFromProcess(without capability) = %#v, want nil", got)
+	}
+	if got := RecordingsServiceFromProcess(withoutCapabilities); got != nil {
+		t.Fatalf("RecordingsServiceFromProcess(without capability) = %#v, want nil", got)
 	}
 
 	wrongType, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
@@ -72,6 +78,9 @@ func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) 
 	}
 	if got := OperatorSettingsFromProcess(wrongType); got != nil {
 		t.Fatalf("OperatorSettingsFromProcess(wrong type) = %#v, want nil", got)
+	}
+	if got := RecordingsServiceFromProcess(wrongType); got != nil {
+		t.Fatalf("RecordingsServiceFromProcess(wrong type) = %#v, want nil", got)
 	}
 
 	typedProjection := &rootRecordingsProjectionProbe{}

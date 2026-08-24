@@ -148,15 +148,6 @@ func RecordingsServiceFromProcess(process any) recordings.Service {
 	return serviceCapability.RecordingsService()
 }
 
-// RecordingsProjectionQueriesFromProcess returns the already-composed
-// Recordings projection-query capability when the canonical process exposes
-// it. A nil result preserves the optional nature of this additive surface.
-func RecordingsProjectionQueriesFromProcess(process any) RecordingsProjectionQueries {
-	projection := RecordingsProjectionFromProcess(process)
-	queries, _ := projection.(RecordingsProjectionQueries)
-	return queries
-}
-
 // OperatorSettingsFromProcess returns the already-composed Operator Settings
 // root carried by a canonical process. No service is constructed at this
 // boundary.
