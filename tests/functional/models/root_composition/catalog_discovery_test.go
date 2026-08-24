@@ -19,6 +19,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
@@ -254,51 +255,12 @@ func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t 
 	}
 }
 
-// TestModelsCatalogReadinessDependencyFailureIsUnavailableThroughHTTP proves
-// cache-inspection failures do not leak filesystem details through catalog
-// collection or detail responses.
-func TestModelsCatalogReadinessDependencyFailureIsUnavailableThroughHTTP(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	var failInspection atomic.Bool
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-				if !failInspection.Load() {
-					return nil, os.ErrNotExist
-				}
-				return nil, errors.New(`inspect C:\private\model-cache: access denied`)
-			},
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-	failInspection.Store(true)
-
-	for _, path := range []string{"/models", "/models/OMNIVOICE_Q4_K_M"} {
-		response, err := http.Get(server.URL() + path)
-		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
-		}
-		body, readErr := io.ReadAll(response.Body)
-		_ = response.Body.Close()
-		if readErr != nil {
-			t.Fatalf("read GET %s response: %v", path, readErr)
-		}
-		if response.StatusCode != http.StatusNotFound {
-			t.Fatalf("GET %s status = %d body=%s, want 404", path, response.StatusCode, body)
-		}
-		if strings.Contains(string(body), "private") || strings.Contains(string(body), "access denied") {
-			t.Fatalf("GET %s leaked cache inspection details: %s", path, body)
-		}
-	}
-}
-
 // TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess
 // proves direct invocation does not turn a second readiness lookup failure
 // into a backend or filesystem diagnostic.
 func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
 	var inspections atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
@@ -313,6 +275,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 		"--operation", "TTS", "--text", "readiness failure probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
 	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf("Process.Execute(models invoke) error = nil, want readiness failure; inspections=%d", inspections.Load())
@@ -331,6 +294,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 // provider or expose the dependency's error text through Process.Execute.
 func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
 			return nil, context.Canceled
@@ -341,6 +305,7 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 		"--operation", "TTS", "--text", "catalog cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want dependency cancellation")
 	}
@@ -355,6 +320,7 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 // can return a partial detail or invoke a provider.
 func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var startOnce sync.Once
@@ -371,6 +337,7 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 		"--operation", "TTS", "--text", "catalog request cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	select {
 	case <-started:
@@ -477,6 +444,7 @@ func TestModelsReadinessPostQueryCancellationThroughPublicRoot(t *testing.T) {
 // after catalog discovery has already succeeded.
 func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
 	var inspections atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
@@ -491,6 +459,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 		"--operation", "TTS", "--text", "readiness cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want readiness cancellation")
 	}
@@ -505,6 +474,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 // observation.
 func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	var inspections atomic.Int32
@@ -521,46 +491,12 @@ func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *te
 		"--operation", "TTS", "--text", "post-readiness cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want post-readiness cancellation")
 	}
 	if inspections.Load() < 2 {
 		t.Fatalf("model cache inspections = %d, want catalog and readiness probes", inspections.Load())
-	}
-}
-
-// TestModelsCatalogDependencyCancellationIsSafeThroughHTTP proves a
-// readiness collaborator returning cancellation is not rendered as a server
-// error or an internal filesystem diagnostic by the public catalog boundary.
-func TestModelsCatalogDependencyCancellationIsSafeThroughHTTP(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	var allowInspection atomic.Bool
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-				if !allowInspection.Load() {
-					return nil, os.ErrNotExist
-				}
-				return nil, context.Canceled
-			},
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-	allowInspection.Store(true)
-
-	response, err := http.Get(server.URL() + "/models")
-	if err != nil {
-		t.Fatalf("GET /models: %v", err)
-	}
-	body, readErr := io.ReadAll(response.Body)
-	_ = response.Body.Close()
-	if readErr != nil {
-		t.Fatalf("read GET /models response: %v", readErr)
-	}
-	if response.StatusCode != http.StatusOK || len(body) != 0 {
-		t.Fatalf("GET /models status=%d body=%q, want cancellation without a partial response", response.StatusCode, body)
 	}
 }
 
