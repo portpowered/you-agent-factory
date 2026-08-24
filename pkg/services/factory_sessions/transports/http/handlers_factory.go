@@ -308,12 +308,20 @@ func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, ses
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		if err := s.liveControl.CloseFactorySession(r.Context(), sessionID); err != nil {
+		deletion := s.sessionDeletion
+		if deletion == nil {
+			deletion, _ = s.liveControl.(factorysessionexecution.LiveDeletionService)
+		}
+		if deletion == nil {
+			s.writeError(w, http.StatusInternalServerError, "factory session deletion is unavailable", "INTERNAL_ERROR")
+			return
+		}
+		if err := deletion.DeleteFactorySession(r.Context(), sessionID); err != nil {
 			if s.writeSessionsRootError(w, sessionID, err) {
 				return
 			}
-			s.logger.Error("close factory session failed", zap.Error(err), zap.String("session_id", sessionID))
-			s.writeSessionsRootErrorOrInternal(w, sessionID, err, "failed to close factory session")
+			s.logger.Error("delete factory session failed", zap.Error(err), zap.String("session_id", sessionID))
+			s.writeSessionsRootErrorOrInternal(w, sessionID, err, "failed to delete factory session")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -329,8 +337,8 @@ func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, ses
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 			return
 		}
-		s.logger.Error("close factory session failed", zap.Error(err), zap.String("session_id", sessionID))
-		s.writeError(w, http.StatusInternalServerError, "failed to close factory session", "INTERNAL_ERROR")
+		s.logger.Error("delete factory session failed", zap.Error(err), zap.String("session_id", sessionID))
+		s.writeError(w, http.StatusInternalServerError, "failed to delete factory session", "INTERNAL_ERROR")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

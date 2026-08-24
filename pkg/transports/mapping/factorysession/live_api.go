@@ -50,6 +50,18 @@ func (a *LiveAPI) requireControl() (factorysessions.LiveControlService, error) {
 	return a.control, nil
 }
 
+func (a *LiveAPI) requireLifecycleControl() (factorysessions.LiveLifecycleControlService, error) {
+	control, err := a.requireControl()
+	if err != nil {
+		return nil, err
+	}
+	lifecycle, ok := control.(factorysessions.LiveLifecycleControlService)
+	if !ok {
+		return nil, fmt.Errorf("Factory Session live lifecycle-control service is required")
+	}
+	return lifecycle, nil
+}
+
 func (a *LiveAPI) requireGateway() (LiveGateway, error) {
 	if a == nil || a.gateway == nil {
 		return nil, fmt.Errorf("Factory Session service is required")
@@ -147,11 +159,22 @@ func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.Ope
 }
 
 func (a *LiveAPI) CloseFactorySession(ctx context.Context, sessionID string) error {
+	return a.DeleteFactorySession(ctx, sessionID)
+}
+
+// DeleteFactorySession forwards the public DELETE operation to the
+// Factory-Sessions-owned deletion capability. It never falls back to the
+// destructive internal close operation.
+func (a *LiveAPI) DeleteFactorySession(ctx context.Context, sessionID string) error {
 	control, err := a.requireControl()
 	if err != nil {
 		return err
 	}
-	return control.CloseFactorySession(ctx, sessionID)
+	deletion, ok := control.(factorysessions.LiveDeletionService)
+	if !ok {
+		return fmt.Errorf("Factory Session deletion service is required")
+	}
+	return deletion.DeleteFactorySession(ctx, sessionID)
 }
 
 func (a *LiveAPI) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.LiveControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
@@ -172,6 +195,30 @@ func (a *LiveAPI) ResumeLiveFactorySession(ctx context.Context, sessionID string
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
 	result, err := control.ResumeLiveFactorySession(ctx, sessionID, request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return LifecycleControlResponseToAPI(result), nil
+}
+
+func (a *LiveAPI) CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.LiveControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := a.requireLifecycleControl()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := control.CancelLiveFactorySession(ctx, sessionID, request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return LifecycleControlResponseToAPI(result), nil
+}
+
+func (a *LiveAPI) TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.LiveControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := a.requireLifecycleControl()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := control.TerminateLiveFactorySession(ctx, sessionID, request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}

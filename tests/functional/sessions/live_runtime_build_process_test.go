@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -197,6 +198,8 @@ func postLiveRuntimeJSON[T any](t *testing.T, endpoint string, request any, fail
 
 func closeLiveRuntimeSession(t *testing.T, baseURL, sessionID string) {
 	t.Helper()
+	support.TerminateFactorySessionAt(t, baseURL, sessionID)
+	support.WaitForSessionStopped(t, baseURL, sessionID, 10*time.Second)
 	request, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+sessionID, nil)
 	if err != nil {
 		t.Fatalf("construct close live session request: %v", err)

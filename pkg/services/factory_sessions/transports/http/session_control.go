@@ -145,6 +145,20 @@ func (s *Server) invokeRootLiveLifecycleControl(
 	case "resume":
 		result, err := s.liveControl.ResumeLiveFactorySession(ctx, string(sessionID), control)
 		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
+	case "cancel", "terminate":
+		lifecycle, ok := s.liveControl.(factorysessions.LiveLifecycleControlService)
+		if !ok {
+			s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control is unavailable", "INTERNAL_ERROR")
+			return
+		}
+		var result factorysessions.LifecycleControlResult
+		var err error
+		if operation == "cancel" {
+			result, err = lifecycle.CancelLiveFactorySession(ctx, string(sessionID), control)
+		} else {
+			result, err = lifecycle.TerminateLiveFactorySession(ctx, string(sessionID), control)
+		}
+		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
 	default:
 		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")
 	}

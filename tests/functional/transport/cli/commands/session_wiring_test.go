@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +35,6 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	serverPort := portFromServerURL(t, baseURL)
 	processHarness := newRootProcessHarness(t)
 
 	newFactoryDir := filepath.Join(t.TempDir(), "cli-session-wiring-factory")
@@ -116,10 +114,17 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session show missing runtime status markers: %#v", shown)
 	}
 
-	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, "",
+	terminateResponse := runSessionLifecycleCLIJSON(
+		t, ctx, processHarness, primaryFactoryDir, baseURL, "terminate", sessionID,
+	)
+	if terminateResponse.Operation != factoryapi.FactorySessionLifecycleControlKindTerminate ||
+		terminateResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("session terminate response = %#v, want accepted terminate", terminateResponse)
+	}
+
+	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "delete", sessionID,
-		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	if err != nil {
 		t.Fatalf("you session delete: %v\noutput:\n%s", err, deleteOut)
@@ -238,7 +243,6 @@ func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	serverPort := portFromServerURL(t, baseURL)
 	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
@@ -250,10 +254,9 @@ func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
 	)
 	assertCLISessionNotFoundFailure(t, "show", showOut, err, sessionWiringMissingSessionID, false)
 
-	deleteOut, err := runYouCLI(ctx, processHarness, factoryDir, "",
+	deleteOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"--json",
 		"session", "delete", sessionWiringMissingSessionID,
-		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionWiringMissingSessionID, true)
 
@@ -308,24 +311,6 @@ func runYouCLI(
 	cmd := processHarness.CommandContext(ctx, cmdArgs...)
 	cmd.Dir = workingDir
 	return cmd.CombinedOutput()
-}
-
-func portFromServerURL(t *testing.T, serverURL string) int {
-	t.Helper()
-
-	parsed, err := url.Parse(serverURL)
-	if err != nil {
-		t.Fatalf("parse server URL %q: %v", serverURL, err)
-	}
-	port := parsed.Port()
-	if port == "" {
-		t.Fatalf("server URL %q missing port", serverURL)
-	}
-	var portNumber int
-	if _, err := fmt.Sscanf(port, "%d", &portNumber); err != nil {
-		t.Fatalf("parse server port %q: %v", port, err)
-	}
-	return portNumber
 }
 
 func sessionWiringListContains(

@@ -22,6 +22,12 @@ type Service interface {
 	Close(context.Context, string) error
 }
 
+// DeletionService owns the safe public deletion decision separately from the
+// destructive close operation retained for process lifecycle teardown.
+type DeletionService interface {
+	Delete(context.Context, string) error
+}
+
 // Dependencies are the runtime-bound effects used by the live-runtime owner.
 // They are supplied by Factory Sessions composition and never selected here.
 type Dependencies struct {

@@ -254,11 +254,11 @@ func TestSessionCreatePreservesBehaviorThroughProductionComposition(t *testing.T
 func TestSessionDeletePreservesBehaviorThroughProductionComposition(t *testing.T) {
 	t.Parallel()
 
-	args := []string{"--verbose", "--json", "session", "delete", "session-beta", "--port", "9444"}
+	args := []string{"--verbose", "--json", "--server", "https://factory.example:9444", "session", "delete", "session-beta"}
 	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
 		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
 			Delete: func(cfg session.DeleteConfig) error {
-				if cfg.SessionID != "session-beta" || cfg.Port != 9444 || !cfg.JSON || !cfg.Verbose {
+				if cfg.SessionID != "session-beta" || cfg.Server != "https://factory.example:9444" || !cfg.JSON || !cfg.Verbose {
 					t.Fatalf("delete config = %#v", cfg)
 				}
 				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)

@@ -151,9 +151,12 @@ type httpSessionsRootFake struct {
 	listSessions      func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	onOpen            func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
 	onClose           func(context.Context, string) error
+	onDelete          func(context.Context, string) error
 	onStartAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	onPauseDurable    func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	onPauseLive       func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	onCancelLive      func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	onTerminateLive   func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	onApplyLiveChange func(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
 }
 
@@ -256,9 +259,30 @@ func (fake *httpSessionsRootFake) ResumeLiveFactorySession(context.Context, stri
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
 }
 
+func (fake *httpSessionsRootFake) CancelLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onCancelLive != nil {
+		return fake.onCancelLive(ctx, sessionID, control)
+	}
+	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) TerminateLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onTerminateLive != nil {
+		return fake.onTerminateLive(ctx, sessionID, control)
+	}
+	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
+}
+
 func (fake *httpSessionsRootFake) CloseFactorySession(ctx context.Context, sessionID string) error {
 	if fake.onClose != nil {
 		return fake.onClose(ctx, sessionID)
+	}
+	return factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) DeleteFactorySession(ctx context.Context, sessionID string) error {
+	if fake.onDelete != nil {
+		return fake.onDelete(ctx, sessionID)
 	}
 	return factorysessions.ErrSessionNotFound
 }

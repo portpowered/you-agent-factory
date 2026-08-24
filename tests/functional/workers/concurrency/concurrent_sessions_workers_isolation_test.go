@@ -73,11 +73,14 @@ func TestFactoryRuntimeConcurrentSessionsShareWorkersWithoutCancellationLeakage(
 
 	closeDone := make(chan error, 1)
 	go func() {
-		closeDone <- closeConcurrentSession(baseURL, cancelledSessionID)
+		closeDone <- cancelConcurrentSession(baseURL, cancelledSessionID)
 	}()
 	provider.waitCancelled(t, cancelledSessionID)
 	if err := <-closeDone; err != nil {
-		t.Fatalf("close cancelled Factory Session: %v", err)
+		t.Fatalf("cancel concurrent Factory Session: %v", err)
+	}
+	if err := closeConcurrentSession(baseURL, cancelledSessionID); err != nil {
+		t.Fatalf("delete canceled Factory Session: %v", err)
 	}
 	openedSessionClosed.Store(true)
 	provider.releaseSurvivingAttempt()
@@ -222,6 +225,28 @@ func closeConcurrentSession(baseURL string, sessionID string) error {
 			return fmt.Errorf("DELETE %s status = %d: read response body: %w", endpoint, response.StatusCode, readErr)
 		}
 		return fmt.Errorf("DELETE %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+func cancelConcurrentSession(baseURL string, sessionID string) error {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/cancel"
+	request, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(`{}`))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted {
+		body, readErr := io.ReadAll(response.Body)
+		if readErr != nil {
+			return fmt.Errorf("POST %s status = %d: read response body: %w", endpoint, response.StatusCode, readErr)
+		}
+		return fmt.Errorf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }

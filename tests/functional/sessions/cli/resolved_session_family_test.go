@@ -39,7 +39,7 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 	invocations := [][]string{
 		{"you", "--json", "session", "create", "--dir", workingDirectory,
 			"--port", port, "--target-kind", "named", "--target-name", "alpha"},
-		{"you", "--json", "session", "delete", "session-delete", "--port", port},
+		{"you", "--server", server.URL, "--json", "session", "delete", "session-delete"},
 		{"you", "--server", server.URL, "--json", "--debug", "session", "list"},
 		{"you", "--server", server.URL, "--json", "session", "show", "session-show"},
 		{"you", "--remote", "--server", server.URL, "--json", "session", "pause"},

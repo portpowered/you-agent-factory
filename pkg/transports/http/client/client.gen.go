@@ -9574,6 +9574,9 @@ type CurrentFactoryNotFound = ErrorResponse
 // ExecutionRequestIdConflict defines model for ExecutionRequestIdConflict.
 type ExecutionRequestIdConflict = ErrorResponse
 
+// FactorySessionDeletionConflict defines model for FactorySessionDeletionConflict.
+type FactorySessionDeletionConflict = ErrorResponse
+
 // FactorySessionLifecycleControlConflict defines model for FactorySessionLifecycleControlConflict.
 type FactorySessionLifecycleControlConflict struct {
 	union json.RawMessage

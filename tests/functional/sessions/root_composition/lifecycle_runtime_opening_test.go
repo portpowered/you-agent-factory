@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -212,6 +213,8 @@ func postSessionsJSON[T any](t *testing.T, endpoint string, request any, failure
 
 func closeSessionsSession(t *testing.T, baseURL, sessionID string) {
 	t.Helper()
+	support.TerminateFactorySessionAt(t, baseURL, sessionID)
+	support.WaitForSessionStopped(t, baseURL, sessionID, 10*time.Second)
 	request, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+sessionID, nil)
 	if err != nil {
 		t.Fatalf("construct close session request: %v", err)

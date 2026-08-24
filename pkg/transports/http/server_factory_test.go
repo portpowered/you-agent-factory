@@ -81,6 +81,8 @@ type strictLiveSessionAPIFake struct {
 	close     func(context.Context, string) error
 	pause     func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	resume    func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	cancel    func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	terminate func(context.Context, string, factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	subscribe func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
 }
 
@@ -145,6 +147,20 @@ func (fake strictLiveSessionAPIFake) ResumeLiveFactorySession(ctx context.Contex
 		panic("unexpected LiveSessionAPI.ResumeLiveFactorySession call")
 	}
 	return fake.resume(ctx, sessionID, request)
+}
+
+func (fake strictLiveSessionAPIFake) CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	if fake.cancel == nil {
+		panic("unexpected LiveSessionAPI.CancelLiveFactorySession call")
+	}
+	return fake.cancel(ctx, sessionID, request)
+}
+
+func (fake strictLiveSessionAPIFake) TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	if fake.terminate == nil {
+		panic("unexpected LiveSessionAPI.TerminateLiveFactorySession call")
+	}
+	return fake.terminate(ctx, sessionID, request)
 }
 
 func (fake strictLiveSessionAPIFake) SubscribeFactoryResponseEventsForSession(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {

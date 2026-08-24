@@ -3975,7 +3975,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the same default --port as work list. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the shared --server selection; --port remains only for session list and create. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
             "id": "you.session.description"
           },
           "title": {
@@ -4126,7 +4126,7 @@
       "path": "you session",
       "runnable": false,
       "usage": {
-        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
+        "example": "  # Inspect live sessions through the selected server.\n  you session list\n  you session show session-beta\n\n  # Lifecycle controls are local by default.\n  you session pause\n  you session resume\n  you session cancel session-beta\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session pause session-beta\n  you session resume session-beta --remote --server http://factory.example:7437\n\n  # Run output selection and local hosting are separate from placement.\n  you --remote --server http://factory.example:7437 run --named @you/research --output primary \"Review the current plan\"\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open a session on a non-default port and delete through a selected server.\n  you session create --dir /workspace/fleet --port 9090\n  you --server http://localhost:9090 session delete session-beta --json\n\n  # Target a different service port for list output.\n  you session list --port 9090",
         "line": "session"
       },
       "visibility": "visible"
@@ -4601,7 +4601,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\nUse the same --port selection as session list. Use --json to emit a JSON confirmation on stdout.",
+            "canonicalEnglish": "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\nUse global --server to select the exact factory API base URI. The legacy --port flag is rejected with guidance to use --server. Use --json to emit a JSON confirmation on stdout.",
             "id": "you.session.delete.description"
           },
           "title": {
@@ -4610,7 +4610,8 @@
           }
         },
         "examples": [
-          "you session delete session-beta"
+          "you session delete session-beta",
+          "you --server http://factory.example:7437 session delete session-beta"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.delete",
@@ -4688,7 +4689,7 @@
           "binding": "",
           "changedDefault": false,
           "completion": "none",
-          "default": "7437",
+          "default": "0",
           "id": "you.session.delete.flag.port",
           "lifecycle": {
             "formatVersion": "1.0.0",
@@ -4703,9 +4704,9 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
-          "usage": "HTTP server port",
+          "usage": "deprecated; use --server",
           "valueType": "int",
-          "visibility": "visible"
+          "visibility": "hidden"
         },
         "you.session.delete.flag.remote": {
           "aliases": [],
@@ -5515,7 +5516,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Pause one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports paused, already-paused, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
+            "canonicalEnglish": "Pause one live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports paused, already-paused, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
             "id": "you.session.pause.description"
           },
           "title": {
@@ -5527,6 +5528,7 @@
           "you session pause",
           "you session pause session-beta",
           "you session pause dur-sess-js-run-n-001",
+          "you --server http://factory.example:7437 session pause session-beta",
           "you --remote --server http://factory.example:7437 session pause session-beta",
           "you session pause session-beta --remote --server http://factory.example:7437",
           "you --json session pause session-beta"
@@ -5801,7 +5803,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Resume one paused live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports resumed, already-running, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
+            "canonicalEnglish": "Resume one paused live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Omit session-id to target the default compatibility session (~default), pass a named live session id such as session-beta, or pass a durable session id from `you session list --scope all`. Human output reports resumed, already-running, invalid-state, not-found, and unreachable-host outcomes. Placement selects the local or remote adapter; waiting/following and hosting are separate run controls. Use global --json for the API-shaped FactorySessionLifecycleControlResponse.",
             "id": "you.session.resume.description"
           },
           "title": {
@@ -5813,6 +5815,7 @@
           "you session resume",
           "you session resume session-beta",
           "you session resume dur-sess-js-run-n-001",
+          "you --server http://factory.example:7437 session resume session-beta",
           "you --remote --server http://factory.example:7437 session resume session-beta",
           "you session resume session-beta --remote --server http://factory.example:7437",
           "you --json session resume session-beta"
@@ -6065,11 +6068,12 @@
       "constraints": {"platforms": ["linux", "darwin", "windows"], "runtime": ["local"]},
       "documentation": {
         "documentation": {
-          "description": {"canonicalEnglish": "Cancel one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.cancel.description"},
+          "description": {"canonicalEnglish": "Cancel one live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.cancel.description"},
           "title": {"canonicalEnglish": "Cancel one live or durable Factory Session", "id": "you.session.cancel.title"}
         },
         "examples": [
           "you session cancel session-beta",
+          "you --server http://factory.example:7437 session cancel session-beta",
           "you --remote --server http://factory.example:7437 session cancel session-beta",
           "you session cancel session-beta --remote --server http://factory.example:7437",
           "you --json session cancel session-beta"
@@ -6105,7 +6109,7 @@
       "runnable": true,
       "placement": "dual",
       "sideEffects": {"you.session.cancel.side-effect.network": {"id": "you.session.cancel.side-effect.network", "kind": "network"}},
-      "usage": {"example": "  # Cancel one Factory Session locally by default.\n  you session cancel session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session cancel session-beta\n  you session cancel session-beta --remote --server http://factory.example:7437", "line": "cancel [session-id]"},
+      "usage": {"example": "  # Cancel one Factory Session locally by default.\n  you session cancel session-beta\n\n  # Select an exact already-running server explicitly.\n  you --server http://factory.example:7437 session cancel session-beta\n  you session cancel session-beta --remote --server http://factory.example:7437", "line": "cancel [session-id]"},
       "visibility": "visible"
     },
     "you.session.terminate": {
@@ -6133,11 +6137,12 @@
       "constraints": {"platforms": ["linux", "darwin", "windows"], "runtime": ["local"]},
       "documentation": {
         "documentation": {
-          "description": {"canonicalEnglish": "Terminate one live or durable Factory Session. Local placement is the default; use persistent --remote with --server to select one exact already-running You server. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.terminate.description"},
+          "description": {"canonicalEnglish": "Terminate one live or durable Factory Session. Local placement is the default; an explicit --server selects one exact already-running You server and implies remote placement, while persistent --remote remains available for explicit remote placement. Placement selects the adapter, while waiting/following and hosting are separate run controls.", "id": "you.session.terminate.description"},
           "title": {"canonicalEnglish": "Terminate one live or durable Factory Session", "id": "you.session.terminate.title"}
         },
         "examples": [
           "you session terminate session-beta",
+          "you --server http://factory.example:7437 session terminate session-beta",
           "you --remote --server http://factory.example:7437 session terminate session-beta",
           "you session terminate session-beta --remote --server http://factory.example:7437",
           "you --json session terminate session-beta"
@@ -6173,7 +6178,7 @@
       "runnable": true,
       "placement": "dual",
       "sideEffects": {"you.session.terminate.side-effect.network": {"id": "you.session.terminate.side-effect.network", "kind": "network"}},
-      "usage": {"example": "  # Terminate one Factory Session locally by default.\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --remote --server http://factory.example:7437 session terminate session-beta\n  you session terminate session-beta --remote --server http://factory.example:7437", "line": "terminate [session-id]"},
+      "usage": {"example": "  # Terminate one Factory Session locally by default.\n  you session terminate session-beta\n\n  # Select an exact already-running server explicitly.\n  you --server http://factory.example:7437 session terminate session-beta\n  you session terminate session-beta --remote --server http://factory.example:7437", "line": "terminate [session-id]"},
       "visibility": "visible"
     },
     "you.session.show": {
