@@ -9,6 +9,7 @@ import (
 
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -357,7 +358,7 @@ func optionalSessionID(inputs resolvedinput.Inputs, inputID string) (string, err
 func rejectDeprecatedSessionPort(inputs resolvedinput.Inputs, inputID string) error {
 	state, present := inputs.State(inputID)
 	if present && state.Changed {
-		return errors.New(deprecatedSessionPortFlagMessage)
+		return clidiag.NewUsageError("you session", errors.New(deprecatedSessionPortFlagMessage))
 	}
 	return nil
 }
