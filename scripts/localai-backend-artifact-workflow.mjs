@@ -12,6 +12,12 @@ const versionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const supportedAccelerators = new Set(["cpu", "metal"]);
 
+// A published backend archive must contain a credible runnable payload. The
+// strict boundary is intentionally shared by manifest creation and final
+// publication verification so a placeholder cannot be adopted at either
+// artifact-side boundary.
+export const minimumPublishedArchiveSizeBytes = 1 << 20;
+
 const expectedBackendIds = ["localai-llamacpp", "localai-whisper", "localai-vibevoice"];
 const expectedTargetIds = ["darwin-arm64", "linux-amd64", "windows-amd64"];
 const expectedWorkflowPins = {
@@ -599,23 +605,34 @@ function validateMatrixMetadata(metadata, { config, backend, target, key }) {
 
 function readArchiveDigest(path, label) {
 	const bytes = readFileSync(path);
-	if (bytes.length === 0) throw new Error(`${label} is empty`);
+	if (bytes.length <= minimumPublishedArchiveSizeBytes) {
+		throw new Error(
+			`${label} is placeholder-sized at ${bytes.length} bytes; must be strictly greater than ${minimumPublishedArchiveSizeBytes} bytes (1 MiB)`,
+		);
+	}
 	return {
 		sizeBytes: bytes.length,
 		sha256: createHash("sha256").update(bytes).digest("hex"),
 	};
 }
 
-export function verifyManifestArchives({ manifest, artifactDirectory }) {
-	if (!isPlainObject(manifest) || !Array.isArray(manifest.artifacts) || manifest.artifacts.length !== expectedBackendIds.length * expectedTargetIds.length) {
-		throw new Error("manifest must contain exactly nine backend artifacts");
+export function verifyManifestArchives({ config, manifest, artifactDirectory }) {
+	const expected = expectedArtifactEntries(config);
+	if (!isPlainObject(manifest) || !Array.isArray(manifest.artifacts) || manifest.artifacts.length !== expected.length) {
+		throw new Error(`manifest must contain exactly ${expected.length} backend artifacts`);
 	}
+	const expectedByID = new Map(expected.map((entry) => [entry.key, entry]));
 	const seenIds = new Set();
 	const seenNames = new Set();
 	for (const entry of manifest.artifacts) {
 		const id = entry?.id;
 		const name = entry?.artifact?.name;
 		if (typeof id !== "string" || seenIds.has(id)) throw new Error(`manifest contains duplicate artifact identity ${id || "<missing>"}`);
+		const expectedEntry = expectedByID.get(id);
+		if (!expectedEntry) throw new Error(`manifest contains unexpected artifact identity ${id || "<missing>"}`);
+		if (name !== expectedEntry.archiveName) {
+			throw new Error(`${id} archive name ${name || "<missing>"} does not match the publication configuration ${expectedEntry.archiveName}`);
+		}
 		if (typeof name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]+$/.test(name) || seenNames.has(name)) {
 			throw new Error(`manifest contains duplicate or unsafe archive identity ${name || "<missing>"}`);
 		}
@@ -709,7 +726,7 @@ export function createManifest({ config, artifactDirectory, repository }) {
 		},
 		artifacts,
 	};
-	verifyManifestArchives({ manifest, artifactDirectory });
+	verifyManifestArchives({ config, manifest, artifactDirectory });
 	return manifest;
 }
 
@@ -719,7 +736,7 @@ export function writePublicationBundle({ config, artifactDirectory, outputDirect
 	if (readdirSync(outputDirectory).length > 0) throw new Error(`publication directory must be empty: ${outputDirectory}`);
 	for (const entry of manifest.artifacts) copyFileSync(join(artifactDirectory, entry.artifact.name), join(outputDirectory, entry.artifact.name));
 	writeFileSync(join(outputDirectory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-	verifyManifestArchives({ manifest, artifactDirectory: outputDirectory });
+	verifyManifestArchives({ config, manifest, artifactDirectory: outputDirectory });
 	return { manifest, outputDirectory };
 }
 
