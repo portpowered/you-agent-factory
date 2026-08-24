@@ -11,13 +11,15 @@ import (
 )
 
 const (
-	modelsRootModelNotFoundCode  = "NOT_FOUND"
-	modelsRootCacheNotFoundCode  = "MODEL_CACHE_NOT_FOUND"
-	modelsRootCacheInUseCode     = "MODEL_CACHE_IN_USE"
-	modelsRootCacheUnsafeCode    = "BAD_REQUEST"
-	modelsRootPullFailedCode     = "CLI_MODEL_PULL_FAILED"
-	modelsRootDefaultErrorText   = "models command failed"
-	modelsRootMissingCachePrefix = "model cache is not installed; run you models pull"
+	modelsRootModelNotFoundCode    = "NOT_FOUND"
+	modelsRootModelUnavailableCode = "MODEL_NOT_AVAILABLE"
+	modelsRootBadRequestCode       = "BAD_REQUEST"
+	modelsRootCacheNotFoundCode    = "MODEL_CACHE_NOT_FOUND"
+	modelsRootCacheInUseCode       = "MODEL_CACHE_IN_USE"
+	modelsRootCacheUnsafeCode      = modelsRootBadRequestCode
+	modelsRootPullFailedCode       = "CLI_MODEL_PULL_FAILED"
+	modelsRootDefaultErrorText     = "models command failed"
+	modelsRootMissingCachePrefix   = "model cache is not installed; run you models pull"
 )
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
@@ -84,6 +86,59 @@ func newModelsRootError(
 	return &modelsRootError{
 		code: code, family: family, message: message, sentinel: sentinel, cause: cause,
 	}
+}
+
+// mapModelsInvocationError preserves the Models invocation taxonomy at the
+// local CLI boundary. Generic invocation validation already carries a safe
+// public message; only the CLI diagnostic fields are missing when the error
+// crosses this adapter. The underlying typed failure remains in the cause so
+// callers and --debug diagnostics retain its identity.
+func mapModelsInvocationError(err error) (error, bool) {
+	if err == nil {
+		return nil, false
+	}
+	var failure *modelinference.InvocationFailure
+	if !errors.As(err, &failure) || failure == nil {
+		return nil, false
+	}
+	code, family := modelsInvocationDiagnostic(failure.Class)
+	return newModelsRootError(code, family, failure.Error(), nil, err), true
+}
+
+func modelsInvocationDiagnostic(class modelinference.InvocationFailureClass) (string, factoryapi.ErrorFamily) {
+	switch class {
+	case modelinference.InvocationFailureClassInvalidModelReference,
+		modelinference.InvocationFailureClassRevisionResolution:
+		return modelsRootModelUnavailableCode, factoryapi.ErrorFamilyNotFound
+	case modelinference.InvocationFailureClassInvalidOperation,
+		modelinference.InvocationFailureClassInvalidSlot,
+		modelinference.InvocationFailureClassSlotArity,
+		modelinference.InvocationFailureClassInvalidParameter,
+		modelinference.InvocationFailureClassMediaCapability,
+		modelinference.InvocationFailureClassArtifact:
+		return modelsRootBadRequestCode, factoryapi.ErrorFamilyBadRequest
+	case modelinference.InvocationFailureClassOfflineCache:
+		return "MODEL_OFFLINE_CACHE_UNAVAILABLE", factoryapi.ErrorFamilyConflict
+	case modelinference.InvocationFailureClassBackendReadiness:
+		return "MODEL_BACKEND_NOT_READY", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassBackendProtocol,
+		modelinference.InvocationFailureClassMalformedResponse:
+		return "MODEL_BACKEND_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassCancellation,
+		modelinference.InvocationFailureClassTimeout:
+		return "MODEL_INFERENCE_TIMEOUT", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassConfiguration:
+		return "MODEL_CONFIGURATION_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	default:
+		return "MODEL_INFERENCE_RUNTIME_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	}
+}
+
+func mapModelsClientError(err error) error {
+	if mapped, ok := mapModelsInvocationError(err); ok {
+		return mapped
+	}
+	return mapModelsRootError(err)
 }
 
 func mapModelsRootError(err error) error {

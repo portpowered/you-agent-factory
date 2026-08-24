@@ -44,7 +44,7 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	}
 	scope, err := service.openInvokeScope(cfg.Context, cfg)
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	if scope.Close != nil {
 		defer func() {
@@ -102,7 +102,7 @@ func (service *rootService) catalogForInvoke(
 	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
 		return modelinference.Detail{}, fmt.Errorf("--output is required unless --json is set")
 	}
-	return modelinference.Detail{}, mapModelsRootError(err)
+	return modelinference.Detail{}, mapModelsClientError(err)
 }
 
 func (service *rootService) refreshInvokeReadiness(
@@ -122,7 +122,7 @@ func (service *rootService) refreshInvokeReadiness(
 	if errors.Is(err, modelinference.ErrUnsupportedOperation) {
 		return catalog, nil
 	}
-	return modelinference.Detail{}, mapModelsRootError(err)
+	return modelinference.Detail{}, mapModelsClientError(err)
 }
 
 func (service *rootService) tryJoinedInvocation(
@@ -144,7 +144,7 @@ func (service *rootService) tryJoinedInvocation(
 			errors.Is(err, modelinference.ErrModelReferenceUnknown) {
 			return false, nil
 		}
-		return false, mapModelsRootError(err)
+		return false, mapModelsClientError(err)
 	}
 	return true, service.writeJoinedInvocation(cfg, catalog, operation, joinedResult, text)
 }
@@ -553,14 +553,14 @@ func (service *rootService) invokePreparedLease(
 ) error {
 	if runtime := catalog.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
 		if err := runtime.InvocationError(); err != nil {
-			return mapModelsRootError(err)
+			return mapModelsClientError(err)
 		}
 	}
 	leaseResult, err := service.models.AcquireModelLease(cfg.Context, modelinference.AcquireModelLeaseRequest{
 		Scope: scope, Name: modelName, Holder: modelsCLIInvokeHolder,
 	})
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	request := modelinference.InvokeModelRequest{
 		Scope:     scope,
@@ -579,7 +579,7 @@ func (service *rootService) invokePreparedLease(
 	}
 	result, err := service.models.InvokeModelWithLease(cfg.Context, request)
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	if cfg.JSON {
 		response := modelInvocationResponseFromInferenceResult(result, catalog, text)
@@ -588,7 +588,7 @@ func (service *rootService) invokePreparedLease(
 	outputPath := strings.TrimSpace(cfg.OutputPath)
 	streamFile, err := inferenceArtifactSourcePath(result)
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	if service.artifacts == nil {
 		return fmt.Errorf("model invocation artifact exporter is required")

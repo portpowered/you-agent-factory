@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -737,5 +738,48 @@ func assertCharacterizationJSON(t *testing.T, got, want string) {
 	t.Helper()
 	if strings.TrimSpace(got) != want {
 		t.Fatalf("JSON = %q, want exact %q", strings.TrimSpace(got), want)
+	}
+}
+
+func TestRootAdapter_InspectMapsTypedInvocationValidation(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("validation cause")
+	failure := &modelinference.InvocationFailure{
+		Class:   modelinference.InvocationFailureClassInvalidSlot,
+		Message: "required input slot is missing: audio",
+		Cause:   cause,
+	}
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{}, failure
+			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return parityInvokeScope(t), nil
+		},
+	})
+
+	err := service.Inspect(modelscli.InspectConfig{
+		Context: context.Background(), ModelName: "asr", JSON: true, Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("Inspect() error = nil, want typed validation failure")
+	}
+	var classified *modelinference.InvocationFailure
+	if !errors.As(err, &classified) || classified != failure || !errors.Is(err, cause) {
+		t.Fatalf("Inspect() error = %v, failure = %#v, want original typed failure and cause", err, classified)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(err, &coded) {
+		t.Fatalf("Inspect() error = %T, want CLI diagnostic contract", err)
+	}
+	if coded.CLIErrorCode() != "BAD_REQUEST" || coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest || coded.CLIErrorMessage() != failure.Message {
+		t.Fatalf("Inspect() CLI fields = (%q, %q, %q), want BAD_REQUEST/BAD_REQUEST/%q", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage(), failure.Message)
 	}
 }
