@@ -40,11 +40,12 @@ func TestHTTPGenericInvocationContractsPreserveOrderedInputsAndNamedOutputs(t *t
 		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPtr("image/jpeg"), Content: stringPtr("second")},
 	}
 	parameters := []factoryapi.ModelInvocationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}}
+	operation := factoryapi.ModelOperationName(modelprovider.OperationOMNI)
 	mapped, err := modelhttp.GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
 		Scope:      "scope-functional-http",
 		Holder:     "functional-http",
 		Model:      factoryapi.ModelReference{NameOrUri: "llm"},
-		Operation:  modelprovider.OperationOMNI,
+		Operation:  &operation,
 		Inputs:     &inputs,
 		Parameters: &parameters,
 		OutputMode: &outputMode,

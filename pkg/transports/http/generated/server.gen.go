@@ -5296,7 +5296,7 @@ type FailureDetail struct {
 	Reason WorkFailureType `json:"reason"`
 }
 
-// GenericModelInvocationRequest Provider-neutral generic model invocation request. Inputs and parameters retain authored order.
+// GenericModelInvocationRequest Provider-neutral generic model invocation request. Inputs and parameters retain authored order. When operation is omitted, Models infers the sole operation exposed by the resolved model.
 type GenericModelInvocationRequest struct {
 	// Holder Non-empty caller identity used by the eventual capacity owner.
 	Holder string `json:"holder"`
@@ -5311,7 +5311,7 @@ type GenericModelInvocationRequest struct {
 	Offline *bool `json:"offline,omitempty"`
 
 	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
-	Operation ModelOperationName `json:"operation"`
+	Operation *ModelOperationName `json:"operation,omitempty"`
 
 	// OutputMode Provider-neutral representation requested for a generic model invocation result.
 	OutputMode *ModelInvocationOutputMode `json:"outputMode,omitempty"`

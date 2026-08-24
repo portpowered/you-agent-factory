@@ -182,6 +182,114 @@ func TestGenericInvocationMappingPreservesRepeatedOMNIInputsAndJSONOrder(t *test
 	assertGenericInvocationRequestJSON(t, generated)
 }
 
+func TestGenericInvocationMappingPreservesEmbedInputsAndOmittedOperation(t *testing.T) {
+	t.Parallel()
+
+	textValue := "Find similar work"
+	parametersValue := `{"normalize":true,"dimensions":4}`
+	inputs := []factoryapi.ModelInvocationInput{
+		{Name: "text", Modality: factoryapi.ModelInvocationContentTypeText, Content: &textValue},
+		{Name: "parameters", Modality: factoryapi.ModelInvocationContentTypeJSON, Content: &parametersValue},
+	}
+	outputMode := factoryapi.ModelInvocationOutputModeJSON
+	mapped, err := GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
+		Scope:      "scope-http-embed",
+		Holder:     "http-embed",
+		Model:      factoryapi.ModelReference{NameOrUri: "embed"},
+		Inputs:     &inputs,
+		OutputMode: &outputMode,
+	})
+	if err != nil {
+		t.Fatalf("GenericInvocationRequestFromGenerated() error = %v", err)
+	}
+	if mapped.Operation != "" || mapped.Model.NameOrURI != "embed" || mapped.OutputMode != models.OutputModeJSON {
+		t.Fatalf("mapped EMBED identity = %#v, want inferred operation and JSON output mode", mapped)
+	}
+	if len(mapped.Inputs) != 2 || mapped.Inputs[0].Name != "text" || mapped.Inputs[0].Content != textValue ||
+		mapped.Inputs[1].Name != "parameters" || mapped.Inputs[1].Modality != models.ModalityJSON ||
+		mapped.Inputs[1].Content != parametersValue {
+		t.Fatalf("mapped EMBED inputs = %#v, want ordered text then parameters", mapped.Inputs)
+	}
+}
+
+func TestHandler_InvokeGenericModelEmbedReturnsCanonicalNamedJSONOutput(t *testing.T) {
+	t.Parallel()
+
+	var captured models.InvokeModelRequest
+	root := &rootFake{
+		invokeGeneric: func(_ context.Context, request models.InvokeModelRequest) (models.InvokeModelResult, error) {
+			captured = request
+			return models.InvokeModelResult{Outputs: []models.InferenceOutput{
+				{Name: "embedding", Modality: models.ModalityJSON, ContentType: "application/json", MediaType: "application/json", Content: `[0.1,0.2,0.3,0.4]`},
+			}}, nil
+		},
+	}
+	binding := testRootBinding(root)
+	handler := NewHandlerFromRoot(binding, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	body := `{"scope":"caller-supplied","holder":"operator","model":{"nameOrUri":"embed"},"inputs":[{"name":"text","modality":"TEXT","content":"Find similar work"},{"name":"parameters","modality":"JSON","content":"{\"normalize\":true}"}],"outputMode":"JSON"}`
+
+	handler.InvokeGenericModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(body)),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	if captured.Scope != binding.Scope || captured.Model.NameOrURI != "embed" || captured.Operation != "" ||
+		captured.OutputMode != models.OutputModeJSON || len(captured.Inputs) != 2 || captured.Inputs[0].Name != "text" ||
+		captured.Inputs[1].Name != "parameters" {
+		t.Fatalf("root EMBED request = %#v, want live scope, inferred operation, and ordered named inputs", captured)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode EMBED response: %v", err)
+	}
+	if len(response.Outputs) != 1 {
+		t.Fatalf("EMBED outputs = %#v, want exactly one output", response.Outputs)
+	}
+	output := response.Outputs[0]
+	if output.Name != "embedding" || output.Modality != factoryapi.ModelInvocationContentTypeJSON ||
+		output.ContentType == nil || *output.ContentType != "application/json" || output.MediaType == nil ||
+		*output.MediaType != "application/json" || output.Content == nil || *output.Content != `[0.1,0.2,0.3,0.4]` {
+		t.Fatalf("EMBED output = %#v, want canonical named JSON vector", output)
+	}
+	var vector []float64
+	if err := json.Unmarshal([]byte(*output.Content), &vector); err != nil || len(vector) != 4 {
+		t.Fatalf("EMBED output content = %q, want valid four-dimensional JSON array: %v", *output.Content, err)
+	}
+}
+
+func TestHandler_InvokeGenericModelMapsEmbedContractFailureWithoutPartialOutput(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{
+		invokeGeneric: func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+			return models.InvokeModelResult{}, &models.InvocationFailure{
+				Class:     models.InvocationFailureClassInvalidSlot,
+				Message:   `unknown input slot "unknown"; valid: parameters, text`,
+				Model:     models.ModelReference{NameOrURI: "embed"},
+				Operation: models.OperationEMBED,
+				Slot:      "unknown",
+			}
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	body := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"embed"},"operation":"EMBED","inputs":[{"name":"unknown","modality":"TEXT","content":"Find similar work"}]}`
+
+	handler.InvokeGenericModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(body)),
+	)
+
+	assertCatalogHTTPError(t, recorder, http.StatusBadRequest, "BAD_REQUEST", `unknown input slot "unknown"; valid: parameters, text`)
+	if strings.Contains(recorder.Body.String(), "https://") || strings.Contains(recorder.Body.String(), "cache=") {
+		t.Fatalf("EMBED failure leaked implementation detail: %s", recorder.Body.String())
+	}
+}
+
 func TestGeneratedModelInvocationOperationRoundTripPreservesVideoSlotMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -236,6 +344,7 @@ func assertVideoSlotRoundTrip(t *testing.T, operation factoryapi.ModelInvocation
 func genericOMNIRequestForTest() factoryapi.GenericModelInvocationRequest {
 	outputMode := factoryapi.ModelInvocationOutputModeJSON
 	offline := true
+	operation := factoryapi.ModelOperationName(models.OperationOMNI)
 	inputs := []factoryapi.ModelInvocationInput{
 		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: stringPointer("compare")},
 		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
@@ -246,7 +355,7 @@ func genericOMNIRequestForTest() factoryapi.GenericModelInvocationRequest {
 		Scope:      "scope-http-001",
 		Holder:     "http",
 		Model:      factoryapi.ModelReference{NameOrUri: "llm"},
-		Operation:  models.OperationOMNI,
+		Operation:  &operation,
 		Inputs:     &inputs,
 		Parameters: &parameters,
 		OutputMode: &outputMode,
@@ -368,11 +477,12 @@ func TestGenericInvocationRequestMappingRejectsInvalidArtifactAsTypedFailure(t *
 		Modality:    factoryapi.ModelInvocationContentTypeImage,
 		ArtifactRef: stringPointer(" "),
 	}}
+	operation := factoryapi.ModelOperationName(models.OperationOMNI)
 	_, err := GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
 		Scope:     "scope-http-002",
 		Holder:    "http",
 		Model:     factoryapi.ModelReference{NameOrUri: "llm"},
-		Operation: models.OperationOMNI,
+		Operation: &operation,
 		Inputs:    &inputs,
 	})
 	var failure *models.InvocationFailure
@@ -470,6 +580,7 @@ func assertGeneratedClientRequestRoundTrip(t *testing.T) {
 	t.Helper()
 	outputMode := generatedclient.ModelInvocationOutputModeJSON
 	offline := true
+	operation := generatedclient.ModelOperationName(models.OperationOMNI)
 	inputs := []generatedclient.ModelInvocationInput{
 		{Name: "prompt", Modality: generatedclient.ModelInvocationContentTypeText, Content: stringPointer("compare")},
 		{Name: "image", Modality: generatedclient.ModelInvocationContentTypeImage, MediaType: stringPointer("image/png"), Content: stringPointer("first")},
@@ -479,7 +590,7 @@ func assertGeneratedClientRequestRoundTrip(t *testing.T) {
 		Scope:      "scope-client-001",
 		Holder:     "generated-client",
 		Model:      generatedclient.ModelReference{NameOrUri: "llm"},
-		Operation:  "OMNI",
+		Operation:  &operation,
 		Inputs:     &inputs,
 		OutputMode: &outputMode,
 		Offline:    &offline,

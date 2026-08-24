@@ -219,7 +219,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 		server.URL()+"/models/invocations",
 		factoryapi.GenericModelInvocationRequest{
 			Scope: "factory-session:caller-supplied", Holder: "functional-generic-http",
-			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Operation: "TTS", Inputs: &inputs,
+			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Inputs: &inputs,
 		},
 		"POST /models/invocations",
 	)
@@ -269,12 +269,13 @@ func TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 		Name: "text", Modality: factoryapi.ModelInvocationContentTypeText,
 		Content: &text,
 	}}
+	operation := factoryapi.ModelOperationName(models.OperationTTS)
 	genericResponse := postFunctionalJSON[factoryapi.GenericModelInvocationResponse](
 		t,
 		server.URL()+"/models/invocations",
 		factoryapi.GenericModelInvocationRequest{
 			Scope: "factory-session:parity-generic", Holder: "functional-parity",
-			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Operation: "TTS", Inputs: &inputs,
+			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Operation: &operation, Inputs: &inputs,
 		},
 		"POST /models/invocations built-in parity",
 	)

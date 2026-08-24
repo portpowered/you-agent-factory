@@ -2447,14 +2447,15 @@ export interface components {
       /** @description Public request field associated with the failure, when known. */
       field?: string;
     };
-    /** @description Provider-neutral generic model invocation request. Inputs and parameters retain authored order. */
+    /** @description Provider-neutral generic model invocation request. Inputs and parameters retain authored order. When operation is omitted, Models infers the sole operation exposed by the resolved model. */
     GenericModelInvocationRequest: {
       /** @description Opaque Models runtime-scope reference. */
       scope: string;
       /** @description Non-empty caller identity used by the eventual capacity owner. */
       holder: string;
       model: components["schemas"]["ModelReference"];
-      operation: components["schemas"]["ModelOperationName"];
+      /** @description Optional operation identifier. Omit it when the resolved model exposes exactly one operation. */
+      operation?: components["schemas"]["ModelOperationName"];
       /** @description Ordered input values. Repeated slot names remain separate entries in this order. */
       inputs?: components["schemas"]["ModelInvocationInput"][];
       /** @description Ordered named JSON parameters for the selected operation. */
