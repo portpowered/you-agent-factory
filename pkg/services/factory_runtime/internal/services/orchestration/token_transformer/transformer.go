@@ -44,6 +44,7 @@ type OutputTokenInput struct {
 	ConsumedTokens          []factorytoken.Token
 	InputColors             []factorytoken.Color
 	Output                  string
+	OutputContent           []work.WorkContentPart
 	StructuredResult        any
 	StructuredResultPresent bool
 	WorkPropagationMode     interfaces.WorkPropagationMode
@@ -225,8 +226,12 @@ func applyOutputPayloadPropagation(
 			color.Payload = []byte(in.Output)
 		}
 		if shouldShapeWorkContentFromWorkerOutput(in, place, workTypes, color.WorkTypeID) {
-			if err := applyWorkerOutputContent(color, in.Output); err != nil {
-				return err
+			if len(in.OutputContent) > 0 {
+				color.Content = work.CloneWorkContentParts(in.OutputContent)
+			} else {
+				if err := applyWorkerOutputContent(color, in.Output); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

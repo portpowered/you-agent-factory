@@ -202,6 +202,9 @@ func (a *Assembly) Assemble(
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	if modelInvocationOverride, ok := replayProvider.(workers.ModelInvocationService); ok {
+		spec.ModelInvocationOverride = modelInvocationOverride
+	}
 	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
 	if err := a.configureRestoredWorldState(
 		&spec,

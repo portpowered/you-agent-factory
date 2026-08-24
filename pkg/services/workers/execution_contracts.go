@@ -423,11 +423,15 @@ func CanonicalProviderSessionProvider(provider string) string {
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
-	DispatchID                  string                        `json:"dispatch_id"`
-	TransitionID                string                        `json:"transition_id"`
-	Outcome                     WorkOutcome                   `json:"outcome"`
-	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
-	Output                      string                        `json:"output,omitempty"`
+	DispatchID   string                `json:"dispatch_id"`
+	TransitionID string                `json:"transition_id"`
+	Outcome      WorkOutcome           `json:"outcome"`
+	Cancellation *DispatchCancellation `json:"cancellation,omitempty"`
+	Output       string                `json:"output,omitempty"`
+	// OutputContent is the transient structured proposal retained through
+	// Runtime routing. It is intentionally excluded from durable WorkResult
+	// serialization; MODEL_RESPONSE records the canonical detached content.
+	OutputContent               []work.WorkContentPart        `json:"-"`
 	StructuredResult            any                           `json:"structuredResult,omitempty"`
 	RecordedOutputWork          []work.FactoryWorkItem        `json:"recorded_output_work,omitempty"`
 	Error                       string                        `json:"error,omitempty"`

@@ -4,6 +4,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -51,6 +52,9 @@ type SessionBuildSpec struct {
 	// command edge so direct Workers execution can reproduce recorded script
 	// effects even when normal composition supplied a host runner.
 	ReplayCommandRunner platformprocess.CommandRunner
+	// ModelInvocationOverride carries replay's managed-model effect through the
+	// request-scoped Workers boundary without replacing the process Models root.
+	ModelInvocationOverride workers.ModelInvocationService
 	// ReplayEvents carries the detached canonical event history for a legacy
 	// replay. Runtime execution may re-emit events while rebuilding state, but
 	// durable Worker Session streams must retain the artifact's original cursor

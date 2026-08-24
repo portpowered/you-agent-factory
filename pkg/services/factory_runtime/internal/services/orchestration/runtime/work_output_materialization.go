@@ -406,6 +406,7 @@ func applyMaterializedWorkerOutput(
 		result.Output = ""
 		result.StructuredResult = nil
 		result.StructuredResultPresent = false
+		result.OutputContent = nil
 		result.RecordedOutputWork = nil
 		return result
 	}
@@ -418,6 +419,7 @@ func applyMaterializedWorkerOutput(
 		failed := result
 		failed.Outcome = workerexecution.OutcomeFailed
 		failed.RecordedOutputWork = nil
+		failed.OutputContent = nil
 		if strings.TrimSpace(failed.Error) == "" {
 			failed.Error = "worker output materialization: Work service is required"
 		} else {
@@ -440,6 +442,7 @@ func applyMaterializedWorkerOutput(
 		failed := result
 		failed.Outcome = workerexecution.OutcomeFailed
 		failed.RecordedOutputWork = nil
+		failed.OutputContent = nil
 		if strings.TrimSpace(failed.Error) == "" {
 			failed.Error = fmt.Sprintf("worker output materialization: %v", err)
 		} else {
@@ -453,6 +456,7 @@ func applyMaterializedWorkerOutput(
 	}
 
 	next := result
+	next.OutputContent = work.CloneWorkContentParts(proposals.Primary)
 	if text := strings.TrimSpace(materialized.PrimaryOutput); text != "" {
 		next.Output = text
 	}

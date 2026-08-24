@@ -55,6 +55,7 @@ func adaptRunnerRequest(
 		ModelOperation:               request.Input.ModelOperation,
 		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
 		ModelRuntime:                 modelRuntimeInputFromRequest(request),
+		ModelInvocationOverride:      request.Input.ModelInvocationOverride,
 		InputTokens:                  workers.InputTokens(inputTokens...),
 		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
 		UserMessage:                  request.Target.Prompt.UserMessage,

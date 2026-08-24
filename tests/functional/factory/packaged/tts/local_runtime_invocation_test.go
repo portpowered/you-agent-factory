@@ -100,6 +100,8 @@ type packagedTTSModelsBackend struct {
 	mu      sync.Mutex
 	audio   []byte
 	request *models.InvokeModelRequest
+	calls   int
+	failure error
 }
 
 func newPackagedTTSModelsBackend(audio []byte) *packagedTTSModelsBackend {
@@ -111,15 +113,32 @@ func (backend *packagedTTSModelsBackend) Invoke(
 	request models.InvokeModelRequest,
 ) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 	backend.mu.Lock()
+	backend.calls++
+	failure := backend.failure
 	cloned := request
 	cloned.Inputs = append([]models.InferenceInput(nil), request.Inputs...)
 	backend.request = &cloned
 	audio := append([]byte(nil), backend.audio...)
 	backend.mu.Unlock()
+	if failure != nil {
+		return nil, nil, failure
+	}
 	return []models.InferenceContent{{
 		Name: "audio", Modality: models.ModalityAudio,
 		ContentType: "audio/wav", MediaType: "audio/wav", Content: string(audio),
 	}}, nil, nil
+}
+
+func (backend *packagedTTSModelsBackend) CallCount() int {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	return backend.calls
+}
+
+func (backend *packagedTTSModelsBackend) SetFailure(failure error) {
+	backend.mu.Lock()
+	defer backend.mu.Unlock()
+	backend.failure = failure
 }
 
 func (backend *packagedTTSModelsBackend) LastRequest(t testing.TB) models.InvokeModelRequest {

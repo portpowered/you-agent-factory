@@ -13,6 +13,37 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestReplayModelInvocationFailureDetailAvoidsNestedWorkerClassification(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "worker scoped failure",
+			input: `inference failed for worker "tts-executor" model "tts" operation "TTS": model inference failed: backend unavailable`,
+			want:  "model inference failed: backend unavailable",
+		},
+		{
+			name:  "model scoped failure",
+			input: `inference failed for model "tts" operation "TTS": model inference failed: backend unavailable`,
+			want:  "model inference failed: backend unavailable",
+		},
+		{
+			name:  "already detached failure",
+			input: `model inference failed: backend unavailable`,
+			want:  "model inference failed: backend unavailable",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := replayModelInvocationFailureDetail(test.input); got != test.want {
+				t.Fatalf("replayModelInvocationFailureDetail(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+}
+
 // FND-12 captured replay success baseline: matched recorded provider
 // inference returns the recorded response. Invoked by
 // `make fnd-12-replay-behavior-baselines`.

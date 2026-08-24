@@ -105,7 +105,11 @@ func (r *runner) Execute(
 	if err := invocation.ValidateGeneric(); err != nil {
 		return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
 	}
-	result, err := r.models.InvokeModel(ctx, invocation)
+	modelInvoker := r.models
+	if request.ModelInvocationOverride != nil {
+		modelInvoker = request.ModelInvocationOverride
+	}
+	result, err := modelInvoker.InvokeModel(ctx, invocation)
 	if err != nil {
 		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(err, request)
 	}
