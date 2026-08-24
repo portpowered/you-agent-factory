@@ -179,3 +179,12 @@ func TestNewAdapterRejectsMissingQuery(t *testing.T) {
 		t.Fatalf("NewAdapter(nil) = %#v, want nil", got)
 	}
 }
+
+func TestAdapterRejectsNilReceiver(t *testing.T) {
+	t.Parallel()
+
+	var adapter *Adapter
+	if _, err := adapter.GetMetricsCosts(context.Background(), "session-a"); err == nil || err.Error() != "Costs query is required" {
+		t.Fatalf("nil Adapter.GetMetricsCosts() error = %v, want missing-query error", err)
+	}
+}

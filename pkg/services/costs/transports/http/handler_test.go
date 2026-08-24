@@ -246,4 +246,52 @@ func TestHandlerMapsCanceledCostsQueryToRequestTimeout(t *testing.T) {
 	}
 }
 
+func TestUnavailableHandlerReturnsTypedInternalError(t *testing.T) {
+	t.Parallel()
+
+	var handler *Handler
+	recorder := httptest.NewRecorder()
+	handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil), factoryapi.GetMetricsCostsParams{})
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode unavailable response: %v", err)
+	}
+	if response.Family != factoryapi.ErrorFamilyInternalServerError || response.Code != factoryapi.ErrorResponseCode("INTERNAL_ERROR") || response.Message != "Costs handler is unavailable" {
+		t.Fatalf("unavailable response = %#v, want typed internal error", response)
+	}
+}
+
+func TestHandlerRejectsAlreadyCanceledRequestWithoutQuery(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		called = true
+		return costs.Report{Status: costs.StatusNoUsage}, nil
+	})
+	handler := NewHandler(NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	recorder := httptest.NewRecorder()
+	handler.GetMetricsCosts(recorder, httptest.NewRequest(http.MethodGet, "/metrics/costs", nil).WithContext(ctx), factoryapi.GetMetricsCostsParams{})
+
+	if called {
+		t.Fatal("canceled request invoked the Costs query")
+	}
+	if recorder.Code != http.StatusRequestTimeout {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusRequestTimeout)
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode canceled request response: %v", err)
+	}
+	if response.Family != factoryapi.ErrorFamilyInternalServerError || response.Code != factoryapi.ErrorResponseCode("COSTS_QUERY_CANCELED") {
+		t.Fatalf("canceled request response = %#v, want typed cancellation", response)
+	}
+}
+
 func stringPointer(value string) *string { return &value }
