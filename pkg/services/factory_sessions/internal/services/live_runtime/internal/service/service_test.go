@@ -150,6 +150,29 @@ func TestServiceRejectsRootOnlyRuntimeForLegacySnapshotPaths(t *testing.T) {
 	}
 }
 
+func TestServiceSnapshotUsesBoundedWorkSnapshotWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	runtime := &boundedSnapshotRuntime{}
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) { return runtime, nil }
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	snapshot, err := service.Snapshot(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if snapshot == nil || snapshot.FactoryState != "bounded" {
+		t.Fatalf("Snapshot = %#v, want bounded snapshot", snapshot)
+	}
+	if runtime.workSnapshotCalls != 1 || runtime.engineSnapshotCalls != 0 {
+		t.Fatalf("snapshot calls = work %d, engine %d; want bounded work only", runtime.workSnapshotCalls, runtime.engineSnapshotCalls)
+	}
+}
+
 func testDependencies() liveruntime.Dependencies {
 	return liveruntime.Dependencies{
 		OpenForTarget:  func(context.Context, factorysessions.Target) (string, error) { return "session", nil },
@@ -180,6 +203,22 @@ type testFactoryRuntime struct {
 	terminateCalls int
 	pauseRequests  []factoryruntime.PauseRequest
 	resumeRequests []factoryruntime.ResumeRequest
+}
+
+type boundedSnapshotRuntime struct {
+	testFactoryRuntime
+	workSnapshotCalls   int
+	engineSnapshotCalls int
+}
+
+func (f *boundedSnapshotRuntime) GetWorkStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	f.workSnapshotCalls++
+	return &legacysnapshot.Snapshot{FactoryState: "bounded"}, nil
+}
+
+func (f *boundedSnapshotRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	f.engineSnapshotCalls++
+	return &legacysnapshot.Snapshot{FactoryState: "aggregate"}, nil
 }
 
 func (f *testFactoryRuntime) Run(context.Context) error    { return nil }

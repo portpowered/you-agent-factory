@@ -10,6 +10,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -66,6 +67,58 @@ type SessionLifecycleCompleteInput struct {
 // SessionLifecycleControlInput remains an alias for source compatibility.
 type SessionLifecycleControlInput = recordings.SessionLifecycleControlInput
 
+// SetRuntimeReadMetricsRecorder binds optional process-level observation
+// telemetry without widening the RuntimeLedger contract.
+func (h *FactoryEventHistory) SetRuntimeReadMetricsRecorder(recorder recordings.RuntimeReadMetricsRecorder) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.runtimeReadRecorder = recorder
+	h.mu.Unlock()
+}
+
+// RecordRuntimeReadMetric forwards one bounded runtime-read observation to the
+// recorder bound by the process composition root.
+func (h *FactoryEventHistory) RecordRuntimeReadMetric(metric recordings.RuntimeReadMetric) {
+	if h == nil {
+		return
+	}
+	h.mu.RLock()
+	recorder := h.runtimeReadRecorder
+	h.mu.RUnlock()
+	if recorder == nil {
+		return
+	}
+	labels := make(map[string]string, len(metric.Labels))
+	for key, value := range metric.Labels {
+		labels[key] = value
+	}
+	recorder(recordings.RuntimeReadMetric{Name: metric.Name, Labels: labels})
+}
+
+// CanonicalHistoryReadStats returns detached history-read counters for
+// request-level regression evidence.
+func (h *FactoryEventHistory) CanonicalHistoryReadStats() recordings.CanonicalHistoryReadStats {
+	if h == nil {
+		return recordings.CanonicalHistoryReadStats{}
+	}
+	return recordings.CanonicalHistoryReadStats{
+		CanonicalEventsCalls:  h.canonicalEventsCalls.Load(),
+		CanonicalEventsCopied: h.canonicalEventsCopied.Load(),
+		FullHistoryReductions: h.fullHistoryReductions.Load(),
+	}
+}
+
+// RecordCanonicalHistoryReduction records a full world-state reduction that
+// intentionally starts from canonical history.
+func (h *FactoryEventHistory) RecordCanonicalHistoryReduction() {
+	if h == nil {
+		return
+	}
+	h.fullHistoryReductions.Add(1)
+}
+
 // SeedCanonicalEvents restores an already-recorded event prefix before the
 // runtime emits successor lifecycle events. The restored identities and
 // ordering metadata remain untouched so public reconnect cursors continue
@@ -83,31 +136,47 @@ func (h *FactoryEventHistory) SeedCanonicalEvents(events []interfaces.FactoryEve
 		return fmt.Errorf("factory event history already contains events")
 	}
 	h.events = cloneFactoryEvents(events)
+	h.seedSessionProjectionLocked()
 	for _, event := range h.events {
-		switch event.Type {
-		case interfaces.FactoryEventTypeInitialStructureRequest:
-			h.hasInitialStructure = true
-		case interfaces.FactoryEventTypeRunRequest:
-			h.hasRunRequest = true
-			h.runRecordedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
-		case interfaces.FactoryEventTypeRunResponse:
-			h.hasRunResponse = true
-		case interfaces.FactoryEventTypeSessionStarted:
-			h.hasSessionStarted = true
-			h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
-		case interfaces.FactoryEventTypeSessionCompleted:
-			h.hasSessionCompleted = true
-		}
-		if event.Context.SessionID != nil {
-			if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
-				h.sessionID = sessionID
-			}
-		}
-		if event.Context.SessionSequence != nil && *event.Context.SessionSequence >= h.nextSessionSequence {
-			h.nextSessionSequence = *event.Context.SessionSequence + 1
-		}
+		h.restoreSeedEventStateLocked(event)
 	}
 	return nil
+}
+
+func (h *FactoryEventHistory) seedSessionProjectionLocked() {
+	if h.sessionProjection == nil {
+		h.sessionProjection = projections.NewIncrementalSessionProjection()
+	}
+	for _, event := range h.events {
+		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
+			h.sessionProjectionErr = err
+		}
+	}
+}
+
+func (h *FactoryEventHistory) restoreSeedEventStateLocked(event interfaces.FactoryEvent) {
+	switch event.Type {
+	case interfaces.FactoryEventTypeInitialStructureRequest:
+		h.hasInitialStructure = true
+	case interfaces.FactoryEventTypeRunRequest:
+		h.hasRunRequest = true
+		h.runRecordedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+	case interfaces.FactoryEventTypeRunResponse:
+		h.hasRunResponse = true
+	case interfaces.FactoryEventTypeSessionStarted:
+		h.hasSessionStarted = true
+		h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+	case interfaces.FactoryEventTypeSessionCompleted:
+		h.hasSessionCompleted = true
+	}
+	if event.Context.SessionID != nil {
+		if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
+			h.sessionID = sessionID
+		}
+	}
+	if sequence := event.Context.SessionSequence; sequence != nil && *sequence >= h.nextSessionSequence {
+		h.nextSessionSequence = *sequence + 1
+	}
 }
 
 // RecordSessionPaused records a successful Factory Session pause lifecycle transition.
@@ -557,6 +626,11 @@ func (h *FactoryEventHistory) appendEventWithValidation(
 		}
 	}
 	h.events = append(h.events, event)
+	if h.sessionProjection != nil {
+		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
+			h.sessionProjectionErr = err
+		}
+	}
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)

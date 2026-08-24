@@ -268,6 +268,8 @@ type (
 	RunResponseEventPayload                                    = recordingcontracts.RunResponseEventPayload
 	RuntimeEventLedger                                         = recordingcontracts.RuntimeEventLedger
 	RuntimeLedger                                              = recordingcontracts.RuntimeLedger
+	SessionProjectionFacts                                     = recordingcontracts.SessionProjectionFacts
+	SessionProjectionReader                                    = recordingcontracts.SessionProjectionReader
 	DispatchWorkerSessionExecutionFacts                        = recordingcontracts.DispatchWorkerSessionExecutionFacts
 	DispatchWorkerSessionAssociationRecorder                   = recordingcontracts.DispatchWorkerSessionAssociationRecorder
 	HumanApprovalRequestRecorder                               = recordingcontracts.HumanApprovalRequestRecorder
@@ -618,4 +620,25 @@ func (e *HistoricalRecordingQueryError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+// RuntimeReadMetric is the small observation vocabulary used by bounded live
+// reads. Recordings owns the canonical-history counters; the process-level
+// recorder is supplied by the composition root.
+type RuntimeReadMetric struct {
+	Name   string
+	Labels map[string]string
+}
+
+// RuntimeReadMetricsRecorder forwards bounded runtime-read observations.
+// A function type keeps the optional capability narrow without publishing a
+// second service-root interface.
+type RuntimeReadMetricsRecorder func(RuntimeReadMetric)
+
+// CanonicalHistoryReadStats is a detached snapshot of canonical-history work
+// observed by one runtime ledger.
+type CanonicalHistoryReadStats struct {
+	CanonicalEventsCalls  uint64
+	CanonicalEventsCopied uint64
+	FullHistoryReductions uint64
 }

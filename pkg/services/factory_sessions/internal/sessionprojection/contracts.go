@@ -9,6 +9,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // ProjectionBuildInput contains the owner-private mutable runtime facts needed
@@ -23,6 +24,7 @@ type ProjectionBuildInput struct {
 	NormalizedTarget    *factorysessions.RuntimeLogicalTarget
 	RuntimeStartedAt    time.Time
 	CheckpointStore     factoryruntime.JavaScriptCheckpointStore
+	SessionProjection   *recordings.SessionProjectionFacts
 	Events              []interfaces.FactoryEvent
 	WorldStateProjector factoryruntime.WorldStateProjector
 	Now                 time.Time

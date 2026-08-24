@@ -14,6 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation"
+	sessionprojectionfacts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -1519,6 +1520,18 @@ type Ledger interface {
 	AddEventRecorder(func(FactoryEvent))
 	AddEventTypeRecorder(func(FactoryEventType))
 	AppendRecordedEvent(FactoryEvent)
+}
+
+// SessionProjectionFacts contains the event-derived facts needed by live
+// Factory Session reads. Recordings maintains these facts as events are
+// appended so request-time session reads do not reconstruct canonical history.
+type SessionProjectionFacts = sessionprojectionfacts.SessionProjectionFacts
+
+// SessionProjectionReader is an optional Ledger capability for bounded live
+// session reads. It is optional so older recording fakes and historical
+// consumers can continue to implement the canonical Ledger contract.
+type SessionProjectionReader interface {
+	CurrentSessionProjectionFacts() (SessionProjectionFacts, error)
 }
 
 // Service is the singular Recordings root contract for cross-service peers.

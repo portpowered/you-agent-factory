@@ -160,7 +160,7 @@ type Handler = Adapter
 type Server = Adapter
 
 // ListHumanApprovalsBySessionId returns the pending approvals projected from
-// the selected live Factory Session's canonical event history.
+// the selected live Factory Session's current session facts.
 func (s *Adapter) ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListHumanApprovalsBySessionIdParams) {
 	if s.guardSessionsRequestContext(w, r) {
 		return

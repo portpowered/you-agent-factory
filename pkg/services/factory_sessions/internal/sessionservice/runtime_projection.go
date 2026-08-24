@@ -11,10 +11,12 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type sessionSyncPreflightTarget struct {
@@ -88,6 +90,25 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, err
 	}
 	bundle := runtimebinding.BundleFromSession(session)
+	var snapshot *legacysnapshot.Snapshot
+	if runtime := runtimebinding.ServiceForLiveRuntime(session.Runtime); runtime != nil {
+		if provider, ok := runtime.(legacysnapshot.WorkProvider); ok && provider != nil {
+			snapshot, err = provider.GetWorkStateSnapshot(ctx)
+			if err != nil {
+				return factorysessions.ProjectionContext{}, err
+			}
+		}
+	}
+	var sessionProjectionFacts *recordings.SessionProjectionFacts
+	if bundle != nil {
+		if reader, ok := bundle.RecordingLedger().(recordings.SessionProjectionReader); ok && reader != nil {
+			facts, factsErr := reader.CurrentSessionProjectionFacts()
+			if factsErr != nil {
+				return factorysessions.ProjectionContext{}, factsErr
+			}
+			sessionProjectionFacts = &facts
+		}
+	}
 	var checkpointStore factoryruntime.JavaScriptCheckpointStore
 	if interfaces.IsJavaScriptOrchestratorFactory(runtimeCfg.FactoryConfig()) {
 		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
@@ -106,10 +127,10 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	}
 	return sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg,
-		Observation:    observationResult.Observation,
+		Observation: observationResult.Observation, Snapshot: snapshot,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
-		CheckpointStore: checkpointStore, Events: runtimebinding.CanonicalEventsFromSession(session),
+		CheckpointStore: checkpointStore, SessionProjection: sessionProjectionFacts,
 		WorldStateProjector: fs.worldStateProjector, Now: fs.clock.Now().UTC(),
 	})
 }

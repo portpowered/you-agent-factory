@@ -11,7 +11,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -671,26 +670,6 @@ func (f *factoryImpl) ControlMoveWork(ctx context.Context, req factory.MoveWorkR
 	}, nil
 }
 
-func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
-	if !validObservationScope(req.Scope) {
-		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
-	}
-	f.mu.RLock()
-	state := f.state
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
-		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
-	default:
-		return factory.ObserveResult{}, factory.ErrNotRunning
-	}
-	snapshot, err := f.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return factory.ObserveResult{}, err
-	}
-	return factory.ObserveResult{Observation: rootobservation.Project(snapshot, req.Scope)}, nil
-}
-
 func (f *factoryImpl) PlanDispatch(
 	ctx context.Context,
 	req factory.PlanDispatchRequest,
@@ -837,17 +816,6 @@ func mapDispatchPlanningError(err error) error {
 		return fmt.Errorf("%w: %v", factory.ErrInvalidDispatchResultBoundary, err)
 	default:
 		return err
-	}
-}
-
-func validObservationScope(scope factory.ObservationScope) bool {
-	switch scope {
-	case "", factory.ObservationScopeFull, factory.ObservationScopeStatus, factory.ObservationScopeProgress,
-		factory.ObservationScopeDispatches, factory.ObservationScopeResults, factory.ObservationScopeResources,
-		factory.ObservationScopeHealth:
-		return true
-	default:
-		return false
 	}
 }
 

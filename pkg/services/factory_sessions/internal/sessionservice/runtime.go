@@ -135,6 +135,7 @@ func (fs *SessionRuntime) buildReplacementFactoryRuntime(
 	if err := fs.bindModelsRuntimeScope(bundle); err != nil {
 		return nil, errors.Join(err, bundle.CloseArtifacts())
 	}
+	fs.bindRuntimeReadMetrics(bundle)
 	return bundle, nil
 }
 
