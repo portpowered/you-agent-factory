@@ -169,6 +169,49 @@ describe("Dialog focus and keyboard behavior", () => {
     });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
+
+  it("uses the palette scrim role and keeps a disabled close control semantic", async () => {
+    const user = userEvent.setup();
+
+    renderPackageComponent(
+      <Dialog defaultOpen>
+        <DialogContent
+          aria-describedby={undefined}
+          closeDisabled
+          closeLabel="Close unavailable dialog"
+        >
+          <DialogTitle>Unavailable close dialog</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Unavailable close dialog",
+    });
+    const overlay = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-state="open"]'),
+    ).find((element) => element.classList.contains("bg-scrim"));
+    const closeButton = screen.getByRole("button", {
+      name: "Close unavailable dialog",
+    });
+
+    expect(overlay).toBeDefined();
+    if (!overlay) {
+      throw new Error("Expected the open dialog overlay");
+    }
+    expect(overlay).toHaveClass("bg-scrim");
+    expect(overlay).not.toHaveClass("bg-black/70");
+    expect(closeButton).toBeDisabled();
+    expect(closeButton).toHaveClass(
+      "disabled:pointer-events-none",
+      "disabled:bg-surface-container-low",
+      "disabled:text-on-surface-disabled",
+    );
+    expect(closeButton).not.toHaveClass("disabled:opacity-50");
+
+    await user.click(closeButton);
+    expect(dialog).toBeInTheDocument();
+  });
 });
 
 describe("Popover focus and keyboard behavior", () => {

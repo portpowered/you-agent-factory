@@ -61,6 +61,11 @@
     from var(--color-af-foundation-tertiary-accent) r g b /
     0.3
   );
+  /* Reference-only roles keep the migration showcase out of foundation call sites. */
+  --color-af-legacy-info: var(--color-info);
+  --color-af-legacy-info-ink: var(--color-on-info);
+  --color-af-legacy-worker: var(--color-af-foundation-worker);
+  --color-af-legacy-worker-ink: var(--color-af-foundation-canvas);
   --color-af-bg: var(--color-af-background);
   --color-af-bg-start: var(--color-af-foundation-background-start);
   --color-af-bg-mid: var(--color-af-foundation-background-mid);

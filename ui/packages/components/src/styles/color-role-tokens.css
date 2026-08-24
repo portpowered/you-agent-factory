@@ -39,6 +39,8 @@
     from var(--color-af-foundation-overlay) r g b /
     0.1
   );
+  /* Modal scrims follow the active palette while preserving the dark baseline. */
+  --color-scrim: rgb(from var(--color-af-foundation-background) r g b / 0.7);
   /* on-surface text roles: text-color-role-tokens.css */
   --color-outline: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
   --color-outline-variant: rgb(
@@ -110,6 +112,19 @@
     0.12
   );
   --color-on-info-container: var(--color-af-foundation-info-ink);
+
+  /* --- Graph visual-state emphasis --- */
+  --color-af-graph-selected-ring: rgb(from var(--color-primary) r g b / 0.3);
+  --color-af-graph-selected-outline: rgb(
+    from var(--color-primary) r g b /
+    0.28
+  );
+  --color-af-graph-selected-glow: rgb(from var(--color-primary) r g b / 0.08);
+  --color-af-graph-error-ring: rgb(from var(--color-error) r g b / 0.4);
+  --shadow-af-graph-selected:
+    0 0 0 1px var(--color-af-graph-selected-outline),
+    0 0 0 4px var(--color-af-graph-selected-glow);
+  --shadow-af-graph-error: 0 0 0 3px var(--color-error-container);
 
   /* --- Product af-* keys (role-backed; formerly color-role-aliases.css) --- */
   --color-af-background: var(--color-background);

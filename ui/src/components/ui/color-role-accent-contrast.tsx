@@ -27,8 +27,8 @@ const LEGACY_REFERENCE_SWATCHES = [
     id: "legacy-info",
     label: "Prior secondary hue (info foundation)",
     style: {
-      backgroundColor: "var(--color-af-foundation-info)",
-      color: "var(--color-af-foundation-canvas)",
+      backgroundColor: "var(--color-af-legacy-info)",
+      color: "var(--color-af-legacy-info-ink)",
     },
     subtitle: "Semantic info / legacy vibrant cyan",
   },
@@ -36,8 +36,8 @@ const LEGACY_REFERENCE_SWATCHES = [
     id: "legacy-worker",
     label: "Prior tertiary hue (worker foundation)",
     style: {
-      backgroundColor: "var(--color-af-foundation-worker)",
-      color: "var(--color-af-foundation-canvas)",
+      backgroundColor: "var(--color-af-legacy-worker)",
+      color: "var(--color-af-legacy-worker-ink)",
     },
     subtitle: "Legacy vibrant violet chrome",
   },
