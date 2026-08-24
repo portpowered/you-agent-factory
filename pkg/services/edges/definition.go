@@ -139,6 +139,12 @@ type Edges struct {
 		Open(string) (io.ReadCloser, error)
 		Create(string) (io.WriteCloser, error)
 	}
+	// ModelInvocationProtocolClient is the provider-neutral generic protocol
+	// edge used by fixture-backed and production model adapters. LocalAI wire
+	// representations stay behind the Models wire boundary.
+	ModelInvocationProtocolClient interface {
+		Predict(context.Context, models.InvocationProtocolRequest) (models.InvocationProtocolResponse, error)
+	}
 	FactorySessionsWorkingDirectory            platformfilesystem.WorkingDirectory
 	FactorySessionExecutionOpeningFileSystem   factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection          factorysessions.DirectoryInspection
@@ -435,6 +441,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelInvocationArtifactFileSystem != nil {
 		defaults.ModelInvocationArtifactFileSystem = replacements.ModelInvocationArtifactFileSystem
+	}
+	if replacements.ModelInvocationProtocolClient != nil {
+		defaults.ModelInvocationProtocolClient = replacements.ModelInvocationProtocolClient
 	}
 	if replacements.FactorySessionsWorkingDirectory != nil {
 		defaults.FactorySessionsWorkingDirectory = replacements.FactorySessionsWorkingDirectory

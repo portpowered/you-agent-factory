@@ -221,10 +221,10 @@ func (service *rootService) writeGenericCLIInvocationResult(
 		return service.writeGenericCLIOutputPath(cfg, result)
 	}
 	if genericCLIInlineOutput(cfg, catalog, operation) {
-		return writeGenericCLIOutput(cfg.Output, result)
+		return writeGenericCLIOutput(cfg.Output, result, catalog, operation)
 	}
 	if genericCLIStdoutOutput(cfg, catalog, operation) {
-		return writeGenericCLIOutput(cfg.Output, result)
+		return writeGenericCLIOutput(cfg.Output, result, catalog, operation)
 	}
 	response := modelInvocationResponseFromInferenceResult(result, catalog, text)
 	return json.NewEncoder(cfg.Output).Encode(response)
@@ -235,7 +235,7 @@ func validateCLIOutputShape(
 	catalog modelinference.Detail,
 	operation string,
 ) error {
-	selected, ok := catalogOperationForName(catalog, operation)
+	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
 	if len(cfg.OutputMappings) > 0 {
 		if strings.TrimSpace(cfg.OutputPath) != "" {
 			return fmt.Errorf("--output cannot be combined with explicit output mappings")
@@ -245,16 +245,17 @@ func validateCLIOutputShape(
 	if cfg.JSON {
 		return nil
 	}
-	if ok && len(selected.Outputs) > 1 {
+	outputSlots := genericCLIOutputSlots(selected.Outputs)
+	if ok && len(outputSlots) > 1 {
 		return fmt.Errorf(
 			"multiple model outputs require --json or explicit output mappings: %s",
-			genericOutputSlotNames(selected.Outputs),
+			genericOutputSlotNames(outputSlots),
 		)
 	}
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return nil
 	}
-	if !ok || len(selected.Outputs) != 1 || !genericCLIStdoutModality(selected.Outputs[0].Modality) {
+	if !ok || len(outputSlots) != 1 || !genericCLIStdoutModality(outputSlots[0].Modality) {
 		return fmt.Errorf("--output is required unless --json is set")
 	}
 	return nil
@@ -264,8 +265,9 @@ func genericCLIInlineOutput(cfg InvokeConfig, catalog modelinference.Detail, ope
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return false
 	}
-	selected, ok := catalogOperationForName(catalog, operation)
-	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
+	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
+	outputSlots := genericCLIOutputSlots(selected.Outputs)
+	return ok && len(outputSlots) == 1 && genericCLIInlineModality(outputSlots[0].Modality)
 }
 
 func genericCLIInlineModality(modality modelinference.Modality) bool {
@@ -276,8 +278,35 @@ func genericCLIStdoutOutput(cfg InvokeConfig, catalog modelinference.Detail, ope
 	if cfg.JSON || strings.TrimSpace(cfg.OutputPath) != "" {
 		return false
 	}
-	selected, ok := catalogOperationForName(catalog, operation)
-	return ok && len(selected.Outputs) == 1 && genericCLIStdoutModality(selected.Outputs[0].Modality)
+	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
+	outputSlots := genericCLIOutputSlots(selected.Outputs)
+	return ok && len(outputSlots) == 1 && genericCLIStdoutModality(outputSlots[0].Modality)
+}
+
+func genericCLIOutputSlots(outputs []modelinference.OperationSlot) []modelinference.OperationSlot {
+	if len(outputs) <= 1 {
+		return append([]modelinference.OperationSlot(nil), outputs...)
+	}
+	required := make([]modelinference.OperationSlot, 0, len(outputs))
+	for _, output := range outputs {
+		if output.Required == nil || *output.Required {
+			required = append(required, output)
+		}
+	}
+	return required
+}
+
+func catalogCLIOutputOperation(
+	cfg InvokeConfig,
+	catalog modelinference.Detail,
+	operation string,
+) (modelinference.Operation, bool) {
+	if len(cfg.InputMappings) == 0 && strings.TrimSpace(cfg.Text) != "" {
+		if authored, authoredOK := catalogCapabilityOperationForName(catalog, operation); authoredOK {
+			return authored, true
+		}
+	}
+	return catalogOperationForName(catalog, operation)
 }
 
 func genericCLIStdoutModality(modality modelinference.Modality) bool {
@@ -314,11 +343,35 @@ func genericCLIJSONResult(
 	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
 }
 
-func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelResult) error {
-	if len(result.Outputs) != 1 {
+func writeGenericCLIOutput(
+	output io.Writer,
+	result modelinference.InvokeModelResult,
+	catalog modelinference.Detail,
+	operation string,
+) error {
+	var inline *modelinference.InferenceOutput
+	if len(result.Outputs) == 1 {
+		inline = &result.Outputs[0]
+	} else if selected, ok := catalogOperationForName(catalog, operation); ok {
+		for _, slot := range selected.Outputs {
+			if slot.Required != nil && !*slot.Required || !genericCLIInlineModality(slot.Modality) {
+				continue
+			}
+			for index := range result.Outputs {
+				if result.Outputs[index].Name != slot.Name {
+					continue
+				}
+				if inline != nil {
+					return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
+				}
+				inline = &result.Outputs[index]
+			}
+		}
+	}
+	if inline == nil {
 		return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
 	}
-	value := result.Outputs[0].Content
+	value := inline.Content
 	if value == "" {
 		return fmt.Errorf("model invocation returned no inline output")
 	}
@@ -938,4 +991,133 @@ func genericInvocationResponseFromInferenceResult(
 		outputs[index] = projected
 	}
 	return factoryapi.GenericModelInvocationResponse{Outputs: outputs}
+}
+
+func genericCLIStringPointer(value string) *string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	copy := value
+	return &copy
+}
+
+func catalogPresentationForOperation(catalog modelinference.Detail, operation string) (string, string) {
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return capability.Worker, string(capability.ProviderLocality)
+			}
+		}
+	}
+	return "", string(catalog.ProviderLocality)
+}
+
+func resolvedPresentationBindings(
+	catalog modelinference.Detail,
+	operation string,
+	inputText string,
+) []modelinference.ResolvedModelOperationBinding {
+	operationDetail, ok := catalogOperationForName(catalog, operation)
+	if !ok {
+		return []modelinference.ResolvedModelOperationBinding{}
+	}
+	for _, input := range operationDetail.Inputs {
+		slot := strings.TrimSpace(input.Name)
+		if slot == "" {
+			continue
+		}
+		return []modelinference.ResolvedModelOperationBinding{{
+			Slot:   slot,
+			Source: "INPUT",
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: inputText,
+			}},
+		}}
+	}
+	return []modelinference.ResolvedModelOperationBinding{}
+}
+
+func catalogOperationForName(catalog modelinference.Detail, operation string) (modelinference.Operation, bool) {
+	for _, catalogOperation := range catalog.Operations {
+		if catalogOperation.Name == operation {
+			return catalogOperation, true
+		}
+	}
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return catalogOperation, true
+			}
+		}
+	}
+	return modelinference.Operation{}, false
+}
+
+func catalogCapabilityOperationForName(catalog modelinference.Detail, operation string) (modelinference.Operation, bool) {
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return catalogOperation, true
+			}
+		}
+	}
+	return modelinference.Operation{}, false
+}
+
+func inferenceContentToWorkParts(content []modelinference.InferenceContent) []work.WorkContentPart {
+	if len(content) == 0 {
+		return nil
+	}
+	parts := make([]work.WorkContentPart, 0, len(content))
+	for _, item := range content {
+		parts = append(parts, inferenceContentToWorkPart(item))
+	}
+	return parts
+}
+
+func inferenceContentToWorkPart(item modelinference.InferenceContent) work.WorkContentPart {
+	contentType := strings.TrimSpace(item.ContentType)
+	value := strings.TrimSpace(item.Content)
+	switch {
+	case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
+			File:        value,
+			ContentType: contentType,
+			Slot:        "audio",
+		}
+	case strings.HasPrefix(strings.ToLower(contentType), "image/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeImage,
+			URL:         value,
+			ContentType: contentType,
+			Slot:        "image",
+		}
+	case strings.EqualFold(contentType, "application/json"):
+		return work.WorkContentPart{
+			Type: work.WorkContentPartTypeJSON,
+			JSON: json.RawMessage(value),
+			Slot: "json",
+		}
+	default:
+		if contentType == "" {
+			contentType = "text/plain"
+		}
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeText,
+			Text:        value,
+			ContentType: contentType,
+			Slot:        "text",
+		}
+	}
+}
+
+func inferenceArtifactSourcePath(result modelinference.InvokeModelResult) (string, error) {
+	for _, artifact := range result.Artifacts {
+		if path := strings.TrimSpace(artifact.Artifact.String()); path != "" {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("models invoke returned no streamed audio output")
 }

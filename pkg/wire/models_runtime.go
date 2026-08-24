@@ -15,6 +15,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -114,13 +115,23 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	if hostClock == nil {
 		hostClock = modelsClock{source: processClock}
 	}
+	protocolDialer := edges.ModelInvocationGRPCDialer
+	if isNilModelEdgeDependency(protocolDialer) {
+		protocolDialer = platformgrpc.NetworkDialer{}
+	}
 	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
 	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
 		protocolNegotiator = modelswire.PinnedGRPCNegotiator{
 			Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer},
 		}
 	}
-	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	if protocolNegotiator == nil {
+		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(protocolDialer)
+	}
+	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges)
+	if compatibilityErr != nil {
+		return nil, compatibilityErr
+	}
 	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
 	if backendArtifactResolver == nil {
 		var resolverErr error
@@ -159,7 +170,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 
-	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationBackend(
+	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -192,11 +203,27 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		protocolNegotiator,
 		compatibilityChecker,
 		backendArtifactResolver,
+		edges.ModelInvocationProtocolClient,
+		protocolDialer,
 		adaptModelInvocationBackend(edges.ModelInvocationBackend),
 		adaptModelASRBackend(edges.ModelASRBackend),
 		adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
 		edges.ModelResolveHuggingFaceRevision,
 	)
+}
+
+func provideModelHostCompatibilityChecker(
+	edges serviceedges.Edges,
+) (modelswire.HostCompatibilityChecker, error) {
+	checker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	if checker != nil {
+		return checker, nil
+	}
+	checker, err := modelswire.NewDefaultHostCompatibilityChecker()
+	if err != nil {
+		return nil, fmt.Errorf("construct Models host compatibility checker: %w", err)
+	}
+	return checker, nil
 }
 
 func newModelAssetHTTPClient() *http.Client {
