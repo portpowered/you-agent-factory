@@ -278,6 +278,32 @@ func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 		failure.Family != factoryapi.ErrorFamilyNotFound {
 		t.Fatalf("GET %s = status %d, failure %#v; want typed not-found 404", endpoint, response.StatusCode, failure)
 	}
+
+	invalidEndpoint := server.URL() + "/models/%20"
+	invalidResponse, err := http.Get(invalidEndpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", invalidEndpoint, err)
+	}
+	var invalidFailure factoryapi.ErrorResponse
+	decodeErr = json.NewDecoder(invalidResponse.Body).Decode(&invalidFailure)
+	invalidResponse.Body.Close()
+	if decodeErr != nil {
+		t.Fatalf("decode GET %s failure: %v", invalidEndpoint, decodeErr)
+	}
+	if invalidResponse.StatusCode != http.StatusNotFound ||
+		invalidFailure.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+		invalidFailure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("GET %s = status %d, failure %#v; want typed blank-name not-found 404", invalidEndpoint, invalidResponse.StatusCode, invalidFailure)
+	}
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "inspect", "missing-catalog-model",
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models inspect) error = nil, want unknown model")
+	}
 }
 
 // TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP proves that
@@ -307,6 +333,51 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 		failure.Family != factoryapi.ErrorFamilyBadRequest ||
 		failure.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") {
 		t.Fatalf("POST %s = status %d, failure %#v; want typed bad-request 400", endpoint, response.StatusCode, failure)
+	}
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts",
+		"--operation", "ASR", "--text", "unsupported catalog operation",
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want unsupported catalog operation")
+	}
+}
+
+// TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy proves that
+// a scoped cache-inspection failure stays on the public model-unavailable
+// contract for both collection and detail reads.
+func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
+	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+				return nil, errors.New("cache inspection failed")
+			},
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	for _, endpoint := range []string{server.URL() + "/models", server.URL() + "/models/OMNIVOICE_Q4_K_M"} {
+		response, err := http.Get(endpoint)
+		if err != nil {
+			t.Fatalf("GET %s: %v", endpoint, err)
+		}
+		var failure factoryapi.ErrorResponse
+		decodeErr := json.NewDecoder(response.Body).Decode(&failure)
+		response.Body.Close()
+		if decodeErr != nil {
+			t.Fatalf("decode GET %s failure: %v", endpoint, decodeErr)
+		}
+		if response.StatusCode != http.StatusNotFound ||
+			failure.Family != factoryapi.ErrorFamilyNotFound ||
+			failure.Code != factoryapi.ErrorResponseCode("MODEL_NOT_AVAILABLE") {
+			t.Fatalf("GET %s failure = status %d %#v, want public unavailable model taxonomy", endpoint, response.StatusCode, failure)
+		}
 	}
 }
 
