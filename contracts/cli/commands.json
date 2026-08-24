@@ -9204,14 +9204,15 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.title",
-            "canonicalEnglish": "Inspect Worker Sessions for Work"
+            "canonicalEnglish": "Inspect Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.description",
-            "canonicalEnglish": "Inspect authoritative Worker Session attempts correlated with one Work item."
+            "canonicalEnglish": "Inspect authoritative Worker Session attempts by fleet-wide scope or one Work item. Omit --work-id for the fleet-wide view."
           }
         },
         "examples": [
+          "you worker-sessions list",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json",
           "you worker-sessions stream --provider codex --kind session_id --id session-123"
@@ -9229,7 +9230,7 @@
       "runnable": false,
       "usage": {
         "line": "worker-sessions",
-        "example": "  you worker-sessions list --work-id work-123"
+        "example": "  you worker-sessions list"
       }
     },
     "you.worker-sessions.list": {
@@ -9271,7 +9272,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "list",
-        "example": "  you worker-sessions list --work-id work-123 --output json"
+        "example": "  you worker-sessions list --output json\n\n  # Work-scoped:\n  you worker-sessions list --work-id work-123 --output json"
       },
       "flags": {
         "you.worker-sessions.list.flag.work-id": {
@@ -13684,7 +13685,7 @@
           },
           "description": {
             "id": "you.metrics.description",
-            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API."
+            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API. The base command reports token and latency metrics. Costs are reported separately."
           }
         },
         "examples": [
@@ -13972,7 +13973,7 @@
           },
           "description": {
             "id": "you.metrics.costs.description",
-            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. Missing prices remain visible as UNPRICED usage; this command does not fetch live vendor pricing or enforce billing."
+            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. PRICED rows include price_source as BUILT_IN or OPERATOR_SUPPLIED. Missing prices remain visible as UNPRICED usage. This command does not fetch live vendor pricing or enforce billing."
           }
         },
         "examples": [
