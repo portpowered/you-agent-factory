@@ -228,6 +228,10 @@ type WorkstationExecutionRequest struct {
 	// workstation-backed Worker leaves this false and takes the policy its
 	// runtime was constructed with.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
+	// DeclaredSecretInvocationParameters carries only the names of invocation
+	// parameters that the caller explicitly classified as sensitive. It is an
+	// in-memory handoff for recording provenance, never provider payload data.
+	DeclaredSecretInvocationParameters []string `json:"-"`
 }
 
 type ProviderInferenceRequest struct {
@@ -278,6 +282,11 @@ type ProviderInferenceRequest struct {
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
+	// DeclaredSecretInvocationParameters carries only explicit sensitivity
+	// provenance into the provider recording decorator. The values are already
+	// present in UserMessage when a declared parameter is interpolated; this
+	// field never serializes or duplicates those values.
+	DeclaredSecretInvocationParameters []string `json:"-"`
 	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
 	// It is intentionally excluded from serialized provider payloads.
 	TemporaryFiles TemporaryFileSystem `json:"-"`
@@ -307,6 +316,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
+	clone.DeclaredSecretInvocationParameters = append([]string(nil), request.DeclaredSecretInvocationParameters...)
 	return clone
 }
 
@@ -323,6 +333,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.ModelRuntime = request.ModelRuntime.Clone()
+	clone.DeclaredSecretInvocationParameters = append([]string(nil), request.DeclaredSecretInvocationParameters...)
 	clone.TemporaryFiles = request.TemporaryFiles
 	clone.ExecutionLogger = request.ExecutionLogger
 	return clone

@@ -39,7 +39,14 @@ func (writer *AtomicWriter) Write(path string, value Recording) error {
 	if err := Validate(value); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(value, "", "  ")
+	redacted, _, err := recordings.RedactPortableRecording(value)
+	if err != nil {
+		return fmt.Errorf("redact recording: %w", err)
+	}
+	if err := Validate(redacted); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(redacted, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal recording: %w", err)
 	}

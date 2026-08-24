@@ -20,7 +20,11 @@ func NewRecordingSnapshotWriter(
 		return nil
 	}
 	return func(target string, snapshot recordings.RecordingSnapshot) error {
-		data, err := json.Marshal(snapshot)
+		redacted, err := redactedRecordingSnapshot(snapshot)
+		if err != nil {
+			return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
+		}
+		data, err := json.Marshal(redacted)
 		if err != nil {
 			return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
 		}
@@ -45,8 +49,12 @@ func NewReplayRecordingSnapshotWriter(
 		return nil
 	}
 	return func(target string, snapshot recordings.RecordingSnapshot) error {
-		events := make([]factorydefinitions.FactoryEvent, len(snapshot.Events))
-		for index, event := range snapshot.Events {
+		redacted, err := redactedRecordingSnapshot(snapshot)
+		if err != nil {
+			return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
+		}
+		events := make([]factorydefinitions.FactoryEvent, len(redacted.Events))
+		for index, event := range redacted.Events {
 			events[index] = canonical.FactoryEventFromCanonical(event)
 		}
 		recordedAt := time.Time{}
@@ -88,6 +96,19 @@ func NewReplayRecordingSnapshotWriter(
 		}
 		return nil
 	}
+}
+
+func redactedRecordingSnapshot(
+	snapshot recordings.RecordingSnapshot,
+) (recordings.RecordingSnapshot, error) {
+	events, _, err := recordings.RedactCanonicalEvents(snapshot.Events, snapshot.SecretProvenance)
+	if err != nil {
+		return recordings.RecordingSnapshot{}, err
+	}
+	return recordings.RecordingSnapshot{
+		Status: snapshot.Status,
+		Events: events,
+	}, nil
 }
 
 // NewRecordingFlushTickerFactory binds the real scheduling edge selected by

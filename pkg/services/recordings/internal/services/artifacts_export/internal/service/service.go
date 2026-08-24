@@ -59,12 +59,17 @@ func (service *Service) BuildPortableArtifact(
 		return recordings.BuildPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 	}
 	artifact := recordings.PortableArtifact{
-		SchemaVersion: recordings.PortableArtifactSchemaV1,
-		Summary:       portableArtifactSummary(snapshot.Status, snapshot.Events),
-		Events:        cloneCanonicalEvents(snapshot.Events),
+		SchemaVersion:    recordings.PortableArtifactSchemaV1,
+		Summary:          portableArtifactSummary(snapshot.Status, snapshot.Events),
+		Events:           cloneCanonicalEvents(snapshot.Events),
+		SecretProvenance: snapshot.SecretProvenance,
 		Integrity: recordings.PortableArtifactIntegrity{
 			Algorithm: recordings.PortableArtifactIntegritySHA256,
 		},
+	}
+	artifact, _, err = recordings.RedactPortableArtifact(artifact)
+	if err != nil {
+		return recordings.BuildPortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 	}
 	digest, err := portableArtifactDigest(artifact)
 	if err != nil {
@@ -91,10 +96,22 @@ func (service *Service) ValidatePortableArtifact(
 func (service *Service) EncodePortableArtifact(
 	request recordings.EncodePortableArtifactRequest,
 ) (recordings.EncodePortableArtifactResult, error) {
-	if err := validatePortableArtifact(request.Artifact); err != nil {
+	artifact, redactedCount, err := recordings.RedactPortableArtifact(request.Artifact)
+	if err != nil {
+		return recordings.EncodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
+	}
+	if redactedCount > 0 {
+		artifact.Integrity.Digest = ""
+		digest, digestErr := portableArtifactDigest(artifact)
+		if digestErr != nil {
+			return recordings.EncodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
+		}
+		artifact.Integrity.Digest = digest
+	}
+	if err := validatePortableArtifact(artifact); err != nil {
 		return recordings.EncodePortableArtifactResult{}, err
 	}
-	payload, err := json.Marshal(request.Artifact)
+	payload, err := json.Marshal(artifact)
 	if err != nil {
 		return recordings.EncodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 	}

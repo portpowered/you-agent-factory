@@ -9,6 +9,7 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
 )
 
 const (
@@ -22,10 +23,11 @@ const (
 // active. It owns artifact mutation so service hooks do not share unsynchronized
 // mutable recording state.
 type Recorder struct {
-	storage       platformreplay.Storage
-	path          string
-	artifact      *interfaces.ReplayArtifact
-	flushInterval time.Duration
+	storage         platformreplay.Storage
+	path            string
+	artifact        *interfaces.ReplayArtifact
+	flushInterval   time.Duration
+	declaredSecrets []recordingcontracts.RecordingSecret
 
 	mu       sync.Mutex
 	flushErr error
@@ -45,6 +47,7 @@ func NewRecorder(
 	path string,
 	artifact *interfaces.ReplayArtifact,
 	flushInterval time.Duration,
+	declaredSecrets ...[]recordingcontracts.RecordingSecret,
 ) (*Recorder, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("replay artifact storage is required")
@@ -60,11 +63,12 @@ func NewRecorder(
 		flushInterval = DefaultRecordFlushInterval
 	}
 	return &Recorder{
-		storage:       storage,
-		path:          path,
-		artifact:      artifact,
-		flushInterval: flushInterval,
-		version:       1,
+		storage:         storage,
+		path:            path,
+		artifact:        artifact,
+		flushInterval:   flushInterval,
+		declaredSecrets: flattenRecordingSecretGroups(declaredSecrets),
+		version:         1,
 	}, nil
 }
 
@@ -233,7 +237,7 @@ func (r *Recorder) snapshotLocked() ([]byte, int64, error) {
 	if r.flushed == r.version {
 		return nil, 0, nil
 	}
-	data, err := MarshalArtifact(r.artifact)
+	data, err := MarshalArtifact(r.artifact, r.declaredSecrets)
 	if err != nil {
 		return nil, 0, err
 	}

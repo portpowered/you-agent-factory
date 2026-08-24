@@ -214,6 +214,29 @@ func TestWorkDiagnosticsFromSafeEventPayloadRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
+func TestSafeWorkDiagnosticsFromEventPayloadMaterializesTypedRedactionMarkers(t *testing.T) {
+	diagnostics, err := SafeWorkDiagnosticsFromEventPayload(json.RawMessage(`{
+		"agentRun": {
+			"transcript": [
+				{"role": "system", "summary": {"redacted": true, "provenance": "DECLARED_SECRET"}},
+				{"role": "assistant", "summary": "visible-control"}
+			]
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("SafeWorkDiagnosticsFromEventPayload: %v", err)
+	}
+	if diagnostics == nil || diagnostics.AgentRun == nil || len(diagnostics.AgentRun.Transcript) != 2 {
+		t.Fatalf("diagnostics = %#v, want agent-run transcript", diagnostics)
+	}
+	if diagnostics.AgentRun.Transcript[0].Summary != "" {
+		t.Fatalf("redacted transcript summary = %q, want empty replay value", diagnostics.AgentRun.Transcript[0].Summary)
+	}
+	if diagnostics.AgentRun.Transcript[1].Summary != "visible-control" {
+		t.Fatalf("visible transcript summary = %q, want preserved control", diagnostics.AgentRun.Transcript[1].Summary)
+	}
+}
+
 func TestSafeWorkDiagnosticsEventPayloadPreservesPublicFieldNamesAndMetadataKeys(t *testing.T) {
 	diagnostics := &SafeWorkDiagnostics{
 		RenderedPrompt: &SafeRenderedPromptDiagnostic{

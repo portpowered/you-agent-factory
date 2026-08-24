@@ -73,6 +73,7 @@ func SafeWorkDiagnosticsFromEventPayload(payload json.RawMessage) (*SafeWorkDiag
 	if err := json.Unmarshal(payload, &eventFields); err != nil {
 		return nil, fmt.Errorf("decode safe inference diagnostics: %w", err)
 	}
+	eventFields = materializeDeclaredSecretDiagnosticMarkers(eventFields)
 	normalizeSafeEventFieldNames(eventFields)
 	normalized, err := json.Marshal(eventFields)
 	if err != nil {
@@ -83,6 +84,38 @@ func SafeWorkDiagnosticsFromEventPayload(payload json.RawMessage) (*SafeWorkDiag
 		return nil, fmt.Errorf("decode normalized safe inference diagnostics: %w", err)
 	}
 	return &safe, nil
+}
+
+func materializeDeclaredSecretDiagnosticMarkers(document any) any {
+	switch value := document.(type) {
+	case []any:
+		for index := range value {
+			value[index] = materializeDeclaredSecretDiagnosticMarkers(value[index])
+		}
+		return value
+	case map[string]any:
+		if isDeclaredSecretDiagnosticMarker(value) {
+			return ""
+		}
+		for key, child := range value {
+			value[key] = materializeDeclaredSecretDiagnosticMarkers(child)
+		}
+		return value
+	default:
+		return document
+	}
+}
+
+func isDeclaredSecretDiagnosticMarker(value map[string]any) bool {
+	if len(value) != 2 {
+		return false
+	}
+	redacted, ok := value["redacted"].(bool)
+	if !ok || !redacted {
+		return false
+	}
+	provenance, ok := value["provenance"].(string)
+	return ok && provenance == "DECLARED_SECRET"
 }
 
 // SafeWorkDiagnosticsEventPayload encodes canonical safe diagnostics with the

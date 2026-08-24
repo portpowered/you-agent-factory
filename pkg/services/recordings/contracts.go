@@ -185,6 +185,11 @@ type (
 	ReconstructWorldStateRequest                               = recordingcontracts.ReconstructWorldStateRequest
 	ReconstructWorldStateResult                                = recordingcontracts.ReconstructWorldStateResult
 	RecordingArtifactReference                                 = recordingcontracts.RecordingArtifactReference
+	RecordingRedactedValue                                     = recordingcontracts.RecordingRedactedValue
+	RecordingRedactionRequest                                  = recordingcontracts.RecordingRedactionRequest
+	RecordingRedactionResult                                   = recordingcontracts.RecordingRedactionResult
+	RecordingSecret                                            = recordingcontracts.RecordingSecret
+	RecordingSecretProvenance                                  = recordingcontracts.RecordingSecretProvenance
 	RecordingClock                                             = recordingcontracts.RecordingClock
 	RecordingCreateTemporaryFile                               = recordingcontracts.RecordingCreateTemporaryFile
 	RecordingFailure                                           = recordingcontracts.RecordingFailure
@@ -277,6 +282,7 @@ type (
 	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
 	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
 	RuntimeRecorder                                            = recordingcontracts.RuntimeRecorder
+	RuntimeRecorderWithProvenance                              = recordingcontracts.RuntimeRecorderWithProvenance
 	RuntimeRecorderFactory                                     = recordingcontracts.RuntimeRecorderFactory
 	SessionLifecycleControlInput                               = recordingcontracts.SessionLifecycleControlInput
 	SimpleDashboardActiveExecution                             = recordingcontracts.SimpleDashboardActiveExecution
@@ -423,6 +429,7 @@ const (
 	RecordingActive                               = recordingcontracts.RecordingActive
 	RecordingFailed                               = recordingcontracts.RecordingFailed
 	RecordingFinalized                            = recordingcontracts.RecordingFinalized
+	RecordingSecretProvenanceDeclared             = recordingcontracts.RecordingSecretProvenanceDeclared
 	ReplayCompleted                               = recordingcontracts.ReplayCompleted
 	ReplayDiverged                                = recordingcontracts.ReplayDiverged
 	ReplayPlanSchemaV1                            = recordingcontracts.ReplayPlanSchemaV1
@@ -469,6 +476,9 @@ var (
 	ErrInvalidReconnectCursor                          = recordingcontracts.ErrInvalidReconnectCursor
 	ErrInvalidRecordingEvent                           = recordingcontracts.ErrInvalidRecordingEvent
 	ErrInvalidRecordingFailure                         = recordingcontracts.ErrInvalidRecordingFailure
+	ErrInvalidRecordingRedactionRequest                = recordingcontracts.ErrInvalidRecordingRedactionRequest
+	ErrInvalidRecordingSecretPath                      = recordingcontracts.ErrInvalidRecordingSecretPath
+	ErrInvalidRecordingSecretProvenance                = recordingcontracts.ErrInvalidRecordingSecretProvenance
 	ErrInvalidRecordingScope                           = recordingcontracts.ErrInvalidRecordingScope
 	ErrInvalidRecordingTerminalMetadata                = recordingcontracts.ErrInvalidRecordingTerminalMetadata
 	ErrInvalidReplayArtifact                           = recordingcontracts.ErrInvalidReplayArtifact
@@ -491,6 +501,8 @@ var (
 	ErrRecordingScopeInvalid                           = recordingcontracts.ErrRecordingScopeInvalid
 	ErrRecordingScopeStale                             = recordingcontracts.ErrRecordingScopeStale
 	ErrRecordingScopeUnknown                           = recordingcontracts.ErrRecordingScopeUnknown
+	ErrRecordingSecretPathNotFound                     = recordingcontracts.ErrRecordingSecretPathNotFound
+	ErrDuplicateRecordingSecretPath                    = recordingcontracts.ErrDuplicateRecordingSecretPath
 	ErrRecordingWriteRejected                          = recordingcontracts.ErrRecordingWriteRejected
 	ErrInvalidRecordingScopeRef                        = recordingcontracts.ErrInvalidRecordingScopeRef
 	ErrReplayPlanNotFound                              = recordingcontracts.ErrReplayPlanNotFound
@@ -514,6 +526,10 @@ var (
 	NewPortableRecordingCodec                          = recordingcontracts.NewPortableRecordingCodec
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
 	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
+	RedactDeclaredSecrets                              = recordingcontracts.RedactDeclaredSecrets
+	RedactCanonicalEvents                              = recordingcontracts.RedactCanonicalEvents
+	RedactPortableArtifact                             = recordingcontracts.RedactPortableArtifact
+	RedactPortableRecording                            = recordingcontracts.RedactPortableRecording
 )
 
 // Service is the singular cross-service Recordings authority. Historical

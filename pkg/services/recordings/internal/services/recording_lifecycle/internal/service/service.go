@@ -14,18 +14,19 @@ import (
 )
 
 type recordingSession struct {
-	artifact       recordings.RecordingArtifactReference
-	serviceTarget  string
-	selection      recordings.RecordingTargetRequest
-	scope          recordings.CanonicalEventScope
-	events         []recordings.CanonicalEvent
-	version        uint64
-	flushedVersion uint64
-	flushedThrough *recordings.CanonicalEventCursor
-	failures       []recordings.RecordingFailure
-	failureCauses  []error
-	finalizedAt    *time.Time
-	terminal       bool
+	artifact         recordings.RecordingArtifactReference
+	serviceTarget    string
+	selection        recordings.RecordingTargetRequest
+	scope            recordings.CanonicalEventScope
+	events           []recordings.CanonicalEvent
+	secretProvenance map[int][]recordings.RecordingSecret
+	version          uint64
+	flushedVersion   uint64
+	flushedThrough   *recordings.CanonicalEventCursor
+	failures         []recordings.RecordingFailure
+	failureCauses    []error
+	finalizedAt      *time.Time
+	terminal         bool
 
 	flushMu      sync.Mutex
 	periodicStop chan struct{}
@@ -225,6 +226,7 @@ func (service *Service) sessionLocked(
 func (service *Service) RecordRecordingEvent(
 	request recordings.RecordRecordingEventRequest,
 ) (recordings.RecordRecordingEventResult, error) {
+	event := request.Event
 	service.mu.Lock()
 	defer service.mu.Unlock()
 	session, err := service.sessionLocked(request.RecordingID)
@@ -234,10 +236,18 @@ func (service *Service) RecordRecordingEvent(
 	if session.finalizing || session.terminal {
 		return recordings.RecordRecordingEventResult{}, recordings.ErrRecordingWriteRejected
 	}
-	if !validRecordingEvent(session, request.Event) {
+	if !validRecordingEvent(session, event) {
 		return recordings.RecordRecordingEventResult{}, recordings.ErrInvalidRecordingEvent
 	}
-	session.events = append(session.events, request.Event)
+	if len(request.SecretProvenance) > 0 {
+		if session.secretProvenance == nil {
+			session.secretProvenance = make(map[int][]recordings.RecordingSecret)
+		}
+		session.secretProvenance[len(session.events)] = append(
+			[]recordings.RecordingSecret(nil), request.SecretProvenance...,
+		)
+	}
+	session.events = append(session.events, event)
 	session.version++
 	return recordings.RecordRecordingEventResult{
 		Status: recordingStatus(request.RecordingID, session),
@@ -390,9 +400,23 @@ func (service *Service) Snapshot(
 		return recordinglifecycle.Snapshot{}, err
 	}
 	return recordinglifecycle.Snapshot{
-		Status: recordingStatus(id, session),
-		Events: append([]recordings.CanonicalEvent(nil), session.events...),
+		Status:           recordingStatus(id, session),
+		Events:           append([]recordings.CanonicalEvent(nil), session.events...),
+		SecretProvenance: cloneSecretProvenance(session.secretProvenance),
 	}, nil
+}
+
+func cloneSecretProvenance(
+	provenance map[int][]recordings.RecordingSecret,
+) map[int][]recordings.RecordingSecret {
+	if len(provenance) == 0 {
+		return nil
+	}
+	cloned := make(map[int][]recordings.RecordingSecret, len(provenance))
+	for index, secrets := range provenance {
+		cloned[index] = append([]recordings.RecordingSecret(nil), secrets...)
+	}
+	return cloned
 }
 
 func validRecordingEvent(session *recordingSession, event recordings.CanonicalEvent) bool {

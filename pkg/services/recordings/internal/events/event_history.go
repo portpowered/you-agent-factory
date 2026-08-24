@@ -114,34 +114,36 @@ func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
-	mu                    sync.RWMutex
-	initialStructure      interfaces.InitialStructurePayload
-	runtimeConfig         interfaces.RuntimeDefinitionLookup
-	factoryRunner         string
-	initialFactory        *interfaces.FactorySnapshot
-	now                   func() time.Time
-	streamGenerationID    string
-	events                []interfaces.FactoryEvent
-	sessionProjection     *projections.IncrementalSessionProjection
-	sessionProjectionErr  error
-	recorders             []func(interfaces.FactoryEvent)
-	eventTypeRecorders    []func(interfaces.FactoryEventType)
-	nextID                int
-	streams               map[int]*eventHistorySubscription
-	runRecordedAt         time.Time
-	hasRunRequest         bool
-	hasRunResponse        bool
-	hasInitialStructure   bool
-	sessionStartedAt      time.Time
-	hasSessionStarted     bool
-	hasSessionCompleted   bool
-	liveClosed            bool
-	sessionID             string
-	nextSessionSequence   int
-	canonicalEventsCalls  atomic.Uint64
-	canonicalEventsCopied atomic.Uint64
-	fullHistoryReductions atomic.Uint64
-	runtimeReadRecorder   recordings.RuntimeReadMetricsRecorder
+	mu                      sync.RWMutex
+	initialStructure        interfaces.InitialStructurePayload
+	runtimeConfig           interfaces.RuntimeDefinitionLookup
+	factoryRunner           string
+	initialFactory          *interfaces.FactorySnapshot
+	initialSecretProvenance []recordings.RecordingSecret
+	now                     func() time.Time
+	streamGenerationID      string
+	events                  []interfaces.FactoryEvent
+	secretProvenance        map[string][]recordings.RecordingSecret
+	sessionProjection       *projections.IncrementalSessionProjection
+	sessionProjectionErr    error
+	recorders               []func(interfaces.FactoryEvent)
+	eventTypeRecorders      []func(interfaces.FactoryEventType)
+	nextID                  int
+	streams                 map[int]*eventHistorySubscription
+	runRecordedAt           time.Time
+	hasRunRequest           bool
+	hasRunResponse          bool
+	hasInitialStructure     bool
+	sessionStartedAt        time.Time
+	hasSessionStarted       bool
+	hasSessionCompleted     bool
+	liveClosed              bool
+	sessionID               string
+	nextSessionSequence     int
+	canonicalEventsCalls    atomic.Uint64
+	canonicalEventsCopied   atomic.Uint64
+	fullHistoryReductions   atomic.Uint64
+	runtimeReadRecorder     recordings.RuntimeReadMetricsRecorder
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
@@ -162,6 +164,7 @@ func NewFactoryEventHistory(topology recordings.InitialStructureSource, now func
 		now:                now,
 		streamGenerationID: streamGenerationID,
 		sessionProjection:  projections.NewIncrementalSessionProjection(),
+		secretProvenance:   make(map[string][]recordings.RecordingSecret),
 		streams:            make(map[int]*eventHistorySubscription),
 	}
 }
@@ -186,18 +189,6 @@ func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.factoryRunner = workers.NormalizeRunnerID(runnerID)
-}
-
-// SetInitialStructureFactory overrides the canonical Factory snapshot emitted
-// by INITIAL_STRUCTURE. Runtime callers can keep execution configs thin while
-// service callers expose an editable event-sourced document.
-func (h *FactoryEventHistory) SetInitialStructureFactory(factory *interfaces.FactorySnapshot) {
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.initialFactory = factory.Clone()
 }
 
 // CanonicalEvents returns detached Factory-owned events in append order.
@@ -331,13 +322,14 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	if h.initialFactory != nil {
 		factory = h.initialFactory.Clone()
 	}
+	provenance := append([]recordings.RecordingSecret(nil), h.initialSecretProvenance...)
 	h.mu.Unlock()
-	h.appendEvent(domainFactoryEvent(
+	h.appendEventWithProvenance(domainFactoryEvent(
 		interfaces.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,
 		interfaces.FactoryEventContext{Tick: 0, EventTime: eventTime},
 		interfaces.InitialStructureRequestEventPayload{Factory: factory},
-	))
+	), provenance)
 }
 
 // RecordFactoryChange records a canonical topology replacement event after a
@@ -369,18 +361,22 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 	recordedAt := interfaces.CanonicalEventTime(h.now())
 	h.runRecordedAt = recordedAt
 	h.hasRunRequest = true
-	h.mu.Unlock()
-
 	payload := h.initialStructure
-	h.appendEvent(domainFactoryEvent(
+	factory := eventsnapshot.FromInitialStructure(payload)
+	if h.initialFactory != nil {
+		factory = h.initialFactory.Clone()
+	}
+	provenance := append([]recordings.RecordingSecret(nil), h.initialSecretProvenance...)
+	h.mu.Unlock()
+	h.appendEventWithProvenance(domainFactoryEvent(
 		interfaces.FactoryEventTypeRunRequest,
 		eventIDRunRequest,
 		interfaces.FactoryEventContext{Tick: 0, EventTime: recordedAt},
 		interfaces.RunRequestEventPayload{
 			RecordedAt: recordedAt,
-			Factory:    eventsnapshot.FromInitialStructure(payload),
+			Factory:    factory,
 		},
-	))
+	), provenance)
 }
 
 // RecordWorkInput records a submitted work token after submit-time identity

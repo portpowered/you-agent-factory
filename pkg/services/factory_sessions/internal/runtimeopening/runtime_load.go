@@ -26,6 +26,18 @@ type RuntimeLoad struct {
 	SessionLogger          *zap.Logger
 }
 
+type invocationSensitiveLoadedFactory struct {
+	factorydefinitions.MutableLoadedFactorySource
+	pointers []string
+}
+
+func (source *invocationSensitiveLoadedFactory) InvocationSensitiveJSONPointers() []string {
+	if source == nil {
+		return nil
+	}
+	return append([]string(nil), source.pointers...)
+}
+
 type runtimeReplayLoad struct {
 	legacyArtifact    *factorydefinitions.ReplayArtifact
 	portableRecording *recording.PortableRecording
@@ -332,6 +344,12 @@ func loadRuntimeSnapshot(
 	loaded.SetRuntimeBaseDir(baseDir)
 	if err := applyOperatorDefaults(loaded, operatorDefaults); err != nil {
 		return nil, err
+	}
+	if len(snapshot.InvocationSensitiveJSONPointers) > 0 {
+		loaded = &invocationSensitiveLoadedFactory{
+			MutableLoadedFactorySource: loaded,
+			pointers:                   append([]string(nil), snapshot.InvocationSensitiveJSONPointers...),
+		}
 	}
 	return loaded, nil
 }
