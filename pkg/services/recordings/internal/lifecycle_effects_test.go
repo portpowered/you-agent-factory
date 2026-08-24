@@ -320,7 +320,7 @@ func TestReplayRecordingSnapshotWriterRejectsNonEmptyV2Target(t *testing.T) {
 		return nil
 	}
 	prepare := func(_ string) error {
-		if len(bytes.TrimSpace(data)) != 0 {
+		if len(data) != 0 {
 			return errors.New("replay v2 target already contains data")
 		}
 		return nil
@@ -352,6 +352,33 @@ func TestReplayRecordingSnapshotWriterRejectsNonEmptyV2Target(t *testing.T) {
 	}
 	if len(stream.Events) != 1 || stream.Terminal == nil {
 		t.Fatalf("stream after collision = %#v, want one event and one terminal", stream)
+	}
+}
+
+func TestReplayRecordingSnapshotWriterRejectsWhitespaceV2Target(t *testing.T) {
+	original := []byte(" \n")
+	data := append([]byte(nil), original...)
+	appendCalled := false
+	writer := newReplayRecordingSnapshotWriter(
+		func(string, []byte) error { return errors.New("replacement must not run") },
+		func(_ string, payload []byte) error {
+			appendCalled = true
+			data = append(data, payload...)
+			return nil
+		},
+		replayV2TargetPreparation(func(string) ([]byte, error) {
+			return append([]byte(nil), data...), nil
+		}),
+	)
+
+	if err := writer("whitespace.jsonl", v2LifecycleSnapshot(time.Date(2026, 8, 23, 14, 45, 0, 0, time.UTC), 1, true)); err == nil || !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
+		t.Fatalf("whitespace-only v2 target error = %v, want collision error", err)
+	}
+	if appendCalled {
+		t.Fatal("collision attempt appended to the whitespace-only target")
+	}
+	if !bytes.Equal(data, original) {
+		t.Fatalf("collision attempt changed target bytes = %q, want %q", data, original)
 	}
 }
 

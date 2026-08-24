@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -81,7 +80,7 @@ func replayV2TargetPreparation(readFile recordings.RecordingReadFile) func(strin
 	return func(target string) error {
 		data, err := readFile(target)
 		if err == nil {
-			if len(bytes.TrimSpace(data)) != 0 {
+			if len(data) != 0 {
 				return fmt.Errorf("replay v2 target already contains data")
 			}
 			return nil
