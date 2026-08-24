@@ -441,7 +441,13 @@ func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.Readine
 		)
 		if readinessErr != nil && errors.Is(readinessErr, models.ErrNotFound) &&
 			detail.Diagnostics["catalogSource"] == "EFFECTIVE_DEFINITION" {
-			return detail.ManagedRuntime.Clone(), nil
+			return localmodels.ManagedRuntimeReadinessForEffectiveDefinitionContext(
+				ctx,
+				detail.ManagedRuntime,
+				&scope.Runtime,
+				detail.Name,
+				puller,
+			)
 		}
 		return readiness, readinessErr
 	}

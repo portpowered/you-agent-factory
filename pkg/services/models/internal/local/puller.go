@@ -125,7 +125,15 @@ func (p *assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *model
 		return RuntimeCacheInspection{}, fmt.Errorf("runtime config is not available")
 	}
 	if modelScopedResource(runtimeCfg, modelName) == nil {
-		return RuntimeCacheInspection{}, nil
+		// Factory workers without an explicit model resource retain the legacy
+		// catalog-only behavior. Effective built-in definitions, which are
+		// absent from RuntimeConfig, still need the durable generic cache probe.
+		if factoryModelWorker(runtimeCfg, modelName) != nil {
+			return RuntimeCacheInspection{}, nil
+		}
+		if _, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(strings.ToLower(strings.TrimSpace(modelName))); !builtIn {
+			return RuntimeCacheInspection{}, nil
+		}
 	}
 	scope, err := p.currentScope()
 	if err != nil {
@@ -175,6 +183,20 @@ func (p *assetPuller) currentScope() (models.RuntimeScopeRef, error) {
 	}
 	p.scope = scope
 	return scope, nil
+}
+
+func factoryModelWorker(runtimeCfg *models.RuntimeConfig, modelName string) *models.RuntimeWorker {
+	if runtimeCfg == nil {
+		return nil
+	}
+	key := strings.ToUpper(strings.TrimSpace(modelName))
+	for index := range runtimeCfg.Workers {
+		worker := &runtimeCfg.Workers[index]
+		if strings.ToUpper(strings.TrimSpace(worker.Model)) == key {
+			return worker
+		}
+	}
+	return nil
 }
 
 func pullResultFromAssets(result models.PrepareModelAssetsResult) models.PullResult {

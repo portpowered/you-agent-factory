@@ -126,28 +126,41 @@ func (s *service) prepareGenericAssets(
 	if err := genericPreparationError(modelErr, backendErr); err != nil {
 		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
 	}
+	var runtimeInspection scopedassets.RuntimeCacheInspection
+	if modelResult.snapshotPath != "" {
+		runtimeInspection, err = s.publishGenericRuntimeCache(
+			ctx, plan.cacheDirectory, request.Name, plan.source, modelResult,
+		)
+		if err != nil {
+			return genericAssetFailureResult(plan.source, modelResult, backendResult), err
+		}
+	}
 	if modelResult.snapshotPath != "" || backendResult.snapshotPath != "" {
-		s.rememberPreparedRuntime(request.Scope, request.Name, scopedassets.RuntimeCacheInspection{
-			Supported:             true,
-			Installed:             modelResult.snapshotPath != "",
-			ManifestPresent:       true,
-			ManifestValid:         true,
-			ExpectedArtifacts:     append([]models.AssetRequirement(nil), expected...),
-			ObservedArtifacts:     append([]models.AssetArtifact(nil), append(modelResult.artifacts, backendResult.artifacts...)...),
-			IntegrityVerified:     true,
-			Revision:              plan.source.revision,
-			CachePath:             modelResult.snapshotPath,
-			InstalledFileCount:    len(modelResult.artifacts),
-			BackendRequired:       len(plan.backendRequirements) > 0,
-			BackendCachePath:      backendResult.snapshotPath,
-			BackendRevision:       plan.backendSource.revision,
-			BackendInstalledFiles: len(backendResult.artifacts),
-		})
+		if !runtimeInspection.Supported {
+			runtimeInspection = scopedassets.RuntimeCacheInspection{
+				Supported:          true,
+				Installed:          modelResult.snapshotPath != "",
+				ManifestPresent:    modelResult.snapshotPath != "",
+				ManifestValid:      modelResult.snapshotPath != "",
+				ExpectedArtifacts:  append([]models.AssetRequirement(nil), expected...),
+				ObservedArtifacts:  append([]models.AssetArtifact(nil), append(modelResult.artifacts, backendResult.artifacts...)...),
+				IntegrityVerified:  modelResult.snapshotPath != "",
+				Revision:           plan.source.revision,
+				CachePath:          modelResult.snapshotPath,
+				InstalledFileCount: len(modelResult.artifacts),
+			}
+		}
+		runtimeInspection.BackendRequired = len(plan.backendRequirements) > 0
+		runtimeInspection.BackendCachePath = backendResult.snapshotPath
+		runtimeInspection.BackendRevision = plan.backendSource.revision
+		runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
+		s.rememberPreparedRuntime(request.Scope, request.Name, runtimeInspection)
 	}
 	return genericAssetResult(plan.source, modelResult, backendResult), nil
 }
 
 type genericPreparationPlan struct {
+	cacheDirectory      string
 	source              genericSource
 	modelRequirements   []genericArtifact
 	modelRoots          []string
@@ -192,6 +205,7 @@ func (s *service) genericPreparationPlan(
 	}
 	backendSource.modelName = request.Name
 	return genericPreparationPlan{
+		cacheDirectory:      scope.CacheDirectory,
 		source:              source,
 		modelRequirements:   modelRequirements,
 		modelRoots:          modelRoots,

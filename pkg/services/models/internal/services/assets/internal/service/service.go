@@ -186,6 +186,9 @@ func (s *service) ResolveRuntimeCache(
 		return assets.RuntimeCacheLayout{}, err
 	}
 	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
+	if errors.Is(err, models.ErrAssetSourceUnsupported) {
+		return s.resolveGenericRuntimeCache(ctx, scope, request.Name)
+	}
 	if err != nil {
 		return assets.RuntimeCacheLayout{}, err
 	}
@@ -230,46 +233,41 @@ func (s *service) InspectRuntimeCache(
 		return assets.RuntimeCacheInspection{}, err
 	}
 	active, isActive, pullFailure := s.activePullStateFor(request.Scope, request.Name)
-	if inspection, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
-		inspection = s.applyActivePullFacts(inspection, active, isActive, pullFailure)
-		if inspection.Installed && strings.TrimSpace(inspection.CachePath) != "" {
-			cacheBytes, measureErr := s.measureRevisionBytes(ctx, inspection.CachePath)
+	configured, handled, err := s.inspectConfiguredRuntimeCache(
+		ctx, scope, request.Name, active, isActive, pullFailure,
+	)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	if handled {
+		return configured, nil
+	}
+
+	genericSource, sourceErr := s.resolveGenericSource(ctx, scope, request.Name)
+	genericInspection, persisted, inspectErr := s.inspectGenericRuntimeCache(
+		ctx, scope.CacheDirectory, request.Name, genericSource,
+	)
+	if inspectErr != nil {
+		return assets.RuntimeCacheInspection{}, inspectErr
+	}
+	if sourceErr == nil || persisted {
+		if prepared, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
+			genericInspection = mergeGenericRuntimeBackendFacts(genericInspection, prepared)
+		}
+		return s.applyActivePullFacts(genericInspection, active, isActive, pullFailure), nil
+	}
+	if prepared, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
+		prepared = s.applyActivePullFacts(prepared, active, isActive, pullFailure)
+		if prepared.Installed && strings.TrimSpace(prepared.CachePath) != "" {
+			cacheBytes, measureErr := s.measureRevisionBytes(ctx, prepared.CachePath)
 			if measureErr != nil {
 				return assets.RuntimeCacheInspection{}, measureErr
 			}
-			inspection.CacheBytes = cacheBytes
+			prepared.CacheBytes = cacheBytes
 		}
-		return inspection, nil
+		return prepared, nil
 	}
-	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, request.Name)
-	if err != nil {
-		return assets.RuntimeCacheInspection{}, err
-	}
-	if !supported {
-		return assets.RuntimeCacheInspection{}, nil
-	}
-	expected := assetRequirementsForSpec(spec)
-	cacheRoot, rootErr := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
-	if rootErr != nil {
-		return assets.RuntimeCacheInspection{}, rootErr
-	}
-	metadata, manifestPresent, metadataErr := s.readMetadata(
-		ctx,
-		filepath.Join(cacheRoot, metadataFileName),
-	)
-	if metadataErr != nil {
-		return s.invalidRuntimeCacheInspection(ctx, expected, active, isActive, pullFailure)
-	}
-	if manifestPresent {
-		expected = requirementsFromMetadata(spec, metadata)
-	}
-	result, err := s.inspectRuntimeCacheFiles(
-		ctx, scope.CacheDirectory, spec, source, expected, cacheRoot, metadata, manifestPresent,
-	)
-	if err != nil {
-		return assets.RuntimeCacheInspection{}, err
-	}
-	return s.applyActivePullFacts(result, active, isActive, pullFailure), nil
+	return assets.RuntimeCacheInspection{}, nil
 }
 
 func (s *service) resolveRuntimeCacheSource(

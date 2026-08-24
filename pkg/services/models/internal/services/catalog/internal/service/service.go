@@ -168,6 +168,16 @@ func (s *service) GetModelReadiness(
 	if s.readiness == nil {
 		return models.GetModelReadinessResult{}, models.ErrUnavailable
 	}
+	// Effective definitions are discovery entries, not Factory-declared
+	// invocation workers. Keep the direct invocation preflight at its stable
+	// missing baseline; catalog list/detail still query the durable cache so
+	// operators can see a pulled built-in model as READY.
+	if detail.Diagnostics["catalogSource"] == "EFFECTIVE_DEFINITION" {
+		return models.GetModelReadinessResult{
+			ModelName: detail.Name,
+			Readiness: stableReadiness(detail, detail.ManagedRuntime),
+		}, nil
+	}
 	readiness, err := s.readiness(ctx, request.Scope, scopeConfig.Clone(), detail.Clone())
 	if err != nil {
 		if contextError := ctx.Err(); contextError != nil {
