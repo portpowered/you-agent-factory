@@ -25,6 +25,28 @@ func (s *Service) ResumeLiveFactorySession(
 	return s.applyLiveLifecycleControl(ctx, sessionID, factorysessions.LifecycleControlResume, request)
 }
 
+// CancelLiveFactorySession requests graceful cancellation for one live
+// session while retaining the stopped session in the registry for inspection
+// and a subsequent safe delete.
+func (s *Service) CancelLiveFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	return s.applyLiveLifecycleControl(ctx, sessionID, factorysessions.LifecycleControlCancel, request)
+}
+
+// TerminateLiveFactorySession requests forced termination for one live session
+// while retaining the stopped session in the registry for inspection and a
+// subsequent safe delete.
+func (s *Service) TerminateLiveFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	return s.applyLiveLifecycleControl(ctx, sessionID, factorysessions.LifecycleControlTerminate, request)
+}
+
 // CloseFactorySession stops one live session through the dataplane.
 func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) error {
 	if s == nil || s.host == nil {

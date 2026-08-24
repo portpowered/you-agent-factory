@@ -394,20 +394,38 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 }
 
 func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
+	if isDurableExecutionSessionID(string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factorysessionexecution.ControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, "cancel", func(
+		sessionRuntime apisurface.LiveSessionAPI,
 		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
+		return sessionRuntime.CancelLiveFactorySession(r.Context(), string(sessionID), req)
 	})
 }
 
 func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
+	if isDurableExecutionSessionID(string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factorysessionexecution.ControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, "terminate", func(
+		sessionRuntime apisurface.LiveSessionAPI,
 		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
+		return sessionRuntime.TerminateLiveFactorySession(r.Context(), string(sessionID), req)
 	})
 }
 

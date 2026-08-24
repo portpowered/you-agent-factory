@@ -86,17 +86,50 @@ func TestLiveAPI_MapsCompleteLifecycleThroughNarrowControl(t *testing.T) {
 	}
 }
 
+func TestLiveAPI_MapsCancelAndTerminateThroughLifecycleCapability(t *testing.T) {
+	t.Parallel()
+
+	control := &liveControlSpy{}
+	api := factorysession.NewLiveAPI(control, nil)
+	ctx := context.Background()
+
+	canceled, err := api.CancelLiveFactorySession(ctx, liveControlSessionID, factorysessions.LiveControlRequest{RequestID: "cancel-1"})
+	if err != nil {
+		t.Fatalf("CancelLiveFactorySession: %v", err)
+	}
+	if canceled.Operation != factoryapi.FactorySessionLifecycleControlKindCancel || canceled.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("cancel response = %#v, want accepted CANCEL", canceled)
+	}
+
+	terminated, err := api.TerminateLiveFactorySession(ctx, liveControlSessionID, factorysessions.LiveControlRequest{RequestID: "terminate-1"})
+	if err != nil {
+		t.Fatalf("TerminateLiveFactorySession: %v", err)
+	}
+	if terminated.Operation != factoryapi.FactorySessionLifecycleControlKindTerminate || terminated.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("terminate response = %#v, want accepted TERMINATE", terminated)
+	}
+	if got, want := control.calls, []string{"cancel", "terminate"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("control calls = %#v, want %#v", got, want)
+	}
+	if control.cancelRequest.RequestID != "cancel-1" || control.terminateRequest.RequestID != "terminate-1" {
+		t.Fatalf("control requests = cancel:%#v terminate:%#v", control.cancelRequest, control.terminateRequest)
+	}
+}
+
 const liveControlSessionID = "live-session-1"
 
 type liveControlSpy struct {
-	calls         []string
-	openRequest   factorysessions.LiveControlOpenRequest
-	pauseRequest  factorysessions.LiveControlRequest
-	resumeRequest factorysessions.LiveControlRequest
-	closedID      string
+	calls            []string
+	openRequest      factorysessions.LiveControlOpenRequest
+	pauseRequest     factorysessions.LiveControlRequest
+	resumeRequest    factorysessions.LiveControlRequest
+	cancelRequest    factorysessions.LiveControlRequest
+	terminateRequest factorysessions.LiveControlRequest
+	closedID         string
 }
 
 var _ factorysessions.LiveControlService = (*liveControlSpy)(nil)
+var _ factorysessions.LiveLifecycleControlService = (*liveControlSpy)(nil)
 
 func (s *liveControlSpy) OpenFactorySession(
 	_ context.Context,
@@ -143,6 +176,26 @@ func (s *liveControlSpy) ResumeLiveFactorySession(
 	s.calls = append(s.calls, "resume")
 	s.resumeRequest = request
 	return liveControlResult("RESUME", "RUNNING"), nil
+}
+
+func (s *liveControlSpy) CancelLiveFactorySession(
+	_ context.Context,
+	_ string,
+	request factorysessions.LiveControlRequest,
+) (factorysessions.LiveControlResult, error) {
+	s.calls = append(s.calls, "cancel")
+	s.cancelRequest = request
+	return liveControlResult("CANCEL", "SUCCEEDED"), nil
+}
+
+func (s *liveControlSpy) TerminateLiveFactorySession(
+	_ context.Context,
+	_ string,
+	request factorysessions.LiveControlRequest,
+) (factorysessions.LiveControlResult, error) {
+	s.calls = append(s.calls, "terminate")
+	s.terminateRequest = request
+	return liveControlResult("TERMINATE", "SUCCEEDED"), nil
 }
 
 func (s *liveControlSpy) CloseFactorySession(_ context.Context, sessionID string) error {

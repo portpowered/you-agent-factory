@@ -468,7 +468,8 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusConflict, ControlErrorToAPI(sessionID, controlErr), true
 	}
 
-	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) ||
+		errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
 		errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "factory session not found",

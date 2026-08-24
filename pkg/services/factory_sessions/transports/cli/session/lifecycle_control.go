@@ -254,11 +254,17 @@ func NewLocalLifecycleControls(service factorysessions.Service) Service {
 	if service == nil {
 		return nil
 	}
+	cancel := service.Cancel
+	terminate := service.Terminate
+	if live, ok := service.(factorysessions.LiveLifecycleControlService); ok {
+		cancel = live.CancelLiveFactorySession
+		terminate = live.TerminateLiveFactorySession
+	}
 	return Bind(Operations{
 		Pause:     NewLocalPause(service.Pause),
 		Resume:    NewLocalResume(service.Resume),
-		Cancel:    NewLocalCancel(service.Cancel),
-		Terminate: NewLocalTerminate(service.Terminate),
+		Cancel:    NewLocalCancel(cancel),
+		Terminate: NewLocalTerminate(terminate),
 	})
 }
 

@@ -154,6 +154,8 @@ type httpSessionsRootFake struct {
 	onStartAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	onPauseDurable    func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	onPauseLive       func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	onCancelLive      func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	onTerminateLive   func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	onApplyLiveChange func(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
 }
 
@@ -253,6 +255,20 @@ func (fake *httpSessionsRootFake) PauseLiveFactorySession(ctx context.Context, s
 }
 
 func (fake *httpSessionsRootFake) ResumeLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) CancelLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onCancelLive != nil {
+		return fake.onCancelLive(ctx, sessionID, control)
+	}
+	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) TerminateLiveFactorySession(ctx context.Context, sessionID string, control factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	if fake.onTerminateLive != nil {
+		return fake.onTerminateLive(ctx, sessionID, control)
+	}
 	return factorysessions.LifecycleControlResult{}, factorysessions.ErrSessionNotFound
 }
 

@@ -163,6 +163,20 @@ type LiveControlService interface {
 	CloseFactorySession(context.Context, string) error
 }
 
+// LiveLifecycleControlService is the owner-published capability for stopping a
+// live Factory Session without evicting it from the session registry. Cancel
+// preserves the Runtime's graceful CANCEL fan-out, while terminate preserves
+// the Runtime's forced TERMINATE fan-out. Both controls leave the stopped
+// session inspectable so a later delete can apply its own safety policy.
+//
+// It is separate from LiveControlService to preserve the existing narrow
+// capability for callers that only open, inspect, pause, resume, or close live
+// sessions. The canonical Factory Sessions root implements both capabilities.
+type LiveLifecycleControlService interface {
+	CancelLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+	TerminateLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+}
+
 // LiveResultService is the owner-published Factory Sessions capability for
 // complete and partial live-session result inspection. It is retained as the
 // P5B live-result transport compatibility capability. Result inspection is

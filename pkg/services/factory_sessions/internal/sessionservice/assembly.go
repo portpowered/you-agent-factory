@@ -850,12 +850,40 @@ func (a *Assembly) ResumeLiveFactorySession(ctx context.Context, sessionID strin
 	return owner.ResumeLiveFactorySession(ctx, sessionID, request)
 }
 
+func (a *Assembly) CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	owner, err := a.detachedLiveLifecycleControlOwner(sessionID)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	return owner.CancelLiveFactorySession(ctx, sessionID, request)
+}
+
+func (a *Assembly) TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	owner, err := a.detachedLiveLifecycleControlOwner(sessionID)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	return owner.TerminateLiveFactorySession(ctx, sessionID, request)
+}
+
 func (a *Assembly) CloseFactorySession(ctx context.Context, sessionID string) error {
 	owner, err := a.detachedLiveControlOwner(sessionID)
 	if err != nil {
 		return err
 	}
 	return owner.CloseFactorySession(ctx, sessionID)
+}
+
+func (a *Assembly) detachedLiveLifecycleControlOwner(sessionID string) (factorysessions.LiveLifecycleControlService, error) {
+	owner, err := a.detachedOwner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	control, ok := owner.(factorysessions.LiveLifecycleControlService)
+	if !ok {
+		return nil, fmt.Errorf("%w: live lifecycle control capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
+	}
+	return control, nil
 }
 
 func (a *Assembly) Pause(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

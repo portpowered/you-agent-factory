@@ -122,6 +122,153 @@ func TestServiceCoordinatesLifecycleAndPreservesTypedRejection(t *testing.T) {
 	}
 }
 
+func TestServiceCancelAndTerminateUseDistinctRuntimeStopActionsAndKeepSessionInspectable(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-live-stop"
+	runtime := &testFactoryRuntime{state: string(factorydefinitions.FactoryStateRunning)}
+	session := &livesession.LiveSession{ID: sessionID}
+	stopCalls := 0
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) { return runtime, nil }
+	dependencies.GetSession = func(id string) *livesession.LiveSession {
+		if id == sessionID {
+			return session
+		}
+		return nil
+	}
+	dependencies.StopSession = func(string) error {
+		stopCalls++
+		return nil
+	}
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	control := factorysessions.ControlRequest{
+		RequestID: "control-cancel",
+		TurnID:    "turn-live-stop",
+		Reason:    "operator cancel",
+	}
+	canceled, err := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, control)
+	if err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if canceled.SessionID != sessionID || canceled.Outcome != factorysessions.LifecycleControlOutcomeAccepted || canceled.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("cancel result = %#v, want accepted terminal result", canceled)
+	}
+	if len(runtime.terminateRequests) != 1 || runtime.terminateRequests[0].WorkerSessionAction != factoryruntime.WorkerSessionControlActionCancel ||
+		runtime.terminateRequests[0].TurnID != control.TurnID || runtime.terminateRequests[0].ControlID != control.RequestID || runtime.terminateRequests[0].Reason != control.Reason {
+		t.Fatalf("cancel runtime request = %#v, want CANCEL with captured identity", runtime.terminateRequests)
+	}
+	if stopCalls != 0 || service.Resolve(sessionID) != session {
+		t.Fatalf("cancel cleanup = stop calls %d, resolved session %#v; want retained session and no registry stop", stopCalls, service.Resolve(sessionID))
+	}
+
+	// The runtime stop primitive is synchronous. Reset the test observation to
+	// model another active session control without evicting the first session.
+	runtime.state = string(factorydefinitions.FactoryStateRunning)
+	terminateControl := factorysessions.ControlRequest{
+		RequestID: "control-terminate",
+		TurnID:    control.TurnID,
+		Reason:    "operator terminate",
+	}
+	terminated, err := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlTerminate, terminateControl)
+	if err != nil {
+		t.Fatalf("terminate: %v", err)
+	}
+	if terminated.SessionID != sessionID || terminated.Outcome != factorysessions.LifecycleControlOutcomeAccepted || terminated.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("terminate result = %#v, want accepted terminal result", terminated)
+	}
+	if len(runtime.terminateRequests) != 2 || runtime.terminateRequests[1].WorkerSessionAction != factoryruntime.WorkerSessionControlActionTerminate ||
+		runtime.terminateRequests[1].TurnID != terminateControl.TurnID || runtime.terminateRequests[1].ControlID != terminateControl.RequestID || runtime.terminateRequests[1].Reason != terminateControl.Reason {
+		t.Fatalf("terminate runtime request = %#v, want TERMINATE with captured identity", runtime.terminateRequests)
+	}
+	if stopCalls != 0 || service.Resolve(sessionID) != session {
+		t.Fatalf("terminate cleanup = stop calls %d, resolved session %#v; want retained session and no registry stop", stopCalls, service.Resolve(sessionID))
+	}
+
+	runtime.state = string(factorydefinitions.FactoryStateCompleted)
+	_, firstErr := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, control)
+	_, secondErr := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, control)
+	var firstControlErr, secondControlErr *factorysessions.ControlError
+	if !errors.As(firstErr, &firstControlErr) || !errors.As(secondErr, &secondControlErr) {
+		t.Fatalf("repeated cancel errors = %v / %v, want typed terminal errors", firstErr, secondErr)
+	}
+	if firstControlErr.Outcome != factorysessions.LifecycleControlOutcomeTerminalSession || secondControlErr.Outcome != firstControlErr.Outcome || secondControlErr.Status != firstControlErr.Status {
+		t.Fatalf("repeated cancel outcomes = %#v / %#v, want deterministic terminal rejection", firstControlErr, secondControlErr)
+	}
+}
+
+func TestServiceLiveStopControlMissingSessionReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	_, err = service.ApplyControl(context.Background(), "missing-live-session", factorysessions.LifecycleControlCancel, factorysessions.ControlRequest{})
+	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing live cancel error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestServiceLiveStopControlMapsRuntimeFailureToTypedConflict(t *testing.T) {
+	t.Parallel()
+
+	runtimeFailure := errors.New("runtime stop rejected")
+	runtime := &testFactoryRuntime{
+		state:        string(factorydefinitions.FactoryStateRunning),
+		terminateErr: runtimeFailure,
+	}
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) { return runtime, nil }
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	_, err = service.ApplyControl(context.Background(), "session-live-stop-error", factorysessions.LifecycleControlTerminate, factorysessions.ControlRequest{RequestID: "control-error"})
+	var controlErr *factorysessions.ControlError
+	if !errors.As(err, &controlErr) {
+		t.Fatalf("terminate error = %v, want typed control error", err)
+	}
+	if controlErr.Outcome != factorysessions.LifecycleControlOutcomeConflict || controlErr.Status != factorysessions.LifecycleStatusRunning {
+		t.Fatalf("terminate control error = %#v, want RUNNING conflict", controlErr)
+	}
+	if controlErr.Message == "" {
+		t.Fatalf("terminate control error = %#v, want actionable message", controlErr)
+	}
+}
+
+func TestServiceLiveStopControlPreservesRuntimeNoOp(t *testing.T) {
+	t.Parallel()
+
+	runtime := &testFactoryRuntime{
+		state:            string(factorydefinitions.FactoryStateRunning),
+		terminateOutcome: factoryruntime.ControlOutcomeNoOp,
+	}
+	dependencies := testDependencies()
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) { return runtime, nil }
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	result, err := service.ApplyControl(context.Background(), "session-live-noop", factorysessions.LifecycleControlTerminate, factorysessions.ControlRequest{RequestID: "control-noop"})
+	if err != nil {
+		t.Fatalf("terminate: %v", err)
+	}
+	if result.Outcome != factorysessions.LifecycleControlOutcomeNoOp || result.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("terminate result = %#v, want runtime NO_OP with terminal status", result)
+	}
+}
+
 func TestServiceRejectsRootOnlyRuntimeForLegacySnapshotPaths(t *testing.T) {
 	t.Parallel()
 
@@ -197,12 +344,15 @@ func (rootOnlyRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (
 
 type testFactoryRuntime struct {
 	factoryruntime.Service
-	state          string
-	pauseCalls     int
-	resumeCalls    int
-	terminateCalls int
-	pauseRequests  []factoryruntime.PauseRequest
-	resumeRequests []factoryruntime.ResumeRequest
+	state             string
+	pauseCalls        int
+	resumeCalls       int
+	terminateCalls    int
+	pauseRequests     []factoryruntime.PauseRequest
+	resumeRequests    []factoryruntime.ResumeRequest
+	terminateRequests []factoryruntime.TerminateRequest
+	terminateErr      error
+	terminateOutcome  factoryruntime.ControlOutcome
 }
 
 type boundedSnapshotRuntime struct {
@@ -235,6 +385,7 @@ func (f *testFactoryRuntime) ControlResume(ctx context.Context, request factoryr
 	return factoryruntime.ResumeResult{Outcome: factoryruntime.ControlOutcomeAccepted}, err
 }
 func (f *testFactoryRuntime) ControlTerminate(ctx context.Context, req factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	f.terminateRequests = append(f.terminateRequests, req)
 	return f.Terminate(ctx, req)
 }
 func (f *testFactoryRuntime) ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
@@ -245,7 +396,11 @@ func (f *testFactoryRuntime) ControlMoveWork(context.Context, factoryruntime.Mov
 }
 func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
 	f.terminateCalls++
-	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
+	outcome := f.terminateOutcome
+	if outcome == "" {
+		outcome = factoryruntime.ControlOutcomeAccepted
+	}
+	return factoryruntime.TerminateResult{Outcome: outcome}, f.terminateErr
 }
 func (f *testFactoryRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{
