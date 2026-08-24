@@ -165,3 +165,16 @@
     0.28
   );
 }
+
+/*
+ * Factory Light uses light-surface-appropriate ink for solid semantic fills.
+ * Keep the shared Factory Dark roles and foundation palette values unchanged.
+ */
+[data-color-palette="factory-light"] {
+  --color-on-primary-container: var(--color-af-foundation-accent-ink);
+  --color-on-secondary: var(--color-af-foundation-surface);
+  --color-on-success: var(--color-af-foundation-overlay);
+  --color-on-warning: var(--color-af-foundation-overlay);
+  --color-on-error: var(--color-af-foundation-overlay);
+  --color-on-info: var(--color-af-foundation-overlay);
+}
