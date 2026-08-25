@@ -93,166 +93,143 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 
 func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPIServer) {
 	t.Helper()
-	index, err := http.Get(enabledServer.URL() + "/debug/pprof/")
-	if err != nil {
-		t.Fatalf("enabled GET pprof index: %v", err)
-	}
-	indexBody, err := io.ReadAll(index.Body)
-	_ = index.Body.Close()
-	if err != nil {
-		t.Fatalf("read enabled pprof index: %v", err)
-	}
-	if index.StatusCode != http.StatusOK ||
-		index.Header.Get("Content-Type") != "text/html; charset=utf-8" ||
-		index.Header.Get("X-Content-Type-Options") != "nosniff" ||
-		!strings.Contains(string(indexBody), "heap") {
-		t.Fatalf("enabled pprof index = (%d, %q), want HTTP 200 with heap profile", index.StatusCode, indexBody)
-	}
+	baseURL := enabledServer.URL()
+	assertPprofIndex(t, baseURL)
+	assertPprofHeap(t, baseURL)
+	assertPprofNamedProfiles(t, baseURL)
+	assertPprofCPU(t, baseURL)
+	assertPprofHeapDelta(t, baseURL)
+	assertPprofTrace(t, baseURL)
+	assertPprofTextEndpoints(t, baseURL)
+	assertPprofUnknownProfile(t, baseURL)
+	assertPprofInvalidQuery(t, baseURL)
+}
 
-	heap, err := http.Get(enabledServer.URL() + "/debug/pprof/heap")
+func getPprofResponse(t *testing.T, baseURL, path string) (*http.Response, []byte) {
+	t.Helper()
+	response, err := http.Get(baseURL + path)
 	if err != nil {
-		t.Fatalf("enabled GET pprof heap: %v", err)
+		t.Fatalf("GET %s: %v", path, err)
 	}
-	heapBody, err := io.ReadAll(heap.Body)
-	_ = heap.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
 	if err != nil {
-		t.Fatalf("read enabled pprof heap: %v", err)
+		t.Fatalf("read GET %s: %v", path, err)
 	}
-	if heap.StatusCode != http.StatusOK ||
-		heap.Header.Get("Content-Type") != "application/octet-stream" ||
-		heap.Header.Get("Content-Disposition") != `attachment; filename="heap"` ||
-		heap.Header.Get("X-Content-Type-Options") != "nosniff" ||
-		len(heapBody) == 0 {
-		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heapBody))
+	return response, body
+}
+
+func assertPprofIndex(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "text/html; charset=utf-8" ||
+		response.Header.Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.Contains(string(body), "heap") {
+		t.Fatalf("pprof index = (%d, %q), want HTTP 200 with heap profile", response.StatusCode, body)
 	}
-	heapProfile, err := profile.Parse(bytes.NewReader(heapBody))
+}
+
+func assertPprofHeap(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/heap")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "application/octet-stream" ||
+		response.Header.Get("Content-Disposition") != `attachment; filename="heap"` ||
+		response.Header.Get("X-Content-Type-Options") != "nosniff" || len(body) == 0 {
+		t.Fatalf("pprof heap = (%d, body length %d), want non-empty HTTP 200 response", response.StatusCode, len(body))
+	}
+	heapProfile, err := profile.Parse(bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("parse enabled live heap profile: %v", err)
 	}
 	if len(heapProfile.SampleType) == 0 || len(heapProfile.Sample) == 0 {
 		t.Fatalf("enabled live heap profile = %+v, want sample types and samples", heapProfile)
 	}
+}
 
+func assertPprofNamedProfiles(t *testing.T, baseURL string) {
+	t.Helper()
 	for _, path := range []string{"/debug/pprof/allocs", "/debug/pprof/goroutine"} {
-		response, err := http.Get(enabledServer.URL() + path)
-		if err != nil {
-			t.Fatalf("enabled GET %s: %v", path, err)
-		}
-		body, err := io.ReadAll(response.Body)
-		_ = response.Body.Close()
-		if err != nil {
-			t.Fatalf("read enabled GET %s: %v", path, err)
-		}
+		response, body := getPprofResponse(t, baseURL, path)
 		if response.StatusCode != http.StatusOK || len(body) == 0 {
-			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
+			t.Fatalf("GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
 		}
 	}
-	cpu, err := http.Get(enabledServer.URL() + "/debug/pprof/profile?seconds=1")
-	if err != nil {
-		t.Fatalf("enabled GET CPU profile: %v", err)
+}
+
+func assertPprofCPU(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/profile?seconds=1")
+	if response.StatusCode != http.StatusOK || len(body) == 0 {
+		t.Fatalf("CPU profile = (%d, body length %d), want non-empty HTTP 200 response", response.StatusCode, len(body))
 	}
-	cpuBody, err := io.ReadAll(cpu.Body)
-	_ = cpu.Body.Close()
-	if err != nil {
-		t.Fatalf("read enabled CPU profile: %v", err)
-	}
-	if cpu.StatusCode != http.StatusOK || len(cpuBody) == 0 {
-		t.Fatalf("enabled CPU profile = (%d, body length %d), want non-empty HTTP 200 response", cpu.StatusCode, len(cpuBody))
-	}
-	cpuProfile, err := profile.Parse(bytes.NewReader(cpuBody))
+	cpuProfile, err := profile.Parse(bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("parse enabled live CPU profile: %v", err)
 	}
 	if len(cpuProfile.SampleType) == 0 {
 		t.Fatalf("enabled live CPU profile = %+v, want sample types", cpuProfile)
 	}
+}
 
-	delta, err := http.Get(enabledServer.URL() + "/debug/pprof/heap?seconds=1")
-	if err != nil {
-		t.Fatalf("enabled GET heap delta profile: %v", err)
+func assertPprofHeapDelta(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/heap?seconds=1")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "application/octet-stream" ||
+		!strings.Contains(response.Header.Get("Content-Disposition"), `heap-delta`) || len(body) == 0 {
+		t.Fatalf("heap delta profile = (%d, headers=%v, body length=%d), want non-empty HTTP 200 profile", response.StatusCode, response.Header, len(body))
 	}
-	deltaBody, err := io.ReadAll(delta.Body)
-	_ = delta.Body.Close()
-	if err != nil {
-		t.Fatalf("read heap delta profile: %v", err)
-	}
-	if delta.StatusCode != http.StatusOK ||
-		delta.Header.Get("Content-Type") != "application/octet-stream" ||
-		!strings.Contains(delta.Header.Get("Content-Disposition"), `heap-delta`) ||
-		len(deltaBody) == 0 {
-		t.Fatalf("heap delta profile = (%d, headers=%v, body length=%d), want non-empty HTTP 200 profile", delta.StatusCode, delta.Header, len(deltaBody))
-	}
-	if parsed, err := profile.Parse(bytes.NewReader(deltaBody)); err != nil || parsed == nil || len(parsed.SampleType) == 0 {
+	if parsed, err := profile.Parse(bytes.NewReader(body)); err != nil || parsed == nil || len(parsed.SampleType) == 0 {
 		t.Fatalf("parse heap delta profile = (%v, %+v), want a valid profile with sample types", err, parsed)
 	}
+}
 
-	trace, err := http.Get(enabledServer.URL() + "/debug/pprof/trace?seconds=0.01")
-	if err != nil {
-		t.Fatalf("enabled GET trace profile: %v", err)
+func assertPprofTrace(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/trace?seconds=0.01")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "application/octet-stream" ||
+		response.Header.Get("Content-Disposition") != `attachment; filename="trace"` || len(body) == 0 {
+		t.Fatalf("trace profile = (%d, headers=%v, body length=%d), want non-empty HTTP 200 profile", response.StatusCode, response.Header, len(body))
 	}
-	traceBody, err := io.ReadAll(trace.Body)
-	_ = trace.Body.Close()
-	if err != nil {
-		t.Fatalf("read trace profile: %v", err)
-	}
-	if trace.StatusCode != http.StatusOK ||
-		trace.Header.Get("Content-Type") != "application/octet-stream" ||
-		trace.Header.Get("Content-Disposition") != `attachment; filename="trace"` ||
-		len(traceBody) == 0 {
-		t.Fatalf("trace profile = (%d, headers=%v, body length=%d), want non-empty HTTP 200 profile", trace.StatusCode, trace.Header, len(traceBody))
-	}
+}
 
+func assertPprofTextEndpoints(t *testing.T, baseURL string) {
+	t.Helper()
 	for _, path := range []string{"/debug/pprof/cmdline", "/debug/pprof/symbol"} {
-		response, err := http.Get(enabledServer.URL() + path)
-		if err != nil {
-			t.Fatalf("enabled GET %s: %v", path, err)
-		}
-		body, err := io.ReadAll(response.Body)
-		_ = response.Body.Close()
-		if err != nil {
-			t.Fatalf("read enabled GET %s: %v", path, err)
-		}
-		if response.StatusCode != http.StatusOK ||
-			response.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
-			t.Fatalf("enabled GET %s = (%d, headers=%v, body=%q), want text HTTP 200 response", path, response.StatusCode, response.Header, body)
+		response, body := getPprofResponse(t, baseURL, path)
+		if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			t.Fatalf("GET %s = (%d, headers=%v, body=%q), want text HTTP 200 response", path, response.StatusCode, response.Header, body)
 		}
 		if path == "/debug/pprof/symbol" && !strings.Contains(string(body), "num_symbols: 1") {
-			t.Fatalf("enabled GET %s body = %q, want symbol count", path, body)
+			t.Fatalf("GET %s body = %q, want symbol count", path, body)
 		}
 	}
+}
 
-	unknown, err := http.Get(enabledServer.URL() + "/debug/pprof/not-a-profile")
-	if err != nil {
-		t.Fatalf("enabled GET unknown pprof profile: %v", err)
+func assertPprofUnknownProfile(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/not-a-profile")
+	if response.StatusCode != http.StatusNotFound || response.Header.Get("X-Go-Pprof") != "1" ||
+		!strings.Contains(string(body), "Unknown profile") {
+		t.Fatalf("unknown pprof profile = (%d, headers=%v, body=%q), want HTTP 404 diagnostic", response.StatusCode, response.Header, body)
 	}
-	unknownBody, err := io.ReadAll(unknown.Body)
-	_ = unknown.Body.Close()
-	if err != nil {
-		t.Fatalf("read unknown pprof profile response: %v", err)
-	}
-	if unknown.StatusCode != http.StatusNotFound || unknown.Header.Get("X-Go-Pprof") != "1" ||
-		!strings.Contains(string(unknownBody), "Unknown profile") {
-		t.Fatalf("unknown pprof profile = (%d, headers=%v, body=%q), want HTTP 404 diagnostic", unknown.StatusCode, unknown.Header, unknownBody)
-	}
+}
 
-	invalid, err := http.Get(enabledServer.URL() + "/debug/pprof/heap?seconds=not-a-duration")
-	if err != nil {
-		t.Fatalf("enabled GET invalid heap profile query: %v", err)
-	}
-	invalidBody, err := io.ReadAll(invalid.Body)
-	_ = invalid.Body.Close()
-	if err != nil {
-		t.Fatalf("read invalid heap profile query response: %v", err)
-	}
-	if invalid.StatusCode != http.StatusBadRequest ||
-		invalid.Header.Get("Content-Type") != "text/plain; charset=utf-8" ||
-		invalid.Header.Get("X-Go-Pprof") != "1" ||
-		!strings.Contains(string(invalidBody), `invalid value for "seconds"`) {
+func assertPprofInvalidQuery(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/heap?seconds=not-a-duration")
+	if response.StatusCode != http.StatusBadRequest ||
+		response.Header.Get("Content-Type") != "text/plain; charset=utf-8" ||
+		response.Header.Get("X-Go-Pprof") != "1" ||
+		!strings.Contains(string(body), `invalid value for "seconds"`) {
 		t.Fatalf(
 			"invalid heap profile query = (%d, headers=%v, body=%q), want actionable HTTP 400 pprof error",
-			invalid.StatusCode,
-			invalid.Header,
-			invalidBody,
+			response.StatusCode,
+			response.Header,
+			body,
 		)
 	}
 }

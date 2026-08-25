@@ -42,9 +42,9 @@ func TestRuntimeMetricsOpenerRejectsMissingExplicitSelections(t *testing.T) {
 	}
 }
 
-func TestRuntimeMetricsOpenerValidatesConstructionAndReleasesPartialStartupEffects(t *testing.T) {
-	paths := &metricsTestReserver{path: filepath.Join(t.TempDir(), "metrics.log")}
-	lifecycle := &metricsTestRetentionLifecycle{lease: &metricsTestCloser{}}
+func TestRuntimeMetricsOpenerValidatesConstruction(t *testing.T) {
+	paths := &metricsTestReserver{}
+	lifecycle := &metricsTestRetentionLifecycle{}
 	coordination := &metricsTestCoordination{}
 	if opener, err := NewRuntimeMetricsOpener(nil, lifecycle); opener != nil || err == nil || !strings.Contains(err.Error(), "path reserver") {
 		t.Fatalf("NewRuntimeMetricsOpener(nil): (%#v, %v)", opener, err)
@@ -58,19 +58,12 @@ func TestRuntimeMetricsOpenerValidatesConstructionAndReleasesPartialStartupEffec
 	if opener, err := NewRuntimeMetricsOpener(paths, lifecycle, nil); opener != nil || err == nil || !strings.Contains(err.Error(), "coordination is required") {
 		t.Fatalf("NewRuntimeMetricsOpener(nil coordinator): (%#v, %v)", opener, err)
 	}
+}
 
-	valid := RuntimeMetricsOpeningRequest{
-		RuntimeInstanceID: "runtime",
-		RootDirectory:     t.TempDir(),
-		StartTimeUTC:      time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC),
-		CollisionID:       "collision",
-	}
+func TestRuntimeMetricsOpenerReportsRetentionAndRootLockFailures(t *testing.T) {
+	opener, _, lifecycle, coordination, valid := newTestRuntimeMetricsOpener(t)
 	startError := errors.New("retention start failed")
 	lifecycle.startErr = startError
-	opener, err := NewRuntimeMetricsOpener(paths, lifecycle, coordination)
-	if err != nil {
-		t.Fatalf("NewRuntimeMetricsOpener(): %v", err)
-	}
 	if _, err := opener.Open(valid); !errors.Is(err, startError) {
 		t.Fatalf("Open(start failure) = %v, want %v", err, startError)
 	}
@@ -86,6 +79,10 @@ func TestRuntimeMetricsOpenerValidatesConstructionAndReleasesPartialStartupEffec
 	if _, err := opener.Open(valid); !errors.Is(err, lockError) || lifecycle.lease.(*metricsTestCloser).closed != 1 {
 		t.Fatalf("Open(root lock failure) = %v, lease=%#v", err, lifecycle.lease)
 	}
+}
+
+func TestRuntimeMetricsOpenerReleasesReservationFailures(t *testing.T) {
+	opener, paths, lifecycle, coordination, valid := newTestRuntimeMetricsOpener(t)
 	coordination.lockRootErr = nil
 	lifecycle.lease = &metricsTestCloser{}
 
@@ -111,7 +108,10 @@ func TestRuntimeMetricsOpenerValidatesConstructionAndReleasesPartialStartupEffec
 	if _, err := opener.Open(valid); err == nil || !strings.Contains(err.Error(), "release runtime metrics startup coordination") || coordination.claim.(*metricsTestCloser).closed != 1 || lifecycle.lease.(*metricsTestCloser).closed != 1 {
 		t.Fatalf("Open(root lock close failure) = %v, claim=%#v lease=%#v", err, coordination.claim, lifecycle.lease)
 	}
+}
 
+func TestRuntimeMetricsOpenerClosesLifecycle(t *testing.T) {
+	opener, _, lifecycle, _, valid := newTestRuntimeMetricsOpener(t)
 	closeError := errors.New("lifecycle close failed")
 	lifecycle.closeErr = closeError
 	if err := opener.Close(context.Background()); !errors.Is(err, closeError) {
@@ -124,6 +124,30 @@ func TestRuntimeMetricsOpenerValidatesConstructionAndReleasesPartialStartupEffec
 	if _, err := nilOpener.Open(valid); err == nil || !strings.Contains(err.Error(), "opener is required") {
 		t.Fatalf("nil opener Open() = %v, want configuration error", err)
 	}
+}
+
+func newTestRuntimeMetricsOpener(t *testing.T) (
+	*RuntimeMetricsOpener,
+	*metricsTestReserver,
+	*metricsTestRetentionLifecycle,
+	*metricsTestCoordination,
+	RuntimeMetricsOpeningRequest,
+) {
+	t.Helper()
+	paths := &metricsTestReserver{path: filepath.Join(t.TempDir(), "metrics.log")}
+	lifecycle := &metricsTestRetentionLifecycle{lease: &metricsTestCloser{}}
+	coordination := &metricsTestCoordination{}
+	opener, err := NewRuntimeMetricsOpener(paths, lifecycle, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsOpener(): %v", err)
+	}
+	valid := RuntimeMetricsOpeningRequest{
+		RuntimeInstanceID: "runtime",
+		RootDirectory:     t.TempDir(),
+		StartTimeUTC:      time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC),
+		CollisionID:       "collision",
+	}
+	return opener, paths, lifecycle, coordination, valid
 }
 
 type metricsTestCloser struct {

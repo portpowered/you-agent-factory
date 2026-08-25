@@ -142,7 +142,7 @@ Types of profiles available:
 <p>
 Profile Descriptions:
 <ul>
-	`)
+`)
 	for _, profile := range profiles {
 		_, _ = fmt.Fprintf(
 			&body,

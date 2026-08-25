@@ -726,7 +726,7 @@ func newTestRuntimeMetricsRetention(t *testing.T, now time.Time) *RuntimeMetrics
 	return retention
 }
 
-func TestRuntimeMetricsRetentionValidatesRequestsAndCoordinationFailures(t *testing.T) {
+func TestRuntimeMetricsRetentionValidatesConstruction(t *testing.T) {
 	if retention, err := NewRuntimeMetricsRetention(nil, time.Now); retention != nil || err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewRuntimeMetricsRetention(nil filesystem) = (%#v, %v)", retention, err)
 	}
@@ -745,7 +745,11 @@ func TestRuntimeMetricsRetentionValidatesRequestsAndCoordinationFailures(t *test
 	if _, err := nilRetention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "retention is not configured") {
 		t.Fatalf("nil retention Sweep() = %v, want configuration error", err)
 	}
+}
+
+func TestRuntimeMetricsRetentionValidatesSweepRequests(t *testing.T) {
 	root := t.TempDir()
+	coordination := &metricsTestCoordination{}
 	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, func() time.Time {
 		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
 	}, coordination)
@@ -781,7 +785,15 @@ func TestRuntimeMetricsRetentionValidatesRequestsAndCoordinationFailures(t *test
 	if _, err := zeroClock.Sweep(nil, RuntimeMetricsRetentionRequest{RootDirectory: root}); err == nil || !strings.Contains(err.Error(), "clock returned zero") {
 		t.Fatalf("Sweep(zero clock) = %v, want clock validation", err)
 	}
+}
 
+func TestRuntimeMetricsRetentionReportsCoordinationOutcomes(t *testing.T) {
+	root := t.TempDir()
+	coordination := &metricsTestCoordination{}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
 	busyCoordination := &metricsTestCoordination{tryLockRootErr: ErrRuntimeMetricsRootBusy}
 	busyRetention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, busyCoordination)
 	if err != nil {

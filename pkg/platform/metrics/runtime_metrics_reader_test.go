@@ -169,6 +169,26 @@ func TestRuntimeMetricsReaderRequiresFilesystem(t *testing.T) {
 }
 
 func TestRuntimeMetricsReaderSelectsPathsAndEnvelopesBeforeMaterializingRecords(t *testing.T) {
+	result := streamSelectedMetrics(t)
+	assertSelectedRecords(t, result.records)
+	assertSelectedEnvelopes(t, result.selectedPath, result.envelopes)
+	assertSelectedReadStats(t, result.stats)
+	if !containsPath(result.paths, result.unselectedDir) {
+		t.Fatalf("path selector was not consulted for unselected directory: %v", result.paths)
+	}
+}
+
+type selectedMetricsReadResult struct {
+	selectedPath  string
+	unselectedDir string
+	stats         *RuntimeMetricsReadStats
+	envelopes     []RuntimeMetricRecordEnvelope
+	paths         []string
+	records       []RuntimeMetricRecord
+}
+
+func streamSelectedMetrics(t *testing.T) selectedMetricsReadResult {
+	t.Helper()
 	root := t.TempDir()
 	selectedDir := filepath.Join(root, "2026", "08", "20")
 	unselectedDir := filepath.Join(root, "2026", "08", "21")
@@ -221,9 +241,25 @@ func TestRuntimeMetricsReaderSelectsPathsAndEnvelopesBeforeMaterializingRecords(
 	if err != nil {
 		t.Fatalf("StreamSelected(): %v", err)
 	}
+	return selectedMetricsReadResult{
+		selectedPath:  selectedPath,
+		unselectedDir: unselectedDir,
+		stats:         stats,
+		envelopes:     envelopes,
+		paths:         paths,
+		records:       records,
+	}
+}
+
+func assertSelectedRecords(t *testing.T, records []RuntimeMetricRecord) {
+	t.Helper()
 	if len(records) != 1 || records[0]["record_id"] != "keep" {
 		t.Fatalf("selected records = %#v, want only keep record", records)
 	}
+}
+
+func assertSelectedEnvelopes(t *testing.T, selectedPath string, envelopes []RuntimeMetricRecordEnvelope) {
+	t.Helper()
 	if len(envelopes) != 2 {
 		t.Fatalf("envelopes = %#v, want both complete JSON records", envelopes)
 	}
@@ -233,15 +269,17 @@ func TestRuntimeMetricsReaderSelectsPathsAndEnvelopesBeforeMaterializingRecords(
 	if _, exists := envelopes[0].Fields["value"]; exists {
 		t.Fatalf("numeric envelope field was materialized as text: %#v", envelopes[0].Fields)
 	}
-	if stats.DirectoriesVisited == 0 || stats.ArtifactsVisited != 1 || stats.ArtifactsOpened != 1 || stats.BytesRead == 0 || stats.RecordsDecoded != 1 {
+}
+
+func assertSelectedReadStats(t *testing.T, stats *RuntimeMetricsReadStats) {
+	t.Helper()
+	if stats.DirectoriesVisited == 0 || stats.ArtifactsVisited != 1 || stats.ArtifactsOpened != 1 ||
+		stats.BytesRead == 0 || stats.RecordsDecoded != 1 {
 		t.Fatalf("read stats = %#v, want pruned traversal and one decoded record", *stats)
-	}
-	if !containsPath(paths, unselectedDir) {
-		t.Fatalf("path selector was not consulted for unselected directory: %v", paths)
 	}
 }
 
-func TestRuntimeMetricsReaderValidatesInputsAndWrapsPublicFailures(t *testing.T) {
+func TestRuntimeMetricsReaderValidatesInputs(t *testing.T) {
 	var nilReader *RuntimeMetricsReader
 	if err := nilReader.Stream(context.Background(), t.TempDir(), func(RuntimeMetricRecord) error { return nil }); err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("nil reader error = %v, want filesystem validation", err)
@@ -276,7 +314,10 @@ func TestRuntimeMetricsReaderValidatesInputsAndWrapsPublicFailures(t *testing.T)
 			}
 		})
 	}
+}
 
+func TestRuntimeMetricsReaderReportsDiscoveryFailure(t *testing.T) {
+	root := t.TempDir()
 	readError := errors.New("walk failed")
 	walkReader, err := NewRuntimeMetricsReader(&walkErrorArtifactFileSystem{err: readError})
 	if err != nil {
@@ -285,7 +326,11 @@ func TestRuntimeMetricsReaderValidatesInputsAndWrapsPublicFailures(t *testing.T)
 	if err := walkReader.Stream(context.Background(), root, func(RuntimeMetricRecord) error { return nil }); err == nil || !errors.Is(err, readError) || !strings.Contains(err.Error(), "discover runtime metrics") {
 		t.Fatalf("walk error = %v, want wrapped discovery failure", err)
 	}
+}
 
+func TestRuntimeMetricsReaderReportsOpenAndVisitorFailures(t *testing.T) {
+	reader := newRuntimeMetricsReader(t)
+	root := t.TempDir()
 	artifactPath := filepath.Join(root, readerActiveName)
 	if err := os.WriteFile(artifactPath, []byte(`{"record_id":"one"}`+"\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile(artifactPath): %v", err)
@@ -303,7 +348,14 @@ func TestRuntimeMetricsReaderValidatesInputsAndWrapsPublicFailures(t *testing.T)
 	if err := reader.Stream(context.Background(), root, func(RuntimeMetricRecord) error { return visitError }); err == nil || !errors.Is(err, visitError) || !strings.Contains(err.Error(), "decode runtime metrics artifact") {
 		t.Fatalf("visitor error = %v, want wrapped decode boundary", err)
 	}
+}
 
+func TestRuntimeMetricsReaderReportsCloseFailure(t *testing.T) {
+	root := t.TempDir()
+	artifactPath := filepath.Join(root, readerActiveName)
+	if err := os.WriteFile(artifactPath, []byte(`{"record_id":"one"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(artifactPath): %v", err)
+	}
 	closeError := errors.New("close failed")
 	closeReader, err := NewRuntimeMetricsReader(&closeErrorArtifactFileSystem{closeErr: closeError})
 	if err != nil {
@@ -312,7 +364,10 @@ func TestRuntimeMetricsReaderValidatesInputsAndWrapsPublicFailures(t *testing.T)
 	if err := closeReader.Stream(context.Background(), root, func(RuntimeMetricRecord) error { return nil }); err == nil || !errors.Is(err, closeError) || !strings.Contains(err.Error(), "close runtime metrics artifact") {
 		t.Fatalf("close error = %v, want close boundary", err)
 	}
+}
 
+func TestRuntimeMetricsReadErrorPreservesCause(t *testing.T) {
+	readError := errors.New("walk failed")
 	typed := &RuntimeMetricsReadError{Operation: "read", Cause: readError}
 	if typed.Error() != "read: walk failed" || !errors.Is(typed, readError) {
 		t.Fatalf("typed read error = %q, unwrap=%v", typed.Error(), typed.Unwrap())

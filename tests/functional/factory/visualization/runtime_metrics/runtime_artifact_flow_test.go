@@ -394,28 +394,10 @@ func TestRuntimeMetricsPublicReaderSelectionAndFailures(t *testing.T) {
 }
 
 func TestRuntimeMetricsPublicCoordinationAndOpenerValidation(t *testing.T) {
-	paths, err := platformruntimeartifact.NewReserver(platformfilesystem.Local{})
-	if err != nil {
-		t.Fatalf("NewReserver(): %v", err)
-	}
 	coordination, err := platformmetrics.NewRuntimeMetricsCoordination()
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
 	}
-	lifecycle := functionalMetricsRetentionLifecycle{}
-	if _, err := platformmetrics.NewRuntimeMetricsOpener(nil, lifecycle); err == nil {
-		t.Fatal("NewRuntimeMetricsOpener(nil paths) = nil error, want required reserver error")
-	}
-	if _, err := platformmetrics.NewRuntimeMetricsOpener(paths, nil); err == nil {
-		t.Fatal("NewRuntimeMetricsOpener(nil lifecycle) = nil error, want required lifecycle error")
-	}
-	if _, err := platformmetrics.NewRuntimeMetricsOpener(paths, lifecycle, coordination, coordination); err == nil {
-		t.Fatal("NewRuntimeMetricsOpener(two coordinators) = nil error, want selection error")
-	}
-	if _, err := platformmetrics.NewRuntimeMetricsOpener(paths, lifecycle, nil); err == nil {
-		t.Fatal("NewRuntimeMetricsOpener(nil coordinator) = nil error, want required coordination error")
-	}
-
 	root := filepath.Join(t.TempDir(), "metrics")
 	if _, err := coordination.LockRoot(nil, ""); err == nil {
 		t.Fatal("LockRoot(empty path) = nil error, want path validation error")
@@ -446,7 +428,32 @@ func TestRuntimeMetricsPublicCoordinationAndOpenerValidation(t *testing.T) {
 	if err := claim.Close(); err != nil {
 		t.Fatalf("claim Close(): %v", err)
 	}
+}
 
+func TestRuntimeMetricsPublicOpenerValidatesRequestsAndCloses(t *testing.T) {
+	paths, err := platformruntimeartifact.NewReserver(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewReserver(): %v", err)
+	}
+	coordination, err := platformmetrics.NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	lifecycle := functionalMetricsRetentionLifecycle{}
+	if _, err := platformmetrics.NewRuntimeMetricsOpener(nil, lifecycle); err == nil {
+		t.Fatal("NewRuntimeMetricsOpener(nil paths) = nil error, want required reserver error")
+	}
+	if _, err := platformmetrics.NewRuntimeMetricsOpener(paths, nil); err == nil {
+		t.Fatal("NewRuntimeMetricsOpener(nil lifecycle) = nil error, want required lifecycle error")
+	}
+	if _, err := platformmetrics.NewRuntimeMetricsOpener(paths, lifecycle, coordination, coordination); err == nil {
+		t.Fatal("NewRuntimeMetricsOpener(two coordinators) = nil error, want selection error")
+	}
+	if _, err := platformmetrics.NewRuntimeMetricsOpener(paths, lifecycle, nil); err == nil {
+		t.Fatal("NewRuntimeMetricsOpener(nil coordinator) = nil error, want required coordination error")
+	}
+
+	root := filepath.Join(t.TempDir(), "metrics")
 	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths, lifecycle, coordination)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsOpener(): %v", err)

@@ -29,6 +29,19 @@ func TestHandlerWithPprofHandlesNilHandlerAndDirectProfileDispatch(t *testing.T)
 	}
 }
 
+func TestPprofIndexPreservesStandardHTMLLayout(t *testing.T) {
+	response := httptest.NewRecorder()
+	pprofIndex(response, httptest.NewRequest(http.MethodGet, pprofPath, nil))
+
+	body := response.Body.String()
+	if !strings.Contains(body, "<ul>\n<li><div class=profile-name>") {
+		t.Fatalf("pprof index body = %q, want standard unindented list-item layout", body)
+	}
+	if strings.Contains(body, "<ul>\n\t<li><div class=profile-name>") {
+		t.Fatalf("pprof index body = %q, contains an unintended tab before list items", body)
+	}
+}
+
 func TestPprofNamedReportsUnknownProfileAndDebugFormat(t *testing.T) {
 	unknownResponse := httptest.NewRecorder()
 	pprofNamed("does-not-exist").ServeHTTP(unknownResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/does-not-exist", nil))
