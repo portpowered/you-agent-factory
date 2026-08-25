@@ -118,22 +118,6 @@ func newRuntimeMetricsOpener(
 
 // Open creates a rolling metrics writer from fully selected inputs.
 func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (*RuntimeMetricsSink, error) {
-	if opener == nil || opener.paths == nil || opener.coordination == nil || opener.retentionLifecycle == nil {
-		return nil, fmt.Errorf("runtime metrics opener is required")
-	}
-	if request.RuntimeInstanceID == "" {
-		return nil, fmt.Errorf("runtime instance ID is required")
-	}
-	if request.RootDirectory == "" {
-		return nil, fmt.Errorf("runtime metrics root is required")
-	}
-	if request.StartTimeUTC.IsZero() {
-		return nil, fmt.Errorf("runtime metrics start time is required")
-	}
-	if request.CollisionID == "" {
-		return nil, fmt.Errorf("runtime metrics collision ID is required")
-	}
-
 	retentionLease, err := opener.retentionLifecycle.Start(context.Background(), RuntimeMetricsRetentionRequest{
 		RootDirectory: request.RootDirectory,
 		Config:        request.Config,

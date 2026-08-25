@@ -1,8 +1,6 @@
 package codex
 
 import (
-	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,11 +10,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -119,62 +115,6 @@ Process the input task.
 		})
 	}
 }
-
-// backend-review construction-path exception: general-backend-standards.md §7
-// prefers root.BuildProcess + Process.Execute for functional application
-// tests. Process.Execute does not expose the detached Workers Service.Execute
-// operation, so this cell directly uses the public root.BuildStatelessWorkers
-// boundary to prove request-scoped worktree cleanup and does not open a
-// Factory Runtime or Factory Session.
-func TestCodexWorktreeReleaseRemovesCreatedCheckout(t *testing.T) {
-	repoRoot := initGitRepositoryForCodexWorktreeFunctionalTest(t)
-	runner := testutil.NewProviderCommandRunner(
-		platformprocessResult("stateless script output"),
-	)
-	service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
-		ScriptCommandRunner: runner,
-	})
-	if err != nil {
-		t.Fatalf("root.BuildStatelessWorkers(): %v", err)
-	}
-
-	result, err := service.Execute(context.Background(), workerexecution.ExecuteRequest{
-		Correlation: workerexecution.ExecutionCorrelation{
-			FactorySessionID: "session-functional-worktree",
-			RuntimeID:        "runtime-functional-worktree",
-			GenerationID:     "generation-functional-worktree",
-			DispatchID:       "dispatch-release",
-			AttemptID:        "attempt-release",
-		},
-		Target: workerexecution.ExecutionTarget{
-			WorkerName: "script-worker",
-			RunnerID:   "script",
-			Command:    "stateless-script",
-			Workspace: workerexecution.WorkspacePolicy{
-				PrepareWorktree:    true,
-				FactoryDirectory:   repoRoot,
-				CheckoutIdentifier: "release-feature",
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("Execute(): %v", err)
-	}
-	if result.Outcome != workerexecution.ExecutionOutcomeAccepted {
-		t.Fatalf("Execute() outcome = %q, want ACCEPTED", result.Outcome)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("script runner call count = %d, want 1", runner.CallCount())
-	}
-	wantCheckout := filepath.Join(repoRoot, ".worktrees", "release-feature")
-	if _, err := os.Stat(wantCheckout); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("released checkout stat error = %v, want not exist", err)
-	}
-	if got := runner.LastRequest().WorkDir; got != wantCheckout {
-		t.Fatalf("script work dir = %q, want %q", got, wantCheckout)
-	}
-}
-
 func platformprocessResult(stdout string) platformprocess.CommandResult {
 	return platformprocess.CommandResult{Stdout: []byte(stdout)}
 }

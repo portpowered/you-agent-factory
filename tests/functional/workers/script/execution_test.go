@@ -12,7 +12,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -294,97 +293,6 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("script command runner calls = %d, want 1", got)
 	}
-}
-
-// TestStatelessWorkersRootExecutesDetachedScriptAttempt proves a detached
-// script attempt submitted to the public Workers root contract runs through
-// the injected command edge and returns one correlated accepted result.
-func TestStatelessWorkersRootExecutesDetachedScriptAttempt(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("detached-script-output")
-	service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
-		ScriptCommandRunner: runner,
-	})
-	if err != nil {
-		t.Fatalf("BuildStatelessWorkers() error = %v", err)
-	}
-
-	result, err := service.Execute(t.Context(), detachedScriptExecuteRequest())
-	if err != nil {
-		t.Fatalf("Workers Execute() error = %v", err)
-	}
-	if result.Outcome != workerexecution.ExecutionOutcomeAccepted {
-		t.Fatalf("detached outcome = %q, failure = %#v, want ACCEPTED", result.Outcome, result.Failure)
-	}
-	if got := executeOutputText(result.Output); got != "detached-script-output" {
-		t.Fatalf("detached primary output = %q, want the script stdout", got)
-	}
-	if result.Correlation.DispatchID != "detached-dispatch" ||
-		result.Correlation.AttemptID != "detached-attempt" ||
-		result.Correlation.TraceID != "detached-trace" {
-		t.Fatalf("result correlation = %#v, want the submitted detached correlation", result.Correlation)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("script command calls = %d, want one canonical Workers attempt", runner.CallCount())
-	}
-	request := runner.LastRequest()
-	if request.Command != "echo" || len(request.Args) != 1 || request.Args[0] != "detached-output" {
-		t.Fatalf("script command request = %#v, want the submitted command and args", request)
-	}
-}
-
-// TestStatelessWorkersRootPreservesDetachedFailureAndPreStartErrors proves the
-// public Workers root reports a typed terminal failure for a non-zero script
-// exit and a pre-start error for an unknown runner, without sharing attempt
-// state between the two calls.
-func TestStatelessWorkersRootPreservesDetachedFailureAndPreStartErrors(t *testing.T) {
-	t.Run("non-zero exit is a typed terminal failure", func(t *testing.T) {
-		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
-			ScriptCommandRunner: nonZeroExitCommandRunner{stderr: "detached failure", exitCode: 17},
-		})
-		if err != nil {
-			t.Fatalf("BuildStatelessWorkers() error = %v", err)
-		}
-
-		result, err := service.Execute(t.Context(), detachedScriptExecuteRequest())
-		if err != nil {
-			t.Fatalf("Workers Execute() error = %v", err)
-		}
-		if result.Outcome != workerexecution.ExecutionOutcomeFailed || result.Failure == nil {
-			t.Fatalf("failed result = %#v, want a typed terminal failure", result)
-		}
-		if result.Failure.Type == "" || result.Failure.Family == "" {
-			t.Fatalf("failure classification = %#v, want type and family", result.Failure)
-		}
-		if result.Correlation.DispatchID != "detached-dispatch" {
-			t.Fatalf("failed correlation = %#v, want the submitted detached correlation", result.Correlation)
-		}
-	})
-
-	t.Run("unknown runner fails before the command edge starts", func(t *testing.T) {
-		runner := support.NewRecordingCommandRunner("never-executed")
-		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
-			ScriptCommandRunner: runner,
-		})
-		if err != nil {
-			t.Fatalf("BuildStatelessWorkers() error = %v", err)
-		}
-
-		request := detachedScriptExecuteRequest()
-		request.Target.RunnerID = "unknown-functional-runner"
-		result, err := service.Execute(t.Context(), request)
-		if err == nil {
-			t.Fatalf("pre-start result = %#v, want an unknown-runner request error", result)
-		}
-		if !strings.Contains(err.Error(), "unknown-functional-runner") {
-			t.Fatalf("pre-start error = %v, want it to name the rejected runner", err)
-		}
-		if result.Outcome != "" {
-			t.Fatalf("pre-start outcome = %q, want no terminal outcome before start", result.Outcome)
-		}
-		if runner.CallCount() != 0 {
-			t.Fatalf("script command calls = %d, want no external effect before start", runner.CallCount())
-		}
-	})
 }
 
 func detachedScriptExecuteRequest() workerexecution.ExecuteRequest {

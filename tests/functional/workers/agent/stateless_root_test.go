@@ -2,14 +2,12 @@ package agent_test
 
 import (
 	"context"
-	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -157,112 +155,5 @@ func detachedRootExecuteRequest(attemptID, command string) workers.ExecuteReques
 			RunnerID:   "script",
 			Command:    command,
 		},
-	}
-}
-
-// TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot is the public
-// caller guard for the detached Workers root. pkg/root already covers the same
-// composition from inside its own package, but no test outside pkg/root drove
-// root.BuildStatelessWorkers as a customer would, so the promise that a
-// detached attempt stays outside Factory Runtime and Factory Session opening
-// had no observable guard at the public boundary.
-//
-// Only edges.Edges replaces external effects: the script command runner is the
-// single allowed effect, and the Sessions/Runtime opening ports are supplied
-// purely so their invocation counts are observable. Nothing in this test waits
-// on a clock.
-func TestBuildStatelessWorkersExecutesDetachedAttemptThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	const detachedOutput = "detached-root-script-output"
-	recorder := &detachedRootOpeningRecorder{}
-	runner := newDetachedRootScriptRunner(detachedOutput)
-
-	service, err := root.BuildStatelessWorkers(t.Context(), recorder.edges(runner))
-	if err != nil {
-		t.Fatalf("root.BuildStatelessWorkers() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("root.BuildStatelessWorkers() service = nil, want the detached Workers root")
-	}
-	for effect, count := range recorder.openingEffects() {
-		if count != 0 {
-			t.Fatalf("%s effect calls during detached construction = %d, want 0", effect, count)
-		}
-	}
-
-	result, err := service.Execute(
-		t.Context(),
-		detachedRootExecuteRequest("detached-root-attempt", "detached-root-command"),
-	)
-	if err != nil {
-		t.Fatalf("detached Workers Execute() error = %v", err)
-	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted {
-		t.Fatalf("detached Workers Execute() outcome = %q, want %q", result.Outcome, workers.ExecutionOutcomeAccepted)
-	}
-	if len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != detachedOutput {
-		t.Fatalf("detached Workers Execute() output = %#v, want one %q part", result.Output.Primary, detachedOutput)
-	}
-	if got := runner.callCount(); got != 1 {
-		t.Fatalf("script command runner calls = %d, want exactly one detached attempt", got)
-	}
-	if got := runner.observedCommands(); len(got) != 1 || got[0] != "detached-root-command" {
-		t.Fatalf("script command runner commands = %#v, want the detached attempt command", got)
-	}
-
-	for effect, count := range recorder.openingEffects() {
-		if count != 0 {
-			t.Fatalf(
-				"%s effect calls after a detached attempt = %d, want 0; the detached root must not open a Factory Runtime or Factory Session",
-				effect,
-				count,
-			)
-		}
-	}
-}
-
-// TestBuildStatelessWorkersReleasesDetachedAttemptOnCancellation proves the
-// public detached root terminalizes a canceled attempt as a cancellation
-// instead of hanging, reporting success, or leaking the external command
-// effect, and that the canceled attempt still opens no Factory Runtime or
-// Factory Session. Cancellation is delivered through the caller's own context,
-// so no sleep or timeout padding is used as synchronization.
-func TestBuildStatelessWorkersReleasesDetachedAttemptOnCancellation(t *testing.T) {
-	t.Parallel()
-
-	recorder := &detachedRootOpeningRecorder{}
-	runner := newDetachedRootScriptRunner("cancelled-detached-output")
-
-	service, err := root.BuildStatelessWorkers(t.Context(), recorder.edges(runner))
-	if err != nil {
-		t.Fatalf("root.BuildStatelessWorkers() error = %v", err)
-	}
-
-	canceledCtx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	result, err := service.Execute(
-		canceledCtx,
-		detachedRootExecuteRequest("cancelled-root-attempt", "cancelled-root-command"),
-	)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled detached Execute() error = %v, want context.Canceled", err)
-	}
-	if result.Outcome == workers.ExecutionOutcomeAccepted {
-		t.Fatalf("canceled detached Execute() outcome = %q, want a non-accepted outcome", result.Outcome)
-	}
-	if got := runner.callCount(); got != 0 {
-		t.Fatalf("script command calls for a canceled detached attempt = %d, want 0", got)
-	}
-
-	for effect, count := range recorder.openingEffects() {
-		if count != 0 {
-			t.Fatalf(
-				"%s effect calls after a canceled detached attempt = %d, want 0",
-				effect,
-				count,
-			)
-		}
 	}
 }

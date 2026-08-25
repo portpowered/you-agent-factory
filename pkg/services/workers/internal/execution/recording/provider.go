@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -170,6 +171,13 @@ func inferenceResponseEvent(
 		nil,
 		&payload,
 	)
+}
+
+func executionTick(metadata work.ExecutionMetadata) int {
+	if metadata.CurrentTick != 0 {
+		return metadata.CurrentTick
+	}
+	return metadata.DispatchCreatedTick
 }
 
 func inferenceEvent(
