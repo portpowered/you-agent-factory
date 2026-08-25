@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
@@ -46,63 +45,49 @@ func adaptRunnerRequest(
 	worktree := strings.TrimSpace(request.Target.Workspace.Worktree)
 
 	return workers.RunnerExecutionRequest{
-		Dispatch:                           adaptDispatch(request, inputTokens),
-		Correlation:                        request.Correlation,
-		WorkerName:                         request.Target.WorkerName,
-		WorkerType:                         firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
-		WorkstationType:                    request.Target.WorkstationName,
-		RunnerID:                           runnerIDForRequest(request, identity),
-		ExecutorProvider:                   firstNonEmpty(request.Target.ExecutorProvider, providerIdentity(request.Target.Provider)),
-		ModelOperation:                     request.Input.ModelOperation,
-		ModelBindings:                      workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
-		ModelRuntime:                       modelRuntimeInputFromRequest(request),
-		InputTokens:                        workers.InputTokens(inputTokens...),
-		SystemPrompt:                       request.Target.Prompt.SystemPrompt,
-		UserMessage:                        request.Target.Prompt.UserMessage,
-		OutputSchema:                       request.Target.Prompt.OutputSchema,
-		ToolExecutionMode:                  request.Target.Tools.ExecutionMode,
-		RequiredOptionalCapabilities:       requiredOptionalCapabilities(request, identity),
-		EnvVars:                            context.envVars,
-		ProcessEnvironment:                 append([]string(nil), request.Target.Environment.ProcessEnvironment...),
-		Worktree:                           worktree,
-		WorkingDirectory:                   context.workingDirectory,
-		Model:                              request.Target.Model.Name,
-		ModelProvider:                      firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
-		ReasoningEffort:                    request.Target.Model.ReasoningEffort,
-		ModelLocality:                      request.Target.Model.Locality,
-		Command:                            request.Target.Command,
-		Args:                               append([]string(nil), request.Target.Args...),
-		FactoryDirectory:                   context.factoryDirectory,
-		OutputContract:                     request.Target.Output.Contract,
-		OutputFormat:                       request.Target.Output.Format,
-		StopToken:                          request.Target.Output.StopToken,
-		DecisionEnvelope:                   request.Target.Output.DecisionEnvelope,
-		GoalRoutingDecisionEnvelope:        request.Target.Output.GoalRoutingDecisionEnvelope,
-		PrintTimeout:                       request.Target.Timeout,
-		SessionID:                          providerSessionID(request),
-		Continuation:                       cloneContinuation(request.Input.Resume),
-		ProjectID:                          context.projectID,
-		WorkflowContext:                    context.workflow,
-		SkipPermissions:                    request.Target.Permissions.SkipPermissions,
-		DeclaredSecretInvocationParameters: declaredSecretInvocationParameters(request.Input.Invocation),
-		TemporaryFiles:                     temporaryFiles,
-		ExecutionLogger:                    request.Input.ExecutionLogger,
-		ProcessLifecycleObserver:           request.Input.ProcessLifecycleObserver,
+		Dispatch:                     adaptDispatch(request, inputTokens),
+		Correlation:                  request.Correlation,
+		WorkerName:                   request.Target.WorkerName,
+		WorkerType:                   firstNonEmpty(request.Target.WorkerType, request.Target.WorkerName),
+		WorkstationType:              request.Target.WorkstationName,
+		RunnerID:                     runnerIDForRequest(request, identity),
+		ExecutorProvider:             firstNonEmpty(request.Target.ExecutorProvider, providerIdentity(request.Target.Provider)),
+		ModelOperation:               request.Input.ModelOperation,
+		ModelBindings:                workers.CloneResolvedModelOperationBindings(request.Input.ModelBindings),
+		ModelRuntime:                 modelRuntimeInputFromRequest(request),
+		InputTokens:                  workers.InputTokens(inputTokens...),
+		SystemPrompt:                 request.Target.Prompt.SystemPrompt,
+		UserMessage:                  request.Target.Prompt.UserMessage,
+		PromptRedaction:              request.Target.Prompt.Redaction.Clone(),
+		OutputSchema:                 request.Target.Prompt.OutputSchema,
+		ToolExecutionMode:            request.Target.Tools.ExecutionMode,
+		RequiredOptionalCapabilities: requiredOptionalCapabilities(request, identity),
+		EnvVars:                      context.envVars,
+		ProcessEnvironment:           append([]string(nil), request.Target.Environment.ProcessEnvironment...),
+		Worktree:                     worktree,
+		WorkingDirectory:             context.workingDirectory,
+		Model:                        request.Target.Model.Name,
+		ModelProvider:                firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
+		ReasoningEffort:              request.Target.Model.ReasoningEffort,
+		ModelLocality:                request.Target.Model.Locality,
+		Command:                      request.Target.Command,
+		Args:                         append([]string(nil), request.Target.Args...),
+		FactoryDirectory:             context.factoryDirectory,
+		OutputContract:               request.Target.Output.Contract,
+		OutputFormat:                 request.Target.Output.Format,
+		StopToken:                    request.Target.Output.StopToken,
+		DecisionEnvelope:             request.Target.Output.DecisionEnvelope,
+		GoalRoutingDecisionEnvelope:  request.Target.Output.GoalRoutingDecisionEnvelope,
+		PrintTimeout:                 request.Target.Timeout,
+		SessionID:                    providerSessionID(request),
+		Continuation:                 cloneContinuation(request.Input.Resume),
+		ProjectID:                    context.projectID,
+		WorkflowContext:              context.workflow,
+		SkipPermissions:              request.Target.Permissions.SkipPermissions,
+		TemporaryFiles:               temporaryFiles,
+		ExecutionLogger:              request.Input.ExecutionLogger,
+		ProcessLifecycleObserver:     request.Input.ProcessLifecycleObserver,
 	}
-}
-
-func declaredSecretInvocationParameters(arguments work.InvocationArguments) []string {
-	if len(arguments.Arguments) == 0 {
-		return nil
-	}
-	declared := make([]string, 0, len(arguments.Arguments))
-	for name, argument := range arguments.Arguments {
-		if argument.Sensitive {
-			declared = append(declared, name)
-		}
-	}
-	sort.Strings(declared)
-	return declared
 }
 
 // requiredOptionalCapabilities reconstructs the runner requirements that the

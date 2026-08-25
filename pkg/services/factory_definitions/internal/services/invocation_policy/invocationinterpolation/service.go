@@ -19,6 +19,7 @@ var invocationInterpolationPattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}
 type Service struct{}
 
 var _ factorydefinitions.InvocationInterpolationService = Service{}
+var _ factorydefinitions.InvocationPromptProvenanceService = Service{}
 
 // NewService returns the canonical Factory invocation interpolator.
 func NewService() factorydefinitions.InvocationInterpolationService {
@@ -47,6 +48,14 @@ func (Service) InterpolateWorkstationConfig(
 	readFile factorydefinitions.FileReader,
 ) (factorydefinitions.FactoryWorkstationConfig, error) {
 	return InterpolateWorkstationConfig(workstation, args, readFile)
+}
+
+func (Service) InterpolatePromptWithProvenance(
+	authored string,
+	args *work.InvocationArguments,
+	readFile factorydefinitions.FileReader,
+) (string, []factorydefinitions.InvocationSensitiveTextSpan, error) {
+	return InterpolatePromptWithProvenance(authored, args, readFile)
 }
 
 // ValidateInvocationInterpolation verifies that runtime-supported invocation
@@ -175,6 +184,24 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 		next.OperationBindings = bindings
 	}
 	return next, nil
+}
+
+// InterpolatePromptWithProvenance resolves one prompt field while retaining
+// only the exact ranges contributed by declared-sensitive arguments. The
+// returned spans are deliberately value-free so callers can carry them to a
+// recording boundary without duplicating invocation data.
+func InterpolatePromptWithProvenance(
+	authored string,
+	args *work.InvocationArguments,
+	readFile factorydefinitions.FileReader,
+) (string, []factorydefinitions.InvocationSensitiveTextSpan, error) {
+	return interpolateInvocationFieldWithProvenance(
+		authored,
+		args,
+		"prompt",
+		false,
+		readFile,
+	)
 }
 
 func interpolateModelOperationBindings(
@@ -333,6 +360,70 @@ func interpolateInvocationField(
 	}
 	builder.WriteString(authored[cursor:])
 	return builder.String(), nil
+}
+
+func interpolateInvocationFieldWithProvenance(
+	authored string,
+	args *work.InvocationArguments,
+	fieldDescriptor string,
+	allowsRepeated bool,
+	readFile factorydefinitions.FileReader,
+) (string, []factorydefinitions.InvocationSensitiveTextSpan, error) {
+	if !strings.Contains(authored, "${") {
+		return authored, nil, nil
+	}
+	matches := invocationInterpolationPattern.FindAllStringSubmatchIndex(authored, -1)
+	if len(matches) == 0 {
+		return authored, nil, nil
+	}
+	spans := make([]factorydefinitions.InvocationSensitiveTextSpan, 0, len(matches))
+	if len(matches) == 1 && matches[0][0] == 0 && matches[0][1] == len(authored) {
+		name := authored[matches[0][2]:matches[0][3]]
+		argument, ok := invocationArgumentByName(args, name)
+		if !ok {
+			return "", nil, nil
+		}
+		replacement, err := invocationArgumentScalar(argument, name, fieldDescriptor, readFile)
+		if err != nil {
+			return "", nil, err
+		}
+		if argument.Sensitive && len(replacement) > 0 {
+			spans = append(spans, factorydefinitions.InvocationSensitiveTextSpan{
+				Start: 0,
+				End:   len(replacement),
+			})
+		}
+		return replacement, spans, nil
+	}
+	var builder strings.Builder
+	cursor := 0
+	for _, match := range matches {
+		builder.WriteString(authored[cursor:match[0]])
+		name := authored[match[2]:match[3]]
+		argument, ok := invocationArgumentByName(args, name)
+		if !ok {
+			return "", nil, &work.ArgumentError{
+				Code:      factorydefinitions.ArgumentErrorCodeInvalidInterpolation,
+				Message:   fmt.Sprintf("%s references omitted invocation parameter %q", fieldDescriptor, name),
+				Parameter: name,
+			}
+		}
+		replacement, err := invocationArgumentScalar(argument, name, fieldDescriptor, readFile)
+		if err != nil {
+			return "", nil, err
+		}
+		replacementStart := builder.Len()
+		builder.WriteString(replacement)
+		if argument.Sensitive && len(replacement) > 0 {
+			spans = append(spans, factorydefinitions.InvocationSensitiveTextSpan{
+				Start: replacementStart,
+				End:   builder.Len(),
+			})
+		}
+		cursor = match[1]
+	}
+	builder.WriteString(authored[cursor:])
+	return builder.String(), spans, nil
 }
 
 func invocationArgumentByName(args *work.InvocationArguments, name string) (work.InvocationArgument, bool) {

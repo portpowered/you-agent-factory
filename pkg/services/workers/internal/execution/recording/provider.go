@@ -121,7 +121,7 @@ func inferenceRequestEvent(
 		Attempt:            attempt,
 		WorkingDirectory:   request.WorkingDirectory,
 		Worktree:           request.Worktree,
-		Prompt:             request.UserMessage,
+		Prompt:             recordedUserMessage(request),
 	}
 	return inferenceEvent(
 		request,
@@ -180,6 +180,10 @@ func inferenceEvent(
 	requestPayload *workers.InferenceRequestEventPayload,
 	responsePayload *workers.InferenceResponseEventPayload,
 ) workers.InferenceEvent {
+	var declaredSecretPointers []string
+	if kind == workers.InferenceEventKindRequest {
+		declaredSecretPointers = declaredSecretPromptPointers(request)
+	}
 	return workers.InferenceEvent{
 		ID:                         id,
 		Kind:                       kind,
@@ -191,18 +195,33 @@ func inferenceEvent(
 		WorkIDs:                    stringsIfPresent(request.Dispatch.Execution.WorkIDs...),
 		Request:                    requestPayload,
 		Response:                   responsePayload,
-		DeclaredSecretJSONPointers: declaredSecretPromptPointers(request),
+		DeclaredSecretJSONPointers: declaredSecretPointers,
 	}
 }
 
 func declaredSecretPromptPointers(request workers.RunnerExecutionRequest) []string {
-	if len(request.DeclaredSecretInvocationParameters) == 0 || request.UserMessage == "" {
+	redaction := request.PromptRedaction
+	if redaction == nil || !redaction.RedactUserMessage || request.UserMessage == "" {
 		return nil
 	}
-	// The canonical inference request payload has one prompt field. The
-	// invocation parameter list is the explicit classification; no content
-	// matching is used to decide whether the field is redacted.
-	return []string{"/prompt"}
+	if redaction.FailClosed || redaction.UserMessage == "" {
+		// The canonical inference request payload has one prompt field. An
+		// inconsistent safe projection must fail closed at the persistence
+		// boundary rather than risk writing the original prompt.
+		return []string{"/prompt"}
+	}
+	return nil
+}
+
+func recordedUserMessage(request workers.RunnerExecutionRequest) string {
+	redaction := request.PromptRedaction
+	if redaction == nil || !redaction.RedactUserMessage || redaction.FailClosed {
+		return request.UserMessage
+	}
+	if redaction.UserMessage == "" && request.UserMessage != "" {
+		return request.UserMessage
+	}
+	return redaction.UserMessage
 }
 
 func providerFailureDetail(err error) *workers.InferenceResponseFailureDetail {

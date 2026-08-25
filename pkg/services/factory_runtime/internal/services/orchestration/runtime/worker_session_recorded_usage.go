@@ -217,8 +217,9 @@ func recordDetachedAgentRunResponse(
 	}
 
 	transcript := make([]workers.AgentRunTranscriptEntry, 0, 3)
-	appendTranscriptEntry(&transcript, "system", request.Target.Prompt.SystemPrompt)
-	appendTranscriptEntry(&transcript, "user", request.Target.Prompt.UserMessage)
+	recordedSystemPrompt, recordedUserMessage := recordedAgentRunPrompts(request)
+	appendTranscriptEntry(&transcript, "system", recordedSystemPrompt)
+	appendTranscriptEntry(&transcript, "user", recordedUserMessage)
 	appendTranscriptEntry(&transcript, "assistant", primaryOutputText(result.Output.Primary))
 	safeDiagnostics := workers.SafeWorkDiagnosticsFromWorkDiagnostics(result.Diagnostics.ToWorkDiagnostics())
 	if safeDiagnostics == nil {
@@ -255,12 +256,14 @@ func agentRunSecretJSONPointers(
 	request workers.ExecuteRequest,
 	transcript []workers.AgentRunTranscriptEntry,
 ) []string {
-	if !hasDeclaredSecretInvocationParameter(request.Input.Invocation) {
+	redaction := request.Target.Prompt.Redaction
+	if redaction == nil || !agentRunPromptRedactionFailClosed(request, redaction) {
 		return nil
 	}
 	pointers := make([]string, 0, len(transcript))
 	for index, entry := range transcript {
-		if entry.Role != "system" && entry.Role != "user" {
+		if (entry.Role != "system" || !redaction.RedactSystemPrompt) &&
+			(entry.Role != "user" || !redaction.RedactUserMessage) {
 			continue
 		}
 		pointers = append(pointers, fmt.Sprintf("/diagnostics/agentRun/transcript/%d/summary", index))
@@ -268,13 +271,33 @@ func agentRunSecretJSONPointers(
 	return pointers
 }
 
-func hasDeclaredSecretInvocationParameter(arguments work.InvocationArguments) bool {
-	for _, argument := range arguments.Arguments {
-		if argument.Sensitive {
-			return true
-		}
+func recordedAgentRunPrompts(request workers.ExecuteRequest) (string, string) {
+	systemPrompt := request.Target.Prompt.SystemPrompt
+	userMessage := request.Target.Prompt.UserMessage
+	redaction := request.Target.Prompt.Redaction
+	if redaction == nil || agentRunPromptRedactionFailClosed(request, redaction) {
+		return systemPrompt, userMessage
 	}
-	return false
+	if redaction.RedactSystemPrompt {
+		systemPrompt = redaction.SystemPrompt
+	}
+	if redaction.RedactUserMessage {
+		userMessage = redaction.UserMessage
+	}
+	return systemPrompt, userMessage
+}
+
+func agentRunPromptRedactionFailClosed(
+	request workers.ExecuteRequest,
+	redaction *workers.PromptRedaction,
+) bool {
+	if redaction == nil || redaction.FailClosed {
+		return redaction != nil && redaction.FailClosed
+	}
+	return (redaction.RedactSystemPrompt &&
+		request.Target.Prompt.SystemPrompt != "" && redaction.SystemPrompt == "") ||
+		(redaction.RedactUserMessage &&
+			request.Target.Prompt.UserMessage != "" && redaction.UserMessage == "")
 }
 
 func detachedExecutionTick(metadata work.ExecutionMetadata) int {
