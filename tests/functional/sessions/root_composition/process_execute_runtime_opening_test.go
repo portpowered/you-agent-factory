@@ -1,6 +1,7 @@
 package root_composition_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -154,6 +156,66 @@ func TestProcessExecuteUnavailableFactoryDoesNotRegisterSession(t *testing.T) {
 	}
 	if got := runtimeIDs.Load(); got != 0 {
 		t.Fatalf("runtime identity allocations after unavailable definition = %d, want 0", got)
+	}
+}
+
+// TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation proves that
+// a replay-source failure is returned from the canonical runtime-opening
+// boundary without attempting to assemble a live Factory Session.
+func TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(t *testing.T) {
+	t.Parallel()
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			if path != "recording.json" {
+				t.Fatalf("replay input path = %q, want recording.json", path)
+			}
+			return nil, errors.New("replay fixture unavailable")
+		},
+	})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	support.CleanupProcess(t, process)
+
+	workingDirectory := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", workingDirectory,
+		"--replay", "recording.json", "--no-record", "--quiet",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
+	inputs.Input.WorkingDirectory = workingDirectory
+
+	err = process.Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "failed to load --replay input") {
+		t.Fatalf("Process.Execute() error = %v, want replay loader failure", err)
+	}
+}
+
+// TestRuntimeOpeningCompositionRejectsMissingOwnerPorts proves that the
+// customer-facing Factory Sessions wire boundary rejects an incomplete graph
+// before any runtime-opening operation can be attempted.
+func TestRuntimeOpeningCompositionRejectsMissingOwnerPorts(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factorysessionwire.NewRuntimeOpening(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if factory != nil {
+		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)
+	}
+	if err == nil || !strings.Contains(err.Error(), "Provider Sessions owner ports are required") {
+		t.Fatalf("NewRuntimeOpening() error = %v, want missing owner-port diagnostic", err)
 	}
 }
 
