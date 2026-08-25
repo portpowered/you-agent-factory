@@ -968,21 +968,12 @@ func decodeSSEFrames(t *testing.T, body string) []sseTestFrame {
 
 type workServiceStub struct {
 	work.Service
-	getErr         error
-	getResult      work.ReadModel
-	getResults     map[string]work.ReadModel
-	getCallCount   *int
-	listErr        error
-	listResult     work.ListResult
-	listCallCount  *int
-	listSessionIDs *[]string
-	listMaxResults *[]int
+	getErr     error
+	getResult  work.ReadModel
+	getResults map[string]work.ReadModel
 }
 
 func (s workServiceStub) GetWork(_ context.Context, _, workID string) (work.ReadModel, error) {
-	if s.getCallCount != nil {
-		*s.getCallCount = *s.getCallCount + 1
-	}
 	if s.getErr != nil {
 		return work.ReadModel{}, s.getErr
 	}
@@ -993,29 +984,6 @@ func (s workServiceStub) GetWork(_ context.Context, _, workID string) (work.Read
 		return s.getResult, nil
 	}
 	return work.ReadModel{WorkID: "known-work"}, nil
-}
-
-func (s workServiceStub) ListWork(_ context.Context, sessionID string, options work.ListOptions) (work.ListResult, error) {
-	if s.listCallCount != nil {
-		*s.listCallCount = *s.listCallCount + 1
-	}
-	if s.listSessionIDs != nil {
-		*s.listSessionIDs = append(*s.listSessionIDs, sessionID)
-	}
-	if s.listMaxResults != nil {
-		*s.listMaxResults = append(*s.listMaxResults, options.MaxResults)
-	}
-	if s.listErr != nil {
-		return work.ListResult{}, s.listErr
-	}
-	if s.listResult.Results != nil || s.listResult.MaxResults != 0 || s.listResult.NextToken != "" || s.listResult.Counts != nil {
-		return s.listResult, nil
-	}
-	results := make([]work.ReadModel, 0, len(s.getResults))
-	for _, result := range s.getResults {
-		results = append(results, result)
-	}
-	return work.ListResult{Results: results}, nil
 }
 
 var _ observationService = (*fakeObservationService)(nil)

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,7 @@ func TestListWorkerSessionsTranslatesPositiveLimit(t *testing.T) {
 	limit := factoryapi.WorkerSessionLimit(2)
 	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{}}}
 	recorder := httptest.NewRecorder()
-	NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessions(
+	NewHandler(NewAdapter(service, listWorkServiceStub{}), zap.NewNop()).ListWorkerSessions(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions?limit=2", nil),
 		factoryapi.ListWorkerSessionsParams{Limit: &limit},
@@ -40,7 +41,7 @@ func TestListWorkerSessionsRejectsNonPositiveLimit(t *testing.T) {
 	limit := factoryapi.WorkerSessionLimit(0)
 	service := &fakeObservationService{}
 	recorder := httptest.NewRecorder()
-	NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessions(
+	NewHandler(NewAdapter(service, listWorkServiceStub{}), zap.NewNop()).ListWorkerSessions(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions?limit=0", nil),
 		factoryapi.ListWorkerSessionsParams{Limit: &limit},
@@ -64,7 +65,7 @@ func TestListWorkerSessionsRejectsNonPositiveLimit(t *testing.T) {
 func TestListWorkerSessionsReturnsTopLevelEmptyCollection(t *testing.T) {
 	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{}, MaxResults: 50}}
 	recorder := httptest.NewRecorder()
-	NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessions(
+	NewHandler(NewAdapter(service, listWorkServiceStub{}), zap.NewNop()).ListWorkerSessions(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions", nil),
 		factoryapi.ListWorkerSessionsParams{},
@@ -94,7 +95,7 @@ func TestListWorkerSessionsMapsInvalidScopeAndStateErrors(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			service := &fakeObservationService{topLevelErr: testCase.err}
 			recorder := httptest.NewRecorder()
-			NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop()).ListWorkerSessions(
+			NewHandler(NewAdapter(service, listWorkServiceStub{}), zap.NewNop()).ListWorkerSessions(
 				recorder,
 				httptest.NewRequest(http.MethodGet, "/worker-sessions", nil),
 				testCase.params,
@@ -107,7 +108,7 @@ func TestListWorkerSessionsMapsInvalidScopeAndStateErrors(t *testing.T) {
 func TestListWorkerSessionsMapsAndLogsBackendFailure(t *testing.T) {
 	core, logs := observer.New(zapcore.ErrorLevel)
 	service := &fakeObservationService{topLevelErr: errors.New("recording projection failed")}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.New(core))
+	handler := NewHandler(NewAdapter(service, listWorkServiceStub{}), zap.New(core))
 	recorder := httptest.NewRecorder()
 	scope := factoryapi.ListWorkerSessionsParamsScope("all")
 	handler.ListWorkerSessions(
@@ -163,7 +164,7 @@ func assertBadRequestResponse(t *testing.T, recorder *httptest.ResponseRecorder)
 func TestListWorkerSessionsProjectsFleetAttributionAndUnavailableFacts(t *testing.T) {
 	service := fleetObservationService()
 	recorder := httptest.NewRecorder()
-	NewHandler(NewAdapter(service, workServiceStub{getResults: fleetWorkResults()}), zap.NewNop()).ListWorkerSessions(
+	NewHandler(NewAdapter(service, listWorkServiceStub{getResults: fleetWorkResults()}), zap.NewNop()).ListWorkerSessions(
 		recorder,
 		httptest.NewRequest(http.MethodGet, "/worker-sessions", nil),
 		factoryapi.ListWorkerSessionsParams{},
@@ -197,7 +198,7 @@ func TestListWorkerSessionsBatchesWorkAttributionReadsByFactorySession(t *testin
 	workListReads := 0
 	workGetReads := 0
 	workListMaxResults := []int{}
-	workReader := workServiceStub{
+	workReader := listWorkServiceStub{
 		getResults:     fleetWorkResults(),
 		getCallCount:   &workGetReads,
 		listCallCount:  &workListReads,
@@ -253,7 +254,7 @@ func TestListWorkerSessionsWorkAttributionScalesWithoutPerObservationReads(t *te
 	workListReads := 0
 	workGetReads := 0
 	workListMaxResults := []int{}
-	workReader := workServiceStub{
+	workReader := listWorkServiceStub{
 		getCallCount:   &workGetReads,
 		listCallCount:  &workListReads,
 		listMaxResults: &workListMaxResults,
@@ -378,3 +379,53 @@ func assertFleetUnavailableObservation(t *testing.T, observation factoryapi.Work
 		t.Fatalf("unavailable optional facts = %#v, want explicit nulls", observation)
 	}
 }
+
+type listWorkServiceStub struct {
+	work.Service
+	getErr         error
+	getResults     map[string]work.ReadModel
+	getCallCount   *int
+	listErr        error
+	listResult     work.ListResult
+	listCallCount  *int
+	listSessionIDs *[]string
+	listMaxResults *[]int
+}
+
+func (s listWorkServiceStub) GetWork(_ context.Context, _, workID string) (work.ReadModel, error) {
+	if s.getCallCount != nil {
+		*s.getCallCount = *s.getCallCount + 1
+	}
+	if s.getErr != nil {
+		return work.ReadModel{}, s.getErr
+	}
+	if result, ok := s.getResults[workID]; ok {
+		return result, nil
+	}
+	return work.ReadModel{WorkID: "known-work"}, nil
+}
+
+func (s listWorkServiceStub) ListWork(_ context.Context, sessionID string, options work.ListOptions) (work.ListResult, error) {
+	if s.listCallCount != nil {
+		*s.listCallCount = *s.listCallCount + 1
+	}
+	if s.listSessionIDs != nil {
+		*s.listSessionIDs = append(*s.listSessionIDs, sessionID)
+	}
+	if s.listMaxResults != nil {
+		*s.listMaxResults = append(*s.listMaxResults, options.MaxResults)
+	}
+	if s.listErr != nil {
+		return work.ListResult{}, s.listErr
+	}
+	if s.listResult.Results != nil || s.listResult.MaxResults != 0 || s.listResult.NextToken != "" || s.listResult.Counts != nil {
+		return s.listResult, nil
+	}
+	results := make([]work.ReadModel, 0, len(s.getResults))
+	for _, result := range s.getResults {
+		results = append(results, result)
+	}
+	return work.ListResult{Results: results}, nil
+}
+
+var _ work.Service = listWorkServiceStub{}
