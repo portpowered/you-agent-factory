@@ -62,6 +62,18 @@ func (o *SessionOwner) waitForResult(
 			loggedActive = true
 		}
 		if result, done, err := o.resolveObservation(ctx, sessionID, input, observation, packaged); done {
+			// A cancellation can arrive after resolveObservation's result check
+			// but before it returns from failure classification. Re-check at the
+			// wait boundary so that classification cannot publish a stale result.
+			if ctx != nil {
+				if contextErr := ctx.Err(); contextErr != nil {
+					alreadyCanceled := result.Status == interfaces.InvocationTerminalStatusCanceled && err == nil
+					if !alreadyCanceled {
+						result, waitErr := o.waitErrorResult(sessionID, input, contextErr)
+						return result, waitErr
+					}
+				}
+			}
 			return result, err
 		}
 		if err := o.waitNext(waitCtx); err != nil {
@@ -81,6 +93,12 @@ func (o *SessionOwner) resolveObservation(
 		RequestID: input.RequestID, InvocationReturn: input.InvocationReturn, WorldState: observation.WorldState,
 	}
 	selection, err := o.workService.ResolvePrimaryResult(ctx, selectionInput)
+	// Work checks the context before selecting a result. Re-check it after the
+	// call so a cancellation racing with that check cannot be classified as a
+	// successful or runtime-failed invocation.
+	if result, canceled, waitErr := o.canceledObservationResult(ctx, sessionID, input); canceled {
+		return result, true, waitErr
+	}
 	if err == nil {
 		if packaged {
 			if telemetry, ok := o.telemetry.(SessionInvocationPackagedTelemetry); ok {
@@ -89,7 +107,7 @@ func (o *SessionOwner) resolveObservation(
 		}
 		return o.completedResult(sessionID, input, selection), true, nil
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if isInvocationWaitError(err) {
 		result, waitErr := o.waitErrorResult(sessionID, input, err)
 		return result, true, waitErr
 	}
@@ -119,6 +137,26 @@ func (o *SessionOwner) resolveObservation(
 		return FactoryInvocationResult{}, false, nil
 	}
 	return o.resolveStoppedInvocation(sessionID, input, selectionInput, primaryErr, packaged), true, nil
+}
+
+func (o *SessionOwner) canceledObservationResult(
+	ctx context.Context,
+	sessionID string,
+	input SessionInvocationWaitInput,
+) (FactoryInvocationResult, bool, error) {
+	if ctx == nil {
+		return FactoryInvocationResult{}, false, nil
+	}
+	contextErr := ctx.Err()
+	if contextErr == nil {
+		return FactoryInvocationResult{}, false, nil
+	}
+	result, waitErr := o.waitErrorResult(sessionID, input, contextErr)
+	return result, true, waitErr
+}
+
+func isInvocationWaitError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (o *SessionOwner) resolveStoppedInvocation(

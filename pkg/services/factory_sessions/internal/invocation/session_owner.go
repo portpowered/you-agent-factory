@@ -146,12 +146,20 @@ func (o *SessionOwner) InvokeFactorySession(
 		}
 		return FactoryInvocationResult{}, err
 	}
+	submissionContextErr := contextError(ctx)
 	submitResult, err := o.submitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          workTypeName,
 		Content:             resolved.Content,
 		InvocationArguments: work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
 	})
+	if submissionContextErr == nil {
+		if contextErr := contextError(ctx); contextErr != nil {
+			return o.waitErrorResult(sessionID, SessionInvocationWaitInput{
+				InputSource: resolved.Source, FactoryConfig: factoryCfg,
+			}, contextErr)
+		}
+	}
 	if err != nil {
 		if o.telemetry != nil {
 			o.telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
@@ -171,6 +179,13 @@ func (o *SessionOwner) InvokeFactorySession(
 		FactoryConfig:    factoryCfg,
 		TimeoutMillis:    request.TimeoutMillis,
 	})
+}
+
+func contextError(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
 }
 
 // ResolvedSessionInvocationInput is the normalized input carried into Work submission.

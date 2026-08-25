@@ -404,6 +404,33 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	}
 }
 
+func TestSessionOwner_MapsCancellationArrivingDuringSubmissionToInvocationOutcome(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			cancel()
+			return workdomain.WorkRequestSubmitResult{}, context.Canceled
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			t.Fatal("Observe called after submission cancellation")
+			return SessionInvocationObservation{}, nil
+		},
+	})
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := sessionOwnerTextContent(t, "hello")
+
+	result, err := owner.InvokeFactorySession(ctx, "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		SourceKind: &sourceKind, Content: &content,
+	}))
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCanceled)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(interfaces.InvocationErrorCodeCanceled))
+}
+
 func successfulSessionOwner(cfg *interfaces.FactoryConfig, capture func(workdomain.SubmitRequest)) *SessionOwner {
 	return newTestSessionOwner(sessionOwnerFixture{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
@@ -532,6 +559,44 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 			assertSessionOwnerEqual(t, "trace ID", result.TraceID, "trace-1")
 		})
 	}
+}
+
+func TestSessionOwnerWait_CancellationAfterPrimaryResultResolutionWinsOverFailureClassification(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return failedSessionInvocationObservation(), nil
+		},
+		Work: &cancelAfterPrimaryResultResolutionWorkService{
+			Service: testInvocationWorkService(),
+			Cancel:  cancel,
+		},
+	})
+
+	result, err := owner.waitForResult(ctx, "session-1", sessionWaitInput(nil))
+	if err != nil {
+		t.Fatalf("waitForResult: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCanceled)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(interfaces.InvocationErrorCodeCanceled))
+}
+
+func TestSessionOwnerWait_CancellationAfterObservationResolutionWinsAtWaitBoundary(t *testing.T) {
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return failedSessionInvocationObservation(), nil
+		},
+		Work: testInvocationWorkService(),
+	})
+
+	result, err := owner.waitForResult(&cancelOnThirdErrContext{}, "session-1", sessionWaitInput(nil))
+	if err != nil {
+		t.Fatalf("waitForResult: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCanceled)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(interfaces.InvocationErrorCodeCanceled))
 }
 
 func TestSessionOwnerWait_ConfiguredTimeoutReachesInjectedWaitBoundary(t *testing.T) {
@@ -680,6 +745,38 @@ func waitForSessionOwnerObservation(t *testing.T, observation SessionInvocationO
 		t.Fatalf("waitForResult: %v", err)
 	}
 	return result
+}
+
+type cancelAfterPrimaryResultResolutionWorkService struct {
+	work.Service
+	Cancel context.CancelFunc
+}
+
+type cancelOnThirdErrContext struct {
+	errCalls int
+}
+
+func (c *cancelOnThirdErrContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+
+func (c *cancelOnThirdErrContext) Done() <-chan struct{} { return nil }
+
+func (c *cancelOnThirdErrContext) Err() error {
+	c.errCalls++
+	if c.errCalls >= 3 {
+		return context.Canceled
+	}
+	return nil
+}
+
+func (c *cancelOnThirdErrContext) Value(any) any { return nil }
+
+func (s *cancelAfterPrimaryResultResolutionWorkService) ResolvePrimaryResult(
+	_ context.Context,
+	input work.PrimaryResultSelectionInput,
+) (work.PrimaryResultSelection, error) {
+	selection, err := s.Service.ResolvePrimaryResult(context.Background(), input)
+	s.Cancel()
+	return selection, err
 }
 
 func sessionWaitInput(policy *interfaces.InvocationReturnConfig) SessionInvocationWaitInput {
