@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -551,6 +552,14 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	info, err := os.Stat(transcripts[0])
 	if err != nil {
 		t.Fatalf("Stat(%q) error = %v", transcripts[0], err)
+	}
+	if runtime.GOOS == "windows" {
+		// Windows exposes profile ACL protection rather than POSIX owner-only
+		// permission bits; os.Chmod(0600) therefore reads back as 0666.
+		if perm := info.Mode().Perm(); perm&0o600 != 0o600 {
+			t.Fatalf("wire transcript mode = %#o, want owner read/write retained", perm)
+		}
+		return
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("wire transcript mode = %#o, want %#o: the transcript holds full prompt and response content",

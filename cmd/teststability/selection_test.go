@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -183,6 +185,42 @@ func TestStabilityRunnerFailsClosedWhenBudgetExpires(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "completed-attempts=1") || !strings.Contains(output.String(), "TestSlow (1/3)") {
 		t.Fatalf("output=%q, want completed and unmeasured attempt counts", output.String())
+	}
+}
+
+func TestStabilityRunnerRunsAttemptsWithBoundedConcurrency(t *testing.T) {
+	var running atomic.Int32
+	var maximum atomic.Int32
+	release := make(chan struct{})
+	runner := stabilityRunner{
+		attempts: 1,
+		budget:   time.Minute,
+		jobs:     2,
+		runGroup: func(context.Context, testGroup) (string, error) {
+			active := running.Add(1)
+			defer running.Add(-1)
+			for {
+				observed := maximum.Load()
+				if active <= observed || maximum.CompareAndSwap(observed, active) {
+					break
+				}
+			}
+			if active == 2 {
+				close(release)
+			}
+			<-release
+			return "ok", nil
+		},
+	}
+	groups := []testGroup{
+		{Package: "example/one", Tests: []string{"TestOne"}},
+		{Package: "example/two", Tests: []string{"TestTwo"}},
+	}
+	if err := runner.runAll(groups, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if got := maximum.Load(); got != 2 {
+		t.Fatalf("maximum concurrency = %d, want 2", got)
 	}
 }
 

@@ -142,6 +142,7 @@ CHANGED_TEST_STABILITY_BASE ?=
 CHANGED_TEST_STABILITY_HEAD ?= HEAD
 CHANGED_TEST_STABILITY_ATTEMPTS ?= 20
 CHANGED_TEST_STABILITY_BUDGET ?= 15m
+CHANGED_TEST_STABILITY_JOBS ?= 4
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_UNIT_COVERAGE_JSON_OUTPUT ?=
 GO_UNIT_COVERAGE_TIMING_OUTPUT ?=
@@ -508,7 +509,7 @@ test-unit-fresh:
 # then gives every selected top-level Go test 20 isolated attempts within one
 # 15-minute total budget.
 test-changed-test-stability:
-	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET)
+	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET) -jobs $(CHANGED_TEST_STABILITY_JOBS)
 
 test-lane-audit:
 	$(GO) run ./cmd/testlanecheck

@@ -10,12 +10,14 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	defaultStabilityAttempts = 20
 	defaultStabilityBudget   = 15 * time.Minute
+	defaultStabilityJobs     = 4
 )
 
 type testGroup struct {
@@ -24,12 +26,15 @@ type testGroup struct {
 }
 
 type attemptExecutor func(context.Context, testGroup, string) (string, error)
+type groupAttemptExecutor func(context.Context, testGroup) (string, error)
 
 type stabilityRunner struct {
 	attempts int
 	budget   time.Duration
+	jobs     int
 	now      func() time.Time
 	run      attemptExecutor
+	runGroup groupAttemptExecutor
 }
 
 type attemptCounts map[string]int
@@ -80,6 +85,12 @@ func (runner stabilityRunner) runAll(groups []testGroup, output io.Writer) error
 			return runGoTestAttempt(ctx, ".", group, testName)
 		}
 	}
+	if runner.jobs == 0 {
+		runner.jobs = 1
+	}
+	if runner.jobs < 1 {
+		return errors.New("stability jobs must be greater than zero")
+	}
 	if len(groups) == 0 {
 		_, _ = fmt.Fprintf(output, "Changed-test stability: no qualifying tests; success (attempts=%d budget=%s)\n", runner.attempts, runner.budget)
 		return nil
@@ -87,7 +98,10 @@ func (runner stabilityRunner) runAll(groups []testGroup, output io.Writer) error
 
 	totalTests := countGroupedTests(groups)
 	deadline := runner.now().Add(runner.budget)
-	_, _ = fmt.Fprintf(output, "Changed-test stability: selectors=%d attempts=%d expected-attempts=%d budget=%s\n", totalTests, runner.attempts, totalTests*runner.attempts, runner.budget)
+	_, _ = fmt.Fprintf(output, "Changed-test stability: selectors=%d attempts=%d expected-attempts=%d budget=%s jobs=%d\n", totalTests, runner.attempts, totalTests*runner.attempts, runner.budget, runner.jobs)
+	if runner.jobs > 1 {
+		return runner.runParallel(groups, deadline, totalTests, output)
+	}
 	completed := make(attemptCounts)
 	for _, group := range groups {
 		for _, testName := range group.Tests {
@@ -114,6 +128,78 @@ func (runner stabilityRunner) runAll(groups []testGroup, output io.Writer) error
 	return nil
 }
 
+type stabilityTask struct {
+	group testGroup
+}
+
+type stabilityFailure struct {
+	group    testGroup
+	attempt  int
+	captured string
+	err      error
+}
+
+func (runner stabilityRunner) runParallel(groups []testGroup, deadline time.Time, totalTests int, output io.Writer) error {
+	if runner.runGroup == nil {
+		runner.runGroup = func(ctx context.Context, group testGroup) (string, error) {
+			return runGoTestGroupAttempt(ctx, ".", group)
+		}
+	}
+	taskCount := len(groups)
+	tasks := make(chan stabilityTask, taskCount)
+	for _, group := range groups {
+		tasks <- stabilityTask{group: group}
+	}
+	close(tasks)
+
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	completed := make(attemptCounts)
+	var completedMu sync.Mutex
+	failures := make(chan stabilityFailure, runner.jobs)
+	var workers sync.WaitGroup
+	workerCount := min(runner.jobs, taskCount)
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for task := range tasks {
+				for attempt := 1; attempt <= runner.attempts; attempt++ {
+					if ctx.Err() != nil || !runner.now().Before(deadline) {
+						return
+					}
+					captured, err := runner.runGroup(ctx, task.group)
+					if err != nil {
+						if ctx.Err() == nil {
+							select {
+							case failures <- stabilityFailure{group: task.group, attempt: attempt, captured: captured, err: err}:
+								cancel()
+							default:
+							}
+						}
+						return
+					}
+					completedMu.Lock()
+					for _, testName := range task.group.Tests {
+						completed[attemptKey(task.group.Package, testName)]++
+					}
+					completedMu.Unlock()
+				}
+			}
+		}()
+	}
+	workers.Wait()
+	close(failures)
+	if failure, ok := <-failures; ok {
+		return groupAttemptFailureError(failure.group, failure.attempt, runner.attempts, failure.captured, failure.err, output)
+	}
+	if !runner.now().Before(deadline) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return budgetExpiredError(groups, completed, runner.attempts, deadline, output)
+	}
+	_, _ = fmt.Fprintf(output, "Changed-test stability: success selectors=%d attempts=%d measured=%d\n", totalTests, runner.attempts, totalTests*runner.attempts)
+	return nil
+}
+
 func countGroupedTests(groups []testGroup) int {
 	total := 0
 	for _, group := range groups {
@@ -132,6 +218,15 @@ func attemptFailureError(packagePath, testName string, attempt, attempts int, ca
 	}
 	_, _ = fmt.Fprintf(output, "Changed-test stability: failure package=%s test=%s attempt=%d/%d\nGo test output:\n%s\nFocused reproduction: %s\n", packagePath, testName, attempt, attempts, captured, focusedReproductionCommand(packagePath, testName))
 	return fmt.Errorf("changed-test stability failed for package %s test %s attempt %d/%d: %w", packagePath, testName, attempt, attempts, runErr)
+}
+
+func groupAttemptFailureError(group testGroup, attempt, attempts int, captured string, runErr error, output io.Writer) error {
+	if strings.TrimSpace(captured) == "" {
+		captured = "<go test produced no output>"
+	}
+	testNames := strings.Join(group.Tests, ",")
+	_, _ = fmt.Fprintf(output, "Changed-test stability: failure package=%s tests=%s attempt=%d/%d\nGo test output:\n%s\nFocused reproduction: %s\n", group.Package, testNames, attempt, attempts, captured, focusedGroupReproductionCommand(group))
+	return fmt.Errorf("changed-test stability failed for package %s tests %s attempt %d/%d: %w", group.Package, testNames, attempt, attempts, runErr)
 }
 
 func budgetExpiredError(groups []testGroup, completed attemptCounts, attempts int, deadline time.Time, output io.Writer) error {
@@ -154,8 +249,30 @@ func focusedReproductionCommand(packagePath, testName string) string {
 	return fmt.Sprintf("go test -count=1 -run=^%s$ %s", regexp.QuoteMeta(testName), packagePath)
 }
 
+func focusedGroupReproductionCommand(group testGroup) string {
+	quoted := make([]string, 0, len(group.Tests))
+	for _, testName := range group.Tests {
+		quoted = append(quoted, regexp.QuoteMeta(testName))
+	}
+	return fmt.Sprintf("go test -count=1 -run='^(?:%s)$' %s", strings.Join(quoted, "|"), group.Package)
+}
+
 func runGoTestAttempt(ctx context.Context, repoRoot string, group testGroup, testName string) (string, error) {
 	args := []string{"test", "-count=1", "-run=^" + regexp.QuoteMeta(testName) + "$", group.Package}
+	command := exec.CommandContext(ctx, "go", args...)
+	command.Dir = repoRoot
+	command.Env = os.Environ()
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func runGoTestGroupAttempt(ctx context.Context, repoRoot string, group testGroup) (string, error) {
+	quoted := make([]string, 0, len(group.Tests))
+	for _, testName := range group.Tests {
+		quoted = append(quoted, regexp.QuoteMeta(testName))
+	}
+	pattern := "^(?:" + strings.Join(quoted, "|") + ")$"
+	args := []string{"test", "-count=1", "-run=" + pattern, group.Package}
 	command := exec.CommandContext(ctx, "go", args...)
 	command.Dir = repoRoot
 	command.Env = os.Environ()
