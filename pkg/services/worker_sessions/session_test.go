@@ -1,8 +1,10 @@
 package workersessions_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -10,6 +12,37 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRuntimeAttempt_CompleteDelegatesAndRejectsUnavailable(t *testing.T) {
+	if err := (workersessions.RuntimeAttempt(nil)).Complete(context.Background(), workers.WorkstationDispatchResult{}, nil); err == nil {
+		t.Fatal("nil RuntimeAttempt.Complete() error = nil, want unavailable error")
+	}
+
+	type contextKey string
+	const key contextKey = "worker-session-test"
+	wantContext := context.WithValue(context.Background(), key, "present")
+	wantDispatchErr := errors.New("dispatch failed")
+	var gotResult workers.WorkstationDispatchResult
+	var gotDispatchErr error
+	called := false
+	attempt := workersessions.RuntimeAttempt(func(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) error {
+		called = true
+		if ctx.Value(key) != "present" {
+			t.Errorf("callback context value = %v, want present", ctx.Value(key))
+		}
+		gotResult = result
+		gotDispatchErr = dispatchErr
+		return wantDispatchErr
+	})
+
+	wantResult := workers.WorkstationDispatchResult{}
+	if err := attempt.Complete(wantContext, wantResult, wantDispatchErr); !errors.Is(err, wantDispatchErr) {
+		t.Fatalf("RuntimeAttempt.Complete() error = %v, want %v", err, wantDispatchErr)
+	}
+	if !called || !reflect.DeepEqual(gotResult, wantResult) || !errors.Is(gotDispatchErr, wantDispatchErr) {
+		t.Fatalf("RuntimeAttempt callback called=%v result=%#v dispatchErr=%v, want called with %#v and %v", called, gotResult, gotDispatchErr, wantResult, wantDispatchErr)
+	}
+}
 
 func TestSession_Validate_AcceptsNonEmptyIDAndAcceptedState(t *testing.T) {
 	session := workersessions.Session{ID: "worker-1", State: workersessions.StateRunning}
@@ -549,5 +582,108 @@ func TestInterruptErrorPreservesPhaseCauseAndErrorsIsContract(t *testing.T) {
 	var nilError *workersessions.InterruptError
 	if nilError.Error() != "worker session: interrupt failed" || nilError.Unwrap() != nil || nilError.Is(workersessions.ErrInterruptValidation) {
 		t.Fatal("nil InterruptError methods did not preserve safe zero behavior")
+	}
+}
+
+type providerSessionObservationSpy struct {
+	workersessions.Service
+	requests []workersessions.ProviderSessionObservationRequest
+	err      error
+}
+
+func continuationFor(reference providers.SessionRef) *providers.ContinuationRef {
+	continuation := reference.ContinuationRef()
+	return &continuation
+}
+
+func (s *providerSessionObservationSpy) ObserveProviderSession(
+	_ context.Context,
+	req workersessions.ProviderSessionObservationRequest,
+) (workersessions.ProviderSessionAssociationResult, error) {
+	req.Reference = req.Reference.Clone()
+	s.requests = append(s.requests, req)
+	return workersessions.ProviderSessionAssociationResult{}, s.err
+}
+
+func validPublishRequest() workersessions.PublishRecordRequest {
+	return workersessions.PublishRecordRequest{
+		SessionID:      "worker-1",
+		Draft:          workers.Draft{Kind: workers.KindProgress, Phase: workers.PhaseUpdated, Payload: []byte(`{"label":"working"}`)},
+		SourceType:     "worker_provider",
+		SourceID:       "worker-1",
+		SourceSequence: 1,
+		SourceEventID:  "evt-1",
+		SchemaID:       "workers.draft.v1",
+	}
+}
+
+func TestProviderSessionObservationPublisher_FallbackNilReceiverIsSafe(t *testing.T) {
+	var publisher *workersessions.ProviderSessionObservationPublisher
+	if got := publisher.WithUnassociatedProgressFallback(); got != nil {
+		t.Fatalf("nil fallback publisher = %v, want nil", got)
+	}
+}
+
+func TestProviderSessionObservationPublisher_SuppressesProviderIdentityDisagreement(t *testing.T) {
+	observer := &providerSessionObservationSpy{}
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+	})
+	publisher.Bind(observer)
+
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:   "dispatch-1",
+		Provider:     "claude",
+		Continuation: continuationFor(providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}),
+	})
+
+	if len(observer.requests) != 0 || forwarded != 0 {
+		t.Fatalf("contradictory provider identity requests=%#v forwarded=%d, want both suppressed", observer.requests, forwarded)
+	}
+}
+
+func TestPublish_MalformedCanonicalUsageFallsBackToUsedTokens(t *testing.T) {
+	spy := &workerRecordSpy{}
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher.Bind(spy)
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "worker-usage",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "usage.updated",
+		Payload:    "{malformed",
+		Metadata:   map[string]string{"used_tokens": "7"},
+	})
+
+	if len(spy.published) != 1 {
+		t.Fatalf("published records = %d, want one usage record", len(spy.published))
+	}
+	if got := spy.published[0].Draft.Kind; got != workers.KindUsage {
+		t.Fatalf("draft kind = %q, want %q", got, workers.KindUsage)
+	}
+	var payload workers.UsagePayload
+	if err := json.Unmarshal(spy.published[0].Draft.Payload, &payload); err != nil {
+		t.Fatalf("usage payload is not valid JSON: %v", err)
+	}
+	if payload.TotalTokens != 7 {
+		t.Fatalf("usage payload total tokens = %d, want 7", payload.TotalTokens)
+	}
+
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "worker-usage-empty-object",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "usage.updated",
+		Payload:    `{}`,
+		Metadata:   map[string]string{"used_tokens": "8"},
+	})
+	if len(spy.published) != 2 {
+		t.Fatalf("published records after empty canonical object = %d, want two usage records", len(spy.published))
+	}
+	var emptyObjectFallback workers.UsagePayload
+	if err := json.Unmarshal(spy.published[1].Draft.Payload, &emptyObjectFallback); err != nil {
+		t.Fatalf("empty canonical object fallback is not valid JSON: %v", err)
+	}
+	if emptyObjectFallback.TotalTokens != 8 {
+		t.Fatalf("empty canonical object fallback total tokens = %d, want 8", emptyObjectFallback.TotalTokens)
 	}
 }
