@@ -139,13 +139,14 @@ test("extracts only the compact verdict contract without verbose diagnostics", (
 	const extracted = extractFunctionalCoverageVerdict(log);
 	assert.equal(extracted.foundInventory, true);
 	assert.equal(extracted.hasCoverageGateFailure, true);
-	assert.equal(extracted.lines.filter((line) => line.startsWith("  package=")).length, 1);
+	assert.equal(extracted.lines.filter((line) => line.startsWith("  package=") && line.includes(" lane=functional")).length, 1);
 	assert.equal(new Set(extracted.lines).size, extracted.lines.length);
 	assert.equal(extracted.text.includes(rawLine), false);
 	assert.equal(extracted.text.includes("make: ***"), false);
 	assert.doesNotMatch(extracted.text, /floor violation|package coverage regression|coverage manifest missing|coverage not evaluated|uncovered blocks|file\.go:/);
 	assert.match(extracted.text, /pkg\/ functional coverage:/);
 	assert.match(extracted.text, /tests\/ functional-package timing:/);
+	assert.match(extracted.text, /tests\/functional\/alpha elapsed=1\.000s outcome=pass/);
 	assert.match(extracted.text, /  tally:/);
 	assert.equal(extracted.text.includes("Functional suite inventory:"), false);
 });

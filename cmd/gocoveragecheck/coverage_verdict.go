@@ -80,7 +80,6 @@ func writeCoverageVerdict(label string, result coverageResult, failures []string
 	} else {
 		fmt.Fprintf(stdoutWriter, "%s package coverage verdict:\n", label)
 	}
-	writeBelowFloorCoverageLines(belowFloor)
 	for _, verdict := range verdicts {
 		writePackageCoverageVerdictLine(verdict, coverageLaneNoun(label), result)
 	}
