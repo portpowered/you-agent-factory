@@ -442,9 +442,11 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 // contract for both collection and detail reads.
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
 	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	_, environment := prepareModelsReadinessCache(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		Env:                       environment,
 		Edges: serviceedges.Edges{
 			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
 				return nil, errors.New("cache inspection failed")
@@ -477,7 +479,7 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 // into a backend or filesystem diagnostic.
 func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := t.TempDir()
+	_, environment := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
@@ -492,7 +494,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 		"--operation", "TTS", "--text", "readiness failure probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.Env = environment
 	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf("Process.Execute(models invoke) error = nil, want readiness failure; inspections=%d", inspections.Load())
@@ -511,7 +513,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 // provider or expose the dependency's error text through Process.Execute.
 func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := t.TempDir()
+	_, environment := prepareModelsReadinessCache(t)
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
 			return nil, context.Canceled
@@ -522,7 +524,7 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 		"--operation", "TTS", "--text", "catalog cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.Env = environment
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want dependency cancellation")
 	}
@@ -537,7 +539,7 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 // can return a partial detail or invoke a provider.
 func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := t.TempDir()
+	_, environment := prepareModelsReadinessCache(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var startOnce sync.Once
@@ -554,7 +556,7 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 		"--operation", "TTS", "--text", "catalog request cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.Env = environment
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	select {
 	case <-started:
@@ -581,7 +583,7 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 // after catalog discovery has already succeeded.
 func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := t.TempDir()
+	_, environment := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
@@ -596,7 +598,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 		"--operation", "TTS", "--text", "readiness cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.Env = environment
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want readiness cancellation")
 	}
@@ -611,7 +613,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 // observation.
 func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := t.TempDir()
+	_, environment := prepareModelsReadinessCache(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	var inspections atomic.Int32
@@ -628,13 +630,27 @@ func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *te
 		"--operation", "TTS", "--text", "post-readiness cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.Env = environment
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want post-readiness cancellation")
 	}
 	if inspections.Load() < 2 {
 		t.Fatalf("model cache inspections = %d, want catalog and readiness probes", inspections.Load())
 	}
+}
+
+func prepareModelsReadinessCache(t *testing.T) (string, []string) {
+	t.Helper()
+	cacheDirectory := t.TempDir()
+	writeCachedOmniVoiceAssets(t, cacheDirectory)
+	homeDirectory := t.TempDir()
+	environment := append(functionalHomeEnvironment(homeDirectory),
+		"HOME="+homeDirectory,
+		"USERPROFILE="+homeDirectory,
+		"XDG_CACHE_HOME="+homeDirectory,
+		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
+	)
+	return cacheDirectory, environment
 }
 
 func findCatalogModel(
