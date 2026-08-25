@@ -97,6 +97,10 @@ func (service *rootService) invokeInScope(
 	if err != nil {
 		return err
 	}
+	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
+	if err != nil {
+		return err
+	}
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
 		return err
 	}
