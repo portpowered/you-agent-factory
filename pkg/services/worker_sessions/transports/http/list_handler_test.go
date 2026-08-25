@@ -143,6 +143,48 @@ func TestListWorkerSessionsProjectsFleetAttributionAndUnavailableFacts(t *testin
 	assertFleetObservationFacts(t, response)
 }
 
+func TestListWorkerSessionsCharacterizesPerObservationWorkAttributionReads(t *testing.T) {
+	started := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	workerSessionIDs := []string{"fleet-worker-a", "fleet-worker-b", "fleet-worker-c"}
+	observations := make([]workersessions.Observation, len(workerSessionIDs))
+	for index, workerSessionID := range workerSessionIDs {
+		observations[index] = workersessions.Observation{
+			WorkerSessionID:  workerSessionID,
+			FactorySessionID: "~default",
+			WorkIDs:          []string{"work-a"},
+			AttemptID:        "attempt-" + workerSessionID,
+			State:            workersessions.StateCompleted,
+			StartedAt:        &started,
+		}
+	}
+	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: observations}}
+	workReads := 0
+	workReader := workServiceStub{
+		getResults:   fleetWorkResults(),
+		getCallCount: &workReads,
+	}
+	recorder := httptest.NewRecorder()
+	NewHandler(NewAdapter(service, workReader), zap.NewNop()).ListWorkerSessions(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/worker-sessions", nil),
+		factoryapi.ListWorkerSessionsParams{},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Sessions) != len(observations) {
+		t.Fatalf("session count = %d, want %d", len(response.Sessions), len(observations))
+	}
+	if workReads != len(observations) {
+		t.Fatalf("Work attribution reads = %d, want one read per returned observation in the current path", workReads)
+	}
+}
+
 func fleetWorkResults() map[string]work.ReadModel {
 	return map[string]work.ReadModel{
 		"work-a": {WorkID: "work-a", Name: "Build API"},

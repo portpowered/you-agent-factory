@@ -968,12 +968,16 @@ func decodeSSEFrames(t *testing.T, body string) []sseTestFrame {
 
 type workServiceStub struct {
 	work.Service
-	getErr     error
-	getResult  work.ReadModel
-	getResults map[string]work.ReadModel
+	getErr       error
+	getResult    work.ReadModel
+	getResults   map[string]work.ReadModel
+	getCallCount *int
 }
 
 func (s workServiceStub) GetWork(_ context.Context, _, workID string) (work.ReadModel, error) {
+	if s.getCallCount != nil {
+		*s.getCallCount = *s.getCallCount + 1
+	}
 	if s.getErr != nil {
 		return work.ReadModel{}, s.getErr
 	}
