@@ -457,43 +457,103 @@ func TestDecodeAPIErrorRejectsMissingOrMalformedBodies(t *testing.T) {
 	}
 }
 
-func TestAPIErrorSafeFallbacksAndNilAccessors(t *testing.T) {
+func TestAPIErrorNilAccessors(t *testing.T) {
 	t.Parallel()
 	var nilError *APIError
-	if nilError.Error() != "" || nilError.Unwrap() != nil || nilError.CLIErrorCode() != "" || nilError.CLIErrorFamily() != "" || nilError.CLIErrorMessage() != "" || nilError.CLIHTTPMethod() != "" || nilError.CLIHTTPURL() != "" || nilError.CLIHTTPStatus() != 0 {
-		t.Fatal("nil APIError did not expose safe zero values")
+	if nilError.Error() != "" {
+		t.Fatalf("nil APIError error = %q", nilError.Error())
+	}
+	if nilError.Unwrap() != nil {
+		t.Fatal("nil APIError unwrap was non-nil")
+	}
+	if nilError.CLIErrorCode() != "" {
+		t.Fatalf("nil APIError code = %q", nilError.CLIErrorCode())
+	}
+	if nilError.CLIErrorFamily() != "" {
+		t.Fatalf("nil APIError family = %q", nilError.CLIErrorFamily())
+	}
+	if nilError.CLIErrorMessage() != "" {
+		t.Fatalf("nil APIError message = %q", nilError.CLIErrorMessage())
+	}
+	if nilError.CLIHTTPMethod() != "" {
+		t.Fatalf("nil APIError method = %q", nilError.CLIHTTPMethod())
+	}
+	if nilError.CLIHTTPURL() != "" {
+		t.Fatalf("nil APIError URL = %q", nilError.CLIHTTPURL())
+	}
+	if nilError.CLIHTTPStatus() != 0 {
+		t.Fatalf("nil APIError status = %d", nilError.CLIHTTPStatus())
 	}
 	if got := nilError.CLIErrorResponse(); got != (factoryapi.ErrorResponse{}) {
 		t.Fatalf("nil API response = %#v", got)
 	}
+}
 
+func TestAPIErrorMessageOnlyFallback(t *testing.T) {
+	t.Parallel()
 	messageOnly := NewAPIError(0, factoryapi.ErrorResponse{Message: " server message "}, " ", nil)
 	if messageOnly.Error() != "server message" || messageOnly.CLIErrorMessage() != "server message" {
 		t.Fatalf("message-only error = %q / %q", messageOnly.Error(), messageOnly.CLIErrorMessage())
 	}
+}
+
+func TestAPIErrorStatusOnlyFallback(t *testing.T) {
+	t.Parallel()
 	statusOnly := NewAPIError(http.StatusServiceUnavailable, factoryapi.ErrorResponse{}, "", nil)
 	if statusOnly.Error() != "HTTP request failed (503)" {
 		t.Fatalf("status-only error = %q", statusOnly.Error())
 	}
+}
+
+func TestAPIErrorEmptyFallback(t *testing.T) {
+	t.Parallel()
 	empty := NewAPIErrorFromResponse(nil, factoryapi.ErrorResponse{}, "", nil)
 	if empty.Error() != "HTTP request failed" || empty.CLIHTTPMethod() != "" || empty.CLIHTTPURL() != "" || empty.CLIHTTPStatus() != 0 {
 		t.Fatalf("empty error = %#v", empty)
 	}
 }
 
-func TestHTTPErrorSafeFallbacksAndMetadataWrappers(t *testing.T) {
+func TestHTTPErrorNilAccessors(t *testing.T) {
 	t.Parallel()
 	var nilError *HTTPError
-	if nilError.Error() != "" || nilError.Unwrap() != nil || nilError.CLIHTTPMethod() != "" || nilError.CLIHTTPURL() != "" || nilError.CLIHTTPStatus() != 0 {
-		t.Fatal("nil HTTPError did not expose safe zero values")
+	if nilError.Error() != "" {
+		t.Fatalf("nil HTTPError error = %q", nilError.Error())
 	}
+	if nilError.Unwrap() != nil {
+		t.Fatal("nil HTTPError unwrap was non-nil")
+	}
+	if nilError.CLIHTTPMethod() != "" {
+		t.Fatalf("nil HTTPError method = %q", nilError.CLIHTTPMethod())
+	}
+	if nilError.CLIHTTPURL() != "" {
+		t.Fatalf("nil HTTPError URL = %q", nilError.CLIHTTPURL())
+	}
+	if nilError.CLIHTTPStatus() != 0 {
+		t.Fatalf("nil HTTPError status = %d", nilError.CLIHTTPStatus())
+	}
+}
+
+func TestHTTPErrorEmptyAndNilConstructors(t *testing.T) {
+	t.Parallel()
 	if (&HTTPError{}).Error() != "HTTP request failed" {
 		t.Fatal("empty HTTPError did not use the safe fallback")
 	}
-	if NewHTTPError(http.MethodGet, "http://factory.test", 0, nil) != nil || NewHTTPErrorFromResponse(nil, nil) != nil || NewHTTPErrorFromRequest(nil, nil) != nil || WithHTTPResponse(nil, nil) != nil {
-		t.Fatal("nil HTTP causes should not manufacture errors")
+	if NewHTTPError(http.MethodGet, "http://factory.test", 0, nil) != nil {
+		t.Fatal("nil NewHTTPError cause manufactured an error")
 	}
+	if NewHTTPErrorFromResponse(nil, nil) != nil {
+		t.Fatal("nil response cause manufactured an error")
+	}
+	if NewHTTPErrorFromRequest(nil, nil) != nil {
+		t.Fatal("nil request cause manufactured an error")
+	}
+	if WithHTTPResponse(nil, nil) != nil {
+		t.Fatal("nil response wrapper manufactured an error")
+	}
+}
 
+func TestHTTPErrorMetadataWrappers(t *testing.T) {
+	t.Parallel()
 	request, err := http.NewRequest(http.MethodDelete, "https://factory.test/work", nil)
 	if err != nil {
 		t.Fatal(err)
