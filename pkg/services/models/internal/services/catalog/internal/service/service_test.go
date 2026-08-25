@@ -830,12 +830,7 @@ func TestCatalogRejectsInvalidOperatorOverlaysWithFieldDiagnostics(t *testing.T)
 	completeCustom := valid()
 	completeCustom.Operations = nil
 
-	tests := []struct {
-		name      string
-		overlays  map[string]models.ModelOverlay
-		modelName string
-		field     string
-	}{
+	tests := []invalidCatalogOverlayCase{
 		{
 			name:      "invalid model name",
 			overlays:  map[string]models.ModelOverlay{"bad/name": valid()},
@@ -886,30 +881,42 @@ func TestCatalogRejectsInvalidOperatorOverlaysWithFieldDiagnostics(t *testing.T)
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			scopes := newRuntimeScopes(t, "catalog-overlay-"+test.name)
-			privateRef, err := scopes.Open(models.RuntimeBinding{
-				RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-				OperatorModels: test.overlays,
-			})
-			if err != nil {
-				t.Fatalf("open scope: %v", err)
-			}
-			service := newCatalogService(t, scopes)
-			_, err = service.ListCatalog(context.Background(), models.ListModelsRequest{
-				Scope: publicScope(t, privateRef),
-			})
-
-			var failure models.ModelConfigurationFailure
-			if !errors.As(err, &failure) {
-				t.Fatalf("ListCatalog error = %v, want ModelConfigurationFailure", err)
-			}
-			if !errors.Is(err, models.ErrModelConfigurationInvalid) {
-				t.Fatalf("ListCatalog error = %v, want ErrModelConfigurationInvalid", err)
-			}
-			if failure.ModelName != test.modelName || failure.Field != test.field {
-				t.Fatalf("configuration failure = %#v, want model %q field %q", failure, test.modelName, test.field)
-			}
+			assertInvalidCatalogOverlay(t, test)
 		})
+	}
+}
+
+type invalidCatalogOverlayCase struct {
+	name      string
+	overlays  map[string]models.ModelOverlay
+	modelName string
+	field     string
+}
+
+func assertInvalidCatalogOverlay(t *testing.T, test invalidCatalogOverlayCase) {
+	t.Helper()
+	scopes := newRuntimeScopes(t, "catalog-overlay-"+test.name)
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+		OperatorModels: test.overlays,
+	})
+	if err != nil {
+		t.Fatalf("open scope: %v", err)
+	}
+	service := newCatalogService(t, scopes)
+	_, err = service.ListCatalog(context.Background(), models.ListModelsRequest{
+		Scope: publicScope(t, privateRef),
+	})
+
+	var failure models.ModelConfigurationFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("ListCatalog error = %v, want ModelConfigurationFailure", err)
+	}
+	if !errors.Is(err, models.ErrModelConfigurationInvalid) {
+		t.Fatalf("ListCatalog error = %v, want ErrModelConfigurationInvalid", err)
+	}
+	if failure.ModelName != test.modelName || failure.Field != test.field {
+		t.Fatalf("configuration failure = %#v, want model %q field %q", failure, test.modelName, test.field)
 	}
 }
 

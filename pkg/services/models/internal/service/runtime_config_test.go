@@ -1,5 +1,11 @@
 package service
 
+import (
+	"context"
+	"errors"
+	"testing"
+)
+
 import models "github.com/portpowered/infinite-you/pkg/services/models"
 
 type modelRuntimeConfig = models.RuntimeConfig
@@ -31,6 +37,64 @@ func projectTestModelsRuntimeConfig(factoryDir string, cfg *testFactoryConfig) *
 		}
 	}
 	return result
+}
+
+func TestRootLegacyOperationsClassifyMissingRuntimeBinding(t *testing.T) {
+	t.Parallel()
+
+	root := &Root{}
+	if _, err := root.ListModels(context.Background()); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("ListModels error = %v, want missing runtime binding", err)
+	}
+	if _, err := root.GetModel(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("GetModel error = %v, want missing runtime binding", err)
+	}
+	if _, err := root.PullModel(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("PullModel error = %v, want missing runtime binding", err)
+	}
+	if _, err := root.InspectRuntime(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("InspectRuntime error = %v, want missing runtime binding", err)
+	}
+	if _, err := root.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "voice"}); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("AcquireLease error = %v, want missing runtime binding", err)
+	}
+	if err := root.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: "lease"}); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("ReleaseLease error = %v, want missing runtime binding", err)
+	}
+}
+
+func TestRuntimeServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := &runtimeService{}
+	_, err := svc.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
+	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
+	_, err = svc.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
+	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
+	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
+	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
+	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
+	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
+	_, err = svc.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
+	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
+	_, err = svc.InvokeModel(ctx, models.InvokeModelRequest{})
+	assertContractOnlyUnsupported(t, "InvokeModel", err)
+	result, err := svc.InvokeLocal(ctx, models.LocalInvocationRequest{})
+	if err != nil || result.Handled {
+		t.Fatalf("InvokeLocal result = %#v, error = %v, want declined no-op", result, err)
+	}
+	_, err = svc.InvokeLocal(ctx, models.LocalInvocationRequest{
+		Worker: models.LocalWorker{
+			Type:          models.RuntimeWorkerTypeInference,
+			ModelLocality: models.RuntimeModelLocalityLocal,
+		},
+	})
+	if !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("managed InvokeLocal error = %v, want ErrNotFound", err)
+	}
 }
 
 func projectTestModelsResources(resources []modelRuntimeResource) []modelRuntimeResource {

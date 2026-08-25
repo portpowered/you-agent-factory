@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -221,6 +222,20 @@ func TestPrepareModelAssetsCopiesDirectoryBackedGenericArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareModelAssets: %v", err)
 	}
+	assertPreparedDirectoryAsset(t, result, body)
+
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "directory-model",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache after directory preparation: %v", err)
+	}
+	assertDirectoryRuntimeInspection(t, inspection, body)
+}
+
+func assertPreparedDirectoryAsset(t *testing.T, result models.PrepareModelAssetsResult, body []byte) {
+	t.Helper()
 	if result.Outcome != models.AssetPreparationPrepared ||
 		result.Asset.Readiness != models.AssetReadinessAvailable ||
 		result.Asset.Integrity != models.AssetIntegrityVerified ||
@@ -230,14 +245,10 @@ func TestPrepareModelAssetsCopiesDirectoryBackedGenericArtifacts(t *testing.T) {
 		result.Asset.Artifacts[0].SHA256 != sha256Hex(body) {
 		t.Fatalf("directory-backed preparation result = %#v", result)
 	}
+}
 
-	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
-		Scope: scope,
-		Name:  "directory-model",
-	})
-	if err != nil {
-		t.Fatalf("InspectRuntimeCache after directory preparation: %v", err)
-	}
+func assertDirectoryRuntimeInspection(t *testing.T, inspection assets.RuntimeCacheInspection, body []byte) {
+	t.Helper()
 	if !inspection.Installed || !inspection.ManifestValid || inspection.InstalledFileCount != 1 ||
 		len(inspection.ObservedArtifacts) != 1 ||
 		inspection.ObservedArtifacts[0].Name != "nested/weights.gguf" {

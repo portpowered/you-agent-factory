@@ -163,40 +163,6 @@ func TestRootDelegatesInferenceThroughInjectedOwner(t *testing.T) {
 	}
 }
 
-func TestRuntimeServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	svc := &runtimeService{}
-	_, err := svc.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
-	_, err = svc.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
-	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
-	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
-	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
-	_, err = svc.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
-	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
-	_, err = svc.InvokeModel(ctx, models.InvokeModelRequest{})
-	assertContractOnlyUnsupported(t, "InvokeModel", err)
-	result, err := svc.InvokeLocal(ctx, models.LocalInvocationRequest{})
-	if err != nil || result.Handled {
-		t.Fatalf("InvokeLocal result = %#v, error = %v, want declined no-op", result, err)
-	}
-	_, err = svc.InvokeLocal(ctx, models.LocalInvocationRequest{
-		Worker: models.LocalWorker{
-			Type:          models.RuntimeWorkerTypeInference,
-			ModelLocality: models.RuntimeModelLocalityLocal,
-		},
-	})
-	if !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("managed InvokeLocal error = %v, want ErrNotFound", err)
-	}
-}
-
 func TestBoundServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
 	t.Parallel()
 

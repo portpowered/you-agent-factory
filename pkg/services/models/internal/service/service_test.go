@@ -941,27 +941,3 @@ func TestRootContractOnlyOperationsFailExplicitly(t *testing.T) {
 	_, err = root.CancelInvocation(ctx, models.CancelInvocationRequest{})
 	assertContractOnlyUnsupported(t, "CancelInvocation", err)
 }
-
-func TestRootLegacyOperationsClassifyMissingRuntimeBinding(t *testing.T) {
-	t.Parallel()
-
-	root := &Root{}
-	if _, err := root.ListModels(context.Background()); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("ListModels error = %v, want missing runtime binding", err)
-	}
-	if _, err := root.GetModel(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("GetModel error = %v, want missing runtime binding", err)
-	}
-	if _, err := root.PullModel(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("PullModel error = %v, want missing runtime binding", err)
-	}
-	if _, err := root.InspectRuntime(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("InspectRuntime error = %v, want missing runtime binding", err)
-	}
-	if _, err := root.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "voice"}); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("AcquireLease error = %v, want missing runtime binding", err)
-	}
-	if err := root.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: "lease"}); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("ReleaseLease error = %v, want missing runtime binding", err)
-	}
-}
