@@ -30,12 +30,43 @@ func (s *recordedWorkerSessionObservation) annotateRecordedFact(
 	return fact
 }
 
-// applyConfirmation samples one completed-flush watermark for the response.
-// The process-local registry remains the fallback source, so every observation
-// starts UNCONFIRMED and can become CONFIRMED only when its recorded state
-// cursor is known and covered by the generation-matching watermark.
+type completedFlushWatermarkSample struct {
+	generationID string
+	watermark    recordings.CanonicalEventCursor
+	available    bool
+}
+
+// sampleCompletedFlushWatermark captures the one durability boundary used by
+// a read response. Keeping the sample separate from decoration prevents a
+// response assembled from recorded and live observations from observing two
+// different flush completions.
+func (s *recordedWorkerSessionObservation) sampleCompletedFlushWatermark() completedFlushWatermarkSample {
+	if s == nil || s.ledger == nil || s.durability == nil {
+		return completedFlushWatermarkSample{}
+	}
+	generationID := strings.TrimSpace(s.ledger.StreamGenerationID())
+	if generationID == "" {
+		return completedFlushWatermarkSample{}
+	}
+	watermark, ok := s.durability.CompletedFlushWatermark(generationID)
+	if !ok || strings.TrimSpace(watermark.StreamGenerationID) != generationID {
+		return completedFlushWatermarkSample{generationID: generationID}
+	}
+	return completedFlushWatermarkSample{
+		generationID: generationID,
+		watermark:    watermark,
+		available:    true,
+	}
+}
+
+// applyConfirmation decorates observations with a previously sampled
+// completed-flush watermark. The process-local registry remains the fallback
+// source, so every observation starts UNCONFIRMED and can become CONFIRMED
+// only when its recorded state cursor is known and covered by the
+// generation-matching watermark.
 func (s *recordedWorkerSessionObservation) applyConfirmation(
 	observations []workersessions.Observation,
+	sample completedFlushWatermarkSample,
 ) {
 	if len(observations) == 0 {
 		return
@@ -43,22 +74,14 @@ func (s *recordedWorkerSessionObservation) applyConfirmation(
 	for index := range observations {
 		observations[index].ConfirmationState = workersessions.ConfirmationStateUnconfirmed
 	}
-	if s == nil || s.ledger == nil || s.durability == nil {
-		return
-	}
-	generationID := strings.TrimSpace(s.ledger.StreamGenerationID())
-	if generationID == "" {
-		return
-	}
-	watermark, ok := s.durability.CompletedFlushWatermark(generationID)
-	if !ok || strings.TrimSpace(watermark.StreamGenerationID) != generationID {
+	if !sample.available {
 		return
 	}
 	for index := range observations {
 		observation := &observations[index]
 		if observation.StateSequenceKnown &&
-			observation.StreamGenerationID == generationID &&
-			observation.StateSequence <= int64(watermark.Sequence) {
+			observation.StreamGenerationID == sample.generationID &&
+			observation.StateSequence <= int64(sample.watermark.Sequence) {
 			observation.ConfirmationState = workersessions.ConfirmationStateConfirmed
 		}
 	}
@@ -68,7 +91,7 @@ func (s *recordedWorkerSessionObservation) confirmedObservation(
 	observation workersessions.Observation,
 ) workersessions.Observation {
 	values := []workersessions.Observation{observation}
-	s.applyConfirmation(values)
+	s.applyConfirmation(values, s.sampleCompletedFlushWatermark())
 	return values[0]
 }
 

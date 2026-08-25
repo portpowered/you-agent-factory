@@ -452,7 +452,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if s == nil || s.ledger == nil || s.projector == nil {
 		result, err := s.listLive(ctx, req)
 		if err == nil {
-			s.applyConfirmation(result.Observations)
+			s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
 		}
 		return result, err
 	}
@@ -473,8 +473,12 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	s.applyConfirmation(recorded)
-	s.applyConfirmation(live.Observations)
+	sample := completedFlushWatermarkSample{}
+	if len(recorded) > 0 || len(live.Observations) > 0 {
+		sample = s.sampleCompletedFlushWatermark()
+	}
+	s.applyConfirmation(recorded, sample)
+	s.applyConfirmation(live.Observations, sample)
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
 }
 
@@ -523,7 +527,7 @@ func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
 	}
 	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
 	if err == nil {
-		s.applyConfirmation(result.Observations)
+		s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
 	}
 	return result, err
 }

@@ -34,10 +34,11 @@ type blockingAssociationLedger struct {
 
 type workerSessionWatermarkedLedger struct {
 	*recordingfixtures.ScriptedRuntimeLedger
-	watermark   recordings.CanonicalEventCursor
-	available   bool
-	calls       int
-	generations []string
+	watermark        recordings.CanonicalEventCursor
+	available        bool
+	calls            int
+	generations      []string
+	watermarkForCall func(int, string) (recordings.CanonicalEventCursor, bool)
 }
 
 func (ledger *workerSessionWatermarkedLedger) CompletedFlushWatermark(
@@ -45,6 +46,9 @@ func (ledger *workerSessionWatermarkedLedger) CompletedFlushWatermark(
 ) (recordings.CanonicalEventCursor, bool) {
 	ledger.calls++
 	ledger.generations = append(ledger.generations, streamGenerationID)
+	if ledger.watermarkForCall != nil {
+		return ledger.watermarkForCall(ledger.calls, streamGenerationID)
+	}
 	return ledger.watermark, ledger.available
 }
 
@@ -430,6 +434,64 @@ func TestRecordedWorkerSessionObservationConfirmationFollowsCompletedFlushWaterm
 	for _, gotGeneration := range ledger.generations {
 		if gotGeneration != generationID {
 			t.Fatalf("watermark generation = %q, want %q", gotGeneration, generationID)
+		}
+	}
+}
+
+func TestRecordedWorkerSessionObservationListSamplesWatermarkOnceForMergedSources(t *testing.T) {
+	base := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	const (
+		generationID = "generation-worker-list-sample"
+		workID       = "work-worker-list-sample"
+	)
+	events := recordedObservationTestEvents(t, base, workID)
+	ledger := &workerSessionWatermarkedLedger{
+		ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{
+			Events:       events,
+			GenerationID: generationID,
+		},
+		watermarkForCall: func(call int, generation string) (recordings.CanonicalEventCursor, bool) {
+			if call == 1 {
+				return recordings.CanonicalEventCursor{StreamGenerationID: generation, Sequence: 2}, true
+			}
+			return recordings.CanonicalEventCursor{StreamGenerationID: generation, Sequence: 0}, true
+		},
+	}
+	live := &processLocalWorkerSessionService{
+		observationListResult: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+			WorkerSessionID:    "worker-live-only",
+			AttemptID:          "dispatch-live-only",
+			ConfirmationState:  workersessions.ConfirmationStateConfirmed,
+			StreamGenerationID: generationID,
+			StateSequence:      2,
+			StateSequenceKnown: true,
+		}}},
+	}
+	service := newRecordedWorkerSessionObservation(
+		live,
+		ledger,
+		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{
+				WorkItemsByID: map[string]work.FactoryWorkItem{workID: {ID: workID}},
+			}, nil
+		},
+		platformclock.Real{},
+		nil,
+	)
+
+	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
+	if err != nil {
+		t.Fatalf("ListObservations() error = %v", err)
+	}
+	if ledger.calls != 1 || len(ledger.generations) != 1 || ledger.generations[0] != generationID {
+		t.Fatalf("watermark samples = %d/%v, want one sample for %q", ledger.calls, ledger.generations, generationID)
+	}
+	if len(result.Observations) != 3 {
+		t.Fatalf("ListObservations() returned %d observations, want recorded and live observations", len(result.Observations))
+	}
+	for _, observation := range result.Observations {
+		if observation.ConfirmationState != workersessions.ConfirmationStateConfirmed {
+			t.Fatalf("observation %q confirmation = %q, want CONFIRMED from the single sample", observation.WorkerSessionID, observation.ConfirmationState)
 		}
 	}
 }
@@ -1102,8 +1164,16 @@ type historicalProviderSessions struct {
 
 type processLocalWorkerSessionService struct {
 	workersessions.Service
-	topLevelResult    workersessions.ListWorkerSessionObservationsResult
-	getByWorkerResult workersessions.Observation
+	topLevelResult        workersessions.ListWorkerSessionObservationsResult
+	observationListResult workersessions.ListObservationsResult
+	getByWorkerResult     workersessions.Observation
+}
+
+func (s *processLocalWorkerSessionService) ListObservations(
+	context.Context,
+	workersessions.ListObservationsRequest,
+) (workersessions.ListObservationsResult, error) {
+	return s.observationListResult, nil
 }
 
 func (s *processLocalWorkerSessionService) ListWorkerSessionObservations(
