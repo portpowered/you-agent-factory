@@ -131,6 +131,46 @@ func TestPublishRecord_AppendsValidatedDetachedSourceNativeDraftsInOrder(t *test
 	}
 }
 
+func TestPublishRecord_InvalidUsagePayloadDoesNotProjectTokenFacts(t *testing.T) {
+	for _, payload := range []string{`[]`, `{}`} {
+		t.Run(payload, func(t *testing.T) {
+			var registry workersessions.Service
+			execution := usagePublishingExecution{
+				draft: workers.Draft{
+					Kind:    workers.KindUsage,
+					Phase:   workers.PhaseUpdated,
+					Payload: []byte(payload),
+				},
+				publish: func(ctx context.Context, request workersessions.PublishRecordRequest) (workersessions.PublishRecordResult, error) {
+					return registry.PublishRecord(ctx, request)
+				},
+			}
+			var err error
+			registry, err = newService(execution, newEventsAppender(), nil)
+			if err != nil {
+				t.Fatalf("service.New() error = %v, want nil", err)
+			}
+
+			request := validStartRequest("worker-usage", "dispatch-invalid-usage")
+			request.Execution.Execution.Dispatch.Execution.WorkIDs = []string{"work-invalid-usage"}
+			if _, err := registry.InvokeSession(context.Background(), request); err != nil {
+				t.Fatalf("InvokeSession() error = %v, want nil", err)
+			}
+			listed, err := registry.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: "work-invalid-usage"})
+			if err != nil {
+				t.Fatalf("ListObservations() error = %v, want nil", err)
+			}
+			if len(listed.Observations) != 1 {
+				t.Fatalf("ListObservations() returned %d observations, want one", len(listed.Observations))
+			}
+			observation := listed.Observations[0]
+			if observation.TokenUsage != nil || observation.Model != nil {
+				t.Fatalf("invalid usage payload projected facts: %#v, want no token usage or model", observation)
+			}
+		})
+	}
+}
+
 // TestPublishRecord_RejectsProviderContradictingOpening proves both provider
 // publication entry points preserve the opening identity: a direct binding
 // attempt and a provider-authored output naming provider B are rejected after
