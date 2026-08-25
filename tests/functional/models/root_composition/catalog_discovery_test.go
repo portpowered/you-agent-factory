@@ -1,12 +1,17 @@
 package root_composition_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -203,6 +208,107 @@ func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t 
 		(*observed.ManagedRuntime.Diagnostics)["lifecycleState"] != string(observed.ManagedRuntime.LifecycleState) {
 		t.Fatalf("GET /models managed diagnostics = %#v, want state projection", observed.ManagedRuntime.Diagnostics)
 	}
+	for _, name := range []string{modelprovider.BuiltInModelNameASR, modelprovider.BuiltInModelNameEmbed, modelprovider.BuiltInModelNameLLM, modelprovider.BuiltInModelNameTTS} {
+		detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/"+name)
+		if detail.Name != name || detail.ManagedRuntime.Identity != name {
+			t.Fatalf("GET /models/%s = %#v, want stable effective catalog detail", name, detail)
+		}
+	}
+	unknownResponse, err := http.Get(server.URL() + "/models/catalog-unknown")
+	if err != nil {
+		t.Fatalf("GET /models/catalog-unknown: %v", err)
+	}
+	defer unknownResponse.Body.Close()
+	if unknownResponse.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET /models/catalog-unknown status = %d, want 404", unknownResponse.StatusCode)
+	}
+}
+
+// TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence
+// proves the public catalog preserves the authored worker/resource shape while
+// keeping a Factory declaration ahead of the built-in definition with the same
+// model name.
+func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
+	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	listed := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	catalogModel := findCatalogModel(t, listed.Results, "OMNIVOICE_Q4_K_M", "GET /models")
+	if catalogModel.ProviderLocality != factoryapi.WorkerModelLocalityLocal ||
+		catalogModel.Status != factoryapi.ModelStatusREADY ||
+		len(catalogModel.Operations) != 2 ||
+		catalogModel.Operations[0].Name != "ASR" || catalogModel.Operations[1].Name != "TTS" {
+		t.Fatalf("catalog-model summary = %#v, want local READY ASR/TTS catalog", catalogModel)
+	}
+	if len(catalogModel.Resources) != 2 || catalogModel.Resources[0].Name != "a-cache" || catalogModel.Resources[1].Name != "z-cache" {
+		t.Fatalf("catalog-model resources = %#v, want stable a-cache/z-cache order", catalogModel.Resources)
+	}
+
+	detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
+	if len(detail.Capabilities) != 2 || detail.Capabilities[0].Worker != "a-worker" || detail.Capabilities[1].Worker != "z-worker" {
+		t.Fatalf("catalog-model capabilities = %#v, want stable worker order", detail.Capabilities)
+	}
+	if detail.Capabilities[0].ModelProvider == nil || *detail.Capabilities[0].ModelProvider != "codex" {
+		t.Fatalf("first catalog capability provider = %#v, want codex", detail.Capabilities[0].ModelProvider)
+	}
+	if len(detail.Capabilities[0].ResourceNames) != 1 || detail.Capabilities[0].ResourceNames[0] != "a-cache" {
+		t.Fatalf("first catalog capability resources = %#v, want a-cache", detail.Capabilities[0].ResourceNames)
+	}
+
+	builtInOverride := findCatalogModel(t, listed.Results, "tts", "GET /models")
+	if len(builtInOverride.Operations) != 1 || builtInOverride.Operations[0].Name != "TTS" {
+		t.Fatalf("factory tts override = %#v, want the authored TTS operation", builtInOverride)
+	}
+	overrideDetail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/tts")
+	if overrideDetail.Name != "tts" || len(overrideDetail.Capabilities) != 1 || overrideDetail.Capabilities[0].Worker != "factory-tts" {
+		t.Fatalf("factory tts detail = %#v, want Factory-owned tts capability", overrideDetail)
+	}
+	content := factoryapi.WorkContent{mustFunctionalTextPart(t, "catalog capability probe")}
+	body, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "TTS", Content: &content})
+	if err != nil {
+		t.Fatalf("marshal Factory-owned model invocation: %v", err)
+	}
+	response, err := http.Post(server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /models/OMNIVOICE_Q4_K_M/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("Factory-owned model invocation status = %d, want execution failure after catalog capability resolution", response.StatusCode)
+	}
+	unsupportedBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "ASR"})
+	if err != nil {
+		t.Fatalf("marshal unsupported Factory-owned model invocation: %v", err)
+	}
+	unsupported, err := http.Post(server.URL()+"/models/tts/invocations", "application/json", bytes.NewReader(unsupportedBody))
+	if err != nil {
+		t.Fatalf("POST /models/tts/invocations: %v", err)
+	}
+	defer unsupported.Body.Close()
+	if unsupported.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unsupported Factory-owned model invocation status = %d, want 400", unsupported.StatusCode)
+	}
+}
+
+func findCatalogModel(
+	t *testing.T,
+	models []factoryapi.ModelSummary,
+	name string,
+	operation string,
+) factoryapi.ModelSummary {
+	t.Helper()
+	for _, model := range models {
+		if model.Name == name {
+			return model
+		}
+	}
+	t.Fatalf("%s did not include %q; results=%#v", operation, name, models)
+	return factoryapi.ModelSummary{}
 }
 
 func TestModelsInstalledDetailDiagnosticsFollowResolvedRuntime(t *testing.T) {
@@ -261,78 +367,293 @@ func TestModelsInstalledDetailDiagnosticsFollowResolvedRuntime(t *testing.T) {
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	t.Run("list projects missing readiness", func(t *testing.T) {
-		cacheDirectory := t.TempDir()
-		dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
-			WaitForServiceModeRuntime: true,
-			Env: append(functionalHomeEnvironment(t.TempDir()),
-				runcli.ModelCacheDirEnvironment+"="+cacheDirectory),
-		})
-		t.Cleanup(func() { server.Stop(t) })
+	t.Run("list projects missing readiness", testListProjectsMissingReadiness)
+	t.Run("detail maps cache inspection failure", testDetailMapsCacheInspectionFailure)
+	t.Run("list maps readiness dependency failure", testListMapsReadinessDependencyFailure)
+	t.Run("detail preserves readiness cancellation", testDetailPreservesReadinessCancellation)
+	t.Run("HTTP list does not publish a partial response after cancellation", testHTTPListNoPartialResponseAfterCancellation)
+	t.Run("HTTP list observes caller cancellation after a dependency error", testHTTPListCallerCancellationAfterDependencyError)
+	t.Run("invoke maps readiness dependency failures", testInvokeMapsReadinessDependencyFailures)
+	t.Run("invoke stops after successful readiness observes cancellation", testInvokeStopsAfterSuccessfulReadinessCancellation)
+	t.Run("invoke stops while catalog readiness is blocked", testInvokeStopsWhileCatalogReadinessBlocked)
+}
 
-		response, err := http.Get(server.URL() + "/models")
-		if err != nil {
-			t.Fatalf("GET /models: %v", err)
-		}
-		defer response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(response.Body)
-			t.Fatalf("GET /models status = %d, want 200: %s", response.StatusCode, body)
-		}
-		var list factoryapi.ListModelsResponse
-		if err := json.NewDecoder(response.Body).Decode(&list); err != nil {
-			t.Fatalf("decode GET /models: %v", err)
-		}
-		var model *factoryapi.ModelSummary
-		for index := range list.Results {
-			if list.Results[index].Name == story003ModelName {
-				model = &list.Results[index]
-				break
+func testListProjectsMissingReadiness(t *testing.T) {
+	cacheDirectory := t.TempDir()
+	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env: append(functionalHomeEnvironment(t.TempDir()), runcli.ModelCacheDirEnvironment+"="+cacheDirectory),
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	response, err := http.Get(server.URL() + "/models")
+	if err != nil {
+		t.Fatalf("GET /models: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET /models status = %d, want 200: %s", response.StatusCode, body)
+	}
+	var list factoryapi.ListModelsResponse
+	if err := json.NewDecoder(response.Body).Decode(&list); err != nil {
+		t.Fatalf("decode GET /models: %v", err)
+	}
+	model := findCatalogModel(t, list.Results, story003ModelName, "GET /models")
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
+		model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+		t.Fatalf("GET /models readiness = %s/%s, want MISSING/NOT_INSTALLED", model.ManagedRuntime.ReadinessState, model.ManagedRuntime.LifecycleState)
+	}
+}
+
+func testDetailMapsCacheInspectionFailure(t *testing.T) {
+	cacheDirectory := t.TempDir()
+	writeCachedOmniVoiceAssets(t, cacheDirectory)
+	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true,
+		Env: append(functionalHomeEnvironment(t.TempDir()), runcli.ModelCacheDirEnvironment+"="+cacheDirectory),
+		Edges: serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			return nil, errors.New("cache inspection failed")
+		}},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	response, err := http.Get(server.URL() + "/models/" + story003ModelName)
+	if err != nil {
+		t.Fatalf("GET /models/%s: %v", story003ModelName, err)
+	}
+	defer response.Body.Close()
+	var failure factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
+		t.Fatalf("decode GET /models/%s failure: %v", story003ModelName, err)
+	}
+	if response.StatusCode != http.StatusNotFound || failure.Family != factoryapi.ErrorFamilyNotFound ||
+		failure.Code != factoryapi.ErrorResponseCode("MODEL_NOT_AVAILABLE") {
+		t.Fatalf("GET /models/%s failure = status %d %#v, want public unavailable model taxonomy", story003ModelName, response.StatusCode, failure)
+	}
+}
+
+func testListMapsReadinessDependencyFailure(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	var failInspection atomic.Bool
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			if !failInspection.Load() {
+				return nil, os.ErrNotExist
 			}
-		}
-		if model == nil {
-			t.Fatalf("GET /models omitted %q: %#v", story003ModelName, list.Results)
-		}
-		if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
-			model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
-			t.Fatalf("GET /models readiness = %s/%s, want MISSING/NOT_INSTALLED", model.ManagedRuntime.ReadinessState, model.ManagedRuntime.LifecycleState)
-		}
+			return nil, errors.New("cache inspection failed")
+		}},
 	})
+	t.Cleanup(func() { server.Stop(t) })
+	failInspection.Store(true)
 
-	t.Run("detail maps cache inspection failure", func(t *testing.T) {
-		cacheDirectory := t.TempDir()
-		writeCachedOmniVoiceAssets(t, cacheDirectory)
-		dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
-			WaitForServiceModeRuntime: true,
-			Env: append(functionalHomeEnvironment(t.TempDir()),
-				runcli.ModelCacheDirEnvironment+"="+cacheDirectory),
-			Edges: serviceedges.Edges{
-				ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-					return nil, errors.New("cache inspection failed")
-				},
-			},
+	response, err := http.Get(server.URL() + "/models")
+	if err != nil {
+		t.Fatalf("GET /models: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET /models status = %d body=%s, want 404", response.StatusCode, body)
+	}
+}
+
+func testDetailPreservesReadinessCancellation(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	process := support.BuildProcess(t, serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+		return nil, context.Canceled
+	}})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "inspect", story003ModelName})
+	inputs.Input.Env = functionalHomeEnvironment(t.TempDir())
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models inspect) error = nil, want readiness cancellation")
+	}
+}
+
+func testHTTPListNoPartialResponseAfterCancellation(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	var allowInspection atomic.Bool
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			if !allowInspection.Load() {
+				return nil, os.ErrNotExist
+			}
+			return nil, context.Canceled
+		}},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	allowInspection.Store(true)
+
+	response, err := http.Get(server.URL() + "/models")
+	if err != nil {
+		t.Fatalf("GET /models after readiness cancellation: %v", err)
+	}
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read GET /models cancellation response: %v", readErr)
+	}
+	if response.StatusCode != http.StatusOK || len(body) != 0 {
+		t.Fatalf("GET /models after readiness cancellation = status %d body=%q, want empty response", response.StatusCode, body)
+	}
+}
+
+func testHTTPListCallerCancellationAfterDependencyError(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	requestContext, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startOnce sync.Once
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			startOnce.Do(func() { close(started) })
+			<-release
+			return nil, errors.New("readiness dependency failed")
+		}},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, server.URL()+"/models", nil)
+	if err != nil {
+		t.Fatalf("create GET /models cancellation request: %v", err)
+	}
+	result := make(chan struct {
+		response *http.Response
+		err      error
+	}, 1)
+	go func() {
+		response, err := http.DefaultClient.Do(request)
+		result <- struct {
+			response *http.Response
+			err      error
+		}{response: response, err: err}
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		cancel()
+		close(release)
+		t.Fatal("GET /models readiness probe did not start")
+	}
+	cancel()
+	close(release)
+	select {
+	case completed := <-result:
+		if completed.response != nil {
+			completed.response.Body.Close()
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("GET /models did not stop after caller cancellation")
+	}
+}
+
+func testInvokeMapsReadinessDependencyFailures(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		failure error
+	}{
+		{name: "unavailable", failure: errors.New("cache inspection failed")},
+		{name: "canceled", failure: context.Canceled},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+			cacheDirectory := t.TempDir()
+			var inspections atomic.Int32
+			process := support.BuildProcess(t, serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+				if inspections.Add(1) == 1 {
+					return nil, os.ErrNotExist
+				}
+				return nil, test.failure
+			}})
+			support.CleanupProcess(t, process)
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+				"--operation", "TTS", "--text", "readiness failure probe",
+			})
+			inputs.Input.Env = append(functionalHomeEnvironment(t.TempDir()), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+			inputs.Input.WorkingDirectory = factoryDir
+			if err := process.Execute(inputs.Input); err == nil {
+				t.Fatalf("Process.Execute(models invoke) error = nil, want %s", test.name)
+			}
+			if inspections.Load() <= 1 {
+				t.Fatalf("model cache inspections = %d, want catalog and follow-up readiness observations", inspections.Load())
+			}
 		})
-		t.Cleanup(func() { server.Stop(t) })
+	}
+}
 
-		response, err := http.Get(server.URL() + "/models/" + story003ModelName)
-		if err != nil {
-			t.Fatalf("GET /models/%s: %v", story003ModelName, err)
+func testInvokeStopsAfterSuccessfulReadinessCancellation(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	var inspections atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+		if inspections.Add(1) >= 2 {
+			cancel()
 		}
-		defer response.Body.Close()
-		var failure factoryapi.ErrorResponse
-		if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
-			t.Fatalf("decode GET /models/%s failure: %v", story003ModelName, err)
-		}
-		if response.StatusCode != http.StatusNotFound ||
-			failure.Family != factoryapi.ErrorFamilyNotFound ||
-			failure.Code != factoryapi.ErrorResponseCode("MODEL_NOT_AVAILABLE") {
-			t.Fatalf("GET /models/%s failure = status %d %#v, want public unavailable model taxonomy", story003ModelName, response.StatusCode, failure)
-		}
+		return nil, os.ErrNotExist
+	}})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "post-readiness cancellation probe",
 	})
+	inputs.Input.Env = append(functionalHomeEnvironment(t.TempDir()), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want post-readiness cancellation")
+	}
+	if inspections.Load() < 2 {
+		t.Fatalf("model cache inspections = %d, want catalog and readiness probes", inspections.Load())
+	}
+}
+
+func testInvokeStopsWhileCatalogReadinessBlocked(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startOnce sync.Once
+	process := support.BuildProcess(t, serviceedges.Edges{ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+		startOnce.Do(func() { close(started) })
+		<-release
+		return nil, context.Canceled
+	}})
+	support.CleanupProcess(t, process)
+	ctx, cancel := context.WithCancel(context.Background())
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "catalog request cancellation probe",
+	})
+	inputs.Input.Env = append(functionalHomeEnvironment(t.TempDir()), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	inputs.Input.WorkingDirectory = factoryDir
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		cancel()
+		close(release)
+		t.Fatal("catalog readiness probe did not start")
+	}
+	cancel()
+	close(release)
+	select {
+	case <-command.Done():
+		if command.Err() == nil {
+			t.Fatal("Process.Execute(models invoke) error = nil, want caller cancellation")
+		}
+		command.AcceptError()
+	case <-time.After(5 * time.Second):
+		t.Fatal("models invoke did not stop after caller cancellation")
+	}
 }
 
 func catalogDiscoveryFactoryConfig() map[string]any {
@@ -365,5 +686,52 @@ func catalogDiscoveryFactoryConfig() map[string]any {
 				}},
 			}},
 		}},
+	}
+}
+
+func richCatalogFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "models-rich-catalog",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"resources": []map[string]any{
+			{
+				"name": "z-cache", "type": interfaces.ResourceTypeModel, "capacity": 2,
+				"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND", "provider": "LOCAL",
+			},
+			{
+				"name": "a-cache", "type": interfaces.ResourceTypeModel, "capacity": 1,
+				"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND", "provider": "LOCAL",
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "z-worker", "type": interfaces.WorkerTypeModel, "model": "OMNIVOICE_Q4_K_M",
+				"modelProvider": "CODEX", "modelLocality": interfaces.ModelLocalityLocal,
+				"resources": []map[string]any{{"name": "z-cache", "capacity": 1}},
+				"operations": []map[string]any{
+					{"name": "TTS", "inputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}, "required": true}}, "outputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}}}},
+				},
+			},
+			{
+				"name": "a-worker", "type": interfaces.WorkerTypeModel, "model": "OMNIVOICE_Q4_K_M",
+				"modelProvider": "CODEX", "modelLocality": interfaces.ModelLocalityLocal,
+				"resources": []map[string]any{{"name": "a-cache", "capacity": 1}},
+				"operations": []map[string]any{
+					{"name": "ASR", "inputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}, "required": true}}, "outputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}}}},
+				},
+			},
+			{
+				"name": "factory-tts", "type": interfaces.WorkerTypeModel, "model": "tts",
+				"modelProvider": "CODEX", "modelLocality": interfaces.ModelLocalityCloud,
+				"operations": []map[string]any{{"name": "TTS", "inputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}}}, "outputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}}}}},
+			},
+		},
 	}
 }

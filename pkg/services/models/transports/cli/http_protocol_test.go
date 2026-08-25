@@ -38,6 +38,109 @@ type pullProgressWriter struct {
 	once     sync.Once
 }
 
+func TestLegacyModelsRemoveProjectsHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodDelete || request.URL.Path != "/models/voice" {
+			t.Fatalf("remove request = %s %s, want DELETE /models/voice", request.Method, request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(writer, `{"modelName":"voice","revision":"rev-1","cachePath":"/models/voice/rev-1","outcome":"REMOVED","bytesRemoved":42}`)
+	}))
+	t.Cleanup(server.Close)
+	service := New(testHTTPProtocol(t), testModelInvocationBuilder)
+
+	var human bytes.Buffer
+	if err := service.Remove(RemoveConfig{Context: context.Background(), ModelName: "voice", Server: server.URL, Output: &human}); err != nil {
+		t.Fatalf("legacy remove human: %v", err)
+	}
+	if !strings.Contains(human.String(), "voice\tREMOVED\trev-1") || !strings.Contains(human.String(), "42 bytes") {
+		t.Fatalf("legacy remove human = %q, want rendered removal facts", human.String())
+	}
+
+	var structured bytes.Buffer
+	if err := service.Remove(RemoveConfig{Context: context.Background(), ModelName: "voice", Server: server.URL, JSON: true, Output: &structured}); err != nil {
+		t.Fatalf("legacy remove JSON: %v", err)
+	}
+	var response factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal(structured.Bytes(), &response); err != nil {
+		t.Fatalf("legacy remove JSON decode: %v", err)
+	}
+	if response.ModelName != "voice" || response.BytesRemoved != 42 {
+		t.Fatalf("legacy remove response = %#v, want voice/42", response)
+	}
+
+	legacy := &httpService{http: testHTTPProtocol(t)}
+	var direct bytes.Buffer
+	if err := legacy.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "voice", Server: server.URL, Output: &direct,
+	}); err != nil {
+		t.Fatalf("direct legacy remove: %v", err)
+	}
+	if !strings.Contains(direct.String(), "voice\tREMOVED\trev-1") {
+		t.Fatalf("direct legacy remove = %q, want rendered removal facts", direct.String())
+	}
+}
+
+func TestLegacyHTTPAdapterValidatesOperationInputs(t *testing.T) {
+	service := &httpService{}
+	output := &bytes.Buffer{}
+	assertError := func(name string, call func() error, want string) {
+		t.Helper()
+		err := call()
+		if err == nil || err.Error() != want {
+			t.Fatalf("%s error = %v, want %q", name, err, want)
+		}
+	}
+
+	assertError("List context", func() error {
+		return service.List(ListConfig{Output: output})
+	}, "context is required")
+	assertError("List output", func() error {
+		return service.List(ListConfig{Context: context.Background()})
+	}, "output writer is required")
+	assertError("Inspect context", func() error {
+		return service.Inspect(InspectConfig{Output: output})
+	}, "context is required")
+	assertError("Inspect output", func() error {
+		return service.Inspect(InspectConfig{Context: context.Background()})
+	}, "output writer is required")
+	assertError("Invoke context", func() error {
+		return service.Invoke(InvokeConfig{Output: output})
+	}, "context is required")
+	assertError("Invoke output", func() error {
+		return service.Invoke(InvokeConfig{Context: context.Background()})
+	}, "output writer is required")
+	assertError("Invoke model", func() error {
+		return service.Invoke(InvokeConfig{Context: context.Background(), Output: output})
+	}, "model name is required")
+	assertError("Invoke operation", func() error {
+		return service.Invoke(InvokeConfig{Context: context.Background(), ModelName: "voice", Output: output})
+	}, "--operation is required")
+	assertError("Invoke text", func() error {
+		return service.Invoke(InvokeConfig{Context: context.Background(), ModelName: "voice", Operation: "TTS", Output: output})
+	}, "--text is required")
+	assertError("Pull context", func() error {
+		return service.Pull(PullConfig{Output: output})
+	}, "context is required")
+	assertError("Pull output", func() error {
+		return service.Pull(PullConfig{Context: context.Background()})
+	}, "output writer is required")
+	assertError("Pull model", func() error {
+		return service.Pull(PullConfig{Context: context.Background(), Output: output})
+	}, "model name is required")
+	assertError("Remove context", func() error {
+		return service.Remove(RemoveConfig{Output: output})
+	}, "context is required")
+	assertError("Remove output", func() error {
+		return service.Remove(RemoveConfig{Context: context.Background()})
+	}, "output writer is required")
+	assertError("Remove model", func() error {
+		return service.Remove(RemoveConfig{Context: context.Background(), Output: output})
+	}, "model name is required")
+}
+
 func (writer *pullProgressWriter) Write(payload []byte) (int, error) {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()

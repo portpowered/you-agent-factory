@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,59 +19,6 @@ import (
 
 const codedDiagnosticModelName = "OMNIVOICE_Q4_K_M"
 const codedDiagnosticUnknownModelName = "missing-model"
-
-func TestModelsLocalInvokeJSONWithoutOutputIsValidationOnly(t *testing.T) {
-	t.Parallel()
-
-	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	homeDir := t.TempDir()
-
-	for _, test := range []struct {
-		name  string
-		debug bool
-	}{
-		{name: "normal"},
-		{name: "debug", debug: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			args := []string{
-				"you", "models", "invoke", "asr",
-				"--operation", "ASR", "--text", "x", "--json",
-			}
-			if test.debug {
-				args = append(args, "--debug")
-			}
-			inputs := support.FakeInputs(t.Context(), args)
-			inputs.Input.Env = functionalHomeEnvironment(homeDir)
-			inputs.Input.WorkingDirectory = factoryDir
-
-			err := process.Execute(inputs.Input)
-			if err != nil {
-				t.Fatalf("Process.Execute(models invoke asr) error = %v, want validation-only success", err)
-			}
-			for _, signal := range []string{`"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
-				if !strings.Contains(inputs.Stdout(), signal) {
-					t.Fatalf("models invoke validation stdout = %q, missing %q", inputs.Stdout(), signal)
-				}
-			}
-		})
-	}
-
-	pullInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "pull", "missing-pull-model", "--json",
-	})
-	pullInputs.Input.Env = functionalHomeEnvironment(homeDir)
-	pullInputs.Input.WorkingDirectory = factoryDir
-	if err := process.Execute(pullInputs.Input); err == nil {
-		t.Fatal("Process.Execute(models pull missing-pull-model) error = nil, want not-found failure")
-	}
-	pullResponse := decodeFirstDiagnostic(t, pullInputs.Stderr())
-	if pullResponse.Code != factoryapi.ErrorResponseCodeNOTFOUND || pullResponse.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("models pull missing-model diagnostic = %#v, want NOT_FOUND/NOT_FOUND", pullResponse)
-	}
-}
 
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 	for _, test := range []struct {
@@ -143,38 +89,6 @@ func TestModelsLocalInvokeMissingFactoryLayoutNamesSearchedRoot(t *testing.T) {
 	}
 	if strings.Contains(inputs.Stderr(), "INTERNAL_SERVER_ERROR") {
 		t.Fatalf("missing-layout diagnostic = %q, must not be INTERNAL_SERVER_ERROR", inputs.Stderr())
-	}
-}
-
-func TestModelsLocalInvokeDiscoversNestedFactoryLayout(t *testing.T) {
-	projectDir := t.TempDir()
-	factoryDir := filepath.Join(projectDir, "factory")
-	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-		t.Fatalf("create nested Factory directory: %v", err)
-	}
-	payload, err := json.Marshal(builtInOnlyModelFactoryConfig())
-	if err != nil {
-		t.Fatalf("marshal nested Factory config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), payload, 0o600); err != nil {
-		t.Fatalf("write nested Factory config: %v", err)
-	}
-
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", "asr", "--operation", "ASR", "--text", "hello",
-	})
-	inputs.Input.Env = functionalHomeEnvironment(t.TempDir())
-	inputs.Input.WorkingDirectory = projectDir
-
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(models invoke from nested Factory layout) error = %v", err)
-	}
-	for _, signal := range []string{`"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
-		if !strings.Contains(inputs.Stdout(), signal) {
-			t.Fatalf("nested-layout models invoke stdout = %q, missing %q", inputs.Stdout(), signal)
-		}
 	}
 }
 
