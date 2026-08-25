@@ -117,6 +117,11 @@ func TestServerStopComposedFailureDiagnostics(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
+		// The live HTTP boundary must exercise the production observer's
+		// observation-timeout classification when the accepted server stays
+		// open. This caller deadline is the bounded negative-case contract
+		// observation; an injected observer or manual cancellation would test a
+		// different error path and would not prove the composed behavior.
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		inputs, err := executeServerStop(t, process, ctx, server.URL, true)
@@ -143,6 +148,10 @@ func TestServerStopCanceledRequestPreservesProcessCancellationContract(t *testin
 
 	result := make(chan error, 1)
 	go func() { result <- process.Execute(inputs.Input) }()
+	// requestStarted is the deterministic signal that the composed command
+	// reached the HTTP boundary. The timer is only a hang guard for a
+	// regression that prevents request dispatch; an injected edge would skip
+	// the live transport boundary this cancellation scenario is meant to prove.
 	select {
 	case <-requestStarted:
 	case <-time.After(time.Second):
@@ -293,9 +302,12 @@ func assertLoopbackListenerClosed(t *testing.T, endpoint string) {
 		t.Fatalf("parse stopped server URL: %v", err)
 	}
 	address := net.JoinHostPort(parsed.Hostname(), parsed.Port())
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	connection, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
+	// Process.Execute returns success only after the production listener
+	// observer has seen this loopback endpoint stop accepting connections. A
+	// direct dial is therefore the deterministic postcondition check; the
+	// listener is numeric loopback, so a separate dial timeout would add no
+	// useful synchronization or contract coverage.
+	connection, err := net.Dial("tcp", address)
 	if err == nil {
 		_ = connection.Close()
 		t.Fatalf("stopped listener at %s still accepted a TCP connection", address)
@@ -304,6 +316,10 @@ func assertLoopbackListenerClosed(t *testing.T, endpoint string) {
 
 func waitForProcessDone(t *testing.T, command *support.ProcessCommand) {
 	t.Helper()
+	// Done is the deterministic signal that the composed daemon's
+	// Process.Execute invocation returned. The timer is only a bounded hang
+	// guard for a lifecycle regression; replacing it with an edge would remove
+	// the process-boundary behavior this functional scenario verifies.
 	select {
 	case <-command.Done():
 		if err := command.Err(); err != nil && !errors.Is(err, context.Canceled) {
