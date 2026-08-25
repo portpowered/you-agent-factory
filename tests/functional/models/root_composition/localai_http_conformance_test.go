@@ -268,10 +268,11 @@ func postConformanceInvocationForModel(
 			Name: parameter.Name, Value: parameter.Value,
 		})
 	}
+	operation := factoryapi.ModelOperationName(row.Operation.Name)
 	request := factoryapi.GenericModelInvocationRequest{
 		Holder: "localai-http-conformance", Inputs: &inputs, Parameters: &parameters,
 		Model:     factoryapi.ModelReference{NameOrUri: modelName},
-		Operation: factoryapi.ModelOperationName(row.Operation.Name), Scope: "factory-session:localai-conformance",
+		Operation: &operation, Scope: "factory-session:localai-conformance",
 	}
 	offline := true
 	request.Offline = &offline

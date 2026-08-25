@@ -2,13 +2,17 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
+	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
 type inertProcessLauncher struct{}
@@ -180,4 +184,166 @@ type recordingProcessClock struct{ calls int }
 func (clock *recordingProcessClock) now() time.Time {
 	clock.calls++
 	panic("process clock invoked during inert construction")
+}
+
+func TestBackendInvocationRuntimeMapsContentAndArtifacts(t *testing.T) {
+	t.Parallel()
+
+	artifactRef, err := (models.InferenceArtifactRef{}).Parse("artifact://fixture-output")
+	if err != nil {
+		t.Fatalf("parse artifact reference: %v", err)
+	}
+	request := models.InvokeModelRequest{Operation: models.OperationEMBED}
+	var received models.InvokeModelRequest
+	runtime := backendInvocationRuntime{backend: func(
+		_ context.Context,
+		request models.InvokeModelRequest,
+	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		received = request
+		return []models.InferenceContent{{Name: "embedding", Content: "[1,2]"}}, []models.InferenceArtifact{{
+			Artifact: artifactRef, Name: "fixture-output", MediaType: "application/octet-stream",
+			SizeBytes: 2, Properties: map[string]string{"source": "fixture"},
+		}}, nil
+	}}
+
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: request})
+	if err != nil {
+		t.Fatalf("backendInvocationRuntime.Invoke() error = %v", err)
+	}
+	if received.Operation != request.Operation {
+		t.Fatalf("backend request = %#v, want operation %q", received, request.Operation)
+	}
+	if len(result.Content) != 1 || result.Content[0].Name != "embedding" {
+		t.Fatalf("runtime content = %#v, want embedding output", result.Content)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != artifactRef.String() ||
+		result.Artifacts[0].MediaType != "application/octet-stream" {
+		t.Fatalf("runtime artifacts = %#v, want mapped fixture artifact", result.Artifacts)
+	}
+
+	wantErr := errors.New("fixture backend failed")
+	runtime.backend = func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return nil, nil, wantErr
+	}
+	if _, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{}); !errors.Is(err, wantErr) {
+		t.Fatalf("backend error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestOperationInvocationRuntimeSelectsASROnlyForASROperations(t *testing.T) {
+	t.Parallel()
+
+	generic := &recordingInvocationRuntime{result: inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Content: "generic"}}}}
+	asr := &recordingInvocationRuntime{result: inference.InvocationRuntimeResult{Content: []models.InferenceContent{{Content: "asr"}}}}
+	runtime := operationInvocationRuntime{generic: generic, asr: asr}
+
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{Operation: models.OperationASR},
+	})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "asr" {
+		t.Fatalf("ASR runtime result = (%#v, %v), want ASR result", result, err)
+	}
+	if asr.calls != 1 || generic.calls != 0 {
+		t.Fatalf("runtime calls after ASR = generic:%d asr:%d, want generic:0 asr:1", generic.calls, asr.calls)
+	}
+
+	result, err = runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request:   models.InvokeModelRequest{Operation: "embed"},
+		Operation: models.Operation{Name: models.OperationEMBED},
+	})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "generic" {
+		t.Fatalf("generic runtime result = (%#v, %v), want generic result", result, err)
+	}
+	if generic.calls != 1 || asr.calls != 1 {
+		t.Fatalf("runtime calls after generic = generic:%d asr:%d, want generic:1 asr:1", generic.calls, asr.calls)
+	}
+
+	result, err = runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{}, Operation: models.Operation{Name: models.OperationASR},
+	})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "asr" {
+		t.Fatalf("operation-only ASR result = (%#v, %v), want ASR result", result, err)
+	}
+}
+
+func TestInferenceRuntimeUsesASRBackendAndMapsResponse(t *testing.T) {
+	t.Parallel()
+
+	artifactRef, err := (models.InferenceArtifactRef{}).Parse("artifact://transcript")
+	if err != nil {
+		t.Fatalf("parse artifact reference: %v", err)
+	}
+	var received models.ASRBackendRequest
+	runtime, err := inferenceRuntime(
+		func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			return []models.InferenceContent{{Content: "generic"}}, nil, nil
+		},
+		func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+			received = request
+			return models.ASRBackendResponse{
+				Text:      "hello fixture",
+				Segments:  []models.ASRBackendSegment{{ID: 1, Start: 0, End: 1000, Text: "hello fixture"}},
+				Artifacts: []models.InferenceArtifact{{Artifact: artifactRef, Name: "transcript", MediaType: "audio/wav"}},
+			}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("inferenceRuntime() error = %v", err)
+	}
+
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{
+		Operation: models.OperationASR,
+		Inputs: []models.InferenceInput{{
+			Name: "audio", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: "wav fixture",
+		}},
+		Parameters: []models.OperationParameter{{Name: "temperature", Value: 0.2}},
+	}})
+	if err != nil {
+		t.Fatalf("ASR runtime Invoke() error = %v", err)
+	}
+	if string(received.Audio) != "wav fixture" || received.MediaType != "audio/wav" {
+		t.Fatalf("ASR backend request = %#v, want detached audio request", received)
+	}
+	if received.Parameters["temperature"] != 0.2 {
+		t.Fatalf("ASR backend parameters = %#v, want temperature", received.Parameters)
+	}
+	if len(result.Content) != 2 || result.Content[0].Name != "transcript" || result.Content[1].Name != "segments" {
+		t.Fatalf("ASR runtime content = %#v, want transcript and segments", result.Content)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != artifactRef.String() {
+		t.Fatalf("ASR runtime artifacts = %#v, want transcript artifact", result.Artifacts)
+	}
+
+	result, err = runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{Operation: models.OperationEMBED}})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "generic" {
+		t.Fatalf("generic runtime result = (%#v, %v), want generic output", result, err)
+	}
+}
+
+func TestCloneASRParametersDetachesNestedValues(t *testing.T) {
+	t.Parallel()
+
+	original := map[string]any{
+		"nested": map[string]any{"value": "original"},
+		"values": []any{map[string]any{"value": "item"}},
+	}
+	cloned := cloneInvocationParameters(original)
+	cloned["nested"].(map[string]any)["value"] = "changed"
+	cloned["values"].([]any)[0].(map[string]any)["value"] = "changed"
+	if original["nested"].(map[string]any)["value"] != "original" ||
+		original["values"].([]any)[0].(map[string]any)["value"] != "item" {
+		t.Fatalf("cloneInvocationParameters mutated original = %#v", original)
+	}
+}
+
+type recordingInvocationRuntime struct {
+	result inference.InvocationRuntimeResult
+	err    error
+	calls  int
+}
+
+func (runtime *recordingInvocationRuntime) Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	runtime.calls++
+	return runtime.result, runtime.err
 }

@@ -166,7 +166,7 @@ func NewServiceWithBackendArtifactResolver(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, nil, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, nil, nil, nil,
 		revisionResolvers...,
 	)
 }
