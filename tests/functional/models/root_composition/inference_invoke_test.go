@@ -25,13 +25,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
-// TestModelsInferenceInvokeActivatesThroughRootBuildProcess proves a process
+// runModelsInferenceInvokeActivatesThroughRootBuildProcess proves a process
 // constructed only through root.BuildProcess executes public Models invoke and
 // returns observable inference output while host, runtime, and asset external
 // effects are replaced exclusively through published edges.Edges fields.
-func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
-	t.Parallel()
-
+func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	audio := []byte("RIFF....WAVE")
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
@@ -418,9 +416,7 @@ func assertUnknownBuiltinFailure(t *testing.T, serverURL string) {
 	}
 }
 
-func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
-	t.Parallel()
-
+func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -627,9 +623,7 @@ func multiOutputModelFactoryConfig(endpoint string) map[string]any {
 	return config
 }
 
-func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
-	t.Parallel()
-
+func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		http.NotFound(writer, request)
 	}))

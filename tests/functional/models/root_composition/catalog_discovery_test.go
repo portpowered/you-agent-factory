@@ -155,11 +155,32 @@ func assertGenericRuntimeFailures(t *testing.T) {
 	}
 }
 
-// TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence
+// TestModelsRootCompositionModelScenarios groups the changed root-composition
+// scenarios so stability verification starts the expensive functional package
+// once while retaining named subtest coverage for each public behavior.
+func TestModelsRootCompositionModelScenarios(t *testing.T) {
+	t.Run("catalog discovery projects worker capabilities and Factory precedence", func(t *testing.T) {
+		runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t)
+	})
+	t.Run("generic CLI output modes reach the joined root", func(t *testing.T) {
+		runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t)
+	})
+	t.Run("inference invoke activates through the root BuildProcess", func(t *testing.T) {
+		runModelsInferenceInvokeActivatesThroughRootBuildProcess(t)
+	})
+	t.Run("JSON invoke validates without starting the joined runtime", func(t *testing.T) {
+		runModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t)
+	})
+	t.Run("pinned backend rejection happens before process start", func(t *testing.T) {
+		runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t)
+	})
+}
+
+// runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence
 // proves the public catalog preserves the authored worker/resource shape while
 // keeping a Factory declaration ahead of the built-in definition with the same
 // model name.
-func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
+func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
 	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,

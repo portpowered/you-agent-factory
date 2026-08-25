@@ -14,12 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime proves metadata
+// runModelsJSONInvokeValidatesWithoutStartingJoinedRuntime proves metadata
 // mode validates a configured generic model without starting its backend or
 // consuming a content-addressed cache.
-func TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t *testing.T) {
-	t.Parallel()
-
+func runModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t *testing.T) {
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/health":
