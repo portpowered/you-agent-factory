@@ -119,6 +119,27 @@ func TestOperationMapsUnreachableAndRequestTimeout(t *testing.T) {
 	}
 }
 
+func TestOperationMapsCanceledRequestToTypedFailure(t *testing.T) {
+	op := NewOperationWithDependencies(
+		func(string) (Client, error) {
+			return &fakeClient{err: context.Canceled}, nil
+		},
+		StopObserverFunc(func(context.Context, string, time.Duration) error {
+			return errors.New("must not observe canceled request")
+		}),
+		time.Second,
+		time.Second,
+	)
+
+	err := op(context.Background(), Config{
+		Server: "http://localhost:7437", Output: io.Discard,
+	})
+	assertServerStopError(t, err, CanceledCode)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled request error = %v, want context.Canceled cause", err)
+	}
+}
+
 func TestOperationReturnsObservationTimeoutWhenListenerStaysOpen(t *testing.T) {
 	op := NewOperationWithDependencies(
 		func(string) (Client, error) { return &fakeClient{response: acceptedShutdownResponse()}, nil },
