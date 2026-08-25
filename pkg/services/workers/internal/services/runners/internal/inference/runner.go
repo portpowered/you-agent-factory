@@ -9,6 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -27,6 +28,10 @@ type Config struct {
 // owned by Models.
 type ModelInvoker interface {
 	InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
+}
+
+type localModelInvoker interface {
+	InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error)
 }
 
 // Dependencies are the exact effects used by one Inference Runner.
@@ -83,7 +88,7 @@ func (r *runner) Execute(
 	if err := validateModelBindings(request.ModelBindings); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
-	scope, worker, _ := modelRuntimeProjection(
+	scope, worker, resources := modelRuntimeProjection(
 		request,
 		r.scope,
 		r.workerForRequest(request),
@@ -98,7 +103,77 @@ func (r *runner) Execute(
 			nil,
 		)
 	}
+	if !shouldUseGenericInvocation(request, worker, r.models) {
+		return r.executeLegacyLocalInvocation(ctx, request, scope, worker, resources)
+	}
 	return r.executeManagedInvocation(ctx, request, scope, worker)
+}
+
+func shouldUseGenericInvocation(
+	request workers.RunnerExecutionRequest,
+	worker models.LocalWorker,
+	modelService ModelInvoker,
+) bool {
+	if request.ModelInvocationOverride != nil {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(worker.Model)) {
+	case strings.ToLower(models.BuiltInModelNameLLM),
+		strings.ToLower(models.BuiltInModelNameASR),
+		strings.ToLower(models.BuiltInModelNameTTS),
+		strings.ToLower(models.BuiltInModelNameEmbed):
+		return true
+	default:
+		// Compatibility services that expose only the joined operation cannot
+		// take the retired local edge, so retain the generic contract for them.
+		_, supportsLegacyLocal := modelService.(localModelInvoker)
+		return !supportsLegacyLocal
+	}
+}
+
+func (r *runner) executeLegacyLocalInvocation(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+	scope models.RuntimeScopeRef,
+	worker models.LocalWorker,
+	resources []models.LocalResource,
+) (workers.RunnerExecutionResult, error) {
+	localInvoker, ok := r.models.(localModelInvoker)
+	if !ok {
+		return workers.RunnerExecutionResult{}, badRequest(
+			"inference Models service does not support legacy local invocation",
+			nil,
+		)
+	}
+	invocation := models.LocalInvocationRequest{
+		Scope:            scope,
+		Holder:           invocationHolder(request),
+		Worker:           worker,
+		Resources:        resources,
+		Dispatch:         request.Dispatch,
+		ModelOperation:   request.ModelOperation,
+		ModelBindings:    modelBindingsForLocalRuntime(request.ModelBindings),
+		WorkingDirectory: effectiveWorkingDirectory(request),
+	}
+	if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
+		return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
+	}
+	result, err := localInvoker.InvokeLocal(ctx, invocation)
+	if !result.Handled {
+		if r.delegate != nil {
+			return r.delegate.Execute(ctx, delegateRequest(request))
+		}
+		return workers.RunnerExecutionResult{}, err
+	}
+	if err != nil {
+		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(err, request)
+	}
+	return workers.RunnerExecutionResult{
+		Content: result.Content,
+		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
+	}, nil
 }
 
 func (r *runner) executeManagedInvocation(
@@ -185,6 +260,30 @@ func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecu
 		}
 	}
 	return request
+}
+
+func effectiveWorkingDirectory(request workers.RunnerExecutionRequest) string {
+	if request.WorkingDirectory != "" {
+		return request.WorkingDirectory
+	}
+	return request.Worktree
+}
+
+func modelBindingsForLocalRuntime(
+	values []workers.ResolvedModelOperationBinding,
+) []models.ResolvedModelOperationBinding {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]models.ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		result[index] = models.ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  string(value.Source),
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
+	return result
 }
 
 func validateRequest(request workers.RunnerExecutionRequest) error {

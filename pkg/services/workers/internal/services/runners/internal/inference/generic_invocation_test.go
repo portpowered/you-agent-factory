@@ -63,6 +63,13 @@ func TestGenericInvocationInputsMapsSupportedWorkPartsInOrder(t *testing.T) {
 	if len(inputs) != 5 {
 		t.Fatalf("inputs = %#v, want five non-empty inputs", inputs)
 	}
+	assertGenericInputModalities(t, inputs)
+	assertGenericInputMetadata(t, inputs, artifactID)
+	assertGenericInputParameters(t, parameters)
+}
+
+func assertGenericInputModalities(t *testing.T, inputs []models.InferenceInput) {
+	t.Helper()
 	wantModalities := []models.Modality{
 		models.ModalityText,
 		models.ModalityJSON,
@@ -75,6 +82,10 @@ func TestGenericInvocationInputsMapsSupportedWorkPartsInOrder(t *testing.T) {
 			t.Fatalf("inputs[%d].Modality = %q, want %q", index, inputs[index].Modality, want)
 		}
 	}
+}
+
+func assertGenericInputMetadata(t *testing.T, inputs []models.InferenceInput, artifactID string) {
+	t.Helper()
 	if inputs[0].ContentType != "text/plain" || inputs[0].MediaType != "text/plain" {
 		t.Fatalf("text metadata = %#v, want text/plain for both fields", inputs[0])
 	}
@@ -87,6 +98,10 @@ func TestGenericInvocationInputsMapsSupportedWorkPartsInOrder(t *testing.T) {
 	if inputs[3].Artifact == nil || inputs[3].Artifact.String() != artifactID || inputs[3].Content != "audio-reference" {
 		t.Fatalf("audio input = %#v", inputs[3])
 	}
+}
+
+func assertGenericInputParameters(t *testing.T, parameters []models.OperationParameter) {
+	t.Helper()
 	if len(parameters) != 2 || parameters[0].Name != "speed" || parameters[1].Name != "pitch" {
 		t.Fatalf("parameters = %#v, want ordered speed/pitch", parameters)
 	}
@@ -269,17 +284,37 @@ func TestProposedOutputMapsAllModalitiesAndArtifacts(t *testing.T) {
 	if len(proposal.Primary) != 5 || len(proposal.ArtifactRefs) != 1 || proposal.ArtifactRefs[0].ArtifactID != artifactRef.String() {
 		t.Fatalf("proposal = %#v, want five parts and one artifact ref", proposal)
 	}
-	if proposal.Primary[0].Type != work.WorkContentPartTypeText || proposal.Primary[0].Text != "hello" || proposal.Primary[0].ContentType != "text/plain" {
-		t.Fatalf("text proposal = %#v", proposal.Primary[0])
+	assertProposedTextOutput(t, proposal.Primary[0])
+	assertProposedJSONOutput(t, proposal.Primary[1])
+	assertProposedAudioOutput(t, proposal.Primary[2], artifactRef)
+	assertProposedMediaOutputs(t, proposal.Primary[3:])
+}
+
+func assertProposedTextOutput(t *testing.T, part work.WorkContentPart) {
+	t.Helper()
+	if part.Type != work.WorkContentPartTypeText || part.Text != "hello" || part.ContentType != "text/plain" {
+		t.Fatalf("text proposal = %#v", part)
 	}
-	if proposal.Primary[1].Type != work.WorkContentPartTypeJSON || string(proposal.Primary[1].JSON) != `{"ok":true}` || proposal.Primary[1].ContentType != "application/json" {
-		t.Fatalf("JSON proposal = %#v", proposal.Primary[1])
+}
+
+func assertProposedJSONOutput(t *testing.T, part work.WorkContentPart) {
+	t.Helper()
+	if part.Type != work.WorkContentPartTypeJSON || string(part.JSON) != `{"ok":true}` || part.ContentType != "application/json" {
+		t.Fatalf("JSON proposal = %#v", part)
 	}
-	if proposal.Primary[2].Type != work.WorkContentPartTypeAudio || !strings.HasPrefix(proposal.Primary[2].URL, "data:audio/wav;base64,") || proposal.Primary[2].ArtifactID != artifactRef.String() || proposal.Primary[2].Metadata["label"] != "speech.wav" {
-		t.Fatalf("audio proposal = %#v", proposal.Primary[2])
+}
+
+func assertProposedAudioOutput(t *testing.T, part work.WorkContentPart, artifactRef models.InferenceArtifactRef) {
+	t.Helper()
+	if part.Type != work.WorkContentPartTypeAudio || !strings.HasPrefix(part.URL, "data:audio/wav;base64,") || part.ArtifactID != artifactRef.String() || part.Metadata["label"] != "speech.wav" {
+		t.Fatalf("audio proposal = %#v", part)
 	}
-	if proposal.Primary[3].Type != work.WorkContentPartTypeImage || proposal.Primary[3].URL != "file://image.png" || proposal.Primary[4].Type != work.WorkContentPartTypeBinary || proposal.Primary[4].URL == "" {
-		t.Fatalf("media proposals = %#v", proposal.Primary[3:])
+}
+
+func assertProposedMediaOutputs(t *testing.T, parts []work.WorkContentPart) {
+	t.Helper()
+	if parts[0].Type != work.WorkContentPartTypeImage || parts[0].URL != "file://image.png" || parts[1].Type != work.WorkContentPartTypeBinary || parts[1].URL == "" {
+		t.Fatalf("media proposals = %#v", parts)
 	}
 }
 
@@ -321,7 +356,8 @@ func TestWorkContentPartFromModelOutputRejectsMalformedOutputs(t *testing.T) {
 	}
 }
 
-func TestGenericInvocationOutputUtilityBranches(t *testing.T) {
+func TestGenericInvocationInputMetadataBranches(t *testing.T) {
+	t.Parallel()
 	if got, want := inputContentMetadata("", "fallback"); got != want || got != "fallback" {
 		t.Fatalf("inputContentMetadata empty = %q/%q, want fallback", got, want)
 	}
@@ -331,7 +367,10 @@ func TestGenericInvocationOutputUtilityBranches(t *testing.T) {
 	if got, media := inputContentMetadata("token", "fallback"); got != "token" || media != "" {
 		t.Fatalf("inputContentMetadata token = %q/%q", got, media)
 	}
+}
 
+func TestGenericInvocationInlineOutputURLBranches(t *testing.T) {
+	t.Parallel()
 	for _, value := range []string{"data:text/plain;base64,eA==", "file://value", "http://value", "https://value"} {
 		if got := inlineOutputURL(value, "text/plain"); got != value {
 			t.Fatalf("inlineOutputURL(%q) = %q, want unchanged URL", value, got)
@@ -343,7 +382,10 @@ func TestGenericInvocationOutputUtilityBranches(t *testing.T) {
 	if got := inlineOutputURL("bytes", "invalid"); !strings.HasPrefix(got, "data:application/octet-stream;base64,") {
 		t.Fatalf("inlineOutputURL invalid media = %q", got)
 	}
+}
 
+func TestGenericInvocationOutputModalityBranches(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		values []string
 		want   models.Modality
@@ -359,6 +401,10 @@ func TestGenericInvocationOutputUtilityBranches(t *testing.T) {
 			t.Fatalf("modalityFromMediaType(%v) = %q, want %q", test.values, got, test.want)
 		}
 	}
+}
+
+func TestGenericInvocationDefaultOutputNamesAndText(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		modality models.Modality
 		index    int

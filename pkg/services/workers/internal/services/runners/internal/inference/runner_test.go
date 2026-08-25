@@ -75,8 +75,8 @@ func TestRunnerInvokesModelsRootGenericOperationExactlyOnce(t *testing.T) {
 
 func assertGenericInvocationRequest(t *testing.T, captured models.InvokeModelRequest) {
 	t.Helper()
-	if captured.Model.NameOrURI != "WHISPER" || captured.Operation != models.OperationTTS {
-		t.Fatalf("generic model selection = %#v, want WHISPER/TTS", captured)
+	if captured.Model.NameOrURI != models.BuiltInModelNameTTS || captured.Operation != models.OperationTTS {
+		t.Fatalf("generic model selection = %#v, want tts/TTS", captured)
 	}
 	if captured.Holder != "dispatch-1" {
 		t.Fatalf("generic invocation holder = %q, want dispatch-1", captured.Holder)
@@ -140,6 +140,28 @@ func TestRunnerPreservesModelsOwnedOutputURLsAndArtifacts(t *testing.T) {
 	if len(result.ProposedOutput.ArtifactRefs) != 1 ||
 		result.ProposedOutput.ArtifactRefs[0].ArtifactID != artifact.String() {
 		t.Fatalf("artifact refs = %#v", result.ProposedOutput.ArtifactRefs)
+	}
+}
+
+func TestRunnerKeepsLegacyModelWorkersOnModelsLocalInvocation(t *testing.T) {
+	modelsEdge := &captureModelsService{legacyHandled: true, legacyContent: "legacy output"}
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:legacy")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	runner, err := New(Config{Worker: models.LocalWorker{
+		Name: "legacy-worker", Type: models.RuntimeWorkerTypeModel,
+		Model: "OMNIVOICE_Q4_K_M", ModelLocality: models.RuntimeModelLocalityLocal,
+	}, Scope: scope}, Dependencies{Models: modelsEdge})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	result, err := runner.Execute(context.Background(), validRequest())
+	if err != nil || result.Content != "legacy output" {
+		t.Fatalf("legacy runner result = %#v, %v", result, err)
+	}
+	if modelsEdge.Calls() != 0 || modelsEdge.LegacyCalls() != 1 {
+		t.Fatalf("Models calls = generic %d legacy %d, want 0/1", modelsEdge.Calls(), modelsEdge.LegacyCalls())
 	}
 }
 
@@ -250,7 +272,7 @@ func validConfig() Config {
 	return Config{Worker: models.LocalWorker{
 		Name:          "tts-worker",
 		Type:          interfaces.WorkerTypeInference,
-		Model:         "WHISPER",
+		Model:         models.BuiltInModelNameTTS,
 		ModelLocality: models.RuntimeModelLocalityLocal,
 	}, Scope: scope}
 }
@@ -276,12 +298,14 @@ func validRequest() workers.RunnerExecutionRequest {
 }
 
 type captureModelsService struct {
-	mu         sync.Mutex
-	request    models.InvokeModelRequest
-	result     models.InvokeModelResult
-	err        error
-	calls      int
-	legacyCall atomic.Int32
+	mu            sync.Mutex
+	request       models.InvokeModelRequest
+	result        models.InvokeModelResult
+	err           error
+	legacyHandled bool
+	legacyContent string
+	calls         int
+	legacyCall    atomic.Int32
 }
 
 func (service *captureModelsService) InvokeModel(
@@ -304,6 +328,9 @@ func (service *captureModelsService) InvokeLocal(
 	models.LocalInvocationRequest,
 ) (models.LocalInvocationResult, error) {
 	service.legacyCall.Add(1)
+	if service.legacyHandled {
+		return models.LocalInvocationResult{Handled: true, Content: service.legacyContent}, nil
+	}
 	return models.LocalInvocationResult{}, errors.New("retired InvokeLocal edge was called")
 }
 

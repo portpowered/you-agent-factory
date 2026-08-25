@@ -8,6 +8,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -555,4 +556,204 @@ func TestSideEffects_CancellationDoesNotConsumeRecordedCommandResult(t *testing.
 	if string(result.Stdout) != "recorded script output\n" {
 		t.Fatalf("stdout after cancellation = %q, want retained recorded result", result.Stdout)
 	}
+}
+
+func TestSideEffects_InvokeModelReconstructsRecordedOutputsAndArtifacts(t *testing.T) {
+	artifactRef := replayTestArtifactRef(t, "models-inference:artifact:replay-audio")
+	content := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "recorded text"},
+		{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"ok":true}`), ContentType: "application/json"},
+		{
+			Type: work.WorkContentPartTypeAudio, URL: "data:audio/wav;base64,YXVkaW8=", ContentType: "audio/wav",
+			ArtifactID: artifactRef.String(), Label: "speech.wav", Metadata: map[string]any{"digest": "abc", " ": "ignored", "nil": nil},
+		},
+		{Type: work.WorkContentPartTypeImage, File: "file://recorded.png", ContentType: "image/png"},
+		{Type: work.WorkContentPartTypeBinary, Text: "binary-reference", ContentType: "application/octet-stream"},
+	}
+	result := invokeRecordedModelForReplayTest(t, workerexecution.WorkResult{
+		DispatchID:   "dispatch-model",
+		TransitionID: "tts",
+		Outcome:      workerexecution.OutcomeAccepted,
+		RecordedOutputWork: []work.FactoryWorkItem{{
+			ID: "output-work", WorkTypeID: "task", State: "complete", Content: content,
+		}},
+	})
+	assertReplayModelIdentity(t, result)
+	assertReplayModelOutputCount(t, result)
+	assertReplayTextOutput(t, result.Outputs[0])
+	assertReplayAudioOutput(t, result.Outputs[2], artifactRef)
+	assertReplayContentProjection(t, result)
+}
+
+func TestReplayModelOutputsUsesOutputContent(t *testing.T) {
+	outputs, err := replayModelOutputs(workerexecution.WorkResult{
+		OutputContent: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeAudio, Text: "audio-from-output-content", ContentType: "audio/wav",
+		}},
+	})
+	if err != nil || len(outputs) != 1 || outputs[0].Modality != models.ModalityAudio {
+		t.Fatalf("replayModelOutputs(OutputContent) = %#v, %v; want one audio output", outputs, err)
+	}
+}
+
+func TestSideEffects_InvokeModelReportsRecordedNoOutput(t *testing.T) {
+	_, err := invokeRecordedModelForReplayTestWithError(t, workerexecution.WorkResult{
+		DispatchID:   "dispatch-no-output",
+		TransitionID: "tts",
+		Outcome:      workerexecution.OutcomeAccepted,
+	})
+	if err == nil || !strings.Contains(err.Error(), "has no output") {
+		t.Fatalf("no-output InvokeModel() error = %v, want recorded no-output error", err)
+	}
+}
+
+func TestSideEffects_InvokeModelReportsRecordedFailure(t *testing.T) {
+	result, err := invokeRecordedModelForReplayTestWithError(t, workerexecution.WorkResult{
+		DispatchID:   "dispatch-failure",
+		TransitionID: "tts",
+		Outcome:      workerexecution.OutcomeFailed,
+		Error:        " ",
+	})
+	if err == nil || !strings.Contains(err.Error(), "recorded model invocation failed") {
+		t.Fatalf("failure InvokeModel() error = %v", err)
+	}
+	if result.Status != models.ModelInvocationStatusFailed || result.ModelName != "tts" || result.Operation != models.OperationTTS {
+		t.Fatalf("failure InvokeModel() result = %#v", result)
+	}
+}
+
+func TestReplayModelOutputHelpersSelectRecordedContent(t *testing.T) {
+	if outputs, err := replayModelOutputs(workerexecution.WorkResult{OutputContent: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "inline"}}}); err != nil || len(outputs) != 1 {
+		t.Fatalf("replayModelOutputs(OutputContent) = %#v, %v; want one output", outputs, err)
+	}
+	if outputs, err := replayModelOutputs(workerexecution.WorkResult{RecordedOutputWork: []work.FactoryWorkItem{{Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded fallback"}}}}}); err != nil || len(outputs) != 1 {
+		t.Fatalf("replayModelOutputs(RecordedOutputWork) = %#v, %v; want one output", outputs, err)
+	}
+	if outputs, err := replayModelOutputs(workerexecution.WorkResult{}); err != nil || outputs != nil {
+		t.Fatalf("replayModelOutputs(empty) = %#v, %v; want nil", outputs, err)
+	}
+}
+
+func TestReplayModelOutputHelpersHandleEmptyPropertiesAndReferences(t *testing.T) {
+	var nilSideEffects *SideEffects
+	if _, err := nilSideEffects.InvokeModel(context.Background(), models.InvokeModelRequest{}); err == nil || !strings.Contains(err.Error(), "replay side effects are required") {
+		t.Fatalf("nil SideEffects InvokeModel() error = %v, want required-side-effects error", err)
+	}
+	if properties := replayArtifactProperties(nil); properties != nil {
+		t.Fatalf("replayArtifactProperties(nil) = %#v, want nil", properties)
+	}
+	if properties := replayArtifactProperties(map[string]any{" ": "ignored", "nil": nil}); properties != nil {
+		t.Fatalf("replayArtifactProperties(only invalid) = %#v, want nil", properties)
+	}
+	assertReplayContentReference(t, work.WorkContentPart{}, "")
+	assertReplayContentReference(t, work.WorkContentPart{File: "file://fallback"}, "file://fallback")
+	assertReplayContentReference(t, work.WorkContentPart{Text: "text-fallback"}, "text-fallback")
+}
+
+func TestReplayModelOutputHelpersMapSupportedValues(t *testing.T) {
+	for _, part := range []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "text"},
+		{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"ok":true}`)},
+		{Type: work.WorkContentPartTypeAudio, URL: "audio"},
+		{Type: work.WorkContentPartTypeImage, URL: "image"},
+		{Type: work.WorkContentPartTypeBinary, URL: "binary"},
+		{Type: work.WorkContentPartType("unknown"), Text: "unknown"},
+	} {
+		modality, value := replayModelOutputValue(part)
+		if part.Type.Normalized() != work.WorkContentPartType("unknown") && (modality == "" || value == "") {
+			t.Fatalf("replayModelOutputValue(%#v) = %q/%q", part, modality, value)
+		}
+	}
+}
+
+func replayTestArtifactRef(t *testing.T, value string) models.InferenceArtifactRef {
+	t.Helper()
+	artifact, err := (models.InferenceArtifactRef{}).Parse(value)
+	if err != nil {
+		t.Fatalf("parse artifact: %v", err)
+	}
+	return artifact
+}
+
+func invokeRecordedModelForReplayTest(t *testing.T, result workerexecution.WorkResult) models.InvokeModelResult {
+	t.Helper()
+	resultValue, err := invokeRecordedModelForReplayTestWithError(t, result)
+	if err != nil {
+		t.Fatalf("InvokeModel() error = %v", err)
+	}
+	return resultValue
+}
+
+func invokeRecordedModelForReplayTestWithError(t *testing.T, result workerexecution.WorkResult) (models.InvokeModelResult, error) {
+	t.Helper()
+	artifact := replayModelSideEffectArtifact(t, result)
+	sideEffects, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact)
+	if err != nil {
+		t.Fatalf("NewSideEffects() error = %v", err)
+	}
+	return sideEffects.InvokeModel(context.Background(), models.InvokeModelRequest{
+		Model: models.ModelReference{NameOrURI: "tts"}, Operation: models.OperationTTS,
+	})
+}
+
+func assertReplayModelIdentity(t *testing.T, result models.InvokeModelResult) {
+	t.Helper()
+	if result.Status != models.ModelInvocationStatusCompleted || result.ModelName != "tts" || result.Operation != models.OperationTTS {
+		t.Fatalf("InvokeModel() result identity = %#v", result)
+	}
+}
+
+func assertReplayModelOutputCount(t *testing.T, result models.InvokeModelResult) {
+	t.Helper()
+	if len(result.Outputs) != 5 || len(result.Content) != 5 {
+		t.Fatalf("InvokeModel() outputs/content = %d/%d, want five each", len(result.Outputs), len(result.Content))
+	}
+}
+
+func assertReplayTextOutput(t *testing.T, output models.InferenceOutput) {
+	t.Helper()
+	if output.Name != "output-0" || output.Modality != models.ModalityText || output.Content != "recorded text" {
+		t.Fatalf("recorded text output = %#v", output)
+	}
+}
+
+func assertReplayAudioOutput(t *testing.T, output models.InferenceOutput, artifactRef models.InferenceArtifactRef) {
+	t.Helper()
+	if output.Artifact == nil || output.Artifact.Artifact.String() != artifactRef.String() || output.Artifact.Name != "speech.wav" || output.Artifact.Properties["digest"] != "abc" {
+		t.Fatalf("recorded audio artifact = %#v", output.Artifact)
+	}
+}
+
+func assertReplayContentProjection(t *testing.T, result models.InvokeModelResult) {
+	t.Helper()
+	audio := result.Outputs[2]
+	if result.Content[2].Content != audio.Content || result.Content[2].MediaType != audio.MediaType {
+		t.Fatalf("content projection = %#v, want output projection %#v", result.Content[2], audio)
+	}
+}
+
+func assertReplayContentReference(t *testing.T, part work.WorkContentPart, want string) {
+	t.Helper()
+	if got := firstReplayContentReference(part); got != want {
+		t.Fatalf("firstReplayContentReference(%#v) = %q, want %q", part, got, want)
+	}
+}
+
+func replayModelSideEffectArtifact(t *testing.T, result workerexecution.WorkResult) *interfaces.ReplayArtifact {
+	t.Helper()
+	dispatch := work.WorkDispatch{
+		DispatchID:      result.DispatchID,
+		TransitionID:    result.TransitionID,
+		WorkerType:      "worker-a",
+		WorkstationName: "process",
+		Execution: work.ExecutionMetadata{
+			ReplayKey: "process/trace-model/" + result.DispatchID,
+			TraceID:   "trace-model",
+			WorkIDs:   []string{"work-model"},
+		},
+	}
+	return testReplayArtifact(t,
+		replayDispatchCreatedEvent(t, dispatch, 1),
+		replayDispatchCompletedEvent(t, "completion-"+result.DispatchID, result, 2),
+	)
 }
