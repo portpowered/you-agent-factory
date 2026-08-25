@@ -84,6 +84,7 @@ func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
 	}
 
 	candidate := projectPetriTerminalSessionState(*state, completion, s.now())
+	compactRuntimePetriHistory(&candidate)
 	if err := s.persistSessionSnapshot(candidate); err != nil {
 		return err
 	}
@@ -157,6 +158,7 @@ const (
 	DurableRecordKindCanonicalFactoryEvent DurableRecordKind = "canonical_factory_event"
 	DurableRecordKindJavaScriptRuntime     DurableRecordKind = "javascript_runtime"
 	DurableRecordKindPetriTokenMutation    DurableRecordKind = "petri_token_mutation"
+	DurableRecordKindPetriTokenSummary     DurableRecordKind = "petri_token_summary"
 )
 
 // DurableSessionRecord is the tagged persistence union for canonical events
@@ -166,6 +168,7 @@ type DurableSessionRecord struct {
 	CanonicalEvent   json.RawMessage                         `json:"canonicalEvent,omitempty"`
 	JavaScriptRecord *workflowsource.JavaScriptRuntimeRecord `json:"javascriptRecord,omitempty"`
 	PetriMutation    *interfaces.TokenMutationRecord         `json:"petriMutation,omitempty"`
+	PetriSummary     *PetriTokenSummary                      `json:"petriSummary,omitempty"`
 }
 
 // UnmarshalJSON rejects unknown and mismatched records so older runtimes never
@@ -189,6 +192,7 @@ func validateDurableSessionRecord(record DurableSessionRecord) error {
 		DurableRecordKindCanonicalFactoryEvent: len(record.CanonicalEvent) > 0,
 		DurableRecordKindJavaScriptRuntime:     record.JavaScriptRecord != nil,
 		DurableRecordKindPetriTokenMutation:    record.PetriMutation != nil,
+		DurableRecordKindPetriTokenSummary:     record.PetriSummary != nil,
 	}
 	present, known := payloads[record.Kind]
 	if !known {
@@ -217,7 +221,7 @@ func validateDurableSessionRecord(record DurableSessionRecord) error {
 }
 
 func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionRecord {
-	records := make([]DurableSessionRecord, 0, len(state.events)+len(state.runtimeRecords)+len(state.petriMutations))
+	records := make([]DurableSessionRecord, 0, len(state.events)+len(state.runtimeRecords)+len(state.petriMutations)+len(state.petriSummaries))
 	for _, event := range state.events {
 		records = append(records, DurableSessionRecord{
 			Kind: DurableRecordKindCanonicalFactoryEvent, CanonicalEvent: append(json.RawMessage(nil), event...),
@@ -235,6 +239,12 @@ func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionR
 			Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &cloned,
 		})
 	}
+	for _, summary := range state.petriSummaries {
+		cloned := clonePetriTokenSummary(summary)
+		records = append(records, DurableSessionRecord{
+			Kind: DurableRecordKindPetriTokenSummary, PetriSummary: &cloned,
+		})
+	}
 	return records
 }
 
@@ -242,10 +252,12 @@ func runtimeHistoryFromDurableRecords(records []DurableSessionRecord) (
 	[]json.RawMessage,
 	[]workflowsource.JavaScriptRuntimeRecord,
 	[]interfaces.TokenMutationRecord,
+	[]PetriTokenSummary,
 ) {
 	events := make([]json.RawMessage, 0, len(records))
 	runtimeRecords := make([]workflowsource.JavaScriptRuntimeRecord, 0, len(records))
 	petriMutations := make([]interfaces.TokenMutationRecord, 0, len(records))
+	petriSummaries := make([]PetriTokenSummary, 0, len(records))
 	for _, record := range records {
 		switch record.Kind {
 		case DurableRecordKindCanonicalFactoryEvent:
@@ -254,15 +266,18 @@ func runtimeHistoryFromDurableRecords(records []DurableSessionRecord) (
 			runtimeRecords = append(runtimeRecords, cloneRuntimeRecord(*record.JavaScriptRecord))
 		case DurableRecordKindPetriTokenMutation:
 			petriMutations = append(petriMutations, *record.PetriMutation)
+		case DurableRecordKindPetriTokenSummary:
+			petriSummaries = append(petriSummaries, clonePetriTokenSummary(*record.PetriSummary))
 		}
 	}
-	return events, runtimeRecords, petriMutations
+	return events, runtimeRecords, petriMutations, petriSummaries
 }
 
 func runtimeHistoryFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) (
 	[]json.RawMessage,
 	[]workflowsource.JavaScriptRuntimeRecord,
 	[]interfaces.TokenMutationRecord,
+	[]PetriTokenSummary,
 ) {
 	if len(snapshot.Records) > 0 {
 		return runtimeHistoryFromDurableRecords(snapshot.Records)
@@ -271,7 +286,7 @@ func runtimeHistoryFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) 
 	for i, event := range snapshot.Events {
 		events[i] = append(json.RawMessage(nil), event...)
 	}
-	return events, cloneRuntimeRecords(snapshot.RuntimeRecords), nil
+	return events, cloneRuntimeRecords(snapshot.RuntimeRecords), nil, nil
 }
 
 func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interfaces.TokenMutationRecord {
