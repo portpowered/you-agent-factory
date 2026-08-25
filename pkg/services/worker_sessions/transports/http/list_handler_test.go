@@ -2,6 +2,8 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +14,8 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestListWorkerSessionsTranslatesPositiveLimit(t *testing.T) {
@@ -100,6 +104,38 @@ func TestListWorkerSessionsMapsInvalidScopeAndStateErrors(t *testing.T) {
 	}
 }
 
+func TestListWorkerSessionsMapsAndLogsBackendFailure(t *testing.T) {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	service := &fakeObservationService{topLevelErr: errors.New("recording projection failed")}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.New(core))
+	recorder := httptest.NewRecorder()
+	scope := factoryapi.ListWorkerSessionsParamsScope("all")
+	handler.ListWorkerSessions(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/worker-sessions?scope=all", nil),
+		factoryapi.ListWorkerSessionsParams{Scope: &scope},
+	)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR || response.Message != "failed to list Worker Sessions" {
+		t.Fatalf("error response = %#v, want safe typed list failure", response)
+	}
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].Message != "list Worker Sessions failed" {
+		t.Fatalf("log entries = %#v, want one list failure entry", entries)
+	}
+	fields := entries[0].ContextMap()
+	if fields["operation"] != "worker_sessions.list" || fields["scope"] != "all" || fields["state_count"] != int64(0) {
+		t.Fatalf("log fields = %#v, want safe operation context", fields)
+	}
+}
+
 func invalidScopeParams() factoryapi.ListWorkerSessionsParams {
 	scope := factoryapi.ListWorkerSessionsParamsScope("unexpected")
 	return factoryapi.ListWorkerSessionsParams{Scope: &scope}
@@ -143,7 +179,7 @@ func TestListWorkerSessionsProjectsFleetAttributionAndUnavailableFacts(t *testin
 	assertFleetObservationFacts(t, response)
 }
 
-func TestListWorkerSessionsCharacterizesPerObservationWorkAttributionReads(t *testing.T) {
+func TestListWorkerSessionsBatchesWorkAttributionReadsByFactorySession(t *testing.T) {
 	started := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	workerSessionIDs := []string{"fleet-worker-a", "fleet-worker-b", "fleet-worker-c"}
 	observations := make([]workersessions.Observation, len(workerSessionIDs))
@@ -158,10 +194,14 @@ func TestListWorkerSessionsCharacterizesPerObservationWorkAttributionReads(t *te
 		}
 	}
 	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: observations}}
-	workReads := 0
+	workListReads := 0
+	workGetReads := 0
+	workListMaxResults := []int{}
 	workReader := workServiceStub{
-		getResults:   fleetWorkResults(),
-		getCallCount: &workReads,
+		getResults:     fleetWorkResults(),
+		getCallCount:   &workGetReads,
+		listCallCount:  &workListReads,
+		listMaxResults: &workListMaxResults,
 	}
 	recorder := httptest.NewRecorder()
 	NewHandler(NewAdapter(service, workReader), zap.NewNop()).ListWorkerSessions(
@@ -180,9 +220,81 @@ func TestListWorkerSessionsCharacterizesPerObservationWorkAttributionReads(t *te
 	if len(response.Sessions) != len(observations) {
 		t.Fatalf("session count = %d, want %d", len(response.Sessions), len(observations))
 	}
-	if workReads != len(observations) {
-		t.Fatalf("Work attribution reads = %d, want one read per returned observation in the current path", workReads)
+	if workListReads != 1 {
+		t.Fatalf("Work list reads = %d, want one bounded read for the shared Factory Session", workListReads)
 	}
+	if len(workListMaxResults) != 1 || workListMaxResults[0] != work.DefaultListMaxResults {
+		t.Fatalf("Work list max results = %#v, want one default bounded page", workListMaxResults)
+	}
+	if workGetReads != 0 {
+		t.Fatalf("Work get reads = %d, want no per-observation reads", workGetReads)
+	}
+}
+
+func TestListWorkerSessionsWorkAttributionScalesWithoutPerObservationReads(t *testing.T) {
+	started := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	const observationCount = 100
+	observations := make([]workersessions.Observation, 0, observationCount)
+	workResults := make(map[string]work.ReadModel, observationCount)
+	for index := 0; index < observationCount; index++ {
+		workID := fmt.Sprintf("work-%03d", index)
+		workerSessionID := fmt.Sprintf("worker-session-%03d", index)
+		observations = append(observations, workersessions.Observation{
+			WorkerSessionID:  workerSessionID,
+			FactorySessionID: "~default",
+			WorkIDs:          []string{workID},
+			AttemptID:        "attempt-" + workerSessionID,
+			State:            workersessions.StateCompleted,
+			StartedAt:        &started,
+		})
+		workResults[workID] = work.ReadModel{WorkID: workID, Name: "Work " + workID}
+	}
+	service := &fakeObservationService{topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: observations}}
+	workListReads := 0
+	workGetReads := 0
+	workListMaxResults := []int{}
+	workReader := workServiceStub{
+		getCallCount:   &workGetReads,
+		listCallCount:  &workListReads,
+		listMaxResults: &workListMaxResults,
+		listResult:     work.ListResult{Results: readModels(workResults)},
+	}
+	recorder := httptest.NewRecorder()
+	NewHandler(NewAdapter(service, workReader), zap.NewNop()).ListWorkerSessions(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/worker-sessions", nil),
+		factoryapi.ListWorkerSessionsParams{},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Sessions) != observationCount {
+		t.Fatalf("session count = %d, want %d", len(response.Sessions), observationCount)
+	}
+	if workListReads != 1 || workGetReads != 0 {
+		t.Fatalf("Work reads = list:%d get:%d, want one list and no gets", workListReads, workGetReads)
+	}
+	if len(workListMaxResults) != 1 || workListMaxResults[0] != observationCount {
+		t.Fatalf("Work list max results = %#v, want one page sized to the bounded observation set", workListMaxResults)
+	}
+	for _, observation := range response.Sessions {
+		if observation.WorkName == nil || *observation.WorkName == "" {
+			t.Fatalf("observation %q missing Work attribution: %#v", observation.WorkerSessionId, observation)
+		}
+	}
+}
+
+func readModels(results map[string]work.ReadModel) []work.ReadModel {
+	models := make([]work.ReadModel, 0, len(results))
+	for _, result := range results {
+		models = append(models, result)
+	}
+	return models
 }
 
 func fleetWorkResults() map[string]work.ReadModel {

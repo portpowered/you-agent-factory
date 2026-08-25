@@ -141,6 +141,15 @@ func (h *Handler) ListWorkerSessions(
 	}
 	response, err := h.adapter.ListTopLevelWorkerSessions(r.Context(), scope, states, maxResults, nextToken)
 	if err != nil {
+		if h.logger != nil {
+			h.logger.Error(
+				"list Worker Sessions failed",
+				zap.String("operation", "worker_sessions.list"),
+				zap.String("scope", scope),
+				zap.Int("state_count", len(states)),
+				zap.Error(err),
+			)
+		}
 		h.writeMappedError(w, err)
 		return
 	}
