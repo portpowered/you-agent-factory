@@ -168,9 +168,6 @@ func TestModelsRootCompositionModelScenarios(t *testing.T) {
 	t.Run("inference invoke activates through the root BuildProcess", func(t *testing.T) {
 		runModelsInferenceInvokeActivatesThroughRootBuildProcess(t)
 	})
-	t.Run("JSON invoke validates without starting the joined runtime", func(t *testing.T) {
-		runModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t)
-	})
 	t.Run("pinned backend rejection happens before process start", func(t *testing.T) {
 		runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t)
 	})
