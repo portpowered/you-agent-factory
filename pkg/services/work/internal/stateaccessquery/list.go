@@ -55,6 +55,13 @@ type ListRequestPreparation interface {
 	PrepareListRequest(context.Context, ListOptions) (PreparedListRequest, error)
 }
 
+// CompletedFlushSequenceReader is the narrow durability capability consumed
+// by Work state access. It stays beside the query implementation so the Work
+// service root can publish only an alias for compatibility.
+type CompletedFlushSequenceReader interface {
+	CompletedFlushSequence(streamGenerationID string) (int64, bool)
+}
+
 // ValidationError identifies the query field that failed validation.
 type ValidationError struct {
 	Field   string

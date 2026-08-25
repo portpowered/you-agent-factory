@@ -21,6 +21,93 @@ import (
 	"time"
 )
 
+// runtimeLedgerWithCompletedFlushWatermark preserves the RuntimeEventLedger
+// port while carrying the Recordings-owned lifecycle capability into the
+// session-scoped runtime projection. It is installed after replay seeding so
+// the concrete ledger keeps its restore-only operation.
+type runtimeLedgerWithCompletedFlushWatermark struct {
+	recordings.RuntimeEventLedger
+	reader recordings.CompletedFlushWatermarkReader
+}
+
+var _ recordings.RuntimeEventLedger = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
+var _ recordings.CompletedFlushWatermarkReader = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
+var _ recordings.DispatchWorkerSessionAssociationRecorder = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
+var _ recordings.HumanApprovalRequestRecorder = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
+
+func (ledger *runtimeLedgerWithCompletedFlushWatermark) CompletedFlushWatermark(
+	streamGenerationID string,
+) (recordings.CanonicalEventCursor, bool) {
+	if ledger == nil || ledger.reader == nil {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	return ledger.reader.CompletedFlushWatermark(streamGenerationID)
+}
+
+func (ledger *runtimeLedgerWithCompletedFlushWatermark) AppendRecordedEventWithValidation(
+	event factorydefinitions.FactoryEvent,
+	validate func(factorydefinitions.FactoryEvent) error,
+) (factorydefinitions.FactoryEvent, error) {
+	if ledger == nil || ledger.RuntimeEventLedger == nil {
+		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings runtime ledger is unavailable")
+	}
+	appender, ok := ledger.RuntimeEventLedger.(interface {
+		AppendRecordedEventWithValidation(
+			factorydefinitions.FactoryEvent,
+			func(factorydefinitions.FactoryEvent) error,
+		) (factorydefinitions.FactoryEvent, error)
+	})
+	if !ok {
+		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings runtime ledger does not support atomic append")
+	}
+	return appender.AppendRecordedEventWithValidation(event, validate)
+}
+
+func (ledger *runtimeLedgerWithCompletedFlushWatermark) CloseLiveSubscriptions() {
+	if ledger == nil || ledger.RuntimeEventLedger == nil {
+		return
+	}
+	closer, ok := ledger.RuntimeEventLedger.(interface{ CloseLiveSubscriptions() })
+	if ok {
+		closer.CloseLiveSubscriptions()
+	}
+}
+
+func (ledger *runtimeLedgerWithCompletedFlushWatermark) RecordDispatchWorkerSessionAssociationWithExecution(
+	tick int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	facts recordings.DispatchWorkerSessionExecutionFacts,
+	eventTime time.Time,
+) {
+	if ledger == nil || ledger.RuntimeEventLedger == nil {
+		return
+	}
+	if recorder, ok := ledger.RuntimeEventLedger.(recordings.DispatchWorkerSessionAssociationRecorder); ok {
+		recorder.RecordDispatchWorkerSessionAssociationWithExecution(
+			tick, dispatchID, workerSessionID, requestID, facts, eventTime,
+		)
+		return
+	}
+	ledger.RuntimeEventLedger.RecordDispatchWorkerSessionAssociation(
+		tick, dispatchID, workerSessionID, requestID, eventTime,
+	)
+}
+
+func (ledger *runtimeLedgerWithCompletedFlushWatermark) RecordHumanApprovalRequested(
+	tick int,
+	record recordings.FactoryDispatchRecord,
+	eventTime time.Time,
+) {
+	if ledger == nil || ledger.RuntimeEventLedger == nil {
+		return
+	}
+	if recorder, ok := ledger.RuntimeEventLedger.(recordings.HumanApprovalRequestRecorder); ok {
+		recorder.RecordHumanApprovalRequested(tick, record, eventTime)
+	}
+}
+
 // lifecycleRuntimeRecorder adapts Factory Runtime's focused recording port to
 // the session's Recordings-owned RecordingLifecycle capability without
 // becoming a second lifecycle owner.

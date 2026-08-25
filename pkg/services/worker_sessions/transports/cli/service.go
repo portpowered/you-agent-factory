@@ -38,6 +38,13 @@ func selectEffects(effects []Effects) Effects {
 	return effects[0]
 }
 
+func workerSessionConfirmationState(session factoryapi.WorkerSessionObservation) factoryapi.ConfirmationState {
+	if session.ConfirmationState == factoryapi.CONFIRMED {
+		return session.ConfirmationState
+	}
+	return factoryapi.UNCONFIRMED
+}
+
 const (
 	// maxWorkerSessionExecutionStdinBytes is the inclusive byte limit for a
 	// direct Worker execution document deliberately supplied through stdin.

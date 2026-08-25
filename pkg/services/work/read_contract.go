@@ -87,9 +87,7 @@ const (
 // CompletedFlushSequenceReader is the narrow durability capability consumed
 // by Work state access. The Recordings owner supplies the implementation at
 // composition time; Work does not depend on Recordings' service contract.
-type CompletedFlushSequenceReader interface {
-	CompletedFlushSequence(streamGenerationID string) (int64, bool)
-}
+type CompletedFlushSequenceReader = stateaccessquery.CompletedFlushSequenceReader
 
 // FailureDetail is the bounded, customer-safe explanation of the dispatch
 // that currently leaves this Work in a failed state. Work owns this detached

@@ -44,10 +44,7 @@ func (service *combinedService) openRuntimeLedger(
 		}
 	}
 	if reader, ok := any(service).(recordings.CompletedFlushWatermarkReader); ok && reader != nil {
-		ledger = &runtimeLedgerWithCompletedFlushWatermark{
-			RuntimeEventLedger: ledger,
-			reader:             reader,
-		}
+		ledger = &runtimeLedgerWithCompletedFlushWatermark{RuntimeEventLedger: ledger, reader: reader}
 	}
 	routeKey := strings.TrimSpace(request.FactorySessionID)
 	if routeKey == "" {
@@ -57,103 +54,6 @@ func (service *combinedService) openRuntimeLedger(
 		return nil, "", err
 	}
 	return ledger, routeKey, nil
-}
-
-// runtimeLedgerWithCompletedFlushWatermark preserves the RuntimeEventLedger
-// port while carrying the Recordings-owned lifecycle capability into the
-// session-scoped runtime projection. The wrapper is installed only after
-// replay seeding so the concrete ledger keeps its restore-only operation.
-type runtimeLedgerWithCompletedFlushWatermark struct {
-	recordings.RuntimeEventLedger
-	reader recordings.CompletedFlushWatermarkReader
-}
-
-var _ recordings.RuntimeEventLedger = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
-var _ recordings.CompletedFlushWatermarkReader = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
-var _ recordings.DispatchWorkerSessionAssociationRecorder = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
-var _ recordings.HumanApprovalRequestRecorder = (*runtimeLedgerWithCompletedFlushWatermark)(nil)
-
-func (ledger *runtimeLedgerWithCompletedFlushWatermark) CompletedFlushWatermark(
-	streamGenerationID string,
-) (recordings.CanonicalEventCursor, bool) {
-	if ledger == nil || ledger.reader == nil {
-		return recordings.CanonicalEventCursor{}, false
-	}
-	return ledger.reader.CompletedFlushWatermark(streamGenerationID)
-}
-
-// AppendRecordedEventWithValidation keeps the optional atomic append seam
-// visible through the capability wrapper used by the runtime router.
-func (ledger *runtimeLedgerWithCompletedFlushWatermark) AppendRecordedEventWithValidation(
-	event factorydefinitions.FactoryEvent,
-	validate func(factorydefinitions.FactoryEvent) error,
-) (factorydefinitions.FactoryEvent, error) {
-	if ledger == nil || ledger.RuntimeEventLedger == nil {
-		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings runtime ledger is unavailable")
-	}
-	appender, ok := ledger.RuntimeEventLedger.(interface {
-		AppendRecordedEventWithValidation(
-			factorydefinitions.FactoryEvent,
-			func(factorydefinitions.FactoryEvent) error,
-		) (factorydefinitions.FactoryEvent, error)
-	})
-	if !ok {
-		return factorydefinitions.FactoryEvent{}, fmt.Errorf("recordings runtime ledger does not support atomic append")
-	}
-	return appender.AppendRecordedEventWithValidation(event, validate)
-}
-
-// CloseLiveSubscriptions keeps the optional live-stream teardown seam visible
-// through the capability wrapper used by the runtime router.
-func (ledger *runtimeLedgerWithCompletedFlushWatermark) CloseLiveSubscriptions() {
-	if ledger == nil || ledger.RuntimeEventLedger == nil {
-		return
-	}
-	closer, ok := ledger.RuntimeEventLedger.(interface{ CloseLiveSubscriptions() })
-	if ok {
-		closer.CloseLiveSubscriptions()
-	}
-}
-
-// RecordDispatchWorkerSessionAssociationWithExecution preserves the optional
-// resolved-execution association capability through the wrapper. Legacy
-// ledgers still receive the original association event when they do not
-// implement the richer extension.
-func (ledger *runtimeLedgerWithCompletedFlushWatermark) RecordDispatchWorkerSessionAssociationWithExecution(
-	tick int,
-	dispatchID string,
-	workerSessionID string,
-	requestID string,
-	facts recordings.DispatchWorkerSessionExecutionFacts,
-	eventTime time.Time,
-) {
-	if ledger == nil || ledger.RuntimeEventLedger == nil {
-		return
-	}
-	if recorder, ok := ledger.RuntimeEventLedger.(recordings.DispatchWorkerSessionAssociationRecorder); ok {
-		recorder.RecordDispatchWorkerSessionAssociationWithExecution(
-			tick, dispatchID, workerSessionID, requestID, facts, eventTime,
-		)
-		return
-	}
-	ledger.RuntimeEventLedger.RecordDispatchWorkerSessionAssociation(
-		tick, dispatchID, workerSessionID, requestID, eventTime,
-	)
-}
-
-// RecordHumanApprovalRequested preserves the optional approval event
-// capability through the wrapper used by the runtime router.
-func (ledger *runtimeLedgerWithCompletedFlushWatermark) RecordHumanApprovalRequested(
-	tick int,
-	record recordings.FactoryDispatchRecord,
-	eventTime time.Time,
-) {
-	if ledger == nil || ledger.RuntimeEventLedger == nil {
-		return
-	}
-	if recorder, ok := ledger.RuntimeEventLedger.(recordings.HumanApprovalRequestRecorder); ok {
-		recorder.RecordHumanApprovalRequested(tick, record, eventTime)
-	}
 }
 
 // LoadResumeInput keeps explicit resume classification on the Recordings root

@@ -248,22 +248,18 @@ type JavaScriptRuntimeService struct {
 	workerSessionsMu sync.RWMutex
 	workerSessions   map[string]string
 
-	mu            sync.RWMutex
-	sessions      map[string]*runtimeSessionState
-	startReplay   map[string]startReplayRecord
-	startInflight map[string]*startInflightFlight
-	controlReplay map[string]controlReplayRecord
-	liveChangeMu  sync.Mutex
-
+	mu                         sync.RWMutex
+	sessions                   map[string]*runtimeSessionState
+	startReplay                map[string]startReplayRecord
+	startInflight              map[string]*startInflightFlight
+	controlReplay              map[string]controlReplayRecord
+	liveChangeMu               sync.Mutex
 	dispatchDurabilityMu       sync.RWMutex
 	dispatchDurability         recording.CompletedFlushWatermarkReader
 	dispatchStreamGenerationID string
 }
 
-var _ Service = (*JavaScriptRuntimeService)(nil)
-
-// NewJavaScriptRuntimeService constructs one JavaScript runtime-backed durable
-// session service from explicit collaborators.
+// NewJavaScriptRuntimeService constructs the durable session service.
 func NewJavaScriptRuntimeService(
 	projectRoot string,
 	childExecutorMode string,
@@ -609,20 +605,6 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 		}
 	}
 	return DispatchDetail{}, ErrDispatchNotFound
-}
-
-func (s *JavaScriptRuntimeService) dispatchesForRead(
-	dispatches []DispatchSummary,
-	events []json.RawMessage,
-) []DispatchSummary {
-	if s == nil {
-		return dispatchesForRead(dispatches, events)
-	}
-	s.dispatchDurabilityMu.RLock()
-	reader := s.dispatchDurability
-	generationID := s.dispatchStreamGenerationID
-	s.dispatchDurabilityMu.RUnlock()
-	return dispatchesForReadWithDurability(dispatches, events, reader, generationID)
 }
 
 func (s *JavaScriptRuntimeService) ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error) {

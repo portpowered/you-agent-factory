@@ -1,6 +1,9 @@
 package recordings
 
-import "time"
+import (
+	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
+	"time"
+)
 
 // CompletedFlushWatermarkReader is the narrow Recordings capability used by
 // read projections that need to distinguish a live canonical fact from one
@@ -10,9 +13,7 @@ import "time"
 // numbers are only comparable within one generation. The returned cursor is a
 // detached value. ok is false until a successful recording flush has covered
 // at least one event in the requested generation.
-type CompletedFlushWatermarkReader interface {
-	CompletedFlushWatermark(streamGenerationID string) (CanonicalEventCursor, bool)
-}
+type CompletedFlushWatermarkReader = recordingcontracts.CompletedFlushWatermarkReader
 
 // RecordingLifecycle is a narrow, Recordings-owned capability for peers that
 // only need to begin or bind a canonical recording, append ordered Factory

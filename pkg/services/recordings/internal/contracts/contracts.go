@@ -19,6 +19,14 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// CompletedFlushWatermarkReader is the narrow durability capability exposed
+// by the recording lifecycle without widening the broad Recordings service
+// contract. Its cursor is comparable only within the requested stream
+// generation.
+type CompletedFlushWatermarkReader interface {
+	CompletedFlushWatermark(streamGenerationID string) (CanonicalEventCursor, bool)
+}
+
 // ErrReconnectCursorNotFound reports that an acknowledged cursor does not
 // identify an event in the selected ledger stream.
 var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")

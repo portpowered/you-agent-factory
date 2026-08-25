@@ -748,24 +748,12 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 		return workersessions.Observation{}, err
 	}
 	if s != nil && s.ledger != nil && s.projector != nil {
-		fact, found, err := s.recordedObservationForWorkerSessionID(ctx, req.WorkerSessionID)
+		observation, found, err := s.readRecordedWorkerSessionByID(ctx, req.WorkerSessionID)
 		if err != nil {
 			return workersessions.Observation{}, err
 		}
 		if found {
-			observation := recordedObservationFromFact(fact, s.clock)
-			if fact.provider != nil {
-				var enrichErr error
-				observation, enrichErr = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
-				if enrichErr != nil {
-					return workersessions.Observation{}, enrichErr
-				}
-			}
-			observation, healthErr := s.withRecordingHealth(ctx, observation)
-			if healthErr != nil {
-				return workersessions.Observation{}, healthErr
-			}
-			return s.confirmedObservation(observation), nil
+			return observation, nil
 		}
 		if s.Service == nil {
 			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
@@ -774,6 +762,35 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if s == nil || s.Service == nil {
 		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
 	}
+	return s.readLiveWorkerSessionByID(ctx, req)
+}
+
+func (s *recordedWorkerSessionObservation) readRecordedWorkerSessionByID(
+	ctx context.Context,
+	workerSessionID string,
+) (workersessions.Observation, bool, error) {
+	fact, found, err := s.recordedObservationForWorkerSessionID(ctx, workerSessionID)
+	if err != nil || !found {
+		return workersessions.Observation{}, found, err
+	}
+	observation := recordedObservationFromFact(fact, s.clock)
+	if fact.provider != nil {
+		observation, err = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+		if err != nil {
+			return workersessions.Observation{}, false, err
+		}
+	}
+	observation, err = s.withRecordingHealth(ctx, observation)
+	if err != nil {
+		return workersessions.Observation{}, false, err
+	}
+	return s.confirmedObservation(observation), true, nil
+}
+
+func (s *recordedWorkerSessionObservation) readLiveWorkerSessionByID(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
 	observation, err := s.Service.GetObservationByWorkerSessionID(ctx, req)
 	if err != nil {
 		return workersessions.Observation{}, err

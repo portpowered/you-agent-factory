@@ -704,3 +704,124 @@ func redactRuntimePromptText(
 	builder.WriteString(value[cursor:])
 	return builder.String(), true
 }
+
+func completedFlushWatermarkReader(
+	ledger recordings.RuntimeLedger,
+) recordings.CompletedFlushWatermarkReader {
+	if ledger == nil {
+		return nil
+	}
+	reader, _ := ledger.(recordings.CompletedFlushWatermarkReader)
+	return reader
+}
+
+// annotateRecordedFact attaches the canonical stream identity to the state
+// cursor before the detached observation crosses the runtime boundary.
+func (s *recordedWorkerSessionObservation) annotateRecordedFact(
+	fact recordedDispatchObservation,
+) recordedDispatchObservation {
+	if s == nil || s.ledger == nil {
+		return fact
+	}
+	fact.streamGenerationID = strings.TrimSpace(s.ledger.StreamGenerationID())
+	return fact
+}
+
+type completedFlushWatermarkSample struct {
+	generationID string
+	watermark    recordings.CanonicalEventCursor
+	available    bool
+}
+
+// sampleCompletedFlushWatermark captures the one durability boundary used by
+// a read response. Keeping the sample separate from decoration prevents a
+// response assembled from recorded and live observations from observing two
+// different flush completions.
+func (s *recordedWorkerSessionObservation) sampleCompletedFlushWatermark() completedFlushWatermarkSample {
+	if s == nil || s.ledger == nil || s.durability == nil {
+		return completedFlushWatermarkSample{}
+	}
+	generationID := strings.TrimSpace(s.ledger.StreamGenerationID())
+	if generationID == "" {
+		return completedFlushWatermarkSample{}
+	}
+	watermark, ok := s.durability.CompletedFlushWatermark(generationID)
+	if !ok || strings.TrimSpace(watermark.StreamGenerationID) != generationID {
+		return completedFlushWatermarkSample{generationID: generationID}
+	}
+	return completedFlushWatermarkSample{
+		generationID: generationID,
+		watermark:    watermark,
+		available:    true,
+	}
+}
+
+// applyConfirmation decorates observations with a previously sampled
+// completed-flush watermark. The process-local registry remains the fallback
+// source, so every observation starts UNCONFIRMED and can become CONFIRMED
+// only when its recorded state cursor is known and covered by the
+// generation-matching watermark.
+func (s *recordedWorkerSessionObservation) applyConfirmation(
+	observations []workersessions.Observation,
+	sample completedFlushWatermarkSample,
+) {
+	if len(observations) == 0 {
+		return
+	}
+	for index := range observations {
+		observations[index].ConfirmationState = workersessions.ConfirmationStateUnconfirmed
+	}
+	if !sample.available {
+		return
+	}
+	for index := range observations {
+		observation := &observations[index]
+		if observation.StateSequenceKnown &&
+			observation.StreamGenerationID == sample.generationID &&
+			observation.StateSequence <= int64(sample.watermark.Sequence) {
+			observation.ConfirmationState = workersessions.ConfirmationStateConfirmed
+		}
+	}
+}
+
+func (s *recordedWorkerSessionObservation) confirmedObservation(
+	observation workersessions.Observation,
+) workersessions.Observation {
+	values := []workersessions.Observation{observation}
+	s.applyConfirmation(values, s.sampleCompletedFlushWatermark())
+	return values[0]
+}
+
+// recordedDispatchStateCursor returns the latest canonical dispatch lifecycle
+// event for the dispatch. It is the cursor responsible for the projected
+// Worker Session state or terminal outcome, rather than merely the association
+// event that made the Worker Session addressable.
+func recordedDispatchStateCursor(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) (int64, bool) {
+	dispatchID = strings.TrimSpace(dispatchID)
+	if dispatchID == "" {
+		return 0, false
+	}
+	var (
+		sequence int64
+		found    bool
+	)
+	for _, event := range cloneAndSortFactoryEvents(events) {
+		if stringPointerValue(event.Context.DispatchID) != dispatchID {
+			continue
+		}
+		switch event.Type {
+		case interfaces.FactoryEventTypeDispatchRequest,
+			interfaces.FactoryEventTypeDispatchWorkerSessionAssoc,
+			interfaces.FactoryEventTypeDispatchQueued,
+			interfaces.FactoryEventTypeDispatchResponse,
+			interfaces.FactoryEventTypeDispatchInterrupted,
+			interfaces.FactoryEventTypeDispatchReconciled:
+			sequence = int64(event.Context.Sequence)
+			found = true
+		}
+	}
+	return sequence, found
+}
