@@ -633,7 +633,7 @@ func TestRootAdapter_InvokeGenericMultipleOutputsRejectsBeforeRoot(t *testing.T)
 	}
 }
 
-func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
+func TestRootAdapter_InvokeGenericInputJSONPreservesAllNamedOutputs(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
@@ -641,9 +641,12 @@ func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
 	service := modelscli.NewService(modelscli.Config{
 		Models: stubModelsRoot{
 			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
-				return genericCLIModel("omni", modelinference.OperationOMNI,
-					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
-					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+				return genericCLIOperationModel("omni", modelinference.OperationOMNI,
+					[]modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
+					[]modelinference.OperationSlot{
+						{Name: "text", Modality: modelinference.ModalityText},
+						{Name: "usage", Modality: modelinference.ModalityJSON},
+					}), nil
 			},
 			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
 				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
@@ -662,7 +665,7 @@ func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
 	var out bytes.Buffer
 	if err := service.Invoke(modelscli.InvokeConfig{
 		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
-		Text: "hello", JSON: true, Output: &out,
+		InputMappings: []string{"prompt=hello"}, JSON: true, Output: &out,
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
