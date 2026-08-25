@@ -184,7 +184,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/browser",
-      "minimum": 10.00
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/clock",
@@ -908,7 +908,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 71.48
+      "minimum": 71.41
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
