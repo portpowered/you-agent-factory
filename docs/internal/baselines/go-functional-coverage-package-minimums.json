@@ -74,6 +74,13 @@
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/internal/service",
+      "justification": "Complete current-head functional coverage is below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
       "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
@@ -142,6 +149,13 @@
       "owner": "coverage-remediation",
       "deadline": "2027-07-15",
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop",
+      "justification": "Complete current-head functional coverage is below the functional default floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the functional default floor and this hold is removed."
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics",
