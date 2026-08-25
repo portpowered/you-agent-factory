@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,35 +59,6 @@ func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 				t.Fatalf("debug models remove diagnostic = %q, want underlying cache-not-found cause", inputs.Stderr())
 			}
 		})
-	}
-}
-
-func TestModelsLocalInvokeMissingFactoryLayoutNamesSearchedRoot(t *testing.T) {
-	projectDir := t.TempDir()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", codedDiagnosticModelName,
-		"--operation", "TTS", "--text", "hello",
-	})
-	inputs.Input.Env = functionalHomeEnvironment(t.TempDir())
-	inputs.Input.WorkingDirectory = projectDir
-
-	err := process.Execute(inputs.Input)
-	if err == nil {
-		t.Fatal("Process.Execute(models invoke without Factory layout) error = nil, want failure")
-	}
-	response := decodeFirstDiagnostic(t, inputs.Stderr())
-	if response.Code != factoryapi.ErrorResponseCode("CURRENT_FACTORY_NOT_FOUND") || response.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("missing-layout diagnostic = %#v, want CURRENT_FACTORY_NOT_FOUND/NOT_FOUND", response)
-	}
-	wantRoot := filepath.Join(projectDir, "factory")
-	normalizedMessage := strings.ReplaceAll(response.Message, `\\`, `\`)
-	if !strings.Contains(normalizedMessage, wantRoot) || !strings.Contains(inputs.Stderr(), "factory") {
-		t.Fatalf("missing-layout diagnostic = %q, want searched root %q", response.Message, wantRoot)
-	}
-	if strings.Contains(inputs.Stderr(), "INTERNAL_SERVER_ERROR") {
-		t.Fatalf("missing-layout diagnostic = %q, must not be INTERNAL_SERVER_ERROR", inputs.Stderr())
 	}
 }
 

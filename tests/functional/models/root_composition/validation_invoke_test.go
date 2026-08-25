@@ -37,17 +37,9 @@ func TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t *testing.T) {
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
+	backendResolverCalls := 0
 	assetFiles := functionalModelAssetFileSystem{home: home}
-	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
-	resources := config["resources"].([]map[string]any)
-	resources[0]["model"] = "tts"
-	resources[0]["backend"] = "localai-vibevoice"
-	workers := config["workers"].([]map[string]any)
-	workers[0]["name"] = "tts-worker"
-	workers[0]["model"] = "tts"
-	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
-
-	dir := support.ScaffoldFactory(t, config)
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -64,9 +56,16 @@ func TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t *testing.T) {
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			backendResolverCalls++
+			return pinnedTTSBackendSelection(), nil
+		},
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:    modelServer.Client(),
+		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
 
 	var output bytes.Buffer
@@ -98,8 +97,8 @@ func TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t *testing.T) {
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("joined asset network calls = %d, want 0 from content-addressed cache", rejectingNetwork.Calls())
 	}
-	if hostLauncher.Calls() != 0 {
-		t.Fatalf("joined host starts = %d, want 0 for validation-only metadata", hostLauncher.Calls())
+	if backendResolverCalls != 0 || hostLauncher.Calls() != 0 {
+		t.Fatalf("validation-only joined effects = resolver %d, starts %d; want 0/0", backendResolverCalls, hostLauncher.Calls())
 	}
 
 	closer, ok := process.(interface{ Close(context.Context) error })
