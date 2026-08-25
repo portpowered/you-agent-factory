@@ -84,6 +84,43 @@ func provideFactorySessionReplayInputs(
 	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
 }
 
+// provideRecordingsProjectionCapability carries the already-composed
+// Recordings projection across the neutral initializer boundary.
+func provideRecordingsProjectionCapability(
+	service recordings.Service,
+) processcontract.RecordingsProjectionCapability {
+	var projection recordings.ProjectionService
+	if opening, ok := service.(recordings.RuntimeOpening); ok {
+		projection = opening.Projection()
+	}
+	return recordingsProjectionCapability{projection: projection}
+}
+
+type recordingsProjectionCapability struct {
+	projection recordings.ProjectionService
+}
+
+func (capability recordingsProjectionCapability) RecordingsProjection() any {
+	return recordingsProjection{projection: capability.projection}
+}
+
+type recordingsProjection struct {
+	projection recordings.ProjectionService
+}
+
+func (projection recordingsProjection) ReconstructFactoryWorldState(
+	events []recordings.FactoryEvent,
+	selectedTick int,
+) (recordings.FactoryWorldState, error) {
+	return projection.projection.ReconstructFactoryWorldState(events, selectedTick)
+}
+
+func (projection recordingsProjection) ProjectWorkstationRequests(
+	world recordings.FactoryWorldState,
+) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return projection.projection.ProjectWorkstationRequests(world)
+}
+
 // provideOperatorSettingsCapability carries the already-composed Operator
 // Settings root across the neutral initializer boundary for public bindings.
 func provideOperatorSettingsCapability(

@@ -760,8 +760,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	processRecordingsProjectionCapability := provideRecordingsProjectionCapability(recordingsService)
 	processOperatorSettingsCapability := provideOperatorSettingsCapability(operatorsettingsService)
-	process, err := application.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability, processRuntimeCostsQueryCapability, processOperatorSettingsCapability)
+	process, err := application.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processDetachedOperationsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability, processRuntimeCostsQueryCapability, processRecordingsProjectionCapability, processOperatorSettingsCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -875,6 +876,7 @@ var servicesSet = wire5.NewSet(
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
 	provideWorkerRecordingReader,
+	provideRecordingsProjectionCapability,
 	provideOperatorSettingsCapability,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,

@@ -152,6 +152,12 @@ type RuntimeCostsQueryCapability interface {
 	RuntimeCostsQuery() any
 }
 
+// RecordingsProjectionCapability is the neutral process handoff for the
+// already-composed Recordings projection used by public HTTP reads.
+type RecordingsProjectionCapability interface {
+	RecordingsProjection() any
+}
+
 // OperatorSettingsCapability is the neutral process handoff for the
 // already-composed Operator Settings root. The initializer keeps this value
 // opaque; pkg/root reifies the service-owned contract for public transports.

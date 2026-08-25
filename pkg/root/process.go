@@ -10,6 +10,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
@@ -80,6 +81,28 @@ func CostsQueryFromProcess(process any) costs.CostsQuery {
 	}
 	query, _ := capability.RuntimeCostsQuery().(costs.CostsQuery)
 	return query
+}
+
+// RecordingsProjection is the narrow Recordings read capability exposed by a
+// canonical process for the generated HTTP projection boundary.
+type RecordingsProjection interface {
+	ReconstructFactoryWorldState([]recordings.FactoryEvent, int) (recordings.FactoryWorldState, error)
+	ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice
+}
+
+// RecordingsProjectionFromProcess returns the already-composed Recordings
+// projection capability carried by a canonical process.
+func RecordingsProjectionFromProcess(process any) RecordingsProjection {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.RecordingsProjection()
+	if capability == nil {
+		return nil
+	}
+	projection, _ := capability.RecordingsProjection().(RecordingsProjection)
+	return projection
 }
 
 // OperatorSettingsFromProcess returns the already-composed Operator Settings
