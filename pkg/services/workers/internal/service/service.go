@@ -149,10 +149,10 @@ func newService(
 	}, nil
 }
 
-// contentURLSafetyValidator is an optional method on the Work materializer.
-// It stays private to Workers because the public Work root already owns the
-// safety policy; providers that retain a valid remote URL still need that
-// policy checked before they receive the request.
+// contentURLSafetyValidator is an optional capability on the Work materializer
+// role. It stays private to Workers because the public Work root owns the
+// safety policy; it becomes required before an ACP provider receives a remote
+// URL that Workers intentionally preserves for provider-side retrieval.
 type contentURLSafetyValidator interface {
 	ValidateContentURLSafety(context.Context, string) error
 }
@@ -290,10 +290,17 @@ func (s *Service) materializeContentParts(
 			return fmt.Errorf("%s content part %d: resolve URL: %w", owner, partIndex, err)
 		}
 		if preserveACPRemoteResourceURL(executorProvider, resolvedURL) {
-			if validator, ok := s.contentMaterializer.(contentURLSafetyValidator); ok {
-				if err := validator.ValidateContentURLSafety(ctx, resolvedURL); err != nil {
-					return fmt.Errorf("%s content part %d: validate URL safety: %w", owner, partIndex, err)
-				}
+			validator, ok := s.contentMaterializer.(contentURLSafetyValidator)
+			if !ok {
+				return fmt.Errorf(
+					"%w: %s content part %d: Work content materializer cannot validate ACP remote URL safety",
+					workers.ErrInvalidExecuteRequest,
+					owner,
+					partIndex,
+				)
+			}
+			if err := validator.ValidateContentURLSafety(ctx, resolvedURL); err != nil {
+				return fmt.Errorf("%s content part %d: validate URL safety: %w", owner, partIndex, err)
 			}
 			continue
 		}

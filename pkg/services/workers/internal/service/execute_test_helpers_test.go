@@ -178,6 +178,22 @@ func (*unsafeRemoteContentMaterializer) ValidateContentURLSafety(
 	return fmt.Errorf("reject private target: %w", work.ErrUnsafeContentURL)
 }
 
+type safeRemoteContentMaterializer struct {
+	calls atomic.Int32
+}
+
+func (materializer *safeRemoteContentMaterializer) MaterializeContentURL(
+	context.Context,
+	string,
+) (string, work.ContentCleanup, error) {
+	materializer.calls.Add(1)
+	return "", nil, fmt.Errorf("remote ACP resource should not be materialized")
+}
+
+func (*safeRemoteContentMaterializer) ValidateContentURLSafety(context.Context, string) error {
+	return nil
+}
+
 func TestExecuteRejectsUnsafeWorkContentBeforeRunner(t *testing.T) {
 	t.Parallel()
 
@@ -278,7 +294,7 @@ func TestExecuteRejectsMediaContentWithoutMaterializerBeforeRunner(t *testing.T)
 func TestExecutePreservesRemoteACPResourceURLs(t *testing.T) {
 	t.Parallel()
 
-	var materializerCalls atomic.Int32
+	materializer := &safeRemoteContentMaterializer{}
 	service := mustExecuteServiceWithContentMaterializer(
 		t,
 		&stubRunner{execute: func(
@@ -298,13 +314,7 @@ func TestExecutePreservesRemoteACPResourceURLs(t *testing.T) {
 			}
 			return workers.RunnerExecutionResult{Content: "resource accepted"}, nil
 		}},
-		work.ContentMaterializeFunc(func(
-			context.Context,
-			string,
-		) (string, work.ContentCleanup, error) {
-			materializerCalls.Add(1)
-			return "", nil, fmt.Errorf("remote ACP resource should not be materialized")
-		}),
+		materializer,
 	)
 
 	request := validExecuteRequest("dispatch-acp-resource", "attempt-acp-resource")
@@ -324,8 +334,8 @@ func TestExecutePreservesRemoteACPResourceURLs(t *testing.T) {
 	if result.Outcome != workers.ExecutionOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
 	}
-	if materializerCalls.Load() != 0 {
-		t.Fatalf("materializer calls = %d, want zero for ACP resource URL", materializerCalls.Load())
+	if materializer.calls.Load() != 0 {
+		t.Fatalf("materializer calls = %d, want zero for ACP resource URL", materializer.calls.Load())
 	}
 }
 
