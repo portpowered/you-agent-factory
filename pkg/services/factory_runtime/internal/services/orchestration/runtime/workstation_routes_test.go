@@ -25,41 +25,6 @@ type routeNamesTestExecutor struct{}
 
 type invocationInterpolationTestService struct{}
 
-type promptProvenanceInvocationInterpolationTestService struct {
-	invocationInterpolationTestService
-}
-
-func (promptProvenanceInvocationInterpolationTestService) InterpolatePromptWithProvenance(
-	authored string,
-	invocation *work.InvocationArguments,
-	_ interfaces.FileReader,
-) (string, []interfaces.InvocationSensitiveTextSpan, error) {
-	value := authored
-	var spans []interfaces.InvocationSensitiveTextSpan
-	if invocation == nil {
-		return value, nil, nil
-	}
-	for name, argument := range invocation.Arguments {
-		if len(argument.Values) != 1 {
-			continue
-		}
-		placeholder := "${" + name + "}"
-		start := strings.Index(value, placeholder)
-		if start < 0 {
-			continue
-		}
-		replacement := argument.Values[0]
-		value = strings.Replace(value, placeholder, replacement, 1)
-		if argument.Sensitive && replacement != "" {
-			spans = append(spans, interfaces.InvocationSensitiveTextSpan{
-				Start: start,
-				End:   start + len(replacement),
-			})
-		}
-	}
-	return value, spans, nil
-}
-
 func (invocationInterpolationTestService) ValidateInvocationInterpolation(
 	*interfaces.FactoryConfig,
 	*work.InvocationArguments,
@@ -419,81 +384,6 @@ func TestRenderRuntimePromptInterpolatesInvocationArguments(t *testing.T) {
 	}
 }
 
-func TestRenderRuntimePromptCarriesDispatchSpecificRedactionProjection(t *testing.T) {
-	cfg := &runtimeConfig{
-		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
-		promptRenderer: runtimePromptRendererFunc(func(
-			prompt string,
-			_ []workers.Token,
-			_ *workers.Context,
-		) (string, error) {
-			return prompt, nil
-		}),
-	}
-	selection := &runtimeExecutionSelection{
-		promptTemplate: "prefix=${visible};token=${secret};suffix",
-	}
-	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
-		"visible": {Values: []string{"shown"}},
-		"secret":  {Values: []string{"hidden"}, Sensitive: true},
-	}}
-
-	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, invocation); err != nil {
-		t.Fatalf("renderRuntimePrompt() error = %v", err)
-	}
-	if selection.userMessage != "prefix=shown;token=hidden;suffix" {
-		t.Fatalf("userMessage = %q, want real prompt preserved for execution", selection.userMessage)
-	}
-	if selection.promptRedaction == nil || selection.promptRedaction.FailClosed {
-		t.Fatalf("promptRedaction = %#v, want valid dispatch provenance", selection.promptRedaction)
-	}
-	if selection.promptRedaction.UserMessage != "prefix=shown;token=<redacted>;suffix" {
-		t.Fatalf("recording prompt = %q, want adjacent visible text preserved", selection.promptRedaction.UserMessage)
-	}
-	if !selection.promptRedaction.RedactUserMessage {
-		t.Fatal("RedactUserMessage = false, want explicit sensitive binding provenance")
-	}
-}
-
-func TestRenderRuntimePromptLeavesUnrelatedDispatchComplete(t *testing.T) {
-	cfg := &runtimeConfig{
-		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
-		promptRenderer: runtimePromptRendererFunc(func(
-			prompt string,
-			_ []workers.Token,
-			_ *workers.Context,
-		) (string, error) {
-			return prompt, nil
-		}),
-	}
-	selection := &runtimeExecutionSelection{promptTemplate: "unrelated dispatch"}
-	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
-		"secret": {Values: []string{"hidden"}, Sensitive: true},
-	}}
-
-	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, invocation); err != nil {
-		t.Fatalf("renderRuntimePrompt() error = %v", err)
-	}
-	if selection.userMessage != "unrelated dispatch" || selection.promptRedaction != nil {
-		t.Fatalf("selection = %#v, want complete prompt with no redaction projection", selection)
-	}
-}
-
-func TestBuildRuntimePromptRedactionFailsClosedOnInvalidSpan(t *testing.T) {
-	selection := &runtimeExecutionSelection{
-		userMessage:    "visible secret",
-		promptTemplate: "visible secret",
-		userPromptProvenance: runtimePromptFieldProvenance{
-			available: true,
-			spans:     []interfaces.InvocationSensitiveTextSpan{{Start: 20, End: 21}},
-		},
-	}
-	redaction := buildRuntimePromptRedaction(nil, selection, nil, nil)
-	if redaction == nil || !redaction.FailClosed || !redaction.RedactUserMessage {
-		t.Fatalf("redaction = %#v, want fail-closed user prompt projection", redaction)
-	}
-}
-
 func TestRuntimePromptSourceContentRefreshesAuthoredFiles(t *testing.T) {
 	t.Parallel()
 
@@ -523,60 +413,6 @@ func TestRuntimePromptSourceContentRefreshesAuthoredFiles(t *testing.T) {
 	}
 	if _, ok := runtimePromptSourceContent(cfg, "missing", true, true); ok {
 		t.Fatal("missing prompt source reported found")
-	}
-}
-
-func TestRuntimeWorkstationPromptProvenanceUsesAuthoredBodySource(t *testing.T) {
-	lookup := runtimePromptSourceLookupFixture{
-		RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{},
-		workstation:                    interfaces.PromptSource{Path: "workstation.md"},
-	}
-	cfg := &runtimeConfig{
-		runtimeConfig:           lookup,
-		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
-		promptSourceReader: func(path string) ([]byte, error) {
-			if path != "workstation.md" {
-				return nil, errors.New("missing source")
-			}
-			return []byte("---\ntype: MODEL_WORKSTATION\n---\ncontrol=visible secret=${secret}\n"), nil
-		},
-	}
-	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
-		"secret": {Values: []string{"resolved-secret"}, Sensitive: true},
-	}}
-	provenance := runtimeWorkstationPromptProvenance(
-		cfg,
-		&interfaces.FactoryWorkstationConfig{
-			Name:           "workstation",
-			Body:           "control=visible secret=resolved-secret",
-			PromptTemplate: "control=visible secret=resolved-secret",
-		},
-		invocation,
-	)
-	if !provenance.body.available || !provenance.body.sensitive() {
-		t.Fatalf("body provenance = %#v, want sensitive authored-body spans", provenance.body)
-	}
-	if provenance.body.resolved != "control=visible secret=resolved-secret" {
-		t.Fatalf("body provenance resolved = %q, want interpolated authored body", provenance.body.resolved)
-	}
-
-	selection := &runtimeExecutionSelection{systemPrompt: provenance.body.resolved}
-	applyRuntimeWorkstationSelection(
-		cfg,
-		selection,
-		invocation,
-		&interfaces.FactoryWorkstationConfig{
-			Name: "workstation",
-			Body: provenance.body.resolved,
-		},
-		provenance,
-	)
-	if !selection.systemPromptProvenance.sensitive() {
-		t.Fatalf("selection system prompt provenance = %#v, want sensitive spans", selection.systemPromptProvenance)
-	}
-	safe, ok := redactRuntimePromptText(selection.systemPrompt, selection.systemPromptProvenance.spans)
-	if !ok || safe != "control=visible secret=<redacted>" {
-		t.Fatalf("safe system prompt = %q, %t, want adjacent control preserved", safe, ok)
 	}
 }
 

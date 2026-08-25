@@ -15,16 +15,6 @@ type InvocationInterpolationService interface {
 	InterpolateWorkstationConfig(FactoryWorkstationConfig, *work.InvocationArguments, FileReader) (FactoryWorkstationConfig, error)
 }
 
-// InvocationPromptProvenanceService is an optional capability of the
-// invocation interpolator. It resolves one prompt string and returns the
-// value-free byte ranges contributed by declared-sensitive invocation
-// arguments. Keeping this capability optional preserves compatibility with
-// callers that only need ordinary interpolation while allowing recording
-// boundaries to require explicit prompt provenance.
-type InvocationPromptProvenanceService interface {
-	InterpolatePromptWithProvenance(string, *work.InvocationArguments, FileReader) (string, []InvocationSensitiveTextSpan, error)
-}
-
 // InvocationSensitiveTextSpan identifies a byte range in an interpolated
 // prompt that came from a declared-sensitive invocation argument. Start and
 // End are zero-based UTF-8 byte offsets, with End exclusive. The span never
@@ -44,11 +34,4 @@ type InvocationSensitiveJSONSpan struct {
 	JSONPointer string
 	Start       int
 	End         int
-}
-
-// InvocationSensitiveJSONSpanSource is an optional capability implemented by
-// invocation-bound loaded Factory sources. Sources without invocation-bound
-// sensitive values do not need to implement it.
-type InvocationSensitiveJSONSpanSource interface {
-	InvocationSensitiveJSONSpans() []InvocationSensitiveJSONSpan
 }

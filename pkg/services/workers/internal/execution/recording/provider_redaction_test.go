@@ -138,21 +138,25 @@ func TestProviderRecorderKeepsEmptyPromptAndRetryDecisionsDispatchScoped(t *test
 	if len(events) != 6 {
 		t.Fatalf("events = %d, want two retry attempts plus one independent attempt", len(events))
 	}
+	assertDispatchScopedPromptEvents(t, events)
+}
+
+func assertDispatchScopedPromptEvents(t *testing.T, events []workers.InferenceEvent) {
+	t.Helper()
+	wantPrompts := map[string]string{
+		"retry-dispatch": "before <redacted> after",
+		"empty-dispatch": "",
+	}
 	for index, event := range events {
 		if event.Kind != workers.InferenceEventKindRequest {
 			continue
 		}
-		switch event.DispatchID {
-		case "retry-dispatch":
-			if event.Request == nil || event.Request.Prompt != "before <redacted> after" || len(event.DeclaredSecretJSONPointers) != 0 {
-				t.Fatalf("retry event %d = %#v, want same safe prompt decision", index, event)
-			}
-		case "empty-dispatch":
-			if event.Request == nil || event.Request.Prompt != "" || len(event.DeclaredSecretJSONPointers) != 0 {
-				t.Fatalf("empty event %d = %#v, want empty prompt without whole-field provenance", index, event)
-			}
-		default:
+		want, ok := wantPrompts[event.DispatchID]
+		if !ok {
 			t.Fatalf("unexpected dispatch %q in event %d", event.DispatchID, index)
+		}
+		if event.Request == nil || event.Request.Prompt != want || len(event.DeclaredSecretJSONPointers) != 0 {
+			t.Fatalf("dispatch event %d = %#v, want prompt %q without whole-field provenance", index, event, want)
 		}
 	}
 }

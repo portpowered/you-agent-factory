@@ -73,7 +73,9 @@ func (source preparedInitialFactorySnapshotSource) Workstation(
 }
 
 func (source preparedInitialFactorySnapshotSource) InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan {
-	provenance, ok := source.loaded.(factorydefinitions.InvocationSensitiveJSONSpanSource)
+	provenance, ok := source.loaded.(interface {
+		InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan
+	})
 	if !ok {
 		return nil
 	}

@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -417,4 +420,270 @@ func withDispatchID(event interfaces.FactoryEvent, dispatchID string) interfaces
 		event.Context.DispatchID = &dispatchID
 	}
 	return event
+}
+
+type promptProvenanceInvocationInterpolationTestService struct {
+	invocationInterpolationTestService
+}
+
+func (promptProvenanceInvocationInterpolationTestService) InterpolatePromptWithProvenance(
+	authored string,
+	invocation *work.InvocationArguments,
+	_ interfaces.FileReader,
+) (string, []interfaces.InvocationSensitiveTextSpan, error) {
+	var spans []interfaces.InvocationSensitiveTextSpan
+	if invocation == nil {
+		return authored, nil, nil
+	}
+	var builder strings.Builder
+	cursor := 0
+	for cursor < len(authored) {
+		startOffset := strings.Index(authored[cursor:], "${")
+		if startOffset < 0 {
+			break
+		}
+		start := cursor + startOffset
+		endOffset := strings.IndexByte(authored[start+2:], '}')
+		if endOffset < 0 {
+			break
+		}
+		end := start + 2 + endOffset + 1
+		name := authored[start+2 : end-1]
+		argument, ok := invocation.Arguments[name]
+		if !ok || len(argument.Values) != 1 {
+			builder.WriteString(authored[cursor:end])
+			cursor = end
+			continue
+		}
+		builder.WriteString(authored[cursor:start])
+		replacement := argument.Values[0]
+		replacementStart := builder.Len()
+		builder.WriteString(replacement)
+		if argument.Sensitive && replacement != "" {
+			spans = append(spans, interfaces.InvocationSensitiveTextSpan{
+				Start: replacementStart,
+				End:   builder.Len(),
+			})
+		}
+		cursor = end
+	}
+	builder.WriteString(authored[cursor:])
+	return builder.String(), spans, nil
+}
+
+func TestRenderRuntimePromptCarriesDispatchSpecificRedactionProjection(t *testing.T) {
+	cfg := &runtimeConfig{
+		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			_ []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			return prompt, nil
+		}),
+	}
+	selection := &runtimeExecutionSelection{
+		promptTemplate: "prefix=${visible};token=${secret};suffix",
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"visible": {Values: []string{"shown"}},
+		"secret":  {Values: []string{"hidden"}, Sensitive: true},
+	}}
+
+	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, invocation); err != nil {
+		t.Fatalf("renderRuntimePrompt() error = %v", err)
+	}
+	if selection.userMessage != "prefix=shown;token=hidden;suffix" {
+		t.Fatalf("userMessage = %q, want real prompt preserved for execution", selection.userMessage)
+	}
+	if selection.promptRedaction == nil || selection.promptRedaction.FailClosed {
+		t.Fatalf("promptRedaction = %#v, want valid dispatch provenance", selection.promptRedaction)
+	}
+	if selection.promptRedaction.UserMessage != "prefix=shown;token=<redacted>;suffix" {
+		t.Fatalf("recording prompt = %q, want adjacent visible text preserved", selection.promptRedaction.UserMessage)
+	}
+	if !selection.promptRedaction.RedactUserMessage {
+		t.Fatal("RedactUserMessage = false, want explicit sensitive binding provenance")
+	}
+}
+
+func TestRenderRuntimePromptFailsClosedWithoutPromptProvenance(t *testing.T) {
+	cfg := &runtimeConfig{
+		invocationInterpolation: invocationInterpolationTestService{},
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			_ []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			return prompt, nil
+		}),
+	}
+	selection := &runtimeExecutionSelection{promptTemplate: "visible=${secret}"}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"secret": {Values: []string{"hidden"}, Sensitive: true},
+	}}
+
+	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, invocation); err != nil {
+		t.Fatalf("renderRuntimePrompt() error = %v", err)
+	}
+	if selection.userMessage != "visible=hidden" {
+		t.Fatalf("userMessage = %q, want resolved execution prompt", selection.userMessage)
+	}
+	redaction := selection.promptRedaction
+	if redaction == nil || !redaction.FailClosed || !redaction.RedactUserMessage {
+		t.Fatalf("promptRedaction = %#v, want complete-field fail-closed projection", redaction)
+	}
+}
+
+func TestRenderRuntimePromptLeavesUnrelatedDispatchComplete(t *testing.T) {
+	cfg := &runtimeConfig{
+		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			_ []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			return prompt, nil
+		}),
+	}
+	selection := &runtimeExecutionSelection{promptTemplate: "unrelated dispatch"}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"secret": {Values: []string{"hidden"}, Sensitive: true},
+	}}
+
+	if err := renderRuntimePrompt(cfg, selection, nil, &workers.Context{}, nil, invocation); err != nil {
+		t.Fatalf("renderRuntimePrompt() error = %v", err)
+	}
+	if selection.userMessage != "unrelated dispatch" || selection.promptRedaction != nil {
+		t.Fatalf("selection = %#v, want complete prompt with no redaction projection", selection)
+	}
+}
+
+func TestBuildRuntimePromptRedactionFailsClosedOnInvalidSpan(t *testing.T) {
+	selection := &runtimeExecutionSelection{
+		userMessage:    "visible secret",
+		promptTemplate: "visible secret",
+		userPromptProvenance: runtimePromptFieldProvenance{
+			available: true,
+			spans:     []interfaces.InvocationSensitiveTextSpan{{Start: 20, End: 21}},
+		},
+	}
+	redaction := buildRuntimePromptRedaction(nil, selection, nil, nil)
+	if redaction == nil || !redaction.FailClosed || !redaction.RedactUserMessage {
+		t.Fatalf("redaction = %#v, want fail-closed user prompt projection", redaction)
+	}
+}
+
+func TestRuntimeWorkstationPromptProvenanceUsesAuthoredBodySource(t *testing.T) {
+	lookup := runtimePromptSourceLookupFixture{
+		RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{},
+		workstation:                    interfaces.PromptSource{Path: "workstation.md"},
+	}
+	cfg := &runtimeConfig{
+		runtimeConfig:           lookup,
+		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
+		promptSourceReader: func(path string) ([]byte, error) {
+			if path != "workstation.md" {
+				return nil, errors.New("missing source")
+			}
+			return []byte("---\ntype: MODEL_WORKSTATION\n---\ncontrol=visible secret=${secret}\n"), nil
+		},
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"secret": {Values: []string{"resolved-secret"}, Sensitive: true},
+	}}
+	provenance := runtimeWorkstationPromptProvenance(
+		cfg,
+		&interfaces.FactoryWorkstationConfig{
+			Name:           "workstation",
+			Body:           "control=visible secret=resolved-secret",
+			PromptTemplate: "control=visible secret=resolved-secret",
+		},
+		invocation,
+	)
+	if !provenance.body.available || !provenance.body.sensitive() {
+		t.Fatalf("body provenance = %#v, want sensitive authored-body spans", provenance.body)
+	}
+	if provenance.body.resolved != "control=visible secret=resolved-secret" {
+		t.Fatalf("body provenance resolved = %q, want interpolated authored body", provenance.body.resolved)
+	}
+
+	selection := &runtimeExecutionSelection{systemPrompt: provenance.body.resolved}
+	applyRuntimeWorkstationSelection(
+		cfg,
+		selection,
+		invocation,
+		&interfaces.FactoryWorkstationConfig{
+			Name: "workstation",
+			Body: provenance.body.resolved,
+		},
+		provenance,
+	)
+	if !selection.systemPromptProvenance.sensitive() {
+		t.Fatalf("selection system prompt provenance = %#v, want sensitive spans", selection.systemPromptProvenance)
+	}
+	safe, ok := redactRuntimePromptText(selection.systemPrompt, selection.systemPromptProvenance.spans)
+	if !ok || safe != "control=visible secret=<redacted>" {
+		t.Fatalf("safe system prompt = %q, %t, want adjacent control preserved", safe, ok)
+	}
+}
+
+func TestRecordDetachedAgentRunResponseUsesDispatchPromptProjection(t *testing.T) {
+	t.Parallel()
+
+	ledger := &agentRunRecordingLedger{
+		ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{},
+	}
+	cfg := &runtimeConfig{
+		eventHistory: ledger,
+		clock:        testRuntimeClock{},
+		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"agent": {Name: "agent", Type: interfaces.WorkstationTypeAgent},
+			},
+		},
+	}
+	request := workers.ExecuteRequest{
+		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-secret"},
+		Input:       workers.ExecutionInput{Dispatch: work.WorkDispatch{}},
+		Target: workers.ExecutionTarget{
+			WorkstationName: "agent",
+			Prompt: workers.PromptPolicy{
+				SystemPrompt: "system token-secret visible",
+				UserMessage:  "user token-secret visible",
+				Redaction: &workers.PromptRedaction{
+					SystemPrompt:       "system <redacted> visible",
+					UserMessage:        "user <redacted> visible",
+					RedactSystemPrompt: true,
+					RedactUserMessage:  true,
+				},
+			},
+		},
+	}
+
+	recordDetachedAgentRunResponse(cfg, request, workers.ExecuteResult{}, nil)
+
+	diagnostics, err := workers.SafeWorkDiagnosticsFromEventPayload(ledger.event.Payload.Diagnostics)
+	if err != nil {
+		t.Fatalf("decode diagnostics: %v", err)
+	}
+	if diagnostics.AgentRun == nil || len(diagnostics.AgentRun.Transcript) != 2 {
+		t.Fatalf("transcript = %#v, want projected system and user entries", diagnostics.AgentRun)
+	}
+	if diagnostics.AgentRun.Transcript[0].Summary != "system <redacted> visible" ||
+		diagnostics.AgentRun.Transcript[1].Summary != "user <redacted> visible" {
+		t.Fatalf("transcript = %#v, want adjacent visible text preserved", diagnostics.AgentRun.Transcript)
+	}
+	if len(ledger.event.DeclaredSecretJSONPointers) != 0 {
+		t.Fatalf("transcript provenance = %#v, want no whole-entry fallback", ledger.event.DeclaredSecretJSONPointers)
+	}
+}
+
+type agentRunRecordingLedger struct {
+	*recordingfixtures.ScriptedRuntimeLedger
+	event workers.AgentRunResponseEvent
+}
+
+func (ledger *agentRunRecordingLedger) RecordAgentRunEvent(event workers.AgentRunResponseEvent) {
+	ledger.event = event
 }

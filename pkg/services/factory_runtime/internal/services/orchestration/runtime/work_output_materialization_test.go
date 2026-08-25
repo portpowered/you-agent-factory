@@ -935,66 +935,6 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	}
 }
 
-func TestRecordDetachedAgentRunResponseUsesDispatchPromptProjection(t *testing.T) {
-	t.Parallel()
-
-	ledger := &agentRunRecordingLedger{
-		ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{},
-	}
-	cfg := &runtimeConfig{
-		eventHistory: ledger,
-		clock:        testRuntimeClock{},
-		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"agent": {Name: "agent", Type: interfaces.WorkstationTypeAgent},
-			},
-		},
-	}
-	request := workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{DispatchID: "dispatch-secret"},
-		Input:       workers.ExecutionInput{Dispatch: work.WorkDispatch{}},
-		Target: workers.ExecutionTarget{
-			WorkstationName: "agent",
-			Prompt: workers.PromptPolicy{
-				SystemPrompt: "system token-secret visible",
-				UserMessage:  "user token-secret visible",
-				Redaction: &workers.PromptRedaction{
-					SystemPrompt:       "system <redacted> visible",
-					UserMessage:        "user <redacted> visible",
-					RedactSystemPrompt: true,
-					RedactUserMessage:  true,
-				},
-			},
-		},
-	}
-
-	recordDetachedAgentRunResponse(cfg, request, workers.ExecuteResult{}, nil)
-
-	diagnostics, err := workers.SafeWorkDiagnosticsFromEventPayload(ledger.event.Payload.Diagnostics)
-	if err != nil {
-		t.Fatalf("decode diagnostics: %v", err)
-	}
-	if diagnostics.AgentRun == nil || len(diagnostics.AgentRun.Transcript) != 2 {
-		t.Fatalf("transcript = %#v, want projected system and user entries", diagnostics.AgentRun)
-	}
-	if diagnostics.AgentRun.Transcript[0].Summary != "system <redacted> visible" ||
-		diagnostics.AgentRun.Transcript[1].Summary != "user <redacted> visible" {
-		t.Fatalf("transcript = %#v, want adjacent visible text preserved", diagnostics.AgentRun.Transcript)
-	}
-	if len(ledger.event.DeclaredSecretJSONPointers) != 0 {
-		t.Fatalf("transcript provenance = %#v, want no whole-entry fallback", ledger.event.DeclaredSecretJSONPointers)
-	}
-}
-
-type agentRunRecordingLedger struct {
-	*recordingfixtures.ScriptedRuntimeLedger
-	event workers.AgentRunResponseEvent
-}
-
-func (ledger *agentRunRecordingLedger) RecordAgentRunEvent(event workers.AgentRunResponseEvent) {
-	ledger.event = event
-}
-
 func testMaterializationService() work.Service {
 	return testRuntimeWorkService{}
 }

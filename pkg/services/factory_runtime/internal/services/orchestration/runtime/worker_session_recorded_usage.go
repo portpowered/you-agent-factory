@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -12,6 +14,14 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type runtimeInvocationPromptProvenanceService interface {
+	InterpolatePromptWithProvenance(
+		string,
+		*work.InvocationArguments,
+		interfaces.FileReader,
+	) (string, []interfaces.InvocationSensitiveTextSpan, error)
+}
 
 // recordedTokenUsageFromDiagnostics preserves provider usage in the
 // event-first Worker Session projection. Provider-session transcript storage
@@ -332,4 +342,318 @@ func appendTranscriptEntry(
 		Role:    role,
 		Summary: content,
 	})
+}
+
+type runtimePromptFieldProvenance struct {
+	resolved  string
+	spans     []interfaces.InvocationSensitiveTextSpan
+	available bool
+	invalid   bool
+}
+
+func (provenance runtimePromptFieldProvenance) sensitive() bool {
+	return len(provenance.spans) > 0
+}
+
+func (provenance runtimePromptFieldProvenance) clone() runtimePromptFieldProvenance {
+	provenance.spans = append([]interfaces.InvocationSensitiveTextSpan(nil), provenance.spans...)
+	return provenance
+}
+
+type runtimeWorkstationPromptProvenanceSet struct {
+	body           runtimePromptFieldProvenance
+	promptTemplate runtimePromptFieldProvenance
+}
+
+func runtimeWorkstationPromptProvenance(
+	cfg *runtimeConfig,
+	workstation *interfaces.FactoryWorkstationConfig,
+	invocation *work.InvocationArguments,
+) runtimeWorkstationPromptProvenanceSet {
+	if workstation == nil {
+		return runtimeWorkstationPromptProvenanceSet{}
+	}
+	body := workstation.Body
+	if source, found := runtimePromptSource(cfg, workstation.Name, false); found && !source.IsTemplate {
+		if authoredBody, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
+			body = authoredBody
+		}
+	}
+	return runtimeWorkstationPromptProvenanceSet{
+		body:           runtimePromptFieldProvenanceForText(cfg, body, invocation),
+		promptTemplate: runtimePromptFieldProvenanceForText(cfg, workstation.PromptTemplate, invocation),
+	}
+}
+
+func runtimePromptFieldProvenanceForText(
+	cfg *runtimeConfig,
+	authored string,
+	invocation *work.InvocationArguments,
+) runtimePromptFieldProvenance {
+	if cfg == nil || cfg.invocationInterpolation == nil || authored == "" {
+		return runtimePromptFieldProvenance{}
+	}
+	service, ok := cfg.invocationInterpolation.(runtimeInvocationPromptProvenanceService)
+	if !ok || service == nil {
+		if invocationHasSensitiveArgument(invocation) {
+			return runtimePromptFieldProvenance{available: true, invalid: true}
+		}
+		return runtimePromptFieldProvenance{}
+	}
+	resolved, spans, err := service.InterpolatePromptWithProvenance(
+		authored,
+		invocation,
+		cfg.invocationFileReader,
+	)
+	provenance := runtimePromptFieldProvenance{
+		resolved:  resolved,
+		spans:     append([]interfaces.InvocationSensitiveTextSpan(nil), spans...),
+		available: true,
+	}
+	if err != nil {
+		provenance.invalid = true
+	}
+	return provenance
+}
+
+func invocationHasSensitiveArgument(invocation *work.InvocationArguments) bool {
+	if invocation == nil {
+		return false
+	}
+	for _, argument := range invocation.Arguments {
+		if argument.Sensitive {
+			return true
+		}
+	}
+	return false
+}
+
+func validateRuntimePromptProvenance(
+	provenance *runtimePromptFieldProvenance,
+	actual string,
+) {
+	if provenance == nil || !provenance.available || provenance.invalid {
+		return
+	}
+	if provenance.resolved != actual {
+		provenance.invalid = true
+	}
+}
+
+func renderRuntimePrompt(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	inputs []workers.WorkInput,
+	invocation *work.InvocationArguments,
+) error {
+	if selection == nil {
+		return nil
+	}
+	if selection.interpolationError != nil {
+		return wrapRuntimePromptRenderError(selection.interpolationError)
+	}
+	if err := interpolateRuntimePromptTemplate(cfg, selection, invocation); err != nil {
+		return wrapRuntimePromptRenderError(err)
+	}
+	if err := renderRuntimePromptMessage(cfg, selection, tokens, workflowContext, inputs); err != nil {
+		return wrapRuntimePromptRenderError(err)
+	}
+	if err := resolveRuntimeTemplateFields(cfg, selection, tokens, workflowContext); err != nil {
+		return wrapRuntimePromptRenderError(err)
+	}
+	selection.promptRedaction = buildRuntimePromptRedaction(cfg, selection, tokens, workflowContext)
+	return nil
+}
+
+func interpolateRuntimePromptTemplate(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	invocation *work.InvocationArguments,
+) error {
+	if cfg == nil || cfg.invocationInterpolation == nil ||
+		selection.promptTemplate == "" || selection.promptTemplateInterpolated {
+		return nil
+	}
+	provenance := runtimePromptFieldProvenanceForText(cfg, selection.promptTemplate, invocation)
+	interpolated, err := cfg.invocationInterpolation.InterpolateWorkstationConfig(
+		interfaces.FactoryWorkstationConfig{PromptTemplate: selection.promptTemplate},
+		invocation,
+		cfg.invocationFileReader,
+	)
+	if err != nil {
+		return fmt.Errorf("interpolate workstation prompt: %w", err)
+	}
+	selection.promptTemplate = interpolated.PromptTemplate
+	validateRuntimePromptProvenance(&provenance, selection.promptTemplate)
+	if provenance.available {
+		selection.userPromptProvenance = provenance
+	}
+	selection.promptTemplateInterpolated = true
+	return nil
+}
+
+func renderRuntimePromptMessage(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	inputs []workers.WorkInput,
+) error {
+	if selection.userMessage != "" || selection.promptTemplate == "" {
+		return nil
+	}
+	if cfg == nil || cfg.promptRenderer == nil {
+		// Legacy test and adapter callers may not provide the optional renderer.
+		// Preserve their detached execution behavior by using the same payload
+		// fallback as an empty authored prompt.
+		selection.userMessage = workInputMessage(inputs)
+		return nil
+	}
+	rendered, err := cfg.promptRenderer.RenderPrompt(
+		selection.promptTemplate,
+		tokens,
+		workflowContext,
+	)
+	if err != nil {
+		return fmt.Errorf("render workstation prompt: %w", err)
+	}
+	selection.userMessage = rendered
+	return nil
+}
+
+func resolveRuntimeTemplateFields(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+) error {
+	if cfg == nil || cfg.templateFieldResolver == nil {
+		return nil
+	}
+	resolved, err := cfg.templateFieldResolver.ResolveTemplateFields(
+		selection.workingDirectory,
+		selection.environment,
+		tokens,
+		workflowContext,
+		selection.worktree,
+	)
+	if err != nil {
+		return fmt.Errorf("resolve workstation execution fields: %w", err)
+	}
+	if resolved != nil {
+		selection.workingDirectory = resolved.WorkingDirectory
+		selection.worktree = resolved.Worktree
+		selection.environment = cloneRuntimeStringMap(resolved.Env)
+	}
+	return nil
+}
+
+const runtimePromptRedactionMarker = "<redacted>"
+
+func buildRuntimePromptRedaction(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+) *workers.PromptRedaction {
+	if selection == nil {
+		return nil
+	}
+	system := selection.systemPromptProvenance
+	user := selection.userPromptProvenance
+	if !system.available && !user.available {
+		return nil
+	}
+	redaction := &workers.PromptRedaction{}
+	applyRuntimeSystemPromptRedaction(selection, &system, redaction)
+	applyRuntimeUserPromptRedaction(cfg, selection, &user, tokens, workflowContext, redaction)
+	if !redaction.RedactSystemPrompt && !redaction.RedactUserMessage && !redaction.FailClosed {
+		return nil
+	}
+	return redaction
+}
+
+func applyRuntimeSystemPromptRedaction(
+	selection *runtimeExecutionSelection,
+	provenance *runtimePromptFieldProvenance,
+	redaction *workers.PromptRedaction,
+) {
+	if provenance.invalid {
+		redaction.FailClosed = true
+		redaction.RedactSystemPrompt = selection.systemPrompt != ""
+	}
+	if !provenance.sensitive() {
+		return
+	}
+	redaction.RedactSystemPrompt = true
+	safe, ok := redactRuntimePromptText(selection.systemPrompt, provenance.spans)
+	if !ok {
+		redaction.FailClosed = true
+		return
+	}
+	redaction.SystemPrompt = safe
+}
+
+func applyRuntimeUserPromptRedaction(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	provenance *runtimePromptFieldProvenance,
+	tokens []workers.Token,
+	workflowContext *workers.Context,
+	redaction *workers.PromptRedaction,
+) {
+	if provenance.invalid {
+		redaction.FailClosed = true
+		redaction.RedactUserMessage = selection.userMessage != ""
+	}
+	if !provenance.sensitive() {
+		return
+	}
+	redaction.RedactUserMessage = true
+	safeTemplate, ok := redactRuntimePromptText(selection.promptTemplate, provenance.spans)
+	if !ok || cfg == nil || cfg.promptRenderer == nil {
+		redaction.FailClosed = true
+		return
+	}
+	safe, err := cfg.promptRenderer.RenderPrompt(safeTemplate, tokens, workflowContext)
+	if err != nil {
+		redaction.FailClosed = true
+		return
+	}
+	redaction.UserMessage = safe
+}
+
+func redactRuntimePromptText(
+	value string,
+	spans []interfaces.InvocationSensitiveTextSpan,
+) (string, bool) {
+	if len(spans) == 0 || !utf8.ValidString(value) {
+		return "", false
+	}
+	ordered := append([]interfaces.InvocationSensitiveTextSpan(nil), spans...)
+	sort.Slice(ordered, func(left, right int) bool {
+		if ordered[left].Start != ordered[right].Start {
+			return ordered[left].Start < ordered[right].Start
+		}
+		return ordered[left].End < ordered[right].End
+	})
+	var builder strings.Builder
+	cursor := 0
+	for _, span := range ordered {
+		if span.Start < cursor || span.Start < 0 || span.End <= span.Start || span.End > len(value) {
+			return "", false
+		}
+		if !utf8.ValidString(value[span.Start:span.End]) ||
+			(span.Start > 0 && !utf8.ValidString(value[:span.Start])) ||
+			(span.End < len(value) && !utf8.ValidString(value[:span.End])) {
+			return "", false
+		}
+		builder.WriteString(value[cursor:span.Start])
+		builder.WriteString(runtimePromptRedactionMarker)
+		cursor = span.End
+	}
+	builder.WriteString(value[cursor:])
+	return builder.String(), true
 }

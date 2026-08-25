@@ -19,7 +19,6 @@ var invocationInterpolationPattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}
 type Service struct{}
 
 var _ factorydefinitions.InvocationInterpolationService = Service{}
-var _ factorydefinitions.InvocationPromptProvenanceService = Service{}
 
 // NewService returns the canonical Factory invocation interpolator.
 func NewService() factorydefinitions.InvocationInterpolationService {

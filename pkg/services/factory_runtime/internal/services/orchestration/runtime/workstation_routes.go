@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -104,87 +103,6 @@ type runtimeExecutionSelection struct {
 	worktree                    string
 	skipPermissions             bool
 	timeout                     time.Duration
-}
-
-type runtimePromptFieldProvenance struct {
-	resolved  string
-	spans     []interfaces.InvocationSensitiveTextSpan
-	available bool
-	invalid   bool
-}
-
-func (provenance runtimePromptFieldProvenance) sensitive() bool {
-	return len(provenance.spans) > 0
-}
-
-func (provenance runtimePromptFieldProvenance) clone() runtimePromptFieldProvenance {
-	provenance.spans = append([]interfaces.InvocationSensitiveTextSpan(nil), provenance.spans...)
-	return provenance
-}
-
-type runtimeWorkstationPromptProvenanceSet struct {
-	body           runtimePromptFieldProvenance
-	promptTemplate runtimePromptFieldProvenance
-}
-
-func runtimeWorkstationPromptProvenance(
-	cfg *runtimeConfig,
-	workstation *interfaces.FactoryWorkstationConfig,
-	invocation *work.InvocationArguments,
-) runtimeWorkstationPromptProvenanceSet {
-	if workstation == nil {
-		return runtimeWorkstationPromptProvenanceSet{}
-	}
-	body := workstation.Body
-	if source, found := runtimePromptSource(cfg, workstation.Name, false); found && !source.IsTemplate {
-		if authoredBody, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
-			body = authoredBody
-		}
-	}
-	return runtimeWorkstationPromptProvenanceSet{
-		body:           runtimePromptFieldProvenanceForText(cfg, body, invocation),
-		promptTemplate: runtimePromptFieldProvenanceForText(cfg, workstation.PromptTemplate, invocation),
-	}
-}
-
-func runtimePromptFieldProvenanceForText(
-	cfg *runtimeConfig,
-	authored string,
-	invocation *work.InvocationArguments,
-) runtimePromptFieldProvenance {
-	if cfg == nil || cfg.invocationInterpolation == nil || authored == "" {
-		return runtimePromptFieldProvenance{}
-	}
-	service, ok := cfg.invocationInterpolation.(interfaces.InvocationPromptProvenanceService)
-	if !ok || service == nil {
-		return runtimePromptFieldProvenance{}
-	}
-	resolved, spans, err := service.InterpolatePromptWithProvenance(
-		authored,
-		invocation,
-		cfg.invocationFileReader,
-	)
-	provenance := runtimePromptFieldProvenance{
-		resolved:  resolved,
-		spans:     append([]interfaces.InvocationSensitiveTextSpan(nil), spans...),
-		available: true,
-	}
-	if err != nil {
-		provenance.invalid = true
-	}
-	return provenance
-}
-
-func validateRuntimePromptProvenance(
-	provenance *runtimePromptFieldProvenance,
-	actual string,
-) {
-	if provenance == nil || !provenance.available || provenance.invalid {
-		return
-	}
-	if provenance.resolved != actual {
-		provenance.invalid = true
-	}
 }
 
 type runtimeTemplateFieldResolver interface {
@@ -466,6 +384,17 @@ func applyRuntimeWorkstationSelection(
 	if len(workstationPromptProvenance) > 0 {
 		workstationPrompt = workstationPromptProvenance[0]
 	}
+	applyRuntimeWorkstationPromptSelection(cfg, selection, invocation, workstation, workstationPrompt)
+	applyRuntimeWorkstationOutputSelection(selection, invocation, workstation)
+}
+
+func applyRuntimeWorkstationPromptSelection(
+	cfg *runtimeConfig,
+	selection *runtimeExecutionSelection,
+	invocation *work.InvocationArguments,
+	workstation *interfaces.FactoryWorkstationConfig,
+	workstationPrompt runtimeWorkstationPromptProvenanceSet,
+) {
 	selection.runnerID = firstRuntimeValue(
 		selection.runnerID,
 		resolveRuntimeInvocationValue(workstation.Runner, invocation),
@@ -498,6 +427,13 @@ func applyRuntimeWorkstationSelection(
 			validateRuntimePromptProvenance(&selection.userPromptProvenance, selection.promptTemplate)
 		}
 	}
+}
+
+func applyRuntimeWorkstationOutputSelection(
+	selection *runtimeExecutionSelection,
+	invocation *work.InvocationArguments,
+	workstation *interfaces.FactoryWorkstationConfig,
+) {
 	selection.outputSchema = firstRuntimeValue(
 		selection.outputSchema,
 		resolveRuntimeInvocationValue(workstation.OutputSchema, invocation),
@@ -986,216 +922,6 @@ func interpolateRuntimeWorkstationConfig(
 		return nil, err
 	}
 	return &interpolated, nil
-}
-
-func renderRuntimePrompt(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	tokens []workers.Token,
-	workflowContext *workers.Context,
-	inputs []workers.WorkInput,
-	invocation *work.InvocationArguments,
-) error {
-	if selection == nil {
-		return nil
-	}
-	if selection.interpolationError != nil {
-		return wrapRuntimePromptRenderError(selection.interpolationError)
-	}
-	if err := interpolateRuntimePromptTemplate(cfg, selection, invocation); err != nil {
-		return wrapRuntimePromptRenderError(err)
-	}
-	if err := renderRuntimePromptMessage(cfg, selection, tokens, workflowContext, inputs); err != nil {
-		return wrapRuntimePromptRenderError(err)
-	}
-	if err := resolveRuntimeTemplateFields(cfg, selection, tokens, workflowContext); err != nil {
-		return wrapRuntimePromptRenderError(err)
-	}
-	selection.promptRedaction = buildRuntimePromptRedaction(
-		cfg,
-		selection,
-		tokens,
-		workflowContext,
-	)
-	return nil
-}
-
-func interpolateRuntimePromptTemplate(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	invocation *work.InvocationArguments,
-) error {
-	if cfg == nil || cfg.invocationInterpolation == nil ||
-		selection.promptTemplate == "" || selection.promptTemplateInterpolated {
-		return nil
-	}
-	provenance := runtimePromptFieldProvenanceForText(cfg, selection.promptTemplate, invocation)
-	interpolated, err := cfg.invocationInterpolation.InterpolateWorkstationConfig(
-		interfaces.FactoryWorkstationConfig{PromptTemplate: selection.promptTemplate},
-		invocation,
-		cfg.invocationFileReader,
-	)
-	if err != nil {
-		return fmt.Errorf("interpolate workstation prompt: %w", err)
-	}
-	selection.promptTemplate = interpolated.PromptTemplate
-	validateRuntimePromptProvenance(&provenance, selection.promptTemplate)
-	if provenance.available {
-		selection.userPromptProvenance = provenance
-	}
-	selection.promptTemplateInterpolated = true
-	return nil
-}
-
-func renderRuntimePromptMessage(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	tokens []workers.Token,
-	workflowContext *workers.Context,
-	inputs []workers.WorkInput,
-) error {
-	if selection.userMessage != "" || selection.promptTemplate == "" {
-		return nil
-	}
-	if cfg == nil || cfg.promptRenderer == nil {
-		// Legacy test and adapter callers may not provide the optional renderer.
-		// Preserve their detached execution behavior by using the same payload
-		// fallback as an empty authored prompt.
-		selection.userMessage = workInputMessage(inputs)
-		return nil
-	}
-	rendered, err := cfg.promptRenderer.RenderPrompt(
-		selection.promptTemplate,
-		tokens,
-		workflowContext,
-	)
-	if err != nil {
-		return fmt.Errorf("render workstation prompt: %w", err)
-	}
-	selection.userMessage = rendered
-	return nil
-}
-
-func resolveRuntimeTemplateFields(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	tokens []workers.Token,
-	workflowContext *workers.Context,
-) error {
-	if cfg == nil || cfg.templateFieldResolver == nil {
-		return nil
-	}
-	resolved, err := cfg.templateFieldResolver.ResolveTemplateFields(
-		selection.workingDirectory,
-		selection.environment,
-		tokens,
-		workflowContext,
-		selection.worktree,
-	)
-	if err != nil {
-		return fmt.Errorf("resolve workstation execution fields: %w", err)
-	}
-	if resolved != nil {
-		selection.workingDirectory = resolved.WorkingDirectory
-		selection.worktree = resolved.Worktree
-		selection.environment = cloneRuntimeStringMap(resolved.Env)
-	}
-	return nil
-}
-
-const runtimePromptRedactionMarker = "<redacted>"
-
-func buildRuntimePromptRedaction(
-	cfg *runtimeConfig,
-	selection *runtimeExecutionSelection,
-	tokens []workers.Token,
-	workflowContext *workers.Context,
-) *workers.PromptRedaction {
-	if selection == nil {
-		return nil
-	}
-	system := selection.systemPromptProvenance
-	user := selection.userPromptProvenance
-	if !system.available && !user.available {
-		return nil
-	}
-	redaction := &workers.PromptRedaction{}
-	if system.invalid {
-		redaction.FailClosed = true
-		redaction.RedactSystemPrompt = selection.systemPrompt != ""
-	}
-	if user.invalid {
-		redaction.FailClosed = true
-		redaction.RedactUserMessage = selection.userMessage != ""
-	}
-	if system.sensitive() {
-		redaction.RedactSystemPrompt = true
-		safe, ok := redactRuntimePromptText(selection.systemPrompt, system.spans)
-		if !ok {
-			redaction.FailClosed = true
-		} else {
-			redaction.SystemPrompt = safe
-		}
-	}
-	if user.sensitive() {
-		redaction.RedactUserMessage = true
-		safeTemplate, ok := redactRuntimePromptText(selection.promptTemplate, user.spans)
-		if !ok {
-			redaction.FailClosed = true
-		} else if cfg == nil || cfg.promptRenderer == nil {
-			// Without the renderer, the normal path falls back to Work input;
-			// there is no reliable way to map template spans to that value.
-			redaction.FailClosed = true
-		} else {
-			safe, err := cfg.promptRenderer.RenderPrompt(
-				safeTemplate,
-				tokens,
-				workflowContext,
-			)
-			if err != nil {
-				redaction.FailClosed = true
-			} else {
-				redaction.UserMessage = safe
-			}
-		}
-	}
-	if !redaction.RedactSystemPrompt && !redaction.RedactUserMessage && !redaction.FailClosed {
-		return nil
-	}
-	return redaction
-}
-
-func redactRuntimePromptText(
-	value string,
-	spans []interfaces.InvocationSensitiveTextSpan,
-) (string, bool) {
-	if len(spans) == 0 || !utf8.ValidString(value) {
-		return "", false
-	}
-	ordered := append([]interfaces.InvocationSensitiveTextSpan(nil), spans...)
-	sort.Slice(ordered, func(left, right int) bool {
-		if ordered[left].Start != ordered[right].Start {
-			return ordered[left].Start < ordered[right].Start
-		}
-		return ordered[left].End < ordered[right].End
-	})
-	var builder strings.Builder
-	cursor := 0
-	for _, span := range ordered {
-		if span.Start < cursor || span.Start < 0 || span.End <= span.Start || span.End > len(value) {
-			return "", false
-		}
-		if !utf8.ValidString(value[span.Start:span.End]) ||
-			(span.Start > 0 && !utf8.ValidString(value[:span.Start])) ||
-			(span.End < len(value) && !utf8.ValidString(value[:span.End])) {
-			return "", false
-		}
-		builder.WriteString(value[cursor:span.Start])
-		builder.WriteString(runtimePromptRedactionMarker)
-		cursor = span.End
-	}
-	builder.WriteString(value[cursor:])
-	return builder.String(), true
 }
 
 func workerTokenPlaceKey(token workers.Token) string {

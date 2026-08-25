@@ -255,6 +255,11 @@ func TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle(t 
 	}
 	assertRecordedTwoWorkstationArtifact(t, artifactPath, secretControl, plainControl, output)
 
+	replayFunctionalRecording(t, artifactPath, dir, homeDir)
+}
+
+func replayFunctionalRecording(t *testing.T, artifactPath, dir, homeDir string) {
+	t.Helper()
 	replayInputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--replay", artifactPath, "--no-record", "--quiet",
 	})

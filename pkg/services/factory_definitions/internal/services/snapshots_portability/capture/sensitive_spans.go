@@ -19,73 +19,111 @@ func redactInvocationSensitiveSpans(
 	if len(spans) == 0 {
 		return object, nil
 	}
-
-	byPointer := make(map[string][]factorydefinitions.InvocationSensitiveJSONSpan)
-	for _, span := range spans {
-		if strings.TrimSpace(span.JSONPointer) == "" || !strings.HasPrefix(span.JSONPointer, "/") {
-			return nil, fmt.Errorf("sensitive span has invalid JSON pointer %q", span.JSONPointer)
-		}
-		byPointer[span.JSONPointer] = append(byPointer[span.JSONPointer], span)
+	byPointer, pointers, err := groupInvocationSensitiveSpans(spans)
+	if err != nil {
+		return nil, err
 	}
-
-	pointers := make([]string, 0, len(byPointer))
-	for pointer := range byPointer {
-		pointers = append(pointers, pointer)
-	}
-	sort.Strings(pointers)
 	for _, pointer := range pointers {
 		tokens, err := decodeInvocationJSONPointer(pointer)
 		if err != nil {
 			return nil, err
 		}
-		value, ok := lookupInvocationJSONValue(object, tokens)
-		if !ok {
-			return nil, fmt.Errorf("sensitive span JSON pointer %q is not present", pointer)
+		text, err := lookupInvocationSensitiveText(object, tokens, pointer)
+		if err != nil {
+			return nil, err
 		}
-		text, ok := value.(string)
-		if !ok {
-			return nil, fmt.Errorf("sensitive span JSON pointer %q does not identify a string", pointer)
-		}
-		if !utf8.ValidString(text) {
-			return nil, fmt.Errorf("sensitive span JSON pointer %q identifies invalid UTF-8", pointer)
-		}
-
-		pointerSpans := byPointer[pointer]
-		sort.Slice(pointerSpans, func(left, right int) bool {
-			if pointerSpans[left].Start != pointerSpans[right].Start {
-				return pointerSpans[left].Start < pointerSpans[right].Start
-			}
-			return pointerSpans[left].End < pointerSpans[right].End
-		})
-		previousEnd := 0
-		for index, span := range pointerSpans {
-			if span.Start < 0 || span.End <= span.Start || span.End > len(text) {
-				return nil, fmt.Errorf(
-					"sensitive span JSON pointer %q has invalid byte range [%d,%d)",
-					pointer, span.Start, span.End,
-				)
-			}
-			if !invocationUTF8Boundary(text, span.Start) || !invocationUTF8Boundary(text, span.End) {
-				return nil, fmt.Errorf(
-					"sensitive span JSON pointer %q has a non-UTF-8 boundary [%d,%d)",
-					pointer, span.Start, span.End,
-				)
-			}
-			if index > 0 && span.Start < previousEnd {
-				return nil, fmt.Errorf("sensitive spans overlap at JSON pointer %q", pointer)
-			}
-			previousEnd = span.End
-		}
-
-		for index := len(pointerSpans) - 1; index >= 0; index-- {
-			span := pointerSpans[index]
-			text = text[:span.Start] + invocationSensitiveRedactionMarker + text[span.End:]
+		text, err = redactInvocationSensitiveText(pointer, text, byPointer[pointer])
+		if err != nil {
+			return nil, err
 		}
 		if err := setInvocationJSONValue(object, tokens, text); err != nil {
 			return nil, fmt.Errorf("replace sensitive span at JSON pointer %q: %w", pointer, err)
 		}
 	}
 	return object, nil
+}
+
+func groupInvocationSensitiveSpans(
+	spans []factorydefinitions.InvocationSensitiveJSONSpan,
+) (map[string][]factorydefinitions.InvocationSensitiveJSONSpan, []string, error) {
+	byPointer := make(map[string][]factorydefinitions.InvocationSensitiveJSONSpan)
+	for _, span := range spans {
+		if strings.TrimSpace(span.JSONPointer) == "" || !strings.HasPrefix(span.JSONPointer, "/") {
+			return nil, nil, fmt.Errorf("sensitive span has invalid JSON pointer %q", span.JSONPointer)
+		}
+		byPointer[span.JSONPointer] = append(byPointer[span.JSONPointer], span)
+	}
+	pointers := make([]string, 0, len(byPointer))
+	for pointer := range byPointer {
+		pointers = append(pointers, pointer)
+	}
+	sort.Strings(pointers)
+	return byPointer, pointers, nil
+}
+
+func lookupInvocationSensitiveText(document any, tokens []string, pointer string) (string, error) {
+	value, ok := lookupInvocationJSONValue(document, tokens)
+	if !ok {
+		return "", fmt.Errorf("sensitive span JSON pointer %q is not present", pointer)
+	}
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("sensitive span JSON pointer %q does not identify a string", pointer)
+	}
+	if !utf8.ValidString(text) {
+		return "", fmt.Errorf("sensitive span JSON pointer %q identifies invalid UTF-8", pointer)
+	}
+	return text, nil
+}
+
+func redactInvocationSensitiveText(
+	pointer string,
+	text string,
+	spans []factorydefinitions.InvocationSensitiveJSONSpan,
+) (string, error) {
+	sort.Slice(spans, func(left, right int) bool {
+		if spans[left].Start != spans[right].Start {
+			return spans[left].Start < spans[right].Start
+		}
+		return spans[left].End < spans[right].End
+	})
+	previousEnd := 0
+	for index, span := range spans {
+		if err := validateInvocationSensitiveSpan(pointer, text, index, previousEnd, span); err != nil {
+			return "", err
+		}
+		previousEnd = span.End
+	}
+	for index := len(spans) - 1; index >= 0; index-- {
+		span := spans[index]
+		text = text[:span.Start] + invocationSensitiveRedactionMarker + text[span.End:]
+	}
+	return text, nil
+}
+
+func validateInvocationSensitiveSpan(
+	pointer string,
+	text string,
+	index int,
+	previousEnd int,
+	span factorydefinitions.InvocationSensitiveJSONSpan,
+) error {
+	if span.Start < 0 || span.End <= span.Start || span.End > len(text) {
+		return fmt.Errorf(
+			"sensitive span JSON pointer %q has invalid byte range [%d,%d)",
+			pointer, span.Start, span.End,
+		)
+	}
+	if !invocationUTF8Boundary(text, span.Start) || !invocationUTF8Boundary(text, span.End) {
+		return fmt.Errorf(
+			"sensitive span JSON pointer %q has a non-UTF-8 boundary [%d,%d)",
+			pointer, span.Start, span.End,
+		)
+	}
+	if index > 0 && span.Start < previousEnd {
+		return fmt.Errorf("sensitive spans overlap at JSON pointer %q", pointer)
+	}
+	return nil
 }
 
 func invocationUTF8Boundary(value string, offset int) bool {
