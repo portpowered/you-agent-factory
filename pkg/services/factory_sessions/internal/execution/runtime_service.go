@@ -254,6 +254,10 @@ type JavaScriptRuntimeService struct {
 	startInflight map[string]*startInflightFlight
 	controlReplay map[string]controlReplayRecord
 	liveChangeMu  sync.Mutex
+
+	dispatchDurabilityMu       sync.RWMutex
+	dispatchDurability         recording.CompletedFlushWatermarkReader
+	dispatchStreamGenerationID string
 }
 
 var _ Service = (*JavaScriptRuntimeService)(nil)
@@ -561,7 +565,7 @@ func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: dispatchesForRead(state.dispatches, state.events),
+		Dispatches: s.dispatchesForRead(state.dispatches, state.events),
 	}, nil
 }
 
@@ -581,7 +585,7 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	for _, summary := range dispatchesForRead(state.dispatches, state.events) {
+	for _, summary := range s.dispatchesForRead(state.dispatches, state.events) {
 		if summary.ID == dispatchID {
 			detail := DispatchDetail{
 				DispatchSummary:  summary,
@@ -605,6 +609,20 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 		}
 	}
 	return DispatchDetail{}, ErrDispatchNotFound
+}
+
+func (s *JavaScriptRuntimeService) dispatchesForRead(
+	dispatches []DispatchSummary,
+	events []json.RawMessage,
+) []DispatchSummary {
+	if s == nil {
+		return dispatchesForRead(dispatches, events)
+	}
+	s.dispatchDurabilityMu.RLock()
+	reader := s.dispatchDurability
+	generationID := s.dispatchStreamGenerationID
+	s.dispatchDurabilityMu.RUnlock()
+	return dispatchesForReadWithDurability(dispatches, events, reader, generationID)
 }
 
 func (s *JavaScriptRuntimeService) ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error) {

@@ -509,6 +509,7 @@ func openRuntime(
 		resourceLeaseAdmission,
 		configured.Runtime.RuntimeInstanceID,
 		startupRuntime.StreamGeneration(),
+		startupRuntime.RecordingLedger(),
 		providerForDurable,
 		configured.Workers.MockWorkers,
 		providerCommandRunner,
