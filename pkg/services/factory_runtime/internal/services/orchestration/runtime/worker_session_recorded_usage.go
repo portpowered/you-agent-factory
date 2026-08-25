@@ -146,6 +146,7 @@ func recordedDispatchFact(
 			Detail: reason,
 		}
 	}
+	fact.stateSequence, fact.stateSequenceKnown = recordedDispatchStateCursor(events, dispatchID)
 	return fact
 }
 
@@ -164,6 +165,10 @@ func recordedObservationFromFact(fact recordedDispatchObservation, clock factory
 		TurnID:                   fact.turnID,
 		AttemptID:                fact.dispatchID,
 		State:                    state,
+		ConfirmationState:        workersessions.ConfirmationStateUnconfirmed,
+		StreamGenerationID:       fact.streamGenerationID,
+		StateSequence:            fact.stateSequence,
+		StateSequenceKnown:       fact.stateSequenceKnown,
 		DurationBasis:            workersessions.DurationBasisUnavailable,
 		Transcript:               workersessions.TranscriptAvailabilityUnavailable,
 	}
