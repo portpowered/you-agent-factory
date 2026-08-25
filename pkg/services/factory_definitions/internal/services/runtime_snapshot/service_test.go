@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -300,6 +301,379 @@ func TestResolveRuntimeSnapshotPreservesTypedLoaderFailure(t *testing.T) {
 	if !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want underlying typed loader failure %v", err, cause)
 	}
+}
+
+func TestResolveRuntimeSnapshotCarriesInvocationProvenance(t *testing.T) {
+	t.Parallel()
+
+	fixture := newInvocationSnapshotFixture(t)
+	snapshot := fixture.result.Snapshot
+	if fixture.receivedPath != "/factories/alpha" {
+		t.Fatalf("loaded Factory path = %q, want trimmed source path", fixture.receivedPath)
+	}
+	if fixture.receivedWorkstationLoader != fixture.workstationLoader {
+		t.Fatalf("workstation loader = %T, want injected loader %T", fixture.receivedWorkstationLoader, fixture.workstationLoader)
+	}
+	if snapshot.FactoryDir != "/factories/alpha" || snapshot.RuntimeBaseDir != "/execution/base" {
+		t.Fatalf("snapshot paths = %q/%q, want Factory and execution roots", snapshot.FactoryDir, snapshot.RuntimeBaseDir)
+	}
+	if snapshot.Invocation.FactorySessionID != "session-1" || snapshot.Invocation.WorkflowID != "workflow-1" {
+		t.Fatalf("invocation context = %#v, want session and workflow identity", snapshot.Invocation)
+	}
+	if got := snapshot.EffectiveFactory.Workers[0].Args; !reflect.DeepEqual(got, []string{"--token=super-secret", "--label=public"}) {
+		t.Fatalf("effective worker args = %#v, want interpolated arguments", got)
+	}
+	if got := snapshot.EffectiveFactory.Workstations[0].Env["secret/name~value"]; got != "super-secret" {
+		t.Fatalf("effective sensitive environment value = %q, want interpolated value", got)
+	}
+	assertInvocationSensitivePointers(t, snapshot.InvocationSensitiveJSONPointers)
+	if len(snapshot.BundledFiles) != 1 || snapshot.BundledFiles[0].TargetPath != "docs/README.md" {
+		t.Fatalf("bundled files = %#v, want loaded portable replacement", snapshot.BundledFiles)
+	}
+}
+
+func TestResolveRuntimeSnapshotDetachesInvocationAndSourceInputs(t *testing.T) {
+	t.Parallel()
+
+	fixture := newInvocationSnapshotFixture(t)
+	snapshot := fixture.result.Snapshot
+	fixture.arguments.Arguments["apiKey"] = work.InvocationArgument{Values: []string{"changed"}, Sensitive: true}
+	fixture.arguments.Arguments["label"].Values[0] = "changed"
+	fixture.source.config.Workers[0].Args[0] = "source-mutated"
+	fixture.source.config.Workstations[0].Env["secret/name~value"] = "source-mutated"
+	fixture.source.replacements[0].TargetPath = "source-mutated"
+	if snapshot.Invocation.Arguments.Arguments["apiKey"].Values[0] != "super-secret" ||
+		snapshot.Invocation.Arguments.Arguments["label"].Values[0] != "public" {
+		t.Fatalf("snapshot invocation arguments were not detached: %#v", snapshot.Invocation.Arguments)
+	}
+	if snapshot.EffectiveFactory.Workers[0].Args[0] != "--token=super-secret" ||
+		snapshot.EffectiveFactory.Workstations[0].Env["secret/name~value"] != "super-secret" {
+		t.Fatalf("snapshot effective values were affected by source mutation: %#v", snapshot.EffectiveFactory)
+	}
+	if snapshot.BundledFiles[0].TargetPath != "docs/README.md" {
+		t.Fatalf("snapshot bundled file was affected by source mutation: %#v", snapshot.BundledFiles)
+	}
+}
+
+func newInvocationSnapshotFixture(t *testing.T) invocationSnapshotFixture {
+	t.Helper()
+	source := newTestLoadedSource()
+	source.config.Workers[0].ModelProvider = "codex"
+	source.config.Workers[0].Args = []string{"--token=${apiKey}", "--label=${label}"}
+	source.config.Workstations[0].Env["secret/name~value"] = "${apiKey}"
+	arguments := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"apiKey": {Values: []string{"super-secret"}, Sensitive: true},
+		"label":  {Values: []string{"public"}},
+	}}
+	fixture := invocationSnapshotFixture{
+		source:            source,
+		arguments:         arguments,
+		workstationLoader: &testWorkstationLoader{},
+	}
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			fixture.receivedWorkstationLoader = loader
+			return source, nil
+		},
+		func(path string, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			fixture.receivedPath = path
+			fixture.receivedWorkstationLoader = loader
+			return source, nil
+		},
+		func() factorydefinitions.WorkstationLoader { return fixture.workstationLoader },
+		factorydefinitions.FileReader(func(string) ([]byte, error) { return nil, nil }),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	fixture.result, err = resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+		SourcePath:       "  /factories/alpha  ",
+		ExecutionBaseDir: "  /execution/base  ",
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			FactorySessionID: "session-1",
+			WorkflowID:       "workflow-1",
+			Arguments:        arguments,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+	}
+	return fixture
+}
+
+type invocationSnapshotFixture struct {
+	result                    factorydefinitions.ResolveRuntimeSnapshotResult
+	source                    *fakeLoadedSource
+	arguments                 *work.InvocationArguments
+	workstationLoader         *testWorkstationLoader
+	receivedPath              string
+	receivedWorkstationLoader factorydefinitions.WorkstationLoader
+}
+
+func assertInvocationSensitivePointers(t *testing.T, pointers []string) {
+	t.Helper()
+	want := []string{
+		"/workers/0/args/0",
+		"/workstations/0/env/secret~1name~0value",
+	}
+	if !reflect.DeepEqual(pointers, want) {
+		t.Fatalf("sensitive JSON pointers = %#v, want %#v", pointers, want)
+	}
+	if strings.Contains(strings.Join(pointers, "\n"), "super-secret") {
+		t.Fatal("sensitive invocation value was exposed in JSON pointer provenance")
+	}
+}
+
+func TestResolveRuntimeSnapshotClassifiesEveryAutomationSourceKind(t *testing.T) {
+	t.Parallel()
+
+	source := newTestLoadedSource()
+	source.config.Workstations = append(source.config.Workstations,
+		factorydefinitions.FactoryWorkstationConfig{
+			ID:   "script-source",
+			Name: "script-source",
+			Type: factorydefinitions.WorkstationTypeScript,
+		},
+		factorydefinitions.FactoryWorkstationConfig{
+			ID:   "poller-source",
+			Name: "poller-source",
+			Type: factorydefinitions.WorkstationTypePoller,
+		},
+		factorydefinitions.FactoryWorkstationConfig{
+			ID:             "hosted-source",
+			Name:           "hosted-source",
+			WorkerTypeName: "agent",
+		},
+		factorydefinitions.FactoryWorkstationConfig{
+			ID:   "ordinary-source",
+			Name: "ordinary-source",
+			Type: factorydefinitions.WorkstationTypeHumanApproval,
+		},
+	)
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func(_ string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical: []byte(`{"name":"automation"}`),
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+	}
+	got := make(map[string]factorydefinitions.RuntimeAutomationSource)
+	for _, automation := range result.Snapshot.AutomationSources {
+		got[automation.WorkstationName] = automation
+	}
+	wantKinds := map[string]factorydefinitions.RuntimeAutomationSourceKind{
+		"cron-agent":    factorydefinitions.RuntimeAutomationSourceKindCron,
+		"script-source": factorydefinitions.RuntimeAutomationSourceKindScript,
+		"poller-source": factorydefinitions.RuntimeAutomationSourceKindPoller,
+		"hosted-source": factorydefinitions.RuntimeAutomationSourceKindHosted,
+	}
+	if len(got) != len(wantKinds) {
+		t.Fatalf("automation sources = %#v, want exactly %d classified sources", got, len(wantKinds))
+	}
+	for name, wantKind := range wantKinds {
+		automation, ok := got[name]
+		if !ok || automation.Kind != wantKind {
+			t.Fatalf("automation source %q = %#v, want kind %q", name, automation, wantKind)
+		}
+		if name == "hosted-source" && (automation.Worker == nil || automation.Worker.Name != "agent") {
+			t.Fatalf("hosted automation worker = %#v, want detached agent worker", automation.Worker)
+		}
+	}
+	if _, ok := got["ordinary-source"]; ok {
+		t.Fatalf("ordinary workstation unexpectedly became an automation source: %#v", got["ordinary-source"])
+	}
+}
+
+func TestResolveRuntimeSnapshotRejectsNilContext(t *testing.T) {
+	t.Parallel()
+
+	resolver := newRuntimeSnapshotFailureResolver(t, nil, nil, nil)
+	assertRuntimeSnapshotFailure(
+		t,
+		resolver,
+		nil,
+		factorydefinitions.RuntimeSnapshotDiagnosticInvalidRequest,
+		nil,
+		false,
+	)
+}
+
+func TestResolveRuntimeSnapshotRejectsCanceledContextBeforeLoading(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	resolver := newRuntimeSnapshotFailureResolver(t, newTestLoadedSource(), nil, nil)
+	assertRuntimeSnapshotFailure(
+		t,
+		resolver,
+		ctx,
+		factorydefinitions.RuntimeSnapshotDiagnosticCanceled,
+		context.Canceled,
+		false,
+	)
+}
+
+func TestResolveRuntimeSnapshotRejectsCancellationAfterLoading(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resolver := newRuntimeSnapshotFailureResolver(t, newTestLoadedSource(), nil, cancel)
+	assertRuntimeSnapshotFailure(
+		t,
+		resolver,
+		ctx,
+		factorydefinitions.RuntimeSnapshotDiagnosticCanceled,
+		context.Canceled,
+		false,
+	)
+}
+
+func TestResolveRuntimeSnapshotPreservesLoaderFailure(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("loader failed")
+	resolver := newRuntimeSnapshotFailureResolver(t, nil, cause, nil)
+	assertRuntimeSnapshotFailure(
+		t,
+		resolver,
+		context.Background(),
+		factorydefinitions.RuntimeSnapshotDiagnosticInvalidDefinition,
+		cause,
+		false,
+	)
+}
+
+func TestResolveRuntimeSnapshotRejectsNilLoadedSource(t *testing.T) {
+	t.Parallel()
+
+	resolver := newRuntimeSnapshotFailureResolver(t, nil, nil, nil)
+	assertRuntimeSnapshotFailure(
+		t,
+		resolver,
+		context.Background(),
+		factorydefinitions.RuntimeSnapshotDiagnosticInvalidDefinition,
+		nil,
+		false,
+	)
+}
+
+func TestResolveRuntimeSnapshotRejectsUndetachableDefinition(t *testing.T) {
+	t.Parallel()
+
+	source := newTestLoadedSource()
+	source.config = nil
+	resolver := newRuntimeSnapshotFailureResolver(t, source, nil, nil)
+	assertRuntimeSnapshotFailure(
+		t,
+		resolver,
+		context.Background(),
+		factorydefinitions.RuntimeSnapshotDiagnosticInvalidDefinition,
+		nil,
+		true,
+	)
+}
+
+type runtimeSnapshotResolver interface {
+	ResolveRuntimeSnapshot(context.Context, factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error)
+}
+
+func newRuntimeSnapshotFailureResolver(
+	t *testing.T,
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	loaderError error,
+	cancelAfterLoad context.CancelFunc,
+) runtimeSnapshotResolver {
+	t.Helper()
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			if cancelAfterLoad != nil {
+				cancelAfterLoad()
+			}
+			return loaded, loaderError
+		},
+		func(_ string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			if cancelAfterLoad != nil {
+				cancelAfterLoad()
+			}
+			return loaded, loaderError
+		},
+		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	return resolver
+}
+
+func TestNewRuntimeSnapshotServiceRejectsMissingSourceLoaders(t *testing.T) {
+	t.Parallel()
+
+	validCanonical := factorydefinitions.CanonicalFactoryJSONLoader(func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return newTestLoadedSource(), nil
+	})
+	validFactory := factorydefinitions.LoadedFactoryLoader(func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return newTestLoadedSource(), nil
+	})
+	if _, err := runtimesnapshotwire.NewService(nil, validFactory, nil, nil); err == nil {
+		t.Fatal("NewService(nil canonical loader) succeeded, want construction failure")
+	}
+	if _, err := runtimesnapshotwire.NewService(validCanonical, nil, nil, nil); err == nil {
+		t.Fatal("NewService(nil Factory loader) succeeded, want construction failure")
+	}
+}
+
+func assertRuntimeSnapshotFailure(
+	t *testing.T,
+	resolver interface {
+		ResolveRuntimeSnapshot(context.Context, factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error)
+	},
+	ctx context.Context,
+	wantCode factorydefinitions.RuntimeSnapshotDiagnosticCode,
+	wantUnderlying error,
+	wantCause bool,
+) {
+	t.Helper()
+	_, err := resolver.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical: []byte(`{"name":"failure"}`),
+	})
+	if err == nil {
+		t.Fatal("ResolveRuntimeSnapshot() succeeded, want typed failure")
+	}
+	var diagnostic *factorydefinitions.RuntimeSnapshotResolutionError
+	if !errors.As(err, &diagnostic) {
+		t.Fatalf("error = %v, want RuntimeSnapshotResolutionError", err)
+	}
+	if diagnostic.Diagnostic.Code != wantCode {
+		t.Fatalf("diagnostic code = %q, want %q", diagnostic.Diagnostic.Code, wantCode)
+	}
+	if wantUnderlying != nil && !errors.Is(err, wantUnderlying) {
+		t.Fatalf("error = %v, want underlying %v", err, wantUnderlying)
+	}
+	if wantCause && diagnostic.Cause == nil {
+		t.Fatal("invalid definition diagnostic has no inspectable cause")
+	}
+}
+
+type testWorkstationLoader struct{}
+
+func (*testWorkstationLoader) Load(string) (*factorydefinitions.FactoryWorkstationConfig, error) {
+	return nil, nil
 }
 
 type fakeLoadedSource struct {
