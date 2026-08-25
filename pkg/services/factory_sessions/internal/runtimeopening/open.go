@@ -291,6 +291,7 @@ func openRuntime(
 		resumeInput = &input
 	}
 	var restoredWorldState *factorydefinitions.FactoryWorldState
+	var restoredEventHistory []factorydefinitions.FactoryEvent
 	var boardHistoryOpening currentBoardHistoryOpening
 	// A portable resume input owns its selected-history reconstruction. Only a
 	// direct live opening should restore the current board recording; applying
@@ -307,7 +308,8 @@ func openRuntime(
 				return runtimeProducts{}, err
 			}
 		}
-		restoredWorldState, err = restoreCurrentBoardState(
+		var restoredBoard *currentBoardHistory
+		restoredBoard, err = restoreCurrentBoardHistory(
 			recordingsService,
 			configured.Recordings.RecordPath,
 			effectiveSessionID,
@@ -321,6 +323,10 @@ func openRuntime(
 				err,
 			)
 			return runtimeProducts{}, err
+		}
+		if restoredBoard != nil {
+			restoredWorldState = restoredBoard.state
+			restoredEventHistory = restoredBoard.events
 		}
 	}
 	runtimebuildService, startupRuntime, startupSpec, runtimeLifecycle, runtimeSidecars, err :=
@@ -375,6 +381,7 @@ func openRuntime(
 			load.ReplayArtifact,
 			resumeInput,
 			restoredWorldState,
+			restoredEventHistory,
 			service2,
 			configured.Runtime.Mode == factorydefinitions.RuntimeModeService,
 		)

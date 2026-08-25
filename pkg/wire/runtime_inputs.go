@@ -736,6 +736,21 @@ func (resolver workerSessionsFactorySessionScopeResolver) ResolveWorkerSessionSc
 	ctx context.Context,
 	sessionID string,
 ) (workersessionshttp.SessionScope, error) {
+	if fast, ok := resolver.sessions.(interface {
+		ResolveFactorySessionRuntimeID(string) (string, error)
+	}); ok {
+		effectiveID, err := fast.ResolveFactorySessionRuntimeID(sessionID)
+		if err != nil {
+			if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
+				return workersessionshttp.SessionScope{}, workersessions.ErrObservationSessionNotFound
+			}
+			return workersessionshttp.SessionScope{}, err
+		}
+		return workersessionshttp.SessionScope{
+			EffectiveID: effectiveID,
+			IsDefault:   strings.TrimSpace(sessionID) == factorysessions.DefaultSessionID,
+		}, nil
+	}
 	projection, err := resolver.sessions.GetFactorySession(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
