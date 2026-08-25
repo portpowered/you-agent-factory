@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,7 +14,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -25,18 +29,101 @@ type Process interface {
 	Execute(root.Input) error
 }
 
+// ACPServer is the protocol capability exposed by a root-built process.
+type ACPServer interface {
+	Serve(context.Context, io.Reader, io.Writer) error
+}
+
+// ProviderRegistry is the immutable provider identity capability exposed by a
+// root-built process.
+type ProviderRegistry interface {
+	CanonicalIdentity(string) (string, error)
+}
+
+// ApplicationProcess is the lifecycle-capable process returned by the
+// context-aware functional construction boundary.
+type ApplicationProcess interface {
+	Process
+	Close(context.Context) error
+	ACPServer() ACPServer
+	ProviderRegistry() ProviderRegistry
+	WorkerRecordingReader() recordings.WorkerRecordingReader
+	CostsQuery() costs.CostsQuery
+	DetachedOperations() factorysessions.DetachedService
+	ExecutionRuntimeOpening() root.ExecutionRuntimeOpening
+	RuntimeMetricsQuery() factoryvisualization.RuntimeMetricsQuery
+}
+
+type applicationProcess struct {
+	Process
+	close            func(context.Context) error
+	acpServer        ACPServer
+	providerRegistry ProviderRegistry
+	recordingReader  recordings.WorkerRecordingReader
+	costsQuery       costs.CostsQuery
+	detachedOps      factorysessions.DetachedService
+	executionOpening root.ExecutionRuntimeOpening
+	runtimeMetrics   factoryvisualization.RuntimeMetricsQuery
+}
+
+func (p applicationProcess) Close(ctx context.Context) error {
+	return p.close(ctx)
+}
+
+func (p applicationProcess) ACPServer() ACPServer {
+	return p.acpServer
+}
+
+func (p applicationProcess) ProviderRegistry() ProviderRegistry {
+	return p.providerRegistry
+}
+
+func (p applicationProcess) WorkerRecordingReader() recordings.WorkerRecordingReader {
+	return p.recordingReader
+}
+
+func (p applicationProcess) CostsQuery() costs.CostsQuery {
+	return p.costsQuery
+}
+
+func (p applicationProcess) DetachedOperations() factorysessions.DetachedService {
+	return p.detachedOps
+}
+
+func (p applicationProcess) ExecutionRuntimeOpening() root.ExecutionRuntimeOpening {
+	return p.executionOpening
+}
+
+func (p applicationProcess) RuntimeMetricsQuery() factoryvisualization.RuntimeMetricsQuery {
+	return p.runtimeMetrics
+}
+
 // BuildProcess constructs the same reusable process used by the production
 // command entrypoint.
-func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
+func BuildProcess(t testing.TB, edges serviceedges.Edges) ApplicationProcess {
 	t.Helper()
-	// Keep the aggregate overlay in test composition so functional fixtures
-	// exercise every external-effect replacement path while production callers
-	// continue to pass the exact owner ports through root.BuildProcess.
-	process, err := root.BuildProcess(context.Background(), serviceedges.Merge(serviceedges.Edges{}, edges))
+	process, err := BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	return process
+}
+
+// BuildProcessWithContext constructs the production application process with
+// functional-test-safe external-effect defaults. Explicit scenario edges win
+// over these defaults, including browser recorders used by dashboard tests.
+func BuildProcessWithContext(
+	ctx context.Context,
+	edges serviceedges.Edges,
+) (ApplicationProcess, error) {
+	process, _, err := buildProcessWithContext(ctx, edges)
+	return process, err
+}
+
+func functionalDefaultEdges() serviceedges.Edges {
+	return serviceedges.Edges{
+		BrowserOpener: func(context.Context, string) error { return nil },
+	}
 }
 
 // BuildProcessWithRecordingReader constructs the same reusable process used by
@@ -46,14 +133,34 @@ func BuildProcessWithRecordingReader(
 	t testing.TB, edges serviceedges.Edges,
 ) (Process, recordings.WorkerRecordingReader) {
 	t.Helper()
-	// Keep the aggregate overlay in test composition so functional fixtures
-	// exercise every external-effect replacement path while production callers
-	// continue to pass the exact owner ports through root.BuildProcess.
-	process, err := root.BuildProcess(context.Background(), serviceedges.Merge(serviceedges.Edges{}, edges))
+	process, recordingReader, err := buildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	return process, root.WorkerRecordingReaderFromProcess(process)
+	return process, recordingReader
+}
+
+func buildProcessWithContext(
+	ctx context.Context,
+	edges serviceedges.Edges,
+) (ApplicationProcess, recordings.WorkerRecordingReader, error) {
+	process, err := root.BuildProcess(ctx, serviceedges.Merge(functionalDefaultEdges(), edges))
+	if err != nil {
+		return nil, nil, err
+	}
+	recordingReader := root.WorkerRecordingReaderFromProcess(process)
+	functionalProcess := applicationProcess{
+		Process:          process,
+		close:            process.Close,
+		acpServer:        process.ACPServer(),
+		providerRegistry: process.ProviderRegistry(),
+		recordingReader:  recordingReader,
+		costsQuery:       root.CostsQueryFromProcess(process),
+		detachedOps:      root.DetachedOperationsFromProcess(process),
+		executionOpening: root.ExecutionRuntimeOpeningFromProcess(process),
+		runtimeMetrics:   root.RuntimeMetricsQueryFromProcess(process),
+	}
+	return functionalProcess, recordingReader, nil
 }
 
 // RequireSafeCLIDiagnostic verifies the process-boundary fallback used when a

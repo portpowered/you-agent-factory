@@ -34,7 +34,7 @@ type processExecutor interface {
 // TestSubmitFamilyExecutesThroughRootBuiltProcess proves batch dry-run and unary
 // submit commands execute through root.BuildProcess with the expected customer output.
 func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -192,7 +192,7 @@ Return structured JSON.
 	if err := os.WriteFile(payloadPath, []byte("execute live submit"), 0o600); err != nil {
 		t.Fatalf("write unary payload: %v", err)
 	}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}

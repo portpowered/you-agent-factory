@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const existingOperatorConfig = `{
@@ -57,7 +58,7 @@ func TestInitUnknownPackagedFactoryFailsClosedWithCatalogInventory(t *testing.T)
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}

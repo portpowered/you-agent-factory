@@ -155,7 +155,7 @@ func executeInit(
 	if replace {
 		args = append(args, "--replace")
 	}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		return err
 	}

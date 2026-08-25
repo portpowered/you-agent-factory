@@ -102,7 +102,7 @@ func StartRootRunFunctionalHost(
 
 	edges := cfg.FunctionalEdges
 	edges.APIServerStarter = rootRunHostStarter(listener, cfg.ListenAddress)
-	process, err := root.BuildProcess(context.Background(), edges)
+	process, err := BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		cancel()
 		if listener != nil {

@@ -23,7 +23,7 @@ const acpShutdownReadTimeout = 30 * time.Second
 // so the command's cancellation cleanup must both unblock the read and return
 // the cancellation sentinel unchanged.
 func TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess(t *testing.T) {
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}

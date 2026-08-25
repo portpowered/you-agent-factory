@@ -95,7 +95,7 @@ func newTranscriptProcess(
 	t.Helper()
 	seedFixtureFactory(t, cwd)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ACPWireRecorder:       newRotatingWireRecorder(t, home),
 		ProviderCommandRunner: runner,
 	})
@@ -473,7 +473,7 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ACPWireRecorder: newRotatingWireRecorder(t, home),
 	})
 	if err != nil {
@@ -526,7 +526,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}

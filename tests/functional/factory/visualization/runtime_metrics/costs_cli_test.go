@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	cligenerated "github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
@@ -33,10 +32,10 @@ func TestMetricsCostsCLITraversesProductionHTTPRoute(t *testing.T) {
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
-	if root.CostsQueryFromProcess(process) == nil ||
-		root.RuntimeMetricsQueryFromProcess(process) == nil ||
-		root.DetachedOperationsFromProcess(process) == nil ||
-		root.ExecutionRuntimeOpeningFromProcess(process) == nil {
+	if process.CostsQuery() == nil ||
+		process.RuntimeMetricsQuery() == nil ||
+		process.DetachedOperations() == nil ||
+		process.ExecutionRuntimeOpening() == nil {
 		t.Fatal("root process did not expose all canonical metrics, costs, detached, and execution capabilities")
 	}
 	manifest, err := cligenerated.MetricsFamilyManifest()

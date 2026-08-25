@@ -17,6 +17,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestBTRCP0StandaloneFixtureSuccessCharacterization(t *testing.T) {
@@ -407,7 +408,7 @@ type standaloneMCPServer struct {
 
 func startStandaloneFixtureServer(t *testing.T, fixtureCatalog string) *standaloneMCPServer {
 	t.Helper()
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}

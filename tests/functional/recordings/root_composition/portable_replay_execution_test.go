@@ -20,7 +20,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -53,7 +53,7 @@ func TestPortableReplayResumeProbeUsesRootExecutionOpening(t *testing.T) {
 	home := t.TempDir()
 	projectRoot := t.TempDir()
 	process := support.BuildProcess(t, functionalPortableReplayEdges(t, payload, calls))
-	opening := root.ExecutionRuntimeOpeningFromProcess(process)
+	opening := process.ExecutionRuntimeOpening()
 	if opening == nil {
 		t.Fatal("ExecutionRuntimeOpeningFromProcess() returned nil")
 	}
@@ -164,7 +164,7 @@ func functionalResumePortableReplay(
 		platformprocess.CommandResult{Stdout: []byte("resumed step")},
 	)
 	process := support.BuildProcess(t, edges)
-	opening := root.ExecutionRuntimeOpeningFromProcess(process)
+	opening := process.ExecutionRuntimeOpening()
 	if opening == nil {
 		t.Fatal("ExecutionRuntimeOpeningFromProcess() returned nil")
 	}

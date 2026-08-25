@@ -115,7 +115,7 @@ func TestFactoryBuilderIsListedAndNamedHelpResolvesWithoutExecution(t *testing.T
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -165,7 +165,7 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -233,7 +233,7 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 		support.CodexDecisionCommandResult("canonical provider result"),
 	)
 	submissions := &canonicalSubmissionObservation{}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ProviderCommandRunner: provider,
 		SubmissionRecorder:    submissions.observe,
 	})
@@ -424,7 +424,7 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	workingDirectory := t.TempDir()
 	submissions := &canonicalSubmissionObservation{}
 	provider := testutil.NewProviderCommandRunner(support.CodexDecisionCommandResult("default applied"))
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ProviderCommandRunner: provider,
 		SubmissionRecorder:    submissions.observe,
 	})
@@ -493,7 +493,7 @@ func runEmptyPreparationFailureCase(
 	workingDirectory := t.TempDir()
 	observation := &preparationSideEffectObservation{}
 	provider := testutil.NewProviderCommandRunner()
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		FactorySessionIDGenerator: observation.nextSessionID,
 		RuntimeHostObserver:       observation.observeRuntimeHost,
 		WorkRequestIDGenerator:    observation.nextWorkRequestID,
@@ -650,7 +650,7 @@ func runPreparationFailureCase(
 			cancel: cancel,
 		}
 	}
-	process, err := root.BuildProcess(t.Context(), edges)
+	process, err := support.BuildProcessWithContext(t.Context(), edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -868,7 +868,7 @@ func runHermeticNamedInvocation(
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	listenerStarts := &listenerStartObservation{}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: listenerStarts.Start,
 	})
 	if err != nil {

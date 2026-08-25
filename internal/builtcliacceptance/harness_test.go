@@ -1,11 +1,34 @@
 package builtcliacceptance
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestNewHarnessSuppressesBrowserOpeningAndAllowsExplicitOverride(t *testing.T) {
+	harness := NewHarness(t, t.TempDir())
+	if harness.Edges.BrowserOpener == nil {
+		t.Fatal("NewHarness BrowserOpener = nil, want functional-test no-op")
+	}
+	if err := harness.Edges.BrowserOpener(context.Background(), "http://127.0.0.1/dashboard/ui"); err != nil {
+		t.Fatalf("default BrowserOpener() error = %v", err)
+	}
+
+	called := false
+	harness.Edges.BrowserOpener = func(context.Context, string) error {
+		called = true
+		return nil
+	}
+	if err := harness.Edges.BrowserOpener(context.Background(), "http://127.0.0.1/dashboard/ui"); err != nil {
+		t.Fatalf("override BrowserOpener() error = %v", err)
+	}
+	if !called {
+		t.Fatal("explicit BrowserOpener override was not called")
+	}
+}
 
 func TestProcessEnvForIsolatedHome_ReplacesHomeVariables(t *testing.T) {
 	t.Setenv("HOME", "/real/home")

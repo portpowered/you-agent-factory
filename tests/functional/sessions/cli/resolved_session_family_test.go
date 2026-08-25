@@ -19,6 +19,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition proves
@@ -30,7 +31,7 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 	defer server.Close()
 
 	port := testServerPort(t, server.URL)
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -99,7 +100,7 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 // TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch proves submit rejects
 // deprecated --port wiring before any dispatch attempt and directs callers to --server.
 func TestBuildProcessRejectsDeprecatedPortBeforeSubmitDispatch(t *testing.T) {
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
