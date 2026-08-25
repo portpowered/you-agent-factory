@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,25 +19,6 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
-
-func assertInvokeCommandConfig(
-	t *testing.T,
-	cfg InvokeConfig,
-	server string,
-	logger *zap.Logger,
-	diagnostics *bytes.Buffer,
-) {
-	t.Helper()
-	if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
-		t.Fatalf("InvokeConfig command values = %#v", cfg)
-	}
-	if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
-		t.Fatalf("InvokeConfig global values = %#v", cfg)
-	}
-	if cfg.FactoryDir != "" || cfg.WorkingDirectory != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
-		t.Fatalf("InvokeConfig dependencies = %#v", cfg)
-	}
-}
 
 func TestCommandHandlerRequiresInjectedModelsService(t *testing.T) {
 	handler := NewCommandHandler(nil, nil, nil, nil, nil)
