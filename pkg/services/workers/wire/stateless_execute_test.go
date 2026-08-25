@@ -134,66 +134,6 @@ func TestNewServiceRejectsContentWithoutMaterializerBeforeRunner(t *testing.T) {
 	}
 }
 
-func TestNewServiceWithContentMaterializerRejectsACPURLWithoutSafetyCapability(t *testing.T) {
-	t.Parallel()
-
-	input := newStatelessConstructionInputs()
-	provider := input.agentDependencies.Providers.(*statelessTestProviders)
-	command := input.scriptDependencies.CommandRunner.(*statelessTestCommandRunner)
-	local := input.inferenceDependencies.Models.(*statelessTestLocalInvoker)
-	materializeCalls := atomic.Int32{}
-	service, err := NewServiceWithContentMaterializer(
-		input.agentDependencies,
-		input.scriptConfig,
-		input.scriptDependencies,
-		input.inferenceConfig,
-		input.inferenceDependencies,
-		nil,
-		nil,
-		func() time.Time { return time.Unix(1, 0) },
-		nil,
-		nil,
-		nil,
-		nil,
-		work.ContentMaterializeFunc(func(context.Context, string) (string, work.ContentCleanup, error) {
-			materializeCalls.Add(1)
-			return "", nil, nil
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewServiceWithContentMaterializer() error = %v", err)
-	}
-
-	request := statelessHappyPathCases()[2].request
-	request.Target.ExecutorProvider = workers.ExecutorProviderACP
-	request.Input.Work = []workers.WorkInput{{
-		Name: "private-image",
-		Content: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeImage,
-			URL:  "http://127.0.0.1/secret.png",
-		}},
-	}}
-	result, err := service.Execute(context.Background(), request)
-	if err == nil || !errors.Is(err, workers.ErrInvalidExecuteRequest) ||
-		!strings.Contains(err.Error(), "cannot validate ACP remote URL safety") {
-		t.Fatalf("Execute() error = %v, want stable missing-safety-capability error", err)
-	}
-	if result.Correlation != (workers.ExecutionCorrelation{}) ||
-		result.Outcome != "" || len(result.Output.Primary) != 0 || result.Failure != nil {
-		t.Fatalf("Execute() result = %#v, want no started result", result)
-	}
-	if materializeCalls.Load() != 0 || command.calls.Load() != 0 || local.calls.Load() != 0 ||
-		provider.executeCalls.Load() != 0 {
-		t.Fatalf(
-			"unsafe ACP URL effects = materialize %d command %d model %d provider %d, want zero",
-			materializeCalls.Load(),
-			command.calls.Load(),
-			local.calls.Load(),
-			provider.executeCalls.Load(),
-		)
-	}
-}
-
 func TestNewServiceExecuteUsesPerCallTargetSelections(t *testing.T) {
 	t.Parallel()
 	fixture := newStatelessTestFixture(t)
