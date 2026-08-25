@@ -36,6 +36,9 @@ const FUNCTIONAL_COVERAGE_RENDER_OPTIONS = {
 	coverageArtifactName: "coverage-summary.json",
 	timingArtifactName: "functional-timing-summary.json",
 	slowestHeading: "Slowest top-level tests",
+	includePackageTiming: true,
+	packageTimingHeading: "Functional test package timing",
+	packageLimit: FUNCTIONAL_COVERAGE_PACKAGE_LIMIT,
 };
 
 /**

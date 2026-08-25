@@ -116,7 +116,7 @@ function runFunctionalRunner(t, outcome) {
 	};
 }
 
-test("extracts the compact verdict and every package regression without raw stream noise", () => {
+test("extracts only the compact verdict contract without verbose diagnostics", () => {
 	const rawLine = `{"Time":"2026-08-20T00:00:00Z","Action":"run","Package":"github.com/portpowered/infinite-you/tests/functional"}`;
 	const log = [
 		rawLine,
@@ -124,20 +124,27 @@ test("extracts the compact verdict and every package regression without raw stre
 		"total: (statements) 70.0%",
 		"Functional package coverage verdict:",
 		"  floor violation: package=github.com/portpowered/infinite-you/pkg/alpha floor=75.0000% actual=70.0000% delta=-5.0000 percentage-points covered=7/10 statements uncovered-blocks=3",
+		"    pkg/alpha/file.go:41 (2 statements)",
+		"  package=github.com/portpowered/infinite-you/pkg/alpha coverage=70.0% floor=75.0% delta=-5.0pp gate=fail lane=functional",
 		"  package=github.com/portpowered/infinite-you/pkg/alpha coverage=70.0% floor=75.0% delta=-5.0pp gate=fail lane=functional",
 		"  tally: measured-packages=2 gated-packages=2 below-floor=1 near-floor=0 gate-failures=1",
 		"package coverage regression: package=github.com/portpowered/infinite-you/pkg/alpha lane=functional expected-minimum=75.00% actual=70.0000% delta=-5.0000 percentage-points covered=7/10 statements",
 		"package coverage regression: package=github.com/portpowered/infinite-you/pkg/beta lane=functional expected-minimum=75.00% actual=60.0000% delta=-15.0000 percentage-points covered=6/10 statements",
+		"coverage manifest missing entry: package=service-root lane=functional",
+		"coverage not evaluated: package=unmeasured lane=functional (no measurement in profile)",
 		"make: *** [functional-test-viz] Error 1",
 	].join("\n");
 
 	const extracted = extractFunctionalCoverageVerdict(log);
 	assert.equal(extracted.foundInventory, true);
 	assert.equal(extracted.hasCoverageGateFailure, true);
-	assert.equal(extracted.lines.filter((line) => line.startsWith("package coverage regression:")).length, 2);
+	assert.equal(extracted.lines.filter((line) => line.startsWith("  package=")).length, 1);
+	assert.equal(new Set(extracted.lines).size, extracted.lines.length);
 	assert.equal(extracted.text.includes(rawLine), false);
 	assert.equal(extracted.text.includes("make: ***"), false);
+	assert.doesNotMatch(extracted.text, /floor violation|package coverage regression|coverage manifest missing|coverage not evaluated|uncovered blocks|file\.go:/);
 	assert.match(extracted.text, /Functional suite inventory:/);
+	assert.match(extracted.text, /  tally:/);
 });
 
 test("retains the advisory banner and distinguishes report-only findings from failed tests", () => {
@@ -157,7 +164,8 @@ test("retains the advisory banner and distinguishes report-only findings from fa
 	assert.equal(extracted.hasAdvisoryFindings, true);
 	assert.equal(extracted.hasOrdinaryTestFailure, false);
 	assert.match(extracted.text, /COVERAGE FLOOR POLICY: advisory/);
-	assert.match(extracted.text, /coverage manifest missing entry: package=service-root/);
+	assert.match(extracted.text, /Functional suite inventory:/);
+	assert.doesNotMatch(extracted.text, /package coverage regression|coverage manifest missing entry|coverage not evaluated/);
 });
 
 test("captures the exact recorded gocoveragecheck exit code", () => {
@@ -252,8 +260,12 @@ test("green runner remains successful and records its compact verdict", (t) => {
 	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 	const verdictPath = join(artifactRoot, "functional-coverage-verdict.txt");
 	assert.ok(existsSync(verdictPath));
-	assert.match(readFileSync(verdictPath, "utf8"), /Go coverage 80\.0% meets minimum/);
+	const verdict = readFileSync(verdictPath, "utf8");
+	assert.match(verdict, /Go coverage 80\.0% meets minimum/);
+	assert.equal(verdict.match(/  package=.*lane=functional/g)?.length, 1);
+	assert.doesNotMatch(verdict, /floor violation|uncovered blocks/);
 	assert.equal(readFileSync(join(artifactRoot, "gocoveragecheck-exit-code.txt"), "utf8").trim(), "0");
+	assert.doesNotMatch(result.stdout, /Functional package coverage verdict:|  package=.*lane=functional|Go coverage .* meets minimum/);
 });
 
 test("advisory runner remains successful and retains policy plus findings", (t) => {
@@ -264,8 +276,8 @@ test("advisory runner remains successful and retains policy plus findings", (t) 
 	assert.match(verdict, /Functional coverage outcome: advisory/);
 	assert.match(verdict, /COVERAGE FLOOR POLICY: advisory/);
 	assert.ok(verdict.includes("package=github.com/portpowered/infinite-you/pkg/alpha"));
-	assert.match(verdict, /coverage manifest missing entry: package=.*factory_runtime/);
-	assert.ok(verdict.includes("coverage not evaluated: package=github.com/portpowered/infinite-you/pkg/beta"));
+	assert.doesNotMatch(verdict, /floor violation|coverage manifest missing entry|coverage not evaluated|uncovered blocks/);
+	assert.doesNotMatch(result.stdout, /Functional package coverage verdict:|  package=.*lane=functional|Go coverage .* meets minimum/);
 	assert.equal(readFileSync(join(artifactRoot, "gocoveragecheck-exit-code.txt"), "utf8").trim(), "0");
 });
 
@@ -288,6 +300,8 @@ test("recorded nonzero verdict fails only in the final verdict step", (t) => {
 	assert.equal(publish.status, 1, `${publish.stdout}\n${publish.stderr}`);
 	assert.equal(publish.stdout.includes(verdict), true);
 	assert.equal(readFileSync(summaryPath, "utf8").includes(verdict), true);
+	assert.equal(`${result.stdout}\n${publish.stdout}`.match(/  package=.*lane=functional/g)?.length, 1);
+	assert.doesNotMatch(`${result.stdout}\n${publish.stdout}`, /floor violation|uncovered blocks/);
 });
 
 test("infrastructure failure keeps the full runner step red", (t) => {
