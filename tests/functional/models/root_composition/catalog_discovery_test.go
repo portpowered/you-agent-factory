@@ -2,16 +2,22 @@ package root_composition_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -289,6 +295,348 @@ func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *
 	}
 }
 
+// TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence
+// proves the public catalog preserves the authored worker/resource shape while
+// keeping a Factory declaration ahead of the built-in definition with the same
+// model name.
+func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
+	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	listed := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	catalogModel := findCatalogModel(t, listed.Results, "OMNIVOICE_Q4_K_M", "GET /models")
+	if catalogModel.ProviderLocality != factoryapi.WorkerModelLocalityLocal ||
+		catalogModel.Status != factoryapi.ModelStatusREADY ||
+		len(catalogModel.Operations) != 2 ||
+		catalogModel.Operations[0].Name != "ASR" || catalogModel.Operations[1].Name != "TTS" {
+		t.Fatalf("catalog-model summary = %#v, want local READY ASR/TTS catalog", catalogModel)
+	}
+	if len(catalogModel.Resources) != 2 || catalogModel.Resources[0].Name != "a-cache" || catalogModel.Resources[1].Name != "z-cache" {
+		t.Fatalf("catalog-model resources = %#v, want stable a-cache/z-cache order", catalogModel.Resources)
+	}
+
+	detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
+	if len(detail.Capabilities) != 2 || detail.Capabilities[0].Worker != "a-worker" || detail.Capabilities[1].Worker != "z-worker" {
+		t.Fatalf("catalog-model capabilities = %#v, want stable worker order", detail.Capabilities)
+	}
+	if detail.Capabilities[0].ModelProvider == nil || *detail.Capabilities[0].ModelProvider != "codex" {
+		t.Fatalf("first catalog capability provider = %#v (%q), want codex", detail.Capabilities[0].ModelProvider, *detail.Capabilities[0].ModelProvider)
+	}
+	if len(detail.Capabilities[0].ResourceNames) != 1 || detail.Capabilities[0].ResourceNames[0] != "a-cache" {
+		t.Fatalf("first catalog capability resources = %#v, want a-cache", detail.Capabilities[0].ResourceNames)
+	}
+
+	builtInOverride := findCatalogModel(t, listed.Results, "tts", "GET /models")
+	if len(builtInOverride.Operations) != 1 || builtInOverride.Operations[0].Name != "TTS" {
+		t.Fatalf("factory tts override = %#v, want the authored TTS operation", builtInOverride)
+	}
+	overrideDetail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/tts")
+	if overrideDetail.Name != "tts" || len(overrideDetail.Capabilities) != 1 || overrideDetail.Capabilities[0].Worker != "factory-tts" {
+		t.Fatalf("factory tts detail = %#v, want Factory-owned tts capability", overrideDetail)
+	}
+}
+
+// TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP proves that a
+// root-composed catalog keeps an unknown model on the public not-found
+// contract instead of exposing an internal runtime failure.
+func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
+	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	endpoint := server.URL() + "/models/missing-catalog-model"
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	var failure factoryapi.ErrorResponse
+	decodeErr := json.NewDecoder(response.Body).Decode(&failure)
+	response.Body.Close()
+	if decodeErr != nil {
+		t.Fatalf("decode GET %s failure: %v", endpoint, decodeErr)
+	}
+	if response.StatusCode != http.StatusNotFound ||
+		failure.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+		failure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("GET %s = status %d, failure %#v; want typed not-found 404", endpoint, response.StatusCode, failure)
+	}
+
+	invalidEndpoint := server.URL() + "/models/%20"
+	invalidResponse, err := http.Get(invalidEndpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", invalidEndpoint, err)
+	}
+	var invalidFailure factoryapi.ErrorResponse
+	decodeErr = json.NewDecoder(invalidResponse.Body).Decode(&invalidFailure)
+	invalidResponse.Body.Close()
+	if decodeErr != nil {
+		t.Fatalf("decode GET %s failure: %v", invalidEndpoint, decodeErr)
+	}
+	if invalidResponse.StatusCode != http.StatusNotFound ||
+		invalidFailure.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+		invalidFailure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("GET %s = status %d, failure %#v; want typed blank-name not-found 404", invalidEndpoint, invalidResponse.StatusCode, invalidFailure)
+	}
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "inspect", "missing-catalog-model",
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models inspect) error = nil, want unknown model")
+	}
+}
+
+// TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP proves that
+// the effective built-in catalog rejects an operation outside the selected
+// model definition before any model host or provider effect is attempted.
+func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T) {
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	endpoint := server.URL() + "/models/tts/invocations"
+	response, err := http.Post(endpoint, "application/json", strings.NewReader(`{"operation":"ASR"}`))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	var failure factoryapi.ErrorResponse
+	decodeErr := json.NewDecoder(response.Body).Decode(&failure)
+	response.Body.Close()
+	if decodeErr != nil {
+		t.Fatalf("decode POST %s failure: %v", endpoint, decodeErr)
+	}
+	if response.StatusCode != http.StatusBadRequest ||
+		failure.Family != factoryapi.ErrorFamilyBadRequest ||
+		failure.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") {
+		t.Fatalf("POST %s = status %d, failure %#v; want typed bad-request 400", endpoint, response.StatusCode, failure)
+	}
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts",
+		"--operation", "ASR", "--text", "unsupported catalog operation",
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want unsupported catalog operation")
+	}
+}
+
+// TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy proves that
+// a scoped cache-inspection failure stays on the public model-unavailable
+// contract for both collection and detail reads.
+func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
+	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+				return nil, errors.New("cache inspection failed")
+			},
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	for _, endpoint := range []string{server.URL() + "/models", server.URL() + "/models/OMNIVOICE_Q4_K_M"} {
+		response, err := http.Get(endpoint)
+		if err != nil {
+			t.Fatalf("GET %s: %v", endpoint, err)
+		}
+		var failure factoryapi.ErrorResponse
+		decodeErr := json.NewDecoder(response.Body).Decode(&failure)
+		response.Body.Close()
+		if decodeErr != nil {
+			t.Fatalf("decode GET %s failure: %v", endpoint, decodeErr)
+		}
+		if response.StatusCode != http.StatusNotFound ||
+			failure.Family != factoryapi.ErrorFamilyNotFound ||
+			failure.Code != factoryapi.ErrorResponseCode("MODEL_NOT_AVAILABLE") {
+			t.Fatalf("GET %s failure = status %d %#v, want public unavailable model taxonomy", endpoint, response.StatusCode, failure)
+		}
+	}
+}
+
+// TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess
+// proves direct invocation does not turn a second readiness lookup failure
+// into a backend or filesystem diagnostic.
+func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	var inspections atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			if inspections.Add(1) <= 1 {
+				return nil, os.ErrNotExist
+			}
+			return nil, errors.New(`inspect C:\private\model-cache: access denied`)
+		},
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "readiness failure probe",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(models invoke) error = nil, want readiness failure; inspections=%d", inspections.Load())
+	}
+	if inspections.Load() <= 1 {
+		t.Fatalf("model cache inspections = %d, want catalog and follow-up readiness observations", inspections.Load())
+	}
+	combined := inputs.Stdout() + inputs.Stderr()
+	if strings.Contains(combined, "private") || strings.Contains(combined, "access denied") {
+		t.Fatalf("models invoke leaked readiness dependency details: %s", combined)
+	}
+}
+
+// TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess proves a
+// readiness cancellation returned by the composed catalog does not reach the
+// provider or expose the dependency's error text through Process.Execute.
+func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			return nil, context.Canceled
+		},
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "catalog cancellation probe",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want dependency cancellation")
+	}
+	combined := inputs.Stdout() + inputs.Stderr()
+	if strings.Contains(combined, "private") || strings.Contains(combined, "access denied") {
+		t.Fatalf("models invoke leaked dependency details: %s", combined)
+	}
+}
+
+// TestModelsInvokeCatalogRequestCancellationStopsReadiness proves cancellation
+// between scope opening and catalog discovery stops GetCatalogModel before it
+// can return a partial detail or invoke a provider.
+func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startOnce sync.Once
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			startOnce.Do(func() { close(started) })
+			<-release
+			return nil, context.Canceled
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "catalog request cancellation probe",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		cancel()
+		close(release)
+		t.Fatal("catalog readiness probe did not start")
+	}
+	cancel()
+	close(release)
+	select {
+	case <-command.Done():
+		if command.Err() == nil {
+			t.Fatal("Process.Execute(models invoke) error = nil, want caller cancellation")
+		}
+		command.AcceptError()
+	case <-time.After(5 * time.Second):
+		t.Fatal("models invoke did not stop after caller cancellation")
+	}
+}
+
+// TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe proves a
+// cancellation from the direct readiness preflight remains typed and safe
+// after catalog discovery has already succeeded.
+func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	var inspections atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			if inspections.Add(1) == 1 {
+				return nil, os.ErrNotExist
+			}
+			return nil, context.Canceled
+		},
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "readiness cancellation probe",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want readiness cancellation")
+	}
+	if inspections.Load() < 2 {
+		t.Fatalf("model cache inspections = %d, want catalog and readiness probes", inspections.Load())
+	}
+}
+
+// TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe
+// proves the post-query context guard prevents invocation after a readiness
+// collaborator cancels the caller while returning a normal missing-cache
+// observation.
+func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	var inspections atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+			if inspections.Add(1) >= 2 {
+				cancel()
+			}
+			return nil, os.ErrNotExist
+		},
+	})
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "post-readiness cancellation probe",
+	})
+	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = append(inputs.Input.Env, runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want post-readiness cancellation")
+	}
+	if inspections.Load() < 2 {
+		t.Fatalf("model cache inspections = %d, want catalog and readiness probes", inspections.Load())
+	}
+}
+
 func findCatalogModel(
 	t *testing.T,
 	models []factoryapi.ModelSummary,
@@ -305,38 +653,6 @@ func findCatalogModel(
 	return factoryapi.ModelSummary{}
 }
 
-func catalogDiscoveryFactoryConfig() map[string]any {
-	return map[string]any{
-		"name": "models-catalog-discovery",
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]any{{
-			"name":          "tts-worker",
-			"type":          interfaces.WorkerTypeModel,
-			"model":         "OMNIVOICE_Q4_K_M",
-			"modelProvider": "CODEX",
-			"modelLocality": interfaces.ModelLocalityCloud,
-			"operations": []map[string]any{{
-				"name": "TTS",
-				"inputs": []map[string]any{{
-					"name":         "text",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
-					"required":     true,
-				}},
-				"outputs": []map[string]any{{
-					"name":         "audio",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
-				}},
-			}},
-		}},
-	}
-}
 
 // TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess proves the
 // effective catalog projects every zero-configuration built-in through the
@@ -526,5 +842,38 @@ func richCatalogFactoryConfig() map[string]any {
 				"operations": []map[string]any{{"name": "TTS", "inputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}}}, "outputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}}}}},
 			},
 		},
+	}
+}
+
+func catalogDiscoveryFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "models-catalog-discovery",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "tts-worker",
+			"type":          interfaces.WorkerTypeModel,
+			"model":         "OMNIVOICE_Q4_K_M",
+			"modelProvider": "CODEX",
+			"modelLocality": interfaces.ModelLocalityCloud,
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{{
+					"name":         "text",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+					"required":     true,
+				}},
+				"outputs": []map[string]any{{
+					"name":         "audio",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
 	}
 }
