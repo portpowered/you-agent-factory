@@ -10,7 +10,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
@@ -81,71 +80,6 @@ func CostsQueryFromProcess(process any) costs.CostsQuery {
 	}
 	query, _ := capability.RuntimeCostsQuery().(costs.CostsQuery)
 	return query
-}
-
-// RecordingsProjection is the narrow Recordings read capability exposed by a
-// canonical process. It keeps process callers independent of the full
-// application service graph while supporting public HTTP representation tests.
-type RecordingsProjection interface {
-	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
-	QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest) (recordings.WorkstationRequestsQueryResult, error)
-	ReconstructFactoryWorldState([]recordings.FactoryEvent, int) (recordings.FactoryWorldState, error)
-	ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice
-}
-
-// RecordingsProjectionQueries is the optional stateless projection-query
-// surface carried by a canonical process. The original RecordingsProjection
-// contract remains narrow for existing callers; this additive capability
-// exposes the other Recordings-owned read projections without leaking the
-// application service graph.
-type RecordingsProjectionQueries interface {
-	RecordingsProjection
-	SimpleDashboardRenderData(recordings.FactoryWorldState) recordings.SimpleDashboardRenderData
-	ProjectActiveThrottlePauses(
-		recordings.InitialStructurePayload,
-		[]recordings.ActiveThrottlePause,
-	) []recordings.FactoryWorldThrottlePause
-	ValidateReconnectReplay(
-		[]recordings.FactoryEvent,
-		recordings.FactoryEventReconnectCursor,
-		recordings.FactoryEventReconnectScope,
-	) error
-}
-
-// RecordingsProjectionFromProcess returns the already-composed Recordings
-// projection capability carried by a canonical process.
-func RecordingsProjectionFromProcess(process any) RecordingsProjection {
-	applicationProcess, ok := process.(*initializerapplication.Process)
-	if !ok || applicationProcess == nil {
-		return nil
-	}
-	capability := applicationProcess.RecordingsProjection()
-	if capability == nil {
-		return nil
-	}
-	projection, _ := capability.RecordingsProjection().(RecordingsProjection)
-	return projection
-}
-
-// RecordingsServiceFromProcess returns the already-composed Recordings root
-// when a caller needs an owner operation that is not part of the projection
-// view. The service remains the instance selected by canonical composition.
-func RecordingsServiceFromProcess(process any) recordings.Service {
-	applicationProcess, ok := process.(*initializerapplication.Process)
-	if !ok || applicationProcess == nil {
-		return nil
-	}
-	capability := applicationProcess.RecordingsProjection()
-	if capability == nil {
-		return nil
-	}
-	serviceCapability, ok := capability.RecordingsProjection().(interface {
-		RecordingsService() recordings.Service
-	})
-	if !ok {
-		return nil
-	}
-	return serviceCapability.RecordingsService()
 }
 
 // OperatorSettingsFromProcess returns the already-composed Operator Settings

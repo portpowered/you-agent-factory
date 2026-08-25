@@ -37,7 +37,6 @@ type Process struct {
 	runtimeMetrics   processcontract.RuntimeMetricsQueryCapability
 	executionOpen    processcontract.ExecutionRuntimeOpeningCapability
 	runtimeCosts     processcontract.RuntimeCostsQueryCapability
-	recordings       processcontract.RecordingsProjectionCapability
 	operatorSettings processcontract.OperatorSettingsCapability
 }
 
@@ -68,7 +67,7 @@ func NewProcess(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil, nil, nil)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil, nil)
 }
 
 // NewProcessWithRuntimeCostsAndExecution constructs the canonical process
@@ -85,13 +84,11 @@ func NewProcessWithRuntimeCostsAndExecution(
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, nil, nil)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, nil)
 }
 
 // NewProcessWithRuntimeCostsAndExecutionAndCapabilities constructs the
-// canonical process with narrow read capabilities already composed by Wire.
-// The capabilities cross the initializer boundary opaquely; this constructor
-// does not build a second service graph.
+// canonical process with the already-composed Operator Settings capability.
 func NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
 	commandFactory processcontract.CommandFactory,
 	initializer processcontract.Initializer,
@@ -103,10 +100,9 @@ func NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
-	recordings processcontract.RecordingsProjectionCapability,
 	operatorSettings processcontract.OperatorSettingsCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, recordings, operatorSettings)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, operatorSettings)
 }
 
 func newProcess(
@@ -120,7 +116,6 @@ func newProcess(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
-	recordings processcontract.RecordingsProjectionCapability,
 	operatorSettings processcontract.OperatorSettingsCapability,
 ) (*Process, error) {
 	if providers == nil {
@@ -140,7 +135,6 @@ func newProcess(
 		runtimeMetrics:   runtimeMetrics,
 		executionOpen:    executionOpen,
 		runtimeCosts:     runtimeCosts,
-		recordings:       recordings,
 		operatorSettings: operatorSettings,
 	}, nil
 }
@@ -219,16 +213,6 @@ func (p *Process) RuntimeCostsQuery() processcontract.RuntimeCostsQueryCapabilit
 		return nil
 	}
 	return p.runtimeCosts
-}
-
-// RecordingsProjection returns the composed Recordings projection capability.
-// The application process exposes only the neutral capability wrapper; pkg/root
-// owns the typed caller-facing projection boundary.
-func (p *Process) RecordingsProjection() processcontract.RecordingsProjectionCapability {
-	if p == nil {
-		return nil
-	}
-	return p.recordings
 }
 
 // OperatorSettings returns the composed Operator Settings capability. The
