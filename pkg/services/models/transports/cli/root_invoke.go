@@ -128,6 +128,13 @@ func (service *rootService) catalogForInvoke(
 	if err == nil {
 		return result.Model, nil
 	}
+	if errors.Is(err, modelinference.ErrUnsupportedOperation) &&
+		strings.TrimSpace(cfg.Text) == "" && len(cfg.InputMappings) == 0 {
+		// Preserve the legacy error for lightweight roots that cannot expose a
+		// catalog. A Models root with catalog support validates the operation's
+		// actual required slots in prepareGenericCLIInputs below.
+		return modelinference.Detail{}, fmt.Errorf("--text is required")
+	}
 	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
 		return modelinference.Detail{}, fmt.Errorf("--output is required unless --json is set")
 	}
@@ -875,7 +882,7 @@ func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.O
 	var optionalText *modelinference.OperationSlot
 	for index := range inputs {
 		input := &inputs[index]
-		if input.Modality != modelinference.ModalityText {
+		if !genericCLITextInputSlot(*input) {
 			continue
 		}
 		if input.Required != nil && *input.Required {
