@@ -883,7 +883,6 @@ func newProductionModelsCommand(
 			policy := diagnostics.resolvePolicy(false)
 			return policy.BuildLogger(rootOptions.buildTerminalLogger)
 		},
-		rootOptions.lookupEnv,
 	)
 	return climanifestcobra.NewModelsCommand(handler)
 }

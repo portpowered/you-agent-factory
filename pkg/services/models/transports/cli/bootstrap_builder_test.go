@@ -37,7 +37,6 @@ func TestPresentationScopeRequestFromInvokePreservesModelDefaults(t *testing.T) 
 	t.Parallel()
 
 	request := presentationScopeRequestFromInvoke(InvokeConfig{
-		ModelCacheDir: "managed-model-cache",
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5.6",
@@ -48,9 +47,6 @@ func TestPresentationScopeRequestFromInvokePreservesModelDefaults(t *testing.T) 
 	}
 	if request.OperatorDefaults.WorkerModel != "gpt-5.6" {
 		t.Fatalf("model = %q, want gpt-5.6", request.OperatorDefaults.WorkerModel)
-	}
-	if request.ModelCacheDir != "managed-model-cache" {
-		t.Fatalf("model cache dir = %q, want managed-model-cache", request.ModelCacheDir)
 	}
 }
 

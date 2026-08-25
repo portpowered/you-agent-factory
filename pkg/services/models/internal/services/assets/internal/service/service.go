@@ -824,13 +824,6 @@ func (s *service) discoverRevision(
 	if err := assetContextError(ctx); err != nil {
 		return missingSnapshot(spec.modelName, source), false, err
 	}
-	if _, err := s.inspectPath(root); errors.Is(err, os.ErrNotExist) {
-		return missingSnapshot(spec.modelName, source), false, nil
-	} else if err != nil {
-		return missingSnapshot(spec.modelName, source), false, fmt.Errorf(
-			"inspect managed model cache: %w", err,
-		)
-	}
 	entries, err := s.readDirectory(root)
 	if errors.Is(err, os.ErrNotExist) {
 		return missingSnapshot(spec.modelName, source), false, nil

@@ -72,12 +72,6 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 			return operatorconfig.ResolvedDefaults{}, nil
 		},
 		func() (*zap.Logger, error) { return logger, nil },
-		func(key string) (string, bool) {
-			if key != modelCacheDirEnvironment {
-				t.Fatalf("environment key = %q, want %q", key, modelCacheDirEnvironment)
-			}
-			return "/managed/models", true
-		},
 	)
 
 	cmd := &cobra.Command{Use: "invoke"}

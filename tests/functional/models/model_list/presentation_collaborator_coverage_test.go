@@ -121,20 +121,3 @@ func TestProcessModelsInspect_RoutesThroughCompositionProviderWithoutServer(t *t
 	}
 	support.RequireNotFoundCLIDiagnostic(t, inputs.Stderr())
 }
-
-func TestProcessModelsInvoke_RejectsUnsupportedCatalogOperationThroughComposition(t *testing.T) {
-	t.Parallel()
-
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
-		"--operation", "UNSUPPORTED_OPERATION", "--text", "catalog operation probe",
-	})
-	err := process.Execute(inputs.Input)
-	if err == nil {
-		t.Fatalf("Process.Execute(unsupported local model operation) error = nil, want catalog rejection")
-	}
-	if strings.Contains(inputs.Stderr(), "localhost:7437") || strings.Contains(inputs.Stderr(), "connection refused") {
-		t.Fatalf("stderr = %q, want unsupported operation from composed catalog rather than remote bootstrap", inputs.Stderr())
-	}
-}

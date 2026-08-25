@@ -9,7 +9,6 @@ func presentationScopeRequestFromInvoke(cfg InvokeConfig) PresentationScopeReque
 	return PresentationScopeRequest{
 		FactoryDir:       cfg.FactoryDir,
 		HomeDir:          cfg.HomeDir,
-		ModelCacheDir:    cfg.ModelCacheDir,
 		OperatorDefaults: presentationOperatorDefaultsFromResolved(cfg.OperatorDefaults),
 		Logger:           cfg.Logger,
 		Verbose:          cfg.Verbose,

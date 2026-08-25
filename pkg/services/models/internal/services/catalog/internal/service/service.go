@@ -104,10 +104,10 @@ func overlayResolvedRuntime(base, current models.Runtime) models.Runtime {
 	if current.CacheBytes != nil {
 		projected.CacheBytes = current.CacheBytes
 	}
-	// mergeDiagnostics always returns a mutable map, including when both
-	// inputs are nil, so the readiness and lifecycle facts can be overlaid
-	// directly without a redundant nil branch.
 	projected.Diagnostics = mergeDiagnostics(projected.Diagnostics, current.Diagnostics)
+	if projected.Diagnostics == nil {
+		projected.Diagnostics = map[string]string{}
+	}
 	if projected.ReadinessState != "" {
 		projected.Diagnostics["readinessState"] = string(projected.ReadinessState)
 	}
