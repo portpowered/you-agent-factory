@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -213,6 +214,64 @@ func TestExecuteRejectsUnsafeWorkContentBeforeRunner(t *testing.T) {
 	}
 	if runnerCalls.Load() != 0 {
 		t.Fatalf("runner calls = %d, want 0 for unsafe content", runnerCalls.Load())
+	}
+}
+
+func TestExecuteRejectsMediaContentWithoutMaterializerBeforeRunner(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		mutate func(*workers.ExecuteRequest)
+	}{
+		{
+			name: "work",
+			mutate: func(request *workers.ExecuteRequest) {
+				request.Input.Work = []workers.WorkInput{{
+					Content: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeImage,
+						URL:  "http://127.0.0.1/secret.png",
+					}},
+				}}
+			},
+		},
+		{
+			name: "model binding",
+			mutate: func(request *workers.ExecuteRequest) {
+				request.Input.ModelBindings = []workers.ResolvedModelOperationBinding{{
+					Content: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeBinary,
+						URL:  "file:///private/secret.bin",
+					}},
+				}}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var runnerCalls atomic.Int32
+			service := mustExecuteServiceWithContentMaterializer(
+				t,
+				&stubRunner{execute: func(
+					context.Context,
+					workers.RunnerExecutionRequest,
+				) (workers.RunnerExecutionResult, error) {
+					runnerCalls.Add(1)
+					return workers.RunnerExecutionResult{Content: "unexpected"}, nil
+				}},
+				nil,
+			)
+			request := validExecuteRequest("dispatch-missing-materializer", "attempt-missing-materializer")
+			test.mutate(&request)
+
+			_, err := service.Execute(context.Background(), request)
+			if err == nil || !errors.Is(err, workers.ErrInvalidExecuteRequest) ||
+				!strings.Contains(err.Error(), "content materializer is required") {
+				t.Fatalf("Execute() error = %v, want stable missing-materializer error", err)
+			}
+			if runnerCalls.Load() != 0 {
+				t.Fatalf("runner calls = %d, want zero for missing materializer", runnerCalls.Load())
+			}
+		})
 	}
 }
 

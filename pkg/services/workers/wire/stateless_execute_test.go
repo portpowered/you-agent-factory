@@ -13,6 +13,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
@@ -97,6 +98,39 @@ func TestNewServiceExecuteManagedInferenceFallsBackThroughProviderRunner(t *test
 		delegate.request.Model != "selected-model" ||
 		delegate.request.ModelProvider != workers.RunnerIDCodex {
 		t.Fatalf("delegate request = %#v, want provider/model identity preserved", delegate.request)
+	}
+}
+
+func TestNewServiceRejectsContentWithoutMaterializerBeforeRunner(t *testing.T) {
+	t.Parallel()
+	fixture := newStatelessTestFixture(t)
+	request := statelessHappyPathCases()[2].request
+	request.Target.ExecutorProvider = workers.ExecutorProviderACP
+	request.Input.Work = []workers.WorkInput{{
+		Name: "private-image",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeImage,
+			URL:  "http://127.0.0.1/secret.png",
+		}},
+	}}
+
+	result, err := fixture.service.Execute(context.Background(), request)
+	if err == nil || !errors.Is(err, workers.ErrInvalidExecuteRequest) ||
+		!strings.Contains(err.Error(), "content materializer is required") {
+		t.Fatalf("Execute() error = %v, want stable missing-materializer error", err)
+	}
+	if result.Correlation != (workers.ExecutionCorrelation{}) ||
+		result.Outcome != "" || len(result.Output.Primary) != 0 || result.Failure != nil {
+		t.Fatalf("Execute() result = %#v, want no started result", result)
+	}
+	if fixture.command.calls.Load() != 0 || fixture.local.calls.Load() != 0 ||
+		fixture.provider.executeCalls.Load() != 0 {
+		t.Fatalf(
+			"content rejection effects = command %d model %d provider %d, want zero",
+			fixture.command.calls.Load(),
+			fixture.local.calls.Load(),
+			fixture.provider.executeCalls.Load(),
+		)
 	}
 }
 

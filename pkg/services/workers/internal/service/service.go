@@ -165,7 +165,16 @@ func (s *Service) materializeWorkContent(
 	request *workers.ExecuteRequest,
 	cleanup *cleanupRegistry,
 ) error {
-	if s == nil || s.contentMaterializer == nil || request == nil {
+	if s == nil || request == nil {
+		return nil
+	}
+	if s.contentMaterializer == nil {
+		if requestHasMaterializableContent(request) {
+			return fmt.Errorf(
+				"%w: Work content materializer is required for media content",
+				workers.ErrInvalidExecuteRequest,
+			)
+		}
 		return nil
 	}
 	workingDirectory := firstNonEmpty(
@@ -206,6 +215,32 @@ func (s *Service) materializeWorkContent(
 		}
 	}
 	return nil
+}
+
+func requestHasMaterializableContent(request *workers.ExecuteRequest) bool {
+	for _, input := range request.Input.Work {
+		if contentPartsNeedMaterialization(input.Content) {
+			return true
+		}
+	}
+	for _, binding := range request.Input.ModelBindings {
+		if contentPartsNeedMaterialization(binding.Content) {
+			return true
+		}
+	}
+	return false
+}
+
+func contentPartsNeedMaterialization(parts []work.WorkContentPart) bool {
+	for _, part := range parts {
+		switch part.Type.Normalized() {
+		case work.WorkContentPartTypeImage,
+			work.WorkContentPartTypeAudio,
+			work.WorkContentPartTypeBinary:
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) materializeContentParts(
