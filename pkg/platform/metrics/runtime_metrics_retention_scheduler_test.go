@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -124,6 +126,172 @@ func TestRuntimeMetricsRetentionSchedulerRetriesFailedCandidateOnNextTick(t *tes
 		t.Fatalf("scheduler.Close(): %v", err)
 	}
 }
+
+func TestRuntimeMetricsRetentionSchedulerValidatesConfiguration(t *testing.T) {
+	if scheduler, err := NewRuntimeMetricsRetentionScheduler(nil, nil, nil); scheduler != nil || err == nil || !strings.Contains(err.Error(), "retention is required") {
+		t.Fatalf("NewRuntimeMetricsRetentionScheduler(nil) = (%#v, %v)", scheduler, err)
+	}
+	var nilScheduler *RuntimeMetricsRetentionScheduler
+	if err := nilScheduler.Close(context.Background()); err != nil {
+		t.Fatalf("nil scheduler Close() = %v, want nil", err)
+	}
+	if _, err := nilScheduler.Start(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "scheduler is not configured") {
+		t.Fatalf("nil scheduler Start() = %v, want configuration error", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerStartsAndClosesDeterministically(t *testing.T) {
+	root := t.TempDir()
+	coordination := &metricsTestCoordination{
+		rootLock:    &metricsTestCloser{},
+		tryRootLock: &metricsTestCloser{},
+	}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	manualTicker := newManualRuntimeMetricsRetentionTicker()
+	var intervals []time.Duration
+	scheduler, err := NewRuntimeMetricsRetentionScheduler(
+		retention,
+		func(interval time.Duration) RuntimeMetricsRetentionTicker {
+			intervals = append(intervals, interval)
+			return manualTicker
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetentionScheduler(): %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := scheduler.Start(canceled, RuntimeMetricsRetentionRequest{RootDirectory: root}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start(canceled) = %v, want context.Canceled", err)
+	}
+	if _, err := scheduler.Start(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: " "}); err == nil || !strings.Contains(err.Error(), "root is required") {
+		t.Fatalf("Start(blank root) = %v, want root validation", err)
+	}
+
+	lease, err := scheduler.Start(nil, RuntimeMetricsRetentionRequest{RootDirectory: root})
+	if err != nil {
+		t.Fatalf("Start(valid): %v", err)
+	}
+	if len(intervals) != 1 || intervals[0] != time.Hour {
+		t.Fatalf("ticker intervals = %v, want one hourly interval", intervals)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("lease.Close(): %v", err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatalf("lease.Close() second call: %v", err)
+	}
+	if err := scheduler.Close(context.Background()); err != nil {
+		t.Fatalf("scheduler.Close(): %v", err)
+	}
+	if err := scheduler.Close(context.Background()); err != nil {
+		t.Fatalf("scheduler.Close() second call: %v", err)
+	}
+	if _, err := scheduler.Start(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: root}); err == nil || !strings.Contains(err.Error(), "scheduler is closed") {
+		t.Fatalf("Start(after close) = %v, want closed validation", err)
+	}
+	assertSchedulerReleaseMissingWorker(t, scheduler, root)
+}
+
+func assertSchedulerReleaseMissingWorker(t *testing.T, scheduler *RuntimeMetricsRetentionScheduler, root string) {
+	t.Helper()
+	if err := scheduler.release(filepath.Clean(root)); err != nil {
+		t.Fatalf("release(missing worker) = %v, want nil", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerRejectsMissingTickers(t *testing.T) {
+	tickerCases := []struct {
+		name    string
+		factory RuntimeMetricsRetentionTickerFactory
+		want    string
+	}{
+		{name: "nil ticker", factory: func(time.Duration) RuntimeMetricsRetentionTicker { return nil }, want: "ticker is not configured"},
+		{name: "nil channel", factory: func(time.Duration) RuntimeMetricsRetentionTicker { return nilChannelRetentionTicker{} }, want: "ticker is not configured"},
+	}
+	for _, test := range tickerCases {
+		t.Run(test.name, func(t *testing.T) {
+			caseCoordination := &metricsTestCoordination{
+				rootLock:    &metricsTestCloser{},
+				tryRootLock: &metricsTestCloser{},
+			}
+			caseRetention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, caseCoordination)
+			if err != nil {
+				t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+			}
+			caseScheduler, err := NewRuntimeMetricsRetentionScheduler(caseRetention, test.factory, nil)
+			if err != nil {
+				t.Fatalf("NewRuntimeMetricsRetentionScheduler(): %v", err)
+			}
+			if _, err := caseScheduler.Start(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: t.TempDir()}); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Start(%s) = %v, want %q", test.name, err, test.want)
+			}
+			if err := caseScheduler.Close(context.Background()); err != nil {
+				t.Fatalf("Close(%s) = %v, want nil", test.name, err)
+			}
+		})
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerReportsPreparationAndCanceledSweep(t *testing.T) {
+	root := t.TempDir()
+	workerCoordination := &metricsTestCoordination{
+		rootLock:    &metricsTestCloser{err: errors.New("ensure root close failed")},
+		tryRootLock: &metricsTestCloser{},
+	}
+	workerRetention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, workerCoordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(ensure root): %v", err)
+	}
+	workerScheduler, err := NewRuntimeMetricsRetentionScheduler(workerRetention, nil, nil)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetentionScheduler(ensure root): %v", err)
+	}
+	if _, err := workerScheduler.Start(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "prepare runtime metrics root") {
+		t.Fatalf("Start(ensure root failure) = %v, want preparation context", err)
+	}
+
+	sweepRetention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, &metricsTestCoordination{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(sweep): %v", err)
+	}
+	sweepScheduler, err := NewRuntimeMetricsRetentionScheduler(sweepRetention, nil, func(RuntimeMetricsRetentionReport, error) {
+		t.Fatal("canceled worker sweep published an observation")
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetentionScheduler(sweep): %v", err)
+	}
+	sweepContext, sweepCancel := context.WithCancel(context.Background())
+	sweepCancel()
+	sweepScheduler.sweep(sweepContext, RuntimeMetricsRetentionRequest{RootDirectory: root})
+	if err := sweepScheduler.Close(context.Background()); err != nil {
+		t.Fatalf("sweepScheduler.Close(): %v", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionSchedulerHandlesNilLifecycleValues(t *testing.T) {
+	var nilLease *runtimeMetricsRetentionLease
+	if err := nilLease.Close(); err != nil {
+		t.Fatalf("nil lease Close() = %v, want nil", err)
+	}
+	if err := (&runtimeMetricsRetentionLease{}).Close(); err != nil {
+		t.Fatalf("lease without scheduler Close() = %v, want nil", err)
+	}
+	if (runtimeMetricsRetentionTicker{}).C() != nil {
+		t.Fatal("zero runtime ticker C() = non-nil, want nil")
+	}
+	(runtimeMetricsRetentionTicker{}).Stop()
+}
+
+type nilChannelRetentionTicker struct{}
+
+func (nilChannelRetentionTicker) C() <-chan time.Time { return nil }
+
+func (nilChannelRetentionTicker) Stop() {}
 
 type runtimeMetricsRetentionSchedulerHarness struct {
 	scheduler *RuntimeMetricsRetentionScheduler
