@@ -581,20 +581,7 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	if err := executeRootModelsCLI(t, process, dir, environment, &output, jsonInvoke.Input.Args); err != nil {
 		t.Fatalf("Process.Execute(multi-output --json) error = %v", err)
 	}
-	var validationResponse struct {
-		ModelName         string `json:"modelName"`
-		Operation         string `json:"operation"`
-		Mode              string `json:"mode"`
-		ValidationOnly    bool   `json:"validationOnly"`
-		InferenceExecuted bool   `json:"inferenceExecuted"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &validationResponse); err != nil {
-		t.Fatalf("decode multi-output validation JSON = %v\n%s", err, output.String())
-	}
-	if validationResponse.ModelName != "llm" || validationResponse.Operation != "OMNI" ||
-		validationResponse.Mode != "VALIDATION_ONLY" || !validationResponse.ValidationOnly || validationResponse.InferenceExecuted {
-		t.Fatalf("multi-output validation JSON = %#v, want validation-only metadata", validationResponse)
-	}
+	assertGenericCLIValidationOnly(t, &output)
 
 	textPath := filepath.Join(t.TempDir(), "text.out")
 	usagePath := filepath.Join(t.TempDir(), "usage.out")
@@ -619,6 +606,24 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 		t.Fatalf("mapped output response/effects = %q, starts %d; want one start for the mapped invocation", output.String(), hostLauncher.Calls())
 	}
 	closeRootProcess(t, process, "close multi-output root process")
+}
+
+func assertGenericCLIValidationOnly(t testing.TB, output *bytes.Buffer) {
+	t.Helper()
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode multi-output validation JSON = %v\n%s", err, output.String())
+	}
+	if response.ModelName != "llm" || response.Operation != "OMNI" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("multi-output validation JSON = %#v, want validation-only metadata", response)
+	}
 }
 
 func assertMappedGenericCLIResponse(t testing.TB, output *bytes.Buffer) {

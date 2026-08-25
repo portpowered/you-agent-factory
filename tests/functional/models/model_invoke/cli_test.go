@@ -18,6 +18,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
@@ -70,20 +71,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		t.Fatalf("Process.Execute(models invoke) error = %v", err)
 	}
 
-	var response struct {
-		ModelName         string `json:"modelName"`
-		Operation         string `json:"operation"`
-		Mode              string `json:"mode"`
-		ValidationOnly    bool   `json:"validationOnly"`
-		InferenceExecuted bool   `json:"inferenceExecuted"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
-		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
-	}
-	if response.ModelName != "tts" || response.Operation != "TTS" ||
-		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
-		t.Fatalf("response = %#v, want validation-only tts/TTS metadata", response)
-	}
+	assertProcessModelsValidationOnly(t, &output)
 	if diagnostics.Len() != 0 {
 		t.Fatalf("models invoke JSON stderr = %q, want empty", diagnostics.String())
 	}
@@ -131,6 +119,104 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	if boundaries.assetNetwork.Calls() != 0 {
 		t.Fatalf("asset network calls = %d, want 0 from content-addressed cache", boundaries.assetNetwork.Calls())
 	}
+}
+
+func assertProcessModelsValidationOnly(t testing.TB, output *bytes.Buffer) {
+	t.Helper()
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
+	}
+	if response.ModelName != "tts" || response.Operation != "TTS" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("response = %#v, want validation-only tts/TTS metadata", response)
+	}
+}
+
+// TestProcessLegacyModelsInvokeMissingFactoryLayoutReportsFailure proves the
+// legacy named-model output form resolves its Factory directory before trying
+// to open an invocation runtime or publish an artifact.
+func TestProcessLegacyModelsInvokeMissingFactoryLayoutReportsFailure(t *testing.T) {
+	t.Parallel()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	workingDirectory := t.TempDir()
+	outputPath := filepath.Join(workingDirectory, "speech.wav")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "missing layout", "--output", outputPath,
+	})
+	inputs.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute(legacy models invoke) error = nil, want missing-layout failure")
+	}
+	if _, err := os.Stat(outputPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy models invoke output stat error = %v, want no artifact", err)
+	}
+}
+
+// TestProcessLegacyNamedModelInvokeUsesInvocationOperation proves a named
+// Factory model with an audio output still reaches the legacy invocation
+// operation and publishes the streamed artifact through Process.Execute.
+func TestProcessLegacyNamedModelInvokeUsesInvocationOperation(t *testing.T) {
+	t.Parallel()
+
+	audio := []byte("RIFF....WAVE")
+	modelServer := processLegacyModelServer(t, audio)
+	home := t.TempDir()
+	writeReadyOmniVoiceCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	factoryDir := support.ScaffoldFactory(t, legacyModelFactoryConfig(modelServer.URL))
+	boundaries := newProcessTTSBoundaries(home, modelServer, nil)
+	process, err := root.BuildProcess(context.Background(), boundaries.edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := process.Close(context.Background()); closeErr != nil {
+			t.Errorf("close reusable process: %v", closeErr)
+		}
+	})
+
+	outputPath := filepath.Join(t.TempDir(), "speech.wav")
+	stdout, stderr, err := executeLegacyModelTTS(t, process, home, factoryDir, outputPath)
+	if err != nil {
+		t.Fatalf("Process.Execute(legacy models invoke) error = %v\nstdout=%q\nstderr=%q", err, stdout, stderr)
+	}
+	if stdout != "Wrote audio: "+outputPath+"\n" || stderr != "" {
+		t.Fatalf("legacy models invoke streams = stdout %q stderr %q, want status-only stdout", stdout, stderr)
+	}
+	written, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read legacy models invoke audio: %v", err)
+	}
+	if !bytes.Equal(written, audio) {
+		t.Fatalf("legacy models invoke audio = %q, want %q", written, audio)
+	}
+}
+
+func executeLegacyModelTTS(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	home, factoryDir, outputPath string,
+) (string, string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	err := process.Execute(root.Input{
+		Args: []string{
+			"you", "models", "invoke", "OMNIVOICE_Q4_K_M",
+			"--operation", "TTS", "--text", "legacy invocation", "--output", outputPath,
+		},
+		Env: homeEnvironment(home), Stdout: &stdout, Stderr: &stderr,
+		Context: context.Background(), WorkingDirectory: factoryDir,
+	})
+	return stdout.String(), stderr.String(), err
 }
 
 func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testing.T) {
@@ -342,6 +428,96 @@ func builtInOnlyModelFactoryConfig() map[string]any {
 			},
 		}},
 	}
+}
+
+func legacyModelFactoryConfig(endpoint string) map[string]any {
+	return map[string]any{
+		"name": "legacy-model-invoke",
+		"resources": []map[string]any{{
+			"name": "omnivoice-cache", "type": factorydefinitions.ResourceTypeModel,
+			"capacity": 1, "model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP",
+			"loadPolicy": "ON_DEMAND",
+		}},
+		"workers": []map[string]any{{
+			"name": "voice-local", "type": factorydefinitions.WorkerTypeModel,
+			"modelProvider": "CODEX", "model": "OMNIVOICE_Q4_K_M",
+			"modelLocality": factorydefinitions.ModelLocalityLocal,
+			"command":       "omnivoice-llamacpp", "args": []string{"--health-endpoint", endpoint},
+			"resources": []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{{
+					"name": "text", "contentTypes": []string{factorydefinitions.ModelOperationContentTypeText},
+					"required": true,
+				}},
+				"outputs": []map[string]any{{
+					"name": "audio", "contentTypes": []string{factorydefinitions.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
+	}
+}
+
+func writeReadyOmniVoiceCache(t *testing.T, home string) {
+	t.Helper()
+	revisionDir := filepath.Join(home, ".agent-factory", "models", "OMNIVOICE_Q4_K_M", "rev-test")
+	if err := os.MkdirAll(revisionDir, 0o755); err != nil {
+		t.Fatalf("create model cache fixture: %v", err)
+	}
+	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
+	for _, name := range files {
+		if err := os.WriteFile(filepath.Join(revisionDir, name), []byte("fixture"), 0o644); err != nil {
+			t.Fatalf("write model cache fixture %s: %v", name, err)
+		}
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"modelName": "OMNIVOICE_Q4_K_M", "revision": "rev-test",
+		"files": []map[string]any{{"path": files[0]}, {"path": files[1]}},
+	})
+	if err != nil {
+		t.Fatalf("marshal model cache metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(revisionDir), ".managed-cache.json"), metadata, 0o644); err != nil {
+		t.Fatalf("write model cache metadata: %v", err)
+	}
+}
+
+func processLegacyModelServer(t *testing.T, audio []byte) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			writer.WriteHeader(http.StatusOK)
+		case "/invoke":
+			var payload struct {
+				OutputFile string `json:"outputFile"`
+			}
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				http.Error(writer, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
+				http.Error(writer, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			response, err := json.Marshal(map[string]any{
+				"content": []map[string]any{{
+					"type": "AUDIO", "slot": "audio", "file": payload.OutputFile,
+					"contentType": "audio/wav",
+				}},
+			})
+			if err != nil {
+				http.Error(writer, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write(response)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
 const processBuiltinTTSSource = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
