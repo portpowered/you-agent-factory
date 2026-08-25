@@ -84,7 +84,7 @@ func (service *rootService) Pull(cfg PullConfig) error {
 		cfg.Progress,
 		service.pullProgressInterval,
 		service.now,
-		true,
+		!cfg.JSON,
 	)
 	defer stopProgress()
 	return service.withCatalogScope(progressCtx, func(scope modelinference.RuntimeScopeRef) error {

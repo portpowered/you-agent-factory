@@ -250,31 +250,40 @@ func TestModelPullProgressPresenterRendersThrottledBytesAndStops(t *testing.T) {
 	)
 
 	lines := progressLines(output.String())
-	if len(lines) != 1 || !strings.Contains(lines[0], `modelName="voice" phase=pull elapsed=0s`) {
-		t.Fatalf("initial progress = %#v, want one pull-phase heartbeat", lines)
+	if len(lines) != 0 {
+		t.Fatalf("initial progress = %#v, want no heartbeat before the interval", lines)
 	}
 
 	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
 		Artifact: "model.bin", TransferredBytes: 25, TotalBytes: 100,
 	})
-	if got := len(progressLines(output.String())); got != 2 {
-		t.Fatalf("first artifact progress = %d lines, want initial heartbeat plus artifact", got)
-	}
-
-	current = start.Add(500 * time.Millisecond)
-	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
-		Artifact: "model.bin", TransferredBytes: 40, TotalBytes: 100,
-	})
-	if got := len(progressLines(output.String())); got != 2 {
-		t.Fatalf("progress before interval = %d lines, want throttled to two", got)
+	if got := len(progressLines(output.String())); got != 0 {
+		t.Fatalf("first artifact progress = %d lines, want throttled output", got)
 	}
 
 	current = start.Add(time.Second)
 	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
+		Artifact: "model.bin", TransferredBytes: 40, TotalBytes: 100,
+	})
+	if got := len(progressLines(output.String())); got != 1 {
+		t.Fatalf("progress at interval = %d lines, want one", got)
+	}
+
+	current = start.Add(1500 * time.Millisecond)
+	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
 		Artifact: "model.bin", TransferredBytes: 50, TotalBytes: 100,
 	})
 	lines = progressLines(output.String())
-	if len(lines) != 3 || !strings.Contains(lines[2], `artifact="model.bin" transferredBytes=50 totalBytes=100 percent=50.0%`) {
+	if len(lines) != 1 || !strings.Contains(lines[0], `artifact="model.bin" transferredBytes=40 totalBytes=100 percent=40.0%`) {
+		t.Fatalf("progress before next interval = %#v, want prior byte totals", lines)
+	}
+
+	current = start.Add(2 * time.Second)
+	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
+		Artifact: "model.bin", TransferredBytes: 50, TotalBytes: 100,
+	})
+	lines = progressLines(output.String())
+	if len(lines) != 2 || !strings.Contains(lines[1], `artifact="model.bin" transferredBytes=50 totalBytes=100 percent=50.0%`) {
 		t.Fatalf("throttled progress = %#v, want latest byte totals", lines)
 	}
 
@@ -283,18 +292,26 @@ func TestModelPullProgressPresenterRendersThrottledBytesAndStops(t *testing.T) {
 	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
 		Artifact: "model.bin", TransferredBytes: 100, TotalBytes: 100,
 	})
-	if got := len(progressLines(output.String())); got != 3 {
+	if got := len(progressLines(output.String())); got != 2 {
 		t.Fatalf("progress after stop = %d lines, want no further output", got)
 	}
 }
 
 func TestModelPullProgressPresenterUsesPreparationPhaseAndJSONGating(t *testing.T) {
 	start := time.Unix(200, 0)
+	current := start
 	var output bytes.Buffer
 	ctx, stop := startModelPullProgress(
 		context.Background(), "asr", modelPullProgressPhasePreparation, &output,
-		time.Hour, func() time.Time { return start }, true,
+		time.Hour, func() time.Time { return current }, true,
 	)
+	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
+		Artifact: "weights.safetensors", TransferredBytes: 1, TotalBytes: 2,
+	})
+	if output.Len() != 0 {
+		t.Fatalf("preparation progress before interval = %q, want no immediate heartbeat", output.String())
+	}
+	current = start.Add(time.Hour)
 	pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
 		Artifact: "weights.safetensors", TransferredBytes: 1, TotalBytes: 2,
 	})

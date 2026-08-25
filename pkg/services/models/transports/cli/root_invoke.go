@@ -99,7 +99,7 @@ func (service *rootService) invokeInScope(
 	}
 	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
 	if err != nil {
-		return err
+		return mapModelsClientError(err)
 	}
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
 		return err
@@ -114,7 +114,7 @@ func (service *rootService) invokeInScope(
 		cfg.Progress,
 		service.pullProgressInterval,
 		service.now,
-		true,
+		!cfg.JSON,
 	)
 	defer stopProgress()
 	cfg.Context = progressCtx

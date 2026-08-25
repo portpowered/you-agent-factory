@@ -130,7 +130,7 @@ func startModelPullProgress(
 		return ctx, func() {}
 	}
 	if now == nil {
-		now = time.Now
+		return ctx, func() {}
 	}
 	presenter := &modelPullProgressPresenter{
 		ctx: ctx, modelName: strings.TrimSpace(modelName), phase: strings.TrimSpace(phase),
@@ -142,7 +142,6 @@ func startModelPullProgress(
 	})
 	ctx = pullsupport.WithProgressObserver(ctx, observer)
 	presenter.start()
-	presenter.observe(pullsupport.ProgressObservation{ModelName: presenter.modelName})
 	return ctx, presenter.close
 }
 
@@ -211,8 +210,10 @@ func (presenter *modelPullProgressPresenter) tick() {
 }
 
 func (presenter *modelPullProgressPresenter) shouldRender(now time.Time) bool {
-	return !presenter.hasObservation || presenter.lastRendered.IsZero() ||
-		(presenter.latest.Artifact != "" && presenter.latest.Artifact != presenter.renderedArtifact) ||
+	if presenter.lastRendered.IsZero() {
+		return now.Sub(presenter.started) >= presenter.interval
+	}
+	return (presenter.latest.Artifact != "" && presenter.latest.Artifact != presenter.renderedArtifact) ||
 		now.Sub(presenter.lastRendered) >= presenter.interval
 }
 

@@ -537,6 +537,18 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
+func progressingClock() func() time.Time {
+	start := time.Unix(300, 0)
+	called := 0
+	return func() time.Time {
+		called++
+		if called == 1 {
+			return start
+		}
+		return start.Add(time.Hour)
+	}
+}
+
 func TestRootAdapterPullProgressStaysOnStderr(t *testing.T) {
 	scope := testRuntimeScope(t)
 	service := modelscli.NewService(modelscli.Config{
@@ -551,6 +563,7 @@ func TestRootAdapterPullProgressStaysOnStderr(t *testing.T) {
 		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
+		Clock:                progressingClock(),
 		PullProgressInterval: time.Hour,
 	})
 
@@ -600,13 +613,14 @@ func TestRootAdapterInvokeProgressCoversImplicitPreparation(t *testing.T) {
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
+		Clock:                progressingClock(),
 		PullProgressInterval: time.Hour,
 	})
 
 	var stdout, stderr bytes.Buffer
 	if err := service.Invoke(modelscli.InvokeConfig{
 		Context: context.Background(), ModelName: "voice", Operation: modelinference.OperationTTS,
-		Text: "hello", JSON: true, Output: &stdout, Progress: &stderr,
+		Text: "hello", Output: &stdout, Progress: &stderr,
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
@@ -615,7 +629,40 @@ func TestRootAdapterInvokeProgressCoversImplicitPreparation(t *testing.T) {
 		t.Fatalf("invoke stderr = %q, want preparation progress with byte totals", stderr.String())
 	}
 	if strings.Contains(stdout.String(), "models pull progress") || !strings.Contains(stdout.String(), "ready") {
-		t.Fatalf("invoke stdout = %q, want final JSON result only", stdout.String())
+		t.Fatalf("invoke stdout = %q, want final result only", stdout.String())
+	}
+}
+
+func TestRootAdapterJSONSuppressesPullProgress(t *testing.T) {
+	scope := testRuntimeScope(t)
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			pullModel: func(ctx context.Context, name string) (modelinference.PullResult, error) {
+				pullsupport.ReportProgress(ctx, pullsupport.ProgressObservation{
+					ModelName: name, Artifact: "model.bin", TransferredBytes: 512, TotalBytes: 1024,
+				})
+				return modelinference.PullResult{ModelName: name}, nil
+			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+		Clock:                progressingClock(),
+		PullProgressInterval: time.Hour,
+	})
+
+	var stdout, stderr bytes.Buffer
+	if err := service.Pull(modelscli.PullConfig{
+		Context: context.Background(), ModelName: "voice", JSON: true,
+		Output: &stdout, Progress: &stderr,
+	}); err != nil {
+		t.Fatalf("Pull() error = %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("JSON pull stderr = %q, want no progress heartbeat", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "voice") {
+		t.Fatalf("JSON pull stdout = %q, want final result", stdout.String())
 	}
 }
 
@@ -634,6 +681,7 @@ func TestRootAdapterPullProgressPreservesFailureAndStops(t *testing.T) {
 		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
+		Clock:                progressingClock(),
 		PullProgressInterval: time.Hour,
 	})
 
