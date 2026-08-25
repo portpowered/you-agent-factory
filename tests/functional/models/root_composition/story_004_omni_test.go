@@ -61,9 +61,11 @@ func buildCoordinatedOmniEnvironment(t *testing.T, responses ...string) *coordin
 	fixture := newCoordinatedOmniProtocolFixture(responses...)
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
+	// Leave compatibility unset so this root-composition journey exercises the
+	// same pinned artifact/platform default as the shipped CLI.
 	edges := genericHTTPInvocationEdges(
 		rejectingNetwork, assetFiles, &recordingModelHostLauncher{endpoint: modelServer.URL},
-		&joinedProtocolNegotiator{}, &joinedCompatibilityChecker{}, modelServer,
+		&joinedProtocolNegotiator{}, nil, modelServer,
 	)
 	edges.ModelCLIInputReadFile = func(path string) ([]byte, error) {
 		data, ok := inputFiles[path]
