@@ -687,12 +687,22 @@ func TestPrepareGenericAssetsFetchesManifestWhenRequirementsAreOmitted(t *testin
 
 type progressWriteCloser struct {
 	bytes.Buffer
-	closed bool
+	closed   bool
+	closeErr error
 }
 
 func (writer *progressWriteCloser) Close() error {
 	writer.closed = true
-	return nil
+	return writer.closeErr
+}
+
+type errorProgressWriteCloser struct {
+	bytes.Buffer
+	closeErr error
+}
+
+func (writer *errorProgressWriteCloser) Close() error {
+	return writer.closeErr
 }
 
 func TestCopyStagedAssetReportsTransferredBytesThroughRequestObserver(t *testing.T) {
@@ -719,5 +729,74 @@ func TestCopyStagedAssetReportsTransferredBytesThroughRequestObserver(t *testing
 	if last.ModelName != "voice" || last.Artifact != "model.bin" ||
 		last.TransferredBytes != int64(len("payload")) || last.TotalBytes != int64(len("payload")) {
 		t.Fatalf("last progress observation = %#v", last)
+	}
+}
+
+func TestAssetProgressHandlesAbsentObserverAndResponseTotals(t *testing.T) {
+	var absent *assetProgress
+	absent.report()
+	absent.add(1)
+	absent.setResponseTotal(1)
+
+	ctx := pullsupport.WithProgressObserver(context.Background(), func(pullsupport.ProgressObservation) {})
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+	progress := newAssetProgress(ctx, "voice", "model.bin", 0)
+	progress.report()
+	progress.setResponseTotal(128)
+	progress.setResponseTotal(256)
+	if progress.totalBytes != 128 {
+		t.Fatalf("response total = %d, want first positive response total", progress.totalBytes)
+	}
+}
+
+func TestCopyStagedAssetWithProgressPreservesCancellationAndFailures(t *testing.T) {
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	var cancelledOutput progressWriteCloser
+	if _, _, err := copyStagedAssetWithProgress(
+		cancelled, &cancelledOutput, strings.NewReader("payload"), "model.bin", nil,
+	); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled copy error = %v, want context.Canceled", err)
+	}
+
+	readCause := errors.New("read failed")
+	var readFailureOutput progressWriteCloser
+	if _, _, err := copyStagedAssetWithProgress(
+		context.Background(), &readFailureOutput, &failingReadCloser{cause: readCause}, "model.bin", nil,
+	); !errors.Is(err, readCause) || !errors.Is(err, models.ErrAssetPreparationInterrupted) {
+		t.Fatalf("reader failure = %v, want read cause and interruption classification", err)
+	}
+
+	closeCause := errors.New("close failed")
+	if _, _, err := copyStagedAssetWithProgress(
+		context.Background(), &errorProgressWriteCloser{closeErr: closeCause}, strings.NewReader("payload"), "model.bin", nil,
+	); !errors.Is(err, closeCause) || !errors.Is(err, models.ErrAssetPreparationInterrupted) {
+		t.Fatalf("close failure = %v, want close cause and interruption classification", err)
+	}
+
+	var nilInterruption *assetPreparationInterruption
+	if nilInterruption.Error() != "" || nilInterruption.Unwrap() != nil {
+		t.Fatal("nil interruption did not remain nil-safe")
+	}
+}
+
+func TestValidateDownloadResponseClassifiesStatusAndCancellation(t *testing.T) {
+	if err := validateDownloadResponse(context.Background(), &http.Response{
+		StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok")),
+	}, "model.bin"); err != nil {
+		t.Fatalf("successful response = %v, want nil", err)
+	}
+	if err := validateDownloadResponse(context.Background(), &http.Response{
+		StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader("opaque upstream body")),
+	}, "model.bin"); !errors.Is(err, models.ErrSourceFetchFailed) {
+		t.Fatalf("failed response = %v, want source-fetch classification", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := validateDownloadResponse(cancelled, &http.Response{
+		StatusCode: http.StatusBadGateway, Body: io.NopCloser(strings.NewReader("ignored")),
+	}, "model.bin"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled response = %v, want context.Canceled", err)
 	}
 }

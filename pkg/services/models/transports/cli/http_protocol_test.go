@@ -342,6 +342,167 @@ func progressLines(value string) []string {
 	return strings.Split(trimmed, "\n")
 }
 
+func TestModelPullProgressPresenterGuardsAndNormalizesObservations(t *testing.T) {
+	clock := time.Unix(300, 0)
+	clockFn := func() time.Time { return clock }
+
+	for _, test := range []struct {
+		name     string
+		output   io.Writer
+		interval time.Duration
+		now      func() time.Time
+	}{
+		{name: "nil output", output: nil, interval: time.Second, now: clockFn},
+		{name: "non-positive interval", output: io.Discard, interval: 0, now: clockFn},
+		{name: "nil clock", output: io.Discard, interval: time.Second, now: nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, stop := startModelPullProgress(
+				nil, "voice", modelPullProgressPhasePull, test.output,
+				test.interval, test.now, true,
+			)
+			if ctx == nil {
+				t.Fatal("startModelPullProgress() context = nil")
+			}
+			stop()
+		})
+	}
+
+	var output bytes.Buffer
+	presenter := &modelPullProgressPresenter{
+		ctx: context.Background(), modelName: "default-model", phase: modelPullProgressPhasePull,
+		output: &output, interval: time.Second, now: clockFn,
+		started: clock.Add(-time.Second), stop: make(chan struct{}), done: make(chan struct{}),
+	}
+	presenter.observe(pullsupport.ProgressObservation{
+		Artifact: "  ", TransferredBytes: -10, TotalBytes: -20,
+	})
+	presenter.observe(pullsupport.ProgressObservation{
+		ModelName: " other-model ", Artifact: " weights.bin ",
+		TransferredBytes: 20, TotalBytes: 10,
+	})
+	clock = clock.Add(time.Second)
+	presenter.observe(pullsupport.ProgressObservation{
+		ModelName: "other-model", Artifact: "weights.bin", TransferredBytes: 10, TotalBytes: 10,
+	})
+	lines := progressLines(output.String())
+	if len(lines) != 3 ||
+		!strings.Contains(lines[0], `modelName="default-model"`) ||
+		!strings.Contains(lines[1], `artifact="weights.bin" transferredBytes=10 totalBytes=10 percent=100.0%`) ||
+		!strings.Contains(lines[2], `percent=100.0%`) {
+		t.Fatalf("normalized progress = %#v, want default model, clamped bytes, and interval update", lines)
+	}
+
+	presenter.started = clock.Add(time.Hour)
+	presenter.renderLocked(clock)
+	if !strings.Contains(progressLines(output.String())[3], "elapsed=0s") {
+		t.Fatalf("negative elapsed progress = %q, want elapsed=0s", output.String())
+	}
+
+	presenter.latest = pullsupport.ProgressObservation{ModelName: "other-model"}
+	presenter.hasObservation = false
+	presenter.tick()
+	presenter.hasObservation = true
+	presenter.tick()
+	tickOutput := new(bytes.Buffer)
+	tickPresenter := &modelPullProgressPresenter{
+		ctx: context.Background(), modelName: "tick-model", phase: modelPullProgressPhasePull,
+		output: tickOutput, interval: time.Second, now: clockFn,
+		started: clock.Add(-2 * time.Second), lastRendered: clock.Add(-2 * time.Second),
+		hasObservation: true, latest: pullsupport.ProgressObservation{ModelName: "tick-model"},
+	}
+	tickPresenter.tick()
+	if !strings.Contains(tickOutput.String(), `modelName="tick-model"`) {
+		t.Fatalf("tick-rendered progress = %q, want a heartbeat", tickOutput.String())
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledPresenter := &modelPullProgressPresenter{ctx: canceled, now: clockFn}
+	canceledPresenter.observe(pullsupport.ProgressObservation{})
+	canceledPresenter.tick()
+	var nilPresenter *modelPullProgressPresenter
+	nilPresenter.observe(pullsupport.ProgressObservation{})
+	nilPresenter.tick()
+	nilPresenter.close()
+
+	stoppedPresenter := &modelPullProgressPresenter{
+		ctx: context.Background(), now: clockFn, stopped: true,
+	}
+	stoppedPresenter.observe(pullsupport.ProgressObservation{})
+	stoppedPresenter.tick()
+	stoppedPresenter.renderLocked(clock)
+
+	closedPresenter := &modelPullProgressPresenter{
+		ctx: context.Background(), stop: make(chan struct{}), done: make(chan struct{}),
+	}
+	close(closedPresenter.done)
+	closedPresenter.close()
+	closedPresenter.close()
+}
+
+func TestGenericCLIInputPreflightPreservesLegacyAndSchemaHints(t *testing.T) {
+	service := &rootService{}
+
+	if _, err := service.prepareGenericCLIInputs(InvokeConfig{}, "ASR", modelinference.Detail{}); err == nil || err.Error() != "--text is required" {
+		t.Fatalf("empty unsupported operation error = %v, want legacy text guidance", err)
+	}
+	if inputs, err := service.prepareGenericCLIInputs(InvokeConfig{Text: "hello"}, "TTS", modelinference.Detail{}); err != nil || inputs != nil {
+		t.Fatalf("text unsupported operation result = %#v, %v, want no preflight inputs or error", inputs, err)
+	}
+
+	textSlot := modelinference.OperationSlot{
+		Name: "text", ContentTypes: []string{"text/plain"}, Required: cliBoolPointer(true),
+	}
+	slots, names := genericCLIInputSlots([]modelinference.OperationSlot{textSlot})
+	if err := validateImplicitCLITextInput("", []modelinference.OperationSlot{textSlot}, slots, names); err == nil || err.Error() != "--text is required" {
+		t.Fatalf("missing text error = %v, want legacy text guidance", err)
+	}
+
+	jsonSlot := modelinference.OperationSlot{
+		Name: "parameters", Modality: modelinference.ModalityJSON, Required: cliBoolPointer(true),
+	}
+	jsonSlots, jsonNames := genericCLIInputSlots([]modelinference.OperationSlot{jsonSlot})
+	err := validateImplicitCLITextInput("", []modelinference.OperationSlot{jsonSlot}, jsonSlots, jsonNames)
+	if err == nil || !strings.Contains(err.Error(), "--input parameters=<value>") {
+		t.Fatalf("missing JSON input error = %v, want value guidance", err)
+	}
+
+	if !genericCLITextInputSlot(modelinference.OperationSlot{MediaTypes: []string{" text/plain "}}) {
+		t.Fatal("media type text slot = false, want true")
+	}
+	if genericCLITextInputSlot(modelinference.OperationSlot{MediaTypes: []string{"audio/wav"}}) {
+		t.Fatal("audio media type slot = true, want false")
+	}
+}
+
+func cliBoolPointer(value bool) *bool {
+	return &value
+}
+
+func TestModelsTransportGuardPathsRemainActionable(t *testing.T) {
+	if _, err := modelsEndpoint("ftp://factory.example.test", "/models"); err == nil {
+		t.Fatal("modelsEndpoint() error = nil, want invalid server error")
+	}
+	if err := managedRuntimePullResponseError(http.StatusUnprocessableEntity, []byte("not json")); err != nil {
+		t.Fatalf("invalid pull response = %v, want no classified pull failure", err)
+	}
+	if err := managedRuntimePullResponseError(http.StatusUnprocessableEntity, []byte(`{"managedRuntimePull":{"pullOutcome":"ALREADY_READY"}}`)); err != nil {
+		t.Fatalf("successful pull response = %v, want no classified pull failure", err)
+	}
+
+	service := &rootService{}
+	if err := service.withCatalogScope(context.Background(), func(modelinference.RuntimeScopeRef) error { return nil }); err == nil || err.Error() != "models catalog scope opener is required" {
+		t.Fatalf("missing catalog opener error = %v, want actionable configuration error", err)
+	}
+	service.openCatalogScope = func(context.Context) (InvokeRuntimeScope, error) {
+		return InvokeRuntimeScope{}, errors.New("catalog unavailable")
+	}
+	if err := service.withCatalogScope(context.Background(), func(modelinference.RuntimeScopeRef) error { return nil }); err == nil || err.Error() != "catalog unavailable" {
+		t.Fatalf("catalog opener failure = %v, want opener error", err)
+	}
+}
+
 func assertDiagnosticsContains(t *testing.T, got string, wants []string) {
 	t.Helper()
 	for _, want := range wants {
