@@ -1,5 +1,9 @@
 import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
+import {
+  type ApiWorkstationType,
+  isWorkerCompatibleWithWorkstationType,
+} from "../worker-workstation-taxonomy";
 import type { EditableWorkstationInputDraft } from "../workstation-editable-values";
 import { normalizeEditableInputGuards } from "../workstation-guards";
 
@@ -58,8 +62,12 @@ export function resolveWorkerModelProvider(
 
 export function resolveWorkerOptions(
   factory: CanonicalFactoryDefinition,
+  workstationType?: ApiWorkstationType | string | null,
 ): string[] {
   return (factory.workers ?? [])
+    .filter((worker) =>
+      isWorkerCompatibleWithWorkstationType(worker.type, workstationType),
+    )
     .map((worker) => worker.name)
     .filter((name) => name.length > 0);
 }

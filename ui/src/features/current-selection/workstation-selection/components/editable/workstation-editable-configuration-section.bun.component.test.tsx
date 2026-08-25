@@ -1,13 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from "bun:test";
 
 const vi = { fn: mock };
 
@@ -395,6 +388,30 @@ describe("EditableConfigurationSection model workstation fields", () => {
     expect(
       screen.getAllByText(messages.editableConfigurationServerFieldChangedHint),
     ).toHaveLength(4);
+  });
+});
+
+describe("EditableConfigurationSection script workstation fields", () => {
+  it("renders script workstation controls without a prompt field", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildEditableConfigurationSectionReadyState({
+          workstationType: "SCRIPT_RUN",
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
+      "script-runner",
+    );
+    expect(screen.getByRole("combobox", { name: "Kind" })).toHaveTextContent(
+      "Standard",
+    );
+    expect(screen.getByLabelText("Runner")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Prompt")).toBeNull();
   });
 });
 

@@ -8,6 +8,7 @@ import {
   resolveWorkstationSummaryRequiresWorkerAssignment,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
+  resolveWorkstationSummaryWorkerTypeValue,
 } from "./workstation-summary-field-values";
 
 const readyEditableConfigurationState = {
@@ -42,7 +43,7 @@ const readyEditableConfigurationState = {
     sharedWorkerWorkstationNames: [],
     workerName: "reviewer",
     workerOptions: ["reviewer"],
-    workerTypeByName: {},
+    workerTypeByName: { reviewer: "MODEL_WORKER" },
     workstationName: "Review",
     workstationOptions: ["Review"],
     workstationType: "MODEL_WORKSTATION" as const,
@@ -162,6 +163,40 @@ describe("resolveWorkstationSummaryTypeValue", () => {
         messages,
       ),
     ).toBe("Logical move");
+  });
+});
+
+describe("resolveWorkstationSummaryWorkerTypeValue", () => {
+  const messages = getWorkstationDetailMessages("en");
+
+  it("uses the canonical worker type for a ready legacy model workstation", () => {
+    expect(
+      resolveWorkstationSummaryWorkerTypeValue(
+        readyEditableConfigurationState,
+        {
+          ...modelWorkstationNode,
+          worker_type: "reviewer",
+        },
+        messages,
+      ),
+    ).toBe("MODEL_WORKER");
+  });
+
+  it("falls back to topology worker data before editable configuration is ready", () => {
+    expect(
+      resolveWorkstationSummaryWorkerTypeValue(
+        { status: "loading" },
+        { ...modelWorkstationNode, worker_type: "reviewer" },
+        messages,
+      ),
+    ).toBe("reviewer");
+    expect(
+      resolveWorkstationSummaryWorkerTypeValue(
+        undefined,
+        { ...modelWorkstationNode, worker_type: undefined },
+        messages,
+      ),
+    ).toBe("Unknown");
   });
 });
 

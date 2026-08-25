@@ -72,6 +72,12 @@ export function isScriptWorkerType(
   return workerType === WorkerType.SCRIPT_WORKER;
 }
 
+export function isScriptRunWorkstationType(
+  workstationType: ApiWorkstationType | string | null | undefined,
+): boolean {
+  return workstationType === WorkstationType.SCRIPT_RUN;
+}
+
 export function isPollerWorkerType(
   workerType: ApiWorkerType | string | null | undefined,
 ): boolean {
@@ -120,6 +126,45 @@ export function isHumanApprovalWorkstationType(
   return workstationType === WorkstationType.HUMAN_APPROVAL;
 }
 
+/**
+ * Returns the worker classes accepted by an explicitly typed workstation.
+ * Omitted workstation types retain the legacy broad worker catalog until the
+ * authored definition is migrated to an explicit runtime type.
+ */
+export function isWorkerCompatibleWithWorkstationType(
+  workerType: ApiWorkerType | string | null | undefined,
+  workstationType: ApiWorkstationType | string | null | undefined,
+): boolean {
+  if (!workstationType) {
+    return true;
+  }
+
+  if (isScriptRunWorkstationType(workstationType)) {
+    return isScriptWorkerType(workerType);
+  }
+
+  if (isPollerRunWorkstationType(workstationType)) {
+    return isPollerWorkerType(workerType) || isScriptWorkerType(workerType);
+  }
+
+  switch (workstationType) {
+    case WorkstationType.INFERENCE_RUN:
+      return isInferenceWorkerType(workerType);
+    case WorkstationType.AGENT_RUN:
+      return isAgentWorkerType(workerType);
+    case WorkstationType.MODEL_INVOKE:
+      return isModelProviderWorkerType(workerType);
+    case WorkstationType.MODEL_WORKSTATION:
+      return (
+        workerType === WorkerType.MODEL_WORKER ||
+        isAgentWorkerType(workerType) ||
+        isScriptWorkerType(workerType)
+      );
+    default:
+      return true;
+  }
+}
+
 export function isLegacyWorkerType(
   workerType: ApiWorkerType | string | null | undefined,
 ): boolean {
@@ -160,6 +205,12 @@ export function resolveEditableWorkstationTypeConversionOptions(
   }
   if (workstationType === WorkstationType.HUMAN_APPROVAL) {
     return [WorkstationType.HUMAN_APPROVAL];
+  }
+  if (
+    workstationType === WorkstationType.SCRIPT_RUN ||
+    workstationType === WorkstationType.POLLER_RUN
+  ) {
+    return [workstationType];
   }
 
   const preferred = EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS;

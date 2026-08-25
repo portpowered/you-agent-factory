@@ -1,3 +1,4 @@
+import { isPollerRunWorkstationType } from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import type { EditableWorkstationBehavior } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   createEmptyEditableWorkstationCronDraft,
@@ -11,6 +12,16 @@ export function resolveDraftForBehaviorChange(
   behavior: EditableWorkstationBehavior,
   selectedEditableValues: EditableWorkstationValues,
 ): EditableWorkstationDraft {
+  if (isPollerRunWorkstationType(draft.workstationType)) {
+    return {
+      ...draft,
+      behavior: "POLLER",
+      cron: null,
+      prompt: "",
+      runnerName: null,
+    };
+  }
+
   if (behavior === "CRON") {
     return {
       ...draft,

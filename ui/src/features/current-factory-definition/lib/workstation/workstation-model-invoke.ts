@@ -3,6 +3,8 @@ import type { components } from "../../../../api/generated/openapi";
 import {
   isInferenceRunWorkstationType,
   isModelProviderWorkerType,
+  isPollerRunWorkstationType,
+  isScriptRunWorkstationType,
 } from "../worker-workstation-taxonomy";
 import type { EditableWorkstationType } from "./workstation-type";
 
@@ -43,7 +45,11 @@ export function isModelInvokeWorkstationType(
 export function workstationUsesPromptOrientedEditing(
   workstationType: EditableWorkstationType,
 ): boolean {
-  return !isModelInvokeWorkstationType(workstationType);
+  return (
+    !isModelInvokeWorkstationType(workstationType) &&
+    !isScriptRunWorkstationType(workstationType) &&
+    !isPollerRunWorkstationType(workstationType)
+  );
 }
 
 export function modelOperationHasCompatibleSlots(

@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
-import {
-  isModelInvokeWorkstationType,
-  workstationUsesPromptOrientedEditing,
-} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import { workstationUsesPromptOrientedEditing } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   type EditableWorkstationDraft,
@@ -64,7 +61,7 @@ export function useEditableWorkstationConfigurationState(
     sessionState != null &&
     selectedEditableValues != null &&
     draftWorkstationType != null &&
-    !isModelInvokeWorkstationType(draftWorkstationType) &&
+    workstationUsesPromptOrientedEditing(draftWorkstationType) &&
     workstationRequiresWorkerAssignment({
       type: draftWorkstationType,
     }) &&

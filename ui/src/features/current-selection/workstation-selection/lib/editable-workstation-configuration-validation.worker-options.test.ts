@@ -111,3 +111,46 @@ describe("resolveWorkerOptionsState model workstation", () => {
     });
   });
 });
+
+describe("resolveWorkerOptionsState script workstation", () => {
+  it("keeps compatible script choices ready and reports an unavailable binding", () => {
+    const scriptValues = {
+      ...modelWorkstationValues,
+      workerName: "script-runner",
+      workerOptions: ["script-runner"],
+      workerTypeByName: { "script-runner": "SCRIPT_WORKER" as const },
+      workstationType: "SCRIPT_RUN" as const,
+      workstationTypeOptions: ["SCRIPT_RUN"] as const,
+    };
+
+    expect(
+      resolveWorkerOptionsState(
+        {
+          ...baseEditableWorkstationDraft,
+          prompt: "",
+          workerName: "script-runner",
+          workstationType: "SCRIPT_RUN",
+        },
+        scriptValues,
+        editableWorkstationValidationMessages,
+      ),
+    ).toEqual({ options: ["script-runner"], status: "ready" });
+
+    expect(
+      resolveWorkerOptionsState(
+        {
+          ...baseEditableWorkstationDraft,
+          prompt: "",
+          workerName: "missing-model-worker",
+          workstationType: "SCRIPT_RUN",
+        },
+        scriptValues,
+        editableWorkstationValidationMessages,
+      ),
+    ).toEqual({
+      message:
+        editableWorkstationValidationMessages.editableConfigurationWorkerMissing,
+      status: "error",
+    });
+  });
+});
