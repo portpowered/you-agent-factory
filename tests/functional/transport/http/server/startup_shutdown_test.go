@@ -117,11 +117,119 @@ func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
 	}
 }
 
+// TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle proves the
+// delivered server-stop path drains a public long-lived response, returns its
+// serve lifecycle, and leaves the real loopback listener unavailable.
+func TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	server := startProductionLoopbackServer(t, dir, false)
+	session := getFactorySession(t, server.url, factorysessions.DefaultSessionID)
+	stream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.url, session.Id),
+	)
+
+	stopProcess := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, stopProcess)
+	stopContext, cancelStop := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancelStop()
+	stopInputs := support.FakeInputs(stopContext, []string{
+		"you", "--server", server.url, "server", "stop",
+	})
+	stopInputs.Input.WorkingDirectory = dir
+	home := t.TempDir()
+	stopInputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+
+	if err := stopProcess.Execute(stopInputs.Input); err != nil {
+		t.Fatalf(
+			"server stop through root process: %v\nstdout=%q\nstderr=%q",
+			err,
+			stopInputs.Stdout(),
+			stopInputs.Stderr(),
+		)
+	}
+	if !strings.Contains(stopInputs.Stdout(), "Server stopped:") {
+		t.Fatalf("server stop stdout = %q, want successful stop confirmation", stopInputs.Stdout())
+	}
+
+	select {
+	case <-server.command.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the production serve lifecycle to return")
+	}
+	if err := server.command.Err(); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("production serve lifecycle error after server stop = %v", err)
+	}
+
+	stream.WaitClosed(10 * time.Second)
+	observer := platformhttpserver.NewListenerStopObserver(
+		(&net.Dialer{}).DialContext,
+		platformhttpserver.DefaultListenerStopObservationInterval,
+	)
+	if err := observer.Wait(t.Context(), server.address, 5*time.Second); err != nil {
+		t.Fatalf("listener stop observation after server stop = %v, want success", err)
+	}
+}
+
+// TestListenerStopObserverReportsBoundedOpenListenerOutcomes proves the
+// observer distinguishes an open listener's deadline from caller cancellation.
+func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for listener observer: %v", err)
+	}
+	acceptDone := make(chan struct{})
+	go func() {
+		defer close(acceptDone)
+		for {
+			connection, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			_ = connection.Close()
+		}
+	}()
+	defer func() {
+		_ = listener.Close()
+		<-acceptDone
+	}()
+
+	observer := platformhttpserver.NewListenerStopObserver(
+		(&net.Dialer{}).DialContext,
+		1*time.Millisecond,
+	)
+	address := listener.Addr().String()
+	if err := observer.Wait(context.Background(), address, 100*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("open-listener observation error = %v, want context deadline exceeded", err)
+	}
+
+	canceledContext, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := observer.Wait(canceledContext, address, time.Second); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled open-listener observation error = %v, want context canceled", err)
+	}
+}
+
 func startProductionLoopbackAPIServer(
 	t *testing.T,
 	dir string,
 	pprofEnabled bool,
 ) string {
+	t.Helper()
+	return startProductionLoopbackServer(t, dir, pprofEnabled).url
+}
+
+type productionLoopbackServer struct {
+	url     string
+	address string
+	command *support.ProcessCommand
+}
+
+func startProductionLoopbackServer(
+	t *testing.T,
+	dir string,
+	pprofEnabled bool,
+) productionLoopbackServer {
 	t.Helper()
 
 	bound := make(chan platformhttpserver.Binding, 1)
@@ -191,7 +299,11 @@ func startProductionLoopbackAPIServer(
 	support.WaitForStatus(t, serverURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 		return status.RuntimeStatus != ""
 	})
-	return serverURL
+	return productionLoopbackServer{
+		url:     serverURL,
+		address: net.JoinHostPort(binding.Host, strconv.Itoa(binding.Port)),
+		command: command,
+	}
 }
 
 func assertLiveStatusAndRuntimeDiagnostics(t *testing.T, serverURL string) {
