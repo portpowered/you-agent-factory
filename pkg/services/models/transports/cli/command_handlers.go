@@ -191,6 +191,12 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	if err != nil {
 		return modelsInvokeInputs{}, err
 	}
+	if state, present := inputs.State(modelsInvokeOperationID); present && state.Default && len(inputMappings) > 0 {
+		// The manifest keeps the legacy TTS default for text invocations. A
+		// generic input binding selects the operation from the built-in model
+		// alias unless the caller supplied --operation explicitly.
+		operation = ""
+	}
 	outputPath, outputMappings, err := readModelsInvokeOutputs(inputs)
 	if err != nil {
 		return modelsInvokeInputs{}, err

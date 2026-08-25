@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -17,7 +18,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
+// YOU_MODELS_BACKEND_ENDPOINT is an opt-in composition seam for delivered
+// artifact and protocol fixtures. An unset value leaves the normal production
+// graph unchanged; the command does not discover or claim a real backend from
+// the environment.
 const modelBackendEndpointEnvironment = "YOU_MODELS_BACKEND_ENDPOINT"
+
+const (
+	environmentEmbedBackendName     = "localai-backend-localai-llamacpp-functional.tar.gz"
+	environmentEmbedBackendLocation = "https://github.com/portpowered/infinite-you/releases/download/lmx-v1-embeddings-end-to-end/localai-backend-localai-llamacpp-functional.tar.gz"
+	environmentEmbedBackendBytes    = int64(25)
+	environmentEmbedBackendSHA256   = "daed908ff6377212bb87323b0bddf0a891961abbc87cdbc1da4cf9fbe71bffc8"
+)
 
 type environmentModelBackend struct {
 	client   *http.Client
@@ -31,14 +43,57 @@ func modelBackendEdgesFromEnvironment() serviceedges.Edges {
 	}
 	backend := environmentModelBackend{client: &http.Client{Timeout: 5 * time.Minute}, endpoint: endpoint}
 	return serviceedges.Edges{
+		ModelAssetHTTPClient: environmentModelAssetHTTPClient{
+			client:   backend.client,
+			endpoint: endpoint,
+		},
+		ModelAssetEndpoints: models.RuntimeAssetEndpoints{
+			BaseURL: endpoint, APIBaseURL: endpoint,
+		},
 		ModelAssetHostPlatform:        models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelInvocationBackend:        backend.invoke,
 		ModelASRBackend:               backend.asr,
+		ModelEmbeddingBackend:         backend.embed,
 		ModelResolveBackendArtifact:   environmentBackendArtifact,
 		ModelHostProcessLauncher:      environmentHostLauncher{endpoint: endpoint},
 		ModelHostProtocolNegotiator:   environmentHostProtocol{},
 		ModelHostCompatibilityChecker: environmentHostCompatibility{},
 	}
+}
+
+// environmentModelAssetHTTPClient routes the immutable release URL used by
+// the pinned backend selector to the same opt-in fixture endpoint as model
+// assets. The selector still receives the production-shaped GitHub identity,
+// so this seam cannot alter the artifact manifest or publishing path.
+type environmentModelAssetHTTPClient struct {
+	client   *http.Client
+	endpoint string
+}
+
+func (client environmentModelAssetHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	if request == nil {
+		return nil, fmt.Errorf("model asset request is required")
+	}
+	endpoint, err := url.Parse(client.endpoint)
+	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" {
+		return nil, fmt.Errorf("model asset fixture endpoint is invalid")
+	}
+	clone := request.Clone(request.Context())
+	clone.URL = cloneURL(request.URL)
+	clone.URL.Scheme = endpoint.Scheme
+	clone.URL.Host = endpoint.Host
+	if endpoint.Path != "" && endpoint.Path != "/" {
+		clone.URL.Path = strings.TrimRight(endpoint.Path, "/") + "/" + strings.TrimLeft(clone.URL.Path, "/")
+	}
+	return client.client.Do(clone)
+}
+
+func cloneURL(value *url.URL) *url.URL {
+	if value == nil {
+		return &url.URL{}
+	}
+	clone := *value
+	return &clone
 }
 
 type environmentGenericRequest struct {
@@ -75,6 +130,15 @@ type environmentArtifactOutput struct {
 	MediaType  string            `json:"mediaType"`
 	SizeBytes  int64             `json:"sizeBytes"`
 	Properties map[string]string `json:"properties,omitempty"`
+}
+
+type environmentEmbeddingRequest struct {
+	Text       string         `json:"text"`
+	Parameters map[string]any `json:"parameters,omitempty"`
+}
+
+type environmentEmbeddingResponse struct {
+	Embeddings []float64 `json:"embeddings"`
 }
 
 func (backend environmentModelBackend) invoke(
@@ -118,6 +182,21 @@ func (backend environmentModelBackend) invoke(
 		}
 	}
 	return content, artifacts, nil
+}
+
+func (backend environmentModelBackend) embed(
+	ctx context.Context,
+	request models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error) {
+	var response environmentEmbeddingResponse
+	if err := backend.post(ctx, "/embed", environmentEmbeddingRequest{
+		Text: request.Text, Parameters: request.Parameters,
+	}, &response); err != nil {
+		return models.EmbeddingBackendResponse{}, err
+	}
+	return models.EmbeddingBackendResponse{
+		Embeddings: append([]float64(nil), response.Embeddings...),
+	}, nil
 }
 
 type environmentASRRequest struct {
@@ -217,12 +296,15 @@ func environmentArtifact(output *environmentArtifactOutput) (*models.InferenceAr
 		SizeBytes: output.SizeBytes, Properties: output.Properties,
 	}, nil
 }
-
 func environmentBackendArtifact(
 	_ context.Context,
 	request serviceedges.ModelBackendArtifactSelectionRequest,
 ) (serviceedges.ModelBackendArtifactSelection, error) {
 	selections := map[string]serviceedges.ModelBackendArtifactSelection{
+		"localai-llamacpp": {
+			Name: environmentEmbedBackendName, Location: environmentEmbedBackendLocation,
+			Bytes: environmentEmbedBackendBytes, SHA256: environmentEmbedBackendSHA256,
+		},
 		"localai-whisper": {
 			Name:     "localai-backend-localai-whisper-linux-amd64-fixture.tar.gz",
 			Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-fixture/localai-backend-localai-whisper-linux-amd64-fixture.tar.gz",

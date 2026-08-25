@@ -30,6 +30,9 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("model name is required")
 	}
 	operation := strings.TrimSpace(cfg.Operation)
+	if operation == "" && len(cfg.InputMappings) > 0 {
+		operation = inferGenericCLIModelOperation(modelName)
+	}
 	if operation == "" {
 		return fmt.Errorf("--operation is required")
 	}
@@ -58,6 +61,21 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		}()
 	}
 	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text)
+}
+
+func inferGenericCLIModelOperation(modelName string) string {
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case strings.ToLower(modelinference.BuiltInModelNameLLM):
+		return modelinference.OperationOMNI
+	case strings.ToLower(modelinference.BuiltInModelNameASR):
+		return modelinference.OperationASR
+	case strings.ToLower(modelinference.BuiltInModelNameTTS):
+		return modelinference.OperationTTS
+	case strings.ToLower(modelinference.BuiltInModelNameEmbed):
+		return modelinference.OperationEMBED
+	default:
+		return ""
+	}
 }
 
 func (service *rootService) invokeInScope(

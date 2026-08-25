@@ -847,6 +847,32 @@ func openCatalogScope(
 	return privateRef
 }
 
+func openCatalogScopeWithOverlays(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	overlays map[string]models.ModelOverlay,
+) models.RuntimeScopeRef {
+	t.Helper()
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{}
+		},
+		OperatorModels: overlays,
+	})
+	if err != nil {
+		t.Fatalf("open catalog overlay scope: %v", err)
+	}
+	return publicScope(t, privateRef)
+}
+
+func stringPointer(value string) *string {
+	return &value
+}
+
+func loadPolicyPointer(value models.LoadPolicy) *models.LoadPolicy {
+	return &value
+}
+
 func catalogWorker(name, model, operation string) models.RuntimeWorker {
 	return models.RuntimeWorker{
 		Name: name, Type: models.RuntimeWorkerTypeInference,

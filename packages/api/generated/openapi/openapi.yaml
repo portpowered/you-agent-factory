@@ -5275,8 +5275,7 @@ components:
         - scope
         - holder
         - model
-        - operation
-      description: Provider-neutral generic model invocation request. Inputs and parameters retain authored order.
+      description: Provider-neutral generic model invocation request. Inputs and parameters retain authored order. When operation is omitted, Models infers the sole operation exposed by the resolved model.
       properties:
         scope:
           type: string
@@ -5290,6 +5289,7 @@ components:
           $ref: '#/components/schemas/ModelReference'
         operation:
           $ref: '#/components/schemas/ModelOperationName'
+          description: Optional operation identifier. Omit it when the resolved model exposes exactly one operation.
         inputs:
           type: array
           description: Ordered input values. Repeated slot names remain separate entries in this order.

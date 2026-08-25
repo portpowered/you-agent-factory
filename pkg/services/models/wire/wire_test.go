@@ -248,7 +248,7 @@ func TestInvocationRuntimeAdaptersPreserveGenericAndASRBackendFacts(t *testing.T
 			Segments:  []models.ASRBackendSegment{{ID: 1, Start: 0, End: 10, Text: "transcribed"}},
 			Artifacts: []models.InferenceArtifact{{Artifact: artifactRef, Name: "segments", SizeBytes: 4}},
 		}, nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("inferenceRuntime: %v", err)
 	}
@@ -360,6 +360,188 @@ func TestNewServiceHonorsRuntimeAssetEndpointOverrides(t *testing.T) {
 	}
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
+	}
+}
+
+func TestNewServiceWithTypedBackendsConstructsTheAdditiveCompositionPath(t *testing.T) {
+	t.Parallel()
+
+	edges := validConstructionEdges()
+	service, err := NewServiceWithBackendArtifactResolverAndInvocationBackend(
+		edges.assetPlatform,
+		edges.assetHTTP,
+		edges.assetEndpoints,
+		edges.assetMkdirAll,
+		edges.assetStat,
+		edges.assetHome,
+		edges.assetWriteFile,
+		edges.assetRename,
+		edges.assetRemove,
+		edges.assetReadFile,
+		edges.assetReadDir,
+		edges.assetCreate,
+		edges.assetOpen,
+		edges.processLauncher,
+		edges.hostHTTP,
+		edges.hostClock,
+		edges.runtimeRunner,
+		edges.runtimeHTTP,
+		edges.runtimeInspect,
+		edges.runtimeTempDir,
+		edges.runtimeTempFile,
+		zap.NewNop(),
+		edges.now,
+		edges.issuerEntropy,
+		nil,
+		nil,
+		nil,
+		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
+		nil,
+		func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			return nil, nil, nil
+		},
+		func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+			return models.ASRBackendResponse{}, nil
+		},
+		func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
+			return models.EmbeddingBackendResponse{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewServiceWithBackendArtifactResolverAndInvocationBackend() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewServiceWithBackendArtifactResolverAndInvocationBackend() returned nil service")
+	}
+}
+
+func TestInferenceRuntimeRoutesTypedBackendsAndDetachesResults(t *testing.T) {
+	t.Parallel()
+
+	artifactRef, err := (models.InferenceArtifactRef{}).Parse("artifact:generic")
+	if err != nil {
+		t.Fatalf("parse artifact reference: %v", err)
+	}
+	var genericRequest models.InvokeModelRequest
+	var asrRequest models.ASRBackendRequest
+	var embeddingRequest models.EmbeddingBackendRequest
+	genericBackend := func(_ context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		genericRequest = request
+		return []models.InferenceContent{{ContentType: "text/plain", Content: "generic"}}, []models.InferenceArtifact{{
+			Artifact: artifactRef, Name: "generic", MediaType: "text/plain", SizeBytes: 3,
+			Properties: map[string]string{"kind": "generic"},
+		}}, nil
+	}
+	asrBackend := func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		asrRequest = request
+		return models.ASRBackendResponse{
+			Text:     "transcript",
+			Segments: []models.ASRBackendSegment{{ID: 1, Start: 0, End: 2, Text: "transcript"}},
+		}, nil
+	}
+	embeddingBackend := func(_ context.Context, request models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
+		embeddingRequest = request
+		return models.EmbeddingBackendResponse{Embeddings: []float64{0.1, 0.2}}, nil
+	}
+
+	runtime, err := inferenceRuntime(genericBackend, asrBackend, embeddingBackend)
+	if err != nil {
+		t.Fatalf("inferenceRuntime() error = %v", err)
+	}
+	assertGenericInferenceRuntimePath(t, runtime, &genericRequest)
+	assertASRInferenceRuntimePath(t, runtime, &asrRequest)
+	assertEmbeddingInferenceRuntimePath(t, runtime, &embeddingRequest)
+	if _, err := genericInvocationRuntime(nil).Invoke(t.Context(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{Input: models.InferenceInput{Content: "echo"}},
+	}); err != nil {
+		t.Fatalf("nil generic backend fallback error = %v", err)
+	}
+}
+
+type ownedCoverageInvocationRuntime interface {
+	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
+}
+
+func assertGenericInferenceRuntimePath(t *testing.T, runtime ownedCoverageInvocationRuntime, request *models.InvokeModelRequest) {
+	t.Helper()
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
+		Request:   models.InvokeModelRequest{Operation: models.OperationOMNI},
+		Operation: models.Operation{Name: models.OperationOMNI},
+	})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "generic" {
+		t.Fatalf("generic runtime result = %#v, error = %v", result, err)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != "artifact:generic" ||
+		result.Artifacts[0].Properties["kind"] != "generic" {
+		t.Fatalf("generic runtime artifacts = %#v, want detached artifact source", result.Artifacts)
+	}
+	if request.Operation != models.OperationOMNI {
+		t.Fatalf("generic backend request = %#v, want OMNI", request)
+	}
+}
+
+func assertASRInferenceRuntimePath(t *testing.T, runtime ownedCoverageInvocationRuntime, request *models.ASRBackendRequest) {
+	t.Helper()
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Operation: models.OperationASR,
+			Inputs: []models.InferenceInput{
+				{Name: "audio", Modality: models.ModalityAudio, ContentType: "audio/wav", MediaType: "audio/wav", Content: "audio"},
+				{Name: "prompt", Modality: models.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "meeting"},
+			},
+		},
+		Operation: models.Operation{Name: models.OperationASR},
+	})
+	if err != nil || len(result.Content) != 2 || result.Content[0].Name != "transcript" {
+		t.Fatalf("ASR runtime result = %#v, error = %v", result, err)
+	}
+	if string(request.Audio) != "audio" || request.MediaType != "audio/wav" || request.Prompt != "meeting" {
+		t.Fatalf("ASR backend request = %#v, want mapped audio request", request)
+	}
+}
+
+func assertEmbeddingInferenceRuntimePath(t *testing.T, runtime ownedCoverageInvocationRuntime, request *models.EmbeddingBackendRequest) {
+	t.Helper()
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Operation: models.OperationEMBED,
+			Inputs: []models.InferenceInput{
+				{Name: "text", Modality: models.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "find work"},
+				{Name: "parameters", Modality: models.ModalityJSON, ContentType: "application/json", MediaType: "application/json", Content: `{"normalize":true}`},
+			},
+		},
+	})
+	if err != nil || len(result.Content) != 1 || result.Content[0].Name != "embedding" ||
+		result.Content[0].Content != "[0.1,0.2]" {
+		t.Fatalf("embedding runtime result = %#v, error = %v", result, err)
+	}
+	if request.Text != "find work" || request.Parameters["normalize"] != true {
+		t.Fatalf("embedding backend request = %#v, want mapped text and parameter", request)
+	}
+}
+
+func TestInvocationParameterAndArtifactHelpersDetachNestedValues(t *testing.T) {
+	t.Parallel()
+
+	if cloneInvocationParameters(nil) != nil {
+		t.Fatal("cloneInvocationParameters(nil) returned non-nil map")
+	}
+	original := map[string]any{
+		"nested": map[string]any{"value": "original"},
+		"items":  []any{map[string]any{"value": "item"}},
+	}
+	cloned := cloneInvocationParameters(original)
+	original["nested"].(map[string]any)["value"] = "mutated"
+	original["items"].([]any)[0].(map[string]any)["value"] = "mutated"
+	if cloned["nested"].(map[string]any)["value"] != "original" ||
+		cloned["items"].([]any)[0].(map[string]any)["value"] != "item" {
+		t.Fatalf("cloned invocation parameters shared nested values: %#v", cloned)
+	}
+	if invocationArtifactSources(nil) != nil {
+		t.Fatal("invocationArtifactSources(nil) returned non-nil slice")
 	}
 }
 

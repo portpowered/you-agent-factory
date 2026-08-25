@@ -23,7 +23,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
-	asrruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
+	modelsruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
@@ -59,6 +59,14 @@ type ASRBackend func(
 	context.Context,
 	models.ASRBackendRequest,
 ) (models.ASRBackendResponse, error)
+
+// EmbeddingBackend is the typed external effect used by the Models-owned
+// EMBED codec/runtime. Its request and response remain provider-neutral at the
+// construction boundary.
+type EmbeddingBackend func(
+	context.Context,
+	models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error)
 
 type invocationRuntime interface {
 	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
@@ -110,7 +118,7 @@ func NewService(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, nil, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, nil, nil, nil,
 		revisionResolvers...,
 	)
 }
@@ -155,6 +163,7 @@ func NewServiceWithBackendArtifactResolverAndInvocationBackend(
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
 	asrBackend ASRBackend,
+	embeddingBackend EmbeddingBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	return newService(
@@ -163,7 +172,7 @@ func NewServiceWithBackendArtifactResolverAndInvocationBackend(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, invocationBackend, asrBackend, revisionResolvers...,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, invocationBackend, asrBackend, embeddingBackend, revisionResolvers...,
 	)
 }
 
@@ -202,6 +211,7 @@ func newService(
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
 	asrBackend ASRBackend,
+	embeddingBackend EmbeddingBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
@@ -262,7 +272,7 @@ func newService(
 		resolveEnvironment,
 		protocolNegotiator,
 		compatibilityChecker,
-		backendResolver, invocationBackend, asrBackend, revisionResolvers...,
+		backendResolver, invocationBackend, asrBackend, embeddingBackend, revisionResolvers...,
 	)
 }
 
@@ -301,6 +311,7 @@ func composeModelsService(
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
 	asrBackend ASRBackend,
+	embeddingBackend EmbeddingBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
@@ -312,7 +323,7 @@ func composeModelsService(
 		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
 		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
-		compatibilityChecker, invocationBackend, asrBackend, now, issuerEntropy,
+		compatibilityChecker, invocationBackend, asrBackend, embeddingBackend, now, issuerEntropy,
 		firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
@@ -352,8 +363,9 @@ func (runtime backendInvocationRuntime) Invoke(
 }
 
 type operationInvocationRuntime struct {
-	generic invocationRuntime
-	asr     invocationRuntime
+	generic   invocationRuntime
+	asr       invocationRuntime
+	embedding invocationRuntime
 }
 
 func (runtime operationInvocationRuntime) Invoke(
@@ -363,19 +375,37 @@ func (runtime operationInvocationRuntime) Invoke(
 	if runtime.asr != nil && isASROperation(request) {
 		return runtime.asr.Invoke(ctx, request)
 	}
+	if runtime.embedding != nil && isEmbeddingOperation(request) {
+		return runtime.embedding.Invoke(ctx, request)
+	}
 	return runtime.generic.Invoke(ctx, request)
 }
 
-func inferenceRuntime(backend InvocationBackend, asrBackend ASRBackend) (invocationRuntime, error) {
+func inferenceRuntime(
+	backend InvocationBackend,
+	asrBackend ASRBackend,
+	embeddingBackend EmbeddingBackend,
+) (invocationRuntime, error) {
 	generic := genericInvocationRuntime(backend)
-	if asrBackend == nil {
+	if asrBackend == nil && embeddingBackend == nil {
 		return generic, nil
 	}
-	asr, err := newASRInvocationRuntime(asrBackend)
-	if err != nil {
-		return nil, err
+	runtime := operationInvocationRuntime{generic: generic}
+	if asrBackend != nil {
+		asr, err := newASRInvocationRuntime(asrBackend)
+		if err != nil {
+			return nil, err
+		}
+		runtime.asr = asr
 	}
-	return operationInvocationRuntime{generic: generic, asr: asr}, nil
+	if embeddingBackend != nil {
+		embedding, err := newEmbeddingInvocationRuntime(embeddingBackend)
+		if err != nil {
+			return nil, err
+		}
+		runtime.embedding = embedding
+	}
+	return runtime, nil
 }
 
 func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
@@ -386,13 +416,13 @@ func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 }
 
 func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {
-	return asrruntime.New(func(
+	return modelsruntime.New(func(
 		ctx context.Context,
 		request modelcodecs.ASRRequest,
 	) (modelcodecs.ASRResponse, []models.InferenceArtifact, error) {
 		response, err := backend(ctx, models.ASRBackendRequest{
 			Audio: append([]byte(nil), request.Audio...), MediaType: request.MediaType,
-			Prompt: request.Prompt, Parameters: cloneASRParameters(request.Parameters),
+			Prompt: request.Prompt, Parameters: cloneInvocationParameters(request.Parameters),
 		})
 		if err != nil {
 			return modelcodecs.ASRResponse{}, nil, err
@@ -407,6 +437,24 @@ func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {
 	})
 }
 
+func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime, error) {
+	return modelsruntime.NewEmbedding(func(
+		ctx context.Context,
+		request modelcodecs.EmbeddingRequest,
+	) (modelcodecs.EmbeddingResponse, error) {
+		response, err := backend(ctx, models.EmbeddingBackendRequest{
+			Text:       request.Prompt,
+			Parameters: cloneInvocationParameters(request.Parameters),
+		})
+		if err != nil {
+			return modelcodecs.EmbeddingResponse{}, err
+		}
+		return modelcodecs.EmbeddingResponse{
+			Embeddings: append([]float64(nil), response.Embeddings...),
+		}, nil
+	})
+}
+
 func isASROperation(request inference.InvocationRuntimeRequest) bool {
 	operation := request.Operation.Name
 	if operation == "" {
@@ -415,25 +463,33 @@ func isASROperation(request inference.InvocationRuntimeRequest) bool {
 	return strings.EqualFold(strings.TrimSpace(operation), models.OperationASR)
 }
 
-func cloneASRParameters(parameters map[string]any) map[string]any {
+func isEmbeddingOperation(request inference.InvocationRuntimeRequest) bool {
+	operation := request.Operation.Name
+	if operation == "" {
+		operation = request.Request.Operation
+	}
+	return strings.EqualFold(strings.TrimSpace(operation), models.OperationEMBED)
+}
+
+func cloneInvocationParameters(parameters map[string]any) map[string]any {
 	if parameters == nil {
 		return nil
 	}
 	cloned := make(map[string]any, len(parameters))
 	for name, value := range parameters {
-		cloned[name] = cloneASRParameterValue(value)
+		cloned[name] = cloneInvocationParameterValue(value)
 	}
 	return cloned
 }
 
-func cloneASRParameterValue(value any) any {
+func cloneInvocationParameterValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
-		return cloneASRParameters(typed)
+		return cloneInvocationParameters(typed)
 	case []any:
 		cloned := make([]any, len(typed))
 		for index, item := range typed {
-			cloned[index] = cloneASRParameterValue(item)
+			cloned[index] = cloneInvocationParameterValue(item)
 		}
 		return cloned
 	default:
@@ -490,6 +546,7 @@ func buildModelsServiceComponents(
 	compatibilityChecker HostCompatibilityChecker,
 	invocationBackend InvocationBackend,
 	asrBackend ASRBackend,
+	embeddingBackend EmbeddingBackend,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
 	revisionResolver func(context.Context, string) (string, error),
@@ -525,7 +582,7 @@ func buildModelsServiceComponents(
 	if err != nil {
 		return modelsServiceComponents{}, err
 	}
-	runtime, err := inferenceRuntime(invocationBackend, asrBackend)
+	runtime, err := inferenceRuntime(invocationBackend, asrBackend, embeddingBackend)
 	if err != nil {
 		return modelsServiceComponents{}, err
 	}

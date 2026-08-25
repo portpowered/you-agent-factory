@@ -97,20 +97,40 @@ func TestModelsCLIInputFileReaderUsesExplicitEdges(t *testing.T) {
 
 	called := false
 	reader := provideModelsCLIInputFileReader(serviceedges.Edges{
-		ModelCLIInputReadFile: func(path string) ([]byte, error) {
+		ModelCLIInputReadFile: func(_ context.Context, path string, maxBytes int64) ([]byte, error) {
 			called = true
 			if path != "meeting.wav" {
 				t.Fatalf("input path = %q, want meeting.wav", path)
 			}
+			if maxBytes <= 0 {
+				t.Fatalf("input max bytes = %d, want positive limit", maxBytes)
+			}
 			return []byte{0x00, 0xff}, nil
 		},
 	})
-	got, err := reader("meeting.wav")
+	got, err := reader(context.Background(), "meeting.wav", 2)
 	if err != nil || string(got) != string([]byte{0x00, 0xff}) {
 		t.Fatalf("input reader = %x, %v; want exact edge bytes", got, err)
 	}
 	if !called {
 		t.Fatal("explicit input reader edge was not called")
+	}
+}
+
+func TestModelsCLIInputFileReaderDefaultBoundsContent(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "oversized.txt")
+	if err := os.WriteFile(path, []byte("0123456789"), 0o600); err != nil {
+		t.Fatalf("write oversized input fixture: %v", err)
+	}
+	reader := provideModelsCLIInputFileReader(serviceedges.Edges{})
+	got, err := reader(context.Background(), path, 5)
+	if err == nil {
+		t.Fatalf("default input reader bytes = %q, want maximum-size failure", got)
+	}
+	if got != nil {
+		t.Fatalf("default input reader bytes = %q, want no partial content", got)
 	}
 }
 

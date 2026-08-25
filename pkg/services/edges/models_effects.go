@@ -37,8 +37,10 @@ type ModelCLIOutputCreateTempFile func(string, string) (interface {
 
 // ModelCLIInputReadFile is the host effect used to load one explicit generic
 // CLI input. The CLI adapter owns mapping validation and media classification;
-// this edge supplies only the file bytes.
-type ModelCLIInputReadFile func(string) ([]byte, error)
+// this edge supplies only the file bytes. maxBytes is the inclusive content
+// limit selected by the CLI transport, and implementations must honor ctx
+// while preparing the content.
+type ModelCLIInputReadFile func(context.Context, string, int64) ([]byte, error)
 
 // ModelBackendArtifactSelectionRequest contains the safe host facts needed by
 // the pinned backend publication selector. The edge owns manifest lookup;
@@ -80,6 +82,14 @@ type ModelASRBackend func(
 	context.Context,
 	models.ASRBackendRequest,
 ) (models.ASRBackendResponse, error)
+
+// ModelEmbeddingBackend is the typed embedding operation effect. Models owns
+// generic request validation, LocalAI codec mapping, output normalization, and
+// lease lifecycle; this edge supplies only detached embedding facts.
+type ModelEmbeddingBackend func(
+	context.Context,
+	models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error)
 
 type HostProcessStartSpec struct {
 	Command                 string

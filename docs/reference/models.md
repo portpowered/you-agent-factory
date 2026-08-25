@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-22
+last-modified: 2026-08-24
 doc-id: agent-factory/models
 ---
 
@@ -162,6 +162,96 @@ Use inline values for text, and valid JSON values for JSON slots.
 | `EMBED` | `text:TEXT` | `parameters:JSON` | `embedding:JSON` |
 | `TTS` | `text:TEXT` | `voice:AUDIO`, `parameters:JSON` | `audio:AUDIO` |
 | `ASR` | `audio:AUDIO` | `prompt:TEXT`, `parameters:JSON` | `transcript:TEXT`, `segments:JSON` |
+
+### Generate an embedding
+
+The built-in `embed` model converts one text input into one `embedding:JSON`
+output. Its only operation is `EMBED`, so Models infers the operation when you
+omit `--operation`.
+
+Run this zero-configuration command:
+
+```bash
+you models invoke embed --input text="Find similar work"
+```
+
+The command resolves `embed` and acquires missing managed assets on first use.
+It loads the runtime, invokes the model, writes one JSON numeric array to
+stdout, and releases the runtime. Diagnostics remain on stderr, so stdout is
+safe to pipe.
+
+Use `@<path>` for a text file. Models reads the bounded file content before
+asset download or backend activation:
+
+```bash
+you models invoke embed --input text=@./query.txt
+```
+
+Use `json:` for the optional `parameters` input. The JSON value must be an
+object. Supported parameters are `dimensions`, `encoding_format`, and
+`normalize`:
+
+```bash
+you models invoke embed \
+  --input text="Find similar work" \
+  --input 'parameters=json:{"normalize":true}'
+```
+
+Use the global `--json` flag when a script needs the output name and metadata:
+
+```bash
+you --json models invoke embed --input text="Find similar work"
+```
+
+The response contains one named `embedding` output. Its modality and media
+type are `JSON` and `application/json`. Its `content` is the JSON numeric
+array:
+
+```json
+{
+  "outputs": [
+    {
+      "name": "embedding",
+      "modality": "JSON",
+      "contentType": "application/json",
+      "mediaType": "application/json",
+      "content": "[0.1,0.2,0.3,0.4]"
+    }
+  ]
+}
+```
+
+After the first successful invocation, verified cache entries are reused and
+the next invocation does not contact the network. Add `--offline` to require
+cache-only resolution. Offline invocation succeeds when all required assets
+are cached; otherwise it returns the typed
+`MODEL_OFFLINE_CACHE_UNAVAILABLE` failure.
+
+Malformed input syntax, missing `text`, unknown slots, duplicate slots,
+malformed JSON, and unsupported parameters fail before download or backend
+activation. Backend protocol or response failures return the typed
+`MODEL_BACKEND_FAILURE` diagnostic and no partial embedding. Diagnostics do
+not include backend addresses, cache paths, signed URLs, or tokens.
+
+The generic HTTP endpoint provides the same operation inference and named
+output:
+
+```http
+POST /models/invocations
+Content-Type: application/json
+
+{
+  "scope": "factory-session:embed",
+  "holder": "example",
+  "model": {"nameOrUri": "embed"},
+  "inputs": [
+    {"name": "text", "modality": "TEXT", "content": "Find similar work"}
+  ]
+}
+```
+
+The HTTP response uses the same `embedding` slot, `JSON` modality,
+`application/json` media type, and canonical JSON vector content.
 
 `ASR` preserves backend segment timestamps in the `segments` JSON output. Each
 segment contains `id`, `start`, `end`, and `text` fields.

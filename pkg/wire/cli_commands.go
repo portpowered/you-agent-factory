@@ -487,13 +487,6 @@ func provideModelsCLIService(
 	)
 }
 
-func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
-	if edges.ModelCLIInputReadFile != nil {
-		return modelscli.InputFileReader(edges.ModelCLIInputReadFile)
-	}
-	return os.ReadFile
-}
-
 func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.OutputFileSystem {
 	createTemp := edges.ModelCLIOutputCreateTempFile
 	if createTemp == nil {

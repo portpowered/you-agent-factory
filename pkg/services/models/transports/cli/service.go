@@ -39,8 +39,9 @@ type OutputFileSystem interface {
 
 // InputFileReader is the exact filesystem effect used to bind one explicit
 // generic CLI input. The Models CLI adapter owns parsing and validation; the
-// composition boundary supplies the host reader.
-type InputFileReader func(string) ([]byte, error)
+// composition boundary supplies the host reader. maxBytes is the inclusive
+// content limit selected by this transport.
+type InputFileReader func(context.Context, string, int64) ([]byte, error)
 
 // InvokeRuntimeScope carries one opened Models runtime scope for invoke.
 type InvokeRuntimeScope struct {

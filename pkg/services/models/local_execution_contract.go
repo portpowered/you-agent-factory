@@ -226,6 +226,20 @@ type ASRBackendResponse struct {
 	Artifacts []InferenceArtifact
 }
 
+// EmbeddingBackendRequest is the detached, provider-neutral request supplied
+// to a Models-owned embedding backend effect. The backend protocol remains
+// private to the Models codec boundary.
+type EmbeddingBackendRequest struct {
+	Text       string
+	Parameters map[string]any
+}
+
+// EmbeddingBackendResponse carries one decoded embedding vector returned by an
+// embedding backend effect. Models validates the vector before publishing it.
+type EmbeddingBackendResponse struct {
+	Embeddings []float64
+}
+
 // InferenceOutput is one ordered, slot-named generic invocation output. An
 // output may carry inline content, an opaque artifact, or both metadata forms.
 type InferenceOutput struct {

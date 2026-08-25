@@ -178,12 +178,16 @@ func GenericInvocationRequestFromGenerated(
 			}
 		}
 	}
+	operation := ""
+	if request.Operation != nil {
+		operation = string(*request.Operation)
+	}
 
 	result := models.GenericInvocationRequest{
 		Scope:      scope,
 		Holder:     request.Holder,
 		Model:      models.ModelReference{NameOrURI: request.Model.NameOrUri},
-		Operation:  request.Operation,
+		Operation:  operation,
 		Inputs:     inputs,
 		Parameters: parameters,
 	}
