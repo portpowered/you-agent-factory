@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
-import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
+import { installDashboardBrowserTestShims } from "../../../../../../components/dashboard/test-browser-shims";
+import { EditableConfigurationSection } from "../workstation-editable-configuration-section";
 import {
   buildEditableConfigurationSectionReadyState,
   editableConfigurationSectionMessages,
   expandEditableConfigurationSection,
-} from "./workstation-editable-configuration-section.test-helpers";
+} from "../workstation-editable-configuration-section.test-helpers";
 
 const messages = editableConfigurationSectionMessages;
 
