@@ -115,6 +115,45 @@ func TestProcessExecuteOpensRequestedFactorySessionThroughRoot(t *testing.T) {
 	}
 }
 
+// TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening proves that a
+// corrupt current-board artifact is rejected at the Process.Execute opening
+// boundary and remains available for investigation.
+func TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
+	recordPath := filepath.Join(factoryDir, "current-board.json")
+	corruptPayload := []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`)
+	if err := os.WriteFile(recordPath, corruptPayload, 0o600); err != nil {
+		t.Fatalf("write corrupt current-board recording: %v", err)
+	}
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	support.CleanupProcess(t, process)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", factoryDir, "--record", recordPath, "--quiet",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
+	inputs.Input.WorkingDirectory = factoryDir
+
+	err = process.Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "CORRUPT_HISTORY") ||
+		!strings.Contains(err.Error(), filepath.Base(recordPath)) {
+		t.Fatalf("Process.Execute() error = %v, want corrupt current-board diagnostic", err)
+	}
+	contents, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("read corrupt current-board recording after failed startup: %v", err)
+	}
+	if string(contents) != string(corruptPayload) {
+		t.Fatal("failed startup changed the corrupt current-board recording")
+	}
+}
+
 // TestProcessExecuteUnavailableFactoryDoesNotRegisterSession proves that an
 // unavailable Factory definition fails at the customer process boundary before
 // Factory Session or runtime identity allocation can publish partial state.
