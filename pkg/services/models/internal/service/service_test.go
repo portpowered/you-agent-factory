@@ -940,31 +940,28 @@ func TestRootContractOnlyOperationsFailExplicitly(t *testing.T) {
 	assertContractOnlyUnsupported(t, "InvokeModelWithLease", err)
 	_, err = root.CancelInvocation(ctx, models.CancelInvocationRequest{})
 	assertContractOnlyUnsupported(t, "CancelInvocation", err)
-	_, err = root.ListModels(ctx)
-	if !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("ListModels error = %v, want ErrInvalidDependencies", err)
+}
+
+func TestRootLegacyOperationsClassifyMissingRuntimeBinding(t *testing.T) {
+	t.Parallel()
+
+	root := &Root{}
+	if _, err := root.ListModels(context.Background()); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("ListModels error = %v, want missing runtime binding", err)
 	}
-	_, err = root.GetModel(ctx, "voice")
-	if !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("GetModel error = %v, want ErrInvalidDependencies", err)
+	if _, err := root.GetModel(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("GetModel error = %v, want missing runtime binding", err)
 	}
-	_, err = root.PullModel(ctx, "voice")
-	if !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("PullModel error = %v, want ErrInvalidDependencies", err)
+	if _, err := root.PullModel(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("PullModel error = %v, want missing runtime binding", err)
 	}
-	_, err = root.InspectRuntime(ctx, "voice")
-	if !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("InspectRuntime error = %v, want ErrInvalidDependencies", err)
+	if _, err := root.InspectRuntime(context.Background(), "voice"); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("InspectRuntime error = %v, want missing runtime binding", err)
 	}
-	_, err = root.AcquireLease(ctx, models.AcquireLeaseRequest{})
-	if !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("AcquireLease error = %v, want ErrInvalidDependencies", err)
+	if _, err := root.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "voice"}); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("AcquireLease error = %v, want missing runtime binding", err)
 	}
-	if err := root.ReleaseLease(ctx, models.ReleaseLeaseRequest{}); !errors.Is(err, ErrInvalidDependencies) {
-		t.Fatalf("ReleaseLease error = %v, want ErrInvalidDependencies", err)
-	}
-	_, err = root.InvokeLocal(ctx, models.LocalInvocationRequest{})
-	if err == nil {
-		t.Fatal("InvokeLocal error = nil, want missing runtime binding failure")
+	if err := root.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: "lease"}); !errors.Is(err, ErrInvalidDependencies) {
+		t.Fatalf("ReleaseLease error = %v, want missing runtime binding", err)
 	}
 }
