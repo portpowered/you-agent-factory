@@ -446,6 +446,7 @@ func assemblePortableReplayRuntime(
 		nil,
 		nil,
 		nil,
+		nil,
 		automationService,
 		false,
 	)
@@ -612,6 +613,11 @@ func inspectCurrentBoardHistory(
 	}, nil
 }
 
+type currentBoardHistory struct {
+	state  *factorydefinitions.FactoryWorldState
+	events []factorydefinitions.FactoryEvent
+}
+
 // restoreCurrentBoardState loads a detached Factory world state through the
 // public Recordings history contract for callers that explicitly request a
 // current-board read.
@@ -621,6 +627,23 @@ func restoreCurrentBoardState(
 	sessionID string,
 	allowMissingHistory bool,
 ) (*factorydefinitions.FactoryWorldState, error) {
+	history, err := restoreCurrentBoardHistory(service, recordPath, sessionID, allowMissingHistory)
+	if err != nil || history == nil {
+		return nil, err
+	}
+	return history.state, nil
+}
+
+// restoreCurrentBoardHistory loads both the detached board state and the
+// canonical Factory event prefix that produced it. The live successor seeds
+// its new Recordings ledger with that prefix so historical dispatch/Worker
+// Session associations remain available after a process replacement.
+func restoreCurrentBoardHistory(
+	service historicalRecordingReader,
+	recordPath string,
+	sessionID string,
+	allowMissingHistory bool,
+) (*currentBoardHistory, error) {
 	recordPath = strings.TrimSpace(recordPath)
 	if recordPath == "" {
 		return nil, nil
@@ -703,7 +726,39 @@ func restoreCurrentBoardState(
 			err,
 		)
 	}
-	return &state, nil
+	return &currentBoardHistory{
+		state:  &state,
+		events: factoryEventsFromCanonical(result.Events),
+	}, nil
+}
+
+func factoryEventsFromCanonical(events []recordings.CanonicalEvent) []factorydefinitions.FactoryEvent {
+	if len(events) == 0 {
+		return nil
+	}
+	converted := make([]factorydefinitions.FactoryEvent, len(events))
+	for index, event := range events {
+		context := factorydefinitions.FactoryEventContext{
+			EventTime: event.RecordedAt,
+			Sequence:  int(event.Sequence),
+			Tick:      event.FactoryTick,
+		}
+		if json.Valid([]byte(event.SourceContext)) {
+			_ = json.Unmarshal([]byte(event.SourceContext), &context)
+		}
+		if event.Scope.FactorySessionID != "" {
+			sessionID := event.Scope.FactorySessionID
+			context.SessionID = &sessionID
+		}
+		converted[index] = factorydefinitions.FactoryEvent{
+			Context:       context,
+			Id:            string(event.ID),
+			Payload:       json.RawMessage(event.Payload),
+			SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
+			Type:          factorydefinitions.FactoryEventType(event.Kind),
+		}
+	}
+	return converted
 }
 
 func currentBoardHistoryFailure(

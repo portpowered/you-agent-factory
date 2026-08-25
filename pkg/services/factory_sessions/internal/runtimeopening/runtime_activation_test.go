@@ -105,6 +105,51 @@ func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing
 	}
 }
 
+func TestRestoreCurrentBoardHistoryReturnsCanonicalFactoryEventPrefix(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(factorydefinitions.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-1": {ID: "work-1"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+	reader := &historicalBoardReaderStub{
+		result: recordings.HistoricalRecordingQueryResult{
+			Events: []recordings.CanonicalEvent{{
+				ID:            "event-1",
+				Sequence:      7,
+				FactoryTick:   9,
+				Scope:         recordings.CanonicalEventScope{FactorySessionID: "~default"},
+				Kind:          recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeDispatchWorkerSessionAssoc),
+				Payload:       `{"workerSessionId":"worker-1"}`,
+				SourceContext: `{"dispatchId":"dispatch-1","workIds":["work-1"]}`,
+			}},
+			WorldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1,
+				Scope:         recordings.CanonicalEventScope{FactorySessionID: "~default"},
+				Payload:       string(payload),
+			},
+		},
+	}
+
+	history, err := restoreCurrentBoardHistory(reader, "board.json", "~default", false)
+	if err != nil {
+		t.Fatalf("restore current board history: %v", err)
+	}
+	if history == nil || len(history.events) != 1 {
+		t.Fatalf("restored history = %#v, want one event", history)
+	}
+	event := history.events[0]
+	if event.Id != "event-1" || event.Context.Sequence != 7 || event.Context.Tick != 9 ||
+		event.Context.DispatchID == nil || *event.Context.DispatchID != "dispatch-1" ||
+		event.Context.WorkIDs == nil || len(*event.Context.WorkIDs) != 1 || (*event.Context.WorkIDs)[0] != "work-1" {
+		t.Fatalf("restored Factory event = %#v, want detached correlation metadata", event)
+	}
+}
+
 func TestRestoreCurrentBoardStateScopesArtifactReferenceToFactorySession(t *testing.T) {
 	t.Parallel()
 

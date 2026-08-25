@@ -135,6 +135,17 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 	return a.state.Resolve(sessionID)
 }
 
+// ResolveFactorySessionRuntimeID resolves a public Factory Session selector
+// to the canonical runtime identity without building the full read projection.
+// Transport adapters use this narrow capability for identity-only routing.
+func (a *Assembly) ResolveFactorySessionRuntimeID(sessionID string) (string, error) {
+	session := a.Resolve(sessionID)
+	if session == nil {
+		return "", fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
+	}
+	return livesession.CanonicalID(session), nil
+}
+
 // ResolveWorkRuntime adapts the Factory Sessions registry to Work's
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
