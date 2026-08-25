@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -102,7 +101,7 @@ func TestRuntimeMetricsQueryReadsDurableArtifactsThroughCanonicalProcess(t *test
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
-	query := root.RuntimeMetricsQueryFromProcess(process)
+	query := process.RuntimeMetricsQuery()
 	if query == nil {
 		t.Fatal("RuntimeMetricsQueryFromProcess() returned nil query")
 	}
@@ -132,7 +131,7 @@ func TestRuntimeMetricsQueryReportsArtifactFailuresThroughCanonicalProcess(t *te
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
-	query := root.RuntimeMetricsQueryFromProcess(process)
+	query := process.RuntimeMetricsQuery()
 	if query == nil {
 		t.Fatal("RuntimeMetricsQueryFromProcess() returned nil query")
 	}

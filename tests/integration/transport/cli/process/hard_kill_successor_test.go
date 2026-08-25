@@ -145,6 +145,22 @@ type hardKillCLIProcess struct {
 	mu       sync.Mutex
 }
 
+func sameStringSet(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	leftSet := make(map[string]struct{}, len(left))
+	for _, value := range left {
+		leftSet[value] = struct{}{}
+	}
+	for _, value := range right {
+		if _, ok := leftSet[value]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func startHardKillCLIProcess(t testing.TB, binaryPath string, session *builtcliacceptance.Session, args ...string) *hardKillCLIProcess {
 	t.Helper()
 

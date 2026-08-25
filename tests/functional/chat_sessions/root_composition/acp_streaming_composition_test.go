@@ -161,7 +161,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edges) (*os.File, *bufio.Reader) {
 	t.Helper()
 
-	buildProcess, err := root.BuildProcess(context.Background(), edges)
+	buildProcess, err := support.BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}

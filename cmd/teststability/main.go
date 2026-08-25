@@ -19,6 +19,7 @@ type config struct {
 	repoRoot string
 	attempts int
 	budget   time.Duration
+	jobs     int
 }
 
 var (
@@ -42,6 +43,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.repoRoot, "repo-root", ".", "repository working directory")
 	flag.IntVar(&cfg.attempts, "attempts", defaultStabilityAttempts, "isolated attempts per selected test")
 	flag.DurationVar(&cfg.budget, "budget", defaultStabilityBudget, "total stability execution budget")
+	flag.IntVar(&cfg.jobs, "jobs", defaultStabilityJobs, "maximum concurrent isolated test attempts")
 	flag.Parse()
 	return cfg
 }
@@ -78,8 +80,12 @@ func run(cfg config) error {
 	runner := stabilityRunner{
 		attempts: cfg.attempts,
 		budget:   cfg.budget,
+		jobs:     cfg.jobs,
 		run: func(ctx context.Context, group testGroup, testName string) (string, error) {
 			return runGoTestAttempt(ctx, repoRoot, group, testName)
+		},
+		runGroup: func(ctx context.Context, group testGroup) (string, error) {
+			return runGoTestGroupAttempt(ctx, repoRoot, group)
 		},
 	}
 	return runner.runAll(groups, stdoutWriter)
@@ -94,6 +100,9 @@ func validateConfig(cfg config) error {
 	}
 	if cfg.budget <= 0 {
 		return errors.New("changed-test stability -budget must be greater than zero")
+	}
+	if cfg.jobs < 1 {
+		return errors.New("changed-test stability -jobs must be greater than zero")
 	}
 	return nil
 }

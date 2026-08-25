@@ -15,7 +15,6 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	"github.com/portpowered/infinite-you/pkg/root"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
@@ -47,7 +46,7 @@ func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -259,7 +258,7 @@ func TestACPServerWithNoAuthoredAgentProfileOffersEveryInstalledFactory(t *testi
 	// Deliberately no SeedACPAgentProfile call: an absent profile must mean
 	// "unrestricted", which is the whole point of this cell.
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -324,7 +323,7 @@ func TestACPServerAuthoredAllowedTargetsStillRestrictsCatalog(t *testing.T) {
 		"factory:@you/classify",
 	})
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -350,7 +349,7 @@ func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
 
 	seedEveryInstalledPackagedFactory(t, home)
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -414,7 +413,7 @@ func TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder(t *testing.T) 
 		"factory:@you/classify",
 	})
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -442,7 +441,7 @@ func TestACPServerUnrestrictedTargetsAreOfferedCurrentFirstThenSorted(t *testing
 
 	seedEveryInstalledPackagedFactory(t, home)
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}

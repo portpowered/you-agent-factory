@@ -70,7 +70,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	factoryfixtures.WriteFactoryJSON(t, factoryDir, processLocalModelFactory(modelServer.URL))
 	assetFiles := processModelAssetFileSystem{home: home}
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
 		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
@@ -179,7 +179,7 @@ func TestProcessModelsInvokeFailureKeepsStreamsSafeAndReleasesCapacity(t *testin
 	factoryDir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, factoryDir, processLocalModelFactory(modelServer.URL))
 	assetFiles := processModelAssetFileSystem{home: home}
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
 		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,

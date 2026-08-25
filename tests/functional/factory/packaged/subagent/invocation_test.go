@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -337,7 +336,7 @@ func runHermeticPackagedSubagentInvocation(t *testing.T, requestText string) (st
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	listenerStarts := &listenerStartObservation{}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: listenerStarts.Start,
 	})
 	if err != nil {

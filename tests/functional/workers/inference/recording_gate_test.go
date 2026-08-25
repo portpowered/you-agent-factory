@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -225,12 +224,12 @@ func runWSRFT004FactoryWithProcess(
 		ExitCode: exitCode,
 	})
 
-	processValue, err := root.BuildProcess(context.Background(), edges)
+	processValue, err := support.BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	process := processValue
-	reader := root.WorkerRecordingReaderFromProcess(process)
+	reader := process.WorkerRecordingReader()
 	if reader == nil {
 		t.Fatal("root-built process returned a nil Recordings reader")
 	}
@@ -261,7 +260,7 @@ func runWSRFT008FactoryWithProcess(
 		ExitCode: exitCode,
 	})
 
-	processValue, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	processValue, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: probe,
 	})
@@ -269,7 +268,7 @@ func runWSRFT008FactoryWithProcess(
 		return nil, fmt.Errorf("BuildProcess() error: %w", err)
 	}
 	process := processValue
-	reader := root.WorkerRecordingReaderFromProcess(process)
+	reader := process.WorkerRecordingReader()
 	support.CleanupProcess(t, process)
 	recordPath := filepath.Join(t.TempDir(), "wsr-ft-008.json")
 	inputs := support.FakeInputs(t.Context(), []string{

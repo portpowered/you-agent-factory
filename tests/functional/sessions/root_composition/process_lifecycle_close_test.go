@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -42,7 +41,7 @@ func TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure(t *testing
 		t.Fatalf("fixture precondition failed: %s exists", missingFactory)
 	}
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -103,7 +102,7 @@ func TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure(t *testing.T) {
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}

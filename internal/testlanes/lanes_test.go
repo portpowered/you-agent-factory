@@ -29,6 +29,7 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "functional", importPath: ModulePath + "/tests/functional/runtime_api", want: LaneFunctional, wantOK: true},
 		{name: "provider contract functional", importPath: ModulePath + "/tests/functional/providers/contract", want: LaneFunctional, wantOK: true},
 		{name: "functional support", importPath: ModulePath + "/tests/functional/internal/support", want: LaneMaintenance, wantOK: true},
+		{name: "repository integration", importPath: ModulePath + "/tests/integration/transport/cli/process", want: LaneIntegration, wantOK: true},
 		{name: "stress", importPath: ModulePath + "/tests/stress/runtime", want: LaneStress, wantOK: true},
 		{name: "release", importPath: ModulePath + "/tests/release", want: LaneRelease, wantOK: true},
 		{name: "ui", importPath: ModulePath + "/ui", want: LaneMaintenance, wantOK: true},

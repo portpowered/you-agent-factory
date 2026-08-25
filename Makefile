@@ -110,7 +110,7 @@ CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
-ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process ./tests/functional/recordings/process
+ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/recordings/process
 ROOT_PROCESS_ACCEPTANCE_TIMEOUT ?= 300s
 
 ifeq ($(OS),Windows_NT)
@@ -142,6 +142,7 @@ CHANGED_TEST_STABILITY_BASE ?=
 CHANGED_TEST_STABILITY_HEAD ?= HEAD
 CHANGED_TEST_STABILITY_ATTEMPTS ?= 20
 CHANGED_TEST_STABILITY_BUDGET ?= 15m
+CHANGED_TEST_STABILITY_JOBS ?= 4
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_UNIT_COVERAGE_JSON_OUTPUT ?=
 GO_UNIT_COVERAGE_TIMING_OUTPUT ?=
@@ -508,7 +509,7 @@ test-unit-fresh:
 # then gives every selected top-level Go test 20 isolated attempts within one
 # 15-minute total budget.
 test-changed-test-stability:
-	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET)
+	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET) -jobs $(CHANGED_TEST_STABILITY_JOBS)
 
 test-lane-audit:
 	$(GO) run ./cmd/testlanecheck
@@ -518,7 +519,7 @@ test-maintenance:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/model-providers ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/internal/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/workers/internal/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)

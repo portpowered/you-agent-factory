@@ -15,7 +15,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -140,7 +139,7 @@ func prepareStaleDeepResearchFixture(t *testing.T) staleDeepResearchFixture {
 		Stdout: support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`),
 	}
 	provider := testutil.NewProviderCommandRunner(providerResult, providerResult)
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ProviderCommandRunner: provider,
 	})
 	if err != nil {

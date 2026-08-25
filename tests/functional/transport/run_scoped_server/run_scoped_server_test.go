@@ -57,7 +57,7 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 			providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 				Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
 			})
-			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					listenerStarts.Add(1)
 					request.OnBound(platformhttpserver.Binding{Port: request.Port})
@@ -135,7 +135,7 @@ func TestRunScopedServerOwnsRawJavaScriptLifecycleAfterReadiness(t *testing.T) {
 				t.Fatalf("write workflow: %v", err)
 			}
 			var listenerStarts, listenerStops, browserCalls atomic.Int32
-			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					listenerStarts.Add(1)
 					assertDashboardHandler(t, request.Handler)
@@ -192,7 +192,7 @@ func TestRunScopedRawJavaScriptServerReportsUnavailableWorkerSessionOwner(t *tes
 		err      error
 	}
 	probes := make(chan probeResult, 1)
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			server := httptest.NewServer(request.Handler)
 			defer server.Close()
@@ -261,7 +261,7 @@ func TestRunScopedServerUsesProductionListenerAndReportsFallback(t *testing.T) {
 	if err := os.WriteFile(workflowPath, []byte(`return "hosted JavaScript";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -308,7 +308,7 @@ func TestRunScopedServerUsesExactListenAddress(t *testing.T) {
 		t.Fatalf("write workflow: %v", err)
 	}
 	requestedPort := reserveExactPort(t)
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -383,7 +383,7 @@ func TestRemotePlacementDispatchesThroughSelectedServer(t *testing.T) {
 		t.Fatalf("write remote factory: %v", err)
 	}
 	var localStarts atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			localStarts.Add(1)
 			return nil
@@ -424,7 +424,7 @@ func TestRunScopedServerRejectsUnavailableExactListenAddress(t *testing.T) {
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -457,7 +457,7 @@ func TestRunScopedServerRejectsRemoteBindTargetAtCLIBoundary(t *testing.T) {
 	}
 	homeDir := t.TempDir()
 	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -489,7 +489,7 @@ func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
 	const wantMessage = "--remote selects a running server through --server and cannot be combined with --with-server or --with-site; remove --remote for local hosting and use --listen <host:port> to choose an exact local bind"
 
 	var effects atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			effects.Add(1)
 			return nil
@@ -560,7 +560,7 @@ func TestRemotePlacementRejectsLocalHostingBeforeInitialization(t *testing.T) {
 // remains explicit for commands that can only own local listener state.
 func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
 	var listenerStarts atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			listenerStarts.Add(1)
 			return nil
@@ -587,7 +587,7 @@ func TestRemotePlacementRejectsLocalOnlyServerCommand(t *testing.T) {
 // local-only commands fail at the generic placement boundary before their
 // handler can inspect the requested file.
 func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -609,7 +609,7 @@ func TestRemotePlacementRejectsLocalOnlyFactoryCommand(t *testing.T) {
 // exact local host:port before the listener or Factory runtime starts.
 func TestRunRejectsMalformedExactListenAddress(t *testing.T) {
 	var listenerStarts atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			listenerStarts.Add(1)
 			return nil
@@ -640,7 +640,7 @@ func TestRunScopedServerReportsExhaustedTerminalPortAtCLIBoundary(t *testing.T) 
 	if err := os.WriteFile(workflowPath, []byte(`return "unreachable";`), 0o600); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -695,7 +695,7 @@ func TestRunScopedServerOwnsReplayLifecycle(t *testing.T) {
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	var listenerStarts, listenerStops, browserCalls atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			listenerStarts.Add(1)
 			request.OnBound(platformhttpserver.Binding{Port: request.Port})

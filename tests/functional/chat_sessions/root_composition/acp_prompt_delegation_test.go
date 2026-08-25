@@ -16,7 +16,6 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -83,7 +82,7 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 	// staying exactly unchanged across the second turn still proves no
 	// second activation happened.
 	var factorySessionIDCalls atomic.Int32
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderOverride: provider,
 		FactorySessionIDGenerator: func() string {
 			n := factorySessionIDCalls.Add(1)
@@ -164,7 +163,7 @@ func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.
 	// downstream Factory failure produced by the Factory's own workflow,
 	// not an injected one.
 	provider := testutil.NewMockProvider()
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{ProviderOverride: provider})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{ProviderOverride: provider})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -249,7 +248,7 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -416,7 +415,7 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 
 
 	provider := newAcceptedGoalProvider()
 	var factorySessionIDCalls atomic.Int32
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderOverride: provider,
 		FactorySessionIDGenerator: func() string {
 			n := factorySessionIDCalls.Add(1)
@@ -651,7 +650,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 
 	provider := newBlockingProvider(newAcceptedGoalProvider())
 	var factorySessionIDCalls atomic.Int32
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderOverride: provider,
 		FactorySessionIDGenerator: func() string {
 			n := factorySessionIDCalls.Add(1)

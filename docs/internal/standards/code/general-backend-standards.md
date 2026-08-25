@@ -220,9 +220,10 @@ Rules:
   **MUST** use public CLI, HTTP, MCP, Factory Session, Work, and Factory Event
   contracts or observations made by the injected external-effect edge.
 - Functional application tests **MUST** execute scenarios through
-  `Process.Execute` by default after constructing through `root.BuildProcess`.
-  They **MAY** invoke a built `you` CLI binary only when the cell must prove
-  OS/process-boundary behavior that `BuildProcess` cannot express.
+  `Process.Execute` after constructing through `root.BuildProcess`. They
+  **MUST NOT** build or invoke the `you` CLI executable. Tests that prove OS
+  process, pipe, signal, executable, or exit-status behavior belong in the
+  integration lane and **MUST** run through the real built binary there.
 - Functional tests **MUST** prefer public CLI invocation over HTTP/API for
   ordinary customer flows. HTTP or API entry **MAY** be used only for
   API-owned contracts or explicit CLI+API parity cells.

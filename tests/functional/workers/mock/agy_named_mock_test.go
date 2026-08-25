@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -55,7 +54,7 @@ func TestNamedAgyMockPreservesDispatchMetadataAndCompletionLog(t *testing.T) {
 		}},
 	})
 	liveRunner := support.NewRecordingCommandRunner("live Agy edge must not run")
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ProviderCommandRunner: liveRunner,
 	})
 	if err != nil {

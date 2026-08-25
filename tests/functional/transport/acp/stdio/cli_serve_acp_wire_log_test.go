@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -95,7 +96,7 @@ func newTranscriptProcess(
 	t.Helper()
 	seedFixtureFactory(t, cwd)
 	support.SeedACPAgentProfile(t, home, fixtureFactoryTargetID, []string{fixtureFactoryTargetID})
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ACPWireRecorder:       newRotatingWireRecorder(t, home),
 		ProviderCommandRunner: runner,
 	})
@@ -473,7 +474,7 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ACPWireRecorder: newRotatingWireRecorder(t, home),
 	})
 	if err != nil {
@@ -526,7 +527,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -551,6 +552,14 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	info, err := os.Stat(transcripts[0])
 	if err != nil {
 		t.Fatalf("Stat(%q) error = %v", transcripts[0], err)
+	}
+	if runtime.GOOS == "windows" {
+		// Windows exposes profile ACL protection rather than POSIX owner-only
+		// permission bits; os.Chmod(0600) therefore reads back as 0666.
+		if perm := info.Mode().Perm(); perm&0o600 != 0o600 {
+			t.Fatalf("wire transcript mode = %#o, want owner read/write retained", perm)
+		}
+		return
 	}
 	if perm := info.Mode().Perm(); perm != 0o600 {
 		t.Fatalf("wire transcript mode = %#o, want %#o: the transcript holds full prompt and response content",

@@ -22,7 +22,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -267,7 +266,7 @@ func startWindowsGracefulStopTarget(
 
 	dashboardURL := waitForDashboardURL(t, lines, scanErr, &stderr, windowsGracefulStopReadinessTimeout)
 	if scenario.name == "continuous run" {
-		support.WaitForStatus(t, server, windowsGracefulStopReadinessTimeout, func(status factoryapi.StatusResponse) bool {
+		waitForStatus(t, server, windowsGracefulStopReadinessTimeout, func(status factoryapi.StatusResponse) bool {
 			return status.FactoryState == "RUNNING"
 		})
 	}
