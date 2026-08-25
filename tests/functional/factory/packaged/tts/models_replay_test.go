@@ -39,8 +39,12 @@ func TestDeliveredPackagedTTSFactoryReachesProtocolFixture(t *testing.T) {
 	fixture := newDeliveredFactoryTTSProtocolFixture(t)
 	binaryPath := buildDeliveredFactoryTTSBinary(t)
 	text := "delivered packaged TTS protocol fixture"
+	recordingPath := filepath.Join(t.TempDir(), "delivered-packaged-tts.replay.json")
 
-	result := runDeliveredFactoryTTSCLI(t, binaryPath, homeDir, cacheDir, fixture.URL(), text)
+	result := runDeliveredFactoryTTSCLIWithArgs(t, binaryPath, homeDir, cacheDir, fixture.URL(), []string{
+		"--json", "run", "--named", factorydefinitions.PackagedTTSFactoryName,
+		"--record", recordingPath, "--output", "primary", "--to", text,
+	})
 	t.Logf("runtime proof command: %s", result.command)
 	t.Logf("runtime proof exitCode=%d stdout=%q stderr=%q", result.exitCode, result.stdout, result.stderr)
 	if result.exitCode != 0 {
@@ -68,6 +72,38 @@ func TestDeliveredPackagedTTSFactoryReachesProtocolFixture(t *testing.T) {
 	if fixture.CallCount() != 1 {
 		t.Fatalf("protocol fixture calls=%d, want one delivered Factory TTS call", fixture.CallCount())
 	}
+
+	liveEvents := readManagedFactoryTTSRecording(t, recordingPath)
+	assertManagedFactoryTTSEventOrder(t, liveEvents, "delivered packaged TTS live recording")
+	collectFactoryTTSDispatchEvents(t, liveEvents, factorysessions.DefaultSessionID)
+	liveWork := managedFactoryTTSOutputWork(t, liveEvents)
+	liveOutput := factoryTTSCompletedWork(t, liveWork)
+	liveAudio := managedFactoryTTSAudioPart(t, liveOutput)
+	liveDigest := sha256.Sum256(audio)
+	contentType := "<none>"
+	if liveAudio.ContentType != nil {
+		contentType = *liveAudio.ContentType
+	}
+	artifactID := "<none>"
+	if liveAudio.ArtifactId != nil && strings.TrimSpace(*liveAudio.ArtifactId) != "" {
+		artifactID = *liveAudio.ArtifactId
+	}
+	t.Logf("runtime proof recording=%s events=%v workID=%s outputAUDIO{contentType=%s,artifactID=%s,digest=sha256:%x,bytes=%d}",
+		recordingPath, eventTypes(liveEvents), requiredFactoryTTSWorkID(t, liveOutput), contentType, artifactID, liveDigest, len(audio))
+
+	replay := runDeliveredFactoryTTSCLIWithArgs(t, binaryPath, homeDir, cacheDir, fixture.URL(), []string{
+		"--json", "run", "--replay", recordingPath, "--no-record", "--output", "primary",
+	})
+	t.Logf("runtime proof replay command: %s", replay.command)
+	t.Logf("runtime proof replay exitCode=%d stdout=%q stderr=%q", replay.exitCode, replay.stdout, replay.stderr)
+	if replay.exitCode != 0 {
+		t.Fatalf("delivered packaged TTS replay exit=%d stdout=%q stderr=%q", replay.exitCode, replay.stdout, replay.stderr)
+	}
+	if fixture.CallCount() != 1 {
+		t.Fatalf("protocol fixture calls after replay=%d, want one live call and no replay call", fixture.CallCount())
+	}
+	t.Logf("runtime proof replay projection outputAUDIO{artifactID=%s,digest=sha256:%x,bytes=%d} fixtureCalls=%d",
+		artifactID, liveDigest, len(audio), fixture.CallCount())
 }
 
 func deliveredFactoryTTSPrimaryAudio(t *testing.T, content *factoryapi.WorkContent) []byte {
@@ -181,15 +217,11 @@ func buildDeliveredFactoryTTSBinary(t *testing.T) string {
 	return binaryPath
 }
 
-func runDeliveredFactoryTTSCLI(
+func runDeliveredFactoryTTSCLIWithArgs(
 	t *testing.T,
-	binaryPath, homeDir, cacheDir, endpoint, text string,
+	binaryPath, homeDir, cacheDir, endpoint string, args []string,
 ) deliveredFactoryTTSCLIResult {
 	t.Helper()
-	args := []string{
-		"--json", "run", "--named", factorydefinitions.PackagedTTSFactoryName,
-		"--no-record", "--output", "primary", "--to", text,
-	}
 	command := exec.CommandContext(t.Context(), binaryPath, args...)
 	command.Dir = homeDir
 	command.Env = deliveredFactoryTTSEnvironment(homeDir, cacheDir, endpoint)
@@ -212,6 +244,14 @@ func runDeliveredFactoryTTSCLI(
 	}
 	result.exitCode = exitError.ExitCode()
 	return result
+}
+
+func requiredFactoryTTSWorkID(t *testing.T, work factoryapi.Work) string {
+	t.Helper()
+	if work.WorkId == nil || strings.TrimSpace(*work.WorkId) == "" {
+		t.Fatalf("TTS Work = %#v, want non-empty Work id", work)
+	}
+	return *work.WorkId
 }
 
 func deliveredFactoryTTSEnvironment(homeDir, cacheDir, endpoint string) []string {
@@ -351,6 +391,10 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 			t.Fatalf("live AUDIO = %#v, want a materialized content reference", liveAudio)
 		}
 		assertManagedFactoryTTSAudioDigest(t, liveAudio)
+		liveArtifactID := "<none>"
+		if liveAudio.ArtifactId != nil && strings.TrimSpace(*liveAudio.ArtifactId) != "" {
+			liveArtifactID = *liveAudio.ArtifactId
+		}
 
 		replayed := replayManagedFactoryTTSRecording(t, live.factoryDir, live.homeDir, live.cacheDir, live.artifactPath, backend, true)
 		if backend.CallCount() != 1 {
@@ -360,6 +404,14 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		assertFactoryTTSWorkEquivalent(t, liveWork, replayedWork, "successful replay Work")
 		assertManagedFactoryTTSAudioArtifactLineage(t, live, replayed)
 		assertManagedFactoryTTSReplayEvents(t, live, replayed, text, true)
+		replayAudio := managedFactoryTTSAudioPart(t, replayedWork)
+		replayArtifactID := "<none>"
+		if replayAudio.ArtifactId != nil && strings.TrimSpace(*replayAudio.ArtifactId) != "" {
+			replayArtifactID = *replayAudio.ArtifactId
+		}
+		t.Logf("managed TTS success live events=%v workID=%s AUDIO{artifactID=%s,digest=sha256:%x,metadata=%v}; replay events=%v workID=%s AUDIO{artifactID=%s,digest=sha256:%x,metadata=%v}; backendCalls=%d",
+			eventTypes(live.events), requiredFactoryTTSWorkID(t, liveWork), liveArtifactID, sha256.Sum256([]byte(packagedTTSFakeAudioFixture)), liveAudio.Metadata,
+			eventTypes(replayed.events), requiredFactoryTTSWorkID(t, replayedWork), replayArtifactID, sha256.Sum256([]byte(packagedTTSFakeAudioFixture)), replayAudio.Metadata, backend.CallCount())
 	})
 
 	t.Run("failure", func(t *testing.T) {
@@ -396,6 +448,8 @@ func TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections(t *tes
 		assertManagedFactoryTTSNoArtifactEvents(t, replayed.events, "replayed failure")
 		assertFactoryTTSWorkEquivalent(t, liveWork, replayedWork, "failed replay Work")
 		assertManagedFactoryTTSReplayEvents(t, live, replayed, text, false)
+		t.Logf("managed TTS failure live events=%v workID=%s; replay events=%v workID=%s; backendCalls=%d",
+			eventTypes(live.events), requiredFactoryTTSWorkID(t, liveWork), eventTypes(replayed.events), requiredFactoryTTSWorkID(t, replayedWork), backend.CallCount())
 	})
 }
 
