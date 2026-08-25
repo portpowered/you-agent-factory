@@ -31,6 +31,32 @@ type invocationSensitiveLoadedFactory struct {
 	pointers []string
 }
 
+func (source *invocationSensitiveLoadedFactory) WorkerPromptSource(
+	name string,
+) (factorydefinitions.PromptSource, bool) {
+	if source == nil || source.MutableLoadedFactorySource == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	lookup, ok := source.MutableLoadedFactorySource.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	return lookup.WorkerPromptSource(name)
+}
+
+func (source *invocationSensitiveLoadedFactory) WorkstationPromptSource(
+	name string,
+) (factorydefinitions.PromptSource, bool) {
+	if source == nil || source.MutableLoadedFactorySource == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	lookup, ok := source.MutableLoadedFactorySource.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	return lookup.WorkstationPromptSource(name)
+}
+
 func (source *invocationSensitiveLoadedFactory) InvocationSensitiveJSONPointers() []string {
 	if source == nil {
 		return nil
@@ -41,6 +67,32 @@ func (source *invocationSensitiveLoadedFactory) InvocationSensitiveJSONPointers(
 type invocationSensitiveSpanLoadedFactory struct {
 	factorydefinitions.MutableLoadedFactorySource
 	spans []factorydefinitions.InvocationSensitiveJSONSpan
+}
+
+func (source *invocationSensitiveSpanLoadedFactory) WorkerPromptSource(
+	name string,
+) (factorydefinitions.PromptSource, bool) {
+	if source == nil || source.MutableLoadedFactorySource == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	lookup, ok := source.MutableLoadedFactorySource.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	return lookup.WorkerPromptSource(name)
+}
+
+func (source *invocationSensitiveSpanLoadedFactory) WorkstationPromptSource(
+	name string,
+) (factorydefinitions.PromptSource, bool) {
+	if source == nil || source.MutableLoadedFactorySource == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	lookup, ok := source.MutableLoadedFactorySource.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return factorydefinitions.PromptSource{}, false
+	}
+	return lookup.WorkstationPromptSource(name)
 }
 
 func (source *invocationSensitiveSpanLoadedFactory) InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan {

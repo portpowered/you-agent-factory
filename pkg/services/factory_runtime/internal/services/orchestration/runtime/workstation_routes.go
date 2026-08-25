@@ -135,8 +135,14 @@ func runtimeWorkstationPromptProvenance(
 	if workstation == nil {
 		return runtimeWorkstationPromptProvenanceSet{}
 	}
+	body := workstation.Body
+	if source, found := runtimePromptSource(cfg, workstation.Name, false); found && !source.IsTemplate {
+		if authoredBody, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
+			body = authoredBody
+		}
+	}
 	return runtimeWorkstationPromptProvenanceSet{
-		body:           runtimePromptFieldProvenanceForText(cfg, workstation.Body, invocation),
+		body:           runtimePromptFieldProvenanceForText(cfg, body, invocation),
 		promptTemplate: runtimePromptFieldProvenanceForText(cfg, workstation.PromptTemplate, invocation),
 	}
 }
@@ -468,7 +474,8 @@ func applyRuntimeWorkstationSelection(
 		selection.systemPrompt,
 		resolveRuntimeInvocationValue(workstation.Body, invocation),
 	)
-	if selection.systemPrompt == "" {
+	if selection.systemPrompt == "" ||
+		(workstationPrompt.body.available && workstationPrompt.body.resolved == resolvedSystemPrompt) {
 		selection.systemPromptProvenance = workstationPrompt.body.clone()
 		validateRuntimePromptProvenance(&selection.systemPromptProvenance, resolvedSystemPrompt)
 	}

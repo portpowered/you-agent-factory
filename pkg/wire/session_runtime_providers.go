@@ -536,7 +536,7 @@ func provideInitialFactorySnapshotFactory(
 				applySupportedFiles,
 				applyStarterWork,
 			),
-			factorydefinitionswire.FactorySnapshotCapturer(),
+			factorydefinitionswire.LoadedFactorySnapshotCapturer(),
 		)
 	}
 }

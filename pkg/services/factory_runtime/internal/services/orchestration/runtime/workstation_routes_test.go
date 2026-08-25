@@ -526,6 +526,60 @@ func TestRuntimePromptSourceContentRefreshesAuthoredFiles(t *testing.T) {
 	}
 }
 
+func TestRuntimeWorkstationPromptProvenanceUsesAuthoredBodySource(t *testing.T) {
+	lookup := runtimePromptSourceLookupFixture{
+		RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{},
+		workstation:                    interfaces.PromptSource{Path: "workstation.md"},
+	}
+	cfg := &runtimeConfig{
+		runtimeConfig:           lookup,
+		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
+		promptSourceReader: func(path string) ([]byte, error) {
+			if path != "workstation.md" {
+				return nil, errors.New("missing source")
+			}
+			return []byte("---\ntype: MODEL_WORKSTATION\n---\ncontrol=visible secret=${secret}\n"), nil
+		},
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"secret": {Values: []string{"resolved-secret"}, Sensitive: true},
+	}}
+	provenance := runtimeWorkstationPromptProvenance(
+		cfg,
+		&interfaces.FactoryWorkstationConfig{
+			Name:           "workstation",
+			Body:           "control=visible secret=resolved-secret",
+			PromptTemplate: "control=visible secret=resolved-secret",
+		},
+		invocation,
+	)
+	if !provenance.body.available || !provenance.body.sensitive() {
+		t.Fatalf("body provenance = %#v, want sensitive authored-body spans", provenance.body)
+	}
+	if provenance.body.resolved != "control=visible secret=resolved-secret" {
+		t.Fatalf("body provenance resolved = %q, want interpolated authored body", provenance.body.resolved)
+	}
+
+	selection := &runtimeExecutionSelection{systemPrompt: provenance.body.resolved}
+	applyRuntimeWorkstationSelection(
+		cfg,
+		selection,
+		invocation,
+		&interfaces.FactoryWorkstationConfig{
+			Name: "workstation",
+			Body: provenance.body.resolved,
+		},
+		provenance,
+	)
+	if !selection.systemPromptProvenance.sensitive() {
+		t.Fatalf("selection system prompt provenance = %#v, want sensitive spans", selection.systemPromptProvenance)
+	}
+	safe, ok := redactRuntimePromptText(selection.systemPrompt, selection.systemPromptProvenance.spans)
+	if !ok || safe != "control=visible secret=<redacted>" {
+		t.Fatalf("safe system prompt = %q, %t, want adjacent control preserved", safe, ok)
+	}
+}
+
 func TestNormalizeScriptClassifierResultKeepsFinalLabelOnly(t *testing.T) {
 	t.Parallel()
 
