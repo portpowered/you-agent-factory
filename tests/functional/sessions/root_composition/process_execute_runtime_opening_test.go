@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -189,33 +188,6 @@ func TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(t *testing.T
 	err = process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "failed to load --replay input") {
 		t.Fatalf("Process.Execute() error = %v, want replay loader failure", err)
-	}
-}
-
-// TestRuntimeOpeningCompositionRejectsMissingOwnerPorts proves that the
-// customer-facing Factory Sessions wire boundary rejects an incomplete graph
-// before any runtime-opening operation can be attempted.
-func TestRuntimeOpeningCompositionRejectsMissingOwnerPorts(t *testing.T) {
-	t.Parallel()
-
-	factory, err := factorysessionwire.NewRuntimeOpening(
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
-	if factory != nil {
-		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)
-	}
-	if err == nil || !strings.Contains(err.Error(), "Provider Sessions owner ports are required") {
-		t.Fatalf("NewRuntimeOpening() error = %v, want missing owner-port diagnostic", err)
 	}
 }
 

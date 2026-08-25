@@ -102,14 +102,7 @@ func (s *Service) Build(ctx context.Context, spec SessionBuildSpec) (*factoryhos
 		return nil, fmt.Errorf("runtime build service is required")
 	}
 	spec.PetriMutationRecorder = s.petriMutationRecorder
-	bundle, err := s.build(ctx, spec)
-	if err != nil {
-		return nil, err
-	}
-	if bundle == nil {
-		return nil, fmt.Errorf("runtime builder returned nil bundle")
-	}
-	return bundle, nil
+	return s.build(ctx, spec)
 }
 
 // BuildSpec derives an immutable session build spec for startup, session open,
@@ -140,9 +133,6 @@ func (s *Service) BuildSpec(
 		loadedFactoryCfg, err = s.loadFactory(dir, s.workstationLoader)
 		if err != nil {
 			return SessionBuildSpec{}, fmt.Errorf("load factory config: %w", err)
-		}
-		if loadedFactoryCfg == nil {
-			return SessionBuildSpec{}, fmt.Errorf("load factory config: loader returned nil source")
 		}
 	}
 	logger := NewSessionLogger(baseLogger, sessionID, folderPath, loadedFactoryCfg.FactoryDir())
