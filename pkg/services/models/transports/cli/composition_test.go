@@ -826,7 +826,7 @@ func TestRootAdapter_InvokeGenericFileInputsPreservesOrderBytesAndMedia(t *testi
 				}}, nil
 			},
 		},
-		InputFileReader: func(path string) ([]byte, error) {
+		InputFileReader: func(_ context.Context, path string, _ int64) ([]byte, error) {
 			if path != "meeting.wav" {
 				return nil, fmt.Errorf("unexpected input path %q", path)
 			}
@@ -882,7 +882,7 @@ func TestRootAdapter_InvokeGenericInlineJSONInputPreservesContent(t *testing.T) 
 				}}, nil
 			},
 		},
-		InputFileReader: func(string) ([]byte, error) { return []byte("RIFF"), nil },
+		InputFileReader: func(context.Context, string, int64) ([]byte, error) { return []byte("RIFF"), nil },
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},

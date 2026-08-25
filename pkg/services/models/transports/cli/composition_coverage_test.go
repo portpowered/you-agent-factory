@@ -582,7 +582,7 @@ func TestRootAdapter_InvokeGenericInputPreflightRejectsBeforeBackend(t *testing.
 						return modelinference.InvokeModelResult{}, nil
 					},
 				},
-				InputFileReader: func(string) ([]byte, error) {
+				InputFileReader: func(context.Context, string, int64) ([]byte, error) {
 					reads++
 					return test.readBytes, test.readErr
 				},
@@ -637,7 +637,7 @@ func TestRootAdapter_InvokeASRRequiresEveryNamedOutputBeforeEffects(t *testing.T
 				return modelinference.InvokeModelResult{}, nil
 			},
 		},
-		InputFileReader: func(string) ([]byte, error) {
+		InputFileReader: func(context.Context, string, int64) ([]byte, error) {
 			reads++
 			return []byte("audio"), nil
 		},
