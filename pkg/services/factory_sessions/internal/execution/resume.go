@@ -970,7 +970,7 @@ func persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
 }
 
 func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) runtimeSessionState {
-	events, runtimeRecords, petriMutations := runtimeHistoryFromPersistedSnapshot(snapshot)
+	events, runtimeRecords, petriMutations, petriSummaries := runtimeHistoryFromPersistedSnapshot(snapshot)
 	state := runtimeSessionState{
 		session:           cloneSessionRead(snapshot.Session),
 		result:            cloneResultRead(snapshot.Result),
@@ -978,6 +978,7 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 		artifacts:         cloneArtifactSummaries(snapshot.Artifacts),
 		runtimeRecords:    cloneRuntimeRecords(runtimeRecords),
 		petriMutations:    clonePetriMutations(petriMutations),
+		petriSummaries:    clonePetriTokenSummaries(petriSummaries),
 		checkpointSummary: cloneCheckpointSummary(snapshot.CheckpointSummary),
 		startRequest:      cloneStartRequestPtr(snapshot.StartRequest),
 		resolvedSource:    snapshot.ResolvedSource,
@@ -999,6 +1000,7 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 }
 
 func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSessionState) error {
+	compactRuntimePetriHistory(&state)
 	return s.persistSessionSnapshot(state)
 }
 
@@ -1013,6 +1015,7 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if !shouldPersistSessionSnapshot(state) {
 		return nil
 	}
+	compactRuntimePetriHistory(&state)
 	failureLogCapacity := s.persistedFailureLogCapacity
 	if failureLogCapacity <= 0 {
 		failureLogCapacity = defaultPersistedTokenFailureLogCapacity
@@ -1052,7 +1055,7 @@ func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
 	if hasDurableLiveChangeEvents(state.events) {
 		return true
 	}
-	if len(state.petriMutations) > 0 {
+	if len(state.petriMutations) > 0 || len(state.petriSummaries) > 0 {
 		return true
 	}
 	if state.session.Status == LifecycleStatusPaused {

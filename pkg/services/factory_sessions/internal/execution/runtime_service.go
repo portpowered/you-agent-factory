@@ -41,6 +41,7 @@ type runtimeSessionState struct {
 	artifacts                 []ArtifactSummary
 	runtimeRecords            []factory.JavaScriptRuntimeRecord
 	petriMutations            []interfaces.TokenMutationRecord
+	petriSummaries            []PetriTokenSummary
 	checkpointSummary         *factory.JavaScriptCheckpointSummary
 	startRequest              *StartRequest
 	resolvedSource            ResolvedSource
@@ -873,6 +874,7 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 	}
 	candidate := cloneRuntimeSessionState(state)
 	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
+	compactRuntimePetriHistory(&candidate)
 	if err := s.persistSessionSnapshot(candidate); err != nil {
 		return err
 	}
@@ -897,6 +899,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		artifacts:                 cloneArtifactSummaries(state.artifacts),
 		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
 		petriMutations:            clonePetriMutations(state.petriMutations),
+		petriSummaries:            clonePetriTokenSummaries(state.petriSummaries),
 		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
