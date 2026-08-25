@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -110,6 +111,7 @@ func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
 			assertLiveStatusAndRuntimeDiagnostics(t, serverURL)
 			if test.pprof {
 				assertLivePprofHeap(t, serverURL)
+				assertLivePprofDiagnostics(t, serverURL)
 				return
 			}
 			assertPprofUnavailable(t, serverURL)
@@ -179,6 +181,8 @@ func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 		t.Fatalf("listen for listener observer: %v", err)
 	}
 	acceptDone := make(chan struct{})
+	var acceptedMu sync.Mutex
+	acceptedConnections := make([]net.Conn, 0, 128)
 	go func() {
 		defer close(acceptDone)
 		for {
@@ -186,16 +190,43 @@ func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 			if acceptErr != nil {
 				return
 			}
-			_ = connection.Close()
+			acceptedMu.Lock()
+			acceptedConnections = append(acceptedConnections, connection)
+			acceptedMu.Unlock()
 		}
 	}()
 	defer func() {
 		_ = listener.Close()
+		acceptedMu.Lock()
+		for _, connection := range acceptedConnections {
+			_ = connection.Close()
+		}
+		acceptedMu.Unlock()
 		<-acceptDone
 	}()
 
+	dialContext := func(ctx context.Context, network string, address string) (net.Conn, error) {
+		for {
+			connection, dialErr := (&net.Dialer{}).DialContext(ctx, network, address)
+			if dialErr == nil {
+				return connection, nil
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			retryTimer := time.NewTimer(time.Millisecond)
+			select {
+			case <-ctx.Done():
+				if !retryTimer.Stop() {
+					<-retryTimer.C
+				}
+				return nil, ctx.Err()
+			case <-retryTimer.C:
+			}
+		}
+	}
 	observer := platformhttpserver.NewListenerStopObserver(
-		(&net.Dialer{}).DialContext,
+		dialContext,
 		1*time.Millisecond,
 	)
 	address := listener.Addr().String()
@@ -355,6 +386,59 @@ func assertLivePprofHeap(t *testing.T, serverURL string) {
 	}
 	if parsed == nil || len(parsed.SampleType) == 0 || len(parsed.Sample) == 0 {
 		t.Fatalf("enabled live pprof heap = %+v, want sample types and samples", parsed)
+	}
+}
+
+func assertLivePprofDiagnostics(t *testing.T, serverURL string) {
+	t.Helper()
+
+	for _, test := range []struct {
+		path      string
+		wantBody  string
+		wantState int
+	}{
+		{path: "/debug/pprof/cmdline", wantBody: "you\x00run", wantState: http.StatusOK},
+		{path: "/debug/pprof/symbol", wantBody: "num_symbols: 1", wantState: http.StatusOK},
+		{path: "/debug/pprof/heap?seconds=0", wantBody: `invalid value for "seconds"`, wantState: http.StatusBadRequest},
+	} {
+		response, err := http.Get(serverURL + test.path)
+		if err != nil {
+			t.Fatalf("GET enabled pprof %s: %v", test.path, err)
+		}
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read enabled pprof %s: %v", test.path, err)
+		}
+		if response.StatusCode != test.wantState || !strings.Contains(string(body), test.wantBody) {
+			t.Fatalf("enabled pprof %s = (%d, %q), want status %d containing %q", test.path, response.StatusCode, body, test.wantState, test.wantBody)
+		}
+	}
+
+	trace, err := http.Get(serverURL + "/debug/pprof/trace?seconds=0.01")
+	if err != nil {
+		t.Fatalf("GET enabled pprof trace: %v", err)
+	}
+	traceBody, err := io.ReadAll(trace.Body)
+	_ = trace.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof trace: %v", err)
+	}
+	if trace.StatusCode != http.StatusOK || len(traceBody) == 0 {
+		t.Fatalf("enabled pprof trace = (%d, body length %d), want non-empty HTTP 200 response", trace.StatusCode, len(traceBody))
+	}
+
+	delta, err := http.Get(serverURL + "/debug/pprof/goroutine?seconds=1")
+	if err != nil {
+		t.Fatalf("GET enabled pprof goroutine delta: %v", err)
+	}
+	deltaBody, err := io.ReadAll(delta.Body)
+	_ = delta.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof goroutine delta: %v", err)
+	}
+	if delta.StatusCode != http.StatusOK || len(deltaBody) == 0 {
+		t.Fatalf("enabled pprof goroutine delta = (%d, body length %d), want non-empty HTTP 200 response", delta.StatusCode, len(deltaBody))
 	}
 }
 
