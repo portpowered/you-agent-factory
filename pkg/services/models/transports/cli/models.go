@@ -97,7 +97,8 @@ type modelInvocationValidationResponse struct {
 
 func validationOnlyModelInvoke(cfg InvokeConfig) bool {
 	return cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" &&
-		len(cfg.InputMappings) == 0 && len(cfg.OutputMappings) == 0
+		len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 &&
+		len(cfg.ParameterSpecs) == 0 && len(cfg.OutputMappings) == 0
 }
 
 func writeValidationOnlyModelInvokeResponse(output io.Writer, modelName, operation string) error {

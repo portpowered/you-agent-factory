@@ -902,7 +902,7 @@ func assertInvokeGlobalValues(t *testing.T, cfg InvokeConfig, server string) {
 
 func assertInvokeDependencyValues(t *testing.T, cfg InvokeConfig, logger *zap.Logger, diagnostics io.Writer) {
 	t.Helper()
-	if cfg.FactoryDir != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
+	if cfg.FactoryDir != "" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
 		t.Fatalf("InvokeConfig dependencies = %#v", cfg)
 	}
 }

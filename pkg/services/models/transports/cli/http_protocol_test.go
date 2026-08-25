@@ -451,7 +451,7 @@ func assertCLIOutputPresentationRequest(t *testing.T, inputs []modelinference.Op
 		Worker: "text-worker", ProviderLocality: modelinference.LocalityCloud,
 		Operations: []modelinference.Operation{{Name: "OMNI", Inputs: inputs}},
 	}}}
-	request := joinedCLIInvocationRequest(scope, "model", "OMNI", "hello", catalog)
+	request := joinedCLIInvocationRequestFromInputs(scope, "model", "OMNI", "hello", nil, nil, catalog)
 	if request.Inputs[0].Name != "text" || request.Inputs[0].ContentType != "text/custom" || request.Inputs[0].Content != "hello" {
 		t.Fatalf("joined request = %#v, want selected text slot", request)
 	}
