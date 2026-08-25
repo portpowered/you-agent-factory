@@ -13,7 +13,6 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
-	factoryeventkinds "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	historicalquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire"
@@ -97,15 +96,6 @@ func NewRuntimeRoot(
 		logger,
 		clocks...,
 	)
-}
-
-// ValidateFactoryEventContract checks the bundled public event discriminator
-// against the canonical recording inventory selected by composition. Keeping
-// this at the Recordings wire boundary lets API/replay contract callers use
-// the same validation authority as runtime composition without importing the
-// inventory implementation package.
-func ValidateFactoryEventContract(openAPIYAML []byte) error {
-	return factoryeventkinds.ValidateBundledFactoryEventKindParity(openAPIYAML)
 }
 
 // NewRuntimeRootWithAppend constructs the process-scoped Recordings authority

@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -85,12 +85,7 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	testutil.WriteSeedFile(t, cliFactoryDir, "task", []byte(`{"title":"FUN Recordings CLI transport activation"}`))
 	assertRecordingsCLITransportRecordPathActivates(t, cliFactoryDir, cliArtifactPath)
 
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	recordingsService := root.RecordingsServiceFromProcess(process)
-	if recordingsService == nil {
-		t.Fatal("root process does not expose the composed Recordings service")
-	}
+	recordingsService := recordingsTransportActivationService(t, edges)
 	assertRecordingsPortableValidateAdverseOutcome(t, recordingsService)
 	assertRecordingsMCPTransportActivatesAfterLifecycle(t, recordingsService, durableSession.SessionId)
 }
@@ -153,6 +148,39 @@ func assertRecordingsCLITransportRecordPathActivates(t *testing.T, factoryDir, a
 	}
 
 	waitForRecordingsActivationArtifact(t, artifactPath)
+}
+
+type recordingsTransportActivationLedger struct {
+	recordings.Ledger
+}
+
+func recordingsTransportActivationService(
+	t *testing.T,
+	edges serviceedges.Edges,
+) recordings.Service {
+	t.Helper()
+
+	_ = support.BuildProcess(t, edges)
+	service, err := recordingswire.NewService(
+		&recordingsTransportActivationLedger{},
+		recordings.LiveRecordingTargetPlannerFunc(
+			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				return recordings.LiveRecordingTarget{}, nil
+			},
+		),
+		func(path string, payload []byte) error {
+			return os.WriteFile(path, payload, 0o600)
+		},
+		edges.RecordingMakeDirectories,
+		edges.RecordingCreateTempFile,
+		edges.RecordingRemovePath,
+		edges.RecordingRenamePath,
+		edges.RecordingReadFile,
+	)
+	if err != nil {
+		t.Fatalf("compose Recordings service for transport activation: %v", err)
+	}
+	return service
 }
 
 func assertRecordingsPortableValidateAdverseOutcome(t *testing.T, service recordings.Service) {
