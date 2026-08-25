@@ -231,7 +231,9 @@ func EmbeddingValues(dimensions int) []float32 {
 // written by TTS. The payload is intentionally non-trivial but model-free.
 func AudioBytes() []byte {
 	const (
-		sampleRate = 16000
+		// Keep the deterministic header and samples UTF-8-safe because the
+		// generic HTTP contract carries inline content as a JSON string.
+		sampleRate = 8192
 		channels   = 1
 		bits       = 16
 		samples    = 160
@@ -239,7 +241,7 @@ func AudioBytes() []byte {
 	dataSize := samples * channels * bits / 8
 	data := make([]byte, dataSize)
 	for index := 0; index < samples; index++ {
-		amplitude := int16((index%32)*500 - 7750)
+		amplitude := int16(64 + index%32)
 		binary.LittleEndian.PutUint16(data[index*2:], uint16(amplitude))
 	}
 	result := make([]byte, 44+len(data))
@@ -283,12 +285,15 @@ func (backend *backendServer) callsSnapshot() []Call {
 	return calls
 }
 
-func (backend *backendServer) begin(ctx context.Context, call Call) error {
+func (backend *backendServer) begin(ctx context.Context, call Call, failMode bool) error {
 	backend.callsMu.Lock()
 	backend.calls = append(backend.calls, call)
 	backend.callsMu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if !failMode {
+		return nil
 	}
 	switch backend.options.Mode {
 	case ModeUnavailable:
@@ -301,17 +306,14 @@ func (backend *backendServer) begin(ctx context.Context, call Call) error {
 }
 
 func (backend *backendServer) Health(ctx context.Context, _ *localaiproto.HealthMessage) (*localaiproto.Reply, error) {
-	if err := backend.begin(ctx, Call{Method: "Health"}); err != nil {
+	if err := backend.begin(ctx, Call{Method: "Health"}, false); err != nil {
 		return nil, err
-	}
-	if backend.options.Mode == ModeMalformed {
-		return &localaiproto.Reply{}, nil
 	}
 	return &localaiproto.Reply{Message: []byte(fixtureHealthMessage)}, nil
 }
 
 func (backend *backendServer) Free(ctx context.Context, _ *localaiproto.HealthMessage) (*localaiproto.Result, error) {
-	if err := backend.begin(ctx, Call{Method: "Free"}); err != nil {
+	if err := backend.begin(ctx, Call{Method: "Free"}, true); err != nil {
 		return nil, err
 	}
 	return &localaiproto.Result{Message: "fixture freed", Success: backend.options.Mode != ModeMalformed}, nil
@@ -322,7 +324,7 @@ func (backend *backendServer) LoadModel(ctx context.Context, request *localaipro
 	if request != nil {
 		call.Model = request.GetModel()
 	}
-	if err := backend.begin(ctx, call); err != nil {
+	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
 	}
 	if backend.options.Mode == ModeMalformed {
@@ -332,7 +334,7 @@ func (backend *backendServer) LoadModel(ctx context.Context, request *localaipro
 }
 
 func (backend *backendServer) Status(ctx context.Context, _ *localaiproto.HealthMessage) (*localaiproto.StatusResponse, error) {
-	if err := backend.begin(ctx, Call{Method: "Status"}); err != nil {
+	if err := backend.begin(ctx, Call{Method: "Status"}, true); err != nil {
 		return nil, err
 	}
 	if backend.options.Mode == ModeMalformed {
@@ -352,7 +354,7 @@ func (backend *backendServer) Predict(ctx context.Context, request *localaiproto
 		Audios: append([]string(nil), request.GetAudios()...),
 		Videos: append([]string(nil), request.GetVideos()...),
 	}
-	if err := backend.begin(ctx, call); err != nil {
+	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
 	}
 	if backend.options.Mode == ModeMalformed {
@@ -375,7 +377,7 @@ func (backend *backendServer) Embedding(ctx context.Context, request *localaipro
 	if request != nil {
 		call.Prompt = request.GetPrompt()
 	}
-	if err := backend.begin(ctx, call); err != nil {
+	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
 	}
 	if backend.options.Mode == ModeMalformed {
@@ -389,7 +391,7 @@ func (backend *backendServer) TTS(ctx context.Context, request *localaiproto.TTS
 		request = &localaiproto.TTSRequest{}
 	}
 	call := Call{Method: "TTS", Model: request.GetModel(), Text: request.GetText(), Destination: request.GetDst()}
-	if err := backend.begin(ctx, call); err != nil {
+	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
 	}
 	if backend.options.Mode == ModeMalformed {
@@ -408,7 +410,7 @@ func (backend *backendServer) TTSStream(request *localaiproto.TTSRequest, stream
 		request = &localaiproto.TTSRequest{}
 	}
 	call := Call{Method: "TTSStream", Model: request.GetModel(), Text: request.GetText(), Destination: request.GetDst()}
-	if err := backend.begin(stream.Context(), call); err != nil {
+	if err := backend.begin(stream.Context(), call, true); err != nil {
 		return err
 	}
 	response := &localaiproto.Reply{}
@@ -425,7 +427,7 @@ func (backend *backendServer) AudioTranscription(ctx context.Context, request *l
 		call.Destination = request.GetDst()
 		call.Prompt = request.GetPrompt()
 	}
-	if err := backend.begin(ctx, call); err != nil {
+	if err := backend.begin(ctx, call, true); err != nil {
 		return nil, err
 	}
 	if backend.options.Mode == ModeMalformed {

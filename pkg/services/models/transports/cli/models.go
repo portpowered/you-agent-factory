@@ -55,11 +55,18 @@ type InspectConfig struct {
 }
 
 type InvokeConfig struct {
-	Context          context.Context
-	ModelName        string
-	Operation        string
-	Text             string
-	InputMappings    []string
+	Context       context.Context
+	ModelName     string
+	Operation     string
+	Text          string
+	InputMappings []string
+	// InputSpecs is the structured-input alias retained for direct callers of
+	// the Models root. The Cobra adapter carries repeatable --input values in
+	// InputMappings so legacy slot=value and JSON forms share one flag.
+	InputSpecs []string
+	// ParameterSpecs contains repeatable JSON-encoded generic operation
+	// parameters. Each value preserves one parameter's name and JSON value.
+	ParameterSpecs   []string
 	OutputPath       string
 	OutputMappings   []string
 	Server           string
@@ -90,7 +97,8 @@ type modelInvocationValidationResponse struct {
 
 func validationOnlyModelInvoke(cfg InvokeConfig) bool {
 	return cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" &&
-		len(cfg.InputMappings) == 0 && len(cfg.OutputMappings) == 0
+		len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 &&
+		len(cfg.ParameterSpecs) == 0 && len(cfg.OutputMappings) == 0
 }
 
 func writeValidationOnlyModelInvokeResponse(output io.Writer, modelName, operation string) error {
@@ -281,14 +289,11 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 {
+	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
 		return fmt.Errorf("--text is required")
 	}
-	if len(cfg.InputMappings) > 0 {
-		return fmt.Errorf("explicit input mappings require the local Models composition")
-	}
-	if len(cfg.OutputMappings) > 0 {
-		return fmt.Errorf("explicit output mappings require the local Models composition")
+	if err := validateHTTPInvokeBindings(cfg); err != nil {
+		return err
 	}
 
 	if validationOnlyModelInvoke(cfg) {
@@ -322,6 +327,21 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	}
 	_, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", outputPath)
 	return err
+}
+
+func validateHTTPInvokeBindings(cfg InvokeConfig) error {
+	switch {
+	case len(cfg.InputMappings) > 0:
+		return fmt.Errorf("explicit input mappings require the local Models composition")
+	case len(cfg.InputSpecs) > 0:
+		return fmt.Errorf("explicit generic inputs require the local Models composition")
+	case len(cfg.ParameterSpecs) > 0:
+		return fmt.Errorf("explicit generic parameters require the local Models composition")
+	case len(cfg.OutputMappings) > 0:
+		return fmt.Errorf("explicit output mappings require the local Models composition")
+	default:
+		return nil
+	}
 }
 
 func (service *httpService) Pull(cfg PullConfig) error {

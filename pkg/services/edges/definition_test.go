@@ -546,12 +546,19 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	embedding := ModelEmbeddingBackend(func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
 		return models.EmbeddingBackendResponse{Embeddings: []float64{0.1}}, nil
 	})
+	backendArtifactResolver := ModelResolveBackendArtifact(func(
+		context.Context,
+		ModelBackendArtifactSelectionRequest,
+	) (ModelBackendArtifactSelection, error) {
+		return ModelBackendArtifactSelection{Name: "fixture-backend"}, nil
+	})
 	protocol := &edgeModelHostProtocol{}
 	dialer := &edgeModelHostGRPCDialer{}
 	compatibility := &edgeModelHostCompatibilityChecker{}
 	merged := Merge(Edges{}, Edges{
 		ModelAssetResolveEnvironment:  environment,
 		ModelEmbeddingBackend:         embedding,
+		ModelResolveBackendArtifact:   backendArtifactResolver,
 		ModelHostProtocolNegotiator:   protocol,
 		ModelHostGRPCDialer:           dialer,
 		ModelHostCompatibilityChecker: compatibility,
@@ -565,6 +572,10 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	if response, err := merged.ModelEmbeddingBackend(context.Background(), models.EmbeddingBackendRequest{Text: "hello"}); err != nil || len(response.Embeddings) != 1 {
 		t.Fatalf("embedding backend edge = (%#v, %v), want fixture response", response, err)
 	}
+	artifact, err := merged.ModelResolveBackendArtifact(context.Background(), ModelBackendArtifactSelectionRequest{})
+	if err != nil || artifact.Name != "fixture-backend" {
+		t.Fatalf("backend artifact resolver = (%#v, %v), want fixture-backend", artifact, err)
+	}
 	if merged.ModelHostProtocolNegotiator != protocol {
 		t.Fatal("protocol negotiator edge was not replaced")
 	}
@@ -573,6 +584,41 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	}
 	if merged.ModelHostCompatibilityChecker != compatibility {
 		t.Fatal("compatibility checker edge was not replaced")
+	}
+}
+
+func TestMergeAppliesAndPreservesModelInvocationBackend(t *testing.T) {
+	t.Parallel()
+
+	defaultBackend := ModelInvocationBackend(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return []models.InferenceContent{{Content: "default"}}, nil, nil
+	})
+	replacementBackend := ModelInvocationBackend(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return []models.InferenceContent{{Content: "replacement"}}, nil, nil
+	})
+
+	merged := Merge(Edges{ModelInvocationBackend: defaultBackend}, Edges{ModelInvocationBackend: replacementBackend})
+	content, _, err := merged.ModelInvocationBackend(context.Background(), models.InvokeModelRequest{})
+	if err != nil || len(content) != 1 || content[0].Content != "replacement" {
+		t.Fatalf("replaced ModelInvocationBackend = (%#v, %v), want replacement content", content, err)
+	}
+
+	preserved := Merge(Edges{ModelInvocationBackend: defaultBackend}, Edges{})
+	content, _, err = preserved.ModelInvocationBackend(context.Background(), models.InvokeModelRequest{})
+	if err != nil || len(content) != 1 || content[0].Content != "default" {
+		t.Fatalf("preserved ModelInvocationBackend = (%#v, %v), want default content", content, err)
+	}
+
+	defaultASR := ModelASRBackend(func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{Text: "default"}, nil
+	})
+	replacementASR := ModelASRBackend(func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{Text: "replacement"}, nil
+	})
+	merged = Merge(Edges{ModelASRBackend: defaultASR}, Edges{ModelASRBackend: replacementASR})
+	response, err := merged.ModelASRBackend(context.Background(), models.ASRBackendRequest{})
+	if err != nil || response.Text != "replacement" {
+		t.Fatalf("replaced ModelASRBackend = (%#v, %v), want replacement response", response, err)
 	}
 }
 

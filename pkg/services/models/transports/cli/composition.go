@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
@@ -117,7 +118,9 @@ func (service *rootService) prepareGenericCLIInputs(
 	operation string,
 	catalog modelinference.Detail,
 ) ([]modelinference.InferenceInput, error) {
-	if len(cfg.InputMappings) == 0 {
+	rawValues := append([]string(nil), cfg.InputMappings...)
+	rawValues = append(rawValues, cfg.InputSpecs...)
+	if len(rawValues) == 0 {
 		return nil, nil
 	}
 	selected, ok := catalogOperationForName(catalog, operation)
@@ -127,19 +130,45 @@ func (service *rootService) prepareGenericCLIInputs(
 			fmt.Sprintf("unknown operation %q", operation), operation, nil,
 		)
 	}
-	mappings, err := parseGenericCLIInputMappings(cfg.InputMappings)
-	if err != nil {
-		return nil, err
+	mappingValues, specValues := splitGenericCLIInputValues(rawValues)
+	var inputs []modelinference.InferenceInput
+	if len(mappingValues) > 0 {
+		mappings, err := parseGenericCLIInputMappings(mappingValues)
+		if err != nil {
+			return nil, err
+		}
+		slots, validNames := genericCLIInputSlots(selected.Inputs)
+		counts, err := validateGenericCLIInputMappings(mappings, slots, validNames)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateMissingGenericCLIInputSlots(selected.Inputs, counts, validNames); err != nil {
+			return nil, err
+		}
+		inputs, err = service.bindGenericCLIInputs(cfg, mappings, slots)
+		if err != nil {
+			return nil, err
+		}
 	}
-	slots, validNames := genericCLIInputSlots(selected.Inputs)
-	counts, err := validateGenericCLIInputMappings(mappings, slots, validNames)
-	if err != nil {
-		return nil, err
+	if len(specValues) > 0 {
+		specInputs, err := parseGenericCLIInputSpecs(specValues)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, specInputs...)
 	}
-	if err := validateMissingGenericCLIInputSlots(selected.Inputs, counts, validNames); err != nil {
-		return nil, err
+	return inputs, nil
+}
+
+func splitGenericCLIInputValues(values []string) (mappings, specs []string) {
+	for _, value := range values {
+		if strings.HasPrefix(strings.TrimSpace(value), "{") {
+			specs = append(specs, value)
+			continue
+		}
+		mappings = append(mappings, value)
 	}
-	return service.bindGenericCLIInputs(cfg, mappings, slots)
+	return mappings, specs
 }
 
 func genericCLIInputSlots(inputSlots []modelinference.OperationSlot) (map[string]modelinference.OperationSlot, []string) {
@@ -402,4 +431,61 @@ func genericCLIInputAcceptsMediaType(slot modelinference.OperationSlot, mediaTyp
 		}
 	}
 	return false
+}
+
+func inferenceContentToWorkParts(content []modelinference.InferenceContent) []work.WorkContentPart {
+	if len(content) == 0 {
+		return nil
+	}
+	parts := make([]work.WorkContentPart, 0, len(content))
+	for _, item := range content {
+		parts = append(parts, inferenceContentToWorkPart(item))
+	}
+	return parts
+}
+
+func inferenceContentToWorkPart(item modelinference.InferenceContent) work.WorkContentPart {
+	contentType := strings.TrimSpace(item.ContentType)
+	value := strings.TrimSpace(item.Content)
+	switch {
+	case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
+			File:        value,
+			ContentType: contentType,
+			Slot:        "audio",
+		}
+	case strings.HasPrefix(strings.ToLower(contentType), "image/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeImage,
+			URL:         value,
+			ContentType: contentType,
+			Slot:        "image",
+		}
+	case strings.EqualFold(contentType, "application/json"):
+		return work.WorkContentPart{
+			Type: work.WorkContentPartTypeJSON,
+			JSON: json.RawMessage(value),
+			Slot: "json",
+		}
+	default:
+		if contentType == "" {
+			contentType = "text/plain"
+		}
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeText,
+			Text:        value,
+			ContentType: contentType,
+			Slot:        "text",
+		}
+	}
+}
+
+func inferenceArtifactSourcePath(result modelinference.InvokeModelResult) (string, error) {
+	for _, artifact := range result.Artifacts {
+		if path := strings.TrimSpace(artifact.Artifact.String()); path != "" {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("models invoke returned no streamed audio output")
 }

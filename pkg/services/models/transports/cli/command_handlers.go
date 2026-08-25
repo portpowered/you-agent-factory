@@ -42,6 +42,7 @@ const (
 	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
 	modelsInvokeTextID       = "you.models.invoke.flag.text"
 	modelsInvokeInputID      = "you.models.invoke.flag.input"
+	modelsInvokeParameterID  = "you.models.invoke.flag.parameter"
 	modelsInvokeOutputID     = "you.models.invoke.flag.output"
 	modelsInvokeOutputMapID  = "you.models.invoke.flag.output-map"
 	modelsPullNameInputID    = "you.models.pull.arg.0"
@@ -151,7 +152,8 @@ func (h *CommandHandler) Invoke(
 	}
 	cfg := InvokeConfig{
 		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
-		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings, OutputPath: invokeInputs.outputPath,
+		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings,
+		ParameterSpecs: invokeInputs.parameterSpecs, OutputPath: invokeInputs.outputPath,
 		OutputMappings: invokeInputs.outputMappings, Output: cmd.OutOrStdout(),
 		// Leave FactoryDir empty so the Factory Session invocation boundary owns
 		// the documented default-layout discovery. A non-empty value is reserved
@@ -170,6 +172,7 @@ type modelsInvokeInputs struct {
 	operation      string
 	text           string
 	inputMappings  []string
+	parameterSpecs []string
 	outputPath     string
 	outputMappings []string
 }
@@ -191,6 +194,13 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	if err != nil {
 		return modelsInvokeInputs{}, err
 	}
+	var parameterSpecs []string
+	if _, present := inputs.State(modelsInvokeParameterID); present {
+		parameterSpecs, err = inputs.StringArray(modelsInvokeParameterID)
+		if err != nil {
+			return modelsInvokeInputs{}, fmt.Errorf("read models invoke parameters: %w", err)
+		}
+	}
 	if state, present := inputs.State(modelsInvokeOperationID); present && state.Default && len(inputMappings) > 0 {
 		// The manifest keeps the legacy TTS default for text invocations. A
 		// generic input binding selects the operation from the built-in model
@@ -203,8 +213,9 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	}
 	return modelsInvokeInputs{
 		modelName: modelName, operation: operation, text: text,
-		inputMappings: inputMappings,
-		outputPath:    outputPath, outputMappings: outputMappings,
+		inputMappings:  inputMappings,
+		parameterSpecs: parameterSpecs, outputPath: outputPath,
+		outputMappings: outputMappings,
 	}, nil
 }
 

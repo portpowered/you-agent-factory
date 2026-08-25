@@ -531,6 +531,7 @@ func assertModelsCommandCharacterization(
 			modelsCharacterizationFlag{long: "operation", scope: "local", valueType: "string", defaultValue: "TTS", enum: []string{"ASR", "EMBED", "OMNI", "TTS"}, normalization: "trim", completionKind: "static", visibility: "visible"},
 			modelsCharacterizationFlag{long: "output", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
 			modelsCharacterizationFlag{long: "output-map", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
+			modelsCharacterizationFlag{long: "parameter", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
 			modelsCharacterizationFlag{long: "text", scope: "local", valueType: "string", normalization: "trim", visibility: "visible"},
 		)
 	}
@@ -558,11 +559,11 @@ type modelsCharacterizationFlag struct {
 	valueType       string
 	defaultValue    string
 	noOptionDefault string
+	repeatable      bool
 	enum            []string
 	normalization   string
 	completionKind  string
 	visibility      string
-	repeatable      bool
 }
 
 func (flag modelsCharacterizationFlag) record(commandPath, commandID string) cliinputs.FlagRecord {

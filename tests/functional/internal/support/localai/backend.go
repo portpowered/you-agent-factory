@@ -9,14 +9,21 @@ import (
 	"strings"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localaiproto "github.com/portpowered/infinite-you/tests/functional/internal/support/localai/protocol"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 const (
-	fixtureDialTimeout = 5 * time.Second
+	// PinnedHostProtocolVersion mirrors the public Models construction seam's
+	// pinned LocalAI protocol value. The generated protocol remains private to
+	// this functional fixture package.
+	PinnedHostProtocolVersion = "localai-backend-v1"
+	fixtureDialTimeout        = 5 * time.Second
 )
 
 // InvocationBackend adapts the fixture's pinned gRPC protocol to the narrow
@@ -27,11 +34,16 @@ func (fixture *Fixture) InvocationBackend(
 	request models.InvokeModelRequest,
 ) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 	if fixture == nil {
-		return nil, nil, errors.New("LocalAI fixture is nil")
+		return nil, nil, backendFailure(
+			request,
+			models.InvocationFailureClassBackendReadiness,
+			"LocalAI backend is unavailable; start the managed backend and verify its health",
+			errors.New("LocalAI fixture is nil"),
+		)
 	}
 	connection, client, err := fixture.dial(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, backendRPCFailure(request, err)
 	}
 	defer func() { _ = connection.Close() }()
 
@@ -43,9 +55,11 @@ func (fixture *Fixture) InvocationBackend(
 	case models.OperationOMNI:
 		return fixture.invokeOMNI(ctx, client, request, inputs)
 	case models.OperationEMBED:
-		return fixture.invokeEMBED(ctx, client, inputs)
+		return fixture.invokeEMBED(ctx, client, request, inputs)
 	case models.OperationTTS:
 		return fixture.invokeTTS(ctx, client, request, inputs)
+	case models.OperationASR:
+		return fixture.invokeASR(ctx, client, request, inputs)
 	default:
 		return nil, nil, fmt.Errorf("unsupported LocalAI fixture operation %q", request.Operation)
 	}
@@ -74,10 +88,10 @@ func (fixture *Fixture) invokeOMNI(
 	}
 	response, err := client.Predict(ctx, options)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invoke LocalAI OMNI: %w", err)
+		return nil, nil, backendRPCFailure(request, err)
 	}
-	if len(response.GetMessage()) == 0 {
-		return nil, nil, malformedResponse(models.OperationOMNI, "text")
+	if response == nil || len(response.GetMessage()) == 0 {
+		return nil, nil, malformedResponse(request, "text")
 	}
 	return []models.InferenceContent{{
 		Name:        "text",
@@ -91,14 +105,15 @@ func (fixture *Fixture) invokeOMNI(
 func (fixture *Fixture) invokeEMBED(
 	ctx context.Context,
 	client localaiproto.BackendClient,
+	request models.InvokeModelRequest,
 	inputs []models.InferenceInput,
 ) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 	response, err := client.Embedding(ctx, &localaiproto.PredictOptions{Prompt: firstInputContent(inputs)})
 	if err != nil {
-		return nil, nil, fmt.Errorf("invoke LocalAI EMBED: %w", err)
+		return nil, nil, backendRPCFailure(request, err)
 	}
-	if len(response.GetEmbeddings()) == 0 {
-		return nil, nil, malformedResponse(models.OperationEMBED, "embedding")
+	if response == nil || len(response.GetEmbeddings()) == 0 {
+		return nil, nil, malformedResponse(request, "embedding")
 	}
 	content, err := json.Marshal(response.GetEmbeddings())
 	if err != nil {
@@ -124,14 +139,14 @@ func (fixture *Fixture) invokeTTS(
 		Text:  firstInputContent(inputs),
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("invoke LocalAI TTS: %w", err)
+		return nil, nil, backendRPCFailure(request, err)
 	}
 	response, err := stream.Recv()
 	if err != nil {
-		return nil, nil, fmt.Errorf("receive LocalAI TTS: %w", err)
+		return nil, nil, backendRPCFailure(request, err)
 	}
-	if len(response.GetAudio()) == 0 {
-		return nil, nil, malformedResponse(models.OperationTTS, "audio")
+	if response == nil || len(response.GetAudio()) == 0 {
+		return nil, nil, malformedResponse(request, "audio")
 	}
 	return []models.InferenceContent{{
 		Name:        "audio",
@@ -166,6 +181,9 @@ func (fixture *Fixture) ASRBackend(
 	if err != nil {
 		return models.ASRBackendResponse{}, fmt.Errorf("invoke LocalAI ASR: %w", err)
 	}
+	if response == nil || strings.TrimSpace(response.GetText()) == "" {
+		return models.ASRBackendResponse{}, errors.New("LocalAI ASR response is missing transcript")
+	}
 	segments := make([]models.ASRBackendSegment, 0, len(response.GetSegments()))
 	for _, segment := range response.GetSegments() {
 		if segment == nil {
@@ -176,6 +194,52 @@ func (fixture *Fixture) ASRBackend(
 		})
 	}
 	return models.ASRBackendResponse{Text: response.GetText(), Segments: segments}, nil
+}
+
+func (fixture *Fixture) invokeASR(
+	ctx context.Context,
+	client localaiproto.BackendClient,
+	request models.InvokeModelRequest,
+	inputs []models.InferenceInput,
+) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	response, err := client.AudioTranscription(ctx, &localaiproto.TranscriptRequest{
+		Prompt: firstInputContent(inputs),
+	})
+	if err != nil {
+		return nil, nil, backendRPCFailure(request, err)
+	}
+	if response == nil || strings.TrimSpace(response.GetText()) == "" {
+		return nil, nil, malformedResponse(request, "transcript")
+	}
+	if len(response.GetSegments()) == 0 {
+		return nil, nil, malformedResponse(request, "segments")
+	}
+	segments := make([]models.ASRBackendSegment, 0, len(response.GetSegments()))
+	for _, segment := range response.GetSegments() {
+		if segment == nil {
+			continue
+		}
+		segments = append(segments, models.ASRBackendSegment{
+			ID: segment.GetId(), Start: segment.GetStart(), End: segment.GetEnd(), Text: segment.GetText(),
+		})
+	}
+	if len(segments) == 0 {
+		return nil, nil, malformedResponse(request, "segments")
+	}
+	segmentContent, err := json.Marshal(segments)
+	if err != nil {
+		return nil, nil, fmt.Errorf("encode LocalAI ASR segments: %w", err)
+	}
+	return []models.InferenceContent{
+		{
+			Name: "transcript", Modality: models.ModalityText,
+			ContentType: "text/plain", MediaType: "text/plain", Content: response.GetText(),
+		},
+		{
+			Name: "segments", Modality: models.ModalityJSON,
+			ContentType: "application/json", MediaType: "application/json", Content: string(segmentContent),
+		},
+	}, nil, nil
 }
 
 func asrProtocolRequest(request models.ASRBackendRequest) *localaiproto.TranscriptRequest {
@@ -191,13 +255,91 @@ func firstInputContent(inputs []models.InferenceInput) string {
 	return inputs[0].Content
 }
 
-func malformedResponse(operation, slot string) error {
+func malformedResponse(request models.InvokeModelRequest, slot string) error {
+	model := invocationModelName(request)
+	operation := invocationOperationName(request)
 	return &models.InvocationFailure{
 		Class:     models.InvocationFailureClassMalformedResponse,
+		Model:     invocationModelReference(request),
 		Operation: operation,
 		Slot:      slot,
-		Message:   fmt.Sprintf("LocalAI fixture returned no %s output", slot),
+		Message: fmt.Sprintf(
+			"LocalAI backend returned malformed response for model %q operation %q: output slot %q is missing; verify the pinned LocalAI response contract",
+			model, operation, slot,
+		),
 	}
+}
+
+func backendRPCFailure(request models.InvokeModelRequest, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	switch status.Code(err) {
+	case codes.Unavailable:
+		return backendFailure(
+			request,
+			models.InvocationFailureClassBackendReadiness,
+			"LocalAI backend is unavailable; start the managed backend and verify its health",
+			err,
+		)
+	case codes.FailedPrecondition:
+		return backendFailure(
+			request,
+			models.InvocationFailureClassBackendProtocol,
+			"LocalAI backend protocol is incompatible; use the pinned LocalAI backend protocol",
+			err,
+		)
+	default:
+		return backendFailure(
+			request,
+			models.InvocationFailureClassBackendProtocol,
+			"LocalAI backend returned an unusable response; verify the pinned LocalAI backend contract",
+			err,
+		)
+	}
+}
+
+func backendFailure(
+	request models.InvokeModelRequest,
+	class models.InvocationFailureClass,
+	action string,
+	cause error,
+) error {
+	model := invocationModelName(request)
+	operation := invocationOperationName(request)
+	return &models.InvocationFailure{
+		Class:     class,
+		Model:     invocationModelReference(request),
+		Operation: operation,
+		Message:   fmt.Sprintf("%s for model %q operation %q", action, model, operation),
+		Cause:     cause,
+	}
+}
+
+func invocationModelReference(request models.InvokeModelRequest) models.ModelReference {
+	if !request.Model.IsZero() {
+		return request.Model
+	}
+	return models.ModelReference{NameOrURI: request.ModelName}
+}
+
+func invocationModelName(request models.InvokeModelRequest) string {
+	model := strings.TrimSpace(invocationModelReference(request).NameOrURI)
+	if model == "" {
+		return "unknown"
+	}
+	return model
+}
+
+func invocationOperationName(request models.InvokeModelRequest) string {
+	operation := strings.ToUpper(strings.TrimSpace(request.Operation))
+	if operation == "" {
+		return "unknown"
+	}
+	return operation
 }
 
 func (fixture *Fixture) dial(ctx context.Context) (*grpc.ClientConn, localaiproto.BackendClient, error) {
@@ -213,4 +355,83 @@ func (fixture *Fixture) dial(ctx context.Context) (*grpc.ClientConn, localaiprot
 		return nil, nil, fmt.Errorf("dial LocalAI fixture: %w", err)
 	}
 	return connection, localaiproto.NewBackendClient(connection), nil
+}
+
+// GRPCDialer exposes the fixture through the Models managed-host edge. The
+// method's anonymous return interface intentionally matches edges.Edges so the
+// generated protocol client and connection remain inside this support package.
+func (fixture *Fixture) GRPCDialer() interface {
+	Dial(context.Context, string) (interface {
+		Negotiate(context.Context, serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error)
+		Close() error
+	}, error)
+} {
+	return fixtureGRPCDialer{fixture: fixture}
+}
+
+type fixtureGRPCDialer struct {
+	fixture *Fixture
+}
+
+func (dialer fixtureGRPCDialer) Dial(
+	ctx context.Context,
+	endpoint string,
+) (interface {
+	Negotiate(context.Context, serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error)
+	Close() error
+}, error) {
+	if dialer.fixture == nil {
+		return nil, errors.New("LocalAI fixture dialer is nil")
+	}
+	if strings.TrimSpace(endpoint) == "" {
+		endpoint = dialer.fixture.Endpoint()
+	}
+	dialContext, cancel := context.WithTimeout(ctx, fixtureDialTimeout)
+	defer cancel()
+	connection, err := grpc.DialContext(
+		dialContext,
+		endpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dial LocalAI managed host: %w", err)
+	}
+	return &fixtureGRPCConnection{
+		connection: connection,
+		client:     localaiproto.NewBackendClient(connection),
+	}, nil
+}
+
+type fixtureGRPCConnection struct {
+	connection *grpc.ClientConn
+	client     localaiproto.BackendClient
+}
+
+func (connection *fixtureGRPCConnection) Negotiate(
+	ctx context.Context,
+	request serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	if request.ProtocolVersion != PinnedHostProtocolVersion {
+		return serviceedges.ModelHostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
+	health, err := connection.client.Health(ctx, &localaiproto.HealthMessage{})
+	if err != nil {
+		return serviceedges.ModelHostProtocolNegotiationResult{}, err
+	}
+	if string(health.GetMessage()) != FixtureHealthMessage {
+		return serviceedges.ModelHostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		Ready:           true,
+	}, nil
+}
+
+func (connection *fixtureGRPCConnection) Close() error {
+	if connection == nil || connection.connection == nil {
+		return nil
+	}
+	return connection.connection.Close()
 }

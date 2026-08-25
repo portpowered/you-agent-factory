@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"strings"
+
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -152,4 +155,65 @@ func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime
 		SupportedOperations: operationsToGenerated(runtime.SupportedOperations),
 		Diagnostics:         &diagnostics,
 	}
+}
+
+func genericCLIStringPointer(value string) *string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	copy := value
+	return &copy
+}
+
+func catalogPresentationForOperation(catalog models.Detail, operation string) (string, string) {
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return capability.Worker, string(capability.ProviderLocality)
+			}
+		}
+	}
+	return "", string(catalog.ProviderLocality)
+}
+
+func resolvedPresentationBindings(
+	catalog models.Detail,
+	operation string,
+	inputText string,
+) []models.ResolvedModelOperationBinding {
+	operationDetail, ok := catalogOperationForName(catalog, operation)
+	if !ok {
+		return []models.ResolvedModelOperationBinding{}
+	}
+	for _, input := range operationDetail.Inputs {
+		slot := strings.TrimSpace(input.Name)
+		if slot == "" {
+			continue
+		}
+		return []models.ResolvedModelOperationBinding{{
+			Slot:   slot,
+			Source: "INPUT",
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: inputText,
+			}},
+		}}
+	}
+	return []models.ResolvedModelOperationBinding{}
+}
+
+func catalogOperationForName(catalog models.Detail, operation string) (models.Operation, bool) {
+	for _, catalogOperation := range catalog.Operations {
+		if catalogOperation.Name == operation {
+			return catalogOperation, true
+		}
+	}
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return catalogOperation, true
+			}
+		}
+	}
+	return models.Operation{}, false
 }

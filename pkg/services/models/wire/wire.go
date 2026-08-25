@@ -123,6 +123,54 @@ func NewService(
 	)
 }
 
+// NewServiceWithBackendArtifactResolver constructs the Models root with the
+// exact pinned backend selector used by the joined invocation path.
+func NewServiceWithBackendArtifactResolver(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	backendResolver BackendArtifactResolver,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	return newService(
+		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
+		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
+		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
+		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, nil, nil, nil,
+		revisionResolvers...,
+	)
+}
+
 // NewServiceWithBackendArtifactResolverAndInvocationBackend constructs the
 // Models root with both the pinned backend selector and one injected backend
 // operation effect. It exists as an additive construction variant so existing
