@@ -140,6 +140,10 @@ func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 	}()
 
 	dialContext := func(ctx context.Context, network string, address string) (net.Conn, error) {
+		// A real open listener can transiently reject a probe while the accept
+		// goroutine is being scheduled, especially on Windows. Retry until the
+		// context ends so that transient dial errors cannot be mistaken for a
+		// listener that has actually stopped.
 		for {
 			connection, dialErr := (&net.Dialer{}).DialContext(ctx, network, address)
 			if dialErr == nil {
