@@ -248,7 +248,7 @@ func TestInvocationRuntimeAdaptersPreserveGenericAndASRBackendFacts(t *testing.T
 			Segments:  []models.ASRBackendSegment{{ID: 1, Start: 0, End: 10, Text: "transcribed"}},
 			Artifacts: []models.InferenceArtifact{{Artifact: artifactRef, Name: "segments", SizeBytes: 4}},
 		}, nil
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("inferenceRuntime: %v", err)
 	}

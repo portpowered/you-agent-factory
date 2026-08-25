@@ -1,6 +1,8 @@
 package root_composition_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
