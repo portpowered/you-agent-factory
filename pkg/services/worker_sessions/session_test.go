@@ -1,8 +1,10 @@
 package workersessions_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -10,6 +12,37 @@ import (
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRuntimeAttempt_CompleteDelegatesAndRejectsUnavailable(t *testing.T) {
+	if err := (workersessions.RuntimeAttempt(nil)).Complete(context.Background(), workers.WorkstationDispatchResult{}, nil); err == nil {
+		t.Fatal("nil RuntimeAttempt.Complete() error = nil, want unavailable error")
+	}
+
+	type contextKey string
+	const key contextKey = "worker-session-test"
+	wantContext := context.WithValue(context.Background(), key, "present")
+	wantDispatchErr := errors.New("dispatch failed")
+	var gotResult workers.WorkstationDispatchResult
+	var gotDispatchErr error
+	called := false
+	attempt := workersessions.RuntimeAttempt(func(ctx context.Context, result workers.WorkstationDispatchResult, dispatchErr error) error {
+		called = true
+		if ctx.Value(key) != "present" {
+			t.Errorf("callback context value = %v, want present", ctx.Value(key))
+		}
+		gotResult = result
+		gotDispatchErr = dispatchErr
+		return wantDispatchErr
+	})
+
+	wantResult := workers.WorkstationDispatchResult{}
+	if err := attempt.Complete(wantContext, wantResult, wantDispatchErr); !errors.Is(err, wantDispatchErr) {
+		t.Fatalf("RuntimeAttempt.Complete() error = %v, want %v", err, wantDispatchErr)
+	}
+	if !called || !reflect.DeepEqual(gotResult, wantResult) || !errors.Is(gotDispatchErr, wantDispatchErr) {
+		t.Fatalf("RuntimeAttempt callback called=%v result=%#v dispatchErr=%v, want called with %#v and %v", called, gotResult, gotDispatchErr, wantResult, wantDispatchErr)
+	}
+}
 
 func TestSession_Validate_AcceptsNonEmptyIDAndAcceptedState(t *testing.T) {
 	session := workersessions.Session{ID: "worker-1", State: workersessions.StateRunning}

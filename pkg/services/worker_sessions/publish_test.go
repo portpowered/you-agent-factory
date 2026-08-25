@@ -2,6 +2,7 @@ package workersessions_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -50,6 +51,70 @@ func TestProviderSessionObservationPublisher_FallbackNilReceiverIsSafe(t *testin
 	var publisher *workersessions.ProviderSessionObservationPublisher
 	if got := publisher.WithUnassociatedProgressFallback(); got != nil {
 		t.Fatalf("nil fallback publisher = %v, want nil", got)
+	}
+}
+
+func TestProviderSessionObservationPublisher_SuppressesProviderIdentityDisagreement(t *testing.T) {
+	observer := &providerSessionObservationSpy{}
+	forwarded := 0
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {
+		forwarded++
+	})
+	publisher.Bind(observer)
+
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID:   "dispatch-1",
+		Provider:     "claude",
+		Continuation: continuationFor(providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "session-1"}),
+	})
+
+	if len(observer.requests) != 0 || forwarded != 0 {
+		t.Fatalf("contradictory provider identity requests=%#v forwarded=%d, want both suppressed", observer.requests, forwarded)
+	}
+}
+
+func TestPublish_MalformedCanonicalUsageFallsBackToUsedTokens(t *testing.T) {
+	spy := &workerRecordSpy{}
+	publisher := workersessions.NewProviderSessionObservationPublisher(func(workers.ProgressFragment) {})
+	publisher.Bind(spy)
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "worker-usage",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "usage.updated",
+		Payload:    "{malformed",
+		Metadata:   map[string]string{"used_tokens": "7"},
+	})
+
+	if len(spy.published) != 1 {
+		t.Fatalf("published records = %d, want one usage record", len(spy.published))
+	}
+	if got := spy.published[0].Draft.Kind; got != workers.KindUsage {
+		t.Fatalf("draft kind = %q, want %q", got, workers.KindUsage)
+	}
+	var payload workers.UsagePayload
+	if err := json.Unmarshal(spy.published[0].Draft.Payload, &payload); err != nil {
+		t.Fatalf("usage payload is not valid JSON: %v", err)
+	}
+	if payload.TotalTokens != 7 {
+		t.Fatalf("usage payload total tokens = %d, want 7", payload.TotalTokens)
+	}
+
+	publisher.Publish(workers.ProgressFragment{
+		DispatchID: "worker-usage-empty-object",
+		Kind:       workers.ProgressFragmentKind,
+		Type:       "usage.updated",
+		Payload:    `{}`,
+		Metadata:   map[string]string{"used_tokens": "8"},
+	})
+	if len(spy.published) != 2 {
+		t.Fatalf("published records after empty canonical object = %d, want two usage records", len(spy.published))
+	}
+	var emptyObjectFallback workers.UsagePayload
+	if err := json.Unmarshal(spy.published[1].Draft.Payload, &emptyObjectFallback); err != nil {
+		t.Fatalf("empty canonical object fallback is not valid JSON: %v", err)
+	}
+	if emptyObjectFallback.TotalTokens != 8 {
+		t.Fatalf("empty canonical object fallback total tokens = %d, want 8", emptyObjectFallback.TotalTokens)
 	}
 }
 
