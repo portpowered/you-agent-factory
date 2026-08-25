@@ -160,6 +160,7 @@ func (h *CommandHandler) Invoke(
 		// for an explicit directory supplied by a caller of the Models service.
 		WorkingDirectory: startupcli.WorkingDirectory(cmd.Context()), HomeDir: homeDir,
 		OperatorDefaults: defaults, Logger: logger,
+		Progress: cmd.ErrOrStderr(),
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models invoke inputs: %w", err)
@@ -289,6 +290,7 @@ func (h *CommandHandler) Pull(
 	}
 	cfg := PullConfig{
 		Context: cmd.Context(), ModelName: modelName, Output: cmd.OutOrStdout(),
+		Progress: cmd.ErrOrStderr(),
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models pull inputs: %w", err)

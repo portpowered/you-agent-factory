@@ -4,11 +4,53 @@
 package pullsupport
 
 import (
+	"context"
 	"errors"
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
+
+// ProgressObservation is one request-scoped, non-canonical asset-transfer
+// observation. TotalBytes is zero when the source does not expose a size.
+type ProgressObservation struct {
+	ModelName        string
+	Artifact         string
+	TransferredBytes int64
+	TotalBytes       int64
+}
+
+// ProgressObserver receives detached pull observations. It is intentionally
+// kept in this internal helper package so the Models service root remains a
+// domain contract rather than a presentation-event surface.
+type ProgressObserver func(ProgressObservation)
+
+type progressObserverContextKey struct{}
+
+// WithProgressObserver attaches one request-scoped pull observer to ctx.
+func WithProgressObserver(ctx context.Context, observer ProgressObserver) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, progressObserverContextKey{}, observer)
+}
+
+// ProgressObserverFromContext returns the observer carried by ctx, if any.
+func ProgressObserverFromContext(ctx context.Context) ProgressObserver {
+	if ctx == nil {
+		return nil
+	}
+	observer, _ := ctx.Value(progressObserverContextKey{}).(ProgressObserver)
+	return observer
+}
+
+// ReportProgress publishes one best-effort observation when ctx has an
+// observer. The callback must not mutate canonical Models state.
+func ReportProgress(ctx context.Context, observation ProgressObservation) {
+	if observer := ProgressObserverFromContext(ctx); observer != nil {
+		observer(observation)
+	}
+}
 
 // WrapPullStage attaches a stage without replacing a more specific stage
 // already present in the error chain.

@@ -654,6 +654,46 @@ func TestPrepareGenericAssetsCancellationRedactsCause(t *testing.T) {
 	}
 }
 
+func TestGenericCacheReportsOfflineMissingAndMissingRoots(t *testing.T) {
+	t.Parallel()
+
+	scopes := newScopes(t, "generic-cache-offline-branches")
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("offline cache branches used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	source := genericSource{
+		kind: genericSourceHF, owner: "owner", repository: "repo",
+		revision: genericTestRevision, safe: "hf://owner/repo@" + genericTestRevision,
+	}
+
+	_, err := service.acquireGenericCacheOnce(
+		context.Background(), assetKindModel, models.AssetArtifactKindModel,
+		source, nil, nil, true,
+	)
+	var offline *models.AssetOfflineError
+	if !errors.As(err, &offline) || !reflect.DeepEqual(offline.Missing, []string{"repo"}) {
+		t.Fatalf("empty offline cache error = %v, want repository missing", err)
+	}
+
+	artifact := genericArtifact{requirement: models.AssetRequirement{Name: "weights.bin"}}
+	_, err = service.acquireGenericCacheOnce(
+		context.Background(), assetKindModel, models.AssetArtifactKindModel,
+		source, []genericArtifact{artifact}, nil, true,
+	)
+	if !errors.As(err, &offline) || !reflect.DeepEqual(offline.Missing, []string{"weights.bin"}) {
+		t.Fatalf("explicit offline cache error = %v, want artifact missing", err)
+	}
+
+	_, err = service.publishGenericCache(
+		context.Background(), assetKindModel, models.AssetArtifactKindModel,
+		source, []genericArtifact{artifact}, nil, []genericArtifact{artifact}, nil,
+	)
+	if !errors.Is(err, models.ErrAssetSourceMissing) {
+		t.Fatalf("publish without roots error = %v, want ErrAssetSourceMissing", err)
+	}
+}
+
 func newGenericService(
 	t *testing.T,
 	scopes runtimescopes.Service,

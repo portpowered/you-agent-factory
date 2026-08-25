@@ -120,11 +120,14 @@ func (service *rootService) prepareGenericCLIInputs(
 ) ([]modelinference.InferenceInput, error) {
 	rawValues := append([]string(nil), cfg.InputMappings...)
 	rawValues = append(rawValues, cfg.InputSpecs...)
-	if len(rawValues) == 0 {
-		return nil, nil
-	}
 	selected, ok := catalogOperationForName(catalog, operation)
 	if !ok {
+		if len(rawValues) == 0 && strings.TrimSpace(cfg.Text) == "" {
+			return nil, fmt.Errorf("--text is required")
+		}
+		if len(rawValues) == 0 {
+			return nil, nil
+		}
 		return nil, genericCLIInputFailure(
 			modelinference.InvocationFailureClassInvalidOperation,
 			fmt.Sprintf("unknown operation %q", operation), operation, nil,
@@ -157,6 +160,12 @@ func (service *rootService) prepareGenericCLIInputs(
 		}
 		inputs = append(inputs, specInputs...)
 	}
+	if len(mappingValues) == 0 && len(specValues) == 0 {
+		slots, validNames := genericCLIInputSlots(selected.Inputs)
+		if err := validateImplicitCLITextInput(cfg.Text, selected.Inputs, slots, validNames); err != nil {
+			return nil, err
+		}
+	}
 	return inputs, nil
 }
 
@@ -169,6 +178,58 @@ func splitGenericCLIInputValues(values []string) (mappings, specs []string) {
 		mappings = append(mappings, value)
 	}
 	return mappings, specs
+}
+
+func validateImplicitCLITextInput(
+	text string,
+	inputSlots []modelinference.OperationSlot,
+	slots map[string]modelinference.OperationSlot,
+	validNames []string,
+) error {
+	counts := make(map[string]int, 1)
+	if strings.TrimSpace(text) != "" {
+		if input := joinedCLITextInput(inputSlots); input != nil {
+			counts[input.Name] = 1
+		}
+	}
+	missing := missingGenericCLIInputSlots(inputSlots, counts)
+	if len(missing) == 0 {
+		return nil
+	}
+	if len(missing) == 1 && genericCLITextInputSlot(slots[missing[0]]) {
+		return fmt.Errorf("--text is required")
+	}
+	firstMissing := slots[missing[0]]
+	hint := "<path>"
+	if genericCLITextInputSlot(firstMissing) || firstMissing.Modality == modelinference.ModalityJSON {
+		hint = "<value>"
+	}
+	return genericCLIInputFailure(
+		modelinference.InvocationFailureClassInvalidSlot,
+		fmt.Sprintf(
+			"required input slot is missing: %s; provide it with --input %s=%s",
+			strings.Join(missing, ", "), missing[0], hint,
+		),
+		missing[0], validNames,
+	)
+}
+
+func genericCLITextInputSlot(slot modelinference.OperationSlot) bool {
+	if slot.Modality == modelinference.ModalityText {
+		return true
+	}
+	for _, contentType := range slot.ContentTypes {
+		normalized := strings.ToUpper(strings.TrimSpace(contentType))
+		if normalized == string(modelinference.ModalityText) || strings.HasPrefix(normalized, "TEXT/") {
+			return true
+		}
+	}
+	for _, mediaType := range slot.MediaTypes {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(mediaType)), "text/") {
+			return true
+		}
+	}
+	return false
 }
 
 func genericCLIInputSlots(inputSlots []modelinference.OperationSlot) (map[string]modelinference.OperationSlot, []string) {
@@ -218,13 +279,7 @@ func validateMissingGenericCLIInputSlots(
 	counts map[string]int,
 	validNames []string,
 ) error {
-	missing := make([]string, 0)
-	for _, slot := range slots {
-		if slot.Required == nil || !*slot.Required || counts[strings.TrimSpace(slot.Name)] != 0 {
-			continue
-		}
-		missing = append(missing, strings.TrimSpace(slot.Name))
-	}
+	missing := missingGenericCLIInputSlots(slots, counts)
 	if len(missing) == 0 {
 		return nil
 	}
@@ -372,6 +427,22 @@ func genericCLIInputFailure(
 		Class: class, Message: message, Operation: "", Slot: slot,
 		ValidNames: append([]string(nil), validNames...),
 	}
+}
+
+func missingGenericCLIInputSlots(
+	slots []modelinference.OperationSlot,
+	counts map[string]int,
+) []string {
+	missing := make([]string, 0)
+	for _, slot := range slots {
+		name := strings.TrimSpace(slot.Name)
+		if name == "" || slot.Required == nil || !*slot.Required || counts[name] != 0 {
+			continue
+		}
+		missing = append(missing, name)
+	}
+	sort.Strings(missing)
+	return missing
 }
 
 func genericCLIInputContentType(slot modelinference.OperationSlot) string {

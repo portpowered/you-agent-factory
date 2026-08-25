@@ -51,27 +51,29 @@ type InvokeRuntimeScope struct {
 
 // Config carries accepted Models-root collaborators for adapter construction.
 type Config struct {
-	Models           models.Service
-	HTTP             clihttp.Protocol
-	PullHTTP         clihttp.Protocol
-	Artifacts        ArtifactExporter
-	OutputFileSystem OutputFileSystem
-	InputFileReader  InputFileReader
-	OpenInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
-	OpenCatalogScope func(context.Context) (InvokeRuntimeScope, error)
-	Clock            func() time.Time
+	Models               models.Service
+	HTTP                 clihttp.Protocol
+	PullHTTP             clihttp.Protocol
+	Artifacts            ArtifactExporter
+	OutputFileSystem     OutputFileSystem
+	InputFileReader      InputFileReader
+	OpenInvokeScope      func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	OpenCatalogScope     func(context.Context) (InvokeRuntimeScope, error)
+	Clock                func() time.Time
+	PullProgressInterval time.Duration
 }
 
 type rootService struct {
-	models           models.Service
-	http             clihttp.Protocol
-	pullHTTP         clihttp.Protocol
-	artifacts        ArtifactExporter
-	outputFileSystem OutputFileSystem
-	inputFileReader  InputFileReader
-	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
-	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
-	now              func() time.Time
+	models               models.Service
+	http                 clihttp.Protocol
+	pullHTTP             clihttp.Protocol
+	artifacts            ArtifactExporter
+	outputFileSystem     OutputFileSystem
+	inputFileReader      InputFileReader
+	openInvokeScope      func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	openCatalogScope     func(context.Context) (InvokeRuntimeScope, error)
+	now                  func() time.Time
+	pullProgressInterval time.Duration
 }
 
 // NewService constructs the Models-owned CLI service from the accepted Models root.
@@ -79,15 +81,20 @@ func NewService(cfg Config) Service {
 	if cfg.Models == nil {
 		return nil
 	}
+	progressInterval := cfg.PullProgressInterval
+	if progressInterval <= 0 {
+		progressInterval = modelPullProgressInterval
+	}
 	return &rootService{
-		models:           cfg.Models,
-		http:             cfg.HTTP,
-		pullHTTP:         cfg.PullHTTP,
-		artifacts:        cfg.Artifacts,
-		outputFileSystem: cfg.OutputFileSystem,
-		inputFileReader:  cfg.InputFileReader,
-		openInvokeScope:  cfg.OpenInvokeScope,
-		openCatalogScope: cfg.OpenCatalogScope,
-		now:              cfg.Clock,
+		models:               cfg.Models,
+		http:                 cfg.HTTP,
+		pullHTTP:             cfg.PullHTTP,
+		artifacts:            cfg.Artifacts,
+		outputFileSystem:     cfg.OutputFileSystem,
+		inputFileReader:      cfg.InputFileReader,
+		openInvokeScope:      cfg.OpenInvokeScope,
+		openCatalogScope:     cfg.OpenCatalogScope,
+		now:                  cfg.Clock,
+		pullProgressInterval: progressInterval,
 	}
 }

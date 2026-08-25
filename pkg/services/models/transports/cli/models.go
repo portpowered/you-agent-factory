@@ -80,6 +80,7 @@ type InvokeConfig struct {
 	Debug            bool
 	Output           io.Writer
 	Diagnostics      io.Writer
+	Progress         io.Writer
 }
 
 const modelInvocationValidationOnlyMode = "VALIDATION_ONLY"
@@ -120,6 +121,7 @@ type PullConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	Progress    io.Writer
 }
 
 type RemoveConfig struct {

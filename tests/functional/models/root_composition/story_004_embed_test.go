@@ -99,7 +99,7 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	if stdout != "" {
 		t.Fatalf("unknown EMBED input stdout = %q, want empty", stdout)
 	}
-	support.RequireSafeCLIDiagnostic(t, stderr)
+	requireEmbedUnknownInputDiagnostic(t, stderr)
 	if fixture.Calls() != beforeCalls || launcher.Calls() != beforeStarts {
 		t.Fatalf("unknown EMBED input effects = backend %d->%d starts %d->%d, want no post-preflight effects", beforeCalls, fixture.Calls(), beforeStarts, launcher.Calls())
 	}
@@ -234,6 +234,20 @@ func assertStory004PlainOutput(t *testing.T, err error, stdout, stderr string) {
 	if stdout != `[0.1,0.2,0.3,0.4]` || stderr != "" {
 		t.Fatalf("documented EMBED command streams = stdout %q stderr %q, want vector and empty stderr", stdout, stderr)
 	}
+}
+
+func requireEmbedUnknownInputDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode unknown EMBED input diagnostic: %v\nstderr=%q", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Message != `unknown input slot "unknown"; valid slots: parameters, text` {
+		t.Fatalf("unknown EMBED input diagnostic = %#v, want typed unknown-slot BAD_REQUEST", response)
+	}
+	return response
 }
 
 func requireEmbedTypedDiagnostic(t testing.TB, stderr, wantMessage string) factoryapi.ErrorResponse {

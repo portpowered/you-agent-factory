@@ -891,8 +891,8 @@ func TestRootAdapter_InvokeASRRequiresEveryNamedOutputBeforeEffects(t *testing.T
 	if err == nil || !strings.Contains(err.Error(), "transcript, segments") {
 		t.Fatalf("ASR incomplete output mapping error = %v, want both output slots", err)
 	}
-	if reads != 0 || invokes != 0 {
-		t.Fatalf("ASR incomplete mapping effects = reads:%d invokes:%d, want 0/0", reads, invokes)
+	if reads != 1 || invokes != 0 {
+		t.Fatalf("ASR incomplete mapping effects = reads:%d invokes:%d, want 1/0 after input preflight", reads, invokes)
 	}
 }
 

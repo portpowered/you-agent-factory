@@ -90,6 +90,173 @@ func startPullProgress(
 	}
 }
 
+const (
+	modelPullProgressPhasePull        = "pull"
+	modelPullProgressPhasePreparation = "preparation"
+)
+
+type modelPullProgressPresenter struct {
+	ctx       context.Context
+	modelName string
+	phase     string
+	output    io.Writer
+	interval  time.Duration
+	now       func() time.Time
+	started   time.Time
+
+	mu               sync.Mutex
+	latest           pullsupport.ProgressObservation
+	hasObservation   bool
+	lastRendered     time.Time
+	renderedArtifact string
+	stopped          bool
+	stopOnce         sync.Once
+	stop             chan struct{}
+	done             chan struct{}
+}
+
+func startModelPullProgress(
+	ctx context.Context,
+	modelName, phase string,
+	output io.Writer,
+	interval time.Duration,
+	now func() time.Time,
+	enabled bool,
+) (context.Context, func()) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !enabled || output == nil || interval <= 0 {
+		return ctx, func() {}
+	}
+	if now == nil {
+		return ctx, func() {}
+	}
+	presenter := &modelPullProgressPresenter{
+		ctx: ctx, modelName: strings.TrimSpace(modelName), phase: strings.TrimSpace(phase),
+		output: newSynchronizedWriter(output), interval: interval, now: now,
+		started: now(), stop: make(chan struct{}), done: make(chan struct{}),
+	}
+	observer := pullsupport.ProgressObserver(func(observation pullsupport.ProgressObservation) {
+		presenter.observe(observation)
+	})
+	ctx = pullsupport.WithProgressObserver(ctx, observer)
+	presenter.start()
+	return ctx, presenter.close
+}
+
+func (presenter *modelPullProgressPresenter) start() {
+	go func() {
+		defer close(presenter.done)
+		ticker := time.NewTicker(presenter.interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				presenter.tick()
+			case <-presenter.ctx.Done():
+				return
+			case <-presenter.stop:
+				return
+			}
+		}
+	}()
+}
+
+func (presenter *modelPullProgressPresenter) observe(observation pullsupport.ProgressObservation) {
+	if presenter == nil || presenter.ctx.Err() != nil {
+		return
+	}
+	now := presenter.now()
+	presenter.mu.Lock()
+	defer presenter.mu.Unlock()
+	if presenter.stopped || presenter.ctx.Err() != nil {
+		return
+	}
+	if strings.TrimSpace(observation.ModelName) == "" {
+		observation.ModelName = presenter.modelName
+	}
+	observation.ModelName = strings.TrimSpace(observation.ModelName)
+	observation.Artifact = strings.TrimSpace(observation.Artifact)
+	if observation.TransferredBytes < 0 {
+		observation.TransferredBytes = 0
+	}
+	if observation.TotalBytes < 0 {
+		observation.TotalBytes = 0
+	}
+	if observation.TotalBytes > 0 && observation.TransferredBytes > observation.TotalBytes {
+		observation.TransferredBytes = observation.TotalBytes
+	}
+	presenter.latest = observation
+	presenter.hasObservation = true
+	if presenter.shouldRender(now) {
+		presenter.renderLocked(now)
+	}
+}
+
+func (presenter *modelPullProgressPresenter) tick() {
+	if presenter == nil || presenter.ctx.Err() != nil {
+		return
+	}
+	now := presenter.now()
+	presenter.mu.Lock()
+	defer presenter.mu.Unlock()
+	if presenter.stopped || !presenter.hasObservation || presenter.ctx.Err() != nil {
+		return
+	}
+	if presenter.shouldRender(now) {
+		presenter.renderLocked(now)
+	}
+}
+
+func (presenter *modelPullProgressPresenter) shouldRender(now time.Time) bool {
+	if presenter.lastRendered.IsZero() {
+		return now.Sub(presenter.started) >= presenter.interval
+	}
+	return (presenter.latest.Artifact != "" && presenter.latest.Artifact != presenter.renderedArtifact) ||
+		now.Sub(presenter.lastRendered) >= presenter.interval
+}
+
+func (presenter *modelPullProgressPresenter) renderLocked(now time.Time) {
+	if presenter.output == nil {
+		return
+	}
+	elapsed := now.Sub(presenter.started)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	line := fmt.Sprintf(
+		"models pull progress modelName=%q phase=%s elapsed=%s",
+		presenter.latest.ModelName, presenter.phase, elapsed.Round(time.Millisecond),
+	)
+	if presenter.latest.Artifact != "" {
+		line += fmt.Sprintf(" artifact=%q", presenter.latest.Artifact)
+	}
+	if presenter.latest.TotalBytes > 0 {
+		percent := float64(presenter.latest.TransferredBytes) * 100 / float64(presenter.latest.TotalBytes)
+		line += fmt.Sprintf(
+			" transferredBytes=%d totalBytes=%d percent=%.1f%%",
+			presenter.latest.TransferredBytes, presenter.latest.TotalBytes, percent,
+		)
+	}
+	_, _ = fmt.Fprintln(presenter.output, line)
+	presenter.lastRendered = now
+	presenter.renderedArtifact = presenter.latest.Artifact
+}
+
+func (presenter *modelPullProgressPresenter) close() {
+	if presenter == nil {
+		return
+	}
+	presenter.stopOnce.Do(func() {
+		presenter.mu.Lock()
+		presenter.stopped = true
+		presenter.mu.Unlock()
+		close(presenter.stop)
+	})
+	<-presenter.done
+}
+
 func pullResultToGenerated(result models.PullResult) factoryapi.ModelPullResponse {
 	files := make([]factoryapi.ModelPullDownloadedFile, 0, len(result.DownloadedFiles))
 	for _, file := range result.DownloadedFiles {

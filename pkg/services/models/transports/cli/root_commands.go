@@ -77,8 +77,18 @@ func (service *rootService) Pull(cfg PullConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.pullRemote(cfg)
 	}
-	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
-		result, err := service.models.PullModelForScope(cfg.Context, modelinference.PullModelRequest{
+	progressCtx, stopProgress := startModelPullProgress(
+		cfg.Context,
+		modelName,
+		modelPullProgressPhasePull,
+		cfg.Progress,
+		service.pullProgressInterval,
+		service.now,
+		!cfg.JSON,
+	)
+	defer stopProgress()
+	return service.withCatalogScope(progressCtx, func(scope modelinference.RuntimeScopeRef) error {
+		result, err := service.models.PullModelForScope(progressCtx, modelinference.PullModelRequest{
 			Scope: scope, Name: modelName,
 		})
 		response := pullResultToGenerated(result)

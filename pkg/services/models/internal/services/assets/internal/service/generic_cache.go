@@ -349,7 +349,15 @@ func (s *service) stageGenericArtifacts(
 		if err := s.makeDirectory(filepath.Dir(path), 0o755); err != nil {
 			return published, interruptedAssetError("prepare asset directory", err)
 		}
-		result, err := s.stageGenericArtifact(ctx, source, artifact.localPath, path, artifact.requirement)
+		progress := newAssetProgress(
+			ctx,
+			source.modelName,
+			artifact.requirement.Name,
+			artifact.requirement.Bytes,
+		)
+		result, err := s.stageGenericArtifact(
+			ctx, source, artifact.localPath, path, artifact.requirement, progress,
+		)
 		if err != nil {
 			return published, err
 		}
@@ -381,12 +389,13 @@ func (s *service) stageGenericArtifact(
 	localPath string,
 	target string,
 	requirement models.AssetRequirement,
+	progress *assetProgress,
 ) (models.AssetArtifact, error) {
 	switch source.kind {
 	case genericSourceLocal, genericSourceFile:
-		return s.copyLocalArtifact(ctx, localPath, target, requirement)
+		return s.copyLocalArtifact(ctx, localPath, target, requirement, progress)
 	case genericSourceHF, genericSourceRelease:
-		return s.downloadGenericArtifact(ctx, source, target, requirement)
+		return s.downloadGenericArtifact(ctx, source, target, requirement, progress)
 	default:
 		return models.AssetArtifact{}, models.ErrAssetSourceUnsupported
 	}
@@ -473,6 +482,7 @@ func (s *service) copyLocalArtifact(
 	localPath string,
 	target string,
 	requirement models.AssetRequirement,
+	progress *assetProgress,
 ) (models.AssetArtifact, error) {
 	input, err := s.openFile(localPath)
 	if err != nil {
@@ -483,7 +493,7 @@ func (s *service) copyLocalArtifact(
 	if err != nil {
 		return models.AssetArtifact{}, interruptedAssetError("create staged asset", err)
 	}
-	written, checksum, err := copyStagedAsset(ctx, output, input, requirement.Name)
+	written, checksum, err := copyStagedAssetWithProgress(ctx, output, input, requirement.Name, progress)
 	if err != nil {
 		return models.AssetArtifact{}, err
 	}
@@ -495,6 +505,7 @@ func (s *service) downloadGenericArtifact(
 	source genericSource,
 	target string,
 	requirement models.AssetRequirement,
+	progress *assetProgress,
 ) (models.AssetArtifact, error) {
 	assetURL := s.genericAssetURL(source, requirement.Name)
 	diagnostics := models.PullDiagnostics{
@@ -537,7 +548,10 @@ func (s *service) downloadGenericArtifact(
 			interruptedAssetError("create staged asset", err),
 		)
 	}
-	written, checksum, err := copyStagedAsset(ctx, output, response.Body, requirement.Name)
+	progress.setResponseTotal(response.ContentLength)
+	written, checksum, err := copyStagedAssetWithProgress(
+		ctx, output, response.Body, requirement.Name, progress,
+	)
 	if err != nil {
 		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(diagnostics, err)
 	}

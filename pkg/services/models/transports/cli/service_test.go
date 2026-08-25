@@ -224,6 +224,112 @@ func TestRootAdapter_InvokeGenericUsesRequiredTextInputWhenOptionalSlotsSortFirs
 	}
 }
 
+func TestRootAdapter_InvokeASRWithoutInputReportsAudioBeforeModelEffects(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	var acquireCalls, invokeCalls int
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIOperationModel("asr", modelinference.OperationASR,
+					[]modelinference.OperationSlot{{
+						Name: "audio", Modality: modelinference.ModalityAudio,
+						Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+					}},
+					[]modelinference.OperationSlot{
+						{Name: "transcript", Modality: modelinference.ModalityText, Required: boolPointer(true)},
+						{Name: "segments", Modality: modelinference.ModalityJSON, Required: boolPointer(true)},
+					}), nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				acquireCalls++
+				return modelinference.AcquireModelLeaseResult{}, errors.New("unexpected model lease")
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokeCalls++
+				return modelinference.InvokeModelResult{}, errors.New("unexpected model invocation")
+			},
+			invokeModelWithLease: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokeCalls++
+				return modelinference.InvokeModelResult{}, errors.New("unexpected leased model invocation")
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		JSON: true, Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("Invoke() error = nil, want missing audio input")
+	}
+	if !strings.Contains(err.Error(), "required input slot is missing: audio") {
+		t.Fatalf("Invoke() error = %q, want the catalog-derived audio slot", err)
+	}
+	if !strings.Contains(err.Error(), "--input audio=<path>") {
+		t.Fatalf("Invoke() error = %q, want actionable audio input guidance", err)
+	}
+	if strings.Contains(err.Error(), "--text is required") {
+		t.Fatalf("Invoke() error = %q, must not report the legacy text requirement", err)
+	}
+	if acquireCalls != 0 || invokeCalls != 0 {
+		t.Fatalf("model effects = acquire:%d invoke:%d, want no effects after validation", acquireCalls, invokeCalls)
+	}
+}
+
+func TestRootAdapter_InvokeRejectsUnknownInputBeforeMultipleOutputShape(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	var invokes int
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIOperationModel("asr", modelinference.OperationASR,
+					[]modelinference.OperationSlot{{
+						Name: "audio", Modality: modelinference.ModalityAudio,
+						Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+					}},
+					[]modelinference.OperationSlot{
+						{Name: "transcript", Modality: modelinference.ModalityText, Required: boolPointer(true)},
+						{Name: "segments", Modality: modelinference.ModalityJSON, Required: boolPointer(true)},
+					}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokes++
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings: []string{"foo=bar"}, Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("Invoke() error = nil, want unknown input slot")
+	}
+	if !strings.Contains(err.Error(), `unknown input slot "foo"`) {
+		t.Fatalf("Invoke() error = %q, want the unknown input slot", err)
+	}
+	if !strings.Contains(err.Error(), "valid slots: audio") {
+		t.Fatalf("Invoke() error = %q, want catalog-derived valid input slots", err)
+	}
+	if strings.Contains(err.Error(), "multiple model outputs") {
+		t.Fatalf("Invoke() error = %q, must report input validation first", err)
+	}
+	if invokes != 0 {
+		t.Fatalf("model invocations = %d, want none after input validation", invokes)
+	}
+}
+
 func TestNewServiceRequiresModelsRoot(t *testing.T) {
 	t.Parallel()
 	if service := modelscli.NewService(modelscli.Config{}); service != nil {

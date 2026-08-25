@@ -36,9 +36,6 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
-		return fmt.Errorf("--text is required")
-	}
 	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
 		return clidiag.NewFlagConflictFailure(
 			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
@@ -97,16 +94,33 @@ func (service *rootService) invokeInScope(
 	if err != nil {
 		return err
 	}
+	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
+	if err != nil {
+		return mapModelsClientError(err)
+	}
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
 		return err
 	}
 	if validationOnlyModelInvoke(cfg) {
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
+	progressCtx, stopProgress := startModelPullProgress(
+		cfg.Context,
+		modelName,
+		modelPullProgressPhasePreparation,
+		cfg.Progress,
+		service.pullProgressInterval,
+		service.now,
+		!cfg.JSON,
+	)
+	defer stopProgress()
+	cfg.Context = progressCtx
 	if !shouldUseGenericCLIInvocation(cfg, catalog, operation) {
 		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
 	}
-	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, catalog)
+	handled, err := service.invokeGenericInScopeWithInputs(
+		cfg, scope, modelName, operation, text, inputs, catalog,
+	)
 	if err != nil {
 		return err
 	}
@@ -127,6 +141,13 @@ func (service *rootService) catalogForInvoke(
 	})
 	if err == nil {
 		return result.Model, nil
+	}
+	if errors.Is(err, modelinference.ErrUnsupportedOperation) &&
+		strings.TrimSpace(cfg.Text) == "" && len(cfg.InputMappings) == 0 {
+		// Preserve the legacy error for lightweight roots that cannot expose a
+		// catalog. A Models root with catalog support validates the operation's
+		// actual required slots in prepareGenericCLIInputs below.
+		return modelinference.Detail{}, fmt.Errorf("--text is required")
 	}
 	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
 		return modelinference.Detail{}, fmt.Errorf("--output is required unless --json is set")
@@ -176,6 +197,18 @@ func (service *rootService) invokeGenericInScope(
 	if err != nil {
 		return true, err
 	}
+	return service.invokeGenericInScopeWithInputs(cfg, scope, modelName, operation, text, inputs, catalog)
+}
+
+func (service *rootService) invokeGenericInScopeWithInputs(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	inputs []modelinference.InferenceInput,
+	catalog modelinference.Detail,
+) (bool, error) {
 	if len(inputs) == 0 && len(cfg.ParameterSpecs) == 0 && !cfg.JSON &&
 		len(cfg.OutputMappings) == 0 && strings.TrimSpace(cfg.OutputPath) == "" &&
 		!genericCLIStdoutOutput(cfg, catalog, operation) {
@@ -875,7 +908,7 @@ func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.O
 	var optionalText *modelinference.OperationSlot
 	for index := range inputs {
 		input := &inputs[index]
-		if input.Modality != modelinference.ModalityText {
+		if !genericCLITextInputSlot(*input) {
 			continue
 		}
 		if input.Required != nil && *input.Required {
