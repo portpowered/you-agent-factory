@@ -107,10 +107,23 @@ func (service *rootService) invokeInScope(
 	if validationOnlyModelInvoke(cfg) {
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
+	progressCtx, stopProgress := startModelPullProgress(
+		cfg.Context,
+		modelName,
+		modelPullProgressPhasePreparation,
+		cfg.Progress,
+		service.pullProgressInterval,
+		service.now,
+		true,
+	)
+	defer stopProgress()
+	cfg.Context = progressCtx
 	if !shouldUseGenericCLIInvocation(cfg, catalog, operation) {
 		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
 	}
-	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, catalog)
+	handled, err := service.invokeGenericInScopeWithInputs(
+		cfg, scope, modelName, operation, text, inputs, catalog,
+	)
 	if err != nil {
 		return err
 	}
@@ -187,6 +200,18 @@ func (service *rootService) invokeGenericInScope(
 	if err != nil {
 		return true, err
 	}
+	return service.invokeGenericInScopeWithInputs(cfg, scope, modelName, operation, text, inputs, catalog)
+}
+
+func (service *rootService) invokeGenericInScopeWithInputs(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	inputs []modelinference.InferenceInput,
+	catalog modelinference.Detail,
+) (bool, error) {
 	if len(inputs) == 0 && len(cfg.ParameterSpecs) == 0 && !cfg.JSON &&
 		len(cfg.OutputMappings) == 0 && strings.TrimSpace(cfg.OutputPath) == "" &&
 		!genericCLIStdoutOutput(cfg, catalog, operation) {

@@ -37,6 +37,61 @@ type remoteFile struct {
 	url        string
 }
 
+type assetProgress struct {
+	ctx         context.Context
+	observer    models.PullProgressObserver
+	modelName   string
+	artifact    string
+	totalBytes  int64
+	transferred int64
+}
+
+func newAssetProgress(
+	ctx context.Context,
+	modelName string,
+	artifact string,
+	totalBytes int64,
+) *assetProgress {
+	observer := models.PullProgressObserverFromContext(ctx)
+	if observer == nil {
+		return nil
+	}
+	return &assetProgress{
+		ctx:        ctx,
+		observer:   observer,
+		modelName:  modelName,
+		artifact:   artifact,
+		totalBytes: totalBytes,
+	}
+}
+
+func (progress *assetProgress) report() {
+	if progress == nil || progress.observer == nil || progress.ctx.Err() != nil {
+		return
+	}
+	progress.observer(models.PullProgressObservation{
+		ModelName:        progress.modelName,
+		Artifact:         progress.artifact,
+		TransferredBytes: progress.transferred,
+		TotalBytes:       progress.totalBytes,
+	})
+}
+
+func (progress *assetProgress) add(transferred int64) {
+	if progress == nil || transferred <= 0 {
+		return
+	}
+	progress.transferred += transferred
+	progress.report()
+}
+
+func (progress *assetProgress) setResponseTotal(totalBytes int64) {
+	if progress == nil || progress.totalBytes > 0 || totalBytes <= 0 {
+		return
+	}
+	progress.totalBytes = totalBytes
+}
+
 type upstreamModel struct {
 	SHA      string            `json:"sha"`
 	Siblings []upstreamSibling `json:"siblings"`
@@ -577,7 +632,9 @@ func (s *service) downloadFile(
 			interruptedAssetError("create staged asset", err),
 		)
 	}
-	written, checksum, err := copyStagedAsset(ctx, output, response.Body, remote.path)
+	progress := newAssetProgress(ctx, remote.modelName, remote.path, remote.bytes)
+	progress.setResponseTotal(response.ContentLength)
+	written, checksum, err := copyStagedAssetWithProgress(ctx, output, response.Body, remote.path, progress)
 	if err != nil {
 		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(diagnostics, err)
 	}
@@ -626,10 +683,23 @@ func copyStagedAsset(
 	input io.Reader,
 	assetPath string,
 ) (int64, string, error) {
+	return copyStagedAssetWithProgress(ctx, output, input, assetPath, nil)
+}
+
+func copyStagedAssetWithProgress(
+	ctx context.Context,
+	output io.WriteCloser,
+	input io.Reader,
+	assetPath string,
+	progress *assetProgress,
+) (int64, string, error) {
+	if progress != nil {
+		progress.report()
+	}
 	hasher := sha256.New()
 	written, copyErr := io.Copy(
 		io.MultiWriter(output, hasher),
-		contextAssetReader{ctx: ctx, input: input},
+		contextAssetReader{ctx: ctx, input: input, progress: progress},
 	)
 	closeErr := output.Close()
 	if copyErr != nil {
@@ -728,15 +798,20 @@ func (failure *assetPreparationInterruption) Unwrap() error {
 }
 
 type contextAssetReader struct {
-	ctx   context.Context
-	input io.Reader
+	ctx      context.Context
+	input    io.Reader
+	progress *assetProgress
 }
 
 func (reader contextAssetReader) Read(buffer []byte) (int, error) {
 	if err := assetContextError(reader.ctx); err != nil {
 		return 0, err
 	}
-	return reader.input.Read(buffer)
+	n, err := reader.input.Read(buffer)
+	if n > 0 {
+		reader.progress.add(int64(n))
+	}
+	return n, err
 }
 
 func shouldRetryResponse(response *http.Response) bool {
