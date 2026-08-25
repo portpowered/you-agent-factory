@@ -202,10 +202,11 @@ func workStopSummaryToAPI(summary *work.StopSummary) *factoryapi.FactoryStopSumm
 	}
 	if summary.LatestDispatch != nil {
 		result.LatestDispatch = &factoryapi.FactoryStopDispatchSummary{
-			DispatchId:      summary.LatestDispatch.DispatchID,
-			Status:          factoryapi.FactoryDispatchStatus(summary.LatestDispatch.Status),
-			DispatchKind:    factoryapi.FactoryDispatchKind(summary.LatestDispatch.DispatchKind),
-			WorkstationName: summary.LatestDispatch.WorkstationName,
+			DispatchId:        summary.LatestDispatch.DispatchID,
+			Status:            factoryapi.FactoryDispatchStatus(summary.LatestDispatch.Status),
+			ConfirmationState: factoryapi.UNCONFIRMED,
+			DispatchKind:      factoryapi.FactoryDispatchKind(summary.LatestDispatch.DispatchKind),
+			WorkstationName:   summary.LatestDispatch.WorkstationName,
 		}
 		if summary.LatestDispatch.FailureDetail != nil {
 			result.LatestDispatch.FailureDetail = &factoryapi.FailureDetail{

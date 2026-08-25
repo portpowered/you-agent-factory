@@ -24,7 +24,7 @@ func TestStopSummaryToAPIOnlyConvertsDetachedOwnerResult(t *testing.T) {
 	if mapped == nil || mapped.StopKind != factoryapi.FactoryStopKind("PAUSED") || mapped.WorkId == nil || *mapped.WorkId != workID {
 		t.Fatalf("mapped summary = %#v", mapped)
 	}
-	if mapped.LatestDispatch == nil || mapped.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED || mapped.LatestDispatch.FailureDetail == nil || mapped.LatestDispatch.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+	if mapped.LatestDispatch == nil || mapped.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED || mapped.LatestDispatch.ConfirmationState != factoryapi.UNCONFIRMED || mapped.LatestDispatch.FailureDetail == nil || mapped.LatestDispatch.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
 		t.Fatalf("mapped dispatch = %#v", mapped.LatestDispatch)
 	}
 

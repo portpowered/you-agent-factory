@@ -2748,6 +2748,8 @@ export interface components {
       /** @description Stable dispatch identifier that most directly explains the stopped state. */
       dispatchId: string;
       status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Whether the reported dispatch status is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       dispatchKind: components["schemas"]["FactoryDispatchKind"];
       /** @description Customer-authored workstation name when one existing workstation run explains the stop. */
       workstationName?: string;

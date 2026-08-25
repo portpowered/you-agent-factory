@@ -4907,6 +4907,9 @@ type FactoryStateResponseEventPayload struct {
 
 // FactoryStopDispatchSummary defines model for FactoryStopDispatchSummary.
 type FactoryStopDispatchSummary struct {
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
+
 	// DispatchId Stable dispatch identifier that most directly explains the stopped state.
 	DispatchId string `json:"dispatchId"`
 

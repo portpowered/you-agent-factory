@@ -6031,12 +6031,16 @@ components:
         - dispatchId
         - status
         - dispatchKind
+        - confirmationState
       properties:
         dispatchId:
           type: string
           description: Stable dispatch identifier that most directly explains the stopped state.
         status:
           $ref: '#/components/schemas/FactoryDispatchStatus'
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the reported dispatch status is covered by completed recording storage.
         dispatchKind:
           $ref: '#/components/schemas/FactoryDispatchKind'
         workstationName:

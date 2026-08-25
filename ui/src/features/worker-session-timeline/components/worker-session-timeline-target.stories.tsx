@@ -62,8 +62,12 @@ export const MultipleObservations: Story = {
         "work-terminal-story",
       ),
     });
+    const secondTargetCard = secondTarget.closest("li");
+    await expect(secondTargetCard).not.toBeNull();
     await expect(
-      await canvas.findByText("Durability confirmation: UNCONFIRMED"),
+      await within(secondTargetCard as HTMLElement).findByText(
+        "Durability confirmation: UNCONFIRMED",
+      ),
     ).toBeVisible();
 
     await userEvent.click(secondTarget);

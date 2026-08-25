@@ -327,6 +327,7 @@ func TestWorkReadModelToAPI_EncodesStopSummary(t *testing.T) {
 	if got.StopSummary == nil ||
 		string(got.StopSummary.StopKind) != "BLOCKED" ||
 		got.StopSummary.LatestDispatch == nil ||
+		got.StopSummary.LatestDispatch.ConfirmationState != factoryapi.UNCONFIRMED ||
 		got.StopSummary.LatestDispatch.FailureDetail == nil {
 		t.Fatalf("stop summary = %#v, want encoded blocked stop summary", got.StopSummary)
 	}

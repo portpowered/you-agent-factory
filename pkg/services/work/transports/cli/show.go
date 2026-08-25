@@ -259,6 +259,7 @@ func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDis
 	dispatchFields := []string{
 		dispatch.DispatchId,
 		fmt.Sprintf("status=%s", dispatch.Status),
+		fmt.Sprintf("confirmation=%s", stopDispatchConfirmationState(dispatch.ConfirmationState)),
 		fmt.Sprintf("kind=%s", dispatch.DispatchKind),
 	}
 	if workstation := trimmedString(dispatch.WorkstationName); workstation != "" {
@@ -266,6 +267,13 @@ func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDis
 	}
 	_, err := fmt.Fprintf(output, "Stop dispatch:\t%s\n", strings.Join(dispatchFields, " "))
 	return err
+}
+
+func stopDispatchConfirmationState(state factoryapi.ConfirmationState) factoryapi.ConfirmationState {
+	if state == factoryapi.CONFIRMED {
+		return state
+	}
+	return factoryapi.UNCONFIRMED
 }
 
 func writeOptionalStopSummaryLine(output io.Writer, label string, value *string) error {

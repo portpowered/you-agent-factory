@@ -101,6 +101,7 @@ func Show(cfg ShowConfig) error {
 		}
 		return clihttp.WithHTTPResponse(resp, fmt.Errorf("get factory session failed (%d)", resp.StatusCode))
 	}
+	normalizeFactorySessionConfirmationState(&result)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -120,6 +121,17 @@ func Show(cfg ShowConfig) error {
 		return err
 	}
 	return renderShowResult(cfg.Output, result, partialResult, liveResult)
+}
+
+func normalizeFactorySessionConfirmationState(session *factoryapi.FactorySession) {
+	if session == nil || session.Runtime.StopSummary == nil {
+		return
+	}
+	dispatch := session.Runtime.StopSummary.LatestDispatch
+	if dispatch == nil || dispatch.ConfirmationState == factoryapi.CONFIRMED {
+		return
+	}
+	dispatch.ConfirmationState = factoryapi.UNCONFIRMED
 }
 
 func showEndpoint(cfg ShowConfig) (url.URL, error) {
@@ -323,6 +335,7 @@ func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDis
 	dispatchFields := []string{
 		dispatch.DispatchId,
 		fmt.Sprintf("status=%s", dispatch.Status),
+		fmt.Sprintf("confirmation=%s", stopDispatchConfirmationState(dispatch.ConfirmationState)),
 		fmt.Sprintf("kind=%s", dispatch.DispatchKind),
 	}
 	if workstation := trimmedString(dispatch.WorkstationName); workstation != "" {
@@ -330,6 +343,13 @@ func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDis
 	}
 	_, err := fmt.Fprintf(output, "Stop dispatch:\t%s\n", strings.Join(dispatchFields, " "))
 	return err
+}
+
+func stopDispatchConfirmationState(state factoryapi.ConfirmationState) factoryapi.ConfirmationState {
+	if state == factoryapi.CONFIRMED {
+		return state
+	}
+	return factoryapi.UNCONFIRMED
 }
 
 func writeOptionalStopSummaryLine(output io.Writer, label string, value *string) error {

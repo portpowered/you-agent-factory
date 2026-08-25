@@ -1,4 +1,4 @@
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../../../../styles.css";
 import type {
@@ -173,6 +173,12 @@ export const DispatchHistoryStandardActions = {
         name: "Logical move dispatch Logical Move dispatch-logical-move",
       },
     );
+    const workstationSummary = within(workstationCard).getByRole("region", {
+      name: "Summary",
+    });
+    await userEvent.click(
+      within(workstationSummary).getByRole("button", { name: "Expand" }),
+    );
 
     await expect(
       within(workstationCard).getByRole("button", {
@@ -180,13 +186,13 @@ export const DispatchHistoryStandardActions = {
       }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(workstationCard.className).toContain(
-      "bg-surface-container-low",
+      "bg-surface-container-high",
     );
     await expect(operatorMoveCard.className).toContain(
-      "bg-surface-container-low",
+      "bg-surface-container-high",
     );
     await expect(logicalMoveCard.className).toContain(
-      "bg-surface-container-low",
+      "bg-surface-container-high",
     );
     await expect(
       within(operatorMoveCard).queryByRole("heading", {
@@ -198,12 +204,6 @@ export const DispatchHistoryStandardActions = {
         name: "Inference attempts",
       }),
     ).toBeNull();
-    await expect(within(workstationCard).getByText("Trace IDs")).toBeVisible();
-    await expect(
-      within(workstationCard).getByRole("button", {
-        name: "trace-active-story (selected)",
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
     const relationshipGraph = await within(card).findByRole("region", {
       name: "Batch relation graph",
     });

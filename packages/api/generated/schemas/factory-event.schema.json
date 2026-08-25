@@ -2579,6 +2579,9 @@
     "FactoryStopDispatchSummary": {
       "additionalProperties": false,
       "properties": {
+        "confirmationState": {
+          "$ref": "#/$defs/ConfirmationState"
+        },
         "dispatchId": {
           "description": "Stable dispatch identifier that most directly explains the stopped state.",
           "type": "string"
@@ -2600,7 +2603,8 @@
       "required": [
         "dispatchId",
         "status",
-        "dispatchKind"
+        "dispatchKind",
+        "confirmationState"
       ],
       "type": "object"
     },
