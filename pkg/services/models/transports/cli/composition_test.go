@@ -678,6 +678,134 @@ func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *tes
 	assertMappedCLIFile(t, usagePath, "{\"tokens\":2}")
 	assertMappedCLIResponse(t, out.Bytes())
 }
+
+func TestRootAdapter_InvokeGenericSingleOutputPathPublishesBytes(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	outputPath := filepath.Join(t.TempDir(), "answer.txt")
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "answer", Modality: modelinference.ModalityText}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{
+					Outputs: []modelinference.InferenceOutput{{
+						Name: "answer", Modality: modelinference.ModalityText, Content: "published answer",
+					}},
+				}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+		OutputFileSystem: localOutputFileSystem{},
+	})
+
+	var output bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", OutputPath: outputPath, Output: &output,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	assertMappedCLIFile(t, outputPath, "published answer")
+	if !strings.Contains(output.String(), "Wrote audio: "+outputPath) {
+		t.Fatalf("Invoke() stdout = %q, want publication confirmation", output.String())
+	}
+
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello again", OutputPath: outputPath, Output: &output,
+	}); err != nil {
+		t.Fatalf("Invoke() replacement error = %v", err)
+	}
+	assertMappedCLIFile(t, outputPath, "published answer")
+}
+
+func TestRootAdapter_InvokeUsesCurrentReadinessProjection(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	var readinessRequest modelinference.GetModelReadinessRequest
+	var invoked bool
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel(request.Name, request.Operation,
+					modelinference.OperationSlot{Name: "answer", Modality: modelinference.ModalityText}), nil
+			},
+			getReadiness: func(_ context.Context, request modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+				readinessRequest = request
+				return modelinference.GetModelReadinessResult{
+					ModelName: request.Name,
+					Readiness: modelinference.Runtime{
+						Identity: request.Name, ReadinessState: modelinference.ReadinessStateReady,
+						LifecycleState: modelinference.LifecycleStateInstalled,
+					},
+				}, nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invoked = true
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{{
+					Name: "answer", Modality: modelinference.ModalityText, Content: "ready answer",
+				}}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+	var output bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if readinessRequest.Scope != scope || readinessRequest.Name != "omni" || readinessRequest.Operation != modelinference.OperationOMNI {
+		t.Fatalf("readiness request = %#v, want scoped omni/OMNI request", readinessRequest)
+	}
+	if !invoked || !strings.Contains(output.String(), "ready answer") {
+		t.Fatalf("Invoke() invoked=%v output=%q, want ready answer", invoked, output.String())
+	}
+}
+
+func TestRootAdapter_InvokeStopsOnReadinessFailure(t *testing.T) {
+	t.Parallel()
+
+	invoked := false
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel(request.Name, request.Operation,
+					modelinference.OperationSlot{Name: "answer", Modality: modelinference.ModalityText}), nil
+			},
+			getReadiness: func(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+				return modelinference.GetModelReadinessResult{}, modelinference.ErrUnavailable
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invoked = true
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: testRuntimeScope(t)}, nil
+		},
+	})
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", JSON: true, Output: io.Discard,
+	}); err == nil || !errors.Is(err, modelinference.ErrUnavailable) {
+		t.Fatalf("Invoke() error = %v, want ErrUnavailable", err)
+	}
+	if invoked {
+		t.Fatal("InvokeModel called after readiness failure")
+	}
+}
+
 func TestRootAdapter_InvokeGenericFileInputsPreservesOrderBytesAndMedia(t *testing.T) {
 	t.Parallel()
 

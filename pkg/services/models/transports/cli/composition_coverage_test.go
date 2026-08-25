@@ -460,9 +460,11 @@ func TestConstructedService_InspectMapsOperationSlots(t *testing.T) {
 							Name: "TTS",
 							Inputs: []modelinference.OperationSlot{{
 								Name: "text", ContentTypes: []string{"text"}, Required: boolPtr(true),
+								Modality: modelinference.ModalityText, MediaTypes: []string{"text/plain"}, Repeatable: true,
 							}},
 							Outputs: []modelinference.OperationSlot{{
 								Name: "audio", ContentTypes: []string{"audio"},
+								Modality: modelinference.ModalityAudio, MediaTypes: []string{"audio/wav"},
 							}},
 						}},
 					},
@@ -493,8 +495,9 @@ func TestConstructedService_InspectMapsOperationSlots(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Inspect() error = %v", err)
 	}
-	if !strings.Contains(out.String(), `"text"`) || !strings.Contains(out.String(), `"audio"`) {
-		t.Fatalf("Inspect() JSON = %q, want mapped operation slots", out.String())
+	if !strings.Contains(out.String(), `"text"`) || !strings.Contains(out.String(), `"audio"`) ||
+		!strings.Contains(out.String(), `"text/plain"`) || !strings.Contains(out.String(), `"repeatable":true`) {
+		t.Fatalf("Inspect() JSON = %q, want mapped operation slot facts", out.String())
 	}
 	if !strings.Contains(out.String(), `"tts-worker"`) || !strings.Contains(out.String(), `"gpu"`) {
 		t.Fatalf("Inspect() JSON = %q, want mapped capabilities", out.String())

@@ -173,6 +173,238 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 	}
 }
 
+func TestCommandHandlerTransformsRemoveArguments(t *testing.T) {
+	server := "http://127.0.0.1:7437"
+	var received RemoveConfig
+	handler := NewCommandHandler(
+		commandServiceFake{remove: func(cfg RemoveConfig) error {
+			received = cfg
+			return nil
+		}},
+		func(*cobra.Command) io.Writer { return io.Discard },
+		nil,
+		nil,
+		nil,
+	)
+	cmd := &cobra.Command{Use: "remove"}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(io.Discard)
+	_, _, inherited := resolvedModelsHandlerInputs(t, server)
+	inputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{{
+			ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		}},
+		[]resolvedinput.Candidate{{
+			InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue("model-cache"),
+		}},
+	)
+	if err != nil {
+		t.Fatalf("resolve remove inputs: %v", err)
+	}
+	if err := handler.Remove(cmd, inputs, inherited); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if received.ModelName != "model-cache" || received.Server != server || !received.JSON || !received.Verbose || !received.Debug {
+		t.Fatalf("RemoveConfig = %#v, want resolved model and common flags", received)
+	}
+}
+
+func TestRootService_RemoveProjectsInstalledAssetOutcome(t *testing.T) {
+	rootScope, err := (modelinference.RuntimeScopeRef{}).Parse("models-cli:remove-scope")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	var received modelinference.RemoveModelAssetsRequest
+	var closed bool
+	service := NewService(Config{
+		Models: ownedCoverageModelsRoot{
+			removeModel: func(_ context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+				received = request
+				return modelinference.RemoveModelAssetsResult{
+					ModelName: request.Name, Revision: "rev-2026", CachePath: "/models/model-cache/rev-2026",
+					BytesRemoved: 42, Outcome: modelinference.AssetRemovalRemoved,
+				}, nil
+			},
+		},
+		OpenCatalogScope: func(context.Context) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{Scope: rootScope, Close: func(context.Context) error {
+				closed = true
+				return nil
+			}}, nil
+		},
+	})
+	if service == nil {
+		t.Fatal("NewService() = nil, want Models CLI service")
+	}
+
+	var human bytes.Buffer
+	if err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: " model-cache ", Output: &human,
+	}); err != nil {
+		t.Fatalf("Remove() human error = %v", err)
+	}
+	if want := "MODEL\tREMOVE OUTCOME\tREVISION\tCACHE PATH\tBYTES REMOVED\nmodel-cache\tREMOVED\trev-2026\t/models/model-cache/rev-2026\t42 B (42 bytes)\n"; human.String() != want {
+		t.Fatalf("Remove() human = %q, want %q", human.String(), want)
+	}
+	if received.Scope != rootScope || received.Name != "model-cache" || !closed {
+		t.Fatalf("remove request = %#v, closed = %v, want scoped model-cache request and closed scope", received, closed)
+	}
+}
+
+func TestRootService_RemoteCommandsPreservePublicProjections(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/models":
+			_, _ = io.WriteString(w, `{"results":[{"name":"remote-model","status":"READY","managedRuntime":{"readinessState":"READY","lifecycleState":"INSTALLED"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/models/remote-model":
+			_, _ = io.WriteString(w, `{"name":"remote-model","status":"READY","operations":[{"name":"TTS"}],"managedRuntime":{"readinessState":"READY","lifecycleState":"INSTALLED"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/models/remote-model":
+			_, _ = io.WriteString(w, `{"modelName":"remote-model","outcome":"REMOVED","revision":"rev-2026","cachePath":"/models/remote-model/rev-2026","bytesRemoved":42}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	service := NewService(Config{Models: ownedCoverageModelsRoot{}, HTTP: testHTTPProtocol(t)})
+	baseURL := strings.TrimSuffix(server.URL, "/")
+
+	var listOutput bytes.Buffer
+	if err := service.List(ListConfig{Context: context.Background(), Server: baseURL, JSON: true, Output: &listOutput}); err != nil {
+		t.Fatalf("remote List() error = %v", err)
+	}
+	var listed factoryapi.ListModelsResponse
+	if err := json.Unmarshal(listOutput.Bytes(), &listed); err != nil {
+		t.Fatalf("decode remote List() output: %v\n%s", err, listOutput.String())
+	}
+	if len(listed.Results) != 1 || listed.Results[0].Name != "remote-model" || listed.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("remote list response = %#v, want ready remote-model", listed)
+	}
+
+	var inspectOutput bytes.Buffer
+	if err := service.Inspect(InspectConfig{Context: context.Background(), ModelName: "remote-model", Server: baseURL, Output: &inspectOutput}); err != nil {
+		t.Fatalf("remote Inspect() error = %v", err)
+	}
+	if !strings.Contains(inspectOutput.String(), "Name:\tremote-model") || !strings.Contains(inspectOutput.String(), "Operations:\tTTS") {
+		t.Fatalf("remote inspect output = %q, want model identity and operation", inspectOutput.String())
+	}
+
+	var removeOutput bytes.Buffer
+	if err := service.Remove(RemoveConfig{Context: context.Background(), ModelName: "remote-model", Server: baseURL, JSON: true, Output: &removeOutput}); err != nil {
+		t.Fatalf("remote Remove() error = %v", err)
+	}
+	var removed factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal(removeOutput.Bytes(), &removed); err != nil {
+		t.Fatalf("decode remote Remove() output: %v\n%s", err, removeOutput.String())
+	}
+	if removed.ModelName != "remote-model" || removed.Outcome != factoryapi.REMOVED || removed.BytesRemoved != 42 {
+		t.Fatalf("remote remove response = %#v, want removed remote-model/42 bytes", removed)
+	}
+}
+
+func TestLegacyHTTPService_RemoveWritesRemoteJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/models/legacy-model" {
+			t.Fatalf("remove request = %s %s, want DELETE /models/legacy-model", r.Method, r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"modelName":"legacy-model","outcome":"REMOVED","revision":"rev-legacy","bytesRemoved":7}`)
+	}))
+	defer server.Close()
+
+	service := New(testHTTPProtocol(t), testModelInvocationBuilder)
+	if service == nil {
+		t.Fatal("New() = nil, want legacy HTTP service")
+	}
+	var output bytes.Buffer
+	if err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "legacy-model", Server: strings.TrimSuffix(server.URL, "/"),
+		JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("legacy Remove() error = %v", err)
+	}
+	var removed factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal(output.Bytes(), &removed); err != nil {
+		t.Fatalf("decode legacy Remove() output: %v\n%s", err, output.String())
+	}
+	if removed.ModelName != "legacy-model" || removed.Revision != "rev-legacy" || removed.BytesRemoved != 7 {
+		t.Fatalf("legacy remove response = %#v, want legacy-model/rev-legacy/7", removed)
+	}
+}
+
+func TestLegacyHTTPService_RemoveMapsNotFoundResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/models/missing-model" {
+			t.Fatalf("remove request = %s %s, want DELETE /models/missing-model", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"message":"model cache not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
+	}))
+	defer server.Close()
+
+	service := New(testHTTPProtocol(t), testModelInvocationBuilder)
+	err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "missing-model", Server: strings.TrimSuffix(server.URL, "/"),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("Remove() error = nil, want not-found failure")
+	}
+	if !errors.Is(err, ErrModelNotFound) {
+		t.Fatalf("Remove() error = %v, want ErrModelNotFound", err)
+	}
+}
+
+func TestModelsCLI_RemoveValidatesRequiredInputs(t *testing.T) {
+	services := []struct {
+		name    string
+		service Service
+	}{
+		{name: "owned", service: NewService(Config{Models: ownedCoverageModelsRoot{}})},
+		{name: "legacy", service: New(testHTTPProtocol(t), testModelInvocationBuilder)},
+	}
+	for _, tc := range services {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.service == nil {
+				t.Fatal("service = nil, want Models CLI service")
+			}
+			if err := tc.service.Remove(RemoveConfig{Output: io.Discard}); err == nil || err.Error() != "context is required" {
+				t.Fatalf("Remove(nil context) error = %v, want context is required", err)
+			}
+			if err := tc.service.Remove(RemoveConfig{Context: context.Background()}); err == nil || err.Error() != "output writer is required" {
+				t.Fatalf("Remove(nil output) error = %v, want output writer is required", err)
+			}
+			if err := tc.service.Remove(RemoveConfig{Context: context.Background(), Output: io.Discard}); err == nil || err.Error() != "model name is required" {
+				t.Fatalf("Remove(empty model) error = %v, want model name is required", err)
+			}
+		})
+	}
+}
+
+func TestCompositionService_RemoveDelegatesToOwnedModelsRoot(t *testing.T) {
+	root := ownedCoverageModelsRoot{
+		removeModel: func(_ context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+			return modelinference.RemoveModelAssetsResult{
+				ModelName: request.Name, Outcome: modelinference.AssetRemovalRemoved,
+			}, nil
+		},
+	}
+	service := New(ownedCoverageHTTPProtocol(t), ownedCoverageCompositionInvocation{root: root})
+	if service == nil {
+		t.Fatal("New() = nil, want composition service")
+	}
+	var output bytes.Buffer
+	if err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "owned-model", Output: &output,
+	}); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "owned-model\tREMOVED") {
+		t.Fatalf("Remove() output = %q, want owned model removal", output.String())
+	}
+}
+
 func resolvedModelsHandlerInputs(
 	t *testing.T,
 	server string,

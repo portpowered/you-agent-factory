@@ -22,6 +22,7 @@ type ownedCoverageModelsRoot struct {
 	listModels           func(context.Context) (modelinference.List, error)
 	getModel             func(context.Context, string) (modelinference.Detail, error)
 	pullModel            func(context.Context, string) (modelinference.PullResult, error)
+	removeModel          func(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error)
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
 	getModelReadiness    func(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
@@ -88,7 +89,10 @@ func (stub ownedCoverageModelsRoot) InspectModelAssets(context.Context, modelinf
 	return modelinference.InspectModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub ownedCoverageModelsRoot) RemoveModelAssets(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+func (stub ownedCoverageModelsRoot) RemoveModelAssets(ctx context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+	if stub.removeModel != nil {
+		return stub.removeModel(ctx, request)
+	}
 	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 

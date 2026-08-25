@@ -22,6 +22,7 @@ type stubModelsRoot struct {
 	pullModel            func(context.Context, string) (modelinference.PullResult, error)
 	removeModel          func(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error)
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
+	getReadiness         func(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
 	invokeModelWithLease func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 	invokeModel          func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
@@ -60,7 +61,10 @@ func (stub stubModelsRoot) GetCatalogModel(ctx context.Context, request modelinf
 	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub stubModelsRoot) GetModelReadiness(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+func (stub stubModelsRoot) GetModelReadiness(ctx context.Context, request modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+	if stub.getReadiness != nil {
+		return stub.getReadiness(ctx, request)
+	}
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
