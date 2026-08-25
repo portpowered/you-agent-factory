@@ -451,23 +451,41 @@ func TestInferenceRuntimeRoutesTypedBackendsAndDetachesResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inferenceRuntime() error = %v", err)
 	}
+	assertGenericInferenceRuntimePath(t, runtime, &genericRequest)
+	assertASRInferenceRuntimePath(t, runtime, &asrRequest)
+	assertEmbeddingInferenceRuntimePath(t, runtime, &embeddingRequest)
+	if _, err := genericInvocationRuntime(nil).Invoke(t.Context(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{Input: models.InferenceInput{Content: "echo"}},
+	}); err != nil {
+		t.Fatalf("nil generic backend fallback error = %v", err)
+	}
+}
 
-	genericResult, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
+type ownedCoverageInvocationRuntime interface {
+	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
+}
+
+func assertGenericInferenceRuntimePath(t *testing.T, runtime ownedCoverageInvocationRuntime, request *models.InvokeModelRequest) {
+	t.Helper()
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
 		Request:   models.InvokeModelRequest{Operation: models.OperationOMNI},
 		Operation: models.Operation{Name: models.OperationOMNI},
 	})
-	if err != nil || len(genericResult.Content) != 1 || genericResult.Content[0].Content != "generic" {
-		t.Fatalf("generic runtime result = %#v, error = %v", genericResult, err)
+	if err != nil || len(result.Content) != 1 || result.Content[0].Content != "generic" {
+		t.Fatalf("generic runtime result = %#v, error = %v", result, err)
 	}
-	if len(genericResult.Artifacts) != 1 || genericResult.Artifacts[0].RefValue != "artifact:generic" ||
-		genericResult.Artifacts[0].Properties["kind"] != "generic" {
-		t.Fatalf("generic runtime artifacts = %#v, want detached artifact source", genericResult.Artifacts)
+	if len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != "artifact:generic" ||
+		result.Artifacts[0].Properties["kind"] != "generic" {
+		t.Fatalf("generic runtime artifacts = %#v, want detached artifact source", result.Artifacts)
 	}
-	if genericRequest.Operation != models.OperationOMNI {
-		t.Fatalf("generic backend request = %#v, want OMNI", genericRequest)
+	if request.Operation != models.OperationOMNI {
+		t.Fatalf("generic backend request = %#v, want OMNI", request)
 	}
+}
 
-	asrResult, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
+func assertASRInferenceRuntimePath(t *testing.T, runtime ownedCoverageInvocationRuntime, request *models.ASRBackendRequest) {
+	t.Helper()
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
 		Request: models.InvokeModelRequest{
 			Operation: models.OperationASR,
 			Inputs: []models.InferenceInput{
@@ -477,14 +495,17 @@ func TestInferenceRuntimeRoutesTypedBackendsAndDetachesResults(t *testing.T) {
 		},
 		Operation: models.Operation{Name: models.OperationASR},
 	})
-	if err != nil || len(asrResult.Content) != 2 || asrResult.Content[0].Name != "transcript" {
-		t.Fatalf("ASR runtime result = %#v, error = %v", asrResult, err)
+	if err != nil || len(result.Content) != 2 || result.Content[0].Name != "transcript" {
+		t.Fatalf("ASR runtime result = %#v, error = %v", result, err)
 	}
-	if string(asrRequest.Audio) != "audio" || asrRequest.MediaType != "audio/wav" || asrRequest.Prompt != "meeting" {
-		t.Fatalf("ASR backend request = %#v, want mapped audio request", asrRequest)
+	if string(request.Audio) != "audio" || request.MediaType != "audio/wav" || request.Prompt != "meeting" {
+		t.Fatalf("ASR backend request = %#v, want mapped audio request", request)
 	}
+}
 
-	embeddingResult, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
+func assertEmbeddingInferenceRuntimePath(t *testing.T, runtime ownedCoverageInvocationRuntime, request *models.EmbeddingBackendRequest) {
+	t.Helper()
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{
 		Request: models.InvokeModelRequest{
 			Operation: models.OperationEMBED,
 			Inputs: []models.InferenceInput{
@@ -493,18 +514,12 @@ func TestInferenceRuntimeRoutesTypedBackendsAndDetachesResults(t *testing.T) {
 			},
 		},
 	})
-	if err != nil || len(embeddingResult.Content) != 1 || embeddingResult.Content[0].Name != "embedding" ||
-		embeddingResult.Content[0].Content != "[0.1,0.2]" {
-		t.Fatalf("embedding runtime result = %#v, error = %v", embeddingResult, err)
+	if err != nil || len(result.Content) != 1 || result.Content[0].Name != "embedding" ||
+		result.Content[0].Content != "[0.1,0.2]" {
+		t.Fatalf("embedding runtime result = %#v, error = %v", result, err)
 	}
-	if embeddingRequest.Text != "find work" || embeddingRequest.Parameters["normalize"] != true {
-		t.Fatalf("embedding backend request = %#v, want mapped text and parameter", embeddingRequest)
-	}
-
-	if _, err := genericInvocationRuntime(nil).Invoke(t.Context(), inference.InvocationRuntimeRequest{
-		Request: models.InvokeModelRequest{Input: models.InferenceInput{Content: "echo"}},
-	}); err != nil {
-		t.Fatalf("nil generic backend fallback error = %v", err)
+	if request.Text != "find work" || request.Parameters["normalize"] != true {
+		t.Fatalf("embedding backend request = %#v, want mapped text and parameter", request)
 	}
 }
 

@@ -23,7 +23,15 @@ import (
 
 const story004EmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
 
-func TestModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T) {
+func TestModelsEmbedRootCompositionBehavior(t *testing.T) {
+	t.Parallel()
+	t.Run("zero-configuration", testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess)
+	t.Run("oversized-file", testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess)
+	t.Run("invalid-vector", testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease)
+	t.Run("named-generic-http-parity", testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution)
+}
+
+func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
@@ -120,7 +128,7 @@ func TestModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	}
 }
 
-func TestModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(t *testing.T) {
+func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
@@ -167,7 +175,7 @@ func TestModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(
 	}
 }
 
-func TestModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) {
+func testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) {
 	t.Parallel()
 
 	hostServer := story004HostServer(t)

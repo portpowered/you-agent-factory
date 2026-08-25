@@ -596,6 +596,18 @@ func TestGeneratedModelSupportsOperationChecksAllPublicProjections(t *testing.T)
 func TestGenericCLIInputHelpersCoverNamedTextJSONAndFileForms(t *testing.T) {
 	t.Parallel()
 
+	textSlot, jsonSlot, audioSlot := genericCLIInputCoverageSlots()
+	readCalls := 0
+	var readLimit int64
+	service := newOwnedCoverageInputReader(&readCalls, &readLimit)
+	cfg := InvokeConfig{Context: context.Background()}
+
+	assertGenericCLIInputSuccessForms(t, service, cfg, textSlot, jsonSlot, &readCalls, &readLimit)
+	assertGenericCLIInputFailureForms(t, service, cfg, textSlot, audioSlot)
+	assertGenericCLIInputMediaTypeForms(t)
+}
+
+func genericCLIInputCoverageSlots() (modelinference.OperationSlot, modelinference.OperationSlot, modelinference.OperationSlot) {
 	textRequired := true
 	textSlot := modelinference.OperationSlot{
 		Name: "text", Modality: modelinference.ModalityText, Required: &textRequired,
@@ -609,20 +621,31 @@ func TestGenericCLIInputHelpersCoverNamedTextJSONAndFileForms(t *testing.T) {
 		Name: "audio", Modality: modelinference.ModalityAudio,
 		MediaTypes: []string{"audio/*"},
 	}
-	readCalls := 0
-	var readLimit int64
-	service := &rootService{
+	return textSlot, jsonSlot, audioSlot
+}
+
+func newOwnedCoverageInputReader(readCalls *int, readLimit *int64) *rootService {
+	return &rootService{
 		inputFileReader: func(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
-			readCalls++
-			readLimit = maxBytes
+			*readCalls = *readCalls + 1
+			*readLimit = maxBytes
 			if path != "note.txt" {
 				return nil, errors.New("unexpected input path")
 			}
 			return []byte("file text"), ctx.Err()
 		},
 	}
-	cfg := InvokeConfig{Context: context.Background()}
+}
 
+func assertGenericCLIInputSuccessForms(
+	t *testing.T,
+	service *rootService,
+	cfg InvokeConfig,
+	textSlot, jsonSlot modelinference.OperationSlot,
+	readCalls *int,
+	readLimit *int64,
+) {
+	t.Helper()
 	text, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "inline text"}, textSlot)
 	if err != nil || text.Content != "inline text" || text.MediaType != "text/plain" {
 		t.Fatalf("inline text input = %#v, error = %v", text, err)
@@ -641,10 +664,18 @@ func TestGenericCLIInputHelpersCoverNamedTextJSONAndFileForms(t *testing.T) {
 	if err != nil || fileInput.Content != "file text" || fileInput.MediaType != "text/plain" {
 		t.Fatalf("file input = %#v, error = %v", fileInput, err)
 	}
-	if readCalls != 1 || readLimit != genericCLIInputMaxFileBytes {
-		t.Fatalf("file reader calls/limit = %d/%d, want 1/%d", readCalls, readLimit, genericCLIInputMaxFileBytes)
+	if *readCalls != 1 || *readLimit != genericCLIInputMaxFileBytes {
+		t.Fatalf("file reader calls/limit = %d/%d, want 1/%d", *readCalls, *readLimit, genericCLIInputMaxFileBytes)
 	}
+}
 
+func assertGenericCLIInputFailureForms(
+	t *testing.T,
+	service *rootService,
+	cfg InvokeConfig,
+	textSlot, audioSlot modelinference.OperationSlot,
+) {
+	t.Helper()
 	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "audio", value: "inline audio"}, audioSlot); err == nil {
 		t.Fatal("inline binary-like input error = nil")
 	}
@@ -676,7 +707,10 @@ func TestGenericCLIInputHelpersCoverNamedTextJSONAndFileForms(t *testing.T) {
 	}); err == nil {
 		t.Fatal("file media capability error = nil")
 	}
+}
 
+func assertGenericCLIInputMediaTypeForms(t *testing.T) {
+	t.Helper()
 	for _, test := range []struct {
 		name, input, want string
 	}{
@@ -779,18 +813,28 @@ func TestGenericCLIEmbedInvocationBindsNamedInputsAndPublishesOutputPath(t *test
 	}); err != nil {
 		t.Fatalf("EMBED Invoke() error = %v", err)
 	}
-	if gotRequest.Operation != modelinference.OperationEMBED || gotRequest.Model.NameOrURI != modelinference.BuiltInModelNameEmbed {
-		t.Fatalf("invoke request = %#v, want inferred EMBED operation", gotRequest)
+	assertGenericCLIEmbedRequest(t, gotRequest)
+	assertGenericCLIEmbedOutput(t, outputPath, out.String())
+}
+
+func assertGenericCLIEmbedRequest(t *testing.T, request modelinference.InvokeModelRequest) {
+	t.Helper()
+	if request.Operation != modelinference.OperationEMBED || request.Model.NameOrURI != modelinference.BuiltInModelNameEmbed {
+		t.Fatalf("invoke request = %#v, want inferred EMBED operation", request)
 	}
-	if len(gotRequest.Inputs) != 2 || gotRequest.Inputs[0].Name != "text" || gotRequest.Inputs[0].Content != "hello" || gotRequest.Inputs[1].Content != `{"normalize":true}` {
-		t.Fatalf("invoke inputs = %#v, want ordered text and JSON inputs", gotRequest.Inputs)
+	if len(request.Inputs) != 2 || request.Inputs[0].Name != "text" || request.Inputs[0].Content != "hello" || request.Inputs[1].Content != `{"normalize":true}` {
+		t.Fatalf("invoke inputs = %#v, want ordered text and JSON inputs", request.Inputs)
 	}
+}
+
+func assertGenericCLIEmbedOutput(t *testing.T, outputPath, report string) {
+	t.Helper()
 	data, err := os.ReadFile(outputPath)
 	if err != nil || string(data) != `[0.1,0.2]` {
 		t.Fatalf("EMBED output = %q, error = %v, want embedding JSON", data, err)
 	}
-	if !strings.Contains(out.String(), "Wrote audio:") {
-		t.Fatalf("output report = %q, want publication report", out.String())
+	if !strings.Contains(report, "Wrote audio:") {
+		t.Fatalf("output report = %q, want publication report", report)
 	}
 }
 
