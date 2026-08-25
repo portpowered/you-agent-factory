@@ -239,6 +239,44 @@ func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *te
 	})
 }
 
+func TestPublishRecord_AcceptsUsageWhenObservationProjectionIsUnavailable(t *testing.T) {
+	const sessionID = "usage-without-observation"
+	const dispatchID = "usage-without-observation-dispatch"
+	r := newTestRegistry(t)
+	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        sessionID,
+		AttemptID: dispatchID,
+		Execution: dispatchHandoff(dispatchID),
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
+	}
+
+	r.mu.Lock()
+	delete(r.observations, sessionID)
+	r.mu.Unlock()
+
+	payload, err := json.Marshal(workers.UsagePayload{InputTokens: 11, Model: "model-without-observation"})
+	if err != nil {
+		t.Fatalf("json.Marshal(UsagePayload) error = %v", err)
+	}
+	publication, err := r.PublishRecord(context.Background(), workersessions.PublishRecordRequest{
+		SessionID:      sessionID,
+		Draft:          workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: payload},
+		SourceType:     "worker_provider",
+		SourceID:       events.SourceID(sessionID),
+		SourceSequence: 1,
+		SourceEventID:  "usage-without-observation-1",
+		SchemaID:       "workers.draft.v1",
+	})
+	if err != nil || publication.Outcome != workersessions.PublishOutcomeAccepted {
+		t.Fatalf("PublishRecord() without observation metadata = %#v, %v, want accepted", publication, err)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(dispatchID), nil); err != nil {
+		t.Fatalf("RuntimeAttempt.Complete() error = %v, want nil", err)
+	}
+}
+
 func TestBeginRuntimeAttempt_NilRegistryAndHandleAreUnavailable(t *testing.T) {
 	var r *registry
 	if _, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{}); !errors.Is(err, workersessions.ErrStartAdmissionFailed) {
@@ -3938,6 +3976,42 @@ func TestResume_LineagePublicationFailureRestoresThePausedAttempt(t *testing.T) 
 	}
 	if supervision.dispatchID != "dispatch-1" || supervision.continuing || supervision.publishing || supervision.attemptsMade != 0 {
 		t.Fatalf("Resume() after lineage append failure supervision = %#v, want restored paused attempt", supervision)
+	}
+}
+
+func TestResume_ReturnsInitialControlHistoryAppendFailure(t *testing.T) {
+	r, _, _ := newPausedContinuationRegistry(t)
+	appendErr := errors.New("initial resume control history append failed")
+	r.events = failingContinuationEventsAppender{err: appendErr}
+
+	result, err := r.Resume(context.Background(), workersessions.ControlRequest{
+		ID:        "worker-1",
+		RequestID: "resume-initial-history-failure",
+	})
+	if !errors.Is(err, appendErr) || result.Outcome != workersessions.ControlOutcomeFailed {
+		t.Fatalf("Resume(initial control history failure) = %#v, %v, want failed append result", result, err)
+	}
+}
+
+func TestCancelBoundary_ReturnsNoopWhenAConcurrentTerminalCommitWins(t *testing.T) {
+	const sessionID = "cancel-after-terminal"
+	const dispatchID = "cancel-after-terminal-dispatch"
+	r := newTestRegistry(t)
+	r.sessions[sessionID] = workersessions.Session{ID: sessionID, State: workersessions.StateCompleted}
+	supervision := newSupervision(dispatchID, "", dispatchHandoff(dispatchID))
+	r.supervisions[sessionID] = supervision
+	supervision.signalDone()
+
+	result, retry, err := r.cancelBoundary(
+		context.Background(),
+		workersessions.ControlRequest{ID: sessionID},
+		workersessions.ControlActionCancel,
+		true,
+		supervision,
+		cancellationAttempt{kind: cancellationAttemptBoundary, wait: make(chan struct{}), dispatchID: dispatchID},
+	)
+	if err != nil || retry || result.Outcome != workersessions.ControlOutcomeNoop || result.Session.State != workersessions.StateCompleted {
+		t.Fatalf("cancelBoundary(after terminal commit) = %#v, %t, %v, want completed no-op", result, retry, err)
 	}
 }
 
