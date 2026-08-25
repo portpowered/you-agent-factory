@@ -144,6 +144,7 @@ type FactoryEventHistory struct {
 	canonicalEventsCopied   atomic.Uint64
 	fullHistoryReductions   atomic.Uint64
 	runtimeReadRecorder     recordings.RuntimeReadMetricsRecorder
+	durabilityReader        recordings.CompletedFlushWatermarkReader
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
