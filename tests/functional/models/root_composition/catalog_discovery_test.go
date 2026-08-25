@@ -476,6 +476,38 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 	}
 }
 
+// TestModelsCatalogReadinessCancellationReturnsPublicFailure proves a
+// cancellation returned by the scoped readiness collaborator cannot produce
+// a plausible successful catalog response through the public Models CLI.
+func TestModelsCatalogReadinessCancellationReturnsPublicFailure(t *testing.T) {
+	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cache := prepareModelsReadinessCache(t)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       cache.Environment,
+		Edges: serviceedges.Edges{
+			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+				return nil, context.Canceled
+			},
+			ModelAssetResolveHomeDirectory: cache.resolveHome,
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "--server", server.URL(), "models", "list",
+	})
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = cache.Environment
+	err := server.Execute(t, inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute(models list) error = nil, want readiness cancellation")
+	}
+	if strings.TrimSpace(inputs.Stdout()) != "" {
+		t.Fatalf("Process.Execute(models list) emitted success output after cancellation: %s", inputs.Stdout())
+	}
+}
+
 // TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess
 // proves direct invocation does not turn a second readiness lookup failure
 // into a backend or filesystem diagnostic.
