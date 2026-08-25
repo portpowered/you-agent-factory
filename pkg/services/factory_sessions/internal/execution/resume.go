@@ -9,9 +9,15 @@ import (
 	"fmt"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"go.uber.org/zap"
 	"os"
 	"strings"
 	"time"
+)
+
+const (
+	durableSessionSnapshotWarningThresholdBytes int64 = 100 * 1024 * 1024
+	durableSessionSnapshotSizeWarningCode             = "DURABLE_SESSION_SNAPSHOT_SIZE_THRESHOLD"
 )
 
 // ResumeInterruptedSession reconstructs one interrupted checkpointed session from
@@ -1025,6 +1031,7 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if err != nil {
 		return fmt.Errorf("marshal durable session snapshot: %w", err)
 	}
+	s.warnIfDurableSnapshotExceedsThreshold(state, int64(len(encoded)))
 	maxBytes := s.persistedSnapshotMaxBytes
 	if maxBytes <= 0 {
 		maxBytes = defaultPersistedSnapshotMaxBytes
@@ -1049,6 +1056,45 @@ func persistedSnapshotPath(store runtimepersist.Store, projectRoot, sessionID st
 		}
 	}
 	return runtimepersist.SnapshotPathForProjectRoot(projectRoot, sessionID)
+}
+
+func (s *JavaScriptRuntimeService) warnIfDurableSnapshotExceedsThreshold(
+	state runtimeSessionState,
+	encodedBytes int64,
+) {
+	if s == nil || s.persistenceWarningLogger == nil || encodedBytes < durableSessionSnapshotWarningThresholdBytes {
+		return
+	}
+	liveTokens, terminalTokens := retainedPetriTokenCounts(state)
+	s.persistenceWarningLogger.Warn(
+		"durable Factory Session snapshot reached the size warning threshold",
+		zap.String("code", durableSessionSnapshotSizeWarningCode),
+		zap.String("session_id", strings.TrimSpace(state.session.SessionID)),
+		zap.Int64("observed_bytes", encodedBytes),
+		zap.Int64("threshold_bytes", durableSessionSnapshotWarningThresholdBytes),
+		zap.Int("retained_live_tokens", liveTokens),
+		zap.Int("retained_terminal_tokens", terminalTokens),
+	)
+}
+
+func retainedPetriTokenCounts(state runtimeSessionState) (liveTokens, terminalTokens int) {
+	index := indexPetriTokenHistory(state.petriMutations, state.petriSummaries)
+	for workID := range index.retainedSummaries {
+		if strings.TrimSpace(workID) != "" {
+			terminalTokens++
+		}
+	}
+	for workID, workFacts := range index.works {
+		if _, alreadyRetained := index.retainedSummaries[workID]; alreadyRetained {
+			continue
+		}
+		if _, terminal := terminalPetriTokenSummary(workFacts); terminal {
+			terminalTokens++
+			continue
+		}
+		liveTokens++
+	}
+	return liveTokens, terminalTokens
 }
 
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {

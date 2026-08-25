@@ -13,12 +13,28 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // Service keeps the durable execution implementation private while preserving
 // the established execution contract during the package migration.
 type Service struct {
 	durableexecution.Service
+}
+
+// SetPersistenceWarningLogger forwards the session-scoped safe diagnostic
+// logger to the concrete durable execution owner when it supports persistence
+// size warnings.
+func (s *Service) SetPersistenceWarningLogger(logger *zap.Logger) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetPersistenceWarningLogger(*zap.Logger)
+	})
+	if ok {
+		setter.SetPersistenceWarningLogger(logger)
+	}
 }
 
 // liveChangeCapability is the optional durable-session boundary used by the
