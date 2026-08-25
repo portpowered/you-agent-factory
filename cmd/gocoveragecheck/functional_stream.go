@@ -9,17 +9,20 @@ import (
 	"sync"
 )
 
-// functionalStreamReporter serializes the two child output streams so a
-// decoded test event and its human-readable package result reach the same
-// diagnostic sink as complete writes. Package completion is tracked across
+// functionalStreamReporter serializes the two child output streams so decoded
+// test events and any human-readable diagnostics reach the sink as complete
+// writes. Functional coverage uses the optional quiet mode: events still reach
+// the observer, while routine child text stays buffered in the command result
+// for failure-specific rendering. Package completion is tracked across
 // invocation batches because a functional selection can be split into more
 // than one go test process on Windows.
 type functionalStreamReporter struct {
-	sink              io.Writer
-	mu                sync.Mutex
-	sinkMu            sync.Mutex
-	completedPackages map[string]struct{}
-	onEvent           func(goTestTimingEvent)
+	sink                io.Writer
+	mu                  sync.Mutex
+	sinkMu              sync.Mutex
+	completedPackages   map[string]struct{}
+	onEvent             func(goTestTimingEvent)
+	suppressHumanOutput bool
 }
 
 type functionalStreamWriter struct {
@@ -52,8 +55,13 @@ func newFunctionalStreamReporter(sink io.Writer) *functionalStreamReporter {
 }
 
 func newFunctionalStreamReporterWithObserver(sink io.Writer, observer func(goTestTimingEvent)) *functionalStreamReporter {
+	return newFunctionalStreamReporterWithObserverMode(sink, observer, false)
+}
+
+func newFunctionalStreamReporterWithObserverMode(sink io.Writer, observer func(goTestTimingEvent), suppressHumanOutput bool) *functionalStreamReporter {
 	reporter := newFunctionalStreamReporter(sink)
 	reporter.onEvent = observer
+	reporter.suppressHumanOutput = suppressHumanOutput
 	return reporter
 }
 
@@ -90,6 +98,12 @@ func (writer *functionalStreamWriter) Write(data []byte) (int, error) {
 func (writer *functionalStreamWriter) Flush() error {
 	writer.reporter.mu.Lock()
 	defer writer.reporter.mu.Unlock()
+	if writer.reporter.suppressHumanOutput {
+		writer.pending = nil
+		writer.coverageContinuationBuffer = nil
+		writer.coverageOutputMode = functionalCoverageOutputNormal
+		return nil
+	}
 
 	if len(writer.pending) > 0 {
 		line := append([]byte(nil), writer.pending...)
@@ -104,10 +118,16 @@ func (writer *functionalStreamWriter) Flush() error {
 func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
 	var event goTestTimingEvent
 	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil || event.Package == "" {
+		if writer.reporter.suppressHumanOutput {
+			return nil
+		}
 		return writer.reporter.writeSink(line)
 	}
 	if writer.reporter.onEvent != nil {
 		writer.reporter.onEvent(event)
+	}
+	if writer.reporter.suppressHumanOutput {
+		return nil
 	}
 	if event.Action != "output" {
 		if err := writer.flushCoverageContinuationLocked(); err != nil {
