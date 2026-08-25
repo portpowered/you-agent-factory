@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -127,6 +128,133 @@ func TestRuntimeCacheCompatibilityFactsComeFromScopedAssetsService(t *testing.T)
 		len(inspection.MissingAssets) != 0 {
 		t.Fatalf("InspectRuntimeCache = %#v", inspection)
 	}
+}
+
+func TestInspectRuntimeCacheReportsInvalidConfiguredManifest(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelDirectory := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create model cache directory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(modelDirectory, metadataFileName),
+		[]byte(`{"revision":`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write malformed cache metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "runtime-cache-invalid-manifest")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	inspection, err := service.InspectRuntimeCache(
+		context.Background(),
+		models.InspectModelAssetsRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"},
+	)
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.ManifestPresent || inspection.ManifestValid ||
+		inspection.Installed || inspection.FailureReason != "managed cache manifest is invalid" {
+		t.Fatalf("invalid manifest inspection = %#v", inspection)
+	}
+	if len(inspection.ExpectedArtifacts) != 2 ||
+		inspection.ExpectedArtifacts[0].Name != "omnivoice-base-Q4_K_M.gguf" ||
+		inspection.ExpectedArtifacts[1].Name != "omnivoice-tokenizer-Q4_K_M.gguf" {
+		t.Fatalf("invalid manifest expected artifacts = %#v", inspection.ExpectedArtifacts)
+	}
+}
+
+func TestInspectRuntimeCacheVerifiesConfiguredArtifactIntegrity(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	scopes := newScopes(t, "runtime-cache-integrity")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.Installed || !inspection.ManifestValid ||
+		!inspection.IntegrityVerified || inspection.InstalledFileCount != 2 ||
+		len(inspection.MissingAssets) != 0 || len(inspection.ObservedArtifacts) != 2 {
+		t.Fatalf("verified runtime inspection = %#v", inspection)
+	}
+}
+
+func TestPrepareModelAssetsCopiesDirectoryBackedGenericArtifacts(t *testing.T) {
+	t.Parallel()
+
+	localRoot := t.TempDir()
+	localPath := filepath.Join(localRoot, "nested", "weights.gguf")
+	body := []byte("directory-backed model weights")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("create local model directory: %v", err)
+	}
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("write local model artifact: %v", err)
+	}
+
+	scopes := newScopes(t, "prepare-directory-generic")
+	cacheDirectory := t.TempDir()
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("directory-backed preparation used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "directory-model",
+		Reference: models.ModelReference{NameOrURI: localRoot},
+		Artifacts: []models.AssetRequirement{{
+			Name: "nested/weights.gguf", Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
+	}
+
+	result, err := service.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	assertPreparedDirectoryAsset(t, result, body)
+
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "directory-model",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache after directory preparation: %v", err)
+	}
+	assertDirectoryRuntimeInspection(t, inspection, body)
+}
+
+func assertPreparedDirectoryAsset(t *testing.T, result models.PrepareModelAssetsResult, body []byte) {
+	t.Helper()
+	if result.Outcome != models.AssetPreparationPrepared ||
+		result.Asset.Readiness != models.AssetReadinessAvailable ||
+		result.Asset.Integrity != models.AssetIntegrityVerified ||
+		result.Asset.Source.Provider != "LOCAL" || len(result.Asset.Artifacts) != 1 ||
+		result.Asset.Artifacts[0].Name != "nested/weights.gguf" ||
+		result.Asset.Artifacts[0].Bytes != int64(len(body)) ||
+		result.Asset.Artifacts[0].SHA256 != sha256Hex(body) {
+		t.Fatalf("directory-backed preparation result = %#v", result)
+	}
+}
+
+func assertDirectoryRuntimeInspection(t *testing.T, inspection assets.RuntimeCacheInspection, body []byte) {
+	t.Helper()
+	if !inspection.Installed || !inspection.ManifestValid || inspection.InstalledFileCount != 1 ||
+		len(inspection.ObservedArtifacts) != 1 ||
+		inspection.ObservedArtifacts[0].Name != "nested/weights.gguf" {
+		t.Fatalf("directory-backed runtime inspection = %#v", inspection)
+	}
+	assertFileBody(t, filepath.Join(inspection.CachePath, filepath.FromSlash("nested/weights.gguf")), body)
 }
 
 func TestInspectRuntimeCacheCountsNestedRegularFilesAndSkipsSymlinks(t *testing.T) {

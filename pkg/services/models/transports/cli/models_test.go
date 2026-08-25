@@ -56,7 +56,6 @@ func (fake commandServiceFake) Remove(cfg RemoveConfig) error {
 	}
 	return nil
 }
-
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
 	logger := zap.NewNop()
@@ -170,6 +169,250 @@ func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 		if !called[operation] {
 			t.Fatalf("%s service operation was not called", operation)
 		}
+	}
+}
+
+func TestCommandHandlerTransformsRemoveArguments(t *testing.T) {
+	server := "http://127.0.0.1:7437"
+	var received RemoveConfig
+	handler := NewCommandHandler(
+		commandServiceFake{remove: func(cfg RemoveConfig) error {
+			received = cfg
+			return nil
+		}},
+		func(*cobra.Command) io.Writer { return io.Discard },
+		nil,
+		nil,
+		nil,
+	)
+	cmd := &cobra.Command{Use: "remove"}
+	cmd.SetContext(context.Background())
+	cmd.SetOut(io.Discard)
+	_, _, inherited := resolvedModelsHandlerInputs(t, server)
+	inputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{{
+			ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		}},
+		[]resolvedinput.Candidate{{
+			InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue("model-cache"),
+		}},
+	)
+	if err != nil {
+		t.Fatalf("resolve remove inputs: %v", err)
+	}
+	if err := handler.Remove(cmd, inputs, inherited); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if received.ModelName != "model-cache" || received.Server != server || !received.JSON || !received.Verbose || !received.Debug {
+		t.Fatalf("RemoveConfig = %#v, want resolved model and common flags", received)
+	}
+}
+
+func TestRootService_RemoveProjectsInstalledAssetOutcome(t *testing.T) {
+	rootScope, err := (modelinference.RuntimeScopeRef{}).Parse("models-cli:remove-scope")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	var received modelinference.RemoveModelAssetsRequest
+	var closed bool
+	service := NewService(Config{
+		Models: ownedCoverageModelsRoot{
+			removeModel: func(_ context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+				received = request
+				return modelinference.RemoveModelAssetsResult{
+					ModelName: request.Name, Revision: "rev-2026", CachePath: "/models/model-cache/rev-2026",
+					BytesRemoved: 42, Outcome: modelinference.AssetRemovalRemoved,
+				}, nil
+			},
+		},
+		OpenCatalogScope: func(context.Context) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{Scope: rootScope, Close: func(context.Context) error {
+				closed = true
+				return nil
+			}}, nil
+		},
+	})
+	if service == nil {
+		t.Fatal("NewService() = nil, want Models CLI service")
+	}
+
+	var human bytes.Buffer
+	if err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: " model-cache ", Output: &human,
+	}); err != nil {
+		t.Fatalf("Remove() human error = %v", err)
+	}
+	if want := "MODEL\tREMOVE OUTCOME\tREVISION\tCACHE PATH\tBYTES REMOVED\nmodel-cache\tREMOVED\trev-2026\t/models/model-cache/rev-2026\t42 B (42 bytes)\n"; human.String() != want {
+		t.Fatalf("Remove() human = %q, want %q", human.String(), want)
+	}
+	if received.Scope != rootScope || received.Name != "model-cache" || !closed {
+		t.Fatalf("remove request = %#v, closed = %v, want scoped model-cache request and closed scope", received, closed)
+	}
+}
+
+func TestRootService_RemoteCommandsPreservePublicProjections(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/models":
+			_, _ = io.WriteString(w, `{"results":[{"name":"remote-model","status":"READY","managedRuntime":{"readinessState":"READY","lifecycleState":"INSTALLED"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/models/remote-model":
+			_, _ = io.WriteString(w, `{"name":"remote-model","status":"READY","operations":[{"name":"TTS"}],"managedRuntime":{"readinessState":"READY","lifecycleState":"INSTALLED"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/models/remote-model":
+			_, _ = io.WriteString(w, `{"modelName":"remote-model","outcome":"REMOVED","revision":"rev-2026","cachePath":"/models/remote-model/rev-2026","bytesRemoved":42}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	service := NewService(Config{Models: ownedCoverageModelsRoot{}, HTTP: testHTTPProtocol(t)})
+	baseURL := strings.TrimSuffix(server.URL, "/")
+	assertRemoteListProjection(t, service, baseURL)
+	assertRemoteInspectProjection(t, service, baseURL)
+	assertRemoteRemoveProjection(t, service, baseURL)
+}
+
+func assertRemoteListProjection(t *testing.T, service Service, baseURL string) {
+	t.Helper()
+	var listOutput bytes.Buffer
+	if err := service.List(ListConfig{Context: context.Background(), Server: baseURL, JSON: true, Output: &listOutput}); err != nil {
+		t.Fatalf("remote List() error = %v", err)
+	}
+	var listed factoryapi.ListModelsResponse
+	if err := json.Unmarshal(listOutput.Bytes(), &listed); err != nil {
+		t.Fatalf("decode remote List() output: %v\n%s", err, listOutput.String())
+	}
+	if len(listed.Results) != 1 || listed.Results[0].Name != "remote-model" || listed.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("remote list response = %#v, want ready remote-model", listed)
+	}
+}
+
+func assertRemoteInspectProjection(t *testing.T, service Service, baseURL string) {
+	t.Helper()
+	var inspectOutput bytes.Buffer
+	if err := service.Inspect(InspectConfig{Context: context.Background(), ModelName: "remote-model", Server: baseURL, Output: &inspectOutput}); err != nil {
+		t.Fatalf("remote Inspect() error = %v", err)
+	}
+	if !strings.Contains(inspectOutput.String(), "Name:\tremote-model") || !strings.Contains(inspectOutput.String(), "Operations:\tTTS") {
+		t.Fatalf("remote inspect output = %q, want model identity and operation", inspectOutput.String())
+	}
+}
+
+func assertRemoteRemoveProjection(t *testing.T, service Service, baseURL string) {
+	t.Helper()
+	var removeOutput bytes.Buffer
+	if err := service.Remove(RemoveConfig{Context: context.Background(), ModelName: "remote-model", Server: baseURL, JSON: true, Output: &removeOutput}); err != nil {
+		t.Fatalf("remote Remove() error = %v", err)
+	}
+	var removed factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal(removeOutput.Bytes(), &removed); err != nil {
+		t.Fatalf("decode remote Remove() output: %v\n%s", err, removeOutput.String())
+	}
+	if removed.ModelName != "remote-model" || removed.Outcome != factoryapi.REMOVED || removed.BytesRemoved != 42 {
+		t.Fatalf("remote remove response = %#v, want removed remote-model/42 bytes", removed)
+	}
+}
+
+func TestLegacyHTTPService_RemoveWritesRemoteJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/models/legacy-model" {
+			t.Fatalf("remove request = %s %s, want DELETE /models/legacy-model", r.Method, r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"modelName":"legacy-model","outcome":"REMOVED","revision":"rev-legacy","bytesRemoved":7}`)
+	}))
+	defer server.Close()
+
+	service := New(testHTTPProtocol(t), testModelInvocationBuilder)
+	if service == nil {
+		t.Fatal("New() = nil, want legacy HTTP service")
+	}
+	var output bytes.Buffer
+	if err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "legacy-model", Server: strings.TrimSuffix(server.URL, "/"),
+		JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("legacy Remove() error = %v", err)
+	}
+	var removed factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal(output.Bytes(), &removed); err != nil {
+		t.Fatalf("decode legacy Remove() output: %v\n%s", err, output.String())
+	}
+	if removed.ModelName != "legacy-model" || removed.Revision != "rev-legacy" || removed.BytesRemoved != 7 {
+		t.Fatalf("legacy remove response = %#v, want legacy-model/rev-legacy/7", removed)
+	}
+}
+
+func TestLegacyHTTPService_RemoveMapsNotFoundResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/models/missing-model" {
+			t.Fatalf("remove request = %s %s, want DELETE /models/missing-model", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"message":"model cache not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
+	}))
+	defer server.Close()
+
+	service := New(testHTTPProtocol(t), testModelInvocationBuilder)
+	err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "missing-model", Server: strings.TrimSuffix(server.URL, "/"),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("Remove() error = nil, want not-found failure")
+	}
+	if !errors.Is(err, ErrModelNotFound) {
+		t.Fatalf("Remove() error = %v, want ErrModelNotFound", err)
+	}
+}
+
+func TestModelsCLI_RemoveValidatesRequiredInputs(t *testing.T) {
+	services := []struct {
+		name    string
+		service Service
+	}{
+		{name: "owned", service: NewService(Config{Models: ownedCoverageModelsRoot{}})},
+		{name: "legacy", service: New(testHTTPProtocol(t), testModelInvocationBuilder)},
+	}
+	for _, tc := range services {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.service == nil {
+				t.Fatal("service = nil, want Models CLI service")
+			}
+			if err := tc.service.Remove(RemoveConfig{Output: io.Discard}); err == nil || err.Error() != "context is required" {
+				t.Fatalf("Remove(nil context) error = %v, want context is required", err)
+			}
+			if err := tc.service.Remove(RemoveConfig{Context: context.Background()}); err == nil || err.Error() != "output writer is required" {
+				t.Fatalf("Remove(nil output) error = %v, want output writer is required", err)
+			}
+			if err := tc.service.Remove(RemoveConfig{Context: context.Background(), Output: io.Discard}); err == nil || err.Error() != "model name is required" {
+				t.Fatalf("Remove(empty model) error = %v, want model name is required", err)
+			}
+		})
+	}
+}
+
+func TestCompositionService_RemoveDelegatesToOwnedModelsRoot(t *testing.T) {
+	root := ownedCoverageModelsRoot{
+		removeModel: func(_ context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+			return modelinference.RemoveModelAssetsResult{
+				ModelName: request.Name, Outcome: modelinference.AssetRemovalRemoved,
+			}, nil
+		},
+	}
+	service := New(ownedCoverageHTTPProtocol(t), ownedCoverageCompositionInvocation{root: root})
+	if service == nil {
+		t.Fatal("New() = nil, want composition service")
+	}
+	var output bytes.Buffer
+	if err := service.Remove(RemoveConfig{
+		Context: context.Background(), ModelName: "owned-model", Output: &output,
+	}); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "owned-model\tREMOVED") {
+		t.Fatalf("Remove() output = %q, want owned model removal", output.String())
 	}
 }
 
@@ -721,267 +964,5 @@ func TestModelsPullWaitsForDedicatedProtocolTerminalResponse(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), `"outcome":"PULLED"`) {
 		t.Fatalf("pull output = %q, want terminal success", output.String())
-	}
-}
-
-func TestModelsTransportErrorSummaryIdentifiesTimeoutAndCancellation(t *testing.T) {
-	t.Parallel()
-	if got := modelsTransportErrorSummary(context.DeadlineExceeded); got != "error=timeout" {
-		t.Fatalf("deadline summary = %q, want error=timeout", got)
-	}
-	if got := modelsTransportErrorSummary(context.Canceled); got != "error=canceled" {
-		t.Fatalf("cancellation summary = %q, want error=canceled", got)
-	}
-	if got := modelsTransportErrorSummary(errors.New("connection refused")); got != "error=unreachable" {
-		t.Fatalf("transport summary = %q, want error=unreachable", got)
-	}
-}
-
-func TestModelsPullDiagnosticsIdentifyOrdinaryClientTimeout(t *testing.T) {
-	t.Parallel()
-	protocol, err := clihttp.NewProtocol(&http.Client{
-		Timeout: 5 * time.Millisecond,
-		Transport: modelsPullRoundTripper(func(request *http.Request) (*http.Response, error) {
-			<-request.Context().Done()
-			return nil, request.Context().Err()
-		}),
-	}, testHTTPClock{})
-	if err != nil {
-		t.Fatalf("timeout protocol: %v", err)
-	}
-	var diagnostics bytes.Buffer
-	_, err = pullModel(pullOptions{
-		Context: context.Background(), Server: "http://factory.test",
-		ModelName: "OMNIVOICE_Q4_K_M", Diagnostics: &diagnostics, Verbose: true,
-		HTTP: protocol,
-	})
-	if err == nil {
-		t.Fatal("pull error = nil, want ordinary client timeout")
-	}
-	if !strings.Contains(diagnostics.String(), "error=timeout") {
-		t.Fatalf("timeout diagnostics = %q, want error=timeout", diagnostics.String())
-	}
-}
-
-func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
-			t.Fatalf("path = %q, want pull path", r.URL.Path)
-		}
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/OMNIVOICE_Q4_K_M/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
-	}))
-	defer server.Close()
-
-	serverBase := strings.TrimSuffix(server.URL, "/")
-	var out bytes.Buffer
-	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Pull(PullConfig{Context: context.Background(),
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Server:    serverBase,
-		JSON:      true,
-		Output:    &out,
-	}); err != nil {
-		t.Fatalf("Pull: %v", err)
-	}
-	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"outcome":"PULLED"`} {
-		if !bytes.Contains(out.Bytes(), []byte(want)) {
-			t.Fatalf("output missing %q:\n%s", want, out.String())
-		}
-	}
-}
-
-func TestModelsList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		if r.URL.Path != "/models" {
-			t.Fatalf("path = %q, want /models", r.URL.Path)
-		}
-		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[]}]}`)
-	}))
-	defer server.Close()
-
-	var out bytes.Buffer
-	var diagnostics bytes.Buffer
-	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).List(ListConfig{Context: context.Background(),
-		Server:      strings.TrimSuffix(server.URL, "/"),
-		JSON:        true,
-		Verbose:     true,
-		Output:      &out,
-		Diagnostics: &diagnostics,
-	}); err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	var response factoryapi.ListModelsResponse
-	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
-		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
-	}
-	assertDiagnosticsContains(t, diagnostics.String(), []string{
-		"models list request",
-		"endpointPath=/models",
-		"server=",
-		"models list response",
-		"status=200",
-		"resultCount=1",
-	})
-	if got := requests.Load(); got != 1 {
-		t.Fatalf("requests = %d, want 1", got)
-	}
-}
-
-func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testing.T) {
-	var inspectRequests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/models/OMNIVOICE_Q4_K_M":
-			inspectRequests.Add(1)
-			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","readinessState":"READY","lifecycleState":"NOT_INSTALLED","locality":"LOCAL","supportedOperations":[{"name":"TTS"}],"diagnostics":{}},"providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
-		case "/models/OMNIVOICE_Q4_K_M/pull":
-			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
-		default:
-			t.Fatalf("unexpected path %q", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
-		return modelinference.Result{
-			ModelName: modelName,
-			Worker:    "tts-worker",
-			Operation: request.Operation,
-			Content: []work.WorkContentPart{{
-				Type: work.WorkContentPartTypeAudio,
-				File: "artifacts/sensitive-generated-output.wav",
-			}},
-		}, nil
-	}))
-
-	serverBase := strings.TrimSuffix(server.URL, "/")
-	var diagnostics bytes.Buffer
-	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Inspect(InspectConfig{Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
-		t.Fatalf("Inspect: %v", err)
-	}
-	if err := invokeForTest(t, InvokeConfig{Context: context.Background(),
-		ModelName:   "OMNIVOICE_Q4_K_M",
-		Operation:   "TTS",
-		Text:        "secret direct input",
-		FactoryDir:  t.TempDir(),
-		Logger:      zap.NewNop(),
-		JSON:        true,
-		Output:      io.Discard,
-		Verbose:     true,
-		Diagnostics: &diagnostics,
-	}); err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Pull(PullConfig{Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
-		t.Fatalf("Pull: %v", err)
-	}
-
-	diag := diagnostics.String()
-	assertDiagnosticsContains(t, diag, []string{
-		"models inspect request",
-		"modelName=\"OMNIVOICE_Q4_K_M\"",
-		"readiness=READY",
-		"models pull request",
-		"pullOutcome=INSTALLED_SUCCESSFULLY",
-		"readiness=READY",
-		"downloadedFiles=1",
-	})
-	for _, forbidden := range []string{"secret direct input", "sensitive-generated-output.wav", "ghp_successResponseToken1234567890"} {
-		if strings.Contains(diag, forbidden) {
-			t.Fatalf("diagnostics leaked model input, response content, or token %q:\n%s", forbidden, diag)
-		}
-	}
-	if got := inspectRequests.Load(); got != 1 {
-		t.Fatalf("inspect requests = %d, want 1", got)
-	}
-}
-
-func TestModelsFailureOmitsNonJSONResponseBody(t *testing.T) {
-	responseBody := "opaque-secret-response-marker"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = io.WriteString(w, responseBody)
-	}))
-	defer server.Close()
-
-	var diagnostics bytes.Buffer
-	_, err := queryModel(queryOptions{
-		Context:     context.Background(),
-		HTTP:        testHTTPProtocol(t),
-		Server:      strings.TrimSuffix(server.URL, "/"),
-		ModelName:   "broken",
-		Verbose:     true,
-		Diagnostics: &diagnostics,
-	})
-	if err == nil {
-		t.Fatal("expected queryModel to fail")
-	}
-	gotErr := err.Error()
-	if !strings.Contains(gotErr, "models request failed (502): response body was not a structured API error") {
-		t.Fatalf("error = %q, want safe non-JSON response summary", gotErr)
-	}
-	if strings.Contains(gotErr, responseBody) {
-		t.Fatalf("error included raw response body")
-	}
-	diag := diagnostics.String()
-	assertDiagnosticsContains(t, diag, []string{
-		"models inspect response",
-		"endpointPath=/models/broken",
-		"status=502",
-		"responseBytes=29",
-	})
-	if strings.Contains(diag, responseBody) {
-		t.Fatalf("diagnostics leaked model input or response content:\n%s", diag)
-	}
-}
-
-func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
-	err := managedRuntimePullResponseError(http.StatusUnprocessableEntity, []byte(`{
-		"managedRuntimePull": {
-			"identity": "OMNIVOICE_Q4_K_M",
-			"pullOutcome": "SOURCE_FETCH_FAILED",
-			"readinessState": "FAILED",
-			"pullDiagnostics": {
-				"modelName": "OMNIVOICE_Q4_K_M",
-				"resolvedRepository": "owner/repo",
-				"revision": "rev-1",
-				"file": "weights.gguf",
-				"operation": "download asset",
-				"requestUrl": "https://assets.example.test/owner/repo/weights.gguf?download=true",
-				"upstreamStatusCode": 502
-			}
-		}
-	}`))
-	if err == nil {
-		t.Fatal("managedRuntimePullResponseError() = nil, want classified failure")
-	}
-	if got, want := err.Error(), "managed runtime pull failed (pullOutcome=SOURCE_FETCH_FAILED readinessState=FAILED)"; got != want {
-		t.Fatalf("error = %q, want %q", got, want)
-	}
-	var coded interface {
-		CLIErrorCode() string
-		CLIErrorFamily() factoryapi.ErrorFamily
-		CLIErrorMessage() string
-	}
-	if !errors.As(err, &coded) {
-		t.Fatalf("error = %T, want coded model pull failure", err)
-	}
-	if coded.CLIErrorCode() != managedRuntimePullFailureCode ||
-		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest ||
-		coded.CLIErrorMessage() != err.Error() {
-		t.Fatalf("coded failure = (%q, %q, %q), want safe outcome diagnostic", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
-	}
-	var diagnostics *modelinference.PullDiagnosticsError
-	if !errors.As(err, &diagnostics) || diagnostics == nil {
-		t.Fatalf("error = %T, want structured pull diagnostics cause", err)
-	}
-	if !strings.Contains(diagnostics.Error(), "repository=owner/repo") ||
-		!strings.Contains(diagnostics.Error(), "status=502") ||
-		!strings.Contains(diagnostics.Error(), "operation=download asset") {
-		t.Fatalf("diagnostics = %q, want repository, operation, and status", diagnostics)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,13 +16,127 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	"go.uber.org/zap"
 )
+
+func TestNewRootClassifiesMissingConstructionDependencies(t *testing.T) {
+	t.Parallel()
+
+	valid := newRootConstructionArgs(t)
+	root, err := valid.build()
+	if err != nil || root == nil {
+		t.Fatalf("NewRoot valid dependencies = (%v, %v), want constructed root", root, err)
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(*rootConstructionArgs)
+		message string
+	}{
+		{name: "process launcher", mutate: func(args *rootConstructionArgs) { args.processLauncher = nil }, message: "model host process launcher"},
+		{name: "host HTTP client", mutate: func(args *rootConstructionArgs) { args.hostHTTP = nil }, message: "model host HTTP client"},
+		{name: "host clock", mutate: func(args *rootConstructionArgs) { args.hostClock = nil }, message: "model host clock"},
+		{name: "runtime command runner", mutate: func(args *rootConstructionArgs) { args.runtimeRunner = nil }, message: "model runtime command runner"},
+		{name: "runtime HTTP client", mutate: func(args *rootConstructionArgs) { args.runtimeHTTP = nil }, message: "model runtime HTTP client"},
+		{name: "runtime file inspector", mutate: func(args *rootConstructionArgs) { args.runtimeInspect = nil }, message: "model runtime file inspector"},
+		{name: "runtime temp directory", mutate: func(args *rootConstructionArgs) { args.runtimeTempDir = nil }, message: "model runtime temporary directory resolver"},
+		{name: "runtime temp file", mutate: func(args *rootConstructionArgs) { args.runtimeTempFile = nil }, message: "model runtime temporary file creator"},
+		{name: "runtime scopes", mutate: func(args *rootConstructionArgs) { args.runtimeScopes = nil }, message: "Models Runtime Scopes service"},
+		{name: "catalog", mutate: func(args *rootConstructionArgs) { args.catalog = nil }, message: "Models Catalog service"},
+		{name: "assets", mutate: func(args *rootConstructionArgs) { args.assets = nil }, message: "Models Assets service"},
+		{name: "runtime host", mutate: func(args *rootConstructionArgs) { args.runtimeHost = nil }, message: "Models Runtime Host service"},
+		{name: "inference", mutate: func(args *rootConstructionArgs) { args.inference = nil }, message: "Models Inference service"},
+		{name: "process clock", mutate: func(args *rootConstructionArgs) { args.process.Clock = nil }, message: "Models process clock"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := newRootConstructionArgs(t)
+			test.mutate(&args)
+			root, err := args.build()
+			if root != nil || !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), test.message) {
+				t.Fatalf("NewRoot missing %s = (%v, %v), want classified dependency error", test.name, root, err)
+			}
+		})
+	}
+}
+
+type rootConstructionArgs struct {
+	processLauncher modelhost.ProcessLauncher
+	hostHTTP        modelhost.HTTPDoer
+	hostClock       modelhost.Clock
+	runtimeRunner   platformprocess.CommandRunner
+	runtimeHTTP     localmodels.HTTPDoer
+	runtimeInspect  localmodels.InspectFile
+	runtimeTempDir  localmodels.TempDirectory
+	runtimeTempFile localmodels.CreateTempFile
+	runtimeScopes   runtimescopes.Service
+	catalog         modelcatalog.Service
+	assets          scopedassets.Service
+	runtimeHost     runtimehost.Service
+	inference       inference.Service
+	process         modelseffects.ProcessDependencies
+}
+
+func (args rootConstructionArgs) build() (*Root, error) {
+	return NewRoot(
+		args.processLauncher,
+		args.hostHTTP,
+		args.hostClock,
+		args.runtimeRunner,
+		args.runtimeHTTP,
+		args.runtimeInspect,
+		args.runtimeTempDir,
+		args.runtimeTempFile,
+		args.runtimeScopes,
+		args.catalog,
+		args.assets,
+		args.runtimeHost,
+		args.inference,
+		args.process,
+	)
+}
+
+func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
+	t.Helper()
+
+	scopes, err := runtimescopeswire.NewService(func() string { return "root-construction-test" })
+	if err != nil {
+		t.Fatalf("construct runtime scopes: %v", err)
+	}
+	catalog, err := catalogwire.NewService(scopes)
+	if err != nil {
+		t.Fatalf("construct catalog: %v", err)
+	}
+	events := []string{}
+	return rootConstructionArgs{
+		processLauncher: rootConstructionProcessLauncher{},
+		hostHTTP:        http.DefaultClient,
+		hostClock:       rootConstructionClock{},
+		runtimeRunner:   rootConstructionCommandRunner{},
+		runtimeHTTP:     http.DefaultClient,
+		runtimeInspect:  os.Stat,
+		runtimeTempDir:  os.TempDir,
+		runtimeTempFile: func(dir, pattern string) (localmodels.TempFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		runtimeScopes: scopes,
+		catalog:       catalog,
+		assets:        inferenceRecordingAssetsService{},
+		runtimeHost:   &joinedHostService{events: &events},
+		inference:     &joinedInferenceService{events: &events},
+		process: modelseffects.ProcessDependencies{
+			Logger: zap.NewNop(), Clock: time.Now,
+		},
+	}
+}
 
 func TestRootDelegatesInferenceThroughInjectedOwner(t *testing.T) {
 	t.Parallel()
@@ -45,40 +160,6 @@ func TestRootDelegatesInferenceThroughInjectedOwner(t *testing.T) {
 	}
 	if privateInference.cancelRequest != cancelRequest {
 		t.Fatalf("CancelInvocation request = %#v, want %#v", privateInference.cancelRequest, cancelRequest)
-	}
-}
-
-func TestRuntimeServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	svc := &runtimeService{}
-	_, err := svc.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "OpenRuntimeScope", err)
-	_, err = svc.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{})
-	assertContractOnlyUnsupported(t, "CloseRuntimeScope", err)
-	_, err = svc.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "PrepareModelAssets", err)
-	_, err = svc.InspectModelAssets(ctx, models.InspectModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "InspectModelAssets", err)
-	_, err = svc.RemoveModelAssets(ctx, models.RemoveModelAssetsRequest{})
-	assertContractOnlyUnsupported(t, "RemoveModelAssets", err)
-	_, err = svc.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{})
-	assertContractOnlyUnsupported(t, "ResolveModelReference", err)
-	_, err = svc.InvokeModel(ctx, models.InvokeModelRequest{})
-	assertContractOnlyUnsupported(t, "InvokeModel", err)
-	result, err := svc.InvokeLocal(ctx, models.LocalInvocationRequest{})
-	if err != nil || result.Handled {
-		t.Fatalf("InvokeLocal result = %#v, error = %v, want declined no-op", result, err)
-	}
-	_, err = svc.InvokeLocal(ctx, models.LocalInvocationRequest{
-		Worker: models.LocalWorker{
-			Type:          models.RuntimeWorkerTypeInference,
-			ModelLocality: models.RuntimeModelLocalityLocal,
-		},
-	})
-	if !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("managed InvokeLocal error = %v, want ErrNotFound", err)
 	}
 }
 

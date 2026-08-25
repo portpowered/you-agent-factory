@@ -17,6 +17,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
 )
 
 func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
@@ -62,6 +63,78 @@ func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
 	}
 	if !result.Handled || result.Content != "local" || host.acquires != 1 || host.releases != 1 || runtime.loads != 1 {
 		t.Fatalf("result=%q acquire/release=%d/%d loads=%d", result.Content, host.acquires, host.releases, runtime.loads)
+	}
+}
+
+func TestRootInvokeLocalUsesBoundRuntimeAndReleasesLease(t *testing.T) {
+	t.Parallel()
+
+	worker := modelRuntimeWorker{
+		Name: "voice-local", Type: models.RuntimeWorkerTypeModel,
+		Model: "voice", ModelLocality: models.RuntimeModelLocalityLocal,
+		Resources: []modelRuntimeResource{{Name: "voice-cache"}},
+	}
+	cfg := &testFactoryConfig{
+		Name: "test", Workers: []modelRuntimeWorker{worker},
+		Resources: []modelRuntimeResource{{
+			Name: "voice-cache", Type: models.RuntimeResourceTypeModel, Model: "voice",
+			Backend: "TEST", LoadPolicy: "ON_DEMAND",
+		}},
+	}
+	loaded := projectTestModelsRuntimeConfig(t.TempDir(), cfg)
+	host := &leaseTestHost{}
+	runtime := &leaseTestRuntime{}
+	assets := leaseTestAssets{}
+	bound, err := newRuntimeWithHostEdges(
+		models.RuntimeScopeRef{},
+		func() *modelRuntimeConfig { return loaded },
+		zap.NewNop(), time.Now, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+		assets, runtime, nil, host,
+	)
+	if err != nil {
+		t.Fatalf("new bound runtime: %v", err)
+	}
+
+	scopes, err := runtimescopeswire.NewService(func() string { return "root-local-invocation-test" })
+	if err != nil {
+		t.Fatalf("runtime scopes: %v", err)
+	}
+	ref, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig { return loaded },
+	})
+	if err != nil {
+		t.Fatalf("open runtime scope: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(ref))
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+
+	root := &Root{
+		runtimeScopes: scopes,
+		runtimeByScope: map[models.RuntimeScopeRef]models.Service{
+			scope: bound,
+		},
+	}
+	result, err := root.InvokeLocal(context.Background(), models.LocalInvocationRequest{
+		Scope:  scope,
+		Holder: "dispatch-1",
+		Worker: models.LocalWorker{
+			Name: worker.Name, Type: worker.Type, Model: worker.Model,
+			ModelLocality: worker.ModelLocality,
+			Resources:     []models.LocalResource{{Name: "voice-cache"}},
+		},
+		Resources: []models.LocalResource{{
+			Name: "voice-cache", Type: models.RuntimeResourceTypeModel, Model: "voice",
+			Backend: "TEST", LoadPolicy: "ON_DEMAND",
+		}},
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
+	})
+	if err != nil {
+		t.Fatalf("Root.InvokeLocal: %v", err)
+	}
+	if !result.Handled || result.Content != "local" || host.acquires != 1 || host.releases != 1 || runtime.loads != 1 {
+		t.Fatalf("result=%#v acquire/release=%d/%d loads=%d", result, host.acquires, host.releases, runtime.loads)
 	}
 }
 

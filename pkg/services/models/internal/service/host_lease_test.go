@@ -123,6 +123,32 @@ func TestService_InspectRuntime_RejectsEmptyModelName(t *testing.T) {
 	}
 }
 
+func TestService_InspectRuntime_ProjectsReadyHostAndPreservesFailure(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	ready, err := mustConstructModelService(t, modelServiceFixture{
+		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+		ModelHost:     hostLeaseTestHost{},
+	}).InspectRuntime(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("InspectRuntime ready: %v", err)
+	}
+	if ready.Identity != "OMNIVOICE_Q4_K_M" ||
+		ready.ReadinessState != models.ReadinessStateReady ||
+		ready.LifecycleState != models.LifecycleStateInstalled {
+		t.Fatalf("InspectRuntime ready = %#v, want ready installed model", ready)
+	}
+
+	failing, err := mustConstructModelService(t, modelServiceFixture{
+		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+		ModelHost:     failingInspectHost{},
+	}).InspectRuntime(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err == nil || !strings.Contains(err.Error(), "inspect failed") {
+		t.Fatalf("InspectRuntime failure = (%#v, %v), want host inspection error", failing, err)
+	}
+}
+
 type hostLeaseTestHost struct{}
 
 func (hostLeaseTestHost) ResolveIdentity(_ context.Context, _ *modelRuntimeConfig, modelName string) (modelhost.Identity, error) {

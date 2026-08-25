@@ -241,3 +241,62 @@ func mutateReadinessResult(result models.GetModelReadinessResult) {
 	result.Readiness.Diagnostics["sourceId"] = "mutated"
 	result.Readiness.Diagnostics["transition"] = "mutated"
 }
+
+func TestCatalogReadinessFailuresAreSanitizedAcrossListAndDetail(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-readiness-failure-projections")
+	dependencyFailure := errors.New(`inspect C:\private\model-cache: access denied`)
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{}, dependencyFailure
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "failed-model", "generate"))
+
+	if _, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Fatalf("ListCatalog error = %v, want sanitized ErrUnavailable", err)
+	}
+	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "failed-model",
+	}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Fatalf("GetCatalogModel error = %v, want sanitized ErrUnavailable", err)
+	}
+}
+
+func TestBuiltInReadinessUsesStableDiscoveryBaseline(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-built-in-readiness-baseline")
+	queryCalls := 0
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			queryCalls++
+			return models.Runtime{ReadinessState: models.ReadinessStateReady}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "configured-model", "generate"))
+	readiness, err := service.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: scope, Name: " ASR ", Operation: models.OperationASR,
+	})
+	if err != nil {
+		t.Fatalf("GetModelReadiness built-in: %v", err)
+	}
+	if readiness.ModelName != models.BuiltInModelNameASR ||
+		readiness.Readiness.Identity != models.BuiltInModelNameASR ||
+		readiness.Readiness.ReadinessState != models.ReadinessStateMissing ||
+		readiness.Readiness.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("built-in readiness = %#v, want stable missing/not-installed baseline", readiness)
+	}
+	if queryCalls != 0 {
+		t.Fatalf("built-in readiness queried current state %d times, want zero", queryCalls)
+	}
+}

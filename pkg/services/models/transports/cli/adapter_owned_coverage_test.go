@@ -22,6 +22,7 @@ type ownedCoverageModelsRoot struct {
 	listModels           func(context.Context) (modelinference.List, error)
 	getModel             func(context.Context, string) (modelinference.Detail, error)
 	pullModel            func(context.Context, string) (modelinference.PullResult, error)
+	removeModel          func(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error)
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
 	getModelReadiness    func(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
@@ -88,7 +89,10 @@ func (stub ownedCoverageModelsRoot) InspectModelAssets(context.Context, modelinf
 	return modelinference.InspectModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub ownedCoverageModelsRoot) RemoveModelAssets(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+func (stub ownedCoverageModelsRoot) RemoveModelAssets(ctx context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+	if stub.removeModel != nil {
+		return stub.removeModel(ctx, request)
+	}
 	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -979,20 +983,5 @@ func TestModelsCLIInvocationDiagnosticsCoverEveryPublicFailureFamily(t *testing.
 				t.Fatalf("mapped %q = %#v, want code %q", test.class, mapped, test.code)
 			}
 		})
-	}
-}
-
-func TestModelsCLISlotMappingPreservesOptionalMetadataShape(t *testing.T) {
-	t.Parallel()
-
-	converted := slotsToGenerated([]modelinference.OperationSlot{
-		{Name: "opaque"},
-		{Name: "text", Modality: modelinference.ModalityText, Repeatable: true, MediaTypes: []string{"text/plain"}},
-	})
-	if len(converted) != 2 || converted[0].Modality != nil || converted[0].Repeatable != nil || converted[0].MediaTypes != nil {
-		t.Fatalf("optional slot mapping = %#v, want nil optional metadata", converted)
-	}
-	if converted[1].Modality == nil || *converted[1].Modality != factoryapi.ModelInvocationContentType(modelinference.ModalityText) || converted[1].Repeatable == nil || !*converted[1].Repeatable || converted[1].MediaTypes == nil {
-		t.Fatalf("declared slot mapping = %#v, want modality/repeatable/media metadata", converted[1])
 	}
 }

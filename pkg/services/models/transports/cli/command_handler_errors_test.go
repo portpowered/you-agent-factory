@@ -7,19 +7,297 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
+
+func TestModelsTransportErrorSummaryIdentifiesTimeoutAndCancellation(t *testing.T) {
+	t.Parallel()
+	if got := modelsTransportErrorSummary(context.DeadlineExceeded); got != "error=timeout" {
+		t.Fatalf("deadline summary = %q, want error=timeout", got)
+	}
+	if got := modelsTransportErrorSummary(context.Canceled); got != "error=canceled" {
+		t.Fatalf("cancellation summary = %q, want error=canceled", got)
+	}
+	if got := modelsTransportErrorSummary(errors.New("connection refused")); got != "error=unreachable" {
+		t.Fatalf("transport summary = %q, want error=unreachable", got)
+	}
+}
+
+func TestModelsPullDiagnosticsIdentifyOrdinaryClientTimeout(t *testing.T) {
+	t.Parallel()
+	protocol, err := clihttp.NewProtocol(&http.Client{
+		Timeout: 5 * time.Millisecond,
+		Transport: modelsPullRoundTripper(func(request *http.Request) (*http.Response, error) {
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		}),
+	}, testHTTPClock{})
+	if err != nil {
+		t.Fatalf("timeout protocol: %v", err)
+	}
+	var diagnostics bytes.Buffer
+	_, err = pullModel(pullOptions{
+		Context: context.Background(), Server: "http://factory.test",
+		ModelName: "OMNIVOICE_Q4_K_M", Diagnostics: &diagnostics, Verbose: true,
+		HTTP: protocol,
+	})
+	if err == nil {
+		t.Fatal("pull error = nil, want ordinary client timeout")
+	}
+	if !strings.Contains(diagnostics.String(), "error=timeout") {
+		t.Fatalf("timeout diagnostics = %q, want error=timeout", diagnostics.String())
+	}
+}
+
+func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
+			t.Fatalf("path = %q, want pull path", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/OMNIVOICE_Q4_K_M/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
+	}))
+	defer server.Close()
+
+	serverBase := strings.TrimSuffix(server.URL, "/")
+	var out bytes.Buffer
+	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Pull(PullConfig{Context: context.Background(),
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Server:    serverBase,
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"outcome":"PULLED"`} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestModelsList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path != "/models" {
+			t.Fatalf("path = %q, want /models", r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[]}]}`)
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	var diagnostics bytes.Buffer
+	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).List(ListConfig{Context: context.Background(),
+		Server:      strings.TrimSuffix(server.URL, "/"),
+		JSON:        true,
+		Verbose:     true,
+		Output:      &out,
+		Diagnostics: &diagnostics,
+	}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	var response factoryapi.ListModelsResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
+	}
+	assertDiagnosticsContains(t, diagnostics.String(), []string{
+		"models list request",
+		"endpointPath=/models",
+		"server=",
+		"models list response",
+		"status=200",
+		"resultCount=1",
+	})
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
+	}
+}
+
+func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testing.T) {
+	streamFile := filepath.Join(t.TempDir(), "generated.wav")
+	if err := os.WriteFile(streamFile, []byte("RIFF-test-audio"), 0o600); err != nil {
+		t.Fatalf("write test audio stream: %v", err)
+	}
+	var inspectRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/models/OMNIVOICE_Q4_K_M":
+			inspectRequests.Add(1)
+			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","readinessState":"READY","lifecycleState":"NOT_INSTALLED","locality":"LOCAL","supportedOperations":[{"name":"TTS"}],"diagnostics":{}},"providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
+		case "/models/OMNIVOICE_Q4_K_M/pull":
+			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
+		default:
+			t.Fatalf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
+		return modelinference.Result{
+			ModelName:  modelName,
+			Worker:     "tts-worker",
+			Operation:  request.Operation,
+			StreamFile: streamFile,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeAudio,
+				File: "artifacts/sensitive-generated-output.wav",
+			}},
+		}, nil
+	}))
+
+	serverBase := strings.TrimSuffix(server.URL, "/")
+	var diagnostics bytes.Buffer
+	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Inspect(InspectConfig{Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if err := invokeForTest(t, InvokeConfig{Context: context.Background(),
+		ModelName:   "OMNIVOICE_Q4_K_M",
+		Operation:   "TTS",
+		Text:        "secret direct input",
+		FactoryDir:  t.TempDir(),
+		Logger:      zap.NewNop(),
+		OutputPath:  filepath.Join(t.TempDir(), "speech.wav"),
+		Output:      io.Discard,
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Pull(PullConfig{Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+
+	diag := diagnostics.String()
+	assertDiagnosticsContains(t, diag, []string{
+		"models inspect request",
+		"modelName=\"OMNIVOICE_Q4_K_M\"",
+		"readiness=READY",
+		"models invoke bootstrap request",
+		"operation=\"TTS\"",
+		"models invoke bootstrap response",
+		"models pull request",
+		"pullOutcome=INSTALLED_SUCCESSFULLY",
+		"readiness=READY",
+		"downloadedFiles=1",
+	})
+	for _, forbidden := range []string{"secret direct input", "sensitive-generated-output.wav", "ghp_successResponseToken1234567890"} {
+		if strings.Contains(diag, forbidden) {
+			t.Fatalf("diagnostics leaked model input, response content, or token %q:\n%s", forbidden, diag)
+		}
+	}
+	if got := inspectRequests.Load(); got != 1 {
+		t.Fatalf("inspect requests = %d, want 1", got)
+	}
+}
+
+func TestModelsFailureOmitsNonJSONResponseBody(t *testing.T) {
+	responseBody := "opaque-secret-response-marker"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, responseBody)
+	}))
+	defer server.Close()
+
+	var diagnostics bytes.Buffer
+	_, err := queryModel(queryOptions{
+		Context:     context.Background(),
+		HTTP:        testHTTPProtocol(t),
+		Server:      strings.TrimSuffix(server.URL, "/"),
+		ModelName:   "broken",
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+	})
+	if err == nil {
+		t.Fatal("expected queryModel to fail")
+	}
+	gotErr := err.Error()
+	if !strings.Contains(gotErr, "models request failed (502): response body was not a structured API error") {
+		t.Fatalf("error = %q, want safe non-JSON response summary", gotErr)
+	}
+	if strings.Contains(gotErr, responseBody) {
+		t.Fatalf("error included raw response body")
+	}
+	diag := diagnostics.String()
+	assertDiagnosticsContains(t, diag, []string{
+		"models inspect response",
+		"endpointPath=/models/broken",
+		"status=502",
+		"responseBytes=29",
+	})
+	if strings.Contains(diag, responseBody) {
+		t.Fatalf("diagnostics leaked model input or response content:\n%s", diag)
+	}
+}
+
+func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
+	err := managedRuntimePullResponseError(http.StatusUnprocessableEntity, []byte(`{
+		"managedRuntimePull": {
+			"identity": "OMNIVOICE_Q4_K_M",
+			"pullOutcome": "SOURCE_FETCH_FAILED",
+			"readinessState": "FAILED",
+			"pullDiagnostics": {
+				"modelName": "OMNIVOICE_Q4_K_M",
+				"resolvedRepository": "owner/repo",
+				"revision": "rev-1",
+				"file": "weights.gguf",
+				"operation": "download asset",
+				"requestUrl": "https://assets.example.test/owner/repo/weights.gguf?download=true",
+				"upstreamStatusCode": 502
+			}
+		}
+	}`))
+	if err == nil {
+		t.Fatal("managedRuntimePullResponseError() = nil, want classified failure")
+	}
+	if got, want := err.Error(), "managed runtime pull failed (pullOutcome=SOURCE_FETCH_FAILED readinessState=FAILED)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(err, &coded) {
+		t.Fatalf("error = %T, want coded model pull failure", err)
+	}
+	if coded.CLIErrorCode() != managedRuntimePullFailureCode ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest ||
+		coded.CLIErrorMessage() != err.Error() {
+		t.Fatalf("coded failure = (%q, %q, %q), want safe outcome diagnostic", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
+	}
+	var diagnostics *modelinference.PullDiagnosticsError
+	if !errors.As(err, &diagnostics) || diagnostics == nil {
+		t.Fatalf("error = %T, want structured pull diagnostics cause", err)
+	}
+	if !strings.Contains(diagnostics.Error(), "repository=owner/repo") ||
+		!strings.Contains(diagnostics.Error(), "status=502") ||
+		!strings.Contains(diagnostics.Error(), "operation=download asset") {
+		t.Fatalf("diagnostics = %q, want repository, operation, and status", diagnostics)
+	}
+}
 
 func TestCommandHandlerRequiresInjectedModelsService(t *testing.T) {
 	handler := NewCommandHandler(nil, nil, nil, nil, nil)
@@ -594,5 +872,20 @@ func TestModelsInvocationDiagnosticCoversFailureClasses(t *testing.T) {
 				t.Fatalf("modelsInvocationDiagnostic(%q) = (%q, %q), want (%q, %q)", test.class, code, family, test.code, test.family)
 			}
 		})
+	}
+}
+
+func TestModelsCLISlotMappingPreservesOptionalMetadataShape(t *testing.T) {
+	t.Parallel()
+
+	converted := slotsToGenerated([]modelinference.OperationSlot{
+		{Name: "opaque"},
+		{Name: "text", Modality: modelinference.ModalityText, Repeatable: true, MediaTypes: []string{"text/plain"}},
+	})
+	if len(converted) != 2 || converted[0].Modality != nil || converted[0].Repeatable != nil || converted[0].MediaTypes != nil {
+		t.Fatalf("optional slot mapping = %#v, want nil optional metadata", converted)
+	}
+	if converted[1].Modality == nil || *converted[1].Modality != factoryapi.ModelInvocationContentType(modelinference.ModalityText) || converted[1].Repeatable == nil || !*converted[1].Repeatable || converted[1].MediaTypes == nil {
+		t.Fatalf("declared slot mapping = %#v, want modality/repeatable/media metadata", converted[1])
 	}
 }
