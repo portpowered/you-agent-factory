@@ -473,6 +473,109 @@ func provideLocalSessionsCLIService(
 ) cli.LocalSessionsCLIService {
 	return sessioncli.NewLocalLifecycleControls(service)
 }
+func provideModelsCLIService(
+	transport standardCLIHTTPProtocol,
+	pullTransport modelsPullCLIHTTPProtocol,
+	invocation modelscli.InvocationOperation,
+	composition modelscli.CompositionScopeProvider,
+	outputFileSystem modelscli.OutputFileSystem,
+	inputFileReader modelscli.InputFileReader,
+	clock runtimeArtifactClock,
+) modelscli.Service {
+	return modelscli.NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, clock, inputFileReader, composition,
+	)
+}
+
+func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
+	if edges.ModelCLIInputReadFile != nil {
+		return modelscli.InputFileReader(edges.ModelCLIInputReadFile)
+	}
+	return os.ReadFile
+}
+
+func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.OutputFileSystem {
+	createTemp := edges.ModelCLIOutputCreateTempFile
+	if createTemp == nil {
+		createTemp = func(dir, pattern string) (interface {
+			io.Writer
+			io.Closer
+			Name() string
+		}, error) {
+			return os.CreateTemp(dir, pattern)
+		}
+	}
+	inspectPath := edges.ModelCLIOutputInspectPath
+	if inspectPath == nil {
+		inspectPath = os.Stat
+	}
+	removePath := edges.ModelCLIOutputRemovePath
+	if removePath == nil {
+		removePath = os.Remove
+	}
+	renamePath := edges.ModelCLIOutputRenamePath
+	if renamePath == nil {
+		renamePath = os.Rename
+	}
+	return modelCLIOutputFileSystem{
+		createTemp: func(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
+			temporary, err := createTemp(dir, pattern)
+			if err != nil {
+				return nil, err
+			}
+			if temporary == nil {
+				return nil, fmt.Errorf("create temporary output file returned no handle")
+			}
+			return modelCLIOutputTemporaryFile{next: temporary}, nil
+		},
+		inspectPath: inspectPath,
+		removePath:  removePath,
+		renamePath:  renamePath,
+	}
+}
+
+type modelCLIOutputFileSystem struct {
+	createTemp  func(string, string) (modelscli.OutputTemporaryFile, error)
+	inspectPath func(string) (os.FileInfo, error)
+	removePath  func(string) error
+	renamePath  func(string, string) error
+}
+
+func (fileSystem modelCLIOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
+	return fileSystem.createTemp(dir, pattern)
+}
+
+func (fileSystem modelCLIOutputFileSystem) Inspect(path string) (os.FileInfo, error) {
+	return fileSystem.inspectPath(path)
+}
+
+func (fileSystem modelCLIOutputFileSystem) Remove(path string) error {
+	return fileSystem.removePath(path)
+}
+
+func (fileSystem modelCLIOutputFileSystem) Rename(oldPath, newPath string) error {
+	return fileSystem.renamePath(oldPath, newPath)
+}
+
+type modelCLIOutputTemporaryFile struct {
+	next interface {
+		io.Writer
+		io.Closer
+		Name() string
+	}
+}
+
+func (file modelCLIOutputTemporaryFile) Write(data []byte) (int, error) {
+	return file.next.Write(data)
+}
+
+func (file modelCLIOutputTemporaryFile) Close() error {
+	return file.next.Close()
+}
+
+func (file modelCLIOutputTemporaryFile) Name() string {
+	return file.next.Name()
+}
 
 // modelsCLIScopeSource is the narrow application-composition capability used
 // to preserve the existing local Factory-derived Models scope behavior. It is

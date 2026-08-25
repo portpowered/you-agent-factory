@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.31.1
-// source: backend.proto
+// source: tests/functional/internal/support/localai/protocol/backend.proto
 
 package proto
 
@@ -19,55 +19,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Backend_Health_FullMethodName                   = "/backend.Backend/Health"
-	Backend_Free_FullMethodName                     = "/backend.Backend/Free"
-	Backend_Predict_FullMethodName                  = "/backend.Backend/Predict"
-	Backend_LoadModel_FullMethodName                = "/backend.Backend/LoadModel"
-	Backend_PredictStream_FullMethodName            = "/backend.Backend/PredictStream"
-	Backend_Embedding_FullMethodName                = "/backend.Backend/Embedding"
-	Backend_GenerateImage_FullMethodName            = "/backend.Backend/GenerateImage"
-	Backend_GenerateVideo_FullMethodName            = "/backend.Backend/GenerateVideo"
-	Backend_AudioTranscription_FullMethodName       = "/backend.Backend/AudioTranscription"
-	Backend_AudioTranscriptionStream_FullMethodName = "/backend.Backend/AudioTranscriptionStream"
-	Backend_AudioTranscriptionLive_FullMethodName   = "/backend.Backend/AudioTranscriptionLive"
-	Backend_TTS_FullMethodName                      = "/backend.Backend/TTS"
-	Backend_TTSStream_FullMethodName                = "/backend.Backend/TTSStream"
-	Backend_SoundGeneration_FullMethodName          = "/backend.Backend/SoundGeneration"
-	Backend_TokenizeString_FullMethodName           = "/backend.Backend/TokenizeString"
-	Backend_Status_FullMethodName                   = "/backend.Backend/Status"
-	Backend_Detect_FullMethodName                   = "/backend.Backend/Detect"
-	Backend_SoundDetection_FullMethodName           = "/backend.Backend/SoundDetection"
-	Backend_Depth_FullMethodName                    = "/backend.Backend/Depth"
-	Backend_FaceVerify_FullMethodName               = "/backend.Backend/FaceVerify"
-	Backend_FaceAnalyze_FullMethodName              = "/backend.Backend/FaceAnalyze"
-	Backend_VoiceVerify_FullMethodName              = "/backend.Backend/VoiceVerify"
-	Backend_VoiceAnalyze_FullMethodName             = "/backend.Backend/VoiceAnalyze"
-	Backend_VoiceEmbed_FullMethodName               = "/backend.Backend/VoiceEmbed"
-	Backend_StoresSet_FullMethodName                = "/backend.Backend/StoresSet"
-	Backend_StoresDelete_FullMethodName             = "/backend.Backend/StoresDelete"
-	Backend_StoresGet_FullMethodName                = "/backend.Backend/StoresGet"
-	Backend_StoresFind_FullMethodName               = "/backend.Backend/StoresFind"
-	Backend_Rerank_FullMethodName                   = "/backend.Backend/Rerank"
-	Backend_TokenClassify_FullMethodName            = "/backend.Backend/TokenClassify"
-	Backend_Score_FullMethodName                    = "/backend.Backend/Score"
-	Backend_GetMetrics_FullMethodName               = "/backend.Backend/GetMetrics"
-	Backend_VAD_FullMethodName                      = "/backend.Backend/VAD"
-	Backend_Diarize_FullMethodName                  = "/backend.Backend/Diarize"
-	Backend_AudioEncode_FullMethodName              = "/backend.Backend/AudioEncode"
-	Backend_AudioDecode_FullMethodName              = "/backend.Backend/AudioDecode"
-	Backend_AudioTransform_FullMethodName           = "/backend.Backend/AudioTransform"
-	Backend_AudioTransformStream_FullMethodName     = "/backend.Backend/AudioTransformStream"
-	Backend_AudioToAudioStream_FullMethodName       = "/backend.Backend/AudioToAudioStream"
-	Backend_ModelMetadata_FullMethodName            = "/backend.Backend/ModelMetadata"
-	Backend_StartFineTune_FullMethodName            = "/backend.Backend/StartFineTune"
-	Backend_FineTuneProgress_FullMethodName         = "/backend.Backend/FineTuneProgress"
-	Backend_StopFineTune_FullMethodName             = "/backend.Backend/StopFineTune"
-	Backend_ListCheckpoints_FullMethodName          = "/backend.Backend/ListCheckpoints"
-	Backend_ExportModel_FullMethodName              = "/backend.Backend/ExportModel"
-	Backend_StartQuantization_FullMethodName        = "/backend.Backend/StartQuantization"
-	Backend_QuantizationProgress_FullMethodName     = "/backend.Backend/QuantizationProgress"
-	Backend_StopQuantization_FullMethodName         = "/backend.Backend/StopQuantization"
-	Backend_Forward_FullMethodName                  = "/backend.Backend/Forward"
+	Backend_Health_FullMethodName                   = "/functional_backend.Backend/Health"
+	Backend_Free_FullMethodName                     = "/functional_backend.Backend/Free"
+	Backend_LoadModel_FullMethodName                = "/functional_backend.Backend/LoadModel"
+	Backend_Predict_FullMethodName                  = "/functional_backend.Backend/Predict"
+	Backend_PredictStream_FullMethodName            = "/functional_backend.Backend/PredictStream"
+	Backend_Embedding_FullMethodName                = "/functional_backend.Backend/Embedding"
+	Backend_TTS_FullMethodName                      = "/functional_backend.Backend/TTS"
+	Backend_TTSStream_FullMethodName                = "/functional_backend.Backend/TTSStream"
+	Backend_AudioTranscription_FullMethodName       = "/functional_backend.Backend/AudioTranscription"
+	Backend_AudioTranscriptionStream_FullMethodName = "/functional_backend.Backend/AudioTranscriptionStream"
+	Backend_Status_FullMethodName                   = "/functional_backend.Backend/Status"
 )
 
 // BackendClient is the client API for Backend service.
@@ -76,99 +38,15 @@ const (
 type BackendClient interface {
 	Health(ctx context.Context, in *HealthMessage, opts ...grpc.CallOption) (*Reply, error)
 	Free(ctx context.Context, in *HealthMessage, opts ...grpc.CallOption) (*Result, error)
-	Predict(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*Reply, error)
 	LoadModel(ctx context.Context, in *ModelOptions, opts ...grpc.CallOption) (*Result, error)
+	Predict(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*Reply, error)
 	PredictStream(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Reply], error)
 	Embedding(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*EmbeddingResult, error)
-	GenerateImage(ctx context.Context, in *GenerateImageRequest, opts ...grpc.CallOption) (*Result, error)
-	GenerateVideo(ctx context.Context, in *GenerateVideoRequest, opts ...grpc.CallOption) (*Result, error)
-	AudioTranscription(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (*TranscriptResult, error)
-	AudioTranscriptionStream(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TranscriptStreamResponse], error)
-	// AudioTranscriptionLive is the bidirectional live-microphone ASR RPC. The
-	// first message MUST carry a Config; subsequent messages carry Audio frames
-	// (mono float PCM at config.sample_rate, 16 kHz default). After a
-	// successful open the backend replies with a single ready ack
-	// (TranscriptLiveResponse{ready:true}); backends or models without
-	// cache-aware streaming support return UNIMPLEMENTED instead. Newly
-	// finalized text streams back as deltas; eou=true marks the model's
-	// end-of-utterance token. One stream spans many utterances (the decoder
-	// resets itself after each EOU). Closing the send side finalizes: the
-	// backend flushes the decoder tail and emits a terminal message carrying
-	// final_result. A second Config mid-stream resets the decode session.
-	AudioTranscriptionLive(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TranscriptLiveRequest, TranscriptLiveResponse], error)
 	TTS(ctx context.Context, in *TTSRequest, opts ...grpc.CallOption) (*Result, error)
 	TTSStream(ctx context.Context, in *TTSRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Reply], error)
-	SoundGeneration(ctx context.Context, in *SoundGenerationRequest, opts ...grpc.CallOption) (*Result, error)
-	TokenizeString(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*TokenizationResponse, error)
+	AudioTranscription(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (*TranscriptResult, error)
+	AudioTranscriptionStream(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TranscriptStreamResponse], error)
 	Status(ctx context.Context, in *HealthMessage, opts ...grpc.CallOption) (*StatusResponse, error)
-	Detect(ctx context.Context, in *DetectOptions, opts ...grpc.CallOption) (*DetectResponse, error)
-	// SoundDetection runs an audio-tagging / sound-event-classification model
-	// (e.g. CED over the AudioSet ontology) on a clip and returns scored labels.
-	SoundDetection(ctx context.Context, in *SoundDetectionRequest, opts ...grpc.CallOption) (*SoundDetectionResponse, error)
-	Depth(ctx context.Context, in *DepthRequest, opts ...grpc.CallOption) (*DepthResponse, error)
-	FaceVerify(ctx context.Context, in *FaceVerifyRequest, opts ...grpc.CallOption) (*FaceVerifyResponse, error)
-	FaceAnalyze(ctx context.Context, in *FaceAnalyzeRequest, opts ...grpc.CallOption) (*FaceAnalyzeResponse, error)
-	VoiceVerify(ctx context.Context, in *VoiceVerifyRequest, opts ...grpc.CallOption) (*VoiceVerifyResponse, error)
-	VoiceAnalyze(ctx context.Context, in *VoiceAnalyzeRequest, opts ...grpc.CallOption) (*VoiceAnalyzeResponse, error)
-	VoiceEmbed(ctx context.Context, in *VoiceEmbedRequest, opts ...grpc.CallOption) (*VoiceEmbedResponse, error)
-	StoresSet(ctx context.Context, in *StoresSetOptions, opts ...grpc.CallOption) (*Result, error)
-	StoresDelete(ctx context.Context, in *StoresDeleteOptions, opts ...grpc.CallOption) (*Result, error)
-	StoresGet(ctx context.Context, in *StoresGetOptions, opts ...grpc.CallOption) (*StoresGetResult, error)
-	StoresFind(ctx context.Context, in *StoresFindOptions, opts ...grpc.CallOption) (*StoresFindResult, error)
-	Rerank(ctx context.Context, in *RerankRequest, opts ...grpc.CallOption) (*RerankResult, error)
-	// TokenClassify runs a token-classification (NER) model on the
-	// supplied text and returns each detected entity span. Used by the
-	// PII redactor's optional NER tier — the regex tier still handles
-	// formatted hits cheaply, while this catches names, locations, and
-	// other unformatted PII that regex misses.
-	TokenClassify(ctx context.Context, in *TokenClassifyRequest, opts ...grpc.CallOption) (*TokenClassifyResponse, error)
-	// Score evaluates the model's joint log-probability of each
-	// supplied candidate continuation given a shared prompt. The
-	// prompt's KV cache is computed once and reused across candidates.
-	// Used for routing-policy multi-label classification, reranking,
-	// calibrated confidence, and reward-model scoring — any task where
-	// the consumer wants the model's confidence in a pre-specified
-	// continuation rather than a generated one.
-	Score(ctx context.Context, in *ScoreRequest, opts ...grpc.CallOption) (*ScoreResponse, error)
-	GetMetrics(ctx context.Context, in *MetricsRequest, opts ...grpc.CallOption) (*MetricsResponse, error)
-	VAD(ctx context.Context, in *VADRequest, opts ...grpc.CallOption) (*VADResponse, error)
-	Diarize(ctx context.Context, in *DiarizeRequest, opts ...grpc.CallOption) (*DiarizeResponse, error)
-	AudioEncode(ctx context.Context, in *AudioEncodeRequest, opts ...grpc.CallOption) (*AudioEncodeResult, error)
-	AudioDecode(ctx context.Context, in *AudioDecodeRequest, opts ...grpc.CallOption) (*AudioDecodeResult, error)
-	AudioTransform(ctx context.Context, in *AudioTransformRequest, opts ...grpc.CallOption) (*AudioTransformResult, error)
-	AudioTransformStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AudioTransformFrameRequest, AudioTransformFrameResponse], error)
-	// AudioToAudioStream is the bidirectional any-to-any S2S RPC. Backends
-	// that load a speech-to-speech model consume input audio frames and emit
-	// interleaved audio + transcript + tool-call deltas as typed events.
-	// Backends without S2S support return UNIMPLEMENTED.
-	AudioToAudioStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AudioToAudioRequest, AudioToAudioResponse], error)
-	ModelMetadata(ctx context.Context, in *ModelOptions, opts ...grpc.CallOption) (*ModelMetadataResponse, error)
-	// Fine-tuning RPCs
-	StartFineTune(ctx context.Context, in *FineTuneRequest, opts ...grpc.CallOption) (*FineTuneJobResult, error)
-	FineTuneProgress(ctx context.Context, in *FineTuneProgressRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FineTuneProgressUpdate], error)
-	StopFineTune(ctx context.Context, in *FineTuneStopRequest, opts ...grpc.CallOption) (*Result, error)
-	ListCheckpoints(ctx context.Context, in *ListCheckpointsRequest, opts ...grpc.CallOption) (*ListCheckpointsResponse, error)
-	ExportModel(ctx context.Context, in *ExportModelRequest, opts ...grpc.CallOption) (*Result, error)
-	// Quantization RPCs
-	StartQuantization(ctx context.Context, in *QuantizationRequest, opts ...grpc.CallOption) (*QuantizationJobResult, error)
-	QuantizationProgress(ctx context.Context, in *QuantizationProgressRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[QuantizationProgressUpdate], error)
-	StopQuantization(ctx context.Context, in *QuantizationStopRequest, opts ...grpc.CallOption) (*Result, error)
-	// Forward proxies a raw HTTP request to an upstream provider. The
-	// cloud-proxy backend implements this for passthrough-mode model
-	// configs: the client wire format is preserved end-to-end (no
-	// translation through internal proto), which means new provider
-	// fields work the day they ship. Translation-mode proxies use the
-	// standard Predict/PredictStream RPCs instead. Backends that don't
-	// support this return UNIMPLEMENTED.
-	//
-	// The request is bidirectionally streamed so large bodies can flow
-	// without buffering. In practice the first ForwardRequest carries
-	// path, method, headers, and the initial body chunk; subsequent
-	// messages append body chunks. The first ForwardReply carries the
-	// upstream status and response headers; subsequent messages stream
-	// body chunks (SSE frames or chunked transfer). Cancellation of the
-	// gRPC context closes the upstream connection.
-	Forward(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ForwardRequest, ForwardReply], error)
 }
 
 type backendClient struct {
@@ -199,20 +77,20 @@ func (c *backendClient) Free(ctx context.Context, in *HealthMessage, opts ...grp
 	return out, nil
 }
 
-func (c *backendClient) Predict(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*Reply, error) {
+func (c *backendClient) LoadModel(ctx context.Context, in *ModelOptions, opts ...grpc.CallOption) (*Result, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Reply)
-	err := c.cc.Invoke(ctx, Backend_Predict_FullMethodName, in, out, cOpts...)
+	out := new(Result)
+	err := c.cc.Invoke(ctx, Backend_LoadModel_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *backendClient) LoadModel(ctx context.Context, in *ModelOptions, opts ...grpc.CallOption) (*Result, error) {
+func (c *backendClient) Predict(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*Reply, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_LoadModel_FullMethodName, in, out, cOpts...)
+	out := new(Reply)
+	err := c.cc.Invoke(ctx, Backend_Predict_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -248,68 +126,6 @@ func (c *backendClient) Embedding(ctx context.Context, in *PredictOptions, opts 
 	return out, nil
 }
 
-func (c *backendClient) GenerateImage(ctx context.Context, in *GenerateImageRequest, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_GenerateImage_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) GenerateVideo(ctx context.Context, in *GenerateVideoRequest, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_GenerateVideo_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) AudioTranscription(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (*TranscriptResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TranscriptResult)
-	err := c.cc.Invoke(ctx, Backend_AudioTranscription_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) AudioTranscriptionStream(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TranscriptStreamResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[1], Backend_AudioTranscriptionStream_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[TranscriptRequest, TranscriptStreamResponse]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioTranscriptionStreamClient = grpc.ServerStreamingClient[TranscriptStreamResponse]
-
-func (c *backendClient) AudioTranscriptionLive(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TranscriptLiveRequest, TranscriptLiveResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[2], Backend_AudioTranscriptionLive_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[TranscriptLiveRequest, TranscriptLiveResponse]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioTranscriptionLiveClient = grpc.BidiStreamingClient[TranscriptLiveRequest, TranscriptLiveResponse]
-
 func (c *backendClient) TTS(ctx context.Context, in *TTSRequest, opts ...grpc.CallOption) (*Result, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Result)
@@ -322,7 +138,7 @@ func (c *backendClient) TTS(ctx context.Context, in *TTSRequest, opts ...grpc.Ca
 
 func (c *backendClient) TTSStream(ctx context.Context, in *TTSRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Reply], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[3], Backend_TTSStream_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[1], Backend_TTSStream_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -339,25 +155,34 @@ func (c *backendClient) TTSStream(ctx context.Context, in *TTSRequest, opts ...g
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Backend_TTSStreamClient = grpc.ServerStreamingClient[Reply]
 
-func (c *backendClient) SoundGeneration(ctx context.Context, in *SoundGenerationRequest, opts ...grpc.CallOption) (*Result, error) {
+func (c *backendClient) AudioTranscription(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (*TranscriptResult, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_SoundGeneration_FullMethodName, in, out, cOpts...)
+	out := new(TranscriptResult)
+	err := c.cc.Invoke(ctx, Backend_AudioTranscription_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *backendClient) TokenizeString(ctx context.Context, in *PredictOptions, opts ...grpc.CallOption) (*TokenizationResponse, error) {
+func (c *backendClient) AudioTranscriptionStream(ctx context.Context, in *TranscriptRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TranscriptStreamResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TokenizationResponse)
-	err := c.cc.Invoke(ctx, Backend_TokenizeString_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[2], Backend_AudioTranscriptionStream_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[TranscriptRequest, TranscriptStreamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Backend_AudioTranscriptionStreamClient = grpc.ServerStreamingClient[TranscriptStreamResponse]
 
 func (c *backendClient) Status(ctx context.Context, in *HealthMessage, opts ...grpc.CallOption) (*StatusResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -369,462 +194,21 @@ func (c *backendClient) Status(ctx context.Context, in *HealthMessage, opts ...g
 	return out, nil
 }
 
-func (c *backendClient) Detect(ctx context.Context, in *DetectOptions, opts ...grpc.CallOption) (*DetectResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DetectResponse)
-	err := c.cc.Invoke(ctx, Backend_Detect_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) SoundDetection(ctx context.Context, in *SoundDetectionRequest, opts ...grpc.CallOption) (*SoundDetectionResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SoundDetectionResponse)
-	err := c.cc.Invoke(ctx, Backend_SoundDetection_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) Depth(ctx context.Context, in *DepthRequest, opts ...grpc.CallOption) (*DepthResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DepthResponse)
-	err := c.cc.Invoke(ctx, Backend_Depth_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) FaceVerify(ctx context.Context, in *FaceVerifyRequest, opts ...grpc.CallOption) (*FaceVerifyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(FaceVerifyResponse)
-	err := c.cc.Invoke(ctx, Backend_FaceVerify_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) FaceAnalyze(ctx context.Context, in *FaceAnalyzeRequest, opts ...grpc.CallOption) (*FaceAnalyzeResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(FaceAnalyzeResponse)
-	err := c.cc.Invoke(ctx, Backend_FaceAnalyze_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) VoiceVerify(ctx context.Context, in *VoiceVerifyRequest, opts ...grpc.CallOption) (*VoiceVerifyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VoiceVerifyResponse)
-	err := c.cc.Invoke(ctx, Backend_VoiceVerify_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) VoiceAnalyze(ctx context.Context, in *VoiceAnalyzeRequest, opts ...grpc.CallOption) (*VoiceAnalyzeResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VoiceAnalyzeResponse)
-	err := c.cc.Invoke(ctx, Backend_VoiceAnalyze_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) VoiceEmbed(ctx context.Context, in *VoiceEmbedRequest, opts ...grpc.CallOption) (*VoiceEmbedResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VoiceEmbedResponse)
-	err := c.cc.Invoke(ctx, Backend_VoiceEmbed_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) StoresSet(ctx context.Context, in *StoresSetOptions, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_StoresSet_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) StoresDelete(ctx context.Context, in *StoresDeleteOptions, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_StoresDelete_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) StoresGet(ctx context.Context, in *StoresGetOptions, opts ...grpc.CallOption) (*StoresGetResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StoresGetResult)
-	err := c.cc.Invoke(ctx, Backend_StoresGet_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) StoresFind(ctx context.Context, in *StoresFindOptions, opts ...grpc.CallOption) (*StoresFindResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StoresFindResult)
-	err := c.cc.Invoke(ctx, Backend_StoresFind_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) Rerank(ctx context.Context, in *RerankRequest, opts ...grpc.CallOption) (*RerankResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RerankResult)
-	err := c.cc.Invoke(ctx, Backend_Rerank_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) TokenClassify(ctx context.Context, in *TokenClassifyRequest, opts ...grpc.CallOption) (*TokenClassifyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(TokenClassifyResponse)
-	err := c.cc.Invoke(ctx, Backend_TokenClassify_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) Score(ctx context.Context, in *ScoreRequest, opts ...grpc.CallOption) (*ScoreResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ScoreResponse)
-	err := c.cc.Invoke(ctx, Backend_Score_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) GetMetrics(ctx context.Context, in *MetricsRequest, opts ...grpc.CallOption) (*MetricsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(MetricsResponse)
-	err := c.cc.Invoke(ctx, Backend_GetMetrics_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) VAD(ctx context.Context, in *VADRequest, opts ...grpc.CallOption) (*VADResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(VADResponse)
-	err := c.cc.Invoke(ctx, Backend_VAD_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) Diarize(ctx context.Context, in *DiarizeRequest, opts ...grpc.CallOption) (*DiarizeResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DiarizeResponse)
-	err := c.cc.Invoke(ctx, Backend_Diarize_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) AudioEncode(ctx context.Context, in *AudioEncodeRequest, opts ...grpc.CallOption) (*AudioEncodeResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AudioEncodeResult)
-	err := c.cc.Invoke(ctx, Backend_AudioEncode_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) AudioDecode(ctx context.Context, in *AudioDecodeRequest, opts ...grpc.CallOption) (*AudioDecodeResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AudioDecodeResult)
-	err := c.cc.Invoke(ctx, Backend_AudioDecode_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) AudioTransform(ctx context.Context, in *AudioTransformRequest, opts ...grpc.CallOption) (*AudioTransformResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AudioTransformResult)
-	err := c.cc.Invoke(ctx, Backend_AudioTransform_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) AudioTransformStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AudioTransformFrameRequest, AudioTransformFrameResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[4], Backend_AudioTransformStream_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[AudioTransformFrameRequest, AudioTransformFrameResponse]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioTransformStreamClient = grpc.BidiStreamingClient[AudioTransformFrameRequest, AudioTransformFrameResponse]
-
-func (c *backendClient) AudioToAudioStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[AudioToAudioRequest, AudioToAudioResponse], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[5], Backend_AudioToAudioStream_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[AudioToAudioRequest, AudioToAudioResponse]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioToAudioStreamClient = grpc.BidiStreamingClient[AudioToAudioRequest, AudioToAudioResponse]
-
-func (c *backendClient) ModelMetadata(ctx context.Context, in *ModelOptions, opts ...grpc.CallOption) (*ModelMetadataResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ModelMetadataResponse)
-	err := c.cc.Invoke(ctx, Backend_ModelMetadata_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) StartFineTune(ctx context.Context, in *FineTuneRequest, opts ...grpc.CallOption) (*FineTuneJobResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(FineTuneJobResult)
-	err := c.cc.Invoke(ctx, Backend_StartFineTune_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) FineTuneProgress(ctx context.Context, in *FineTuneProgressRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FineTuneProgressUpdate], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[6], Backend_FineTuneProgress_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[FineTuneProgressRequest, FineTuneProgressUpdate]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_FineTuneProgressClient = grpc.ServerStreamingClient[FineTuneProgressUpdate]
-
-func (c *backendClient) StopFineTune(ctx context.Context, in *FineTuneStopRequest, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_StopFineTune_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) ListCheckpoints(ctx context.Context, in *ListCheckpointsRequest, opts ...grpc.CallOption) (*ListCheckpointsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListCheckpointsResponse)
-	err := c.cc.Invoke(ctx, Backend_ListCheckpoints_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) ExportModel(ctx context.Context, in *ExportModelRequest, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_ExportModel_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) StartQuantization(ctx context.Context, in *QuantizationRequest, opts ...grpc.CallOption) (*QuantizationJobResult, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(QuantizationJobResult)
-	err := c.cc.Invoke(ctx, Backend_StartQuantization_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) QuantizationProgress(ctx context.Context, in *QuantizationProgressRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[QuantizationProgressUpdate], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[7], Backend_QuantizationProgress_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[QuantizationProgressRequest, QuantizationProgressUpdate]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_QuantizationProgressClient = grpc.ServerStreamingClient[QuantizationProgressUpdate]
-
-func (c *backendClient) StopQuantization(ctx context.Context, in *QuantizationStopRequest, opts ...grpc.CallOption) (*Result, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Result)
-	err := c.cc.Invoke(ctx, Backend_StopQuantization_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *backendClient) Forward(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ForwardRequest, ForwardReply], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Backend_ServiceDesc.Streams[8], Backend_Forward_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[ForwardRequest, ForwardReply]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_ForwardClient = grpc.BidiStreamingClient[ForwardRequest, ForwardReply]
-
 // BackendServer is the server API for Backend service.
 // All implementations must embed UnimplementedBackendServer
 // for forward compatibility.
 type BackendServer interface {
 	Health(context.Context, *HealthMessage) (*Reply, error)
 	Free(context.Context, *HealthMessage) (*Result, error)
-	Predict(context.Context, *PredictOptions) (*Reply, error)
 	LoadModel(context.Context, *ModelOptions) (*Result, error)
+	Predict(context.Context, *PredictOptions) (*Reply, error)
 	PredictStream(*PredictOptions, grpc.ServerStreamingServer[Reply]) error
 	Embedding(context.Context, *PredictOptions) (*EmbeddingResult, error)
-	GenerateImage(context.Context, *GenerateImageRequest) (*Result, error)
-	GenerateVideo(context.Context, *GenerateVideoRequest) (*Result, error)
-	AudioTranscription(context.Context, *TranscriptRequest) (*TranscriptResult, error)
-	AudioTranscriptionStream(*TranscriptRequest, grpc.ServerStreamingServer[TranscriptStreamResponse]) error
-	// AudioTranscriptionLive is the bidirectional live-microphone ASR RPC. The
-	// first message MUST carry a Config; subsequent messages carry Audio frames
-	// (mono float PCM at config.sample_rate, 16 kHz default). After a
-	// successful open the backend replies with a single ready ack
-	// (TranscriptLiveResponse{ready:true}); backends or models without
-	// cache-aware streaming support return UNIMPLEMENTED instead. Newly
-	// finalized text streams back as deltas; eou=true marks the model's
-	// end-of-utterance token. One stream spans many utterances (the decoder
-	// resets itself after each EOU). Closing the send side finalizes: the
-	// backend flushes the decoder tail and emits a terminal message carrying
-	// final_result. A second Config mid-stream resets the decode session.
-	AudioTranscriptionLive(grpc.BidiStreamingServer[TranscriptLiveRequest, TranscriptLiveResponse]) error
 	TTS(context.Context, *TTSRequest) (*Result, error)
 	TTSStream(*TTSRequest, grpc.ServerStreamingServer[Reply]) error
-	SoundGeneration(context.Context, *SoundGenerationRequest) (*Result, error)
-	TokenizeString(context.Context, *PredictOptions) (*TokenizationResponse, error)
+	AudioTranscription(context.Context, *TranscriptRequest) (*TranscriptResult, error)
+	AudioTranscriptionStream(*TranscriptRequest, grpc.ServerStreamingServer[TranscriptStreamResponse]) error
 	Status(context.Context, *HealthMessage) (*StatusResponse, error)
-	Detect(context.Context, *DetectOptions) (*DetectResponse, error)
-	// SoundDetection runs an audio-tagging / sound-event-classification model
-	// (e.g. CED over the AudioSet ontology) on a clip and returns scored labels.
-	SoundDetection(context.Context, *SoundDetectionRequest) (*SoundDetectionResponse, error)
-	Depth(context.Context, *DepthRequest) (*DepthResponse, error)
-	FaceVerify(context.Context, *FaceVerifyRequest) (*FaceVerifyResponse, error)
-	FaceAnalyze(context.Context, *FaceAnalyzeRequest) (*FaceAnalyzeResponse, error)
-	VoiceVerify(context.Context, *VoiceVerifyRequest) (*VoiceVerifyResponse, error)
-	VoiceAnalyze(context.Context, *VoiceAnalyzeRequest) (*VoiceAnalyzeResponse, error)
-	VoiceEmbed(context.Context, *VoiceEmbedRequest) (*VoiceEmbedResponse, error)
-	StoresSet(context.Context, *StoresSetOptions) (*Result, error)
-	StoresDelete(context.Context, *StoresDeleteOptions) (*Result, error)
-	StoresGet(context.Context, *StoresGetOptions) (*StoresGetResult, error)
-	StoresFind(context.Context, *StoresFindOptions) (*StoresFindResult, error)
-	Rerank(context.Context, *RerankRequest) (*RerankResult, error)
-	// TokenClassify runs a token-classification (NER) model on the
-	// supplied text and returns each detected entity span. Used by the
-	// PII redactor's optional NER tier — the regex tier still handles
-	// formatted hits cheaply, while this catches names, locations, and
-	// other unformatted PII that regex misses.
-	TokenClassify(context.Context, *TokenClassifyRequest) (*TokenClassifyResponse, error)
-	// Score evaluates the model's joint log-probability of each
-	// supplied candidate continuation given a shared prompt. The
-	// prompt's KV cache is computed once and reused across candidates.
-	// Used for routing-policy multi-label classification, reranking,
-	// calibrated confidence, and reward-model scoring — any task where
-	// the consumer wants the model's confidence in a pre-specified
-	// continuation rather than a generated one.
-	Score(context.Context, *ScoreRequest) (*ScoreResponse, error)
-	GetMetrics(context.Context, *MetricsRequest) (*MetricsResponse, error)
-	VAD(context.Context, *VADRequest) (*VADResponse, error)
-	Diarize(context.Context, *DiarizeRequest) (*DiarizeResponse, error)
-	AudioEncode(context.Context, *AudioEncodeRequest) (*AudioEncodeResult, error)
-	AudioDecode(context.Context, *AudioDecodeRequest) (*AudioDecodeResult, error)
-	AudioTransform(context.Context, *AudioTransformRequest) (*AudioTransformResult, error)
-	AudioTransformStream(grpc.BidiStreamingServer[AudioTransformFrameRequest, AudioTransformFrameResponse]) error
-	// AudioToAudioStream is the bidirectional any-to-any S2S RPC. Backends
-	// that load a speech-to-speech model consume input audio frames and emit
-	// interleaved audio + transcript + tool-call deltas as typed events.
-	// Backends without S2S support return UNIMPLEMENTED.
-	AudioToAudioStream(grpc.BidiStreamingServer[AudioToAudioRequest, AudioToAudioResponse]) error
-	ModelMetadata(context.Context, *ModelOptions) (*ModelMetadataResponse, error)
-	// Fine-tuning RPCs
-	StartFineTune(context.Context, *FineTuneRequest) (*FineTuneJobResult, error)
-	FineTuneProgress(*FineTuneProgressRequest, grpc.ServerStreamingServer[FineTuneProgressUpdate]) error
-	StopFineTune(context.Context, *FineTuneStopRequest) (*Result, error)
-	ListCheckpoints(context.Context, *ListCheckpointsRequest) (*ListCheckpointsResponse, error)
-	ExportModel(context.Context, *ExportModelRequest) (*Result, error)
-	// Quantization RPCs
-	StartQuantization(context.Context, *QuantizationRequest) (*QuantizationJobResult, error)
-	QuantizationProgress(*QuantizationProgressRequest, grpc.ServerStreamingServer[QuantizationProgressUpdate]) error
-	StopQuantization(context.Context, *QuantizationStopRequest) (*Result, error)
-	// Forward proxies a raw HTTP request to an upstream provider. The
-	// cloud-proxy backend implements this for passthrough-mode model
-	// configs: the client wire format is preserved end-to-end (no
-	// translation through internal proto), which means new provider
-	// fields work the day they ship. Translation-mode proxies use the
-	// standard Predict/PredictStream RPCs instead. Backends that don't
-	// support this return UNIMPLEMENTED.
-	//
-	// The request is bidirectionally streamed so large bodies can flow
-	// without buffering. In practice the first ForwardRequest carries
-	// path, method, headers, and the initial body chunk; subsequent
-	// messages append body chunks. The first ForwardReply carries the
-	// upstream status and response headers; subsequent messages stream
-	// body chunks (SSE frames or chunked transfer). Cancellation of the
-	// gRPC context closes the upstream connection.
-	Forward(grpc.BidiStreamingServer[ForwardRequest, ForwardReply]) error
 	mustEmbedUnimplementedBackendServer()
 }
 
@@ -841,11 +225,11 @@ func (UnimplementedBackendServer) Health(context.Context, *HealthMessage) (*Repl
 func (UnimplementedBackendServer) Free(context.Context, *HealthMessage) (*Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Free not implemented")
 }
-func (UnimplementedBackendServer) Predict(context.Context, *PredictOptions) (*Reply, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Predict not implemented")
-}
 func (UnimplementedBackendServer) LoadModel(context.Context, *ModelOptions) (*Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LoadModel not implemented")
+}
+func (UnimplementedBackendServer) Predict(context.Context, *PredictOptions) (*Reply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Predict not implemented")
 }
 func (UnimplementedBackendServer) PredictStream(*PredictOptions, grpc.ServerStreamingServer[Reply]) error {
 	return status.Errorf(codes.Unimplemented, "method PredictStream not implemented")
@@ -853,11 +237,11 @@ func (UnimplementedBackendServer) PredictStream(*PredictOptions, grpc.ServerStre
 func (UnimplementedBackendServer) Embedding(context.Context, *PredictOptions) (*EmbeddingResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Embedding not implemented")
 }
-func (UnimplementedBackendServer) GenerateImage(context.Context, *GenerateImageRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GenerateImage not implemented")
+func (UnimplementedBackendServer) TTS(context.Context, *TTSRequest) (*Result, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TTS not implemented")
 }
-func (UnimplementedBackendServer) GenerateVideo(context.Context, *GenerateVideoRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GenerateVideo not implemented")
+func (UnimplementedBackendServer) TTSStream(*TTSRequest, grpc.ServerStreamingServer[Reply]) error {
+	return status.Errorf(codes.Unimplemented, "method TTSStream not implemented")
 }
 func (UnimplementedBackendServer) AudioTranscription(context.Context, *TranscriptRequest) (*TranscriptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AudioTranscription not implemented")
@@ -865,122 +249,8 @@ func (UnimplementedBackendServer) AudioTranscription(context.Context, *Transcrip
 func (UnimplementedBackendServer) AudioTranscriptionStream(*TranscriptRequest, grpc.ServerStreamingServer[TranscriptStreamResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method AudioTranscriptionStream not implemented")
 }
-func (UnimplementedBackendServer) AudioTranscriptionLive(grpc.BidiStreamingServer[TranscriptLiveRequest, TranscriptLiveResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method AudioTranscriptionLive not implemented")
-}
-func (UnimplementedBackendServer) TTS(context.Context, *TTSRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TTS not implemented")
-}
-func (UnimplementedBackendServer) TTSStream(*TTSRequest, grpc.ServerStreamingServer[Reply]) error {
-	return status.Errorf(codes.Unimplemented, "method TTSStream not implemented")
-}
-func (UnimplementedBackendServer) SoundGeneration(context.Context, *SoundGenerationRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SoundGeneration not implemented")
-}
-func (UnimplementedBackendServer) TokenizeString(context.Context, *PredictOptions) (*TokenizationResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TokenizeString not implemented")
-}
 func (UnimplementedBackendServer) Status(context.Context, *HealthMessage) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
-}
-func (UnimplementedBackendServer) Detect(context.Context, *DetectOptions) (*DetectResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Detect not implemented")
-}
-func (UnimplementedBackendServer) SoundDetection(context.Context, *SoundDetectionRequest) (*SoundDetectionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SoundDetection not implemented")
-}
-func (UnimplementedBackendServer) Depth(context.Context, *DepthRequest) (*DepthResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Depth not implemented")
-}
-func (UnimplementedBackendServer) FaceVerify(context.Context, *FaceVerifyRequest) (*FaceVerifyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method FaceVerify not implemented")
-}
-func (UnimplementedBackendServer) FaceAnalyze(context.Context, *FaceAnalyzeRequest) (*FaceAnalyzeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method FaceAnalyze not implemented")
-}
-func (UnimplementedBackendServer) VoiceVerify(context.Context, *VoiceVerifyRequest) (*VoiceVerifyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method VoiceVerify not implemented")
-}
-func (UnimplementedBackendServer) VoiceAnalyze(context.Context, *VoiceAnalyzeRequest) (*VoiceAnalyzeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method VoiceAnalyze not implemented")
-}
-func (UnimplementedBackendServer) VoiceEmbed(context.Context, *VoiceEmbedRequest) (*VoiceEmbedResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method VoiceEmbed not implemented")
-}
-func (UnimplementedBackendServer) StoresSet(context.Context, *StoresSetOptions) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StoresSet not implemented")
-}
-func (UnimplementedBackendServer) StoresDelete(context.Context, *StoresDeleteOptions) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StoresDelete not implemented")
-}
-func (UnimplementedBackendServer) StoresGet(context.Context, *StoresGetOptions) (*StoresGetResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StoresGet not implemented")
-}
-func (UnimplementedBackendServer) StoresFind(context.Context, *StoresFindOptions) (*StoresFindResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StoresFind not implemented")
-}
-func (UnimplementedBackendServer) Rerank(context.Context, *RerankRequest) (*RerankResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Rerank not implemented")
-}
-func (UnimplementedBackendServer) TokenClassify(context.Context, *TokenClassifyRequest) (*TokenClassifyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TokenClassify not implemented")
-}
-func (UnimplementedBackendServer) Score(context.Context, *ScoreRequest) (*ScoreResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Score not implemented")
-}
-func (UnimplementedBackendServer) GetMetrics(context.Context, *MetricsRequest) (*MetricsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetMetrics not implemented")
-}
-func (UnimplementedBackendServer) VAD(context.Context, *VADRequest) (*VADResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method VAD not implemented")
-}
-func (UnimplementedBackendServer) Diarize(context.Context, *DiarizeRequest) (*DiarizeResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Diarize not implemented")
-}
-func (UnimplementedBackendServer) AudioEncode(context.Context, *AudioEncodeRequest) (*AudioEncodeResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AudioEncode not implemented")
-}
-func (UnimplementedBackendServer) AudioDecode(context.Context, *AudioDecodeRequest) (*AudioDecodeResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AudioDecode not implemented")
-}
-func (UnimplementedBackendServer) AudioTransform(context.Context, *AudioTransformRequest) (*AudioTransformResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AudioTransform not implemented")
-}
-func (UnimplementedBackendServer) AudioTransformStream(grpc.BidiStreamingServer[AudioTransformFrameRequest, AudioTransformFrameResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method AudioTransformStream not implemented")
-}
-func (UnimplementedBackendServer) AudioToAudioStream(grpc.BidiStreamingServer[AudioToAudioRequest, AudioToAudioResponse]) error {
-	return status.Errorf(codes.Unimplemented, "method AudioToAudioStream not implemented")
-}
-func (UnimplementedBackendServer) ModelMetadata(context.Context, *ModelOptions) (*ModelMetadataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ModelMetadata not implemented")
-}
-func (UnimplementedBackendServer) StartFineTune(context.Context, *FineTuneRequest) (*FineTuneJobResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StartFineTune not implemented")
-}
-func (UnimplementedBackendServer) FineTuneProgress(*FineTuneProgressRequest, grpc.ServerStreamingServer[FineTuneProgressUpdate]) error {
-	return status.Errorf(codes.Unimplemented, "method FineTuneProgress not implemented")
-}
-func (UnimplementedBackendServer) StopFineTune(context.Context, *FineTuneStopRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StopFineTune not implemented")
-}
-func (UnimplementedBackendServer) ListCheckpoints(context.Context, *ListCheckpointsRequest) (*ListCheckpointsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListCheckpoints not implemented")
-}
-func (UnimplementedBackendServer) ExportModel(context.Context, *ExportModelRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ExportModel not implemented")
-}
-func (UnimplementedBackendServer) StartQuantization(context.Context, *QuantizationRequest) (*QuantizationJobResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StartQuantization not implemented")
-}
-func (UnimplementedBackendServer) QuantizationProgress(*QuantizationProgressRequest, grpc.ServerStreamingServer[QuantizationProgressUpdate]) error {
-	return status.Errorf(codes.Unimplemented, "method QuantizationProgress not implemented")
-}
-func (UnimplementedBackendServer) StopQuantization(context.Context, *QuantizationStopRequest) (*Result, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method StopQuantization not implemented")
-}
-func (UnimplementedBackendServer) Forward(grpc.BidiStreamingServer[ForwardRequest, ForwardReply]) error {
-	return status.Errorf(codes.Unimplemented, "method Forward not implemented")
 }
 func (UnimplementedBackendServer) mustEmbedUnimplementedBackendServer() {}
 func (UnimplementedBackendServer) testEmbeddedByValue()                 {}
@@ -1039,24 +309,6 @@ func _Backend_Free_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Backend_Predict_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PredictOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).Predict(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_Predict_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).Predict(ctx, req.(*PredictOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Backend_LoadModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ModelOptions)
 	if err := dec(in); err != nil {
@@ -1071,6 +323,24 @@ func _Backend_LoadModel_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(BackendServer).LoadModel(ctx, req.(*ModelOptions))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Backend_Predict_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PredictOptions)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackendServer).Predict(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Backend_Predict_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackendServer).Predict(ctx, req.(*PredictOptions))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1104,41 +374,34 @@ func _Backend_Embedding_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Backend_GenerateImage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GenerateImageRequest)
+func _Backend_TTS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TTSRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(BackendServer).GenerateImage(ctx, in)
+		return srv.(BackendServer).TTS(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Backend_GenerateImage_FullMethodName,
+		FullMethod: Backend_TTS_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).GenerateImage(ctx, req.(*GenerateImageRequest))
+		return srv.(BackendServer).TTS(ctx, req.(*TTSRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Backend_GenerateVideo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GenerateVideoRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _Backend_TTSStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(TTSRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(BackendServer).GenerateVideo(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_GenerateVideo_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).GenerateVideo(ctx, req.(*GenerateVideoRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(BackendServer).TTSStream(m, &grpc.GenericServerStream[TTSRequest, Reply]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Backend_TTSStreamServer = grpc.ServerStreamingServer[Reply]
 
 func _Backend_AudioTranscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TranscriptRequest)
@@ -1169,78 +432,6 @@ func _Backend_AudioTranscriptionStream_Handler(srv interface{}, stream grpc.Serv
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Backend_AudioTranscriptionStreamServer = grpc.ServerStreamingServer[TranscriptStreamResponse]
 
-func _Backend_AudioTranscriptionLive_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(BackendServer).AudioTranscriptionLive(&grpc.GenericServerStream[TranscriptLiveRequest, TranscriptLiveResponse]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioTranscriptionLiveServer = grpc.BidiStreamingServer[TranscriptLiveRequest, TranscriptLiveResponse]
-
-func _Backend_TTS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TTSRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).TTS(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_TTS_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).TTS(ctx, req.(*TTSRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_TTSStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(TTSRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(BackendServer).TTSStream(m, &grpc.GenericServerStream[TTSRequest, Reply]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_TTSStreamServer = grpc.ServerStreamingServer[Reply]
-
-func _Backend_SoundGeneration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SoundGenerationRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).SoundGeneration(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_SoundGeneration_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).SoundGeneration(ctx, req.(*SoundGenerationRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_TokenizeString_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PredictOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).TokenizeString(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_TokenizeString_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).TokenizeString(ctx, req.(*PredictOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Backend_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HealthMessage)
 	if err := dec(in); err != nil {
@@ -1259,558 +450,11 @@ func _Backend_Status_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Backend_Detect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DetectOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).Detect(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_Detect_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).Detect(ctx, req.(*DetectOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_SoundDetection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SoundDetectionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).SoundDetection(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_SoundDetection_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).SoundDetection(ctx, req.(*SoundDetectionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_Depth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DepthRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).Depth(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_Depth_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).Depth(ctx, req.(*DepthRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_FaceVerify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FaceVerifyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).FaceVerify(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_FaceVerify_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).FaceVerify(ctx, req.(*FaceVerifyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_FaceAnalyze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FaceAnalyzeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).FaceAnalyze(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_FaceAnalyze_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).FaceAnalyze(ctx, req.(*FaceAnalyzeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_VoiceVerify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VoiceVerifyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).VoiceVerify(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_VoiceVerify_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).VoiceVerify(ctx, req.(*VoiceVerifyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_VoiceAnalyze_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VoiceAnalyzeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).VoiceAnalyze(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_VoiceAnalyze_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).VoiceAnalyze(ctx, req.(*VoiceAnalyzeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_VoiceEmbed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VoiceEmbedRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).VoiceEmbed(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_VoiceEmbed_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).VoiceEmbed(ctx, req.(*VoiceEmbedRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_StoresSet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StoresSetOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StoresSet(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StoresSet_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StoresSet(ctx, req.(*StoresSetOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_StoresDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StoresDeleteOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StoresDelete(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StoresDelete_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StoresDelete(ctx, req.(*StoresDeleteOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_StoresGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StoresGetOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StoresGet(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StoresGet_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StoresGet(ctx, req.(*StoresGetOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_StoresFind_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StoresFindOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StoresFind(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StoresFind_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StoresFind(ctx, req.(*StoresFindOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_Rerank_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RerankRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).Rerank(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_Rerank_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).Rerank(ctx, req.(*RerankRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_TokenClassify_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TokenClassifyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).TokenClassify(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_TokenClassify_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).TokenClassify(ctx, req.(*TokenClassifyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_Score_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ScoreRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).Score(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_Score_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).Score(ctx, req.(*ScoreRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_GetMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MetricsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).GetMetrics(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_GetMetrics_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).GetMetrics(ctx, req.(*MetricsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_VAD_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VADRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).VAD(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_VAD_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).VAD(ctx, req.(*VADRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_Diarize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DiarizeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).Diarize(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_Diarize_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).Diarize(ctx, req.(*DiarizeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_AudioEncode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AudioEncodeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).AudioEncode(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_AudioEncode_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).AudioEncode(ctx, req.(*AudioEncodeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_AudioDecode_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AudioDecodeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).AudioDecode(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_AudioDecode_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).AudioDecode(ctx, req.(*AudioDecodeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_AudioTransform_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AudioTransformRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).AudioTransform(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_AudioTransform_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).AudioTransform(ctx, req.(*AudioTransformRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_AudioTransformStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(BackendServer).AudioTransformStream(&grpc.GenericServerStream[AudioTransformFrameRequest, AudioTransformFrameResponse]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioTransformStreamServer = grpc.BidiStreamingServer[AudioTransformFrameRequest, AudioTransformFrameResponse]
-
-func _Backend_AudioToAudioStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(BackendServer).AudioToAudioStream(&grpc.GenericServerStream[AudioToAudioRequest, AudioToAudioResponse]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_AudioToAudioStreamServer = grpc.BidiStreamingServer[AudioToAudioRequest, AudioToAudioResponse]
-
-func _Backend_ModelMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ModelOptions)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).ModelMetadata(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_ModelMetadata_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).ModelMetadata(ctx, req.(*ModelOptions))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_StartFineTune_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FineTuneRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StartFineTune(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StartFineTune_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StartFineTune(ctx, req.(*FineTuneRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_FineTuneProgress_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(FineTuneProgressRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(BackendServer).FineTuneProgress(m, &grpc.GenericServerStream[FineTuneProgressRequest, FineTuneProgressUpdate]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_FineTuneProgressServer = grpc.ServerStreamingServer[FineTuneProgressUpdate]
-
-func _Backend_StopFineTune_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FineTuneStopRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StopFineTune(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StopFineTune_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StopFineTune(ctx, req.(*FineTuneStopRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_ListCheckpoints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListCheckpointsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).ListCheckpoints(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_ListCheckpoints_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).ListCheckpoints(ctx, req.(*ListCheckpointsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_ExportModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExportModelRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).ExportModel(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_ExportModel_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).ExportModel(ctx, req.(*ExportModelRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_StartQuantization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QuantizationRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StartQuantization(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StartQuantization_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StartQuantization(ctx, req.(*QuantizationRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_QuantizationProgress_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(QuantizationProgressRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(BackendServer).QuantizationProgress(m, &grpc.GenericServerStream[QuantizationProgressRequest, QuantizationProgressUpdate]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_QuantizationProgressServer = grpc.ServerStreamingServer[QuantizationProgressUpdate]
-
-func _Backend_StopQuantization_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(QuantizationStopRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(BackendServer).StopQuantization(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Backend_StopQuantization_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BackendServer).StopQuantization(ctx, req.(*QuantizationStopRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Backend_Forward_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(BackendServer).Forward(&grpc.GenericServerStream[ForwardRequest, ForwardReply]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type Backend_ForwardServer = grpc.BidiStreamingServer[ForwardRequest, ForwardReply]
-
 // Backend_ServiceDesc is the grpc.ServiceDesc for Backend service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Backend_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "backend.Backend",
+	ServiceName: "functional_backend.Backend",
 	HandlerType: (*BackendServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -1822,156 +466,28 @@ var Backend_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Backend_Free_Handler,
 		},
 		{
-			MethodName: "Predict",
-			Handler:    _Backend_Predict_Handler,
-		},
-		{
 			MethodName: "LoadModel",
 			Handler:    _Backend_LoadModel_Handler,
+		},
+		{
+			MethodName: "Predict",
+			Handler:    _Backend_Predict_Handler,
 		},
 		{
 			MethodName: "Embedding",
 			Handler:    _Backend_Embedding_Handler,
 		},
 		{
-			MethodName: "GenerateImage",
-			Handler:    _Backend_GenerateImage_Handler,
-		},
-		{
-			MethodName: "GenerateVideo",
-			Handler:    _Backend_GenerateVideo_Handler,
+			MethodName: "TTS",
+			Handler:    _Backend_TTS_Handler,
 		},
 		{
 			MethodName: "AudioTranscription",
 			Handler:    _Backend_AudioTranscription_Handler,
 		},
 		{
-			MethodName: "TTS",
-			Handler:    _Backend_TTS_Handler,
-		},
-		{
-			MethodName: "SoundGeneration",
-			Handler:    _Backend_SoundGeneration_Handler,
-		},
-		{
-			MethodName: "TokenizeString",
-			Handler:    _Backend_TokenizeString_Handler,
-		},
-		{
 			MethodName: "Status",
 			Handler:    _Backend_Status_Handler,
-		},
-		{
-			MethodName: "Detect",
-			Handler:    _Backend_Detect_Handler,
-		},
-		{
-			MethodName: "SoundDetection",
-			Handler:    _Backend_SoundDetection_Handler,
-		},
-		{
-			MethodName: "Depth",
-			Handler:    _Backend_Depth_Handler,
-		},
-		{
-			MethodName: "FaceVerify",
-			Handler:    _Backend_FaceVerify_Handler,
-		},
-		{
-			MethodName: "FaceAnalyze",
-			Handler:    _Backend_FaceAnalyze_Handler,
-		},
-		{
-			MethodName: "VoiceVerify",
-			Handler:    _Backend_VoiceVerify_Handler,
-		},
-		{
-			MethodName: "VoiceAnalyze",
-			Handler:    _Backend_VoiceAnalyze_Handler,
-		},
-		{
-			MethodName: "VoiceEmbed",
-			Handler:    _Backend_VoiceEmbed_Handler,
-		},
-		{
-			MethodName: "StoresSet",
-			Handler:    _Backend_StoresSet_Handler,
-		},
-		{
-			MethodName: "StoresDelete",
-			Handler:    _Backend_StoresDelete_Handler,
-		},
-		{
-			MethodName: "StoresGet",
-			Handler:    _Backend_StoresGet_Handler,
-		},
-		{
-			MethodName: "StoresFind",
-			Handler:    _Backend_StoresFind_Handler,
-		},
-		{
-			MethodName: "Rerank",
-			Handler:    _Backend_Rerank_Handler,
-		},
-		{
-			MethodName: "TokenClassify",
-			Handler:    _Backend_TokenClassify_Handler,
-		},
-		{
-			MethodName: "Score",
-			Handler:    _Backend_Score_Handler,
-		},
-		{
-			MethodName: "GetMetrics",
-			Handler:    _Backend_GetMetrics_Handler,
-		},
-		{
-			MethodName: "VAD",
-			Handler:    _Backend_VAD_Handler,
-		},
-		{
-			MethodName: "Diarize",
-			Handler:    _Backend_Diarize_Handler,
-		},
-		{
-			MethodName: "AudioEncode",
-			Handler:    _Backend_AudioEncode_Handler,
-		},
-		{
-			MethodName: "AudioDecode",
-			Handler:    _Backend_AudioDecode_Handler,
-		},
-		{
-			MethodName: "AudioTransform",
-			Handler:    _Backend_AudioTransform_Handler,
-		},
-		{
-			MethodName: "ModelMetadata",
-			Handler:    _Backend_ModelMetadata_Handler,
-		},
-		{
-			MethodName: "StartFineTune",
-			Handler:    _Backend_StartFineTune_Handler,
-		},
-		{
-			MethodName: "StopFineTune",
-			Handler:    _Backend_StopFineTune_Handler,
-		},
-		{
-			MethodName: "ListCheckpoints",
-			Handler:    _Backend_ListCheckpoints_Handler,
-		},
-		{
-			MethodName: "ExportModel",
-			Handler:    _Backend_ExportModel_Handler,
-		},
-		{
-			MethodName: "StartQuantization",
-			Handler:    _Backend_StartQuantization_Handler,
-		},
-		{
-			MethodName: "StopQuantization",
-			Handler:    _Backend_StopQuantization_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -1981,49 +497,15 @@ var Backend_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "AudioTranscriptionStream",
-			Handler:       _Backend_AudioTranscriptionStream_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "AudioTranscriptionLive",
-			Handler:       _Backend_AudioTranscriptionLive_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
 			StreamName:    "TTSStream",
 			Handler:       _Backend_TTSStream_Handler,
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "AudioTransformStream",
-			Handler:       _Backend_AudioTransformStream_Handler,
+			StreamName:    "AudioTranscriptionStream",
+			Handler:       _Backend_AudioTranscriptionStream_Handler,
 			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "AudioToAudioStream",
-			Handler:       _Backend_AudioToAudioStream_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
-		},
-		{
-			StreamName:    "FineTuneProgress",
-			Handler:       _Backend_FineTuneProgress_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "QuantizationProgress",
-			Handler:       _Backend_QuantizationProgress_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "Forward",
-			Handler:       _Backend_Forward_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
 		},
 	},
-	Metadata: "backend.proto",
+	Metadata: "tests/functional/internal/support/localai/protocol/backend.proto",
 }

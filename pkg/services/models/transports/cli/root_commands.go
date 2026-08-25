@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
@@ -408,95 +407,4 @@ func removeResultToGenerated(result modelinference.RemoveModelAssetsResult) fact
 		Outcome:      factoryapi.ModelRemoveOutcome(result.Outcome),
 		BytesRemoved: result.BytesRemoved,
 	}
-}
-
-func joinedCLIInputSlots(operation modelinference.Operation) (map[string]modelinference.OperationSlot, []string) {
-	slots := make(map[string]modelinference.OperationSlot, len(operation.Inputs))
-	validNames := make([]string, 0, len(operation.Inputs))
-	for _, slot := range operation.Inputs {
-		name := strings.TrimSpace(slot.Name)
-		if name == "" {
-			continue
-		}
-		slots[strings.ToLower(name)] = slot
-		validNames = append(validNames, name)
-	}
-	sort.Strings(validNames)
-	return slots, validNames
-}
-
-func validateJoinedCLIInputMappings(
-	mappings []joinedCLIInputBinding,
-	slots map[string]modelinference.OperationSlot,
-	modelName string,
-	operation string,
-	validNames []string,
-) (map[string]int, error) {
-	counts := make(map[string]int, len(mappings))
-	for _, mapping := range mappings {
-		key := strings.ToLower(mapping.slot)
-		slot, exists := slots[key]
-		if !exists {
-			return nil, joinedCLIInputFailure(
-				modelName, operation, modelinference.InvocationFailureClassInvalidSlot,
-				fmt.Sprintf("unknown input slot %q; valid slots: %s", mapping.slot, strings.Join(validNames, ", ")),
-				mapping.slot, validNames,
-			)
-		}
-		counts[key]++
-		if !slot.Repeatable && counts[key] > 1 {
-			return nil, joinedCLIInputFailure(
-				modelName, operation, modelinference.InvocationFailureClassSlotArity,
-				fmt.Sprintf("input slot %q accepts at most one value", slot.Name),
-				slot.Name, []string{"1"},
-			)
-		}
-	}
-	return counts, nil
-}
-
-func validateJoinedCLIRequiredSlots(
-	operation modelinference.Operation,
-	counts map[string]int,
-	modelName string,
-	operationName string,
-	validNames []string,
-) error {
-	missing := make([]string, 0)
-	for _, slot := range operation.Inputs {
-		name := strings.TrimSpace(slot.Name)
-		if slot.Required != nil && *slot.Required && counts[strings.ToLower(name)] == 0 {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	sort.Strings(missing)
-	return joinedCLIInputFailure(
-		modelName, operationName, modelinference.InvocationFailureClassInvalidSlot,
-		"required input slot is missing: "+strings.Join(missing, ", "), missing[0], validNames,
-	)
-}
-
-func (service *rootService) readJoinedCLIInputs(
-	cfg InvokeConfig,
-	modelName string,
-	operation string,
-	mappings []joinedCLIInputBinding,
-	slots map[string]modelinference.OperationSlot,
-) ([]modelinference.InferenceInput, error) {
-	inputs := make([]modelinference.InferenceInput, 0, len(mappings))
-	for _, mapping := range mappings {
-		if err := cfg.Context.Err(); err != nil {
-			return nil, err
-		}
-		slot := slots[strings.ToLower(mapping.slot)]
-		input, err := service.joinedCLIInput(cfg, modelName, operation, mapping, slot)
-		if err != nil {
-			return nil, err
-		}
-		inputs = append(inputs, input)
-	}
-	return inputs, nil
 }

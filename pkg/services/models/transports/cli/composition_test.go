@@ -678,52 +678,6 @@ func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
 	}
 }
 
-func TestRootAdapter_InvokeGenericInlineWritesRequiredOutputWithOptionalMetadata(t *testing.T) {
-	t.Parallel()
-
-	scope := testRuntimeScope(t)
-	required := true
-	service := modelscli.NewService(modelscli.Config{
-		Models: compositionModelsRoot{
-			getModel: func(context.Context, string) (modelinference.Detail, error) {
-				return modelinference.Detail{Summary: modelinference.Summary{
-					Name: "llm",
-					Operations: []modelinference.Operation{{
-						Name: modelinference.OperationOMNI,
-						Inputs: []modelinference.OperationSlot{{
-							Name: "prompt", Modality: modelinference.ModalityText, Required: &required,
-						}},
-						Outputs: []modelinference.OperationSlot{
-							{Name: "text", Modality: modelinference.ModalityText, Required: &required},
-							{Name: "usage", Modality: modelinference.ModalityJSON},
-						},
-					}},
-				}}, nil
-			},
-			invoke: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
-				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
-					{Name: "text", Modality: modelinference.ModalityText, Content: "answer"},
-					{Name: "usage", Modality: modelinference.ModalityJSON, Content: `{"tokens":2}`},
-				}}, nil
-			},
-		},
-		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
-			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
-		},
-	})
-
-	var out bytes.Buffer
-	if err := service.Invoke(modelscli.InvokeConfig{
-		Context: context.Background(), ModelName: "llm", Operation: modelinference.OperationOMNI,
-		InputBindings: []string{"prompt=hello"}, Output: &out,
-	}); err != nil {
-		t.Fatalf("Invoke() error = %v", err)
-	}
-	if got := out.String(); got != "answer" {
-		t.Fatalf("stdout = %q, want required text output", got)
-	}
-}
-
 func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *testing.T) {
 	t.Parallel()
 
