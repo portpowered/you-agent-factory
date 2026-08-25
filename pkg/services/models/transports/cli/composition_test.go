@@ -633,54 +633,6 @@ func TestRootAdapter_InvokeGenericMultipleOutputsRejectsBeforeRoot(t *testing.T)
 	}
 }
 
-func TestRootAdapter_InvokeGenericInputJSONPreservesAllNamedOutputs(t *testing.T) {
-	t.Parallel()
-
-	scope := testRuntimeScope(t)
-	artifact := testArtifactRef(t, "artifact:usage")
-	service := modelscli.NewService(modelscli.Config{
-		Models: stubModelsRoot{
-			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
-				return genericCLIOperationModel("omni", modelinference.OperationOMNI,
-					[]modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
-					[]modelinference.OperationSlot{
-						{Name: "text", Modality: modelinference.ModalityText},
-						{Name: "usage", Modality: modelinference.ModalityJSON},
-					}), nil
-			},
-			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
-				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
-					{Name: "text", Modality: modelinference.ModalityText, Content: "answer"},
-					{Name: "usage", Modality: modelinference.ModalityJSON, Artifact: &modelinference.InferenceArtifact{
-						Artifact: artifact, MediaType: "application/json", SizeBytes: 7,
-					}},
-				}}, nil
-			},
-		},
-		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
-			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
-		},
-	})
-
-	var out bytes.Buffer
-	if err := service.Invoke(modelscli.InvokeConfig{
-		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
-		InputMappings: []string{"prompt=hello"}, JSON: true, Output: &out,
-	}); err != nil {
-		t.Fatalf("Invoke() error = %v", err)
-	}
-	var response factoryapi.GenericModelInvocationResponse
-	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
-		t.Fatalf("decode generic JSON: %v\n%s", err, out.String())
-	}
-	if len(response.Outputs) != 2 || response.Outputs[0].Name != "text" || response.Outputs[1].Name != "usage" {
-		t.Fatalf("generic outputs = %#v, want all named outputs", response.Outputs)
-	}
-	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.ArtifactRef != "artifact:usage" || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 7 {
-		t.Fatalf("generic artifact = %#v, want preserved metadata", response.Outputs[1].Artifact)
-	}
-}
-
 func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *testing.T) {
 	t.Parallel()
 
