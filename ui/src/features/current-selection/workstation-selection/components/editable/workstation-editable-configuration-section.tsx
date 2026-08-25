@@ -21,7 +21,10 @@ import {
 } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import { supportsEditableWorkstationTypeConversion } from "../../../../current-factory-definition/lib/workstation/workstation-type";
-import { workstationBehaviorRequiresPrompt } from "../../../../current-factory-definition/lib/workstation-behavior";
+import {
+  workstationBehaviorRequiresPrompt,
+  workstationUsesRunnerEditing,
+} from "../../../../current-factory-definition/lib/workstation-behavior";
 import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
@@ -139,6 +142,10 @@ function EditableConfigurationReadyForm({
   const showPromptField =
     workstationUsesPromptOrientedEditing(state.draft.workstationType) &&
     workstationBehaviorRequiresPrompt(state.draft.behavior);
+  const showRunnerField = workstationUsesRunnerEditing(
+    state.draft.workstationType,
+    state.draft.behavior,
+  );
   const showWorkstationTypeField =
     requiresWorkerAssignment &&
     supportsEditableWorkstationTypeConversion(
@@ -252,24 +259,26 @@ function EditableConfigurationReadyForm({
             messages={messages}
             state={renderState}
           />
-          <EditableConfigurationField
-            fieldId="editable-workstation-runner"
-            errorMessage={validationErrors.runnerName}
-            input={
-              <EditableConfigurationRunnerField
-                messages={messages}
-                state={renderState}
-              />
-            }
-            label={messages.runnerFieldLabel}
-            supportingContent={
-              <EditableConfigurationServerChangedHint
-                fieldName="runner"
-                messages={messages}
-                state={state}
-              />
-            }
-          />
+          {showRunnerField ? (
+            <EditableConfigurationField
+              fieldId="editable-workstation-runner"
+              errorMessage={validationErrors.runnerName}
+              input={
+                <EditableConfigurationRunnerField
+                  messages={messages}
+                  state={renderState}
+                />
+              }
+              label={messages.runnerFieldLabel}
+              supportingContent={
+                <EditableConfigurationServerChangedHint
+                  fieldName="runner"
+                  messages={messages}
+                  state={state}
+                />
+              }
+            />
+          ) : null}
           {showPromptField ? (
             <EditableConfigurationField
               errorMessage={validationErrors.prompt}

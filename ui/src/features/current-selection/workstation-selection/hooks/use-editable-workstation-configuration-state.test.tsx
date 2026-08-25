@@ -1143,6 +1143,86 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
     ).toHaveBeenLastCalledWith("Review", "", false);
   });
 
+  it("projects POLLER_RUN as a promptless poller and keeps its behavior invariant", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "linear-poller",
+          workerOptions: [
+            { name: "linear-poller", type: "HOSTED_WORKER" },
+            { name: "script-poller", type: "SCRIPT_WORKER" },
+            { name: "reviewer", type: "MODEL_WORKER" },
+          ],
+          workstationType: "POLLER_RUN",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        behavior: "POLLER",
+        prompt: "",
+        workerName: "linear-poller",
+        workstationType: "POLLER_RUN",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        behavior: "POLLER",
+        behaviorOptions: ["POLLER"],
+        workerOptions: ["linear-poller", "script-poller"],
+        workstationType: "POLLER_RUN",
+        workstationTypeOptions: ["POLLER_RUN"],
+      },
+      status: "ready",
+      validationErrors: {},
+      workerOptionsState: {
+        options: ["linear-poller", "script-poller"],
+        status: "ready",
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toMatchObject({
+      workstations: [
+        {
+          behavior: "POLLER",
+          type: "POLLER_RUN",
+          worker: "linear-poller",
+        },
+      ],
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onBehaviorChange("STANDARD");
+    });
+
+    expect(
+      result.current?.status === "ready" ? result.current.draft : null,
+    ).toMatchObject({
+      behavior: "POLLER",
+      workstationType: "POLLER_RUN",
+    });
+    expect(
+      vi.mocked(useCurrentWorkstationPromptTemplateContract),
+    ).toHaveBeenLastCalledWith("Review", false);
+    expect(
+      vi.mocked(useCurrentWorkstationPromptTemplateValidation),
+    ).toHaveBeenLastCalledWith("Review", "", false);
+  });
+
   it("validates cron fields for CRON workstations and skips them for other behaviors", () => {
     const cronDraft = {
       behavior: "CRON" as const,
@@ -1402,9 +1482,13 @@ function buildEditableFactoryDefinition(overrides?: {
   workerName?: string;
   workerOptions?: Array<{
     name: string;
-    type: "HOSTED_WORKER" | "MODEL_WORKER" | "SCRIPT_WORKER";
+    type: "HOSTED_WORKER" | "MODEL_WORKER" | "POLLER_WORKER" | "SCRIPT_WORKER";
   }>;
-  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE" | "SCRIPT_RUN";
+  workstationType?:
+    | "MODEL_WORKSTATION"
+    | "LOGICAL_MOVE"
+    | "POLLER_RUN"
+    | "SCRIPT_RUN";
 }): CurrentFactoryDocument {
   return {
     name: "Current Factory",
@@ -1428,7 +1512,8 @@ function buildEditableFactoryDefinition(overrides?: {
     workstations: [
       {
         behavior: overrides?.behavior,
-        ...(overrides?.workstationType === "SCRIPT_RUN"
+        ...(overrides?.workstationType === "SCRIPT_RUN" ||
+        overrides?.workstationType === "POLLER_RUN"
           ? {}
           : {
               body:
@@ -1449,7 +1534,8 @@ function buildEditableFactoryDefinition(overrides?: {
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
-        ...(overrides?.workstationType === "SCRIPT_RUN"
+        ...(overrides?.workstationType === "SCRIPT_RUN" ||
+        overrides?.workstationType === "POLLER_RUN"
           ? {}
           : { promptFile: "prompts/review.md" }),
         runner: overrides?.runnerName ?? "gemini",

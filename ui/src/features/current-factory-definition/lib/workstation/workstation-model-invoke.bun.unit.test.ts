@@ -67,6 +67,7 @@ describe("workstation model invoke type helpers", () => {
       true,
     );
     expect(workstationUsesPromptOrientedEditing("SCRIPT_RUN")).toBe(false);
+    expect(workstationUsesPromptOrientedEditing("POLLER_RUN")).toBe(false);
   });
 
   it("resolves compatible model workers and operations from the factory", () => {

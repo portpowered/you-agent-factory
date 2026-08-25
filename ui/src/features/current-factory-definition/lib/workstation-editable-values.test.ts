@@ -2240,6 +2240,90 @@ describe("workstation taxonomy save projection", () => {
     expect(saved?.workstations?.[1]).toEqual(scriptFactory.workstations?.[1]);
   });
 
+  it("projects POLLER_RUN workstations with poller behavior and saves without prompt fields", () => {
+    const pollerNode: DashboardWorkstationNode = {
+      node_id: "ingress",
+      transition_id: "ingress",
+      workstation_kind: WorkstationType.POLLER_RUN,
+      workstation_name: "Ingress",
+    };
+    const pollerFactory: CanonicalFactoryDefinition = {
+      name: "Poller Factory",
+      version: { logical: "5", physical: "2026-06-02T00:00:00Z" },
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear" },
+          name: "linear-poller",
+          provider: "LINEAR",
+          type: WorkerType.HOSTED_WORKER,
+        },
+        {
+          args: ["--watch"],
+          command: "./ingress.sh",
+          name: "script-poller",
+          type: WorkerType.SCRIPT_WORKER,
+        },
+        { name: "native-poller", type: WorkerType.POLLER_WORKER },
+        { model: "gpt-5.4", name: "reviewer", type: WorkerType.MODEL_WORKER },
+      ],
+      workstations: [
+        {
+          body: "This prompt is not part of poller execution.",
+          id: "ingress",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Ingress",
+          outputs: [{ state: "received", workType: "story" }],
+          promptFile: "prompts/unused.md",
+          runner: "codex",
+          type: WorkstationType.POLLER_RUN,
+          worker: "linear-poller",
+        },
+        {
+          body: "Leave this workstation unchanged.",
+          id: "review",
+          inputs: [{ state: "received", workType: "story" }],
+          name: "Review",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [{ name: "story" }],
+    };
+
+    const values = resolveEditableWorkstationValues(pollerFactory, pollerNode);
+    expect(values).toMatchObject({
+      behavior: "POLLER",
+      behaviorOptions: ["POLLER"],
+      prompt: null,
+      workerName: "linear-poller",
+      workerOptions: ["linear-poller", "script-poller", "native-poller"],
+      workstationType: WorkstationType.POLLER_RUN,
+      workstationTypeOptions: [WorkstationType.POLLER_RUN],
+    });
+    if (!values) {
+      throw new Error("expected editable poller workstation values");
+    }
+
+    const saved = applyEditableWorkstationDraft(pollerFactory, pollerNode, {
+      ...editableWorkstationDraftFromValues(values),
+      name: "Ingress Updated",
+    });
+
+    expect(saved?.workers).toEqual(pollerFactory.workers);
+    expect(saved?.workstations?.[1]).toEqual(pollerFactory.workstations?.[1]);
+    expect(saved?.workstations?.[0]).toMatchObject({
+      behavior: "POLLER",
+      id: "ingress",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Ingress Updated",
+      outputs: [{ state: "received", workType: "story" }],
+      type: WorkstationType.POLLER_RUN,
+      worker: "linear-poller",
+    });
+    expect(saved?.workstations?.[0]).not.toHaveProperty("body");
+    expect(saved?.workstations?.[0]).not.toHaveProperty("promptFile");
+    expect(saved?.workstations?.[0]).not.toHaveProperty("runner");
+  });
+
   it("round-trips new taxonomy workstation saves without downgrading to legacy names", () => {
     const taxonomyFactory: CanonicalFactoryDefinition = {
       name: "Legacy Factory",

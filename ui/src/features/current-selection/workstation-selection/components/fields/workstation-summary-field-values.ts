@@ -1,5 +1,6 @@
 import type { DashboardWorkstationNode } from "../../../../../api/dashboard/types";
 import { WorkstationType } from "../../../../../api/generated/openapi";
+import { workstationUsesRunnerEditing } from "../../../../current-factory-definition/lib/workstation-behavior";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import {
   workstationBehaviorSemanticKind,
@@ -130,6 +131,16 @@ export function resolveWorkstationSummaryRunnerValue(
   selectedNode: DashboardWorkstationNode,
 ): string | null {
   if (!resolveWorkstationSummaryRequiresWorkerAssignment(state, selectedNode)) {
+    return null;
+  }
+
+  if (
+    state?.status === "ready" &&
+    !workstationUsesRunnerEditing(
+      state.draft.workstationType,
+      state.draft.behavior,
+    )
+  ) {
     return null;
   }
 

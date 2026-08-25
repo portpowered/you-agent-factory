@@ -57,9 +57,13 @@ function buildEditableConfigurationSectionDraftDefaults(
     | "MODEL_WORKSTATION"
     | "MODEL_INVOKE"
     | "LOGICAL_MOVE"
+    | "POLLER_RUN"
     | "SCRIPT_RUN" = "AGENT_RUN",
 ) {
-  const behavior = overrides?.behavior ?? ("STANDARD" as const);
+  const isPollerRun = workstationType === "POLLER_RUN";
+  const behavior = isPollerRun
+    ? ("POLLER" as const)
+    : (overrides?.behavior ?? ("STANDARD" as const));
   const cron =
     overrides?.cron !== undefined
       ? overrides.cron
@@ -89,11 +93,16 @@ function buildEditableConfigurationSectionDraftDefaults(
     ],
     prompt:
       overrides?.prompt ??
-      (workstationType === "SCRIPT_RUN" ? "" : "Review prompt"),
-    runnerName: overrides?.runnerName ?? ("gemini" as const),
+      (workstationType === "SCRIPT_RUN" || isPollerRun ? "" : "Review prompt"),
+    runnerName:
+      overrides?.runnerName ?? (isPollerRun ? null : ("gemini" as const)),
     workerName:
       overrides?.workerName ??
-      (workstationType === "SCRIPT_RUN" ? "script-runner" : "reviewer"),
+      (workstationType === "SCRIPT_RUN"
+        ? "script-runner"
+        : isPollerRun
+          ? "linear-poller"
+          : "reviewer"),
     workstationType,
   };
 }
@@ -108,13 +117,17 @@ function buildEditableConfigurationSectionInitialValues(
     | "MODEL_WORKSTATION"
     | "MODEL_INVOKE"
     | "LOGICAL_MOVE"
+    | "POLLER_RUN"
     | "SCRIPT_RUN" = "AGENT_RUN",
 ) {
   const isScriptRun = workstationType === "SCRIPT_RUN";
+  const isPollerRun = workstationType === "POLLER_RUN";
 
   return {
-    behavior: "STANDARD" as const,
-    behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
+    behavior: isPollerRun ? ("POLLER" as const) : ("STANDARD" as const),
+    behaviorOptions: isPollerRun
+      ? (["POLLER"] as const)
+      : (["STANDARD", "REPEATER", "POLLER"] as const),
     cron: null,
     effectiveRunnerName: "gemini",
     factoryRunnerName: "codex",
@@ -139,23 +152,33 @@ function buildEditableConfigurationSectionInitialValues(
         selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
       },
     ],
-    prompt: isScriptRun ? null : "Review prompt",
+    prompt: isScriptRun || isPollerRun ? null : "Review prompt",
     resolvedRunnerSelection: {
       runnerId: "gemini",
       source: "workstation" as const,
     },
-    runnerName: "gemini",
+    runnerName: isPollerRun ? null : "gemini",
     runnerOptions: ["codex", "gemini"],
     runnerSelectionSource: "workstation" as const,
     sharedWorkerWorkstationNames: [],
     sharedWorkerWorkstationNamesByWorkerName:
       overrides?.sharedWorkerWorkstationNamesByWorkerName ?? {},
     workerModelProvider: null,
-    workerName: isScriptRun ? "script-runner" : "reviewer",
-    workerOptions: isScriptRun ? ["script-runner"] : ["reviewer", "planner"],
+    workerName: isScriptRun
+      ? "script-runner"
+      : isPollerRun
+        ? "linear-poller"
+        : "reviewer",
+    workerOptions: isScriptRun
+      ? ["script-runner"]
+      : isPollerRun
+        ? ["linear-poller", "script-poller"]
+        : ["reviewer", "planner"],
     workerTypeByName: {
       planner: "MODEL_WORKER" as const,
       reviewer: "MODEL_WORKER" as const,
+      "linear-poller": "HOSTED_WORKER" as const,
+      "script-poller": "SCRIPT_WORKER" as const,
       ...(isScriptRun ? { "script-runner": "SCRIPT_WORKER" as const } : {}),
     },
     workstationName: "Review",
@@ -233,10 +256,12 @@ export function buildEditableConfigurationSectionReadyState(
       | "MODEL_WORKSTATION"
       | "MODEL_INVOKE"
       | "LOGICAL_MOVE"
+      | "POLLER_RUN"
       | "SCRIPT_RUN";
   }>,
 ): EditableConfigurationSectionReadyState {
   const workstationType = overrides?.workstationType ?? "AGENT_RUN";
+  const isPollerRun = workstationType === "POLLER_RUN";
 
   return {
     draft: buildEditableConfigurationSectionDraftDefaults(
@@ -292,8 +317,9 @@ export function buildEditableConfigurationSectionReadyState(
       status: "ready" as const,
     },
     workerOptionsState: overrides?.workerOptionsState ?? {
-      options:
-        workstationType === "SCRIPT_RUN"
+      options: isPollerRun
+        ? ["linear-poller", "script-poller"]
+        : workstationType === "SCRIPT_RUN"
           ? ["script-runner"]
           : ["reviewer", "planner"],
       status: "ready" as const,

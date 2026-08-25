@@ -208,6 +208,87 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(scriptFactory.workstations[0]).not.toHaveProperty("body");
   });
 
+  it("saves a poller definition with POLLER_RUN and no prompt or runner fields", async () => {
+    const pollerFactory = {
+      name: "Poller Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear" },
+          name: "linear-poller",
+          provider: "LINEAR" as const,
+          type: "HOSTED_WORKER" as const,
+        },
+      ],
+      workstations: [
+        {
+          behavior: "POLLER" as const,
+          id: "linear-ingress",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Linear Ingress",
+          outputs: [{ state: "received", workType: "story" }],
+          type: "POLLER_RUN" as const,
+          worker: "linear-poller",
+        },
+      ],
+    };
+    const saveAsync = vi.fn().mockResolvedValue(pollerFactory);
+    const markChangesSaved = vi.fn();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
+      isPending: false,
+      saveAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            draft: {
+              behavior: "POLLER",
+              prompt: "",
+              runnerName: null,
+              workerName: "linear-poller",
+              workstationType: "POLLER_RUN",
+            },
+            markChangesSaved,
+            pendingFactoryDefinition: pollerFactory,
+            prompt: "",
+            workstationType: "POLLER_RUN",
+          }),
+          scopeKey: "linear-ingress:transition:Linear Ingress",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(true);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(saveAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factory: pollerFactory,
+    });
+    expect(pollerFactory.workstations[0]).toMatchObject({
+      behavior: "POLLER",
+      type: "POLLER_RUN",
+      worker: "linear-poller",
+    });
+    expect(pollerFactory.workstations[0]).not.toHaveProperty("body");
+    expect(pollerFactory.workstations[0]).not.toHaveProperty("runner");
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+  });
+
   it("saves legacy model workstations without changing their type or worker alias", async () => {
     const legacyModelFactory = {
       name: "Legacy Model Factory",
@@ -853,9 +934,12 @@ function buildReadyEditableConfigurationState(overrides?: {
     | "MODEL_WORKSTATION"
     | "MODEL_INVOKE"
     | "LOGICAL_MOVE"
+    | "POLLER_RUN"
     | "SCRIPT_RUN";
 }): EditableWorkstationConfigurationState {
-  const behavior = overrides?.behavior ?? "STANDARD";
+  const workstationType = overrides?.workstationType ?? "MODEL_WORKSTATION";
+  const isPollerRun = workstationType === "POLLER_RUN";
+  const behavior = isPollerRun ? "POLLER" : (overrides?.behavior ?? "STANDARD");
   const cron =
     behavior === "CRON"
       ? {
@@ -875,45 +959,21 @@ function buildReadyEditableConfigurationState(overrides?: {
       name: "Review",
       operation: overrides?.draft?.operation ?? "",
       operationBindings: overrides?.draft?.operationBindings ?? [],
-      prompt: overrides?.prompt ?? "Review the story.",
-      runnerName: null,
-      workerName: overrides?.draft?.workerName ?? "reviewer",
+      prompt: overrides?.prompt ?? (isPollerRun ? "" : "Review the story."),
+      runnerName: isPollerRun ? null : null,
+      workerName:
+        overrides?.draft?.workerName ??
+        (isPollerRun ? "linear-poller" : "reviewer"),
       ...overrides?.draft,
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
-    initialValues: {
+    initialValues: buildReadyEditableConfigurationInitialValues({
       behavior,
-      behaviorOptions:
-        behavior === "CRON" ? ["CRON"] : ["STANDARD", "REPEATER", "POLLER"],
-      cron,
-      effectiveRunnerName: "codex",
-      factoryRunnerName: null,
-      prompt: overrides?.prompt ?? "Review the story.",
-      resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "default",
-      },
-      runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "codex", "opencode", "pi"],
-      runnerSelectionSource: "default",
-      sharedWorkerWorkstationNamesByWorkerName: {},
-      sharedWorkerWorkstationNames: [],
-      workerModelProvider: null,
-      workerName: "reviewer",
-      workerOptions: ["reviewer"],
-      workerTypeByName: {
-        reviewer: "MODEL_WORKER",
-      },
-      workstationName: "Review",
-      workstationOptions: ["Review"],
-      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
-      guards: [],
-      inputs: [],
-      modelInvokeWorkerOptions: [],
-      modelOperationsByWorkerName: {},
       operation: overrides?.draft?.operation ?? "",
       operationBindings: overrides?.draft?.operationBindings ?? [],
-    },
+      prompt: overrides?.prompt ?? (isPollerRun ? null : "Review the story."),
+      workstationType,
+    }),
     isDirty: true,
     markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),
     baseVersion: {
@@ -967,9 +1027,68 @@ function buildReadyEditableConfigurationState(overrides?: {
     status: "ready",
     validationErrors: overrides?.validationErrors ?? {},
     workerOptionsState: {
-      options: ["reviewer"],
+      options: isPollerRun ? ["linear-poller", "script-poller"] : ["reviewer"],
       status: "ready",
     },
+  };
+}
+
+type ReadyEditableConfigurationState = Extract<
+  EditableWorkstationConfigurationState,
+  { status: "ready" }
+>;
+
+function buildReadyEditableConfigurationInitialValues({
+  behavior,
+  operation,
+  operationBindings,
+  prompt,
+  workstationType,
+}: {
+  behavior: ReadyEditableConfigurationState["draft"]["behavior"];
+  operation: ReadyEditableConfigurationState["draft"]["operation"];
+  operationBindings: ReadyEditableConfigurationState["draft"]["operationBindings"];
+  prompt: ReadyEditableConfigurationState["initialValues"]["prompt"];
+  workstationType: ReadyEditableConfigurationState["draft"]["workstationType"];
+}): ReadyEditableConfigurationState["initialValues"] {
+  const isPollerRun = workstationType === "POLLER_RUN";
+
+  return {
+    behavior,
+    behaviorOptions: isPollerRun
+      ? ["POLLER"]
+      : behavior === "CRON"
+        ? ["CRON"]
+        : ["STANDARD", "REPEATER", "POLLER"],
+    cron: null,
+    effectiveRunnerName: "codex",
+    factoryRunnerName: null,
+    prompt,
+    resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+    runnerName: null,
+    runnerOptions: ["codex", "gemini", "kiro", "codex", "opencode", "pi"],
+    runnerSelectionSource: "default",
+    sharedWorkerWorkstationNamesByWorkerName: {},
+    sharedWorkerWorkstationNames: [],
+    workerModelProvider: null,
+    workerName: isPollerRun ? "linear-poller" : "reviewer",
+    workerOptions: isPollerRun
+      ? ["linear-poller", "script-poller"]
+      : ["reviewer"],
+    workerTypeByName: {
+      "linear-poller": "HOSTED_WORKER",
+      reviewer: "MODEL_WORKER",
+      "script-poller": "SCRIPT_WORKER",
+    },
+    workstationName: "Review",
+    workstationOptions: ["Review"],
+    workstationType,
+    guards: [],
+    inputs: [],
+    modelInvokeWorkerOptions: [],
+    modelOperationsByWorkerName: {},
+    operation,
+    operationBindings,
   };
 }
 

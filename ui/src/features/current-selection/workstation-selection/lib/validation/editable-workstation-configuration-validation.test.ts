@@ -278,6 +278,56 @@ describe("validateEditableWorkstationDraft model workstation", () => {
   });
 });
 
+describe("validateEditableWorkstationDraft poller workstation", () => {
+  it("accepts poller-capable workers and rejects inference workers", () => {
+    const pollerValues = {
+      ...modelWorkstationValues,
+      behavior: "POLLER" as const,
+      behaviorOptions: ["POLLER" as const],
+      prompt: null,
+      workerName: "linear-poller",
+      workerOptions: ["linear-poller", "script-poller"],
+      workerTypeByName: {
+        "linear-poller": "HOSTED_WORKER" as const,
+        "script-poller": "SCRIPT_WORKER" as const,
+        reviewer: "MODEL_WORKER" as const,
+      },
+      workstationType: "POLLER_RUN" as const,
+      workstationTypeOptions: ["POLLER_RUN" as const],
+    };
+
+    const validErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        behavior: "POLLER",
+        prompt: "",
+        workerName: "linear-poller",
+        workstationType: "POLLER_RUN",
+      },
+      pollerValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(validErrors).toEqual({});
+
+    const incompatibleErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        behavior: "POLLER",
+        prompt: "",
+        workerName: "reviewer",
+        workstationType: "POLLER_RUN",
+      },
+      pollerValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(incompatibleErrors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerUnavailable,
+    );
+  });
+});
+
 describe("validateEditableWorkstationDraft script workstation", () => {
   const scriptValues = {
     ...modelWorkstationValues,

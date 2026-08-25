@@ -1,5 +1,6 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
+  isPollerRunWorkstationType,
   isPollerWorkerType,
   isScriptWorkerType,
 } from "./worker-workstation-taxonomy";
@@ -25,14 +26,24 @@ const BASE_EDITABLE_WORKSTATION_BEHAVIORS: EditableWorkstationBehavior[] = [
 ];
 
 export function resolveEditableWorkstationBehavior(
-  workstation: Pick<CanonicalWorkstation, "behavior">,
+  workstation: Pick<CanonicalWorkstation, "behavior"> &
+    Partial<Pick<CanonicalWorkstation, "type">>,
 ): EditableWorkstationBehavior {
+  if (isPollerRunWorkstationType(workstation.type)) {
+    return "POLLER";
+  }
+
   return workstation.behavior ?? DEFAULT_WORKSTATION_BEHAVIOR;
 }
 
 export function resolveEditableWorkstationBehaviorOptions(
   currentBehavior: EditableWorkstationBehavior,
+  workstationType?: CanonicalWorkstation["type"] | string | null,
 ): EditableWorkstationBehavior[] {
+  if (isPollerRunWorkstationType(workstationType)) {
+    return ["POLLER"];
+  }
+
   return currentBehavior === "CRON"
     ? [...BASE_EDITABLE_WORKSTATION_BEHAVIORS, "CRON"]
     : BASE_EDITABLE_WORKSTATION_BEHAVIORS;
@@ -53,4 +64,11 @@ export function workstationBehaviorRequiresPrompt(
   behavior: EditableWorkstationBehavior,
 ): boolean {
   return behavior !== "POLLER";
+}
+
+export function workstationUsesRunnerEditing(
+  workstationType: CanonicalWorkstation["type"] | string | null | undefined,
+  behavior: EditableWorkstationBehavior,
+): boolean {
+  return behavior !== "POLLER" && !isPollerRunWorkstationType(workstationType);
 }
