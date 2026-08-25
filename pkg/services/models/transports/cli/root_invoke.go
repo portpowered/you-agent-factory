@@ -36,9 +36,6 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
-		return fmt.Errorf("--text is required")
-	}
 	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
 		return clidiag.NewFlagConflictFailure(
 			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
