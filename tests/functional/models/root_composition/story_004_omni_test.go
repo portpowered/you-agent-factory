@@ -32,15 +32,45 @@ func TestModelsOmniVideoCapabilityAndCancellationThroughRootBuildProcess(t *test
 	}
 }
 
+func TestModelsOmniCancellationReleasesHostAcrossRootProcesses(t *testing.T) {
+	t.Parallel()
+
+	const timingResponse = "At 0:30, the scene changes from shadow to light."
+	const followUpResponse = "The follow-up invocation completed."
+	launcher := &recordingModelHostLauncher{
+		endpoint:  "unused-by-fixture",
+		exclusive: true,
+	}
+	first := buildCoordinatedOmniEnvironmentWithLauncher(t, launcher, timingResponse, followUpResponse)
+	runOmniVideoInvocation(t, first, timingResponse)
+	runCancelledOmniInvocation(t, first)
+	closeRootProcess(t, first.process, "close cancelled Omni process")
+
+	secondProcess := support.BuildProcess(t, first.edges)
+	support.CleanupProcess(t, secondProcess)
+	second := *first
+	second.process = secondProcess
+	runOmniFollowUpInvocation(t, &second, followUpResponse)
+}
+
 type coordinatedOmniEnvironment struct {
 	process   support.Process
 	home      string
 	dir       string
 	videoPath string
+	edges     serviceedges.Edges
 	fixture   *coordinatedOmniProtocolFixture
 }
 
 func buildCoordinatedOmniEnvironment(t *testing.T, responses ...string) *coordinatedOmniEnvironment {
+	return buildCoordinatedOmniEnvironmentWithLauncher(t, &recordingModelHostLauncher{}, responses...)
+}
+
+func buildCoordinatedOmniEnvironmentWithLauncher(
+	t *testing.T,
+	hostLauncher *recordingModelHostLauncher,
+	responses ...string,
+) *coordinatedOmniEnvironment {
 	t.Helper()
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
@@ -61,10 +91,11 @@ func buildCoordinatedOmniEnvironment(t *testing.T, responses ...string) *coordin
 	fixture := newCoordinatedOmniProtocolFixture(responses...)
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher.endpoint = modelServer.URL
 	// Leave compatibility unset so this root-composition journey exercises the
 	// same pinned artifact/platform default as the shipped CLI.
 	edges := genericHTTPInvocationEdges(
-		rejectingNetwork, assetFiles, &recordingModelHostLauncher{endpoint: modelServer.URL},
+		rejectingNetwork, assetFiles, hostLauncher,
 		&joinedProtocolNegotiator{}, nil, modelServer,
 	)
 	edges.ModelCLIInputReadFile = func(path string) ([]byte, error) {
@@ -80,7 +111,9 @@ func buildCoordinatedOmniEnvironment(t *testing.T, responses ...string) *coordin
 	edges.ModelInvocationProtocolClient = fixture
 	process := support.BuildProcess(t, edges)
 	support.CleanupProcess(t, process)
-	return &coordinatedOmniEnvironment{process: process, home: home, dir: dir, videoPath: videoPath, fixture: fixture}
+	return &coordinatedOmniEnvironment{
+		process: process, home: home, dir: dir, videoPath: videoPath, edges: edges, fixture: fixture,
+	}
 }
 
 func runOmniVideoInvocation(t *testing.T, environment *coordinatedOmniEnvironment, response string) {

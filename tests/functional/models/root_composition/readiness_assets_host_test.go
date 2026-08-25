@@ -297,9 +297,11 @@ func (client *rejectingModelAssetHTTP) Calls() int {
 }
 
 type recordingModelHostLauncher struct {
-	mu       sync.Mutex
-	calls    int
-	endpoint string
+	mu        sync.Mutex
+	calls     int
+	endpoint  string
+	exclusive bool
+	active    bool
 }
 
 func (launcher *recordingModelHostLauncher) Start(
@@ -311,12 +313,22 @@ func (launcher *recordingModelHostLauncher) Start(
 	Stop(context.Context) error
 }, error) {
 	launcher.mu.Lock()
+	if launcher.exclusive && launcher.active {
+		launcher.mu.Unlock()
+		return nil, fmt.Errorf("model host fixture: previous process is still active")
+	}
 	launcher.calls++
+	launcher.active = true
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()
 	return &functionalModelHostProcess{
 		endpoint: endpoint,
 		stopped:  make(chan struct{}),
+		onStop: func() {
+			launcher.mu.Lock()
+			launcher.active = false
+			launcher.mu.Unlock()
+		},
 	}, nil
 }
 
@@ -329,6 +341,7 @@ func (launcher *recordingModelHostLauncher) Calls() int {
 type functionalModelHostProcess struct {
 	endpoint string
 	stopped  chan struct{}
+	onStop   func()
 	once     sync.Once
 }
 
@@ -336,6 +349,9 @@ func (process *functionalModelHostProcess) HealthEndpoint() string { return proc
 func (process *functionalModelHostProcess) Stop(context.Context) error {
 	process.once.Do(func() {
 		close(process.stopped)
+		if process.onStop != nil {
+			process.onStop()
+		}
 	})
 	return nil
 }

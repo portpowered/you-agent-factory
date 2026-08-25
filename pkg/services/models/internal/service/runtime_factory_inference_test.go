@@ -198,6 +198,29 @@ func TestBoundServiceContractOnlyOperationsFailExplicitly(t *testing.T) {
 	assertContractOnlyUnsupported(t, "CancelInvocation", err)
 }
 
+func TestRootCloseShutsDownRuntimeHost(t *testing.T) {
+	t.Parallel()
+
+	host := &shutdownTrackingRuntimeHost{}
+	root := &Root{runtimeHost: host}
+	if err := root.Close(context.Background()); err != nil {
+		t.Fatalf("Root.Close() error = %v, want nil", err)
+	}
+	if host.shutdownCalls != 1 {
+		t.Fatalf("runtime host shutdown calls = %d, want 1", host.shutdownCalls)
+	}
+}
+
+type shutdownTrackingRuntimeHost struct {
+	runtimehost.Service
+	shutdownCalls int
+}
+
+func (host *shutdownTrackingRuntimeHost) Shutdown(context.Context) error {
+	host.shutdownCalls++
+	return nil
+}
+
 func TestScopedRuntimeResolutionDoesNotReplaceInjectedInferenceOwner(t *testing.T) {
 	t.Parallel()
 

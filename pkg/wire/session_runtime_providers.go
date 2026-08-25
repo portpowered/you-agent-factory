@@ -78,18 +78,18 @@ func (c compositeProcessLifecycle) Close(ctx context.Context) error {
 }
 
 // provideApplicationProcessLifecycle composes the process-wide shutdown path
-// Process.Close reaches: the Providers lifecycle (executable/session
-// teardown), the singular Events root (pkg/wire/events_providers.go), and the
-// on-demand Factory Sessions activation the production ACP prompt-delegation
-// consumer lazily opens runtimes through (see provideACPServerFactoryTarget)
-// -- so every runtime that activation ever opens is guaranteed a reachable,
-// deterministic close on process shutdown, not left open for the life of the
-// process regardless of whether a production ACP stdio entrypoint has been
-// built yet. The process-scoped direct Worker Sessions pool closes first so an
-// admitted local invocation can publish its terminal observation before the
-// shared Events root is closed.
+// Process.Close reaches: the Models host supervisor, Providers lifecycle
+// (executable/session teardown), the singular Events root
+// (pkg/wire/events_providers.go), and the on-demand Factory Sessions
+// activation the production ACP prompt-delegation consumer lazily opens
+// runtimes through (see provideACPServerFactoryTarget) -- so every runtime
+// retained by the application has a deterministic close on process shutdown.
+// The process-scoped direct Worker Sessions pool closes first so an admitted
+// local invocation can publish its terminal observation before shared roots
+// are closed.
 func provideApplicationProcessLifecycle(
 	service providers.Service,
+	modelsService models.Service,
 	eventsService events.Service,
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
@@ -100,6 +100,15 @@ func provideApplicationProcessLifecycle(
 	})
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
+	}
+	if modelsService == nil {
+		return nil, fmt.Errorf("construct application process: Models service is required")
+	}
+	modelsLifecycle, lifecycleOK := modelsService.(interface {
+		Close(context.Context) error
+	})
+	if !lifecycleOK {
+		return nil, fmt.Errorf("construct application process: Models lifecycle is required")
 	}
 	eventsLifecycleValue, ok := eventsService.(eventsLifecycle)
 	if !ok {
@@ -122,6 +131,7 @@ func provideApplicationProcessLifecycle(
 			// assembled when that boundary cannot be built.
 			return localWorkerSessions.Close(ctx)
 		},
+		modelsLifecycle.Close,
 		lifecycle.Close,
 		eventsLifecycleValue.Close,
 		func(context.Context) error {
