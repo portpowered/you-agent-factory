@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
@@ -71,12 +70,19 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		t.Fatalf("Process.Execute(models invoke) error = %v", err)
 	}
 
-	var response factoryapi.ModelInvocationResponse
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
 	}
-	if response.ModelName != "tts" || response.Operation != "TTS" || len(response.Content) == 0 {
-		t.Fatalf("response = %#v, want tts/TTS content", response)
+	if response.ModelName != "tts" || response.Operation != "TTS" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("response = %#v, want validation-only tts/TTS metadata", response)
 	}
 	if diagnostics.Len() != 0 {
 		t.Fatalf("models invoke JSON stderr = %q, want empty", diagnostics.String())
@@ -105,10 +111,10 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 	if diagnostics.Len() != 0 {
 		t.Fatalf("models invoke stderr = %q, want empty", diagnostics.String())
 	}
-	if len(backendRequests) != 2 {
-		t.Fatalf("backend invocation count = %d, want JSON and file invocations", len(backendRequests))
+	if len(backendRequests) != 1 {
+		t.Fatalf("backend invocation count = %d, want only the file invocation", len(backendRequests))
 	}
-	request := backendRequests[1]
+	request := backendRequests[0]
 	if request.ModelName != "tts" || request.Operation != models.OperationTTS ||
 		len(request.Inputs) != 1 || request.Inputs[0].Content != "write audio from the process" {
 		t.Fatalf("backend TTS request = %#v, want canonical tts/TTS text request", request)
