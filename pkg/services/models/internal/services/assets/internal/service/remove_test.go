@@ -25,6 +25,15 @@ func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing
 	if err := os.WriteFile(siblingFile, []byte("sibling"), 0o644); err != nil {
 		t.Fatalf("write sibling revision: %v", err)
 	}
+	nestedFile := filepath.Join(
+		cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test", "nested", "empty-marker",
+	)
+	if err := os.MkdirAll(filepath.Dir(nestedFile), 0o755); err != nil {
+		t.Fatalf("create nested revision directory: %v", err)
+	}
+	if err := os.WriteFile(nestedFile, nil, 0o644); err != nil {
+		t.Fatalf("write nested revision marker: %v", err)
+	}
 
 	scopes := newScopes(t, "remove-success")
 	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))

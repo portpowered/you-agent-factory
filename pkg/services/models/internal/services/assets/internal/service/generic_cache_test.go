@@ -68,6 +68,35 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 	assertGenericRootUntouched(t, filepath.Join(third, "models--owner--repo"))
 }
 
+func TestPrepareModelAssetsReportsMissingDirectorySourceAtBoundary(t *testing.T) {
+	t.Parallel()
+
+	scopes := newScopes(t, "missing-directory-source")
+	cacheDirectory := t.TempDir()
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	missingPath := filepath.Join(t.TempDir(), "missing-model")
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("missing local source used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+
+	_, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "missing-model",
+		Reference: models.ModelReference{NameOrURI: missingPath},
+	})
+	if !errors.Is(err, models.ErrAssetSourceMissing) {
+		t.Fatalf("PrepareModelAssets error = %v, want ErrAssetSourceMissing", err)
+	}
+	var stageErr *models.PullStageError
+	if !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageSourceResolution {
+		t.Fatalf("PrepareModelAssets stage error = %#v, want source-resolution stage", stageErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(cacheDirectory, "MISSING-MODEL")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("missing source created managed cache root: %v", statErr)
+	}
+}
+
 func TestPrepareGenericAssetsFallsThroughOrderedHFCaches(t *testing.T) {
 	t.Parallel()
 

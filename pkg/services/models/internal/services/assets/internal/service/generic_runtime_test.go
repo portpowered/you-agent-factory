@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -53,6 +54,172 @@ func TestPrepareGenericAssetsPublishesDurableRuntimeCacheAcrossServiceReconstruc
 	}
 	if layout.CachePath != secondInspection.CachePath || len(layout.Files) != 1 {
 		t.Fatalf("reconstructed runtime layout = %#v, inspection = %#v", layout, secondInspection)
+	}
+}
+
+func TestPrepareGenericAssetsReplacesNamedRuntimeCacheAtomically(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory, scope, service, localPath, firstBody := newNamedGenericRuntimeFixture(t, "atomic-runtime-replacement")
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "replace-model",
+		Reference: models.ModelReference{NameOrURI: localPath},
+		Artifacts: []models.AssetRequirement{{
+			Name: filepath.Base(localPath), Bytes: int64(len(firstBody)), SHA256: sha256Hex(firstBody),
+		}},
+	}
+	if _, err := service.PrepareModelAssets(context.Background(), request); err != nil {
+		t.Fatalf("initial PrepareModelAssets: %v", err)
+	}
+
+	secondBody := []byte("replacement runtime weights")
+	if err := os.WriteFile(localPath, secondBody, 0o644); err != nil {
+		t.Fatalf("write replacement model artifact: %v", err)
+	}
+	request.Artifacts[0].Bytes = int64(len(secondBody))
+	request.Artifacts[0].SHA256 = sha256Hex(secondBody)
+	if _, err := service.PrepareModelAssets(context.Background(), request); err != nil {
+		t.Fatalf("replacement PrepareModelAssets: %v", err)
+	}
+
+	inspection := inspectNamedGenericRuntime(t, service, scope, request.Name)
+	assertNamedGenericRuntimeReady(t, inspection)
+	assertFileBody(t, filepath.Join(inspection.CachePath, filepath.Base(localPath)), secondBody)
+	if _, err := os.Stat(filepath.Join(
+		cacheDirectory, canonicalModelName(request.Name), metadataFileName+".previous",
+	)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime metadata backup = %v, want removed after replacement", err)
+	}
+}
+
+func TestInspectRuntimeCacheReportsInvalidGenericManifest(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelDirectory := filepath.Join(cacheDirectory, "GENERIC-MODEL")
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create generic model cache directory: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(modelDirectory, metadataFileName),
+		[]byte(`{"revision":`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write malformed generic cache metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "generic-invalid-manifest")
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("invalid generic manifest inspection used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "generic-model",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.ManifestPresent || inspection.ManifestValid ||
+		inspection.Installed || inspection.FailureReason != "managed cache manifest is invalid" {
+		t.Fatalf("invalid generic manifest inspection = %#v", inspection)
+	}
+}
+
+func TestInspectRuntimeCacheRejectsIncompleteGenericManifest(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelDirectory := filepath.Join(cacheDirectory, "GENERIC-MODEL")
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create generic model cache directory: %v", err)
+	}
+	metadata, err := json.Marshal(cacheMetadata{
+		ModelName: "generic-model",
+		Revision:  "revision-1",
+		Files: []metadataFile{
+			{Path: "weights.bin"},
+			{Path: "weights.bin"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal incomplete generic metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), metadata, 0o644); err != nil {
+		t.Fatalf("write incomplete generic metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "generic-incomplete-manifest")
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("incomplete generic manifest inspection used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "generic-model",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.ManifestPresent || inspection.ManifestValid ||
+		inspection.Installed || inspection.FailureReason != "managed cache manifest is invalid" {
+		t.Fatalf("incomplete generic manifest inspection = %#v", inspection)
+	}
+}
+
+func TestInspectRuntimeCacheReportsMissingGenericArtifact(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory, scope, service, localPath, body := newNamedGenericRuntimeFixture(t, "generic-missing-artifact")
+	request := models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "missing-artifact-model",
+		Reference: models.ModelReference{NameOrURI: localPath},
+		Artifacts: []models.AssetRequirement{{
+			Name: "weights.gguf", Bytes: int64(len(body)), SHA256: sha256Hex(body),
+		}},
+	}
+	if _, err := service.PrepareModelAssets(context.Background(), request); err != nil {
+		t.Fatalf("PrepareModelAssets: %v", err)
+	}
+	ready := inspectNamedGenericRuntime(t, service, scope, request.Name)
+	if ready.CachePath == "" {
+		t.Fatalf("ready runtime inspection = %#v, want cache path", ready)
+	}
+	if err := os.Remove(filepath.Join(ready.CachePath, "weights.gguf")); err != nil {
+		t.Fatalf("remove prepared generic artifact: %v", err)
+	}
+
+	inspection := inspectNamedGenericRuntime(t, service, scope, request.Name)
+	if !inspection.Supported || !inspection.ManifestPresent || !inspection.ManifestValid ||
+		inspection.Installed || len(inspection.MissingAssets) != 1 ||
+		inspection.MissingAssets[0] != "weights.gguf" {
+		t.Fatalf("missing generic artifact inspection = %#v", inspection)
+	}
+	if _, err := os.Stat(filepath.Join(cacheDirectory, canonicalModelName(request.Name), metadataFileName)); err != nil {
+		t.Fatalf("generic runtime metadata after missing artifact: %v", err)
+	}
+}
+
+func TestResolveRuntimeCacheReportsUnavailableForUnknownGenericModel(t *testing.T) {
+	t.Parallel()
+
+	scopes := newScopes(t, "generic-runtime-missing")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("unknown generic runtime resolution used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+
+	_, err := service.ResolveRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope,
+		Name:  "unknown-model",
+	})
+	if !errors.Is(err, models.ErrNotAvailable) {
+		t.Fatalf("ResolveRuntimeCache error = %v, want ErrNotAvailable", err)
 	}
 }
 

@@ -536,6 +536,68 @@ func TestPrepareModelAssetsClassifiesManifestFailures(t *testing.T) {
 	}
 }
 
+func TestPrepareModelAssetsClassifiesAssetDownloadFailure(t *testing.T) {
+	t.Parallel()
+
+	baseBody := []byte("downloaded base")
+	tokenizerBody := []byte("downloaded tokenizer")
+	baseSHA := sha256String(baseBody)
+	tokenizerSHA := sha256String(tokenizerBody)
+	var failedDownloads atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/models/Serveurperso/OmniVoice-GGUF":
+			_ = json.NewEncoder(writer).Encode(map[string]any{
+				"sha": "download-failure-revision",
+				"siblings": []map[string]any{
+					{"rfilename": "omnivoice-base-Q4_K_M.gguf", "lfs": map[string]any{
+						"oid": baseSHA, "size": len(baseBody),
+					}},
+					{"rfilename": "omnivoice-tokenizer-Q4_K_M.gguf", "lfs": map[string]any{
+						"oid": tokenizerSHA, "size": len(tokenizerBody),
+					}},
+				},
+			})
+		case "/Serveurperso/OmniVoice-GGUF/resolve/download-failure-revision/omnivoice-base-Q4_K_M.gguf":
+			failedDownloads.Add(1)
+			http.Error(writer, "upstream temporarily unavailable", http.StatusServiceUnavailable)
+		case "/Serveurperso/OmniVoice-GGUF/resolve/download-failure-revision/omnivoice-tokenizer-Q4_K_M.gguf":
+			_, _ = writer.Write(tokenizerBody)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	scopes := newScopes(t, "prepare-download-failure")
+	cacheDirectory := t.TempDir()
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newPreparationTestService(
+		scopes,
+		server.Client(),
+		models.RuntimeAssetEndpoints{BaseURL: server.URL, APIBaseURL: server.URL},
+		nil,
+	)
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrSourceFetchFailed) {
+		t.Fatalf("PrepareModelAssets error = %v, want ErrSourceFetchFailed", err)
+	}
+	if failedDownloads.Load() != assetSourceMaxAttempts {
+		t.Fatalf("failed download attempts = %d, want %d", failedDownloads.Load(), assetSourceMaxAttempts)
+	}
+	diagnostics := pullsupport.PullDiagnosticsFromError(err)
+	if diagnostics.File != "omnivoice-base-Q4_K_M.gguf" ||
+		diagnostics.UpstreamStatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("download failure diagnostics = %#v", diagnostics)
+	}
+	if result.Asset.Readiness != models.AssetReadinessFailed || result.Asset.Revision != "download-failure-revision" {
+		t.Fatalf("download failure result = %#v", result.Asset)
+	}
+	assertAttemptAbsent(t, cacheDirectory, "download-failure-revision")
+}
+
 func TestPrepareModelAssetsRetriesTimeoutThenReturnsSourceFailure(t *testing.T) {
 	t.Parallel()
 
