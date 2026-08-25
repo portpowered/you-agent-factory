@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,6 +17,35 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 )
+
+func TestModelsManagedProcessStopAfterNaturalExitIsClean(t *testing.T) {
+	if os.Getenv("GO_WANT_MODELS_HOST_EXIT_HELPER") == "1" {
+		return
+	}
+
+	managed, err := (modelsProcessLauncher{}).Start(context.Background(), serviceedges.HostProcessStartSpec{
+		Command:        os.Args[0],
+		Args:           []string{"-test.run=^TestModelsManagedProcessStopAfterNaturalExitIsClean$"},
+		Env:            append(os.Environ(), "GO_WANT_MODELS_HOST_EXIT_HELPER=1"),
+		HealthEndpoint: "grpc://127.0.0.1:1",
+	})
+	if err != nil {
+		t.Fatalf("start exited host helper: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- managed.Wait()
+	}()
+	if err := <-done; err != nil {
+		t.Fatalf("natural host exit = %v, want nil", err)
+	}
+	if err := managed.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() after natural host exit = %v, want nil", err)
+	}
+	if err := managed.Stop(context.Background()); err != nil {
+		t.Fatalf("repeated Stop() after natural host exit = %v, want nil", err)
+	}
+}
 
 var (
 	_ modelswire.AssetHTTPDoer                = serviceedges.Edges{}.ModelAssetHTTPClient
