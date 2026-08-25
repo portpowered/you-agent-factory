@@ -2921,41 +2921,72 @@ func TestObservationTurnUsageDiffersCumulativeInputCounters(t *testing.T) {
 }
 
 func TestWorkerSessionUsageProjectionRetainsModelAndTokenLineage(t *testing.T) {
-	inputTokens := int64(11)
-	outputTokens := int64(7)
-	payload, err := json.Marshal(usageProjectionPayload{
-		InputTokens:  &inputTokens,
-		OutputTokens: &outputTokens,
-		Model:        " tts ",
-	})
-	if err != nil {
-		t.Fatalf("json.Marshal(usageProjectionPayload) error = %v", err)
-	}
-	draft := workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: payload}
+	draft := usageProjectionTestDraft(t)
 	usage, model, ok := usageProjectionFromDraft(draft)
-	if !ok || usage == nil || usage.InputTokens == nil || *usage.InputTokens != int(inputTokens) ||
-		usage.OutputTokens == nil || *usage.OutputTokens != int(outputTokens) || model != " tts " {
-		t.Fatalf("usageProjectionFromDraft(valid) = %#v, %q, %t", usage, model, ok)
+	if !ok {
+		t.Fatal("usageProjectionFromDraft(valid) rejected a valid usage draft")
 	}
+	if usage == nil {
+		t.Fatal("usageProjectionFromDraft(valid) returned nil usage")
+	}
+	if usage.InputTokens == nil || *usage.InputTokens != 11 {
+		t.Fatalf("usageProjectionFromDraft(valid) input tokens = %#v, want 11", usage.InputTokens)
+	}
+	if usage.OutputTokens == nil || *usage.OutputTokens != 7 {
+		t.Fatalf("usageProjectionFromDraft(valid) output tokens = %#v, want 7", usage.OutputTokens)
+	}
+	if model != " tts " {
+		t.Fatalf("usageProjectionFromDraft(valid) model = %q, want preserved whitespace", model)
+	}
+}
 
+func TestWorkerSessionUsageProjectionUpdatesRegistry(t *testing.T) {
+	draft := usageProjectionTestDraft(t)
 	r := newTestRegistry(t)
 	r.observations["usage-session"] = &observation{}
 	r.updateUsageProjection("usage-session", draft)
 	r.updateUsageProjection("missing-session", draft)
-	if got := r.observations["usage-session"]; got == nil || got.tokenUsage == nil || got.usageModel != "tts" ||
-		got.tokenUsage.InputTokens == nil || *got.tokenUsage.InputTokens != int(inputTokens) {
-		t.Fatalf("updateUsageProjection() = %#v, want normalized usage metadata", got)
+
+	got := r.observations["usage-session"]
+	if got == nil {
+		t.Fatal("updateUsageProjection() removed the existing observation")
+	}
+	if got.tokenUsage == nil {
+		t.Fatal("updateUsageProjection() did not retain token usage")
+	}
+	if got.usageModel != "tts" {
+		t.Fatalf("updateUsageProjection() model = %q, want normalized model", got.usageModel)
+	}
+	if got.tokenUsage.InputTokens == nil || *got.tokenUsage.InputTokens != 11 {
+		t.Fatalf("updateUsageProjection() input tokens = %#v, want 11", got.tokenUsage.InputTokens)
+	}
+}
+
+func TestWorkerSessionUsageProjectionBuildsDetachedObservationMetadata(t *testing.T) {
+	draft := usageProjectionTestDraft(t)
+	usage, _, ok := usageProjectionFromDraft(draft)
+	if !ok {
+		t.Fatal("usageProjectionFromDraft(valid) rejected a valid usage draft")
 	}
 
 	projected := baseObservation("usage-session", workersessions.Session{ID: "usage-session", State: workersessions.StateRunning}, &observation{usageModel: " tts "})
-	if projected.Model == nil || *projected.Model != "tts" {
-		t.Fatalf("baseObservation(usage model) = %#v, want trimmed model", projected)
+	if projected.Model == nil {
+		t.Fatal("baseObservation() omitted the usage model")
+	}
+	if *projected.Model != "tts" {
+		t.Fatalf("baseObservation() model = %q, want trimmed model", *projected.Model)
 	}
 	cloned := cloneObservationTokenUsage(usage)
-	if cloned == nil || cloned.InputTokens == usage.InputTokens {
-		t.Fatalf("cloneObservationTokenUsage() = %#v, want detached token pointers", cloned)
+	if cloned == nil {
+		t.Fatal("cloneObservationTokenUsage() returned nil")
 	}
+	if cloned.InputTokens == usage.InputTokens {
+		t.Fatal("cloneObservationTokenUsage() retained the input token pointer")
+	}
+}
 
+func TestWorkerSessionUsageProjectionRejectsInvalidDrafts(t *testing.T) {
+	payload := usageProjectionTestDraft(t).Payload
 	for name, invalid := range map[string]workers.Draft{
 		"wrong kind":   {Kind: workers.KindMessage, Phase: workers.PhaseUpdated, Payload: payload},
 		"invalid json": {Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: []byte("not-json")},
@@ -2967,6 +2998,21 @@ func TestWorkerSessionUsageProjectionRetainsModelAndTokenLineage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func usageProjectionTestDraft(t *testing.T) workers.Draft {
+	t.Helper()
+	inputTokens := int64(11)
+	outputTokens := int64(7)
+	payload, err := json.Marshal(usageProjectionPayload{
+		InputTokens:  &inputTokens,
+		OutputTokens: &outputTokens,
+		Model:        " tts ",
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal(usageProjectionPayload) error = %v", err)
+	}
+	return workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: payload}
 }
 
 func TestInvokeSafeDiagnosticMessages(t *testing.T) {
