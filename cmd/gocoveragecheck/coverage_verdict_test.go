@@ -163,9 +163,16 @@ func TestFunctionalCoverageRunSuppressesPerPackageCoverageLines(t *testing.T) {
 	if err == nil {
 		t.Fatalf("execute() error = nil, want a non-zero floor-violation outcome")
 	}
+	if !strings.Contains(stdout, "pkg/ functional coverage:\n") {
+		t.Fatalf("functional coverage report missing its explicit pkg/ section:\n%s", stdout)
+	}
 	for _, coverPackage := range functionalVerdictCoverPackages {
 		if raw := coverPackage + "\tcoverage: "; strings.Contains(stdout, raw) {
 			t.Fatalf("functional stdout still streams the raw per-package line %q:\n%s", raw, stdout)
+		}
+		row := "  package=" + coverPackage + " coverage="
+		if got := strings.Count(stdout, row); got != 1 {
+			t.Fatalf("functional coverage row %q appears %d times, want one:\n%s", row, got, stdout)
 		}
 	}
 	if strings.Contains(stdout, "coverage: 71.4% of statements") {

@@ -3,6 +3,9 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const inventoryPrefix = "Functional suite inventory:";
+const functionalTimingPrefix = "tests/ functional-package timing:";
+const functionalCoveragePrefix = "pkg/ functional coverage:";
+const coverageFailurePrefix = "coverage not evaluated:";
 const ordinaryGocoverageExitCode = 1;
 const advisoryPolicyBanner = "!!! COVERAGE FLOOR POLICY: advisory !!!";
 const failedCoverageTestDiagnostic = "package floors were NOT checked because the coverage test run failed";
@@ -30,12 +33,31 @@ function normalizedLines(log) {
 function isCompactVerdictLine(line) {
 	return (
 		line.startsWith(inventoryPrefix) ||
+		line.startsWith(functionalTimingPrefix) ||
+		line.startsWith(functionalCoveragePrefix) ||
 		line.startsWith("total: (statements)") ||
 		line.startsWith("Functional package coverage verdict:") ||
 		line.startsWith("  package=") ||
 		line.startsWith("  tally:") ||
+		(line.startsWith(coverageFailurePrefix) && line.includes(failedCoverageTestDiagnostic)) ||
 		/^(?:go|Go) coverage (?:found |.* below minimum |.* meets minimum )/.test(line)
 	);
+}
+
+function lastLineIndex(lines, prefix) {
+	return lines.findLastIndex((line) => line.startsWith(prefix));
+}
+
+function findFunctionalVerdictStart(lines) {
+	// The current runner begins its compact terminal report with the timing
+	// section. Coverage-only failure paths can begin with the coverage section
+	// or its concise test-failure diagnostic. Keep the inventory marker as a
+	// legacy fallback for logs produced before the quiet report was introduced.
+	for (const prefix of [inventoryPrefix, functionalTimingPrefix, functionalCoveragePrefix, coverageFailurePrefix]) {
+		const index = lastLineIndex(lines, prefix);
+		if (index >= 0) return index;
+	}
+	return -1;
 }
 
 function hasCoverageGateFailure(lines) {
@@ -80,10 +102,8 @@ function hasAdvisoryFinding(lines) {
 
 export function extractFunctionalCoverageVerdict(log) {
 	const lines = normalizedLines(log);
-	// Use the terminal inventory when a test itself happens to print the same
-	// prefix earlier in the full stream.
-	const inventoryIndex = lines.findLastIndex((line) => line.startsWith(inventoryPrefix));
-	if (inventoryIndex < 0) {
+	const verdictStart = findFunctionalVerdictStart(lines);
+	if (verdictStart < 0) {
 		return {
 			foundInventory: false,
 			text: "",
@@ -96,7 +116,7 @@ export function extractFunctionalCoverageVerdict(log) {
 		};
 	}
 
-	const tail = lines.slice(inventoryIndex);
+	const tail = lines.slice(verdictStart);
 	const advisoryLines = [...new Set(lines.filter(isAdvisoryPolicyLine))];
 	const verdictLines = [...new Set([
 		...advisoryLines,

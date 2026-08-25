@@ -83,6 +83,91 @@ func TestFunctionalStreamSuppressesKnownLifecycleActionsButNotObserverUpdates(t 
 	}
 }
 
+func TestFunctionalStreamQuietModeSuppressesConcurrentSuccessfulOutput(t *testing.T) {
+	var sink bytes.Buffer
+	var observedMu sync.Mutex
+	var observed []goTestTimingEvent
+	reporter := newFunctionalStreamReporterWithObserverMode(&sink, func(event goTestTimingEvent) {
+		observedMu.Lock()
+		defer observedMu.Unlock()
+		observed = append(observed, event)
+	}, true)
+	writer := reporter.stdoutWriter()
+	packages := []string{
+		modulePath + "/tests/functional/quiet/alpha",
+		modulePath + "/tests/functional/quiet/beta",
+	}
+	if _, err := writer.Write([]byte("raw successful test debug output\n")); err != nil {
+		t.Fatalf("write raw quiet functional output: %v", err)
+	}
+
+	var writes sync.WaitGroup
+	for index, packageName := range packages {
+		packageName := packageName
+		elapsed := float64(index+1) / 10
+		writes.Add(1)
+		go func() {
+			defer writes.Done()
+			for _, event := range []goTestTimingEvent{
+				{Action: "run", Package: packageName, Test: "TestNoisy"},
+				{Action: "output", Package: packageName, Test: "TestNoisy", Output: "=== RUN   TestNoisy\nsuccessful test debug log\n--- PASS: TestNoisy (0.01s)\n"},
+				{Action: timingOutcomePass, Package: packageName, Test: "TestNoisy", Elapsed: 0.01},
+				{Action: "output", Package: packageName, Output: "ok  \t" + packageName + "\t" + fmt.Sprintf("%.3fs\n", elapsed)},
+				{Action: timingOutcomePass, Package: packageName, Elapsed: elapsed},
+			} {
+				if _, err := writer.Write(marshalFunctionalStreamEvent(event)); err != nil {
+					t.Errorf("write %s event: %v", packageName, err)
+				}
+			}
+		}()
+	}
+	writes.Wait()
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("flush quiet functional stream: %v", err)
+	}
+
+	if got := sink.String(); got != "" {
+		t.Fatalf("quiet functional stream emitted child output: %q", got)
+	}
+	observedMu.Lock()
+	defer observedMu.Unlock()
+	if len(observed) != len(packages)*5 {
+		t.Fatalf("quiet functional stream observer saw %d events, want %d", len(observed), len(packages)*5)
+	}
+}
+
+func TestFunctionalStreamQuietFlushObservesUnterminatedEvent(t *testing.T) {
+	var sink bytes.Buffer
+	var observed []goTestTimingEvent
+	reporter := newFunctionalStreamReporterWithObserverMode(&sink, func(event goTestTimingEvent) {
+		observed = append(observed, event)
+	}, true)
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/quiet/timeout"
+	finalEvent := goTestTimingEvent{
+		Action:  timingOutcomeFail,
+		Package: packageName,
+		Elapsed: 2.5,
+	}
+	data, err := json.Marshal(finalEvent)
+	if err != nil {
+		t.Fatalf("marshal final quiet event: %v", err)
+	}
+	if _, err := writer.Write(data); err != nil {
+		t.Fatalf("write unterminated quiet event: %v", err)
+	}
+
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("flush unterminated quiet event: %v", err)
+	}
+	if sink.Len() != 0 {
+		t.Fatalf("quiet flush emitted child output: %q", sink.String())
+	}
+	if len(observed) != 1 || observed[0] != finalEvent {
+		t.Fatalf("quiet flush observed = %+v, want final event %+v", observed, finalEvent)
+	}
+}
+
 func TestFunctionalStreamPreservesUnknownActionAndNormalOutputAndResult(t *testing.T) {
 	var sink bytes.Buffer
 	reporter := newFunctionalStreamReporter(&sink)

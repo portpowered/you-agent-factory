@@ -75,7 +75,11 @@ func writeCoverageVerdict(label string, result coverageResult, failures []string
 	belowFloor, _, nearFloor := partitionPackageCoverageVerdicts(verdicts)
 	slices.SortStableFunc(verdicts, comparePackageCoverageVerdicts)
 
-	fmt.Fprintf(stdoutWriter, "%s package coverage verdict:\n", label)
+	if label == coverageLaneLabel(functionalCoverageSuite) {
+		fmt.Fprintln(stdoutWriter, "pkg/ functional coverage:")
+	} else {
+		fmt.Fprintf(stdoutWriter, "%s package coverage verdict:\n", label)
+	}
 	for _, verdict := range verdicts {
 		writePackageCoverageVerdictLine(verdict, coverageLaneNoun(label), result)
 	}
