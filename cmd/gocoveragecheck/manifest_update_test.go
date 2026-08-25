@@ -103,13 +103,24 @@ func TestPlanCoverageManifestUpdateUsesMinimumAndPreservesException(t *testing.T
 	}
 }
 
-func TestUpdateCoverageManifestFileWritesMinimumsAndIsByteIdempotent(t *testing.T) {
+func TestUpdateCoverageManifestFilePreservesFloorHoldsAndIsByteIdempotent(t *testing.T) {
 	alpha := modulePath + "/pkg/config"
 	beta := modulePath + "/pkg/service"
-	manifest := coverageManifest{Version: coverageManifestVersion, Lane: "unit", Packages: []coverageManifestEntry{
-		{Package: alpha, Minimum: json.RawMessage("80.00")},
-		{Package: beta, Minimum: json.RawMessage("50.00")},
-	}}
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "unit",
+		FloorHolds: []coverageManifestFloorHold{{
+			Package:       alpha,
+			Justification: "current-main baseline is being restored",
+			Owner:         "coverage-remediation",
+			Deadline:      "2027-07-15",
+			RemovalGate:   "matching unit tests restore the existing floor",
+		}},
+		Packages: []coverageManifestEntry{
+			{Package: alpha, Minimum: json.RawMessage("80.00")},
+			{Package: beta, Minimum: json.RawMessage("50.00")},
+		},
+	}
 	data, err := renderCoverageManifest(manifest)
 	if err != nil {
 		t.Fatalf("render manifest: %v", err)
@@ -142,6 +153,13 @@ func TestUpdateCoverageManifestFileWritesMinimumsAndIsByteIdempotent(t *testing.
 	}
 	if !strings.Contains(string(first), `"minimum": 79.00`) || !strings.Contains(string(first), `"minimum": 60.00`) {
 		t.Fatalf("updated manifest = %s, want sampled minimum floors", first)
+	}
+	updated, err := readCoverageManifest(first, "unit", []string{alpha, beta})
+	if err != nil {
+		t.Fatalf("read updated manifest: %v", err)
+	}
+	if len(updated.FloorHolds) != 1 || updated.FloorHolds[0].Package != alpha || updated.FloorHolds[0].Owner != "coverage-remediation" {
+		t.Fatalf("updated floor holds = %+v, want the original hold preserved", updated.FloorHolds)
 	}
 	if _, err := updateCoverageManifestFile(filename, "unit", samples); err != nil {
 		t.Fatalf("second update error = %v", err)

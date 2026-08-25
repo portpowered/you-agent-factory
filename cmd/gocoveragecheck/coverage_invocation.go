@@ -428,7 +428,14 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 		sink,
 		sinkMu,
 		func() error {
-			return writePartialCoverageSnapshot(cfg.jsonOutput, profilePath, repoRoot, coverPackages, partialCoverageReason(nil))
+			return writePartialCoverageSnapshot(
+				cfg.jsonOutput,
+				profilePath,
+				repoRoot,
+				coverPackages,
+				cfg.packageFloorPolicyValue(),
+				partialCoverageReason(nil),
+			)
 		},
 	)
 	snapshotter.publish(false, coverageLaneNoun(cfg.suite)+" run started", false)
@@ -494,6 +501,7 @@ func publishPartialCoverageIfNeeded(cfg config, profilePath string, repoRoot str
 		profilePath,
 		repoRoot,
 		coverPackages,
+		cfg.packageFloorPolicyValue(),
 		partialCoverageReason(errors.Join(laneErr, mergeErr)),
 	)
 }

@@ -47,6 +47,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 			manifestDiagnostics: [],
 			violations: [],
 			violationCount: 0,
+			floorHoldCount: 0,
 			omittedViolations: 0,
 			nearFloor: [],
 			gatedCount: 0,
@@ -58,6 +59,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 		.map((entry) => ({
 			package: entry.package,
 			coveragePercent: measuredCoveragePercent(entry),
+			held: entry.packageFloorHeld === true,
 			floor:
 				typeof entry.packageFloor === "number" && Number.isFinite(entry.packageFloor)
 					? entry.packageFloor
@@ -77,13 +79,16 @@ function summarizeCoverageArtifact(coverage, limits) {
 	// because 63.75 is not representable in binary. The tolerance is far below
 	// the two decimals a floor is authored with, so it can only absorb
 	// representation error, never a real shortfall.
-	const allViolations = ranked.filter((entry) => entry.headroom < -HEADROOM_EPSILON);
+	const allHolds = ranked.filter((entry) => entry.held && entry.headroom < -HEADROOM_EPSILON);
+	const allViolations = ranked.filter(
+		(entry) => !entry.held && entry.headroom < -HEADROOM_EPSILON,
+	);
 	// Coverage is never negative, so a package sitting on a 0% floor cannot
 	// regress through it. Unlisted packages in the functional lane now use a
 	// positive 15.00 default (unit uses 50.00), while explicit zero floors
 	// remain report-only for this near-floor table.
 	const contenders = ranked.filter(
-		(entry) => entry.headroom >= -HEADROOM_EPSILON && entry.floor > 0,
+		(entry) => !entry.held && entry.headroom >= -HEADROOM_EPSILON && entry.floor > 0,
 	);
 	const violations = allViolations.slice(0, limits.violations);
 	const nearFloor = contenders.slice(0, limits.packages);
@@ -100,6 +105,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 		packageCount: coverage.packages.length,
 		gatedCount: ranked.length,
 		violationCount: allViolations.length,
+		floorHoldCount: allHolds.length,
 		violations,
 		omittedViolations: allViolations.length - violations.length,
 		nearFloor,
@@ -209,6 +215,9 @@ function renderCoverageOverview(coverage, artifactName) {
 		`- Gated packages: ${coverage.gatedCount}`,
 		`- Floor violations: ${coverage.violationCount}`,
 	];
+	if (coverage.floorHoldCount > 0) {
+		lines.push(`- Remediation holds: ${coverage.floorHoldCount}`);
+	}
 	if (coverage.packageFloorPolicy === "advisory") {
 		lines.push(
 			"!!! COVERAGE FLOOR POLICY: advisory !!!",

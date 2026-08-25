@@ -120,6 +120,41 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 	}
 }
 
+func TestFunctionalCoverageVerdictNamesHeldFloorWithoutCallingItAnActiveViolation(t *testing.T) {
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "functional", []manifestPackageSpec{
+		{
+			importPath: configPackage,
+			minimum:    "80.00",
+			floorHold: &coverageManifestFloorHold{
+				Justification: "current-main baseline is being restored",
+				Owner:         "coverage-remediation",
+				Deadline:      "2027-07-15",
+				RemovalGate:   "matching functional tests restore the existing floor",
+			},
+		},
+		{importPath: modulePath + "/pkg/service", minimum: "89.00"},
+		{importPath: modulePath + "/pkg/wire", minimum: "50.00"},
+	})
+
+	stdout, stderr, err := captureFunctionalVerdictRun(t, functionalVerdictConfig(manifestPath, jsonPath))
+	if err != nil {
+		t.Fatalf("execute() error = %v, want the staged hold to keep the blocking lane green; stdout=%s stderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(stderr, "advisory") || strings.Contains(stderr, "report-only") {
+		t.Fatalf("blocking staged run emitted advisory guidance: %s", stderr)
+	}
+	if !strings.Contains(stdout, "  floor violations: none\n") ||
+		!strings.Contains(stdout, "  floor hold: package="+configPackage) ||
+		!strings.Contains(stdout, "gate=hold lane=functional\n") {
+		t.Fatalf("verdict did not distinguish the held package from active violations:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "below-floor=0 near-floor=1 gate-failures=0") {
+		t.Fatalf("verdict tally treated the held package as an active failure:\n%s", stdout)
+	}
+}
+
 func TestFunctionalCoverageRunSuppressesPerPackageCoverageLines(t *testing.T) {
 	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
 	cfg := functionalVerdictConfig(functionalVerdictManifest(t, "80.00"), jsonPath)

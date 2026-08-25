@@ -36,10 +36,12 @@ function isCompactVerdictLine(line) {
 		line.startsWith("total: (statements)") ||
 		line.startsWith("Functional package coverage verdict:") ||
 		line.startsWith("  floor violation:") ||
+		line.startsWith("  floor hold:") ||
 		line === "  floor violations: none" ||
 		line.startsWith("  package=") ||
 		line.startsWith("  tally:") ||
 		line.startsWith("package coverage regression:") ||
+		line.startsWith("package coverage hold:") ||
 		line.startsWith("coverage manifest missing entry:") ||
 		line.startsWith("coverage not evaluated:") ||
 		/^(?:go|Go) coverage (?:found |.* below minimum |.* meets minimum )/.test(line)

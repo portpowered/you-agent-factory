@@ -22,6 +22,7 @@ const nearFloorCoverageHeadroomPoints = 2.0
 type packageCoverageVerdict struct {
 	importPath      string
 	hasFloor        bool
+	held            bool
 	floor           float64
 	actual          float64
 	headroom        float64
@@ -85,11 +86,12 @@ func writePackageCoverageSummaries(summaries []packageCoverageSummary) {
 // writeCoverageVerdict renders one lane's ordered verdict block.
 func writeCoverageVerdict(label string, result coverageResult, failures []string) {
 	verdicts := collectPackageCoverageVerdicts(result)
-	belowFloor, nearFloor := partitionPackageCoverageVerdicts(verdicts)
+	belowFloor, heldFloor, nearFloor := partitionPackageCoverageVerdicts(verdicts)
 	slices.SortStableFunc(verdicts, comparePackageCoverageVerdicts)
 
 	fmt.Fprintf(stdoutWriter, "%s package coverage verdict:\n", label)
 	writeBelowFloorCoverageLines(belowFloor)
+	writeHeldCoverageLines(heldFloor)
 	for _, verdict := range verdicts {
 		writePackageCoverageVerdictLine(verdict, coverageLaneNoun(label))
 	}
@@ -124,6 +126,22 @@ func writeBelowFloorCoverageLines(belowFloor []packageCoverageVerdict) {
 	}
 }
 
+func writeHeldCoverageLines(heldFloor []packageCoverageVerdict) {
+	for _, verdict := range heldFloor {
+		fmt.Fprintf(
+			stdoutWriter,
+			"  floor hold: package=%s floor=%.4f%% actual=%.4f%% delta=%+.4f percentage-points covered=%d/%d statements uncovered-blocks=%d\n",
+			verdict.importPath,
+			verdict.floor,
+			verdict.actual,
+			verdict.headroom,
+			verdict.covered,
+			verdict.measurable,
+			verdict.uncoveredBlocks,
+		)
+	}
+}
+
 func writePackageCoverageVerdictLine(verdict packageCoverageVerdict, lane string) {
 	if !verdict.hasFloor {
 		fmt.Fprintf(
@@ -139,6 +157,9 @@ func writePackageCoverageVerdictLine(verdict packageCoverageVerdict, lane string
 	gate := "pass"
 	if verdict.measurable > 0 && verdict.headroom < 0 {
 		gate = "fail"
+		if verdict.held {
+			gate = "hold"
+		}
 	}
 	fmt.Fprintf(
 		stdoutWriter,
@@ -170,6 +191,7 @@ func collectPackageCoverageVerdicts(result coverageResult) []packageCoverageVerd
 		}
 		if gate.Floor != nil {
 			verdict.hasFloor = true
+			verdict.held = gate.FloorHold != nil
 			verdict.floor = *gate.Floor
 			verdict.headroom = verdict.actual - verdict.floor
 		}
@@ -178,17 +200,19 @@ func collectPackageCoverageVerdicts(result coverageResult) []packageCoverageVerd
 	return verdicts
 }
 
-// partitionPackageCoverageVerdicts splits verdicts into below-floor packages
-// and passing packages within the near-floor band for the established
-// diagnostics and tally. Report-only and vacuously passing packages do not
-// participate in either count. Both returned groups are ordered by headroom
-// ascending with import path as the deterministic tiebreak.
+// partitionPackageCoverageVerdicts splits verdicts into active below-floor
+// packages, staged floor holds, and passing packages within the near-floor
+// band for the established diagnostics and tally. Report-only, held, and
+// vacuously passing packages do not participate in the active failure or
+// near-floor counts. All returned groups are ordered by headroom ascending
+// with import path as the deterministic tiebreak.
 //
 // A zero floor is excluded from the near-floor band: coverage is never
 // negative, so a package sitting on a 0% floor cannot regress through it and
 // naming it would crowd out the packages that can.
-func partitionPackageCoverageVerdicts(verdicts []packageCoverageVerdict) (belowFloor, nearFloor []packageCoverageVerdict) {
+func partitionPackageCoverageVerdicts(verdicts []packageCoverageVerdict) (belowFloor, heldFloor, nearFloor []packageCoverageVerdict) {
 	belowFloor = make([]packageCoverageVerdict, 0)
+	heldFloor = make([]packageCoverageVerdict, 0)
 	nearFloor = make([]packageCoverageVerdict, 0)
 	for _, verdict := range verdicts {
 		if !verdict.hasFloor || verdict.measurable <= 0 {
@@ -196,14 +220,19 @@ func partitionPackageCoverageVerdicts(verdicts []packageCoverageVerdict) (belowF
 		}
 		switch {
 		case verdict.headroom < 0:
-			belowFloor = append(belowFloor, verdict)
+			if verdict.held {
+				heldFloor = append(heldFloor, verdict)
+			} else {
+				belowFloor = append(belowFloor, verdict)
+			}
 		case verdict.floor > 0 && verdict.headroom <= nearFloorCoverageHeadroomPoints:
 			nearFloor = append(nearFloor, verdict)
 		}
 	}
 	slices.SortStableFunc(belowFloor, comparePackageCoverageHeadroom)
+	slices.SortStableFunc(heldFloor, comparePackageCoverageHeadroom)
 	slices.SortStableFunc(nearFloor, comparePackageCoverageHeadroom)
-	return belowFloor, nearFloor
+	return belowFloor, heldFloor, nearFloor
 }
 
 func comparePackageCoverageVerdicts(left packageCoverageVerdict, right packageCoverageVerdict) int {

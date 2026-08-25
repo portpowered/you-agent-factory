@@ -2,6 +2,169 @@
   "version": 1,
   "lane": "functional",
   "defaultFloorPercent": 15.00,
+  "floorHolds": [
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/httpserver",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/wiretranscript",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/chat_sessions/internal/responsebridge",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/internal/service",
+      "justification": "Complete current-head functional coverage is below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/internal/service",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clidiag",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop",
+      "justification": "Complete current-head functional coverage is below the functional default floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the functional default floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics",
+      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
+    }
+  ],
   "packages": [
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/application",

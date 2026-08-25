@@ -698,8 +698,8 @@ test-coverage-go:
 # is forwarded only when it is set, so an invocation with none of them set runs
 # exactly the command it ran before reporting existed. Setting the JSON or
 # timing path never changes the gate: gocoveragecheck's exit code stays the sole
-# pass/fail signal. Floor policy defaults to blocking for local callers; hosted
-# CI sets GO_COVERAGE_FLOOR_POLICY=advisory for both coverage lanes.
+# pass/fail signal. Both local callers and hosted CI inherit the blocking
+# default; a manifest floor hold is the only lane-scoped staged exception.
 test-unit-coverage:
 	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),) $(if $(GO_UNIT_COVERAGE_JSON_OUTPUT),-json-output $(GO_UNIT_COVERAGE_JSON_OUTPUT),) $(if $(GO_UNIT_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_UNIT_COVERAGE_TIMING_OUTPUT),)
 
