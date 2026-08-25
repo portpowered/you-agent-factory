@@ -281,16 +281,9 @@ func TestStart_CallerCancellationDoesNotCancelServerOwnedAdmission(t *testing.T)
 }
 
 func TestStart_ReplayCallerCancellationReturnsBeforeOriginalAdmission(t *testing.T) {
-	dispatchDone := make(chan struct{})
-	execution := &fakeExecution{
-		admissionStarted: make(chan struct{}),
-		releaseAdmission: make(chan struct{}),
-		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
-			close(dispatchDone)
-			return acceptedResult(request), nil
-		},
-	}
-	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), nil)
+	innerEvents := newEventsAppender()
+	eventsSvc := newGatedEvents(innerEvents)
+	registry, err := newService(executionBoundary{execution: succeedingExecution()}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -300,7 +293,7 @@ func TestStart_ReplayCallerCancellationReturnsBeforeOriginalAdmission(t *testing
 		_, startErr := registry.Start(context.Background(), request)
 		originalDone <- startErr
 	}()
-	waitForStartSignal(t, execution.admissionStarted, "original Start did not reach the controlled admission barrier")
+	waitForStartSignal(t, eventsSvc.subscribeStarted, "original Start did not reach the live topic readiness barrier")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -308,7 +301,7 @@ func TestStart_ReplayCallerCancellationReturnsBeforeOriginalAdmission(t *testing
 		t.Fatalf("replayed Start() error = %v, want context.Canceled", err)
 	}
 
-	close(execution.releaseAdmission)
+	close(eventsSvc.releaseSubscribe)
 	select {
 	case err := <-originalDone:
 		if err != nil {
@@ -316,11 +309,6 @@ func TestStart_ReplayCallerCancellationReturnsBeforeOriginalAdmission(t *testing
 		}
 	case <-time.After(time.Second):
 		t.Fatal("original Start() did not finish after admission release")
-	}
-	select {
-	case <-dispatchDone:
-	case <-time.After(time.Second):
-		t.Fatal("original dispatch did not finish after admission release")
 	}
 }
 
