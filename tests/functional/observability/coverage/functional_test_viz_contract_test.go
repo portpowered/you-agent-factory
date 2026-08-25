@@ -3,6 +3,7 @@
 package coverage
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ const (
 	functionalTestVizDefaultProfile  = ".artifacts/functional-test-viz/coverage.out"
 	functionalTestVizDefaultJSON     = ".artifacts/functional-test-viz/coverage-summary.json"
 	functionalTestVizDefaultMarkdown = ".artifacts/functional-test-viz/functional-tests.md"
+	functionalTestVizDefaultLog      = ".artifacts/functional-test-viz/command.log"
 )
 
 // TestFunctionalTestVizContract_DefaultWiringDryRun proves make functional-test-viz
@@ -28,20 +30,12 @@ func TestFunctionalTestVizContract_DefaultWiringDryRun(t *testing.T) {
 		t.Fatalf("dry-run functional-test-viz: %v\n%s", err, output)
 	}
 
-	if !strings.Contains(output, "functional-boundary-check") && !strings.Contains(output, "functionalboundarycheck") {
-		t.Fatalf("functional-test-viz dry-run missing functional-boundary-check:\n%s", output)
-	}
-	if count := strings.Count(output, "run ./cmd/gocoveragecheck"); count != 1 {
-		t.Fatalf("functional-test-viz must invoke gocoveragecheck exactly once, found %d:\n%s", count, output)
-	}
-	if !strings.Contains(output, "-suite functional") {
-		t.Fatalf("functional-test-viz dry-run missing functional suite flag:\n%s", output)
+	if !strings.Contains(output, "test-functional-coverage") {
+		t.Fatalf("functional-test-viz dry-run missing the canonical coverage target:\n%s", output)
 	}
 	for _, marker := range []string{
 		"GO_FUNCTIONAL_COVERAGE_PROFILE=" + functionalTestVizDefaultProfile,
 		"GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=" + functionalTestVizDefaultJSON,
-		"-profile " + functionalTestVizDefaultProfile,
-		"-json-output " + functionalTestVizDefaultJSON,
 		"run ./cmd/functionaltestviz",
 		"-coverage-summary " + functionalTestVizDefaultJSON,
 		"-output " + functionalTestVizDefaultMarkdown,
@@ -51,8 +45,7 @@ func TestFunctionalTestVizContract_DefaultWiringDryRun(t *testing.T) {
 		}
 	}
 	assertOutputOrder(t, output,
-		"functional-boundary-check",
-		"run ./cmd/gocoveragecheck",
+		"test-functional-coverage",
 		"run ./cmd/functionaltestviz",
 	)
 }
@@ -65,47 +58,54 @@ func TestFunctionalTestVizContract_WiresBoundarySingleCoverageThenMarkdown(t *te
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
-		"test-functional-coverage": "@printf '%s\\n' 'stub:coverage-once'\n" +
+		"test-functional-coverage": "@$(MAKE) functional-boundary-check\n" +
+			"\t@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)\n" +
+			"\t@printf '%s\\n' '{\"packages\":[{\"package\":\"github.com/portpowered/infinite-you/pkg/alpha\",\"coveragePercent\":80}]}' > $(FUNCTIONAL_TEST_VIZ_JSON)\n" +
+			"\t@printf '%s\\n' '{\"tests\":[{\"package\":\"github.com/portpowered/infinite-you/tests/functional/work/submit\",\"test\":\"TestSubmit\",\"seconds\":0.125,\"outcome\":\"pass\"}]}' > $(FUNCTIONAL_TEST_VIZ_TIMING)\n" +
+			"\t@printf '%s\\n' 'stub:coverage-once'\n" +
 			"\t@printf '%s\\n' 'profile=$(GO_FUNCTIONAL_COVERAGE_PROFILE)'\n" +
 			"\t@printf '%s\\n' 'json=$(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT)'\n",
 	})
 	goStub := writeMakeEchoScript(t, "stub-go")
+	nodeStub := filepath.Join(t.TempDir(), "stub-node")
+	if err := os.WriteFile(nodeStub, []byte("#!/bin/sh\nprintf '%s\\n' 'Functional coverage for pkg/:' 'pkg/alpha 80.0%' '' 'Functional test latencies:' 'tests/functional/work/submit TestSubmit 0.125s'\n"), 0o755); err != nil {
+		t.Fatalf("write console summary stub: %v", err)
+	}
 
 	output, err := runMakefileTargetWithArgs(
 		repoRoot,
 		makefilePath,
 		"functional-test-viz",
 		"GO="+goStub,
+		"NODE="+filepath.ToSlash(nodeStub),
 	)
 	if err != nil {
 		t.Fatalf("run functional-test-viz wiring contract: %v\n%s", err, output)
 	}
 
-	assertOutputOrder(t, output,
-		"stub:boundary-ok",
-		"stub:coverage-once",
-		"stub-go:",
-	)
-	if count := strings.Count(output, "stub:boundary-ok"); count != 1 {
-		t.Fatalf("expected boundary check exactly once at the viz surface, found %d:\n%s", count, output)
+	for _, expected := range []string{
+		"Functional coverage for pkg/:\npkg/alpha 80.0%",
+		"Functional test latencies:\ntests/functional/work/submit TestSubmit 0.125s",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("functional-test-viz console summary missing %q:\n%s", expected, output)
+		}
 	}
-	if count := strings.Count(output, "stub:coverage-once"); count != 1 {
-		t.Fatalf("expected a single functional coverage invocation, found %d:\n%s", count, output)
+	for _, noisy := range []string{"stub:boundary-ok", "stub:coverage-once", "stub-go:", "outcome=pass"} {
+		if strings.Contains(output, noisy) {
+			t.Fatalf("functional-test-viz console summary contains noisy output %q:\n%s", noisy, output)
+		}
 	}
-	if !strings.Contains(output, "run ./cmd/functionaltestviz") {
-		t.Fatalf("functional-test-viz did not invoke Markdown generator:\n%s", output)
+
+	logBody, readErr := os.ReadFile(filepath.Join(repoRoot, functionalTestVizDefaultLog))
+	if readErr != nil {
+		t.Fatalf("read functional-test-viz command log: %v", readErr)
 	}
-	if !strings.Contains(output, "profile="+functionalTestVizDefaultProfile) {
-		t.Fatalf("coverage invocation missing default profile path:\n%s", output)
-	}
-	if !strings.Contains(output, "json="+functionalTestVizDefaultJSON) {
-		t.Fatalf("coverage invocation missing default JSON path:\n%s", output)
-	}
-	if !strings.Contains(output, "-coverage-summary "+functionalTestVizDefaultJSON) {
-		t.Fatalf("Markdown generator missing default coverage-summary path:\n%s", output)
-	}
-	if !strings.Contains(output, "-output "+functionalTestVizDefaultMarkdown) {
-		t.Fatalf("Markdown generator missing default output path:\n%s", output)
+	log := string(logBody)
+	assertOutputOrder(t, log, "stub:boundary-ok", "stub:coverage-once", "stub-go:")
+	if !strings.Contains(log, "profile="+functionalTestVizDefaultProfile) ||
+		!strings.Contains(log, "json="+functionalTestVizDefaultJSON) {
+		t.Fatalf("coverage invocation log missing default artifact paths:\n%s", log)
 	}
 }
 

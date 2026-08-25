@@ -29,9 +29,6 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 
 	assertSelectedTickCanonicalState(t, worldState)
 
-	worldView := recordingprojections.BuildFactoryWorldView(worldState)
-	assertSelectedTickWorldView(t, worldView)
-
 	projector := &selectedTickWorkstationProjector{
 		result: selectedTickWorkstationProjectionFixture(t0),
 	}

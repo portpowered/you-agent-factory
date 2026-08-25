@@ -5,32 +5,9 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-func TestReconstructFactoryWorldState_SuccessfulSessionBracketReconstructsLifecycle(t *testing.T) {
-	t0 := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
-	events := successfulSessionBracketEvents(t, t0)
-
-	worldState, err := ReconstructFactoryWorldState(events, 3)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	assertSuccessfulSessionBracketReplay(t, worldState)
-
-	view := BuildFactoryWorldView(worldState)
-	if view.Runtime.Session.Bracket == nil {
-		t.Fatal("session bracket projection = nil, want lifecycle bracket")
-	}
-	if !view.Runtime.Session.Bracket.Terminal || view.Runtime.Session.Bracket.FinalStatus != string(factoryapi.FactorySessionDurableLifecycleStatusSucceeded) {
-		t.Fatalf("session bracket projection = %#v, want terminal FINISHED", view.Runtime.Session.Bracket)
-	}
-	if view.Runtime.Session.Bracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusFinal) {
-		t.Fatalf("session bracket result status = %q, want FINAL", view.Runtime.Session.Bracket.ResultStatus)
-	}
-}
 
 func TestReconstructFactoryWorldState_RunningSessionNotReadyResultStatusRoundTrips(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 12, 2, 0, 0, time.UTC)

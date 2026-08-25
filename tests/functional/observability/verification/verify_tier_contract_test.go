@@ -662,76 +662,39 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 	}
 }
 
-// TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog prove run-functional-test-viz.sh invokes the canonical make target with the shared artifact directory and captures command.log.
+// TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog
+// now proves CI invokes the single Make-owned functional report entrypoint.
 func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	makePath := writeExecutableScript(t, "fake-make-functional-viz", `#!/bin/sh
-for argument in "$@"; do
-  case "$argument" in
-    FUNCTIONAL_GOCOVERAGE_EXIT_FILE=*)
-      printf '%s\n' '0' > "${argument#*=}"
-      ;;
-  esac
-done
-printf '%s\n' 'Functional suite inventory: discovered-packages=1 observed-packages=1 (pass=1 fail=0 skip=0) top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0 wall=0.001s complete=true'
-printf '%s\n' 'total: (statements) 80.0%'
-printf '%s\n' 'Functional package coverage verdict:'
-printf '%s\n' '  floor violations: none'
-printf '%s\n' '  package=github.com/portpowered/infinite-you/pkg/alpha coverage=80.0% floor=75.0% delta=+5.0pp gate=pass lane=functional'
-printf '%s\n' '  tally: measured-packages=1 gated-packages=1 below-floor=0 near-floor=0 gate-failures=0'
-printf '%s\n' 'Go coverage 80.0% meets minimum 33.1%.'
-printf '%s\n' "fake-make:$*"
-`)
-	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
-
-	output, err := runScript(
-		repoRoot,
-		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
-		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
-		fmt.Sprintf("MAKE_BIN=%s", makePath),
-	)
+	workflow, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "ci.yml"))
 	if err != nil {
-		t.Fatalf("run functional test viz script: %v\n%s", err, output)
+		t.Fatalf("read CI workflow: %v", err)
 	}
-	if !strings.Contains(output, "fake-make:functional-test-viz FUNCTIONAL_TEST_VIZ_DIR="+artifactRoot) {
-		t.Fatalf("functional test viz script did not invoke the canonical make target with the shared artifact directory:\n%s", output)
+	body := string(workflow)
+	if !strings.Contains(body, "run: make functional-test-viz") {
+		t.Fatalf("functional CI lane does not invoke the canonical Make target:\n%s", body)
 	}
-
-	logBody, err := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
-	if err != nil {
-		t.Fatalf("read functional test viz command log: %v", err)
-	}
-	if !strings.Contains(string(logBody), "fake-make:functional-test-viz") {
-		t.Fatalf("functional test viz command log missing canonical command output:\n%s", string(logBody))
+	if strings.Contains(body, "run-functional-test-viz.sh") {
+		t.Fatalf("functional CI lane still invokes the retired Bash runner:\n%s", body)
 	}
 }
 
-// TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog prove run-functional-test-viz.sh preserves failure exit codes and command.log output so a failed lane cannot be papered over by publication steps.
+// TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog proves the
+// Make-owned entrypoint retains the full stream and returns its captured status.
 func TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	makePath := writeExecutableScript(t, "fake-make-functional-viz-fail", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\nexit 42\n")
-	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
-
-	output, err := runScript(
-		repoRoot,
-		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
-		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
-		fmt.Sprintf("MAKE_BIN=%s", makePath),
-	)
-	if err == nil {
-		t.Fatalf("functional test viz script unexpectedly succeeded:\n%s", output)
+	makefile, err := os.ReadFile(filepath.Join(repoRoot, "Makefile"))
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
 	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok || exitErr.ExitCode() != 42 {
-		t.Fatalf("functional test viz script exit = %v, want exit code 42\n%s", err, output)
-	}
-
-	logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
-	if readErr != nil {
-		t.Fatalf("read functional test viz command log: %v", readErr)
-	}
-	if !strings.Contains(string(logBody), "fake-make:functional-test-viz") {
-		t.Fatalf("functional test viz command log missing failure output:\n%s", string(logBody))
+	body := string(makefile)
+	for _, required := range []string{
+		`>> "$(FUNCTIONAL_TEST_VIZ_LOG)" 2>&1`,
+		`exit "$$status"`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("functional-test-viz missing failure/log contract %q", required)
+		}
 	}
 }
 

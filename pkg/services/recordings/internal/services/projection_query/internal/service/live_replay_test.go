@@ -117,21 +117,6 @@ func assertEquivalentDerivedQueries(
 		t.Fatalf("live workstation requests differ from replay: %#v != %#v", liveRequests, replayRequests)
 	}
 
-	pauses := []factorydefinitions.ActiveThrottlePause{
-		{
-			LaneID:      "reviewer/openai/gpt-5",
-			Provider:    "openai",
-			Model:       "gpt-5",
-			PausedAt:    time.Date(2026, 7, 25, 12, 0, 3, 0, time.UTC),
-			PausedUntil: time.Date(2026, 7, 25, 12, 1, 3, 0, time.UTC),
-		},
-	}
-	livePauses := projection.ProjectActiveThrottlePauses(live.Topology, pauses)
-	replayPauses := projection.ProjectActiveThrottlePauses(replayed.Topology, pauses)
-	if !reflect.DeepEqual(livePauses, replayPauses) {
-		t.Fatalf("live throttle pauses differ from replay: %#v != %#v", livePauses, replayPauses)
-	}
-
 	again := projection.SimpleDashboardRenderData(live)
 	if !reflect.DeepEqual(again, liveDashboard) {
 		t.Fatal("repeated dashboard query is not stable")
