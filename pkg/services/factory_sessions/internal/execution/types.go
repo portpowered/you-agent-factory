@@ -78,6 +78,16 @@ func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
 	}
 	if IsTerminalLifecycleStatus(state.session.Status) {
 		if state.session.Status == completion.Status {
+			candidate := cloneRuntimeSessionState(state)
+			beforeMutations, beforeSummaries := len(candidate.petriMutations), len(candidate.petriSummaries)
+			compactRuntimePetriHistory(&candidate)
+			if beforeMutations == len(candidate.petriMutations) && beforeSummaries == len(candidate.petriSummaries) {
+				return nil
+			}
+			if err := s.persistSessionSnapshot(candidate); err != nil {
+				return err
+			}
+			*state = candidate
 			return nil
 		}
 		return fmt.Errorf("record Petri session completion: session %q is already %s", id, state.session.Status)

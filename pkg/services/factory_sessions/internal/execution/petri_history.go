@@ -271,6 +271,83 @@ func compactRuntimePetriHistory(state *runtimeSessionState) {
 		state.petriMutations,
 		state.petriSummaries,
 	)
+	if !allowsLegacyTerminalPetriCompaction(state) {
+		return
+	}
+	state.petriMutations, state.petriSummaries = compactLegacyTerminalPetriHistory(
+		state.petriMutations,
+		state.petriSummaries,
+	)
+}
+
+// allowsLegacyTerminalPetriCompaction identifies the only legacy migration
+// boundary that does not need topology facts: a non-resumable terminal Petri
+// session has no live transition that can resume one of its historical Work
+// tokens. Interrupted sessions are deliberately excluded because their token
+// state is still part of the resume contract.
+func allowsLegacyTerminalPetriCompaction(state *runtimeSessionState) bool {
+	if state == nil || state.session.OrchestratorKind != interfaces.OrchestratorKindPetri {
+		return false
+	}
+	switch state.session.Status {
+	case LifecycleStatusSucceeded, LifecycleStatusFailed, LifecycleStatusCanceled,
+		LifecycleStatusTimedOut, LifecycleStatusTerminated:
+		return true
+	default:
+		return false
+	}
+}
+
+// compactLegacyTerminalPetriHistory migrates snapshots written before
+// TokenMutationRecord carried terminal/reachability facts. It is intentionally
+// conservative: a Work history that already contains an explicit terminal or
+// reachability fact is left to the topology-backed compactor above. This keeps
+// a current reachable terminal token lossless even when legacy records for the
+// same Work identity are present.
+func compactLegacyTerminalPetriHistory(
+	mutations []interfaces.TokenMutationRecord,
+	summaries []PetriTokenSummary,
+) ([]interfaces.TokenMutationRecord, []PetriTokenSummary) {
+	index := indexPetriTokenHistory(mutations, summaries)
+	eligible := make(map[string]PetriTokenSummary)
+	for workID, workFacts := range index.works {
+		if legacy, ok := legacyTerminalPetriTokenSummary(workFacts); ok {
+			eligible[workID] = legacy
+		}
+	}
+	retained := retainPetriMutations(mutations, index.recordWorkIDs, eligible)
+	for workID, summary := range eligible {
+		index.retainedSummaries[workID] = summary
+	}
+	return retained, sortedPetriTokenSummaries(index.retainedSummaries)
+}
+
+func legacyTerminalPetriTokenSummary(
+	workFacts *petriWorkHistoryFacts,
+) (PetriTokenSummary, bool) {
+	if workFacts == nil || len(workFacts.tokens) == 0 {
+		return PetriTokenSummary{}, false
+	}
+	var selected *petriTokenHistoryFact
+	for _, fact := range workFacts.tokens {
+		if fact == nil || !fact.seen {
+			return PetriTokenSummary{}, false
+		}
+		// A true value can only come from the newer runtime fact fields. Let
+		// the topology-backed pass decide whether that history is eligible.
+		if fact.terminal || fact.transitionReachable {
+			return PetriTokenSummary{}, false
+		}
+		if selected == nil || fact.lastMutationPosition > selected.lastMutationPosition {
+			selected = fact
+		}
+	}
+	if selected == nil || strings.TrimSpace(selected.summary.WorkID) == "" {
+		return PetriTokenSummary{}, false
+	}
+	summary := clonePetriTokenSummary(selected.summary)
+	summary.Retired = selected.retired
+	return summary, true
 }
 
 func stateFromPetriPlaceID(placeID string) string {

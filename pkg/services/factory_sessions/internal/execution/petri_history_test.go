@@ -1,6 +1,7 @@
 package factorysessionexecution
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strconv"
@@ -75,6 +76,136 @@ func TestCompactPetriTokenHistory_CompactsTerminalTokenWhenItIsConsumed(t *testi
 	}
 	if !summaries[0].Retired || summaries[0].WorkID != "work-2" || summaries[0].State != "done" {
 		t.Fatalf("consumed terminal summary = %#v, want retired work-2 in done", summaries[0])
+	}
+}
+
+func TestCompactRuntimePetriHistory_MigratesLegacyTerminalSessionButPreservesInterruptedState(t *testing.T) {
+	legacy := legacyTerminalTokenMutations(5)
+
+	terminal := runtimeSessionState{session: SessionReadResult{
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
+		Status:           LifecycleStatusSucceeded,
+	}, petriMutations: clonePetriMutations(legacy)}
+	compactRuntimePetriHistory(&terminal)
+	if len(terminal.petriMutations) != 0 || len(terminal.petriSummaries) != 1 {
+		t.Fatalf("legacy terminal history = %d mutations, %d summaries, want 0 and 1", len(terminal.petriMutations), len(terminal.petriSummaries))
+	}
+	if got := terminal.petriSummaries[0]; got.WorkID != "work-5" || got.State != "done" {
+		t.Fatalf("legacy terminal summary = %#v, want work-5 at done", got)
+	}
+
+	interrupted := runtimeSessionState{session: SessionReadResult{
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
+		Status:           LifecycleStatusInterrupted,
+	}, petriMutations: clonePetriMutations(legacy)}
+	compactRuntimePetriHistory(&interrupted)
+	if len(interrupted.petriMutations) != len(legacy) || len(interrupted.petriSummaries) != 0 {
+		t.Fatalf("interrupted legacy history = %d mutations, %d summaries, want %d and 0", len(interrupted.petriMutations), len(interrupted.petriSummaries), len(legacy))
+	}
+}
+
+func TestCompactRuntimePetriHistory_LegacyMigrationLeavesExplicitReachableHistoryLossless(t *testing.T) {
+	mutations := largeTerminalTokenMutations(6, "reachable-output")
+	mutations[2].TransitionReachable = true
+	state := runtimeSessionState{session: SessionReadResult{
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
+		Status:           LifecycleStatusSucceeded,
+	}, petriMutations: mutations}
+
+	compactRuntimePetriHistory(&state)
+	if len(state.petriMutations) != len(mutations) || len(state.petriSummaries) != 0 {
+		t.Fatalf("reachable terminal history = %d mutations, %d summaries, want %d and 0", len(state.petriMutations), len(state.petriSummaries), len(mutations))
+	}
+}
+
+func TestLegacyTerminalSnapshot_MigratesOnNextSuccessfulSaveAndReload(t *testing.T) {
+	const sessionID = "dur-sess-dddddddddddddddddddddddddddddddd"
+	store := &petriCompactionStore{}
+	legacy := runtimeSessionState{
+		session: SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: interfaces.OrchestratorKindPetri,
+		},
+		result:         ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusSucceeded},
+		petriMutations: legacyTerminalTokenMutations(7),
+	}
+	encoded, err := json.Marshal(persistedSnapshotFromRuntimeState(legacy))
+	if err != nil {
+		t.Fatalf("marshal legacy snapshot: %v", err)
+	}
+	if err := store.Save(sessionID, encoded); err != nil {
+		t.Fatalf("seed legacy snapshot: %v", err)
+	}
+
+	service := &JavaScriptRuntimeService{
+		persistence: store,
+		sessions:    make(map[string]*runtimeSessionState),
+	}
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession legacy snapshot: %v", err)
+	}
+	if read.Status != LifecycleStatusSucceeded {
+		t.Fatalf("legacy session status = %q, want SUCCEEDED", read.Status)
+	}
+	if err := service.RecordPetriSessionCompletion(sessionID, PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+		t.Fatalf("RecordPetriSessionCompletion migration: %v", err)
+	}
+
+	var migrated PersistedRuntimeSessionState
+	saved, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load migrated snapshot: %v", err)
+	}
+	if err := json.Unmarshal(saved, &migrated); err != nil {
+		t.Fatalf("decode migrated snapshot: %v", err)
+	}
+	if len(migrated.Records) != 1 || migrated.Records[0].PetriSummary == nil {
+		t.Fatalf("migrated records = %#v, want one Petri summary", migrated.Records)
+	}
+	if got := migrated.Records[0].PetriSummary; got.WorkID != "work-7" || got.State != "done" {
+		t.Fatalf("migrated summary = %#v, want work-7 at done", got)
+	}
+	if strings.Contains(string(saved), "large-worker-output") || strings.Contains(string(saved), "structured_result") {
+		t.Fatal("migrated snapshot retained legacy worker output")
+	}
+	loaded, err := service.snapshotSessionState(sessionID)
+	if err != nil {
+		t.Fatalf("snapshot migrated session: %v", err)
+	}
+	if len(loaded.petriMutations) != 0 || len(loaded.petriSummaries) != 1 {
+		t.Fatalf("hot migrated history = %d mutations, %d summaries, want 0 and 1", len(loaded.petriMutations), len(loaded.petriSummaries))
+	}
+}
+
+func TestLegacyInterruptedSnapshot_RemainsLosslessOnSuccessfulSave(t *testing.T) {
+	const sessionID = "dur-sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	store := &petriCompactionStore{}
+	state := runtimeSessionState{
+		session: SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusInterrupted,
+			OrchestratorKind: interfaces.OrchestratorKindPetri,
+		},
+		petriMutations: legacyTerminalTokenMutations(8),
+	}
+	service := &JavaScriptRuntimeService{persistence: store}
+	if err := service.persistSessionSnapshot(state); err != nil {
+		t.Fatalf("persist interrupted legacy snapshot: %v", err)
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(store.payload, &persisted); err != nil {
+		t.Fatalf("decode interrupted snapshot: %v", err)
+	}
+	var mutationCount int
+	for _, record := range persisted.Records {
+		if record.Kind == DurableRecordKindPetriTokenMutation {
+			mutationCount++
+		}
+	}
+	if mutationCount != len(state.petriMutations) {
+		t.Fatalf("interrupted persisted mutation count = %d, want %d", mutationCount, len(state.petriMutations))
 	}
 }
 
@@ -227,6 +358,15 @@ func largeTerminalTokenMutations(index int, body string) []interfaces.TokenMutat
 	}
 }
 
+func legacyTerminalTokenMutations(index int) []interfaces.TokenMutationRecord {
+	mutations := largeTerminalTokenMutations(index, "large-worker-output")
+	for mutationIndex := range mutations {
+		mutations[mutationIndex].Terminal = false
+		mutations[mutationIndex].TransitionReachable = false
+	}
+	return mutations
+}
+
 func encodePetriMutationSnapshot(t *testing.T, mutations []interfaces.TokenMutationRecord, summaries []PetriTokenSummary) []byte {
 	t.Helper()
 	snapshot := persistedSnapshotFromRuntimeState(runtimeSessionState{
@@ -259,6 +399,9 @@ func (s *petriCompactionStore) Save(_ string, encoded []byte) error {
 	return nil
 }
 
-func (*petriCompactionStore) Load(string) ([]byte, error) {
-	return nil, errors.New("not found")
+func (s *petriCompactionStore) Load(string) ([]byte, error) {
+	if len(s.payload) == 0 {
+		return nil, errors.New("not found")
+	}
+	return append([]byte(nil), s.payload...), nil
 }
