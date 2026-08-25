@@ -338,7 +338,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 			result.DispatchID,
 			result.TransitionID,
 			resolved.outcome,
-			snapshotTopology(snapshot),
+			t.netDefinition,
 			mutations,
 		),
 	}
@@ -463,13 +463,6 @@ func mutationRecordsForDispatch(
 		records = append(records, record)
 	}
 	return records
-}
-
-func snapshotTopology(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) *state.Net {
-	if snapshot == nil {
-		return nil
-	}
-	return snapshot.Topology
 }
 
 func terminalMutationFacts(topology *state.Net, mutation interfaces.MarkingMutation) (bool, bool) {

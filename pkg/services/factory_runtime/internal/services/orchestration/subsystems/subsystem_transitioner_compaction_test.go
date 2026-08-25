@@ -2,10 +2,12 @@ package subsystems
 
 import (
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestTerminalMutationFacts_UseTopologyReachabilityAndConsumeFacts(t *testing.T) {
@@ -47,6 +49,39 @@ func TestTerminalMutationFacts_UseTopologyReachabilityAndConsumeFacts(t *testing
 				t.Fatalf("terminalMutationFacts() = (%t, %t), want (%t, %t)", terminal, reachable, test.wantTerminal, test.wantReachable)
 			}
 		})
+	}
+}
+
+func TestBuildCompletedDispatch_UsesTransitionerTopologyForMutationFacts(t *testing.T) {
+	transitioner := &TransitionerSubsystem{netDefinition: compactionTestNet()}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}
+	result := &workerexecution.WorkResult{
+		DispatchID:   "dispatch-done",
+		TransitionID: "complete",
+	}
+	mutation := interfaces.MarkingMutation{
+		Type:    interfaces.MutationMove,
+		TokenID: "token-done",
+		ToPlace: "task:done",
+		NewToken: &workerexecution.Token{ID: "token-done", State: "done", Color: workerexecution.Color{
+			WorkID: "work-done", WorkTypeID: "task",
+		}},
+	}
+
+	completed := transitioner.buildCompletedDispatch(
+		snapshot,
+		result,
+		resolvedWorkResult{outcome: workerexecution.OutcomeAccepted},
+		nil,
+		[]interfaces.MarkingMutation{mutation},
+		time.Unix(0, 0),
+	)
+	if len(completed.OutputMutations) != 1 {
+		t.Fatalf("output mutations = %d, want 1", len(completed.OutputMutations))
+	}
+	record := completed.OutputMutations[0]
+	if !record.Terminal || record.TransitionReachable {
+		t.Fatalf("mutation topology facts = terminal=%t reachable=%t, want true/false", record.Terminal, record.TransitionReachable)
 	}
 }
 
