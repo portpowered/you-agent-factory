@@ -8,50 +8,6 @@ import (
 	"strings"
 )
 
-// PullProgressObservation is one request-scoped observation from Models while
-// it prepares a model asset. TotalBytes is zero when the source did not expose
-// a trustworthy size; otherwise TransferredBytes is the current byte count for
-// Artifact and can be rendered as a percentage by a caller.
-type PullProgressObservation struct {
-	ModelName        string
-	Artifact         string
-	TransferredBytes int64
-	TotalBytes       int64
-}
-
-// PullProgressObserver receives detached, non-canonical pull observations.
-// Observers are carried by the request context so concurrent pull requests do
-// not share presentation state or mutate Models state.
-type PullProgressObserver func(PullProgressObservation)
-
-type pullProgressObserverContextKey struct{}
-
-// WithPullProgressObserver attaches one request-scoped pull observer to ctx.
-func WithPullProgressObserver(ctx context.Context, observer PullProgressObserver) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, pullProgressObserverContextKey{}, observer)
-}
-
-// PullProgressObserverFromContext returns the request-scoped pull observer,
-// when one was attached by a transport or another caller.
-func PullProgressObserverFromContext(ctx context.Context) PullProgressObserver {
-	if ctx == nil {
-		return nil
-	}
-	observer, _ := ctx.Value(pullProgressObserverContextKey{}).(PullProgressObserver)
-	return observer
-}
-
-// ReportPullProgress publishes one detached observation when the request has
-// an observer. Models callers must treat this as best-effort presentation data.
-func ReportPullProgress(ctx context.Context, observation PullProgressObservation) {
-	if observer := PullProgressObserverFromContext(ctx); observer != nil {
-		observer(observation)
-	}
-}
-
 // Service is the singular cross-service Models root authority. Peer packages
 // depend on this one named interface for Models-owned runtime scope, catalog,
 // assets, host/lease readiness, and local infer operations rather than nested

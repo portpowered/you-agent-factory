@@ -105,7 +105,7 @@ type modelPullProgressPresenter struct {
 	started   time.Time
 
 	mu               sync.Mutex
-	latest           models.PullProgressObservation
+	latest           pullsupport.ProgressObservation
 	hasObservation   bool
 	lastRendered     time.Time
 	renderedArtifact string
@@ -137,12 +137,12 @@ func startModelPullProgress(
 		output: newSynchronizedWriter(output), interval: interval, now: now,
 		started: now(), stop: make(chan struct{}), done: make(chan struct{}),
 	}
-	observer := models.PullProgressObserver(func(observation models.PullProgressObservation) {
+	observer := pullsupport.ProgressObserver(func(observation pullsupport.ProgressObservation) {
 		presenter.observe(observation)
 	})
-	ctx = models.WithPullProgressObserver(ctx, observer)
+	ctx = pullsupport.WithProgressObserver(ctx, observer)
 	presenter.start()
-	presenter.observe(models.PullProgressObservation{ModelName: presenter.modelName})
+	presenter.observe(pullsupport.ProgressObservation{ModelName: presenter.modelName})
 	return ctx, presenter.close
 }
 
@@ -164,7 +164,7 @@ func (presenter *modelPullProgressPresenter) start() {
 	}()
 }
 
-func (presenter *modelPullProgressPresenter) observe(observation models.PullProgressObservation) {
+func (presenter *modelPullProgressPresenter) observe(observation pullsupport.ProgressObservation) {
 	if presenter == nil || presenter.ctx.Err() != nil {
 		return
 	}

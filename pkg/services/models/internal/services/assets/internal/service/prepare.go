@@ -39,7 +39,7 @@ type remoteFile struct {
 
 type assetProgress struct {
 	ctx         context.Context
-	observer    models.PullProgressObserver
+	observer    pullsupport.ProgressObserver
 	modelName   string
 	artifact    string
 	totalBytes  int64
@@ -52,7 +52,7 @@ func newAssetProgress(
 	artifact string,
 	totalBytes int64,
 ) *assetProgress {
-	observer := models.PullProgressObserverFromContext(ctx)
+	observer := pullsupport.ProgressObserverFromContext(ctx)
 	if observer == nil {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (progress *assetProgress) report() {
 	if progress == nil || progress.observer == nil || progress.ctx.Err() != nil {
 		return
 	}
-	progress.observer(models.PullProgressObservation{
+	progress.observer(pullsupport.ProgressObservation{
 		ModelName:        progress.modelName,
 		Artifact:         progress.artifact,
 		TransferredBytes: progress.transferred,
