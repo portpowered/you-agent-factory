@@ -1195,6 +1195,24 @@ func TestCombinedServiceReplayArtifactCapabilityRoundTripsDetachedOutcomes(t *te
 		t.Fatalf("RecordRecordingEvent: %v", err)
 	}
 
+	assertCombinedReplayArtifactActiveErrors(t, capability, recordingID)
+
+	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	loaded := loadCombinedReplayArtifact(t, capability, recordingID)
+	assertCombinedLoadedReplay(t, loaded, recordingID, scope, event)
+	built := buildCombinedReplayArtifact(t, capability, recordingID)
+	assertCombinedBuiltArtifact(t, built, recordingID, destination, event)
+	assertCombinedArtifactOperations(t, capability, built.Artifact, scope, event)
+	assertCombinedArtifactPublication(t, capability, recordingID, destination)
+}
+
+func assertCombinedReplayArtifactActiveErrors(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) {
+	t.Helper()
 	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorNotFinalized) {
 		t.Fatalf("LoadReplay active = %v, want NOT_FINALIZED", err)
 	}
@@ -1204,70 +1222,73 @@ func TestCombinedServiceReplayArtifactCapabilityRoundTripsDetachedOutcomes(t *te
 	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "missing-neutral-artifacts"}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorNotFound) {
 		t.Fatalf("LoadReplay missing = %v, want NOT_FOUND", err)
 	}
+}
 
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
+func loadCombinedReplayArtifact(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) recordings.LoadReplayResult {
+	t.Helper()
 	loaded, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID})
 	if err != nil {
 		t.Fatalf("LoadReplay: %v", err)
 	}
-	if loaded.Replay.RecordingID != recordingID ||
-		loaded.Replay.Scope.FactorySessionID != scope.FactorySessionID ||
-		len(loaded.Replay.Events) != 1 ||
-		loaded.Replay.Events[0].ID != string(event.ID) ||
-		loaded.Replay.Events[0].Payload != event.Payload {
+	return loaded
+}
+
+func assertCombinedLoadedReplay(t *testing.T, loaded recordings.LoadReplayResult, recordingID recordings.ReplayRecordingID, scope recordings.CanonicalEventScope, event recordings.CanonicalEvent) {
+	t.Helper()
+	if loaded.Replay.RecordingID != recordingID || loaded.Replay.Scope.FactorySessionID != scope.FactorySessionID ||
+		len(loaded.Replay.Events) != 1 || loaded.Replay.Events[0].ID != string(event.ID) || loaded.Replay.Events[0].Payload != event.Payload {
 		t.Fatalf("LoadReplay = %#v, want detached recording facts", loaded)
 	}
+}
 
+func buildCombinedReplayArtifact(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) recordings.BuildArtifactResult {
+	t.Helper()
 	built, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
 	if err != nil {
 		t.Fatalf("BuildArtifact: %v", err)
 	}
-	if built.Artifact.SchemaVersion != recordings.ArtifactSchemaV1 ||
-		built.Artifact.Summary.RecordingID != recordingID ||
-		built.Artifact.Summary.Reference != recordings.ArtifactReference(destination) ||
-		built.Artifact.Summary.EventCount != 1 ||
-		len(built.Artifact.Events) != 1 ||
-		built.Artifact.Events[0].ID != string(event.ID) {
+	return built
+}
+
+func assertCombinedBuiltArtifact(t *testing.T, built recordings.BuildArtifactResult, recordingID recordings.ReplayRecordingID, destination string, event recordings.CanonicalEvent) {
+	t.Helper()
+	if built.Artifact.SchemaVersion != recordings.ArtifactSchemaV1 || built.Artifact.Summary.RecordingID != recordingID ||
+		built.Artifact.Summary.Reference != recordings.ArtifactReference(destination) || built.Artifact.Summary.EventCount != 1 ||
+		len(built.Artifact.Events) != 1 || built.Artifact.Events[0].ID != string(event.ID) {
 		t.Fatalf("BuildArtifact = %#v, want finalized detached artifact", built)
 	}
+}
 
-	validated, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{
-		Artifact: built.Artifact,
-	})
+func assertCombinedArtifactOperations(t *testing.T, capability recordings.RecordingReplayArtifacts, artifact recordings.ArtifactEnvelope, scope recordings.CanonicalEventScope, event recordings.CanonicalEvent) {
+	t.Helper()
+	validated, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: artifact})
 	if err != nil || validated.Summary.EventCount != 1 {
 		t.Fatalf("ValidateArtifact = (%#v, %v), want one-event summary", validated, err)
 	}
-	summarized, err := capability.SummarizeArtifact(recordings.SummarizeArtifactRequest{
-		Artifact: built.Artifact,
-	})
+	summarized, err := capability.SummarizeArtifact(recordings.SummarizeArtifactRequest{Artifact: artifact})
 	if err != nil || summarized.Summary.Scope.FactorySessionID != scope.FactorySessionID {
 		t.Fatalf("SummarizeArtifact = (%#v, %v), want session scope", summarized, err)
 	}
-	encoded, err := capability.EncodeArtifact(recordings.EncodeArtifactRequest{
-		Artifact: built.Artifact,
-	})
+	encoded, err := capability.EncodeArtifact(recordings.EncodeArtifactRequest{Artifact: artifact})
 	if err != nil || len(encoded.Payload) == 0 {
 		t.Fatalf("EncodeArtifact = (%d bytes, %v), want payload", len(encoded.Payload), err)
 	}
-	decoded, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{
-		Payload: encoded.Payload,
-	})
+	decoded, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: encoded.Payload})
 	if err != nil || decoded.Artifact.Events[0].Payload != event.Payload {
 		t.Fatalf("DecodeArtifact = (%#v, %v), want preserved event payload", decoded, err)
 	}
+	assertCombinedArtifactValidationFailures(t, capability, artifact)
+}
 
-	tampered := built.Artifact
-	tampered.Events = append([]recordings.ReplayEvent(nil), built.Artifact.Events...)
+func assertCombinedArtifactValidationFailures(t *testing.T, capability recordings.RecordingReplayArtifacts, artifact recordings.ArtifactEnvelope) {
+	t.Helper()
+	tampered := artifact
+	tampered.Events = append([]recordings.ReplayEvent(nil), artifact.Events...)
 	tampered.Events[0].Payload = `{"changed":true}`
 	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: tampered}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorInvalidIntegrity) {
 		t.Fatalf("ValidateArtifact tampered = %v, want INVALID_INTEGRITY", err)
 	}
-	unsupported := built.Artifact
+	unsupported := artifact
 	unsupported.SchemaVersion = "recordings.portable-artifact.v99"
 	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: unsupported}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorUnsupportedSchema) {
 		t.Fatalf("ValidateArtifact unsupported = %v, want UNSUPPORTED_SCHEMA", err)
@@ -1275,32 +1296,26 @@ func TestCombinedServiceReplayArtifactCapabilityRoundTripsDetachedOutcomes(t *te
 	if _, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorInvalid) {
 		t.Fatalf("DecodeArtifact empty = %v, want INVALID", err)
 	}
+}
 
-	exported, err := capability.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
-		RecordingID: recordingID,
-	})
+func assertCombinedArtifactPublication(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID, destination string) {
+	t.Helper()
+	exported, err := capability.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: recordingID})
 	if err != nil || exported.Reference != recordings.ArtifactReference(destination) {
 		t.Fatalf("ExportArtifact = (%#v, %v), want published destination", exported, err)
 	}
-	read, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   exported.Reference,
-	})
+	read, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{RecordingID: recordingID, Reference: exported.Reference})
 	if err != nil || read.Artifact.Integrity.Digest != exported.Artifact.Integrity.Digest {
 		t.Fatalf("ReadArtifact = (%#v, %v), want exported digest", read, err)
 	}
 	if _, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   recordings.ArtifactReference(destination + ".other"),
+		RecordingID: recordingID, Reference: recordings.ArtifactReference(destination + ".other"),
 	}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorForeign) {
 		t.Fatalf("ReadArtifact foreign = %v, want FOREIGN", err)
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := capability.ReadArtifact(canceled, recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   exported.Reference,
-	}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorCancelled) {
+	if _, err := capability.ReadArtifact(canceled, recordings.ReadArtifactRequest{RecordingID: recordingID, Reference: exported.Reference}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorCancelled) {
 		t.Fatalf("ReadArtifact canceled = %v, want CANCELLED", err)
 	}
 }
