@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -594,5 +596,202 @@ func TestModelsInvocationDiagnosticCoversFailureClasses(t *testing.T) {
 				t.Fatalf("modelsInvocationDiagnostic(%q) = (%q, %q), want (%q, %q)", test.class, code, family, test.code, test.family)
 			}
 		})
+	}
+}
+
+func TestModelsRemoveUsesDeleteAndPreservesHumanResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodDelete || request.URL.EscapedPath() != "/models/voice%20model" {
+			t.Fatalf("remove request = %s %s, want DELETE escaped model path", request.Method, request.URL.Path)
+		}
+		_, _ = io.WriteString(writer, `{"modelName":"voice model","outcome":"REMOVED","revision":"rev-1","cachePath":"/tmp/models/voice","bytesRemoved":2048}`)
+	}))
+	defer server.Close()
+	var output bytes.Buffer
+	if err := New(testHTTPProtocol(t), testModelInvocationBuilder).Remove(RemoveConfig{Context: context.Background(), Server: strings.TrimSuffix(server.URL, "/"), ModelName: "voice model", Output: &output}); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	for _, want := range []string{"voice model", "REMOVED", "rev-1", "2.00 KiB (2048 bytes)"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("remove output missing %q:\n%s", want, output.String())
+		}
+	}
+	endpoint, err := modelsEndpoint("http://factory.test", "/models/voice")
+	if err != nil {
+		t.Fatalf("modelsEndpoint() error = %v", err)
+	}
+	if err := doModelsDELETE(nil, testHTTPProtocol(t), endpoint, nil, requestDiagnostics{}); err == nil || err.Error() != "context is required" {
+		t.Fatalf("nil context delete error = %v, want context requirement", err)
+	}
+	if err := doModelsDELETE(context.Background(), nil, endpoint, nil, requestDiagnostics{}); err == nil || err.Error() != "CLI HTTP protocol is required" {
+		t.Fatalf("nil transport delete error = %v, want protocol requirement", err)
+	}
+}
+
+func TestManagedRuntimePullMappingPreservesDiagnostics(t *testing.T) {
+	diagnostics := modelinference.PullDiagnostics{ModelName: "voice", ResolvedRepository: "owner/repo", Revision: "rev-1", File: "weights.gguf", Operation: "download asset", RequestURL: "https://assets.example.test/weights.gguf", UpstreamStatusCode: http.StatusBadGateway}
+	response := pullResultToGenerated(modelinference.PullResult{ModelName: "voice", CachePath: "/tmp/models/voice", Revision: "rev-1", ManagedPullOutcome: "SOURCE_FETCH_FAILED", ReadinessState: "FAILED", SourceKind: "huggingface", SourceID: "owner/repo", ResolverNotes: "resolved from catalog", PullDiagnostics: diagnostics})
+	if response.ManagedRuntimePull.PullDiagnostics == nil || response.ManagedRuntimePull.PullDiagnostics.ModelName == nil || *response.ManagedRuntimePull.PullDiagnostics.ModelName != "voice" || response.ManagedRuntimePull.PullDiagnostics.UpstreamStatusCode == nil || *response.ManagedRuntimePull.PullDiagnostics.UpstreamStatusCode != http.StatusBadGateway {
+		t.Fatalf("pull diagnostics = %#v, want safe diagnostic fields", response.ManagedRuntimePull.PullDiagnostics)
+	}
+	if response.ManagedRuntimePull.SourceDiagnostics == nil || response.ManagedRuntimePull.SourceDiagnostics.SourceKind == nil || *response.ManagedRuntimePull.SourceDiagnostics.SourceKind != "huggingface" {
+		t.Fatalf("source diagnostics = %#v, want source facts", response.ManagedRuntimePull.SourceDiagnostics)
+	}
+}
+
+func TestManagedRuntimePullMappingUsesStableOutcomes(t *testing.T) {
+	for _, test := range []struct {
+		outcome string
+		want    factoryapi.ManagedRuntimePullOutcome
+	}{
+		{outcome: "PULLED", want: factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY},
+		{outcome: "ALREADY_PRESENT", want: factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT},
+		{outcome: "other", want: factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME},
+	} {
+		if got := managedRuntimePullOutcome(modelinference.PullResult{Outcome: test.outcome}); got != test.want {
+			t.Fatalf("managedRuntimePullOutcome(%q) = %q, want %q", test.outcome, got, test.want)
+		}
+	}
+	if got := managedRuntimePullDiagnostics(modelinference.PullResult{}); got != nil {
+		t.Fatalf("empty pull diagnostics = %#v, want nil", got)
+	}
+	if got := managedRuntimePullReadiness(modelinference.PullResult{}); got != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("empty readiness = %q, want READY", got)
+	}
+	if got := managedRuntimePullSourceDiagnostics(modelinference.PullResult{}); got != nil {
+		t.Fatalf("empty source diagnostics = %#v, want nil", got)
+	}
+}
+
+func TestManagedRuntimePullMappingClassifiesFailures(t *testing.T) {
+	for _, outcome := range []factoryapi.ManagedRuntimePullOutcome{"", factoryapi.ManagedRuntimePullOutcomeALREADYREADY, factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY, factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT, factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED} {
+		failure := isManagedRuntimePullFailure(outcome)
+		wantFailure := outcome == factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED
+		if failure != wantFailure {
+			t.Fatalf("isManagedRuntimePullFailure(%q) = %t, want %t", outcome, failure, wantFailure)
+		}
+	}
+	var nilFailure *managedRuntimePullFailure
+	if nilFailure.Error() != "" || nilFailure.Unwrap() != nil {
+		t.Fatal("nil managedRuntimePullFailure did not remain nil-safe")
+	}
+}
+
+func TestModelsRequestErrorClassifiesStructuredAndOpaqueFailures(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		status   int
+		body     string
+		response *http.Response
+		want     error
+	}{
+		{name: "cache not found", status: http.StatusNotFound, body: `{"code":"MODEL_CACHE_NOT_FOUND","message":"voice cache missing"}`, want: ErrModelCacheNotFound},
+		{name: "cache in use", status: http.StatusConflict, body: `{"code":"MODEL_CACHE_IN_USE","message":"voice is leased"}`, want: ErrModelCacheInUse},
+		{name: "model not found with response", status: http.StatusNotFound, body: `{"code":"NOT_FOUND","message":"voice missing"}`, response: &http.Response{StatusCode: http.StatusNotFound}, want: ErrModelNotFound},
+		{name: "generic structured", status: http.StatusBadGateway, body: `{"code":"BACKEND_FAILURE","message":"upstream failed"}`},
+		{name: "opaque", status: http.StatusBadGateway, body: "not json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := modelsRequestError(test.status, []byte(test.body), test.response)
+			if test.want != nil {
+				if !errors.Is(err, test.want) {
+					t.Fatalf("modelsRequestError() = %v, want %v", err, test.want)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("modelsRequestError() = nil, want failure")
+			}
+			if test.name == "opaque" && !strings.Contains(err.Error(), "response body was not a structured API error") {
+				t.Fatalf("opaque error = %v, want safe body classification", err)
+			}
+		})
+	}
+}
+
+func TestModelsInvocationDiagnosticsCoverStableFailureClasses(t *testing.T) {
+	for _, class := range []modelinference.InvocationFailureClass{
+		modelinference.InvocationFailureClassInvalidModelReference, modelinference.InvocationFailureClassRevisionResolution,
+		modelinference.InvocationFailureClassInvalidOperation, modelinference.InvocationFailureClassInvalidSlot,
+		modelinference.InvocationFailureClassSlotArity, modelinference.InvocationFailureClassInvalidParameter,
+		modelinference.InvocationFailureClassMediaCapability, modelinference.InvocationFailureClassConfiguration,
+		modelinference.InvocationFailureClassOfflineCache, modelinference.InvocationFailureClassArtifact,
+		modelinference.InvocationFailureClassBackendReadiness, modelinference.InvocationFailureClassBackendProtocol,
+		modelinference.InvocationFailureClassCancellation, modelinference.InvocationFailureClassTimeout,
+		modelinference.InvocationFailureClassMalformedResponse, modelinference.InvocationFailureClass("future-class"),
+	} {
+		assertModelsInvocationDiagnostic(t, class)
+	}
+}
+
+func assertModelsInvocationDiagnostic(t *testing.T, class modelinference.InvocationFailureClass) {
+	t.Helper()
+	cause := errors.New("underlying validation failure")
+	failure := &modelinference.InvocationFailure{Class: class, Message: "safe failure", Cause: cause}
+	mapped, ok := mapModelsInvocationError(failure)
+	if !ok || mapped == nil || !errors.Is(mapped, cause) || !strings.Contains(mapped.Error(), "safe failure") {
+		t.Fatalf("mapModelsInvocationError(%q) = (%v, %t), want mapped cause and message", class, mapped, ok)
+	}
+	code, family := modelsInvocationDiagnostic(class)
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+	}
+	if !errors.As(mapped, &coded) || coded.CLIErrorCode() != code || coded.CLIErrorFamily() != family {
+		t.Fatalf("mapped %q fields = (%q, %q), want (%q, %q)", class, coded.CLIErrorCode(), coded.CLIErrorFamily(), code, family)
+	}
+}
+
+func TestModelsRootErrorMappingPreservesCacheTaxonomy(t *testing.T) {
+	for _, sentinel := range []error{modelinference.ErrModelCacheNotFound, modelinference.ErrModelCacheInUse, modelinference.ErrModelCacheUnsafe, modelinference.ErrNotFound} {
+		mapped := mapModelsRootError(fmt.Errorf("%w: voice", sentinel))
+		if mapped == nil || !errors.Is(mapped, sentinel) {
+			t.Fatalf("mapModelsRootError(%v) = %v, want preserved sentinel", sentinel, mapped)
+		}
+	}
+	for _, sentinel := range []error{modelinference.ErrMissing, modelinference.ErrLoading, modelinference.ErrFailed, modelinference.ErrUnsupported, modelinference.ErrNotAvailable, modelinference.ErrUnsupportedOperation, modelinference.ErrUnsupportedResponseMode, modelinference.ErrUnsupportedModelOperation} {
+		if mapped := mapModelsRootError(sentinel); mapped != sentinel {
+			t.Fatalf("mapModelsRootError(%v) = %v, want unchanged error", sentinel, mapped)
+		}
+	}
+}
+
+func TestModelsRootErrorMappingPreservesPullAndOrdinaryErrors(t *testing.T) {
+	pullCause := errors.New("asset source unavailable")
+	pull := &modelinference.PullError{Result: modelinference.PullResult{ModelName: "voice", SourceID: "owner/repo", Revision: "rev-1"}, Cause: pullCause}
+	mapped := mapModelsRootError(pull)
+	if mapped == nil || !errors.Is(mapped, pull) || !strings.Contains(mapped.Error(), "pull") {
+		t.Fatalf("mapped pull error = %v, want pull sentinel and diagnostic", mapped)
+	}
+	if mapModelsRootError(nil) != nil {
+		t.Fatal("mapModelsRootError(nil) returned an error")
+	}
+	if got := mapModelsRootError(errors.New("ordinary failure")); got == nil || got.Error() != "ordinary failure" {
+		t.Fatalf("ordinary root error = %v, want unchanged error", got)
+	}
+}
+
+func TestModelsRootErrorMappingProvidesSafeDefaultDiagnostics(t *testing.T) {
+	if got := modelCacheNotFoundMessage(fmt.Errorf("%w: voice", modelinference.ErrModelCacheNotFound)); !strings.Contains(got, "voice") {
+		t.Fatalf("cache message = %q, want model name", got)
+	}
+	if got := modelCacheNotFoundMessage(modelinference.ErrModelCacheNotFound); !strings.Contains(got, "<model>") {
+		t.Fatalf("cache message without model = %q, want placeholder", got)
+	}
+	if got := modelNotFoundMessage(fmt.Errorf("%w: voice", modelinference.ErrNotFound)); !strings.Contains(got, "voice") {
+		t.Fatalf("not-found message = %q, want model name", got)
+	}
+	if got := modelNotFoundMessage(modelinference.ErrNotFound); got != modelinference.ErrNotFound.Error() {
+		t.Fatalf("not-found message without model = %q, want sentinel text", got)
+	}
+	if modelNameFromError(nil, "marker") != "" || modelNameFromError(errors.New("ordinary"), "marker") != "" {
+		t.Fatal("modelNameFromError() found a name without its marker")
+	}
+	var nilRootError *modelsRootError
+	if nilRootError.Error() != "" || nilRootError.Unwrap() != nil || nilRootError.Is(errors.New("target")) {
+		t.Fatal("nil modelsRootError did not preserve nil-safe behavior")
+	}
+	if nilRootError.CLIErrorCode() != modelsRootCacheNotFoundCode || nilRootError.CLIErrorFamily() != factoryapi.ErrorFamilyInternalServerError || nilRootError.CLIErrorMessage() != modelsRootDefaultErrorText {
+		t.Fatal("nil modelsRootError returned unexpected default diagnostic fields")
 	}
 }
