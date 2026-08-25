@@ -64,6 +64,7 @@ type InvokeConfig struct {
 	OutputMappings   []string
 	Server           string
 	FactoryDir       string
+	WorkingDirectory string
 	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
@@ -72,6 +73,34 @@ type InvokeConfig struct {
 	Debug            bool
 	Output           io.Writer
 	Diagnostics      io.Writer
+}
+
+const modelInvocationValidationOnlyMode = "VALIDATION_ONLY"
+
+// modelInvocationValidationResponse is deliberately not the inference result
+// envelope. Metadata mode validates the request and reports that no inference
+// was attempted, so callers cannot mistake a successful preflight for output.
+type modelInvocationValidationResponse struct {
+	ModelName         string `json:"modelName"`
+	Operation         string `json:"operation"`
+	Mode              string `json:"mode"`
+	ValidationOnly    bool   `json:"validationOnly"`
+	InferenceExecuted bool   `json:"inferenceExecuted"`
+}
+
+func validationOnlyModelInvoke(cfg InvokeConfig) bool {
+	return cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" &&
+		len(cfg.InputMappings) == 0 && len(cfg.OutputMappings) == 0
+}
+
+func writeValidationOnlyModelInvokeResponse(output io.Writer, modelName, operation string) error {
+	return json.NewEncoder(output).Encode(modelInvocationValidationResponse{
+		ModelName:         modelName,
+		Operation:         operation,
+		Mode:              modelInvocationValidationOnlyMode,
+		ValidationOnly:    true,
+		InferenceExecuted: false,
+	})
 }
 
 type PullConfig struct {
@@ -106,10 +135,13 @@ type Service interface {
 }
 
 type httpService struct {
-	http       clihttp.Protocol
-	pullHTTP   clihttp.Protocol
-	invocation InvocationOperation
-	now        func() time.Time
+	http             clihttp.Protocol
+	pullHTTP         clihttp.Protocol
+	invocation       InvocationOperation
+	now              func() time.Time
+	models           modelinference.Service
+	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
+	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 }
 
 // New constructs the composition-stable Models CLI service injected into Cobra
@@ -259,25 +291,11 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("explicit output mappings require the local Models composition")
 	}
 
-	if cfg.JSON {
-		response, err := invokeModelMetadata(invokeOptions{
-			Context:          cfg.Context,
-			Server:           cfg.Server,
-			ModelName:        modelName,
-			Operation:        operation,
-			Text:             text,
-			FactoryDir:       cfg.FactoryDir,
-			HomeDir:          cfg.HomeDir,
-			OperatorDefaults: cfg.OperatorDefaults,
-			Logger:           cfg.Logger,
-			Verbose:          cfg.Verbose,
-			Diagnostics:      cfg.Diagnostics,
-			Invocation:       service.invocation,
-		})
-		if err != nil {
+	if validationOnlyModelInvoke(cfg) {
+		if err := service.validateModelInvoke(cfg, modelName, operation); err != nil {
 			return err
 		}
-		return json.NewEncoder(cfg.Output).Encode(response)
+		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
 
 	outputPath := strings.TrimSpace(cfg.OutputPath)
@@ -292,6 +310,7 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		Text:             text,
 		OutputPath:       outputPath,
 		FactoryDir:       cfg.FactoryDir,
+		WorkingDirectory: cfg.WorkingDirectory,
 		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: cfg.OperatorDefaults,
 		Logger:           cfg.Logger,
@@ -434,22 +453,13 @@ type invokeOptions struct {
 	Text             string
 	OutputPath       string
 	FactoryDir       string
+	WorkingDirectory string
 	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
 	Verbose          bool
 	Diagnostics      io.Writer
 	Invocation       InvocationOperation
-}
-
-func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse, error) {
-	result, err := invokeModelThroughBootstrap(cfg, nil)
-	if err != nil {
-		return factoryapi.ModelInvocationResponse{}, err
-	}
-	response := modelInvocationResponseFromResult(result)
-	logBootstrapInvokeResponse(cfg, fmt.Sprintf("worker=%s contentParts=%d", response.Worker, len(response.Content)))
-	return response, nil
 }
 
 // invokeModelAudio copies streamed audio from the bootstrap-owned invocation

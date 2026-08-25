@@ -28,15 +28,20 @@ func bindCompositionService(
 	if pullHTTPProtocol == nil {
 		pullHTTPProtocol = httpProtocol
 	}
-	legacy := &httpService{
-		http: httpProtocol, pullHTTP: pullHTTPProtocol, invocation: invocation,
-		now: now,
-	}
 	cfg := ConfigFromComposition(httpProtocol, invocation, providers...)
 	cfg.PullHTTP = pullHTTPProtocol
 	cfg.OutputFileSystem = outputFileSystem
 	cfg.InputFileReader = inputFileReader
 	cfg.Clock = now
+	legacy := &httpService{
+		http:             httpProtocol,
+		pullHTTP:         pullHTTPProtocol,
+		invocation:       invocation,
+		now:              now,
+		models:           cfg.Models,
+		openCatalogScope: cfg.OpenCatalogScope,
+		openInvokeScope:  cfg.OpenInvokeScope,
+	}
 	owned := NewService(cfg)
 	if owned == nil {
 		return legacy

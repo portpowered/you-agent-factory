@@ -127,6 +127,76 @@ func (service *rootService) Remove(cfg RemoveConfig) error {
 	})
 }
 
+func (service *httpService) validateModelInvoke(cfg InvokeConfig, modelName, operation string) error {
+	// An explicit server selects the HTTP fallback even when the process also
+	// carries a locally composed Models root. The composition facade routes
+	// server-bound invokes here, so validation must describe the target the
+	// caller selected rather than silently opening the local Factory.
+	if strings.TrimSpace(cfg.Server) != "" {
+		if service.http == nil {
+			return fmt.Errorf("CLI HTTP protocol is required for remote models invoke validation")
+		}
+		model, err := queryModel(queryOptions{
+			Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
+			Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+		})
+		if err != nil {
+			return err
+		}
+		if !generatedModelSupportsOperation(model, operation) {
+			return fmt.Errorf("model %q does not support operation %q", modelName, operation)
+		}
+		return nil
+	}
+	if service.models != nil && (service.openInvokeScope != nil || service.openCatalogScope != nil) {
+		var scope InvokeRuntimeScope
+		var err error
+		if service.openInvokeScope != nil {
+			scope, err = service.openInvokeScope(cfg.Context, cfg)
+		} else {
+			scope, err = service.openCatalogScope(cfg.Context)
+		}
+		if err != nil {
+			return mapModelsRootError(err)
+		}
+		if scope.Close != nil {
+			defer func() { _ = scope.Close(cfg.Context) }()
+		}
+		_, err = service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
+			Scope: scope.Scope, Name: modelName, Operation: operation,
+		})
+		if err != nil {
+			return mapModelsRootError(err)
+		}
+		return nil
+	}
+	// Older embedded callers may not provide either a Models root or an HTTP
+	// target. Preserve their validation-only compatibility envelope because
+	// there is no catalog against which this transport can validate.
+	return nil
+}
+
+func generatedModelSupportsOperation(model factoryapi.ModelDetail, operation string) bool {
+	for _, candidate := range model.Operations {
+		if candidate.Name == operation {
+			return true
+		}
+	}
+	for _, capability := range model.Capabilities {
+		for _, candidate := range capability.Operations {
+			if candidate.Name == operation {
+				return true
+			}
+		}
+	}
+	for _, candidate := range model.ManagedRuntime.SupportedOperations {
+		if candidate.Name == operation {
+			return true
+		}
+	}
+	return false
+}
+
 func (service *rootService) withCatalogScope(
 	ctx context.Context,
 	run func(modelinference.RuntimeScopeRef) error,

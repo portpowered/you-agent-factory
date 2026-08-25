@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -371,8 +372,8 @@ func TestOwnedAdapter_CompositionFacadeRoutesOwnedListThroughModelsRoot(t *testi
 	}
 }
 
-// TestOwnedAdapter_InvokeResolvesThroughModelsRoot proves invoke
-// catalog->lease->inference ordering through the owned adapter.
+// TestOwnedAdapter_InvokeValidationResolvesThroughModelsRoot proves validation
+// mode reaches the owned adapter's catalog boundary without acquiring a lease.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestOwnedAdapter_InvokeResolvesThroughModelsRoot(t *testing.T) {
 	t.Parallel()
@@ -432,10 +433,151 @@ func TestOwnedAdapter_InvokeResolvesThroughModelsRoot(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if !gotCatalog || !gotAcquire || !gotInvoke {
-		t.Fatalf("invoke path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
+	if !gotCatalog || gotAcquire || gotInvoke {
+		t.Fatalf("validation path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
 	}
-	if !strings.Contains(out.String(), "OMNIVOICE_Q4_K_M") {
-		t.Fatalf("Invoke() JSON missing model name:\n%s", out.String())
+	for _, want := range []string{
+		"OMNIVOICE_Q4_K_M",
+		`"mode":"VALIDATION_ONLY"`,
+		`"validationOnly":true`,
+		`"inferenceExecuted":false`,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("Invoke() JSON missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestHTTPServiceValidationUsesSelectedCatalogTarget(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("validation:test-scope")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	var gotRequest modelinference.GetModelRequest
+	closed := false
+	root := ownedCoverageModelsRoot{
+		getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+			gotRequest = request
+			return modelinference.GetModelResult{}, nil
+		},
+	}
+	service := &httpService{
+		models: root,
+		openInvokeScope: func(context.Context, InvokeConfig) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{
+				Scope: scope,
+				Close: func(context.Context) error {
+					closed = true
+					return nil
+				},
+			}, nil
+		},
+	}
+	if err := service.validateModelInvoke(InvokeConfig{Context: context.Background()}, "voice", "TTS"); err != nil {
+		t.Fatalf("local validation error = %v", err)
+	}
+	if gotRequest.Scope != scope || gotRequest.Name != "voice" || gotRequest.Operation != "TTS" {
+		t.Fatalf("local validation request = %#v", gotRequest)
+	}
+	if !closed {
+		t.Fatal("local validation did not close its runtime scope")
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/models/voice" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"name":"voice","operations":[{"name":"TTS"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	remote := &httpService{http: testHTTPProtocol(t), models: root, openInvokeScope: func(context.Context, InvokeConfig) (InvokeRuntimeScope, error) {
+		t.Fatal("remote validation opened the local scope")
+		return InvokeRuntimeScope{}, nil
+	}}
+	if err := remote.validateModelInvoke(InvokeConfig{
+		Context: context.Background(), Server: server.URL,
+	}, "voice", "TTS"); err != nil {
+		t.Fatalf("remote validation error = %v", err)
+	}
+}
+
+func TestHTTPServiceValidationReportsTargetFailures(t *testing.T) {
+	t.Parallel()
+
+	if err := (&httpService{}).validateModelInvoke(InvokeConfig{
+		Context: context.Background(), Server: "http://factory.test",
+	}, "voice", "TTS"); err == nil || !strings.Contains(err.Error(), "HTTP protocol") {
+		t.Fatalf("nil HTTP validation error = %v, want protocol failure", err)
+	}
+
+	openErr := errors.New("factory layout unavailable")
+	service := &httpService{
+		models: ownedCoverageModelsRoot{},
+		openInvokeScope: func(context.Context, InvokeConfig) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{}, openErr
+		},
+	}
+	if err := service.validateModelInvoke(InvokeConfig{Context: context.Background()}, "voice", "TTS"); !errors.Is(err, openErr) {
+		t.Fatalf("scope opener error = %v, want %v", err, openErr)
+	}
+
+	service = &httpService{
+		models: ownedCoverageModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{}, modelinference.ErrNotFound
+			},
+		},
+		openCatalogScope: func(context.Context) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{}, nil
+		},
+	}
+	if err := service.validateModelInvoke(InvokeConfig{Context: context.Background()}, "voice", "TTS"); !errors.Is(err, ErrModelNotFound) {
+		t.Fatalf("catalog validation error = %v, want ErrModelNotFound", err)
+	}
+	if err := (&httpService{}).validateModelInvoke(InvokeConfig{Context: context.Background()}, "voice", "TTS"); err != nil {
+		t.Fatalf("unscoped compatibility validation error = %v, want nil", err)
+	}
+}
+
+func TestGeneratedModelSupportsOperationChecksAllPublicProjections(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		model factoryapi.ModelDetail
+		want  bool
+	}{
+		{
+			name:  "detail operations",
+			model: factoryapi.ModelDetail{Operations: []factoryapi.ModelInvocationOperation{{Name: "TTS"}}},
+			want:  true,
+		},
+		{
+			name: "capability operations",
+			model: factoryapi.ModelDetail{Capabilities: []factoryapi.ModelCapability{{
+				Operations: []factoryapi.ModelInvocationOperation{{Name: "TTS"}},
+			}}},
+			want: true,
+		},
+		{
+			name: "managed runtime operations",
+			model: factoryapi.ModelDetail{ManagedRuntime: factoryapi.ManagedRuntime{
+				SupportedOperations: []factoryapi.ModelInvocationOperation{{Name: "TTS"}},
+			}},
+			want: true,
+		},
+		{name: "missing operation", model: factoryapi.ModelDetail{}, want: false},
+	}
+	for _, test := range cases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			if got := generatedModelSupportsOperation(test.model, "TTS"); got != test.want {
+				t.Fatalf("generatedModelSupportsOperation() = %v, want %v", got, test.want)
+			}
+		})
 	}
 }

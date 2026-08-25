@@ -163,6 +163,14 @@ func assertStory003ReadyParity(
 		httpDetail.ManagedRuntime.LifecycleState != listedModel.ManagedRuntime.LifecycleState {
 		t.Fatalf("HTTP list/detail managed runtime diverged: list=%#v detail=%#v", listedModel.ManagedRuntime, httpDetail.ManagedRuntime)
 	}
+	if httpDetail.Diagnostics["readinessState"] != string(httpDetail.ManagedRuntime.ReadinessState) ||
+		httpDetail.Diagnostics["lifecycleState"] != string(httpDetail.ManagedRuntime.LifecycleState) {
+		t.Fatalf("HTTP detail diagnostics diverged from managed runtime: diagnostics=%#v managedRuntime=%#v", httpDetail.Diagnostics, httpDetail.ManagedRuntime)
+	}
+	if inspected.Detail.Diagnostics["readinessState"] != string(inspected.Detail.ManagedRuntime.ReadinessState) ||
+		inspected.Detail.Diagnostics["lifecycleState"] != string(inspected.Detail.ManagedRuntime.LifecycleState) {
+		t.Fatalf("inspect diagnostics diverged from managed runtime: diagnostics=%#v managedRuntime=%#v", inspected.Detail.Diagnostics, inspected.Detail.ManagedRuntime)
+	}
 	assertStory003HumanOutput(t, process, "models list", story003ModelsHumanListArgs(serverURL), "READY", "INSTALLED")
 	assertStory003HumanOutput(t, process, "models inspect", story003ModelsHumanInspectArgs(serverURL), "READY", "INSTALLED")
 }

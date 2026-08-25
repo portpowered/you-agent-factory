@@ -3,43 +3,40 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
-func assertTransformedInvokeConfig(
+func assertInvokeCommandConfig(
 	t *testing.T,
+	cfg InvokeConfig,
 	server string,
 	logger *zap.Logger,
 	diagnostics *bytes.Buffer,
-) func(InvokeConfig) error {
+) {
 	t.Helper()
-	return func(cfg InvokeConfig) error {
-		if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
-			t.Fatalf("InvokeConfig command values = %#v", cfg)
-		}
-		if !reflect.DeepEqual(cfg.InputMappings, []string{"audio=@meeting.wav", "prompt=hint"}) {
-			t.Fatalf("InvokeConfig input mappings = %#v", cfg.InputMappings)
-		}
-		if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
-			t.Fatalf("InvokeConfig global values = %#v", cfg)
-		}
-		if cfg.FactoryDir != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
-			t.Fatalf("InvokeConfig dependencies = %#v", cfg)
-		}
-		return nil
+	if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
+		t.Fatalf("InvokeConfig command values = %#v", cfg)
+	}
+	if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
+		t.Fatalf("InvokeConfig global values = %#v", cfg)
+	}
+	if cfg.FactoryDir != "" || cfg.WorkingDirectory != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
+		t.Fatalf("InvokeConfig dependencies = %#v", cfg)
 	}
 }
 
@@ -506,5 +503,115 @@ func TestModelsRootErrorDoesNotReclassifyInvocationFailuresOutsideClientPaths(t 
 	}
 	if mapped := mapModelsRootError(modelinference.ErrNotFound); mapped == nil || !errors.Is(mapped, modelinference.ErrNotFound) {
 		t.Fatalf("mapModelsRootError(ErrNotFound) = %v, want unchanged not-found identity", mapped)
+	}
+}
+
+func TestMapModelsRootErrorClassifiesMissingCacheWithModelName(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf("remove model: %w: OMNIVOICE_Q4_K_M", modelinference.ErrModelCacheNotFound)
+	mapped := mapModelsRootError(cause)
+	if mapped == nil || !errors.Is(mapped, modelinference.ErrModelCacheNotFound) {
+		t.Fatalf("mapped cache error = %v, want preserved cache sentinel", mapped)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(mapped, &coded) {
+		t.Fatalf("mapped cache error = %T, want CLI diagnostic", mapped)
+	}
+	if coded.CLIErrorCode() != modelsRootCacheNotFoundCode ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound ||
+		coded.CLIErrorMessage() != "model cache is not installed; run you models pull OMNIVOICE_Q4_K_M first" {
+		t.Fatalf("cache diagnostic = (%q, %q, %q), want model-specific not-found guidance", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
+	}
+}
+
+func TestMapModelsRootError_ClassifiesMissingFactoryLayoutWithSearchedRoot(t *testing.T) {
+	t.Parallel()
+
+	searchedRoot := `C:\workspace\project\factory`
+	cause := fmt.Errorf("resolve current factory in %s: %w", searchedRoot, factorydefinitions.ErrFactoryLayoutNotFound)
+	mapped := mapModelsRootError(cause)
+	if mapped == nil {
+		t.Fatal("mapModelsRootError() = nil, want classified failure")
+	}
+	if !errors.Is(mapped, factorydefinitions.ErrFactoryLayoutNotFound) {
+		t.Fatalf("mapped error = %v, want ErrFactoryLayoutNotFound cause", mapped)
+	}
+
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(mapped, &coded) {
+		t.Fatalf("mapped error = %T, want CLI-coded failure", mapped)
+	}
+	if coded.CLIErrorCode() != modelsFactoryLayoutNotFoundCode ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound ||
+		!strings.Contains(coded.CLIErrorMessage(), searchedRoot) {
+		t.Fatalf("coded failure = (%q, %q, %q), want not-found with searched root %q", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage(), searchedRoot)
+	}
+
+	var output bytes.Buffer
+	if !clidiag.WriteFailure(&output, mapped) {
+		t.Fatal("WriteFailure() = false, want one customer-visible diagnostic")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("diagnostic JSON = %q: %v", output.String(), err)
+	}
+	if response.Code != factoryapi.ErrorResponseCode(modelsFactoryLayoutNotFoundCode) ||
+		response.Family != factoryapi.ErrorFamilyNotFound ||
+		!strings.Contains(response.Message, searchedRoot) {
+		t.Fatalf("customer response = %#v, want not-found classification and searched root %q", response, searchedRoot)
+	}
+}
+
+func TestModelsFactoryLayoutNotFoundErrorHandlesNilAndPreservesCause(t *testing.T) {
+	t.Parallel()
+
+	var nilError *modelsFactoryLayoutNotFoundError
+	if got := nilError.Error(); got != "Factory layout was not found" {
+		t.Fatalf("nil layout error = %q, want stable fallback text", got)
+	}
+	if nilError.Unwrap() != nil || nilError.CLIErrorMessage() != "Factory layout was not found" {
+		t.Fatalf("nil layout error methods = unwrap %v message %q", nilError.Unwrap(), nilError.CLIErrorMessage())
+	}
+
+	cause := errors.New("resolve current factory in C:\\workspace\\factory")
+	mapped := &modelsFactoryLayoutNotFoundError{cause: cause}
+	if mapped.Error() != cause.Error() || !errors.Is(mapped, cause) || mapped.CLIErrorCode() != modelsFactoryLayoutNotFoundCode || mapped.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("mapped layout error = %v, want cause and not-found diagnostic", mapped)
+	}
+}
+
+func TestModelsInvocationDiagnosticCoversFailureClasses(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		class  modelinference.InvocationFailureClass
+		code   string
+		family factoryapi.ErrorFamily
+	}{
+		{name: "revision", class: modelinference.InvocationFailureClassRevisionResolution, code: "MODEL_NOT_AVAILABLE", family: factoryapi.ErrorFamilyNotFound},
+		{name: "parameter", class: modelinference.InvocationFailureClassInvalidParameter, code: "BAD_REQUEST", family: factoryapi.ErrorFamilyBadRequest},
+		{name: "offline cache", class: modelinference.InvocationFailureClassOfflineCache, code: "MODEL_OFFLINE_CACHE_UNAVAILABLE", family: factoryapi.ErrorFamilyConflict},
+		{name: "backend protocol", class: modelinference.InvocationFailureClassBackendProtocol, code: "MODEL_BACKEND_FAILURE", family: factoryapi.ErrorFamilyInternalServerError},
+		{name: "timeout", class: modelinference.InvocationFailureClassTimeout, code: "MODEL_INFERENCE_TIMEOUT", family: factoryapi.ErrorFamilyInternalServerError},
+		{name: "configuration", class: modelinference.InvocationFailureClassConfiguration, code: "MODEL_CONFIGURATION_FAILURE", family: factoryapi.ErrorFamilyInternalServerError},
+		{name: "unknown", class: modelinference.InvocationFailureClass("UNKNOWN"), code: "MODEL_INFERENCE_RUNTIME_FAILURE", family: factoryapi.ErrorFamilyInternalServerError},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			code, family := modelsInvocationDiagnostic(test.class)
+			if code != test.code || family != test.family {
+				t.Fatalf("modelsInvocationDiagnostic(%q) = (%q, %q), want (%q, %q)", test.class, code, family, test.code, test.family)
+			}
+		})
 	}
 }

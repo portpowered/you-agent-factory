@@ -6,6 +6,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
@@ -93,6 +94,67 @@ func TestService_ListModels_ProjectsManagedRuntimeFromModelHost(t *testing.T) {
 	if models.Results[0].ManagedRuntime.ReadinessState != managedruntime.ReadinessStateMissing {
 		t.Fatalf("managed readiness = %s, want MISSING", models.Results[0].ManagedRuntime.ReadinessState)
 	}
+}
+
+func TestServiceCatalogProjectsInstalledCacheFactsAcrossListAndDetail(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := mustConstructModelService(t, modelServiceFixture{
+		RuntimeConfig:    func() *modelRuntimeConfig { return runtimeCfg },
+		ModelHost:        installedCacheInspectHost{},
+		ModelAssetPuller: installedCacheFactsPuller{},
+	})
+
+	listed, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	detail, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("GetModel: %v", err)
+	}
+	if len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.Revision == nil || *listed.Results[0].ManagedRuntime.Revision != "rev-cache" || listed.Results[0].ManagedRuntime.CacheBytes == nil || *listed.Results[0].ManagedRuntime.CacheBytes != 17 {
+		t.Fatalf("list cache facts = %#v, want rev-cache/17", listed.Results[0].ManagedRuntime)
+	}
+	if detail.ManagedRuntime.Revision == nil || *detail.ManagedRuntime.Revision != "rev-cache" || detail.ManagedRuntime.CacheBytes == nil || *detail.ManagedRuntime.CacheBytes != 17 {
+		t.Fatalf("detail cache facts = %#v, want rev-cache/17", detail.ManagedRuntime)
+	}
+}
+
+func TestServiceInspectRuntimeProjectsHostReadiness(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := mustConstructModelService(t, modelServiceFixture{
+		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+		ModelHost:     installedCacheInspectHost{},
+	})
+	runtime, err := svc.InspectRuntime(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("InspectRuntime: %v", err)
+	}
+	if runtime.ReadinessState != managedruntime.ReadinessStateReady || runtime.LifecycleState != managedruntime.LifecycleStateInstalled {
+		t.Fatalf("InspectRuntime = %#v, want READY/INSTALLED", runtime)
+	}
+}
+
+type installedCacheFactsPuller struct{}
+
+func (installedCacheFactsPuller) PullModel(context.Context, *modelRuntimeConfig, string) (models.PullResult, error) {
+	return models.PullResult{}, nil
+}
+
+func (installedCacheFactsPuller) EnsureModelAvailable(context.Context, *modelRuntimeConfig, *modelRuntimeWorker) error {
+	return nil
+}
+
+func (installedCacheFactsPuller) ResolveModelCache(context.Context, *modelRuntimeConfig, *modelRuntimeWorker) (localmodels.CacheLayout, error) {
+	return localmodels.CacheLayout{}, nil
+}
+
+func (installedCacheFactsPuller) InspectRuntimeCache(context.Context, *modelRuntimeConfig, string) (localmodels.RuntimeCacheInspection, error) {
+	return localmodels.RuntimeCacheInspection{Supported: true, Installed: true, Revision: "rev-cache", CacheBytes: 17}, nil
 }
 
 type failingInspectHost struct{}
