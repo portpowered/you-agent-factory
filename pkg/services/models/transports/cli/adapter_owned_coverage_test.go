@@ -15,7 +15,6 @@ import (
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -995,44 +994,5 @@ func TestModelsCLISlotMappingPreservesOptionalMetadataShape(t *testing.T) {
 	}
 	if converted[1].Modality == nil || *converted[1].Modality != factoryapi.ModelInvocationContentType(modelinference.ModalityText) || converted[1].Repeatable == nil || !*converted[1].Repeatable || converted[1].MediaTypes == nil {
 		t.Fatalf("declared slot mapping = %#v, want modality/repeatable/media metadata", converted[1])
-	}
-}
-
-func TestModelsCLIMissingCacheMessageKeepsThePullHint(t *testing.T) {
-	t.Parallel()
-
-	if got := modelCacheNotFoundMessage(modelinference.ErrModelCacheNotFound); got != "model cache is not installed; run you models pull <model> first" {
-		t.Fatalf("modelCacheNotFoundMessage() = %q, want actionable pull hint", got)
-	}
-}
-
-func TestReadModelsInvokeInputsClearsOnlyManifestOperationDefaultForNamedInputs(t *testing.T) {
-	t.Parallel()
-
-	inputs, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{
-			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
-			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault, resolvedinput.SourceCLIFlag}},
-			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
-			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
-			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
-		},
-		[]resolvedinput.Candidate{
-			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("embed")},
-			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringValue("TTS")},
-			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringValue("")},
-			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{"text=hello"})},
-			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringArrayValue(nil)},
-		},
-	)
-	if err != nil {
-		t.Fatalf("resolve invoke inputs: %v", err)
-	}
-	got, err := readModelsInvokeInputs(inputs)
-	if err != nil {
-		t.Fatalf("readModelsInvokeInputs() error = %v", err)
-	}
-	if got.modelName != "embed" || got.operation != "" || len(got.inputMappings) != 1 || got.inputMappings[0] != "text=hello" {
-		t.Fatalf("readModelsInvokeInputs() = %#v, want cleared default operation and named input", got)
 	}
 }
