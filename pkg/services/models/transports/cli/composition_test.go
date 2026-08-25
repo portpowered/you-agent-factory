@@ -675,7 +675,7 @@ func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *tes
 	assertMappedCLIResponse(t, out.Bytes())
 }
 
-func TestRootAdapter_InvokeGenericSingleOutputPathPublishesBytes(t *testing.T) {
+func TestRootAdapter_InvokeDirectTTSAliasOutputPathPublishesBytes(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
@@ -683,7 +683,7 @@ func TestRootAdapter_InvokeGenericSingleOutputPathPublishesBytes(t *testing.T) {
 	service := modelscli.NewService(modelscli.Config{
 		Models: stubModelsRoot{
 			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
-				return genericCLIModel("omni", modelinference.OperationOMNI,
+				return genericCLIModel(modelinference.BuiltInModelNameTTS, modelinference.OperationTTS,
 					modelinference.OperationSlot{Name: "answer", Modality: modelinference.ModalityText}), nil
 			},
 			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
@@ -702,7 +702,7 @@ func TestRootAdapter_InvokeGenericSingleOutputPathPublishesBytes(t *testing.T) {
 
 	var output bytes.Buffer
 	if err := service.Invoke(modelscli.InvokeConfig{
-		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Context: context.Background(), ModelName: modelinference.BuiltInModelNameTTS, Operation: modelinference.OperationTTS,
 		Text: "hello", OutputPath: outputPath, Output: &output,
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
@@ -713,7 +713,7 @@ func TestRootAdapter_InvokeGenericSingleOutputPathPublishesBytes(t *testing.T) {
 	}
 
 	if err := service.Invoke(modelscli.InvokeConfig{
-		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Context: context.Background(), ModelName: modelinference.BuiltInModelNameTTS, Operation: modelinference.OperationTTS,
 		Text: "hello again", OutputPath: outputPath, Output: &output,
 	}); err != nil {
 		t.Fatalf("Invoke() replacement error = %v", err)
