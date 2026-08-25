@@ -160,11 +160,88 @@ func assertRecordedSecretArtifact(t *testing.T, artifactPath, control string) {
 }
 
 func TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle(t *testing.T) {
+	runRecordedTwoWorkstationLifecycle(t, false)
+}
+
+func TestRecordedFactoryRedactsInlineSecretStepAndPreservesPlainStepAcrossLifecycle(t *testing.T) {
+	runRecordedTwoWorkstationLifecycle(t, true)
+}
+
+func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
 	secret := "sk-fake-story003-lifecycle-secret-4c9e2a7f"
 	secretControl := "secret-step-visible-control"
 	plainControl := "plain-step-visible-control"
 	output := "story003-two-step-output"
-	dir := support.ScaffoldFactory(t, map[string]any{
+	dir := scaffoldRecordedTwoWorkstationFactory(t, inline, secretControl, plainControl)
+	if !inline {
+		support.WriteWorkstationConfig(t, dir, "secret-step", "---\ntype: MODEL_WORKSTATION\n---\ncontrol="+secretControl+" secret=${secret}\n")
+		support.WriteWorkstationConfig(t, dir, "plain-step", "---\ntype: MODEL_WORKSTATION\n---\ncontrol="+plainControl+"\n")
+	}
+
+	artifactPath := filepath.Join(t.TempDir(), "recordings-secret-redaction-two-step.replay.json")
+	homeDir := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--record", artifactPath,
+		"--quiet",
+		"--secret", secret,
+	})
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(output),
+	})
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("recording two-workstation Factory run: %v\nstderr=%s", err, inputs.Stderr())
+	}
+
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatalf("read persisted two-workstation recording: %v", err)
+	}
+	if bytes.Contains(data, []byte(secret)) {
+		t.Fatalf("persisted two-workstation recording contains the declared secret; artifact=%s", artifactPath)
+	}
+	for _, visible := range []string{secretControl, plainControl} {
+		if !bytes.Contains(data, []byte(visible)) {
+			t.Fatalf("persisted two-workstation recording lost visible control %q", visible)
+		}
+	}
+	assertRecordedTwoWorkstationArtifact(t, artifactPath, secretControl, plainControl, output)
+
+	replayFunctionalRecording(t, artifactPath, dir, homeDir)
+}
+
+func scaffoldRecordedTwoWorkstationFactory(t *testing.T, inline bool, secretControl, plainControl string) string {
+	workstations := []map[string]any{
+		{
+			"name":      "secret-step",
+			"worker":    "secret-worker",
+			"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
+			"outputs":   []any{map[string]any{"workType": "task", "state": "processing"}},
+			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+		},
+		{
+			"name":      "plain-step",
+			"worker":    "plain-worker",
+			"inputs":    []any{map[string]any{"workType": "task", "state": "processing"}},
+			"outputs":   []any{map[string]any{"workType": "task", "state": "complete"}},
+			"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
+		},
+	}
+	var factoryWorkstations any = workstations
+	if inline {
+		workstations[0]["body"] = "control=" + secretControl + " secret=${secret}"
+		workstations[1]["body"] = "control=" + plainControl
+		inlineWorkstations := make([]any, len(workstations))
+		for index, workstation := range workstations {
+			inlineWorkstations[index] = workstation
+		}
+		factoryWorkstations = inlineWorkstations
+	}
+	return support.ScaffoldFactory(t, map[string]any{
 		"name": "recordings-secret-redaction-two-step",
 		"invocationSignature": map[string]any{
 			"parameters": []any{
@@ -202,60 +279,8 @@ func TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle(t 
 				"model":            "gpt-5-codex",
 			},
 		},
-		"workstations": []map[string]any{
-			{
-				"name":      "secret-step",
-				"worker":    "secret-worker",
-				"inputs":    []any{map[string]any{"workType": "task", "state": "init"}},
-				"outputs":   []any{map[string]any{"workType": "task", "state": "processing"}},
-				"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
-			},
-			{
-				"name":      "plain-step",
-				"worker":    "plain-worker",
-				"inputs":    []any{map[string]any{"workType": "task", "state": "processing"}},
-				"outputs":   []any{map[string]any{"workType": "task", "state": "complete"}},
-				"onFailure": []any{map[string]any{"workType": "task", "state": "failed"}},
-			},
-		},
+		"workstations": factoryWorkstations,
 	})
-	support.WriteWorkstationConfig(t, dir, "secret-step", "---\ntype: MODEL_WORKSTATION\n---\ncontrol="+secretControl+" secret=${secret}\n")
-	support.WriteWorkstationConfig(t, dir, "plain-step", "---\ntype: MODEL_WORKSTATION\n---\ncontrol="+plainControl+"\n")
-
-	artifactPath := filepath.Join(t.TempDir(), "recordings-secret-redaction-two-step.replay.json")
-	homeDir := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--factory", filepath.Join(dir, "factory.json"),
-		"--record", artifactPath,
-		"--quiet",
-		"--secret", secret,
-	})
-	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(output),
-	})
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("recording two-workstation Factory run: %v\nstderr=%s", err, inputs.Stderr())
-	}
-
-	data, err := os.ReadFile(artifactPath)
-	if err != nil {
-		t.Fatalf("read persisted two-workstation recording: %v", err)
-	}
-	if bytes.Contains(data, []byte(secret)) {
-		t.Fatalf("persisted two-workstation recording contains the declared secret; artifact=%s", artifactPath)
-	}
-	for _, visible := range []string{secretControl, plainControl} {
-		if !bytes.Contains(data, []byte(visible)) {
-			t.Fatalf("persisted two-workstation recording lost visible control %q", visible)
-		}
-	}
-	assertRecordedTwoWorkstationArtifact(t, artifactPath, secretControl, plainControl, output)
-
-	replayFunctionalRecording(t, artifactPath, dir, homeDir)
 }
 
 func replayFunctionalRecording(t *testing.T, artifactPath, dir, homeDir string) {

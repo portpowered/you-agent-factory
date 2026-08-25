@@ -158,7 +158,8 @@ func detach(
 	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
 	readFile factorydefinitions.FileReader,
 ) (factorydefinitions.RuntimeSnapshot, error) {
-	config, err := cloneRuntimeSnapshotConfig(loaded.FactoryConfig())
+	authoredConfig := loaded.FactoryConfig()
+	config, err := cloneRuntimeSnapshotConfig(authoredConfig)
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, err
 	}
@@ -179,9 +180,63 @@ func detach(
 	}
 	snapshot := newRuntimeSnapshot(loaded, invocation, *config)
 	snapshot.InvocationSensitiveJSONSpans = sensitiveSpans
+	snapshot.PromptProvenance = runtimePromptProvenance(loaded, authoredConfig, invocation)
 	appendRuntimeSnapshotWorkersAndSources(&snapshot, *config)
 	appendRuntimeSnapshotPromptSources(&snapshot, loaded)
 	return snapshot, nil
+}
+
+func runtimePromptProvenance(
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	authored *factorydefinitions.FactoryConfig,
+	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
+) []factorydefinitions.RuntimePromptProvenance {
+	if loaded == nil || authored == nil || invocation.Arguments == nil {
+		return nil
+	}
+	provenance := make([]factorydefinitions.RuntimePromptProvenance, 0)
+	for _, worker := range authored.Workers {
+		if strings.TrimSpace(worker.Name) == "" ||
+			strings.TrimSpace(worker.Body) == "" ||
+			runtimePromptSourcePresent(loaded, worker.Name, true) {
+			continue
+		}
+		provenance = append(provenance, factorydefinitions.RuntimePromptProvenance{
+			Name: worker.Name,
+			Body: worker.Body,
+		})
+	}
+	for _, workstation := range authored.Workstations {
+		if strings.TrimSpace(workstation.Name) == "" ||
+			runtimePromptSourcePresent(loaded, workstation.Name, false) ||
+			(strings.TrimSpace(workstation.Body) == "" &&
+				strings.TrimSpace(workstation.PromptTemplate) == "") {
+			continue
+		}
+		provenance = append(provenance, factorydefinitions.RuntimePromptProvenance{
+			Name:           workstation.Name,
+			Body:           workstation.Body,
+			PromptTemplate: workstation.PromptTemplate,
+		})
+	}
+	return provenance
+}
+
+func runtimePromptSourcePresent(
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	name string,
+	worker bool,
+) bool {
+	lookup, ok := loaded.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return false
+	}
+	if worker {
+		_, ok = lookup.WorkerPromptSource(name)
+	} else {
+		_, ok = lookup.WorkstationPromptSource(name)
+	}
+	return ok
 }
 
 func cloneRuntimeSnapshotConfig(

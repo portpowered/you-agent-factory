@@ -628,6 +628,46 @@ func TestRuntimeWorkstationPromptProvenanceUsesAuthoredBodySource(t *testing.T) 
 	}
 }
 
+func TestRuntimeWorkstationPromptProvenanceUsesInlineAuthoredBody(t *testing.T) {
+	lookup := runtimePromptSourceLookupFixture{
+		RuntimeDefinitionLookupFixture: runtimefixtures.RuntimeDefinitionLookupFixture{},
+		workstationProvenance: interfaces.RuntimePromptProvenance{
+			Name:           "workstation",
+			Body:           "control=visible secret=${secret}",
+			PromptTemplate: "control=visible secret=${secret}",
+		},
+	}
+	cfg := &runtimeConfig{
+		runtimeConfig:           lookup,
+		invocationInterpolation: promptProvenanceInvocationInterpolationTestService{},
+	}
+	invocation := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"secret": {Values: []string{"resolved-secret"}, Sensitive: true},
+	}}
+	provenance := runtimeWorkstationPromptProvenance(
+		cfg,
+		&interfaces.FactoryWorkstationConfig{
+			Name:           "workstation",
+			Body:           "control=visible secret=resolved-secret",
+			PromptTemplate: "control=visible secret=resolved-secret",
+		},
+		invocation,
+	)
+	if !provenance.body.available || !provenance.body.sensitive() {
+		t.Fatalf("inline body provenance = %#v, want sensitive authored-body spans", provenance.body)
+	}
+	if !provenance.promptTemplate.available || !provenance.promptTemplate.sensitive() {
+		t.Fatalf("inline prompt-template provenance = %#v, want sensitive authored-template spans", provenance.promptTemplate)
+	}
+	safe, ok := redactRuntimePromptText(
+		"control=visible secret=resolved-secret",
+		provenance.body.spans,
+	)
+	if !ok || safe != "control=visible secret=<redacted>" {
+		t.Fatalf("safe inline system prompt = %q, %t, want adjacent control preserved", safe, ok)
+	}
+}
+
 func TestRecordDetachedAgentRunResponseUsesDispatchPromptProjection(t *testing.T) {
 	t.Parallel()
 

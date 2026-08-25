@@ -365,6 +365,21 @@ type runtimeWorkstationPromptProvenanceSet struct {
 	promptTemplate runtimePromptFieldProvenance
 }
 
+func runtimeWorkerPromptProvenance(
+	cfg *runtimeConfig,
+	worker *interfaces.FactoryWorkerConfig,
+	invocation *work.InvocationArguments,
+) runtimePromptFieldProvenance {
+	if worker == nil {
+		return runtimePromptFieldProvenance{}
+	}
+	authored := worker.Body
+	if provenance, found := runtimeAuthoredPromptProvenance(cfg, worker.Name, true); found && provenance.Body != "" {
+		authored = provenance.Body
+	}
+	return runtimePromptFieldProvenanceForText(cfg, authored, invocation)
+}
+
 func runtimeWorkstationPromptProvenance(
 	cfg *runtimeConfig,
 	workstation *interfaces.FactoryWorkstationConfig,
@@ -374,6 +389,15 @@ func runtimeWorkstationPromptProvenance(
 		return runtimeWorkstationPromptProvenanceSet{}
 	}
 	body := workstation.Body
+	promptTemplate := workstation.PromptTemplate
+	if provenance, found := runtimeAuthoredPromptProvenance(cfg, workstation.Name, false); found {
+		if provenance.Body != "" {
+			body = provenance.Body
+		}
+		if provenance.PromptTemplate != "" {
+			promptTemplate = provenance.PromptTemplate
+		}
+	}
 	if source, found := runtimePromptSource(cfg, workstation.Name, false); found && !source.IsTemplate {
 		if authoredBody, ok := runtimePromptSourceContent(cfg, workstation.Name, false, false); ok {
 			body = authoredBody
@@ -381,8 +405,26 @@ func runtimeWorkstationPromptProvenance(
 	}
 	return runtimeWorkstationPromptProvenanceSet{
 		body:           runtimePromptFieldProvenanceForText(cfg, body, invocation),
-		promptTemplate: runtimePromptFieldProvenanceForText(cfg, workstation.PromptTemplate, invocation),
+		promptTemplate: runtimePromptFieldProvenanceForText(cfg, promptTemplate, invocation),
 	}
+}
+
+func runtimeAuthoredPromptProvenance(
+	cfg *runtimeConfig,
+	name string,
+	worker bool,
+) (interfaces.RuntimePromptProvenance, bool) {
+	if cfg == nil || cfg.runtimeConfig == nil {
+		return interfaces.RuntimePromptProvenance{}, false
+	}
+	lookup, ok := cfg.runtimeConfig.(interfaces.RuntimePromptProvenanceLookup)
+	if !ok || lookup == nil {
+		return interfaces.RuntimePromptProvenance{}, false
+	}
+	if worker {
+		return lookup.WorkerPromptProvenance(name)
+	}
+	return lookup.WorkstationPromptProvenance(name)
 }
 
 func runtimePromptFieldProvenanceForText(

@@ -61,6 +61,8 @@ type RuntimeConfigLookup = contracts.RuntimeConfigLookup
 type RuntimeDefinitionLookup = contracts.RuntimeDefinitionLookup
 type RuntimeFactoryConfigLookup = contracts.RuntimeFactoryConfigLookup
 type PromptSource = contracts.PromptSource
+type RuntimePromptProvenance = contracts.RuntimePromptProvenance
+type RuntimePromptProvenanceLookup = contracts.RuntimePromptProvenanceLookup
 type RuntimePromptSourceLookup = contracts.RuntimePromptSourceLookup
 type WorkstationKind = contracts.WorkstationKind
 type WorkstationLimits = contracts.WorkstationLimits
@@ -558,13 +560,18 @@ type RuntimeSnapshot struct {
 	// retained for compatibility with legacy snapshots; new invocation-bound
 	// snapshots use InvocationSensitiveJSONSpans.
 	InvocationSensitiveJSONPointers []string
-	DefinitionVersion               *FactoryVersion
-	EffectiveFactory                FactoryConfig
-	Workers                         []FactoryWorkerConfig
-	Workstations                    []FactoryWorkstationConfig
-	AutomationSources               []RuntimeAutomationSource
-	PromptSources                   []RuntimePromptSource
-	BundledFiles                    []PortableBundledFileReplacement
+	// PromptProvenance carries value-free authored worker and workstation
+	// prompt fields for inline definitions whose effective runtime values have
+	// already been interpolated. File-backed prompts continue to use
+	// PromptSources for the same purpose.
+	PromptProvenance  []RuntimePromptProvenance
+	DefinitionVersion *FactoryVersion
+	EffectiveFactory  FactoryConfig
+	Workers           []FactoryWorkerConfig
+	Workstations      []FactoryWorkstationConfig
+	AutomationSources []RuntimeAutomationSource
+	PromptSources     []RuntimePromptSource
+	BundledFiles      []PortableBundledFileReplacement
 }
 
 // Clone returns a detached copy suitable for crossing another service
@@ -600,6 +607,7 @@ func (snapshot RuntimeSnapshot) Clone() (RuntimeSnapshot, error) {
 		},
 		InvocationSensitiveJSONSpans:    append([]InvocationSensitiveJSONSpan(nil), snapshot.InvocationSensitiveJSONSpans...),
 		InvocationSensitiveJSONPointers: append([]string(nil), snapshot.InvocationSensitiveJSONPointers...),
+		PromptProvenance:                append([]RuntimePromptProvenance(nil), snapshot.PromptProvenance...),
 		EffectiveFactory:                *config,
 		Workers:                         make([]FactoryWorkerConfig, len(snapshot.Workers)),
 		Workstations:                    make([]FactoryWorkstationConfig, len(snapshot.Workstations)),

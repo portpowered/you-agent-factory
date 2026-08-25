@@ -28,7 +28,8 @@ type RuntimeLoad struct {
 
 type invocationSensitiveLoadedFactory struct {
 	factorydefinitions.MutableLoadedFactorySource
-	pointers []string
+	pointers         []string
+	promptProvenance []factorydefinitions.RuntimePromptProvenance
 }
 
 func (source *invocationSensitiveLoadedFactory) WorkerPromptSource(
@@ -64,9 +65,22 @@ func (source *invocationSensitiveLoadedFactory) InvocationSensitiveJSONPointers(
 	return append([]string(nil), source.pointers...)
 }
 
+func (source *invocationSensitiveLoadedFactory) WorkerPromptProvenance(
+	name string,
+) (factorydefinitions.RuntimePromptProvenance, bool) {
+	return lookupRuntimePromptProvenance(source.MutableLoadedFactorySource, source.promptProvenance, name, true)
+}
+
+func (source *invocationSensitiveLoadedFactory) WorkstationPromptProvenance(
+	name string,
+) (factorydefinitions.RuntimePromptProvenance, bool) {
+	return lookupRuntimePromptProvenance(source.MutableLoadedFactorySource, source.promptProvenance, name, false)
+}
+
 type invocationSensitiveSpanLoadedFactory struct {
 	factorydefinitions.MutableLoadedFactorySource
-	spans []factorydefinitions.InvocationSensitiveJSONSpan
+	spans            []factorydefinitions.InvocationSensitiveJSONSpan
+	promptProvenance []factorydefinitions.RuntimePromptProvenance
 }
 
 func (source *invocationSensitiveSpanLoadedFactory) WorkerPromptSource(
@@ -100,6 +114,39 @@ func (source *invocationSensitiveSpanLoadedFactory) InvocationSensitiveJSONSpans
 		return nil
 	}
 	return append([]factorydefinitions.InvocationSensitiveJSONSpan(nil), source.spans...)
+}
+
+func (source *invocationSensitiveSpanLoadedFactory) WorkerPromptProvenance(
+	name string,
+) (factorydefinitions.RuntimePromptProvenance, bool) {
+	return lookupRuntimePromptProvenance(source.MutableLoadedFactorySource, source.promptProvenance, name, true)
+}
+
+func (source *invocationSensitiveSpanLoadedFactory) WorkstationPromptProvenance(
+	name string,
+) (factorydefinitions.RuntimePromptProvenance, bool) {
+	return lookupRuntimePromptProvenance(source.MutableLoadedFactorySource, source.promptProvenance, name, false)
+}
+
+func lookupRuntimePromptProvenance(
+	source factorydefinitions.MutableLoadedFactorySource,
+	provenance []factorydefinitions.RuntimePromptProvenance,
+	name string,
+	worker bool,
+) (factorydefinitions.RuntimePromptProvenance, bool) {
+	for _, candidate := range provenance {
+		if candidate.Name == name {
+			return candidate, true
+		}
+	}
+	lookup, ok := source.(factorydefinitions.RuntimePromptProvenanceLookup)
+	if !ok || lookup == nil {
+		return factorydefinitions.RuntimePromptProvenance{}, false
+	}
+	if worker {
+		return lookup.WorkerPromptProvenance(name)
+	}
+	return lookup.WorkstationPromptProvenance(name)
 }
 
 type runtimeReplayLoad struct {
@@ -413,11 +460,13 @@ func loadRuntimeSnapshot(
 		loaded = &invocationSensitiveSpanLoadedFactory{
 			MutableLoadedFactorySource: loaded,
 			spans:                      append([]factorydefinitions.InvocationSensitiveJSONSpan(nil), snapshot.InvocationSensitiveJSONSpans...),
+			promptProvenance:           append([]factorydefinitions.RuntimePromptProvenance(nil), snapshot.PromptProvenance...),
 		}
-	} else if len(snapshot.InvocationSensitiveJSONPointers) > 0 {
+	} else if len(snapshot.InvocationSensitiveJSONPointers) > 0 || len(snapshot.PromptProvenance) > 0 {
 		loaded = &invocationSensitiveLoadedFactory{
 			MutableLoadedFactorySource: loaded,
 			pointers:                   append([]string(nil), snapshot.InvocationSensitiveJSONPointers...),
+			promptProvenance:           append([]factorydefinitions.RuntimePromptProvenance(nil), snapshot.PromptProvenance...),
 		}
 	}
 	return loaded, nil

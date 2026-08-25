@@ -223,11 +223,7 @@ func applyRuntimeDefinitionSelection(
 	)
 	selection.noop = runtimeSelectionIsTopologyNoop(selection, workerFound, worker)
 	if workerFound && worker != nil {
-		workerPromptProvenance := runtimePromptFieldProvenanceForText(
-			cfg,
-			worker.Body,
-			invocation,
-		)
+		workerPromptProvenance := runtimeWorkerPromptProvenance(cfg, worker, invocation)
 		interpolated, err := interpolateRuntimeWorkerConfig(cfg, worker, invocation)
 		if err != nil {
 			selection.interpolationError = fmt.Errorf("interpolate worker definition: %w", err)

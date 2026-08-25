@@ -127,6 +127,8 @@ func TestResolveRuntimeSnapshotTracksSensitiveRenderedSpans(t *testing.T) {
 	source.config.Workers[0].Body = "left=${visible} middle=${secret} right=${placeholder}"
 	source.config.Workers[0].Command = "literal ${placeholder}"
 	source.config.Workstations[0].Body = "station-visible secret=${secret}"
+	delete(source.prompts, "worker:agent")
+	delete(source.prompts, "workstation:cron-agent")
 	resolver, err := runtimesnapshotwire.NewService(
 		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return source, nil
@@ -183,6 +185,17 @@ func TestResolveRuntimeSnapshotTracksSensitiveRenderedSpans(t *testing.T) {
 	}
 	if len(result.Snapshot.InvocationSensitiveJSONPointers) != 0 {
 		t.Fatalf("legacy sensitive pointers = %#v, want none", result.Snapshot.InvocationSensitiveJSONPointers)
+	}
+	wantPromptProvenance := []factorydefinitions.RuntimePromptProvenance{
+		{Name: "agent", Body: "left=${visible} middle=${secret} right=${placeholder}"},
+		{Name: "cron-agent", Body: "station-visible secret=${secret}"},
+	}
+	if !reflect.DeepEqual(result.Snapshot.PromptProvenance, wantPromptProvenance) {
+		t.Fatalf(
+			"prompt provenance = %#v, want %#v",
+			result.Snapshot.PromptProvenance,
+			wantPromptProvenance,
+		)
 	}
 }
 
