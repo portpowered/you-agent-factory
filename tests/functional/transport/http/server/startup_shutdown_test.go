@@ -89,6 +89,163 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	enabledServer.Stop(t)
 }
 
+// TestAPIServerDiagnosticsUseProductionLoopbackStarter proves the diagnostics
+// contract through the customer process with the production HTTP starter. The
+// existing API-server helper intentionally owns an httptest transport for most
+// HTTP functional tests; this cell reaches the real bind, Serve, and shutdown
+// lifecycle so those host-network branches remain in the functional profile.
+func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+
+	for _, test := range []struct {
+		name  string
+		pprof bool
+	}{
+		{name: "disabled by default"},
+		{name: "enabled by opt-in", pprof: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			serverURL := startProductionLoopbackAPIServer(t, dir, test.pprof)
+			assertLiveStatusAndRuntimeDiagnostics(t, serverURL)
+			if test.pprof {
+				assertLivePprofHeap(t, serverURL)
+				return
+			}
+			assertPprofUnavailable(t, serverURL)
+		})
+	}
+}
+
+func startProductionLoopbackAPIServer(
+	t *testing.T,
+	dir string,
+	pprofEnabled bool,
+) string {
+	t.Helper()
+
+	bound := make(chan platformhttpserver.Binding, 1)
+	starter, err := platformhttpserver.NewStarter(
+		net.Listen,
+		nil,
+		func() []string { return []string{"you", "run", "--with-server"} },
+	)
+	if err != nil {
+		t.Fatalf("NewStarter() error = %v", err)
+	}
+
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("live diagnostics"), nil)
+	edges.APIServerStarter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		originalOnBound := request.OnBound
+		request.OnBound = func(binding platformhttpserver.Binding) {
+			select {
+			case bound <- binding:
+			default:
+			}
+			if originalOnBound != nil {
+				originalOnBound(binding)
+			}
+		}
+		return starter(ctx, request)
+	}
+
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	requestedURL := reserveConfiguredLoopbackURL(t)
+	requestedEndpoint, err := url.Parse(requestedURL)
+	if err != nil {
+		t.Fatalf("parse reserved loopback URL %q: %v", requestedURL, err)
+	}
+	requestedPort, err := strconv.Atoi(requestedEndpoint.Port())
+	if err != nil {
+		t.Fatalf("parse reserved loopback port from %q: %v", requestedURL, err)
+	}
+	args := []string{
+		"you", "run", "--dir", dir, "--continuously", "--with-server",
+		"--listen", net.JoinHostPort("127.0.0.1", strconv.Itoa(requestedPort)),
+		"--quiet", "--no-record",
+	}
+	if pprofEnabled {
+		args = append(args, "--pprof")
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = dir
+	home := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+
+	var binding platformhttpserver.Binding
+	select {
+	case binding = <-bound:
+	case <-time.After(15 * time.Second):
+		command.AcceptError()
+		t.Fatal("timed out waiting for production HTTP starter binding")
+	}
+	if binding.Host != "127.0.0.1" || binding.Port <= 0 {
+		command.AcceptError()
+		t.Fatalf("production HTTP binding = %+v, want a loopback endpoint", binding)
+	}
+
+	serverURL := "http://" + net.JoinHostPort(binding.Host, strconv.Itoa(binding.Port))
+	support.WaitForStatus(t, serverURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return status.RuntimeStatus != ""
+	})
+	return serverURL
+}
+
+func assertLiveStatusAndRuntimeDiagnostics(t *testing.T, serverURL string) {
+	t.Helper()
+	status := support.GetJSON[factoryapi.StatusResponse](t, serverURL+"/status")
+	if status.FactoryState == "" || status.RuntimeStatus == "" {
+		t.Fatalf("live /status = %+v, want factory and runtime state", status)
+	}
+
+	snapshot := support.GetJSON[platformhttpserver.RuntimeSnapshot](t, serverURL+"/debug/runtime")
+	if snapshot.HeapAllocBytes == 0 || snapshot.HeapInuseBytes < snapshot.HeapAllocBytes ||
+		snapshot.SysBytes < snapshot.HeapInuseBytes || snapshot.Goroutines <= 0 {
+		t.Fatalf("live runtime snapshot = %+v, want plausible values", snapshot)
+	}
+	if snapshot.ProcessCommitAvailable && snapshot.ProcessCommitBytes == 0 {
+		t.Fatalf("live runtime snapshot = %+v, want positive commit bytes when available", snapshot)
+	}
+}
+
+func assertPprofUnavailable(t *testing.T, serverURL string) {
+	t.Helper()
+	response, err := http.Get(serverURL + "/debug/pprof/heap")
+	if err != nil {
+		t.Fatalf("GET disabled pprof heap: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("disabled pprof heap status = %d, want %d", response.StatusCode, http.StatusNotFound)
+	}
+}
+
+func assertLivePprofHeap(t *testing.T, serverURL string) {
+	t.Helper()
+	response, err := http.Get(serverURL + "/debug/pprof/heap")
+	if err != nil {
+		t.Fatalf("GET enabled pprof heap: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read enabled pprof heap: %v", err)
+	}
+	if response.StatusCode != http.StatusOK || len(body) == 0 {
+		t.Fatalf("enabled pprof heap = (%d, body length %d), want a non-empty HTTP 200 response", response.StatusCode, len(body))
+	}
+	parsed, err := profile.Parse(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("parse enabled live pprof heap: %v", err)
+	}
+	if parsed == nil || len(parsed.SampleType) == 0 || len(parsed.Sample) == 0 {
+		t.Fatalf("enabled live pprof heap = %+v, want sample types and samples", parsed)
+	}
+}
+
 func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPIServer) {
 	t.Helper()
 	index, err := http.Get(enabledServer.URL() + "/debug/pprof/")
