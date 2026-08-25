@@ -94,6 +94,7 @@ test("retains measured partial packages with an explicit report-only floor and m
 		{
 			package: "pkg/measured",
 			coveragePercent: 50,
+			held: false,
 			floor: null,
 			timing: { package: "pkg/measured", seconds: 3.75, outcome: "fail" },
 		},

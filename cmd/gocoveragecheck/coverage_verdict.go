@@ -20,13 +20,13 @@ const nearFloorCoverageHeadroomPoints = 2.0
 // its distance to the package floor. Headroom is negative when a measurable
 // package is below its floor. A package without a numeric floor is report-only.
 type packageCoverageVerdict struct {
-	importPath      string
-	hasFloor        bool
-	held            bool
-	floor           float64
-	actual          float64
-	headroom        float64
-	measurable      int
+	importPath string
+	hasFloor   bool
+	held       bool
+	floor      float64
+	actual     float64
+	headroom   float64
+	measurable int
 }
 
 // writeCoverageLaneReport prints a lane's per-package coverage result.

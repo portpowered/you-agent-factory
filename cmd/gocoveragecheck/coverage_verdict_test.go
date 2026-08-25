@@ -144,10 +144,11 @@ func TestFunctionalCoverageVerdictNamesHeldFloorWithoutCallingItAnActiveViolatio
 	if strings.Contains(stderr, "advisory") || strings.Contains(stderr, "report-only") {
 		t.Fatalf("blocking staged run emitted advisory guidance: %s", stderr)
 	}
-	if !strings.Contains(stdout, "  floor violations: none\n") ||
-		!strings.Contains(stdout, "  floor hold: package="+configPackage) ||
-		!strings.Contains(stdout, "gate=hold lane=functional\n") {
+	if !strings.Contains(stdout, "  package="+configPackage+" coverage=25.0% floor=80.0% delta=-55.0pp status=HOLD lane=functional\n") {
 		t.Fatalf("verdict did not distinguish the held package from active violations:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "floor hold:") || strings.Contains(stdout, "uncovered-blocks=") {
+		t.Fatalf("held verdict exposed verbose floor diagnostics:\n%s", stdout)
 	}
 	if !strings.Contains(stdout, "below-floor=0 near-floor=1 gate-failures=0") {
 		t.Fatalf("verdict tally treated the held package as an active failure:\n%s", stdout)
