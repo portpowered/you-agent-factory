@@ -121,6 +121,7 @@
         {
           "id": "disp-petri-001",
           "status": "RUNNING",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "PETRI_TRANSITION",
           "phase": "triage",
           "label": "plan-task",
@@ -143,6 +144,7 @@
         "orchestratorKind": "PETRI",
         "dispatchKind": "PETRI_TRANSITION",
         "status": "RUNNING",
+        "confirmationState": "CONFIRMED",
         "phase": "triage",
         "label": "plan-task",
         "attempt": 1,
@@ -276,6 +278,7 @@
         {
           "id": "disp-petri-success-001",
           "status": "COMPLETED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "PETRI_TRANSITION",
           "label": "plan-task",
           "attempt": 1,
@@ -290,6 +293,7 @@
         "orchestratorKind": "PETRI",
         "dispatchKind": "PETRI_TRANSITION",
         "status": "COMPLETED",
+        "confirmationState": "CONFIRMED",
         "label": "plan-task",
         "attempt": 1,
         "artifactIds": [
@@ -460,6 +464,7 @@
         {
           "id": "disp-js-001",
           "status": "COMPLETED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_AGENT",
           "phase": "plan",
           "label": "plan-release",
@@ -468,6 +473,7 @@
         {
           "id": "disp-js-002",
           "status": "RUNNING",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "phase": "verify",
           "label": "verify-release",
@@ -476,6 +482,7 @@
         {
           "id": "disp-js-003",
           "status": "QUEUED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_SYNTHESIZE",
           "phase": "synthesize",
           "label": "synthesize-notes",
@@ -488,6 +495,7 @@
         "orchestratorKind": "JAVASCRIPT",
         "dispatchKind": "JAVASCRIPT_VERIFY",
         "status": "RUNNING",
+        "confirmationState": "CONFIRMED",
         "phase": "verify",
         "label": "verify-release",
         "attempt": 1,
@@ -623,6 +631,7 @@
         {
           "id": "disp-js-pause-001",
           "status": "COMPLETED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_AGENT",
           "label": "draft-change",
           "attempt": 1
@@ -630,6 +639,7 @@
         {
           "id": "disp-js-pause-002",
           "status": "QUEUED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_SYSTEM",
           "label": "await-approval",
           "attempt": 1
@@ -641,6 +651,7 @@
         "orchestratorKind": "JAVASCRIPT",
         "dispatchKind": "JAVASCRIPT_SYSTEM",
         "status": "QUEUED",
+        "confirmationState": "CONFIRMED",
         "label": "await-approval",
         "attempt": 1,
         "javascript": {
@@ -781,6 +792,7 @@
         {
           "id": "disp-js-fail-001",
           "status": "COMPLETED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_SYNTHESIZE",
           "label": "synthesize",
           "attempt": 1
@@ -788,6 +800,7 @@
         {
           "id": "disp-js-fail-002",
           "status": "FAILED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "label": "verify",
           "attempt": 1,
@@ -815,6 +828,7 @@
         "orchestratorKind": "JAVASCRIPT",
         "dispatchKind": "JAVASCRIPT_VERIFY",
         "status": "FAILED",
+        "confirmationState": "CONFIRMED",
         "label": "verify",
         "attempt": 1,
         "javascript": {
@@ -928,6 +942,7 @@
         {
           "id": "disp-js-timeout-001",
           "status": "RUNNING",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_AGENT",
           "label": "audit",
           "attempt": 1
@@ -939,6 +954,7 @@
         "orchestratorKind": "JAVASCRIPT",
         "dispatchKind": "JAVASCRIPT_AGENT",
         "status": "RUNNING",
+        "confirmationState": "CONFIRMED",
         "label": "audit",
         "attempt": 1,
         "javascript": {
@@ -1014,6 +1030,7 @@
         {
           "id": "disp-petri-cancel-001",
           "status": "FAILED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "PETRI_TRANSITION",
           "label": "plan-task",
           "attempt": 1
@@ -1025,6 +1042,7 @@
         "orchestratorKind": "PETRI",
         "dispatchKind": "PETRI_TRANSITION",
         "status": "FAILED",
+        "confirmationState": "CONFIRMED",
         "label": "plan-task",
         "attempt": 1,
         "petri": {
@@ -1142,6 +1160,7 @@
         {
           "id": "disp-js-success-001",
           "status": "COMPLETED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_AGENT",
           "label": "draft-docs",
           "attempt": 1
@@ -1149,6 +1168,7 @@
         {
           "id": "disp-js-success-002",
           "status": "COMPLETED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "label": "verify-docs",
           "attempt": 1,
@@ -1175,6 +1195,7 @@
         "orchestratorKind": "JAVASCRIPT",
         "dispatchKind": "JAVASCRIPT_VERIFY",
         "status": "COMPLETED",
+        "confirmationState": "CONFIRMED",
         "label": "verify-docs",
         "attempt": 1,
         "artifactIds": [
@@ -1557,6 +1578,7 @@
         {
           "id": "disp-unsupported-001",
           "status": "FAILED",
+          "confirmationState": "CONFIRMED",
           "dispatchKind": "JAVASCRIPT_AGENT",
           "label": "experimental-agent",
           "attempt": 1,
@@ -1573,6 +1595,7 @@
         "orchestratorKind": "JAVASCRIPT",
         "dispatchKind": "JAVASCRIPT_AGENT",
         "status": "FAILED",
+        "confirmationState": "CONFIRMED",
         "label": "experimental-agent",
         "attempt": 1,
         "runnerId": "experimental-runner",

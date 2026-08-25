@@ -690,10 +690,11 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 	assertArrayItemRef(t, listDispatchesProperties, "dispatches", "#/components/schemas/FactorySessionDispatchSummary")
 
 	dispatchSummarySchema := schemaObject(t, schemas, "FactorySessionDispatchSummary")
-	assertRequiredFields(t, dispatchSummarySchema, "id", "status", "dispatchKind")
+	assertRequiredFields(t, dispatchSummarySchema, "id", "status", "dispatchKind", "confirmationState")
 	dispatchSummaryProperties := schemaProperties(t, dispatchSummarySchema, "FactorySessionDispatchSummary")
 	assertPropertyRef(t, dispatchSummaryProperties, "status", "#/components/schemas/FactoryDispatchStatus")
 	assertPropertyRef(t, dispatchSummaryProperties, "dispatchKind", "#/components/schemas/FactoryDispatchKind")
+	assertPropertyRef(t, dispatchSummaryProperties, "confirmationState", "#/components/schemas/ConfirmationState")
 	assertPropertyRef(t, dispatchSummaryProperties, "usage", "#/components/schemas/FactoryDispatchUsage")
 	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FailureDetail")
 	assertPropertyRef(t, dispatchSummaryProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
@@ -704,7 +705,9 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail", "javascript")
 
 	dispatchDetailSchema := schemaObject(t, schemas, "FactoryDispatch")
+	assertRequiredFields(t, dispatchDetailSchema, "id", "sessionId", "orchestratorKind", "dispatchKind", "status", "confirmationState")
 	dispatchDetailProperties := schemaProperties(t, dispatchDetailSchema, "FactoryDispatch")
+	assertPropertyRef(t, dispatchDetailProperties, "confirmationState", "#/components/schemas/ConfirmationState")
 	assertPropertyRef(t, dispatchDetailProperties, "petri", "#/components/schemas/FactoryDispatchPetriProjection")
 	assertPropertyRef(t, dispatchDetailProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
 	assertArrayItemRef(t, dispatchDetailProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
