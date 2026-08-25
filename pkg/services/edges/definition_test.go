@@ -92,6 +92,15 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		directoryCreationRequested = true
 		return nil
 	})
+	invocationBackend := ModelInvocationBackend(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return nil, nil, nil
+	})
+	asrBackend := ModelASRBackend(func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{}, nil
+	})
+	embeddingBackend := ModelEmbeddingBackend(func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
+		return models.EmbeddingBackendResponse{}, nil
+	})
 
 	merged := Merge(Edges{
 		APIServerStarter:     defaultStarter,
@@ -120,6 +129,9 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			Architecture:    "replacement-arch",
 		},
 		WorkContentHostPlatform:      "replacement-os",
+		ModelInvocationBackend:       invocationBackend,
+		ModelASRBackend:              asrBackend,
+		ModelEmbeddingBackend:        embeddingBackend,
 		WorkersFactoryDocsFileSystem: workerDocsFileSystem,
 		WorkersResolveSymlinks: func(path string) (string, error) {
 			workerSymlinksResolved = true
@@ -228,6 +240,15 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if merged.WorkContentHostPlatform != "replacement-os" {
 		t.Fatalf("WorkContentHostPlatform = %q, want explicit replacement", merged.WorkContentHostPlatform)
+	}
+	if merged.ModelInvocationBackend == nil || merged.ModelASRBackend == nil || merged.ModelEmbeddingBackend == nil {
+		t.Fatal("typed model backends were not retained")
+	}
+	if _, _, err := merged.ModelInvocationBackend(context.Background(), models.InvokeModelRequest{}); err != nil {
+		t.Fatalf("ModelInvocationBackend replacement error = %v", err)
+	}
+	if _, err := merged.ModelASRBackend(context.Background(), models.ASRBackendRequest{}); err != nil {
+		t.Fatalf("ModelASRBackend replacement error = %v", err)
 	}
 	if err := merged.FactoryRuntimeInputDirectoryWalker("ignored", nil); err != nil || !walked {
 		t.Fatalf("FactoryRuntimeInputDirectoryWalker replacement = (%v, %v), want injected call", err, walked)
@@ -522,17 +543,27 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	t.Parallel()
 
 	environment := func(name string) string { return "value:" + name }
+	embedding := ModelEmbeddingBackend(func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
+		return models.EmbeddingBackendResponse{Embeddings: []float64{0.1}}, nil
+	})
 	protocol := &edgeModelHostProtocol{}
 	dialer := &edgeModelHostGRPCDialer{}
 	compatibility := &edgeModelHostCompatibilityChecker{}
 	merged := Merge(Edges{}, Edges{
 		ModelAssetResolveEnvironment:  environment,
+		ModelEmbeddingBackend:         embedding,
 		ModelHostProtocolNegotiator:   protocol,
 		ModelHostGRPCDialer:           dialer,
 		ModelHostCompatibilityChecker: compatibility,
 	})
 	if merged.ModelAssetResolveEnvironment("CACHE") != "value:CACHE" {
 		t.Fatalf("asset environment edge was not replaced")
+	}
+	if merged.ModelEmbeddingBackend == nil {
+		t.Fatal("embedding backend edge was not replaced")
+	}
+	if response, err := merged.ModelEmbeddingBackend(context.Background(), models.EmbeddingBackendRequest{Text: "hello"}); err != nil || len(response.Embeddings) != 1 {
+		t.Fatalf("embedding backend edge = (%#v, %v), want fixture response", response, err)
 	}
 	if merged.ModelHostProtocolNegotiator != protocol {
 		t.Fatal("protocol negotiator edge was not replaced")

@@ -2,16 +2,26 @@ package root_composition_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"go.uber.org/zap"
 )
 
 // TestGenericModelContractsRemainDetachedAtApplicationRoot proves generic model
@@ -155,6 +165,49 @@ func assertGenericRuntimeFailures(t *testing.T) {
 	}
 }
 
+// TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle proves
+// catalog discovery through GET /models after runtime lifecycle starts on a process
+// constructed only through root.BuildProcess with edges.Edges effect replacement.
+func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	if status.FactoryState != string(interfaces.FactoryStateRunning) {
+		t.Fatalf("GET /status factory_state = %q, want RUNNING", status.FactoryState)
+	}
+
+	models := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	var observed *factoryapi.ModelSummary
+	for index := range models.Results {
+		if models.Results[index].Name == "OMNIVOICE_Q4_K_M" {
+			observed = &models.Results[index]
+			break
+		}
+	}
+	if observed == nil {
+		t.Fatalf("GET /models did not include OMNIVOICE_Q4_K_M; results=%#v", models.Results)
+	}
+	if observed.ProviderLocality != factoryapi.WorkerModelLocalityCloud {
+		t.Fatalf("GET /models provider locality = %q, want CLOUD", observed.ProviderLocality)
+	}
+	if observed.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", observed.ManagedRuntime.Identity)
+	}
+	if observed.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models managed readiness = %s, want READY", observed.ManagedRuntime.ReadinessState)
+	}
+}
+
 // TestModelsRootCompositionModelScenarios groups the changed root-composition
 // scenarios so stability verification starts the expensive functional package
 // once while retaining named subtest coverage for each public behavior.
@@ -258,6 +311,290 @@ func findCatalogModel(
 	}
 	t.Fatalf("%s did not include %q; results=%#v", operation, name, models)
 	return factoryapi.ModelSummary{}
+}
+
+func catalogDiscoveryFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "models-catalog-discovery",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "tts-worker",
+			"type":          interfaces.WorkerTypeModel,
+			"model":         "OMNIVOICE_Q4_K_M",
+			"modelProvider": "CODEX",
+			"modelLocality": interfaces.ModelLocalityCloud,
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{{
+					"name":         "text",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+					"required":     true,
+				}},
+				"outputs": []map[string]any{{
+					"name":         "audio",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
+	}
+}
+
+// TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess proves the
+// effective catalog projects every zero-configuration built-in through the
+// same public HTTP projection and keeps unknown detail reads customer-safe.
+func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	list := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	if len(list.Results) < 5 {
+		t.Fatalf("GET /models returned %d models, want factory plus built-ins: %#v", len(list.Results), list.Results)
+	}
+	for _, name := range []string{
+		modelprovider.BuiltInModelNameASR,
+		modelprovider.BuiltInModelNameEmbed,
+		modelprovider.BuiltInModelNameLLM,
+		modelprovider.BuiltInModelNameTTS,
+		"OMNIVOICE_Q4_K_M",
+	} {
+		detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/"+name)
+		if detail.Name != name {
+			t.Fatalf("GET /models/%s name = %q, want %q", name, detail.Name, name)
+		}
+	}
+
+	response, err := http.Get(server.URL() + "/models/catalog-missing")
+	if err != nil {
+		t.Fatalf("GET unknown model: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET unknown model status = %d, want %d", response.StatusCode, http.StatusNotFound)
+	}
+	unsupported, err := http.Post(
+		server.URL()+"/models/llm/invocations",
+		"application/json",
+		strings.NewReader(`{"operation":"EMBED","content":[{"type":"TEXT","text":"unsupported"}]}`),
+	)
+	if err != nil {
+		t.Fatalf("POST unsupported model operation: %v", err)
+	}
+	unsupported.Body.Close()
+	if unsupported.StatusCode == http.StatusOK {
+		t.Fatal("POST unsupported model operation unexpectedly succeeded")
+	}
+}
+
+// TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP proves a
+// readiness observation failure is normalized to the public model-unavailable
+// response instead of exposing an internal asset diagnostic.
+func TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ModelAssetReadFile: func(string) ([]byte, error) {
+				return nil, errors.New("fixture asset metadata read failed")
+			},
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	response, err := http.Get(server.URL() + "/models")
+	if err != nil {
+		t.Fatalf("GET /models with readiness failure: %v", err)
+	}
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read GET /models readiness failure response: %v", readErr)
+	}
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET /models readiness failure status = %d, want %d: %s", response.StatusCode, http.StatusNotFound, body)
+	}
+	detailResponse, err := http.Get(server.URL() + "/models/embed")
+	if err != nil {
+		t.Fatalf("GET /models/embed with readiness failure: %v", err)
+	}
+	detailResponse.Body.Close()
+	if detailResponse.StatusCode == http.StatusOK {
+		t.Fatal("GET /models/embed unexpectedly succeeded after readiness failure")
+	}
+}
+
+// TestModelsCatalogProjectsOperatorOverlaysThroughModelsService exercises the
+// public Models composition boundary with a scope-local overlay. The live
+// application catalog remains zero-configuration; this focused functional
+// cell proves the public scope contract also validates and projects the
+// existing operator overlay model without exposing catalog internals.
+func TestModelsCatalogProjectsOperatorOverlaysThroughModelsService(t *testing.T) {
+	t.Parallel()
+
+	service, err := newFunctionalCatalogModelsService()
+	if err != nil {
+		t.Fatalf("construct Models service: %v", err)
+	}
+	source := "file://custom-embed.gguf"
+	backend := "localai-llamacpp"
+	loadPolicy := modelprovider.LoadPolicyOnDemand
+	opened, err := service.OpenRuntimeScope(t.Context(), modelprovider.OpenRuntimeScopeRequest{
+		Config: modelprovider.RuntimeScopeConfig{
+			CacheDirectory: t.TempDir(),
+			OperatorModels: map[string]modelprovider.ModelOverlay{
+				" custom-embed ": {
+					Source:     &source,
+					Backend:    &backend,
+					LoadPolicy: &loadPolicy,
+					Operations: []string{modelprovider.OperationEMBED},
+				},
+				modelprovider.BuiltInModelNameLLM: {Backend: &backend},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("open Models overlay scope: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, closeErr := service.CloseRuntimeScope(context.Background(), modelprovider.CloseRuntimeScopeRequest{Scope: opened.Scope}); closeErr != nil {
+			t.Errorf("close Models overlay scope: %v", closeErr)
+		}
+	})
+
+	list, err := service.ListCatalog(t.Context(), modelprovider.ListModelsRequest{Scope: opened.Scope})
+	if err != nil {
+		t.Fatalf("list effective overlay catalog: %v", err)
+	}
+	custom, ok := findFunctionalCatalogSummary(list.Models, "custom-embed")
+	if !ok || len(custom.Operations) != 1 || custom.Operations[0].Name != modelprovider.OperationEMBED {
+		t.Fatalf("effective custom catalog entry = %#v, want one EMBED operation", custom)
+	}
+	if custom.ManagedRuntime.Identity != "custom-embed" || custom.ManagedRuntime.ReadinessState != modelprovider.ReadinessStateMissing {
+		t.Fatalf("custom runtime = %#v, want stable missing baseline", custom.ManagedRuntime)
+	}
+
+	detail, err := service.GetCatalogModel(t.Context(), modelprovider.GetModelRequest{
+		Scope: opened.Scope, Name: "CUSTOM-EMBED", Operation: modelprovider.OperationEMBED,
+	})
+	if err != nil {
+		t.Fatalf("get effective custom catalog detail: %v", err)
+	}
+	if detail.Model.Name != "custom-embed" || detail.Model.Diagnostics["sourceKind"] != string(modelprovider.ModelReferenceSourceFileURI) {
+		t.Fatalf("custom detail = %#v, want file URI provenance", detail.Model)
+	}
+	if _, err := service.GetCatalogModel(t.Context(), modelprovider.GetModelRequest{
+		Scope: opened.Scope, Name: modelprovider.BuiltInModelNameLLM, Operation: modelprovider.OperationEMBED,
+	}); !errors.Is(err, modelprovider.ErrUnsupportedOperation) {
+		t.Fatalf("unsupported overlay operation error = %v, want ErrUnsupportedOperation", err)
+	}
+
+	readiness, err := service.GetModelReadiness(t.Context(), modelprovider.GetModelReadinessRequest{
+		Scope: opened.Scope, Name: "custom-embed", Operation: modelprovider.OperationEMBED,
+	})
+	if err != nil || readiness.Readiness.Identity != "custom-embed" || readiness.Readiness.ReadinessState != modelprovider.ReadinessStateMissing {
+		t.Fatalf("custom readiness = %#v, error = %v, want effective missing state", readiness, err)
+	}
+
+	invalidScopeCases := []map[string]modelprovider.ModelOverlay{
+		{"bad/name": {Source: &source, Backend: &backend, LoadPolicy: &loadPolicy, Operations: []string{modelprovider.OperationEMBED}}},
+		{"embed": {Source: &source, Backend: &backend, LoadPolicy: &loadPolicy, Operations: []string{"UNKNOWN"}}},
+		{"new-model": {}},
+	}
+	for index, overlays := range invalidScopeCases {
+		invalid, openErr := service.OpenRuntimeScope(t.Context(), modelprovider.OpenRuntimeScopeRequest{
+			Config: modelprovider.RuntimeScopeConfig{OperatorModels: overlays},
+		})
+		if openErr != nil {
+			t.Fatalf("open invalid overlay scope[%d]: %v", index, openErr)
+		}
+		_, listErr := service.ListCatalog(t.Context(), modelprovider.ListModelsRequest{Scope: invalid.Scope})
+		var configurationFailure modelprovider.ModelConfigurationFailure
+		if !errors.As(listErr, &configurationFailure) {
+			t.Fatalf("invalid overlay scope[%d] error = %v, want ModelConfigurationFailure", index, listErr)
+		}
+		if _, closeErr := service.CloseRuntimeScope(context.Background(), modelprovider.CloseRuntimeScopeRequest{Scope: invalid.Scope}); closeErr != nil {
+			t.Fatalf("close invalid overlay scope[%d]: %v", index, closeErr)
+		}
+	}
+}
+
+func findFunctionalCatalogSummary(values []modelprovider.Summary, name string) (modelprovider.Summary, bool) {
+	for _, value := range values {
+		if value.Name == name {
+			return value, true
+		}
+	}
+	return modelprovider.Summary{}, false
+}
+
+func newFunctionalCatalogModelsService() (modelprovider.Service, error) {
+	return modelswire.NewService(
+		modelprovider.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
+		http.DefaultClient,
+		modelprovider.RuntimeAssetEndpoints{},
+		os.MkdirAll,
+		os.Stat,
+		os.UserHomeDir,
+		os.WriteFile,
+		os.Rename,
+		os.Remove,
+		os.ReadFile,
+		os.ReadDir,
+		func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		functionalCatalogProcessLauncher{},
+		http.DefaultClient,
+		functionalCatalogHostClock{},
+		functionalCatalogCommandRunner{},
+		http.DefaultClient,
+		os.Stat,
+		os.TempDir,
+		func(dir, pattern string) (modelswire.RuntimeTempFile, error) { return os.CreateTemp(dir, pattern) },
+		zap.NewNop(),
+		func() time.Time { return time.Unix(123, 456) },
+		platformrandom.CryptoSource{},
+		nil,
+		nil,
+		nil,
+		modelswire.LocalRuntimeHooks{},
+		func(string) string { return "" },
+		nil,
+		nil,
+	)
+}
+
+type functionalCatalogProcessLauncher struct{}
+
+func (functionalCatalogProcessLauncher) Start(context.Context, modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
+	return nil, errors.New("functional catalog host launcher was called")
+}
+
+type functionalCatalogHostClock struct{}
+
+func (functionalCatalogHostClock) Now() time.Time { return time.Unix(0, 0) }
+
+func (functionalCatalogHostClock) NewTimer(time.Duration) modelswire.HostTimer { return nil }
+
+type functionalCatalogCommandRunner struct{}
+
+func (functionalCatalogCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("functional catalog command runner was called")
 }
 
 func richCatalogFactoryConfig() map[string]any {

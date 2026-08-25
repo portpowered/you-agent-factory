@@ -7,12 +7,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -21,7 +24,9 @@ type ownedCoverageModelsRoot struct {
 	getModel             func(context.Context, string) (modelinference.Detail, error)
 	pullModel            func(context.Context, string) (modelinference.PullResult, error)
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
+	getModelReadiness    func(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
+	invokeModel          func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 	invokeModelWithLease func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 
@@ -58,7 +63,10 @@ func (stub ownedCoverageModelsRoot) GetCatalogModel(ctx context.Context, request
 	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub ownedCoverageModelsRoot) GetModelReadiness(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+func (stub ownedCoverageModelsRoot) GetModelReadiness(ctx context.Context, request modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+	if stub.getModelReadiness != nil {
+		return stub.getModelReadiness(ctx, request)
+	}
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -119,7 +127,10 @@ func (stub ownedCoverageModelsRoot) InvokeModelWithLease(ctx context.Context, re
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub ownedCoverageModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+func (stub ownedCoverageModelsRoot) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if stub.invokeModel != nil {
+		return stub.invokeModel(ctx, request)
+	}
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -579,5 +590,405 @@ func TestGeneratedModelSupportsOperationChecksAllPublicProjections(t *testing.T)
 				t.Fatalf("generatedModelSupportsOperation() = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestGenericCLIInputHelpersCoverNamedTextJSONAndFileForms(t *testing.T) {
+	t.Parallel()
+
+	textRequired := true
+	textSlot := modelinference.OperationSlot{
+		Name: "text", Modality: modelinference.ModalityText, Required: &textRequired,
+		MediaTypes: []string{"text/plain"},
+	}
+	jsonSlot := modelinference.OperationSlot{
+		Name: "parameters", Modality: modelinference.ModalityJSON,
+		MediaTypes: []string{"application/json"},
+	}
+	audioSlot := modelinference.OperationSlot{
+		Name: "audio", Modality: modelinference.ModalityAudio,
+		MediaTypes: []string{"audio/*"},
+	}
+	readCalls := 0
+	var readLimit int64
+	service := &rootService{
+		inputFileReader: func(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+			readCalls++
+			readLimit = maxBytes
+			if path != "note.txt" {
+				return nil, errors.New("unexpected input path")
+			}
+			return []byte("file text"), ctx.Err()
+		},
+	}
+	cfg := InvokeConfig{Context: context.Background()}
+
+	text, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "inline text"}, textSlot)
+	if err != nil || text.Content != "inline text" || text.MediaType != "text/plain" {
+		t.Fatalf("inline text input = %#v, error = %v", text, err)
+	}
+	parameters, err := service.genericCLIInput(cfg, genericCLIInputMapping{
+		slot: "parameters", value: `json:{"normalize":true}`,
+	}, jsonSlot)
+	if err != nil || parameters.Content != `{"normalize":true}` || parameters.MediaType != "application/json" {
+		t.Fatalf("inline JSON input = %#v, error = %v", parameters, err)
+	}
+	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "parameters", value: "json:not-json"}, jsonSlot); err == nil {
+		t.Fatal("invalid JSON input error = nil")
+	}
+
+	fileInput, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot)
+	if err != nil || fileInput.Content != "file text" || fileInput.MediaType != "text/plain" {
+		t.Fatalf("file input = %#v, error = %v", fileInput, err)
+	}
+	if readCalls != 1 || readLimit != genericCLIInputMaxFileBytes {
+		t.Fatalf("file reader calls/limit = %d/%d, want 1/%d", readCalls, readLimit, genericCLIInputMaxFileBytes)
+	}
+
+	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "audio", value: "inline audio"}, audioSlot); err == nil {
+		t.Fatal("inline binary-like input error = nil")
+	}
+	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@"}, textSlot); err == nil {
+		t.Fatal("empty file path error = nil")
+	}
+
+	tooLarge := &rootService{inputFileReader: func(context.Context, string, int64) ([]byte, error) {
+		return []byte(strings.Repeat("x", int(genericCLIInputMaxFileBytes+1))), nil
+	}}
+	if _, err := tooLarge.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot); err == nil {
+		t.Fatal("oversized file input error = nil")
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancelReader := &rootService{inputFileReader: func(context.Context, string, int64) ([]byte, error) {
+		cancel()
+		return []byte("late"), nil
+	}}
+	if _, err := cancelReader.genericCLIInput(InvokeConfig{Context: cancelled}, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot); err == nil {
+		t.Fatal("canceled file input error = nil")
+	}
+
+	if _, err := (&rootService{}).genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot); err == nil {
+		t.Fatal("unconfigured file reader error = nil")
+	}
+	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, modelinference.OperationSlot{
+		Name: "text", Modality: modelinference.ModalityText, MediaTypes: []string{"application/json"},
+	}); err == nil {
+		t.Fatal("file media capability error = nil")
+	}
+
+	for _, test := range []struct {
+		name, input, want string
+	}{
+		{name: "wav alias", input: " audio/x-wav; charset=binary ", want: "audio/wav"},
+		{name: "ogg alias", input: "application/ogg; codecs=opus", want: "audio/ogg"},
+		{name: "lowercase", input: "Application/JSON; charset=utf-8", want: "application/json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := genericCLIInputNormalizeMediaType(test.input); got != test.want {
+				t.Fatalf("genericCLIInputNormalizeMediaType(%q) = %q, want %q", test.input, got, test.want)
+			}
+		})
+	}
+	if got := genericCLIJSONInputValue("  {\"normalize\":true} "); got != "  {\"normalize\":true} " {
+		t.Fatalf("unprefixed JSON value = %q, want original value", got)
+	}
+}
+
+func TestGenericCLIModelOperationInferenceCoversBuiltInAliases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, model, want string
+	}{
+		{name: "llm", model: " LLM ", want: modelinference.OperationOMNI},
+		{name: "asr", model: "AsR", want: modelinference.OperationASR},
+		{name: "tts", model: "tts", want: modelinference.OperationTTS},
+		{name: "embed", model: " EMBED ", want: modelinference.OperationEMBED},
+		{name: "unknown", model: "custom", want: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := inferGenericCLIModelOperation(test.model); got != test.want {
+				t.Fatalf("inferGenericCLIModelOperation(%q) = %q, want %q", test.model, got, test.want)
+			}
+		})
+	}
+}
+
+func TestGenericCLIEmbedInvocationBindsNamedInputsAndPublishesOutputPath(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("owned-coverage:embed-scope")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	textRequired := true
+	parametersRequired := false
+	var gotRequest modelinference.InvokeModelRequest
+	service := NewService(Config{
+		Models: ownedCoverageModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				if request.Name != modelinference.BuiltInModelNameEmbed || request.Operation != modelinference.OperationEMBED {
+					t.Fatalf("catalog request = %#v, want EMBED alias", request)
+				}
+				return modelinference.GetModelResult{Model: modelinference.Detail{
+					Summary: modelinference.Summary{
+						Name: modelinference.BuiltInModelNameEmbed,
+						Operations: []modelinference.Operation{{
+							Name: modelinference.OperationEMBED,
+							Inputs: []modelinference.OperationSlot{
+								{Name: "text", Modality: modelinference.ModalityText, Required: &textRequired, MediaTypes: []string{"text/plain"}},
+								{Name: "parameters", Modality: modelinference.ModalityJSON, Required: &parametersRequired, MediaTypes: []string{"application/json"}},
+							},
+							Outputs: []modelinference.OperationSlot{{Name: "embedding", Modality: modelinference.ModalityJSON, MediaTypes: []string{"application/json"}}},
+						}},
+					},
+				},
+				}, nil
+			},
+			getModelReadiness: func(_ context.Context, request modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+				if request.Name != modelinference.BuiltInModelNameEmbed || request.Operation != modelinference.OperationEMBED {
+					t.Fatalf("readiness request = %#v, want EMBED alias", request)
+				}
+				return modelinference.GetModelReadinessResult{ModelName: modelinference.BuiltInModelNameEmbed, Readiness: modelinference.Runtime{
+					Identity: modelinference.BuiltInModelNameEmbed, ReadinessState: modelinference.ReadinessStateReady,
+				}}, nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				gotRequest = request
+				return modelinference.InvokeModelResult{
+					ModelName: modelinference.BuiltInModelNameEmbed,
+					Operation: modelinference.OperationEMBED,
+					Outputs:   []modelinference.InferenceOutput{{Name: "embedding", Modality: modelinference.ModalityJSON, ContentType: "application/json", Content: `[0.1,0.2]`}},
+				}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, InvokeConfig) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{Scope: scope}, nil
+		},
+		OutputFileSystem: ownedCoverageOutputFileSystem{},
+	})
+
+	outputPath := filepath.Join(t.TempDir(), "embedding.json")
+	var out bytes.Buffer
+	if err := service.Invoke(InvokeConfig{
+		Context: context.Background(), ModelName: " embed ", InputMappings: []string{
+			"text=hello", `parameters=json:{"normalize":true}`,
+		}, OutputPath: outputPath, Output: &out,
+	}); err != nil {
+		t.Fatalf("EMBED Invoke() error = %v", err)
+	}
+	if gotRequest.Operation != modelinference.OperationEMBED || gotRequest.Model.NameOrURI != modelinference.BuiltInModelNameEmbed {
+		t.Fatalf("invoke request = %#v, want inferred EMBED operation", gotRequest)
+	}
+	if len(gotRequest.Inputs) != 2 || gotRequest.Inputs[0].Name != "text" || gotRequest.Inputs[0].Content != "hello" || gotRequest.Inputs[1].Content != `{"normalize":true}` {
+		t.Fatalf("invoke inputs = %#v, want ordered text and JSON inputs", gotRequest.Inputs)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil || string(data) != `[0.1,0.2]` {
+		t.Fatalf("EMBED output = %q, error = %v, want embedding JSON", data, err)
+	}
+	if !strings.Contains(out.String(), "Wrote audio:") {
+		t.Fatalf("output report = %q, want publication report", out.String())
+	}
+}
+
+type ownedCoverageOutputFileSystem struct{}
+
+func (ownedCoverageOutputFileSystem) CreateTemp(dir, pattern string) (OutputTemporaryFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
+func (ownedCoverageOutputFileSystem) Inspect(path string) (os.FileInfo, error) {
+	return os.Stat(path)
+}
+
+func (ownedCoverageOutputFileSystem) Remove(path string) error {
+	return os.Remove(path)
+}
+
+func (ownedCoverageOutputFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+
+func TestGenericCLIOutputPublicationRestoresAnExistingTargetAfterRollback(t *testing.T) {
+	t.Parallel()
+
+	fileSystem := ownedCoverageOutputFileSystem{}
+	targetPath := filepath.Join(t.TempDir(), "embedding.json")
+	if err := os.WriteFile(targetPath, []byte("old-vector"), 0o600); err != nil {
+		t.Fatalf("write existing target: %v", err)
+	}
+	backups, err := backupGenericCLIOutputTargets(context.Background(), fileSystem, []genericCLIOutputMapping{{slot: "embedding", path: targetPath}})
+	if err != nil {
+		t.Fatalf("backupGenericCLIOutputTargets() error = %v", err)
+	}
+	if len(backups) != 1 || backups[0].targetPath != targetPath {
+		t.Fatalf("backups = %#v, want one backup for target", backups)
+	}
+	if err := os.WriteFile(targetPath, []byte("new-vector"), 0o600); err != nil {
+		t.Fatalf("write replacement target: %v", err)
+	}
+	rollbackGenericCLIOutputPublication(fileSystem, []genericCLIOutputStage{{targetPath: targetPath}}, backups, 1)
+	data, err := os.ReadFile(targetPath)
+	if err != nil || string(data) != "old-vector" {
+		t.Fatalf("restored target = %q, error = %v, want old-vector", data, err)
+	}
+}
+
+func TestGenericCLIInputMediaAndContentTypeFallbacks(t *testing.T) {
+	t.Parallel()
+
+	if got := genericCLIInputContentType(modelinference.OperationSlot{
+		Modality: modelinference.ModalityText, MediaTypes: []string{" text/* ", "application/custom"},
+	}); got != "application/custom" {
+		t.Fatalf("content type = %q, want first concrete declaration", got)
+	}
+	if got := genericCLIInputContentType(modelinference.OperationSlot{Modality: modelinference.ModalityJSON}); got != "application/json" {
+		t.Fatalf("JSON fallback content type = %q, want application/json", got)
+	}
+	if got := genericCLIInputContentType(modelinference.OperationSlot{}); got != "text/plain" {
+		t.Fatalf("text fallback content type = %q, want text/plain", got)
+	}
+	for _, test := range []struct {
+		path, want string
+		data       []byte
+	}{
+		{path: "note.txt", want: "text/plain"},
+		{path: "note.xml", want: "text/xml"},
+		{path: "note.unknown", want: "application/octet-stream", data: []byte{0x00, 0x01}},
+	} {
+		if got := genericCLIInputMediaType(test.path, test.data); got != test.want {
+			t.Fatalf("genericCLIInputMediaType(%q) = %q, want %q", test.path, got, test.want)
+		}
+	}
+}
+
+func TestCompositionServiceRecognizesDirectTTSAliasForOwnedOutputPath(t *testing.T) {
+	t.Parallel()
+
+	if !isDirectTTSAlias(InvokeConfig{ModelName: " tTs ", Operation: " tTs "}) {
+		t.Fatal("isDirectTTSAlias() = false, want true for the built-in alias")
+	}
+	if isDirectTTSAlias(InvokeConfig{ModelName: "embed", Operation: modelinference.OperationEMBED}) {
+		t.Fatal("isDirectTTSAlias() = true, want false for EMBED")
+	}
+}
+
+func TestModelsCLIRemoteRemovePublishesTheDeleteResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodDelete || request.URL.Path != "/models/embed" {
+			t.Fatalf("remove request = %s %s, want DELETE /models/embed", request.Method, request.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"modelName":"embed","outcome":"REMOVED","revision":"rev-1","cachePath":"/cache/embed","bytesRemoved":3}`))
+	}))
+	defer server.Close()
+
+	service := NewService(Config{Models: ownedCoverageModelsRoot{}, HTTP: ownedCoverageHTTPProtocol(t)})
+	var output bytes.Buffer
+	if err := service.Remove(RemoveConfig{Context: context.Background(), Server: server.URL, ModelName: "embed", JSON: true, Output: &output}); err != nil {
+		t.Fatalf("remote Remove() error = %v", err)
+	}
+	var response factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode remote remove response: %v\n%s", err, output.String())
+	}
+	if response.ModelName != "embed" || response.Revision != "rev-1" || response.BytesRemoved != 3 {
+		t.Fatalf("remote remove response = %#v, want detached delete response", response)
+	}
+}
+
+func TestModelsCLIInvocationDiagnosticsCoverEveryPublicFailureFamily(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		class modelinference.InvocationFailureClass
+		code  string
+	}{
+		{class: modelinference.InvocationFailureClassInvalidModelReference, code: modelsRootModelUnavailableCode},
+		{class: modelinference.InvocationFailureClassRevisionResolution, code: modelsRootModelUnavailableCode},
+		{class: modelinference.InvocationFailureClassInvalidOperation, code: modelsRootBadRequestCode},
+		{class: modelinference.InvocationFailureClassInvalidSlot, code: modelsRootBadRequestCode},
+		{class: modelinference.InvocationFailureClassSlotArity, code: modelsRootBadRequestCode},
+		{class: modelinference.InvocationFailureClassInvalidParameter, code: modelsRootBadRequestCode},
+		{class: modelinference.InvocationFailureClassMediaCapability, code: modelsRootBadRequestCode},
+		{class: modelinference.InvocationFailureClassArtifact, code: modelsRootBadRequestCode},
+		{class: modelinference.InvocationFailureClassOfflineCache, code: "MODEL_OFFLINE_CACHE_UNAVAILABLE"},
+		{class: modelinference.InvocationFailureClassBackendReadiness, code: "MODEL_BACKEND_NOT_READY"},
+		{class: modelinference.InvocationFailureClassBackendProtocol, code: "MODEL_BACKEND_FAILURE"},
+		{class: modelinference.InvocationFailureClassMalformedResponse, code: "MODEL_BACKEND_FAILURE"},
+		{class: modelinference.InvocationFailureClassCancellation, code: "MODEL_INFERENCE_TIMEOUT"},
+		{class: modelinference.InvocationFailureClassTimeout, code: "MODEL_INFERENCE_TIMEOUT"},
+		{class: modelinference.InvocationFailureClassConfiguration, code: "MODEL_CONFIGURATION_FAILURE"},
+	}
+	for _, test := range tests {
+		t.Run(string(test.class), func(t *testing.T) {
+			mapped, ok := mapModelsInvocationError(&modelinference.InvocationFailure{Class: test.class, Message: "failure"})
+			if !ok || mapped == nil {
+				t.Fatalf("mapModelsInvocationError(%q) = (%v, %v), want mapped error", test.class, mapped, ok)
+			}
+			rootError, ok := mapped.(*modelsRootError)
+			if !ok || rootError.CLIErrorCode() != test.code {
+				t.Fatalf("mapped %q = %#v, want code %q", test.class, mapped, test.code)
+			}
+		})
+	}
+}
+
+func TestModelsCLISlotMappingPreservesOptionalMetadataShape(t *testing.T) {
+	t.Parallel()
+
+	converted := slotsToGenerated([]modelinference.OperationSlot{
+		{Name: "opaque"},
+		{Name: "text", Modality: modelinference.ModalityText, Repeatable: true, MediaTypes: []string{"text/plain"}},
+	})
+	if len(converted) != 2 || converted[0].Modality != nil || converted[0].Repeatable != nil || converted[0].MediaTypes != nil {
+		t.Fatalf("optional slot mapping = %#v, want nil optional metadata", converted)
+	}
+	if converted[1].Modality == nil || *converted[1].Modality != factoryapi.ModelInvocationContentType(modelinference.ModalityText) || converted[1].Repeatable == nil || !*converted[1].Repeatable || converted[1].MediaTypes == nil {
+		t.Fatalf("declared slot mapping = %#v, want modality/repeatable/media metadata", converted[1])
+	}
+}
+
+func TestModelsCLIMissingCacheMessageKeepsThePullHint(t *testing.T) {
+	t.Parallel()
+
+	if got := modelCacheNotFoundMessage(modelinference.ErrModelCacheNotFound); got != "model cache is not installed; run you models pull <model> first" {
+		t.Fatalf("modelCacheNotFoundMessage() = %q, want actionable pull hint", got)
+	}
+}
+
+func TestReadModelsInvokeInputsClearsOnlyManifestOperationDefaultForNamedInputs(t *testing.T) {
+	t.Parallel()
+
+	inputs, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{
+			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
+			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault, resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
+			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
+		},
+		[]resolvedinput.Candidate{
+			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("embed")},
+			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringValue("TTS")},
+			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringValue("")},
+			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{"text=hello"})},
+			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringArrayValue(nil)},
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolve invoke inputs: %v", err)
+	}
+	got, err := readModelsInvokeInputs(inputs)
+	if err != nil {
+		t.Fatalf("readModelsInvokeInputs() error = %v", err)
+	}
+	if got.modelName != "embed" || got.operation != "" || len(got.inputMappings) != 1 || got.inputMappings[0] != "text=hello" {
+		t.Fatalf("readModelsInvokeInputs() = %#v, want cleared default operation and named input", got)
 	}
 }
