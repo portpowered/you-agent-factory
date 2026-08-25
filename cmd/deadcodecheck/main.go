@@ -67,7 +67,9 @@ func run(_ []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func runDeadcode() (string, error) {
-	cmd := execCommand("go", "run", deadcodeTool, "-test", "./...")
+	// Analyze production entrypoints only. Including test executables makes
+	// production functions reachable solely from _test.go appear live.
+	cmd := execCommand("go", "run", deadcodeTool, "./...")
 	cmd.Env = deadcodeEnv()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

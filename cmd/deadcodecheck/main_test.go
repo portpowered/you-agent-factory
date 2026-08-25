@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -60,7 +61,7 @@ func TestMainRoutesThroughCommandMain(t *testing.T) {
 	}
 }
 
-func TestRunDeadcodeUsesExpectedCommandAndGoTypesAliasEnvironment(t *testing.T) {
+func TestRunDeadcodeExcludesTestExecutablesAndUsesGoTypesAliasEnvironment(t *testing.T) {
 	restoreExecCommand(t)
 	t.Setenv("GO_WANT_DEADCODECHECK_HELPER", "1")
 	t.Setenv("DEADCODECHECK_HELPER_STDOUT", "pkg/foo.go: Example\n")
@@ -82,8 +83,11 @@ func TestRunDeadcodeUsesExpectedCommandAndGoTypesAliasEnvironment(t *testing.T) 
 	if captured == nil {
 		t.Fatal("runDeadcode() did not create a subprocess command")
 	}
-	if got := captured.Args; len(got) < 7 || got[len(got)-5] != "go" || got[len(got)-4] != "run" || got[len(got)-3] != deadcodeTool || got[len(got)-2] != "-test" || got[len(got)-1] != "./..." {
-		t.Fatalf("runDeadcode() args = %v, want go run %s -test ./...", captured.Args, deadcodeTool)
+	if got := captured.Args; len(got) < 6 || got[len(got)-4] != "go" || got[len(got)-3] != "run" || got[len(got)-2] != deadcodeTool || got[len(got)-1] != "./..." {
+		t.Fatalf("runDeadcode() args = %v, want go run %s ./...", captured.Args, deadcodeTool)
+	}
+	if slices.Contains(captured.Args, "-test") {
+		t.Fatalf("runDeadcode() args = %v, must not treat tests as production reachability roots", captured.Args)
 	}
 	if !envContains(captured.Env, "GODEBUG=gocachehash=1,gotypesalias=1") {
 		t.Fatalf("runDeadcode() env = %v, want gotypesalias enabled", captured.Env)
