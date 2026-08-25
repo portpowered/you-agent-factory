@@ -391,7 +391,8 @@ jobs:
       # gate returns, including on failure.
       - name: Run complete Linux functional coverage and inventory
         if: matrix.suite == 'functional'
-        run: bash scripts/ci/run-functional-test-viz.sh
+        timeout-minutes: 75
+        run: make functional-test-viz
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_TEST_TIER: "merge-full"

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -143,6 +144,45 @@ func TestCheckCoverageDefaultFloorSupportsHeldUnlistedPackages(t *testing.T) {
 	gates := coverageManifestGatedPackages(manifest, map[string]packageCoverageTotals{unlisted: {coveredStatements: 0, totalStatements: 100}})
 	if gate := gates[unlisted]; gate.FloorHold == nil || *gate.FloorHold != manifest.FloorHolds[0] {
 		t.Fatalf("held default-floor gate = %+v, want the staged hold", gate)
+	}
+}
+
+func TestUnitCoverageRequirementsExcludeWirePackagesOnly(t *testing.T) {
+	t.Parallel()
+
+	rootWire := modulePath + "/pkg/wire"
+	nestedWire := modulePath + "/pkg/services/work/wire"
+	wireless := modulePath + "/pkg/services/work/wireless"
+	packages := []string{nestedWire, wireless, rootWire}
+
+	if got := filterCoverageRequirementPackages("unit", packages); !slices.Equal(got, []string{wireless}) {
+		t.Fatalf("unit coverage requirement packages = %v, want only %s", got, wireless)
+	}
+	if got := filterCoverageRequirementPackages("functional", packages); !slices.Equal(got, []string{nestedWire, wireless, rootWire}) {
+		t.Fatalf("functional coverage requirement packages = %v, want every package", got)
+	}
+
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "unit",
+		Packages: []coverageManifestEntry{
+			{Package: rootWire, Minimum: json.RawMessage("100.00")},
+		},
+	}
+	totals := map[string]packageCoverageTotals{
+		rootWire:   {totalStatements: 100},
+		nestedWire: {totalStatements: 100},
+		wireless:   {coveredStatements: 40, totalStatements: 100},
+	}
+	failures, warnings := checkCoverageManifestWithEpsilon(manifest, totals, "minimums.json", 0)
+	if len(warnings) != 0 {
+		t.Fatalf("unit coverage warnings = %v, want none", warnings)
+	}
+	if len(failures) != 1 || !strings.Contains(failures[0], "package="+wireless) {
+		t.Fatalf("unit coverage failures = %v, want only the non-wire package default-floor failure", failures)
+	}
+	if gates := coverageManifestGatedPackages(manifest, totals); len(gates) != 1 || gates[wireless].Floor == nil {
+		t.Fatalf("unit coverage gates = %+v, want only the non-wire package", gates)
 	}
 }
 

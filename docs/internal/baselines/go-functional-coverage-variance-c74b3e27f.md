@@ -3,7 +3,7 @@
 - **Sampling commit:** `c74b3e27f9db69fdaa01cbb42b696bcb6e6ea475`
 - **Suite:** `functional`
 - **Run count:** 5 complete profiles
-- **Command:** `bash scripts/ci/run-functional-test-viz.sh (functional lane -jobs 8); then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs 8 -variance-annotations docs/internal/baselines/go-functional-coverage-variance-c74b3e27f.annotations.json`
+- **Command:** `make functional-test-viz FUNCTIONAL_DEFAULT_JOBS=8; then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs 8 -variance-annotations docs/internal/baselines/go-functional-coverage-variance-c74b3e27f.annotations.json`
 - **Aggregation:** Parse each count-mode Go coverage profile into canonical source blocks, sum statement counts by backend package, require identical package universes and total statement counts, then derive minimums from exact covered/total ratios.
 
 - **Annotation input:** `docs/internal/baselines/go-functional-coverage-variance-c74b3e27f.annotations.json`

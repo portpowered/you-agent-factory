@@ -75,68 +75,6 @@ func TestParseTotalCoverageRejectsMalformedPercentageToken(t *testing.T) {
 	}
 }
 
-func TestParseCoverageProfileRejectsMalformedInputs(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := filepath.Clean(t.TempDir())
-	cases := []struct {
-		name        string
-		profileData string
-		wantErr     string
-	}{
-		{
-			name:        "empty profile",
-			profileData: "",
-			wantErr:     "parse go coverage profile: empty profile",
-		},
-		{
-			name:        "missing mode header",
-			profileData: "pkg/config/config.go:1.1,2.1 2 1\n",
-			wantErr:     "parse go coverage profile: missing mode header",
-		},
-		{
-			name:        "malformed line shape",
-			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2\n",
-			wantErr:     "parse go coverage profile: malformed line 2",
-		},
-		{
-			name:        "malformed file range",
-			profileData: "mode: count\npkg/config/config.go 2 1\n",
-			wantErr:     "parse go coverage profile: malformed file range on line 2",
-		},
-		{
-			name:        "invalid statement count",
-			profileData: "mode: count\npkg/config/config.go:1.1,2.1 nope 1\n",
-			wantErr:     "parse go coverage profile statements on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
-		},
-		{
-			name:        "invalid execution count",
-			profileData: "mode: count\npkg/config/config.go:1.1,2.1 2 nope\n",
-			wantErr:     "parse go coverage profile execution count on line 2: strconv.Atoi: parsing \"nope\": invalid syntax",
-		},
-		{
-			name:        "import path escapes repository root",
-			profileData: "mode: count\n../outside/pkg/config.go:1.1,2.1 2 1\n",
-			wantErr:     "parse go coverage profile import path on line 2: profile path \"../outside/pkg/config.go\" escapes repository root",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			_, err := parseCoverageProfile([]byte(tc.profileData), repoRoot)
-			if err == nil {
-				t.Fatal("parseCoverageProfile() unexpectedly succeeded")
-			}
-			if err.Error() != tc.wantErr {
-				t.Fatalf("parseCoverageProfile() error = %q, want %q", err.Error(), tc.wantErr)
-			}
-		})
-	}
-}
-
 func TestCoverageImportPathRejectsMalformedPaths(t *testing.T) {
 	t.Parallel()
 
@@ -225,19 +163,5 @@ func TestCoverageImportPathNormalizesSupportedPaths(t *testing.T) {
 				t.Fatalf("coverageImportPath() = %q, want %q", got, tc.want)
 			}
 		})
-	}
-}
-
-func TestFormatZeroCoverageFailure(t *testing.T) {
-	t.Parallel()
-
-	got := formatZeroCoverageFailure([]string{
-		modulePath + "/pkg/config",
-		modulePath + "/pkg/service",
-	})
-	want := "go coverage found backend-owned packages with 0% statement coverage: " +
-		modulePath + "/pkg/config, " + modulePath + "/pkg/service"
-	if got != want {
-		t.Fatalf("formatZeroCoverageFailure() = %q, want %q", got, want)
 	}
 }

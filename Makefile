@@ -154,9 +154,12 @@ FUNCTIONAL_TEST_VIZ_PROFILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage.out
 FUNCTIONAL_TEST_VIZ_JSON ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage-summary.json
 FUNCTIONAL_TEST_VIZ_TIMING ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-timing-summary.json
 FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
-# The Linux CI wrapper sets this optional handoff so an ordinary
-# gocoveragecheck failure can be reported by its compact terminal verdict step.
-# An unset path preserves the historical fail-fast target behavior.
+FUNCTIONAL_TEST_VIZ_LOG ?= $(FUNCTIONAL_TEST_VIZ_DIR)/command.log
+FUNCTIONAL_COVERAGE_VERDICT_FILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-coverage-verdict.txt
+FUNCTIONAL_MAKE ?= $(MAKE)
+# Hosted CI sets this optional handoff so an ordinary gocoveragecheck failure
+# can be reported by its compact terminal verdict step. An unset path preserves
+# the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
@@ -493,7 +496,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/functional-test-console-summary.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -542,35 +545,55 @@ test-functional-fresh:
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
-# functional-test-viz runs the boundary check, then the configured fresh
-# functional coverage tier exactly once (profile + gocoveragecheck
-# -json-output), then the FND-004 Markdown catalog generator. Artifacts land
-# under .artifacts/functional-test-viz/. The Linux CI wrapper enforces the
-# tier's FUNCTIONAL_TEST_BUDGET around this target and leaves the artifact root
-# intact when the budget or a later step fails.
+# functional-test-viz is the single functional-report entrypoint. It runs the
+# configured fresh functional coverage tier exactly once (including its
+# boundary check), renders the Markdown catalog, retains the complete command
+# stream in command.log, and prints only pkg/ coverage plus functional-test
+# latencies to the terminal. Artifacts land under .artifacts/functional-test-viz/.
 #
-# Fail-closed composition: each recipe line must succeed before the next runs.
-# Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering
-# failures exit non-zero. The target never deletes the artifact root on failure,
-# so already-written diagnostics (for example coverage.out / coverage-summary.json
-# after a floor fail, or those files before a render fail) remain inspectable.
+# Fail-closed composition: boundary, suite, coverage-floor, metadata/inventory,
+# console-summary, or Markdown rendering failures exit non-zero. The target
+# never deletes the artifact root on failure, so already-written diagnostics
+# remain inspectable.
 # gocoveragecheck writes -json-output after a completed measurement even when a
 # floor fails. Without FUNCTIONAL_GOCOVERAGE_EXIT_FILE, Make stops before
-# Markdown so the failure stays non-zero; the Linux CI wrapper sets that path
-# to hand an ordinary exit-1 outcome to its compact verdict step.
+# Markdown so the failure stays non-zero; hosted CI sets that path to hand an
+# ordinary exit-1 outcome to its compact verdict step.
 functional-test-viz:
-	$(MAKE) functional-boundary-check
 	$(call ensure_directory,$(FUNCTIONAL_TEST_VIZ_DIR))
-	$(MAKE) test-functional-coverage \
+	@rm -f "$(FUNCTIONAL_TEST_VIZ_LOG)" "$(FUNCTIONAL_TEST_VIZ_TIMING)" "$(FUNCTIONAL_TEST_VIZ_JSON)" "$(FUNCTIONAL_TEST_VIZ_PROFILE)" "$(FUNCTIONAL_TEST_VIZ_MARKDOWN)" "$(FUNCTIONAL_COVERAGE_VERDICT_FILE)" $(if $(FUNCTIONAL_GOCOVERAGE_EXIT_FILE),"$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)",)
+	@printf '%s\n' "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE) jobs=$(FUNCTIONAL_DEFAULT_JOBS)" > "$(FUNCTIONAL_TEST_VIZ_LOG)"
+	@set +e; \
+	$(FUNCTIONAL_MAKE) test-functional-coverage \
 		GO_COVERAGE_FLOOR_POLICY=$(GO_COVERAGE_FLOOR_POLICY) \
 		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
 		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
 		GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT=$(FUNCTIONAL_TEST_VIZ_TIMING) \
-		FUNCTIONAL_GOCOVERAGE_EXIT_FILE=$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)
-	$(GO) run ./cmd/functionaltestviz \
-		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
-		-timing-summary $(FUNCTIONAL_TEST_VIZ_TIMING) \
-		-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN)
+		FUNCTIONAL_GOCOVERAGE_EXIT_FILE=$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE) \
+		>> "$(FUNCTIONAL_TEST_VIZ_LOG)" 2>&1; \
+	status=$$?; \
+	if [ "$$status" -eq 0 ]; then \
+		$(GO) run ./cmd/functionaltestviz \
+			-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
+			-timing-summary $(FUNCTIONAL_TEST_VIZ_TIMING) \
+			-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN) \
+			>> "$(FUNCTIONAL_TEST_VIZ_LOG)" 2>&1; \
+		status=$$?; \
+	fi; \
+	$(NODE) scripts/ci/functional-test-console-summary.mjs \
+		--coverage "$(FUNCTIONAL_TEST_VIZ_JSON)" \
+		--timing "$(FUNCTIONAL_TEST_VIZ_TIMING)"; \
+	summary_status=$$?; \
+	if [ "$$status" -eq 0 ] && [ "$$summary_status" -ne 0 ]; then status=$$summary_status; fi; \
+	if [ "$$status" -eq 0 ] && [ -n "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" ]; then \
+		$(NODE) scripts/ci/functional-coverage-verdict.mjs \
+			--log "$(FUNCTIONAL_TEST_VIZ_LOG)" \
+			--exit-code-file "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" \
+			--output "$(FUNCTIONAL_COVERAGE_VERDICT_FILE)" \
+			>> "$(FUNCTIONAL_TEST_VIZ_LOG)" 2>&1; \
+		status=$$?; \
+	fi; \
+	exit "$$status"
 
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
