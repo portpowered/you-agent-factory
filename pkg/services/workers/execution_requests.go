@@ -210,6 +210,7 @@ type WorkstationExecutionRequest struct {
 	GoalRoutingDecisionEnvelope bool                                     `json:"goal_routing_decision_envelope,omitempty"`
 	SystemPrompt                string                                   `json:"system_prompt,omitempty"`
 	UserMessage                 string                                   `json:"user_message,omitempty"`
+	PromptRedaction             *PromptRedaction                         `json:"-"`
 	OutputSchema                string                                   `json:"output_schema,omitempty"`
 	OutputContract              string                                   `json:"output_contract,omitempty"`
 	Timeout                     time.Duration                            `json:"timeout,omitempty"`
@@ -228,9 +229,10 @@ type WorkstationExecutionRequest struct {
 	// workstation-backed Worker leaves this false and takes the policy its
 	// runtime was constructed with.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
-	// DeclaredSecretInvocationParameters carries only the names of invocation
-	// parameters that the caller explicitly classified as sensitive. It is an
-	// in-memory handoff for recording provenance, never provider payload data.
+	// DeclaredSecretInvocationParameters is retained for detached-request
+	// compatibility only. Recording must not use this work-level list to infer
+	// prompt sensitivity; callers carry dispatch-specific decisions in
+	// PromptRedaction instead.
 	DeclaredSecretInvocationParameters []string `json:"-"`
 }
 
@@ -248,6 +250,7 @@ type ProviderInferenceRequest struct {
 	ModelBindings                []ResolvedModelOperationBinding          `json:"model_bindings,omitempty"`
 	SystemPrompt                 string                                   `json:"system_prompt,omitempty"`
 	UserMessage                  string                                   `json:"user_message,omitempty"`
+	PromptRedaction              *PromptRedaction                         `json:"-"`
 	OutputSchema                 string                                   `json:"output_schema,omitempty"`
 	ToolExecutionMode            RunnerToolExecutionMode                  `json:"tool_execution_mode,omitempty"`
 	RequiredOptionalCapabilities []RunnerOptionalCapability               `json:"required_optional_capabilities,omitempty"`
@@ -282,10 +285,9 @@ type ProviderInferenceRequest struct {
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
-	// DeclaredSecretInvocationParameters carries only explicit sensitivity
-	// provenance into the provider recording decorator. The values are already
-	// present in UserMessage when a declared parameter is interpolated; this
-	// field never serializes or duplicates those values.
+	// DeclaredSecretInvocationParameters is retained for detached-request
+	// compatibility only. The provider recording decorator ignores this
+	// work-level list and consumes PromptRedaction instead.
 	DeclaredSecretInvocationParameters []string `json:"-"`
 	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
 	// It is intentionally excluded from serialized provider payloads.
@@ -316,6 +318,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
+	clone.PromptRedaction = request.PromptRedaction.Clone()
 	clone.DeclaredSecretInvocationParameters = append([]string(nil), request.DeclaredSecretInvocationParameters...)
 	return clone
 }
@@ -333,6 +336,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.ModelRuntime = request.ModelRuntime.Clone()
+	clone.PromptRedaction = request.PromptRedaction.Clone()
 	clone.DeclaredSecretInvocationParameters = append([]string(nil), request.DeclaredSecretInvocationParameters...)
 	clone.TemporaryFiles = request.TemporaryFiles
 	clone.ExecutionLogger = request.ExecutionLogger
@@ -495,6 +499,31 @@ type PromptPolicy struct {
 	SystemPrompt string
 	UserMessage  string
 	OutputSchema string
+	// Redaction is an in-memory, recording-only projection of prompt
+	// provenance. Workers executes the real prompt fields above; recording
+	// decorators use this explicit safe projection when a declared-sensitive
+	// invocation binding contributed to either field.
+	Redaction *PromptRedaction
+}
+
+// PromptRedaction carries safe prompt text produced from explicit invocation
+// interpolation provenance. It never carries the original sensitive value.
+// When FailClosed is true, a recorder must redact the affected complete field
+// instead of attempting a partial transformation.
+type PromptRedaction struct {
+	SystemPrompt       string
+	UserMessage        string
+	RedactSystemPrompt bool
+	RedactUserMessage  bool
+	FailClosed         bool
+}
+
+func (redaction *PromptRedaction) Clone() *PromptRedaction {
+	if redaction == nil {
+		return nil
+	}
+	clone := *redaction
+	return &clone
 }
 
 type ToolPolicy struct {
@@ -813,6 +842,7 @@ func (target ExecutionTarget) Clone() ExecutionTarget {
 		[]string(nil),
 		target.Environment.ProcessEnvironment...,
 	)
+	clone.Prompt.Redaction = target.Prompt.Redaction.Clone()
 	return clone
 }
 

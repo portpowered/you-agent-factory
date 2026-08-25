@@ -4,10 +4,7 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -161,13 +158,14 @@ func detach(
 	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
 	readFile factorydefinitions.FileReader,
 ) (factorydefinitions.RuntimeSnapshot, error) {
-	config, err := cloneRuntimeSnapshotConfig(loaded.FactoryConfig())
+	authoredConfig := loaded.FactoryConfig()
+	config, err := cloneRuntimeSnapshotConfig(authoredConfig)
 	if err != nil {
 		return factorydefinitions.RuntimeSnapshot{}, err
 	}
-	sensitivePointers := invocationSensitiveJSONPointers(loaded.FactoryConfig(), invocation.Arguments)
+	var sensitiveSpans []factorydefinitions.InvocationSensitiveJSONSpan
 	if invocation.Arguments != nil {
-		resolved, err := workstationexecution.ResolveExecutionDefinition(ctx, factorydefinitions.ResolveExecutionCatalogRequest{
+		resolved, spans, err := workstationexecution.ResolveExecutionDefinitionWithProvenance(ctx, factorydefinitions.ResolveExecutionCatalogRequest{
 			EffectiveDefinition: config,
 			Invocation: factorydefinitions.InvocationDefinitionContext{
 				Arguments: invocation.Arguments,
@@ -178,87 +176,67 @@ func detach(
 			return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf("resolve invocation-effective execution definition: %w", err)
 		}
 		config = resolved
+		sensitiveSpans = spans
 	}
 	snapshot := newRuntimeSnapshot(loaded, invocation, *config)
-	snapshot.InvocationSensitiveJSONPointers = sensitivePointers
+	snapshot.InvocationSensitiveJSONSpans = sensitiveSpans
+	snapshot.PromptProvenance = runtimePromptProvenance(loaded, authoredConfig, invocation)
 	appendRuntimeSnapshotWorkersAndSources(&snapshot, *config)
 	appendRuntimeSnapshotPromptSources(&snapshot, loaded)
 	return snapshot, nil
 }
 
-func invocationSensitiveJSONPointers(
-	config *factorydefinitions.FactoryConfig,
-	arguments *work.InvocationArguments,
-) []string {
-	if config == nil || arguments == nil || len(arguments.Arguments) == 0 {
+func runtimePromptProvenance(
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	authored *factorydefinitions.FactoryConfig,
+	invocation factorydefinitions.RuntimeSnapshotInvocationContext,
+) []factorydefinitions.RuntimePromptProvenance {
+	if loaded == nil || authored == nil || invocation.Arguments == nil {
 		return nil
 	}
-	sensitiveNames := make(map[string]struct{})
-	for name, argument := range arguments.Arguments {
-		if argument.Sensitive {
-			sensitiveNames[name] = struct{}{}
+	provenance := make([]factorydefinitions.RuntimePromptProvenance, 0)
+	for _, worker := range authored.Workers {
+		if strings.TrimSpace(worker.Name) == "" ||
+			strings.TrimSpace(worker.Body) == "" ||
+			runtimePromptSourcePresent(loaded, worker.Name, true) {
+			continue
 		}
+		provenance = append(provenance, factorydefinitions.RuntimePromptProvenance{
+			Name: worker.Name,
+			Body: worker.Body,
+		})
 	}
-	if len(sensitiveNames) == 0 {
-		return nil
+	for _, workstation := range authored.Workstations {
+		if strings.TrimSpace(workstation.Name) == "" ||
+			runtimePromptSourcePresent(loaded, workstation.Name, false) ||
+			(strings.TrimSpace(workstation.Body) == "" &&
+				strings.TrimSpace(workstation.PromptTemplate) == "") {
+			continue
+		}
+		provenance = append(provenance, factorydefinitions.RuntimePromptProvenance{
+			Name:           workstation.Name,
+			Body:           workstation.Body,
+			PromptTemplate: workstation.PromptTemplate,
+		})
 	}
-	payload, err := json.Marshal(config)
-	if err != nil {
-		return nil
-	}
-	var document any
-	if err := json.Unmarshal(payload, &document); err != nil {
-		return nil
-	}
-	pointers := make([]string, 0)
-	collectInvocationSensitiveJSONPointers(document, "", sensitiveNames, &pointers)
-	sort.Strings(pointers)
-	return pointers
+	return provenance
 }
 
-func collectInvocationSensitiveJSONPointers(
-	document any,
-	pointer string,
-	sensitiveNames map[string]struct{},
-	pointers *[]string,
-) {
-	switch value := document.(type) {
-	case string:
-		for name := range sensitiveNames {
-			if strings.Contains(value, "${"+name+"}") {
-				*pointers = append(*pointers, pointer)
-				return
-			}
-		}
-	case []any:
-		for index, child := range value {
-			collectInvocationSensitiveJSONPointers(
-				child,
-				pointer+"/"+strconv.Itoa(index),
-				sensitiveNames,
-				pointers,
-			)
-		}
-	case map[string]any:
-		keys := make([]string, 0, len(value))
-		for key := range value {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			collectInvocationSensitiveJSONPointers(
-				value[key],
-				pointer+"/"+escapeJSONPointerToken(key),
-				sensitiveNames,
-				pointers,
-			)
-		}
+func runtimePromptSourcePresent(
+	loaded factorydefinitions.MutableLoadedFactorySource,
+	name string,
+	worker bool,
+) bool {
+	lookup, ok := loaded.(factorydefinitions.RuntimePromptSourceLookup)
+	if !ok || lookup == nil {
+		return false
 	}
-}
-
-func escapeJSONPointerToken(value string) string {
-	value = strings.ReplaceAll(value, "~", "~0")
-	return strings.ReplaceAll(value, "/", "~1")
+	if worker {
+		_, ok = lookup.WorkerPromptSource(name)
+	} else {
+		_, ok = lookup.WorkstationPromptSource(name)
+	}
+	return ok
 }
 
 func cloneRuntimeSnapshotConfig(

@@ -448,6 +448,7 @@ func executionTargetFromSelection(
 		Prompt: workers.PromptPolicy{
 			SystemPrompt: selection.systemPrompt,
 			UserMessage:  selection.userMessage,
+			Redaction:    selection.promptRedaction.Clone(),
 			OutputSchema: selection.outputSchema,
 		},
 		Tools: workers.ToolPolicy{

@@ -44,7 +44,7 @@ func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
 func CaptureInitialSnapshot(
 	loaded contracts.LoadedFactorySource,
 	preparePortableFactoryConfig contracts.PortableFactoryConfigPreparer,
-	captureFactorySnapshot contracts.FactorySnapshotCapturer,
+	captureFactorySnapshot contracts.LoadedFactorySnapshotCapturer,
 ) (*contracts.FactorySnapshot, error) {
 	return factorydefinitionsinternal.CaptureInitialSnapshot(
 		loaded,

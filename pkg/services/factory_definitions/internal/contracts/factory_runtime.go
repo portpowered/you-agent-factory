@@ -237,6 +237,24 @@ type PromptSource struct {
 	IsTemplate bool
 }
 
+// RuntimePromptProvenance carries the value-free authored prompt fields that
+// were present before invocation interpolation. Runtime snapshots use this
+// metadata when an inline Factory definition has no prompt source path to
+// identify the authored placeholders at dispatch time.
+type RuntimePromptProvenance struct {
+	Name           string
+	Body           string
+	PromptTemplate string
+}
+
+// RuntimePromptProvenanceLookup exposes authored prompt fields separately from
+// the effective runtime Factory Definition. The fields contain authored
+// placeholders, never resolved invocation values.
+type RuntimePromptProvenanceLookup interface {
+	WorkerPromptProvenance(name string) (RuntimePromptProvenance, bool)
+	WorkstationPromptProvenance(name string) (RuntimePromptProvenance, bool)
+}
+
 // RuntimePromptSourceLookup exposes authored prompt identity without adding
 // source paths to the customer-facing runtime Factory Definition.
 type RuntimePromptSourceLookup interface {

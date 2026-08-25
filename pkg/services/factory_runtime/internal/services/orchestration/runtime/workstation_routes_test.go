@@ -794,8 +794,10 @@ func (resolver runtimeTemplateFieldResolverFunc) ResolveTemplateFields(
 
 type runtimePromptSourceLookupFixture struct {
 	runtimefixtures.RuntimeDefinitionLookupFixture
-	worker      interfaces.PromptSource
-	workstation interfaces.PromptSource
+	worker                interfaces.PromptSource
+	workstation           interfaces.PromptSource
+	workerProvenance      interfaces.RuntimePromptProvenance
+	workstationProvenance interfaces.RuntimePromptProvenance
 }
 
 func (fixture runtimePromptSourceLookupFixture) WorkerPromptSource(name string) (interfaces.PromptSource, bool) {
@@ -810,6 +812,18 @@ func (fixture runtimePromptSourceLookupFixture) WorkstationPromptSource(name str
 		return interfaces.PromptSource{}, false
 	}
 	return fixture.workstation, fixture.workstation.Path != ""
+}
+
+func (fixture runtimePromptSourceLookupFixture) WorkerPromptProvenance(
+	name string,
+) (interfaces.RuntimePromptProvenance, bool) {
+	return fixture.workerProvenance, fixture.workerProvenance.Name == name
+}
+
+func (fixture runtimePromptSourceLookupFixture) WorkstationPromptProvenance(
+	name string,
+) (interfaces.RuntimePromptProvenance, bool) {
+	return fixture.workstationProvenance, fixture.workstationProvenance.Name == name
 }
 
 func TestVerifyRuntimeExpectedArtifactDeclarationsClassifiesWorkspaceResults(t *testing.T) {

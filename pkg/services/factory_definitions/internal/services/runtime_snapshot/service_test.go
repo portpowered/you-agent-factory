@@ -119,6 +119,86 @@ func TestResolveRuntimeSnapshotInterpolatesInvocationValuesBeforeDetaching(t *te
 	}
 }
 
+func TestResolveRuntimeSnapshotTracksSensitiveRenderedSpans(t *testing.T) {
+	t.Parallel()
+
+	source := newTestLoadedSource()
+	source.config.Workers[0].ModelProvider = "codex"
+	source.config.Workers[0].Body = "left=${visible} middle=${secret} right=${placeholder}"
+	source.config.Workers[0].Command = "literal ${placeholder}"
+	source.config.Workstations[0].Body = "station-visible secret=${secret}"
+	delete(source.prompts, "worker:agent")
+	delete(source.prompts, "workstation:cron-agent")
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func(_ string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	secret := "secret-value"
+	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical: []byte(`{"name":"detached"}`),
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			Arguments: &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+				"visible":     {Values: []string{"visible-value"}},
+				"secret":      {Values: []string{secret}, Sensitive: true},
+				"placeholder": {Values: []string{"placeholder-like-value"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+	}
+
+	wantBody := "left=visible-value middle=" + secret + " right=placeholder-like-value"
+	if got := result.Snapshot.EffectiveFactory.Workers[0].Body; got != wantBody {
+		t.Fatalf("resolved worker body = %q, want %q", got, wantBody)
+	}
+	wantStart := len("left=visible-value middle=")
+	stationStart := len("station-visible secret=")
+	wantSpans := []factorydefinitions.InvocationSensitiveJSONSpan{
+		{
+			JSONPointer: "/workers/0/body",
+			Start:       wantStart,
+			End:         wantStart + len(secret),
+		},
+		{
+			JSONPointer: "/workstations/0/body",
+			Start:       stationStart,
+			End:         stationStart + len(secret),
+		},
+	}
+	if !reflect.DeepEqual(result.Snapshot.InvocationSensitiveJSONSpans, wantSpans) {
+		t.Fatalf(
+			"sensitive spans = %#v, want %#v",
+			result.Snapshot.InvocationSensitiveJSONSpans,
+			wantSpans,
+		)
+	}
+	if len(result.Snapshot.InvocationSensitiveJSONPointers) != 0 {
+		t.Fatalf("legacy sensitive pointers = %#v, want none", result.Snapshot.InvocationSensitiveJSONPointers)
+	}
+	wantPromptProvenance := []factorydefinitions.RuntimePromptProvenance{
+		{Name: "agent", Body: "left=${visible} middle=${secret} right=${placeholder}"},
+		{Name: "cron-agent", Body: "station-visible secret=${secret}"},
+	}
+	if !reflect.DeepEqual(result.Snapshot.PromptProvenance, wantPromptProvenance) {
+		t.Fatalf(
+			"prompt provenance = %#v, want %#v",
+			result.Snapshot.PromptProvenance,
+			wantPromptProvenance,
+		)
+	}
+}
+
 func TestResolveRuntimeSnapshotAllowsLogicalWorkstationsDuringOneShotResolution(t *testing.T) {
 	t.Parallel()
 
@@ -326,7 +406,30 @@ func TestResolveRuntimeSnapshotCarriesInvocationProvenance(t *testing.T) {
 	if got := snapshot.EffectiveFactory.Workstations[0].Env["secret/name~value"]; got != "super-secret" {
 		t.Fatalf("effective sensitive environment value = %q, want interpolated value", got)
 	}
-	assertInvocationSensitivePointers(t, snapshot.InvocationSensitiveJSONPointers)
+	wantSpans := []factorydefinitions.InvocationSensitiveJSONSpan{
+		{
+			JSONPointer: "/workers/0/args/0",
+			Start:       len("--token="),
+			End:         len("--token=") + len("super-secret"),
+		},
+		{
+			JSONPointer: "/workstations/0/env/secret~1name~0value",
+			Start:       0,
+			End:         len("super-secret"),
+		},
+	}
+	if !reflect.DeepEqual(snapshot.InvocationSensitiveJSONSpans, wantSpans) {
+		t.Fatalf("sensitive JSON spans = %#v, want %#v", snapshot.InvocationSensitiveJSONSpans, wantSpans)
+	}
+	if len(snapshot.InvocationSensitiveJSONPointers) != 0 {
+		t.Fatalf("legacy sensitive pointers = %#v, want none", snapshot.InvocationSensitiveJSONPointers)
+	}
+	if strings.Contains(strings.Join([]string{
+		wantSpans[0].JSONPointer,
+		wantSpans[1].JSONPointer,
+	}, "\n"), "super-secret") {
+		t.Fatal("sensitive invocation value was exposed in JSON span provenance")
+	}
 	if len(snapshot.BundledFiles) != 1 || snapshot.BundledFiles[0].TargetPath != "docs/README.md" {
 		t.Fatalf("bundled files = %#v, want loaded portable replacement", snapshot.BundledFiles)
 	}
@@ -408,20 +511,6 @@ type invocationSnapshotFixture struct {
 	workstationLoader         *testWorkstationLoader
 	receivedPath              string
 	receivedWorkstationLoader factorydefinitions.WorkstationLoader
-}
-
-func assertInvocationSensitivePointers(t *testing.T, pointers []string) {
-	t.Helper()
-	want := []string{
-		"/workers/0/args/0",
-		"/workstations/0/env/secret~1name~0value",
-	}
-	if !reflect.DeepEqual(pointers, want) {
-		t.Fatalf("sensitive JSON pointers = %#v, want %#v", pointers, want)
-	}
-	if strings.Contains(strings.Join(pointers, "\n"), "super-secret") {
-		t.Fatal("sensitive invocation value was exposed in JSON pointer provenance")
-	}
 }
 
 func TestResolveRuntimeSnapshotClassifiesEveryAutomationSourceKind(t *testing.T) {

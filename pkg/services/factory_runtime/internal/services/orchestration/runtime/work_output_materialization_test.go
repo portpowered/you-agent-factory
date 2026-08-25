@@ -935,15 +935,6 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	}
 }
 
-type agentRunRecordingLedger struct {
-	*recordingfixtures.ScriptedRuntimeLedger
-	event workers.AgentRunResponseEvent
-}
-
-func (ledger *agentRunRecordingLedger) RecordAgentRunEvent(event workers.AgentRunResponseEvent) {
-	ledger.event = event
-}
-
 func testMaterializationService() work.Service {
 	return testRuntimeWorkService{}
 }

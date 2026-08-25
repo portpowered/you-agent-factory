@@ -469,6 +469,7 @@ func newRuntimeWorkersService(
 			RuntimeDefinitions:         spec.LoadedFactoryCfg,
 			InvocationInterpolation:    runtimeFactory.invocationInterpolation,
 			InvocationFileReader:       invocationFileReader(runtimeFactory.inputFiles),
+			PromptSourceReader:         invocationFileReader(runtimeFactory.inputFiles),
 			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), sessionID),
 			FactorySessionID:           sessionID,
 			RuntimeID:                  spec.RuntimeInstanceID,
