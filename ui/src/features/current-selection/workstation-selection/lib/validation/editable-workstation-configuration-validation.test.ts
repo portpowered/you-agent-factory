@@ -136,6 +136,45 @@ describe("validateEditableWorkstationDraft logical move", () => {
 });
 
 describe("validateEditableWorkstationDraft model workstation", () => {
+  it("keeps the legacy MODEL_WORKER binding valid while rejecting an incompatible worker", () => {
+    const legacyModelValues = {
+      ...modelWorkstationValues,
+      workerName: "legacy-model",
+      workerOptions: ["legacy-model", "script-worker"],
+      workerTypeByName: {
+        "legacy-model": "MODEL_WORKER" as const,
+        "script-worker": "SCRIPT_WORKER" as const,
+        "inference-worker": "INFERENCE_WORKER" as const,
+      },
+    };
+
+    const validErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "Review the configured story.",
+        workerName: "legacy-model",
+      },
+      legacyModelValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(validErrors.workerName).toBeUndefined();
+
+    const incompatibleErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "Review the configured story.",
+        workerName: "inference-worker",
+      },
+      legacyModelValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(incompatibleErrors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerUnavailable,
+    );
+  });
+
   it("requires worker and prompt for MODEL_WORKSTATION drafts", () => {
     const errors = validateEditableWorkstationDraft(
       baseEditableWorkstationDraft,

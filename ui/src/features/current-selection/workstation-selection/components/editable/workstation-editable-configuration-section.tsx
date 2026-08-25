@@ -52,6 +52,7 @@ import {
   resolveWorkstationSummaryRequiresWorkerAssignment,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
+  resolveWorkstationSummaryWorkerTypeValue,
 } from "../fields/workstation-summary-field-values";
 import { EditableConfigurationModelInvokeFields } from "../workstation-model-invoke-fields";
 import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
@@ -586,7 +587,11 @@ export function WorkstationSummary({
         {requiresWorkerAssignment ? (
           <WorkstationSummaryItem
             label={messages.workerTypeLabel}
-            value={selectedNode.worker_type || messages.unknownWorkerTypeValue}
+            value={resolveWorkstationSummaryWorkerTypeValue(
+              editableConfigurationState,
+              selectedNode,
+              messages,
+            )}
           />
         ) : null}
         <WorkstationSummaryItem

@@ -208,6 +208,85 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(scriptFactory.workstations[0]).not.toHaveProperty("body");
   });
 
+  it("saves legacy model workstations without changing their type or worker alias", async () => {
+    const legacyModelFactory = {
+      name: "Legacy Model Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [
+        {
+          args: ["--json"],
+          command: "model-runner",
+          model: "gpt-5.4",
+          name: "legacy-model",
+          type: "MODEL_WORKER" as const,
+        },
+      ],
+      workstations: [
+        {
+          behavior: "STANDARD" as const,
+          body: "Review the updated story.",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT" as const }],
+          id: "legacy-review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Legacy Review Updated",
+          outputs: [{ state: "approved", workType: "story" }],
+          promptFile: "prompts/legacy-review.md",
+          runner: "claude" as const,
+          type: "MODEL_WORKSTATION" as const,
+          worker: "legacy-model",
+        },
+      ],
+    };
+    const saveAsync = vi.fn().mockResolvedValue(legacyModelFactory);
+    const markChangesSaved = vi.fn();
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
+      isPending: false,
+      saveAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            markChangesSaved,
+            pendingFactoryDefinition: legacyModelFactory,
+            prompt: "Review the updated story.",
+            workstationType: "MODEL_WORKSTATION",
+            draft: {
+              name: "Legacy Review Updated",
+              prompt: "Review the updated story.",
+              runnerName: "claude",
+              workerName: "legacy-model",
+              workstationType: "MODEL_WORKSTATION",
+            },
+          }),
+          scopeKey: "legacy-review:transition:Legacy Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(true);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(saveAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factory: legacyModelFactory,
+    });
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+  });
+
   it("saves workstation edits through the selected session current-factory route", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(

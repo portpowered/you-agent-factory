@@ -2052,6 +2052,111 @@ describe("editable workstation name draft", () => {
 });
 
 describe("workstation taxonomy save projection", () => {
+  it("projects and saves MODEL_WORKSTATION/MODEL_WORKER without coercing the legacy aliases", () => {
+    const modelNode: DashboardWorkstationNode = {
+      model: "gpt-5.4",
+      node_id: "legacy-review",
+      transition_id: "legacy-review",
+      workstation_kind: WorkstationType.MODEL_WORKSTATION,
+      workstation_name: "Legacy Review",
+      worker_type: "legacy-model",
+    };
+    const modelFactory: CanonicalFactoryDefinition = {
+      metadata: { description: "Legacy model metadata survives edits." },
+      name: "Legacy Model Factory",
+      resources: [{ initial: 1, name: "review-slot" }],
+      version: { logical: "9", physical: "2026-06-01T00:00:00Z" },
+      workers: [
+        {
+          args: ["--json"],
+          command: "model-runner",
+          model: "gpt-5.4",
+          modelProvider: "CODEX",
+          name: "legacy-model",
+          type: WorkerType.MODEL_WORKER,
+        },
+        {
+          model: "gpt-5.4",
+          name: "inference-worker",
+          type: WorkerType.INFERENCE_WORKER,
+        },
+        {
+          command: "review.sh",
+          name: "script-worker",
+          type: WorkerType.SCRIPT_WORKER,
+        },
+      ],
+      workTypes: [{ name: "story" }],
+      workstations: [
+        {
+          behavior: "REPEATER",
+          body: "Review the story before approval.",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+          id: "legacy-review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Legacy Review",
+          onFailure: [{ state: "failed", workType: "story" }],
+          onRejection: [{ state: "queued", workType: "story" }],
+          outputs: [{ state: "approved", workType: "story" }],
+          promptFile: "prompts/legacy-review.md",
+          runner: "codex",
+          type: WorkstationType.MODEL_WORKSTATION,
+          worker: "legacy-model",
+        },
+        {
+          body: "Leave this workstation unchanged.",
+          id: "unrelated",
+          name: "Unrelated",
+          worker: "script-worker",
+        },
+      ],
+    };
+
+    const values = resolveEditableWorkstationValues(modelFactory, modelNode);
+    if (!values) {
+      throw new Error("expected legacy model workstation editable values");
+    }
+
+    expect(values.workstationType).toBe(WorkstationType.MODEL_WORKSTATION);
+    expect(values.workerName).toBe("legacy-model");
+    expect(values.prompt).toBe("Review the story before approval.");
+    expect(values.workerOptions).toEqual(["legacy-model", "script-worker"]);
+    expect(values.workstationTypeOptions).toEqual([
+      WorkstationType.MODEL_WORKSTATION,
+      WorkstationType.AGENT_RUN,
+      WorkstationType.INFERENCE_RUN,
+    ]);
+
+    const saved = applyEditableWorkstationDraft(modelFactory, modelNode, {
+      ...editableWorkstationDraftFromValues(values),
+      behavior: "STANDARD",
+      name: "Legacy Review Updated",
+      prompt: "Review the updated story before approval.",
+      runnerName: "claude",
+    });
+
+    expect(saved?.metadata).toEqual(modelFactory.metadata);
+    expect(saved?.resources).toEqual(modelFactory.resources);
+    expect(saved?.workTypes).toEqual(modelFactory.workTypes);
+    expect(saved?.workers).toEqual(modelFactory.workers);
+    expect(saved?.workstations?.[0]).toEqual({
+      behavior: "STANDARD",
+      body: "Review the updated story before approval.",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+      id: "legacy-review",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Legacy Review Updated",
+      onFailure: [{ state: "failed", workType: "story" }],
+      onRejection: [{ state: "queued", workType: "story" }],
+      outputs: [{ state: "approved", workType: "story" }],
+      promptFile: "prompts/legacy-review.md",
+      runner: "claude",
+      type: WorkstationType.MODEL_WORKSTATION,
+      worker: "legacy-model",
+    });
+    expect(saved?.workstations?.[1]).toEqual(modelFactory.workstations?.[1]);
+  });
+
   it("projects and saves promptless SCRIPT_RUN workstations without adding a body", () => {
     const scriptNode: DashboardWorkstationNode = {
       model: "script",

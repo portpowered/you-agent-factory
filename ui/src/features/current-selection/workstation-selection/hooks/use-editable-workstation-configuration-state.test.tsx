@@ -117,6 +117,50 @@ describe("useEditableWorkstationConfigurationState", () => {
     ).toBeNull();
   });
 
+  it("keeps an explicit legacy model workstation and worker binding in the ready state", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          workerName: "legacy-model",
+          workerOptions: [
+            { name: "legacy-model", type: "MODEL_WORKER" },
+            { name: "script-worker", type: "SCRIPT_WORKER" },
+          ],
+          workstationType: "MODEL_WORKSTATION",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        workstationType: "MODEL_WORKSTATION",
+        workerName: "legacy-model",
+      },
+      initialValues: {
+        workerOptions: ["legacy-model", "script-worker"],
+        workstationType: "MODEL_WORKSTATION",
+      },
+      hasValidationErrors: false,
+      status: "ready",
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition?.workstations?.[0]
+        : undefined,
+    ).toMatchObject({
+      type: "MODEL_WORKSTATION",
+      worker: "legacy-model",
+    });
+  });
+
   it("blocks save when the workstation name duplicates another workstation", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(

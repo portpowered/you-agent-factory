@@ -375,17 +375,18 @@ describe("buildReadyEditableWorkstationConfigurationState model invoke handlers"
     ]);
     readyState.onNameChange("Speak Story Invoke");
 
-    expect(getSessionState().draft).toMatchObject({
-      name: "Speak Story Invoke",
-      operation: "STT",
-      workerName: "tts-worker",
-      workstationType: "MODEL_INVOKE",
-      operationBindings: [
-        expect.objectContaining({
-          slot: "audio",
-          selector: expect.objectContaining({ label: "clip", type: "AUDIO" }),
-        }),
-      ],
+    const draft = getSessionState().draft;
+    expect(draft.name).toBe("Speak Story Invoke");
+    expect(draft.operation).toBe("STT");
+    expect(draft.workerName).toBe("tts-worker");
+    expect(draft.workstationType).toBe("MODEL_INVOKE");
+    expect(draft.operationBindings).toHaveLength(1);
+    expect(draft.operationBindings[0]?.slot).toBe("audio");
+    expect(draft.operationBindings[0]?.selector).toEqual({
+      label: "clip",
+      role: "",
+      slot: "input.audio",
+      type: "AUDIO",
     });
     expect(buildReady().operationOptionsState).toEqual({
       operations: expect.any(Array),

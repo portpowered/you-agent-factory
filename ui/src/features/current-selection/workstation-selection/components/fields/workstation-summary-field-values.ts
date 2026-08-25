@@ -81,6 +81,22 @@ export function resolveWorkstationSummaryTypeValue(
   return messages.localizeWorkstationType(state.draft.workstationType);
 }
 
+export function resolveWorkstationSummaryWorkerTypeValue(
+  state: WorkstationDetailCardProps["editableConfigurationState"],
+  selectedNode: DashboardWorkstationNode,
+  messages: ReturnType<typeof getWorkstationDetailMessages>,
+): string {
+  if (state?.status === "ready") {
+    const workerType =
+      state.initialValues.workerTypeByName[state.draft.workerName];
+    if (workerType) {
+      return workerType;
+    }
+  }
+
+  return selectedNode.worker_type || messages.unknownWorkerTypeValue;
+}
+
 export function resolveWorkstationSummaryPresentation(
   editableConfigurationState:
     | WorkstationDetailCardProps["editableConfigurationState"]

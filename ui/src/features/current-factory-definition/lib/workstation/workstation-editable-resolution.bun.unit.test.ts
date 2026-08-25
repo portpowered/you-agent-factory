@@ -98,6 +98,25 @@ describe("workstation editable resolution lookups", () => {
     ]);
   });
 
+  it("retains legacy model workers for explicit MODEL_WORKSTATION choices", () => {
+    const factory = {
+      name: "Factory",
+      workers: [
+        { name: "legacy-model", type: "MODEL_WORKER" as const },
+        { name: "inference", type: "INFERENCE_WORKER" as const },
+        { name: "agent", type: "AGENT_WORKER" as const },
+        { name: "script", type: "SCRIPT_WORKER" as const },
+      ],
+      workstations: [],
+    };
+
+    expect(resolveWorkerOptions(factory, "MODEL_WORKSTATION")).toEqual([
+      "legacy-model",
+      "agent",
+      "script",
+    ]);
+  });
+
   it("returns no shared worker workstations when the selected workstation has no worker", () => {
     expect(
       resolveSharedWorkerWorkstationNames(
