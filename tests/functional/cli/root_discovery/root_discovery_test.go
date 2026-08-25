@@ -23,6 +23,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func startupOutputValue(output, label string) string {
@@ -49,7 +50,7 @@ func pathUnderDirectory(path, directory string) bool {
 func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing.T) {
 	t.Parallel()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -173,7 +174,7 @@ func TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation(t *testi
 
 	workingDirectory := t.TempDir()
 	var effects atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			effects.Add(1)
 			return nil
@@ -229,7 +230,7 @@ func runCurrentFactoryFailureCaseForCommand(
 	prepare(t, factoryDir)
 
 	var effects atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			effects.Add(1)
 			return nil
@@ -299,7 +300,7 @@ func runServerLifecycleCase(t *testing.T) {
 	defer cancel()
 	serverStopped := make(chan struct{})
 	var bound, browserCalls, providerCalls atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
 			if request.Handler == nil || request.OnBound == nil {
 				return errors.New("incomplete server start request")
@@ -380,7 +381,7 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 		t.Fatalf("NewStarter() error = %v", err)
 	}
 	var browserCalls, readinessCalls atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: starter,
 		BrowserOpener: func(context.Context, string) error {
 			browserCalls.Add(1)
@@ -454,7 +455,7 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	}
 
 	var effects atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
 			effects.Add(1)
 			return nil
@@ -509,7 +510,7 @@ func TestLocalRunDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	events := make([]string, 0, 2)
 	stdout := &orderedStartupOutput{events: &events}
 	var stderr bytes.Buffer
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		SystemInitializationInspectPath: func(path string) (fs.FileInfo, error) {
 			events = append(events, "initialize:"+path)
 			return nil, fs.ErrNotExist
@@ -607,7 +608,7 @@ func TestServerDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	startupSeen := make(chan struct{})
 	stdout := &orderedStartupOutput{events: &events, startupSeen: startupSeen}
 	var stderr bytes.Buffer
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		SystemInitializationInspectPath: func(path string) (fs.FileInfo, error) {
 			events = append(events, "initialize:"+path)
 			return nil, fs.ErrNotExist
@@ -693,7 +694,7 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 
 			serverStopped := make(chan struct{})
 			var bound, browserCalls atomic.Int32
-			process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+			process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 				APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 					bound.Store(1)
 					request.OnBound(platformhttpserver.Binding{Port: request.Port})
@@ -759,7 +760,7 @@ func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	serverStopped := make(chan struct{})
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
 			request.OnBound(platformhttpserver.Binding{Port: request.Port})
 			cancel()

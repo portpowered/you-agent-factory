@@ -105,6 +105,127 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 	assertTerminalRunPayload(t, finishedEvent.Payload, startedAt, finishedAt)
 }
 
+func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{
+		"credential": "runtime-secret",
+		"items":      []any{map[string]any{"token": "item-secret", "label": "visible"}},
+		"a/b":        map[string]any{"~key": "escaped-secret"},
+		"scalar":     "leaf",
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	root := NewRuntimeRoot(
+		nil, nil, nil, nil,
+		func(
+			factorydefinitions.FactorySnapshotSource,
+			string,
+			map[string]string,
+		) (*factorydefinitions.FactorySnapshot, error) {
+			return snapshot, nil
+		},
+		nil, nil, nil, nil,
+		runtimeRecorderTestClock{now: startedAt},
+	)
+	opening, ok := root.(recordings.RuntimeOpening)
+	if !ok {
+		t.Fatal("Recordings root does not expose RuntimeOpening")
+	}
+	opened, err := opening.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
+		Topology:         runtimeOpeningTopology{},
+		LoadedFactory:    invocationSensitiveLoadedFactory{pointers: []string{"/credential", "/items/0/token", "/a~1b/~0key", "/missing", "/items/not-an-index", "/scalar/child", "/a~", "/a~2"}},
+		Now:              func() time.Time { return startedAt },
+		RecordingID:      "runtime-provenance",
+		RecordPath:       "runtime-provenance.json",
+		FactorySessionID: "session-runtime-provenance",
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntime: %v", err)
+	}
+	if err := opened.Recorder.Finalize(startedAt.Add(time.Minute)); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+
+	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
+		RecordingID: "runtime-provenance",
+	})
+	if err != nil {
+		t.Fatalf("BuildPortableArtifact: %v", err)
+	}
+	if len(built.Artifact.Events) < 2 {
+		t.Fatalf("final artifact events = %d, want initial and terminal events", len(built.Artifact.Events))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(built.Artifact.Events[0].Payload), &payload); err != nil {
+		t.Fatalf("decode initial event payload: %v", err)
+	}
+	factory, ok := payload["factory"].(map[string]any)
+	if !ok {
+		t.Fatalf("initial event factory payload = %#v", payload["factory"])
+	}
+	assertRedactedRuntimeValue(t, factory["credential"], "credential")
+	items, ok := factory["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("initial event items = %#v, want one item", factory["items"])
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("initial event item = %#v", items[0])
+	}
+	assertRedactedRuntimeValue(t, item["token"], "items/0/token")
+	escaped, ok := factory["a/b"].(map[string]any)
+	if !ok {
+		t.Fatalf("initial event escaped object = %#v", factory["a/b"])
+	}
+	assertRedactedRuntimeValue(t, escaped["~key"], "a/b/~key")
+	if factory["scalar"] != "leaf" {
+		t.Fatalf("unclassified scalar = %#v, want leaf", factory["scalar"])
+	}
+	if _, exists := factory["missing"]; exists {
+		t.Fatalf("missing declared path changed the Factory payload: %#v", factory["missing"])
+	}
+}
+
+func assertRedactedRuntimeValue(t *testing.T, value any, path string) {
+	t.Helper()
+	marker, ok := value.(map[string]any)
+	if !ok || marker["redacted"] != true || marker["provenance"] != string(recordings.RecordingSecretProvenanceDeclared) {
+		t.Fatalf("redacted %s value = %#v, want typed redaction marker", path, value)
+	}
+	if _, hasOriginalValue := marker["value"]; hasOriginalValue {
+		t.Fatalf("redacted %s value retained original content: %#v", path, marker)
+	}
+}
+
+type invocationSensitiveLoadedFactory struct {
+	pointers []string
+}
+
+func (source invocationSensitiveLoadedFactory) FactoryDir() string { return "" }
+
+func (source invocationSensitiveLoadedFactory) FactoryConfig() *factorydefinitions.FactoryConfig {
+	return nil
+}
+
+func (source invocationSensitiveLoadedFactory) RuntimeBaseDir() string { return "" }
+
+func (source invocationSensitiveLoadedFactory) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	return nil, false
+}
+
+func (source invocationSensitiveLoadedFactory) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
+	return nil, false
+}
+
+func (source invocationSensitiveLoadedFactory) InvocationSensitiveJSONPointers() []string {
+	return append([]string(nil), source.pointers...)
+}
+
+var _ factorydefinitions.LoadedFactorySource = invocationSensitiveLoadedFactory{}
+
 // assertTerminalRunPayload checks the decoded body of the terminal run event.
 // The terminal event is the only record of how long a run took, so its wall
 // clock has to survive into the portable artifact with both ends intact.

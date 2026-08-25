@@ -26,14 +26,32 @@ type coverageManifest struct {
 	// DefaultFloorPercent is the floor applied to a measured package with no
 	// entry in Packages. It is optional; when absent the lane's built-in
 	// default applies. Explicit Packages entries always win over it.
-	DefaultFloorPercent json.RawMessage         `json:"defaultFloorPercent,omitempty"`
-	Packages            []coverageManifestEntry `json:"packages"`
+	DefaultFloorPercent json.RawMessage `json:"defaultFloorPercent,omitempty"`
+	// FloorHolds keep a measured baseline finding visible without turning the
+	// entire lane back into report-only mode. A hold is a temporary exception
+	// to enforcement for one package; the package's existing floor remains the
+	// value that matching-lane remediation must restore.
+	FloorHolds []coverageManifestFloorHold `json:"floorHolds,omitempty"`
+	Packages   []coverageManifestEntry     `json:"packages"`
 }
 
 type coverageManifestEntry struct {
 	Package   string                     `json:"package"`
 	Minimum   json.RawMessage            `json:"minimum,omitempty"`
 	Exception *coverageManifestException `json:"exception,omitempty"`
+}
+
+// coverageManifestFloorHold is a staged-cutover record for a package whose
+// current measured coverage is below its existing floor. It is deliberately
+// separate from a measurement exception: the package remains measured and
+// keeps its floor, while only enforcement is held until the removal gate is
+// met.
+type coverageManifestFloorHold struct {
+	Package       string `json:"package"`
+	Justification string `json:"justification"`
+	Owner         string `json:"owner"`
+	Deadline      string `json:"deadline"`
+	RemovalGate   string `json:"removalGate"`
 }
 
 type coverageManifestException struct {
@@ -254,6 +272,9 @@ func validateCoverageManifestAtModeWithTotals(manifest coverageManifest, expecte
 		seen[entry.Package] = struct{}{}
 		previous = entry.Package
 	}
+	if err := validateCoverageManifestFloorHolds(manifest.FloorHolds, expectedLane, measured, manifest.Packages, now); err != nil {
+		return err
+	}
 	// A measured package with no entry is not a completeness gap: it resolves to
 	// the lane default floor. Completeness only requires that every measured
 	// service declares a floor at its root.
@@ -312,6 +333,7 @@ func checkCoverageManifestWithEpsilon(manifest coverageManifest, totals map[stri
 func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string, epsilon float64, coverageBlocks map[string]coverageBlock) ([]string, []string) {
 	failures := make([]string, 0)
 	warnings := make([]string, 0)
+	holds := coverageManifestFloorHoldMap(manifest)
 	for _, entry := range manifest.Packages {
 		if entry.Exception != nil {
 			continue
@@ -328,6 +350,10 @@ func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals
 			actualPercent = float64(actual.coveredStatements) * 100 / float64(actual.totalStatements)
 		}
 		expectedPercent := float64(minimum) / 100
+		if hold, held := holds[entry.Package]; held {
+			warnings = append(warnings, formatHeldCoverageRegression(manifest, entry.Package, minimum, actual, coverageBlocks, hold))
+			continue
+		}
 		if coverageFloorDriftWithinEpsilon(minimum, actual, epsilon) {
 			warnings = append(warnings, fmt.Sprintf(
 				"package coverage warning: tolerated drift: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points epsilon=%.4f percentage-points",
@@ -353,8 +379,38 @@ func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals
 			manifest.Lane, manifestPath,
 		))
 	}
-	failures = append(failures, checkCoverageDefaultFloor(manifest, totals, manifestPath, coverageBlocks)...)
+	defaultFailures, defaultWarnings := checkCoverageDefaultFloorWithHolds(manifest, totals, manifestPath, coverageBlocks, holds)
+	failures = append(failures, defaultFailures...)
+	warnings = append(warnings, defaultWarnings...)
 	return failures, warnings
+}
+
+func formatHeldCoverageRegression(manifest coverageManifest, importPath string, minimum coverageFloor, actual packageCoverageTotals, coverageBlocks map[string]coverageBlock, hold coverageManifestFloorHold) string {
+	actualPercent := 0.0
+	if actual.totalStatements > 0 {
+		actualPercent = float64(actual.coveredStatements) * 100 / float64(actual.totalStatements)
+	}
+	diagnostic := fmt.Sprintf(
+		"package coverage hold: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points covered=%d/%d statements",
+		importPath,
+		manifest.Lane,
+		minimum.String(),
+		actualPercent,
+		actualPercent-float64(minimum)/100,
+		actual.coveredStatements,
+		actual.totalStatements,
+	)
+	if uncovered := formatUncoveredCoverageBlocks(coverageBlocks, importPath); uncovered != "" {
+		diagnostic += "; " + uncovered
+	}
+	return diagnostic + fmt.Sprintf(
+		"; staged blocking hold owner=%s deadline=%s; restore matching-%s-lane coverage to %s%% before removing this hold: %s",
+		hold.Owner,
+		hold.Deadline,
+		manifest.Lane,
+		minimum.String(),
+		hold.RemovalGate,
+	)
 }
 
 func coverageFloorDriftWithinEpsilon(minimum coverageFloor, actual packageCoverageTotals, epsilon float64) bool {
@@ -390,6 +446,67 @@ func validateCoverageManifestEntry(entry coverageManifestEntry) error {
 		return err
 	}
 	return validateCoverageManifestException(*entry.Exception)
+}
+
+func validateCoverageManifestFloorHolds(holds []coverageManifestFloorHold, expectedLane string, measured map[string]struct{}, entries []coverageManifestEntry, now time.Time) error {
+	entryByPackage := make(map[string]coverageManifestEntry, len(entries))
+	for _, entry := range entries {
+		entryByPackage[entry.Package] = entry
+	}
+	seen := make(map[string]struct{}, len(holds))
+	previous := ""
+	for index, hold := range holds {
+		if strings.TrimSpace(hold.Package) == "" {
+			return fmt.Errorf("validate go coverage manifest: floorHolds[%d].package is required", index)
+		}
+		if _, duplicate := seen[hold.Package]; duplicate {
+			return fmt.Errorf("validate go coverage manifest: duplicate floor hold for package %q", hold.Package)
+		}
+		if previous != "" && hold.Package < previous {
+			return fmt.Errorf("validate go coverage manifest: floorHolds must be sorted by package; %q appears after %q", hold.Package, previous)
+		}
+		if _, measuredPackage := measured[hold.Package]; !measuredPackage {
+			return fmt.Errorf("validate go coverage manifest: floor hold package %q is outside the %s measured package set", hold.Package, expectedLane)
+		}
+		if entry, explicit := entryByPackage[hold.Package]; explicit && entry.Exception != nil {
+			return fmt.Errorf("validate go coverage manifest: floor hold package %q cannot use a measurement exception", hold.Package)
+		}
+		if err := validateCoverageManifestFloorHold(hold); err != nil {
+			return fmt.Errorf("validate go coverage manifest floor hold package %q: %w", hold.Package, err)
+		}
+		deadline, _ := time.Parse("2006-01-02", hold.Deadline)
+		if deadline.Before(dateOnlyUTC(now)) {
+			return fmt.Errorf("validate go coverage manifest: expired floor hold for package %q: deadline %s passed; satisfy removal gate: %s", hold.Package, hold.Deadline, hold.RemovalGate)
+		}
+		seen[hold.Package] = struct{}{}
+		previous = hold.Package
+	}
+	return nil
+}
+
+func validateCoverageManifestFloorHold(hold coverageManifestFloorHold) error {
+	for name, value := range map[string]string{
+		"justification": hold.Justification,
+		"owner":         hold.Owner,
+		"deadline":      hold.Deadline,
+		"removalGate":   hold.RemovalGate,
+	} {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("floor hold %s is required", name)
+		}
+	}
+	if _, err := time.Parse("2006-01-02", hold.Deadline); err != nil {
+		return fmt.Errorf("floor hold deadline %q must use YYYY-MM-DD", hold.Deadline)
+	}
+	return nil
+}
+
+func coverageManifestFloorHoldMap(manifest coverageManifest) map[string]coverageManifestFloorHold {
+	holds := make(map[string]coverageManifestFloorHold, len(manifest.FloorHolds))
+	for _, hold := range manifest.FloorHolds {
+		holds[hold.Package] = hold
+	}
+	return holds
 }
 
 func parseCoverageFloor(raw json.RawMessage) (coverageFloor, error) {

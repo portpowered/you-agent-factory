@@ -1,5 +1,7 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { WorkstationKind } from "../../../api/generated/openapi";
 import {
+  isPollerRunWorkstationType,
   isPollerWorkerType,
   isScriptWorkerType,
 } from "./worker-workstation-taxonomy";
@@ -16,31 +18,41 @@ export type EditableWorkstationBehavior = NonNullable<
 >;
 
 export const DEFAULT_WORKSTATION_BEHAVIOR: EditableWorkstationBehavior =
-  "STANDARD";
+  WorkstationKind.STANDARD;
 
 const BASE_EDITABLE_WORKSTATION_BEHAVIORS: EditableWorkstationBehavior[] = [
-  "STANDARD",
-  "REPEATER",
-  "POLLER",
+  WorkstationKind.STANDARD,
+  WorkstationKind.REPEATER,
+  WorkstationKind.POLLER,
 ];
 
 export function resolveEditableWorkstationBehavior(
-  workstation: Pick<CanonicalWorkstation, "behavior">,
+  workstation: Pick<CanonicalWorkstation, "behavior"> &
+    Partial<Pick<CanonicalWorkstation, "type">>,
 ): EditableWorkstationBehavior {
+  if (isPollerRunWorkstationType(workstation.type)) {
+    return WorkstationKind.POLLER;
+  }
+
   return workstation.behavior ?? DEFAULT_WORKSTATION_BEHAVIOR;
 }
 
 export function resolveEditableWorkstationBehaviorOptions(
   currentBehavior: EditableWorkstationBehavior,
+  workstationType?: CanonicalWorkstation["type"] | string | null,
 ): EditableWorkstationBehavior[] {
-  return currentBehavior === "CRON"
-    ? [...BASE_EDITABLE_WORKSTATION_BEHAVIORS, "CRON"]
+  if (isPollerRunWorkstationType(workstationType)) {
+    return [WorkstationKind.POLLER];
+  }
+
+  return currentBehavior === WorkstationKind.CRON
+    ? [...BASE_EDITABLE_WORKSTATION_BEHAVIORS, WorkstationKind.CRON]
     : BASE_EDITABLE_WORKSTATION_BEHAVIORS;
 }
 
 /** Graph add-workstation exposes CRON at creation time, not only when editing cron workstations. */
 export function resolveFactoryGraphAddWorkstationBehaviorOptions(): EditableWorkstationBehavior[] {
-  return [...BASE_EDITABLE_WORKSTATION_BEHAVIORS, "CRON"];
+  return [...BASE_EDITABLE_WORKSTATION_BEHAVIORS, WorkstationKind.CRON];
 }
 
 export function workerSupportsPollerBehavior(
@@ -52,5 +64,15 @@ export function workerSupportsPollerBehavior(
 export function workstationBehaviorRequiresPrompt(
   behavior: EditableWorkstationBehavior,
 ): boolean {
-  return behavior !== "POLLER";
+  return behavior !== WorkstationKind.POLLER;
+}
+
+export function workstationUsesRunnerEditing(
+  workstationType: CanonicalWorkstation["type"] | string | null | undefined,
+  behavior: EditableWorkstationBehavior,
+): boolean {
+  return (
+    behavior !== WorkstationKind.POLLER &&
+    !isPollerRunWorkstationType(workstationType)
+  );
 }

@@ -110,14 +110,14 @@ func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: probe,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
-	reader := root.WorkerRecordingReaderFromProcess(process)
+	reader := process.WorkerRecordingReader()
 	if reader == nil {
 		t.Fatal("root-built process returned a nil Recordings reader")
 	}
@@ -239,7 +239,7 @@ func runWSRFT006FactoryWithProcess(
 	t.Helper()
 	queueWSRFT006ProviderResult(t, loaded, runner)
 
-	processValue, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	processValue, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: probe,
 	})
@@ -247,7 +247,7 @@ func runWSRFT006FactoryWithProcess(
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
 	process := processValue
-	reader := root.WorkerRecordingReaderFromProcess(process)
+	reader := process.WorkerRecordingReader()
 	if reader == nil {
 		t.Fatal("root-built process returned a nil Recordings reader")
 	}

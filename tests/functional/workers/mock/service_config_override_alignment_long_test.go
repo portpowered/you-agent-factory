@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -25,7 +24,7 @@ func TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner(t *te
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--dir", dir, "--no-record",
 	})
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ScriptCommandRunner: runner,
 	})
 	if err != nil {

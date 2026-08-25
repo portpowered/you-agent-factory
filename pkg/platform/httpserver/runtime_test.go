@@ -42,6 +42,12 @@ func TestHandlerWithRuntimeReturnsPlausibleSnapshotAndExactCommit(t *testing.T) 
 	}
 }
 
+func TestHandlerWithRuntimeReturnsNilForNilApplicationHandler(t *testing.T) {
+	if handler := HandlerWithRuntime(nil, nil); handler != nil {
+		t.Fatalf("HandlerWithRuntime(nil) = %T, want nil", handler)
+	}
+}
+
 func TestHandlerWithRuntimePreservesGoFieldsWhenCommitUnavailable(t *testing.T) {
 	server := httptest.NewServer(HandlerWithRuntime(
 		http.NotFoundHandler(),

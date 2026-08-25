@@ -15,10 +15,13 @@ import {
   isLegacyRunnableWorkstationType,
   isModelProviderWorkerType,
   isPollerWorkerType,
+  isScriptRunWorkstationType,
+  isWorkerCompatibleWithWorkstationType,
   resolveEditableWorkerTypeOptions,
   resolveEditableWorkstationTypeConversionOptions,
 } from "./worker-workstation-taxonomy";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: taxonomy cases keep the public compatibility matrix together.
 describe("worker-workstation taxonomy helpers", () => {
   it("prefers new taxonomy defaults for factory creation", () => {
     expect(DEFAULT_WORKER_TYPE).toBe(WorkerType.INFERENCE_WORKER);
@@ -108,12 +111,51 @@ describe("worker-workstation taxonomy helpers", () => {
     ).toEqual([WorkstationType.CLASSIFIER_WORKSTATION]);
   });
 
-  it("returns preferred conversion options for unsupported workstation types", () => {
+  it("retains promptless conversion options for script and poller workstations", () => {
     expect(
       resolveEditableWorkstationTypeConversionOptions(
         WorkstationType.SCRIPT_RUN,
       ),
-    ).toEqual(EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS);
+    ).toEqual([WorkstationType.SCRIPT_RUN]);
+    expect(
+      resolveEditableWorkstationTypeConversionOptions(
+        WorkstationType.POLLER_RUN,
+      ),
+    ).toEqual([WorkstationType.POLLER_RUN]);
+    expect(isScriptRunWorkstationType(WorkstationType.SCRIPT_RUN)).toBe(true);
+  });
+
+  it("filters explicit workstation types by canonical worker compatibility", () => {
+    expect(
+      isWorkerCompatibleWithWorkstationType(
+        WorkerType.SCRIPT_WORKER,
+        WorkstationType.SCRIPT_RUN,
+      ),
+    ).toBe(true);
+    expect(
+      isWorkerCompatibleWithWorkstationType(
+        WorkerType.MODEL_WORKER,
+        WorkstationType.SCRIPT_RUN,
+      ),
+    ).toBe(false);
+    expect(
+      isWorkerCompatibleWithWorkstationType(
+        WorkerType.SCRIPT_WORKER,
+        WorkstationType.POLLER_RUN,
+      ),
+    ).toBe(true);
+    expect(
+      isWorkerCompatibleWithWorkstationType(
+        WorkerType.HOSTED_WORKER,
+        WorkstationType.POLLER_RUN,
+      ),
+    ).toBe(true);
+    expect(
+      isWorkerCompatibleWithWorkstationType(
+        WorkerType.INFERENCE_WORKER,
+        WorkstationType.POLLER_RUN,
+      ),
+    ).toBe(false);
   });
 
   it("retains unsupported worker types before preferred options", () => {

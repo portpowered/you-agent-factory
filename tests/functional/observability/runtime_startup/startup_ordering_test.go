@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func startupOutputValue(output, label string) string {
@@ -55,7 +56,7 @@ func TestLocalStartupDisclosesHomeBeforeOperatorSettingsRead(t *testing.T) {
 		Output: &stdout,
 		Home:   homeDir,
 	}
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		OperatorSettingsFileSystem: settingsFiles,
 	})
 	if err != nil {
@@ -114,7 +115,7 @@ func TestReplayArtifactUnderResolvedHomeStartsAfterDisclosure(t *testing.T) {
 	homeDir := t.TempDir()
 	replayPath := filepath.Join(homeDir, ".you-agent-factory", "recordings", "root-discovery.replay.json")
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
@@ -193,7 +194,7 @@ func TestServerInitializationFailureStopsBeforeRuntimeArtifacts(t *testing.T) {
 	}
 
 	var listenerCalls atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		SystemInitializationInspectPath: func(string) (fs.FileInfo, error) {
 			return nil, fmt.Errorf("%w: another process is staging packaged factories", interfaces.ErrFactoryInstallationContention)
 		},

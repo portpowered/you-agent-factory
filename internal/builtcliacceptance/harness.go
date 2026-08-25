@@ -23,6 +23,7 @@ const (
 // Harness constructs isolated root processes for hermetic acceptance scenarios.
 type Harness struct {
 	RepoRoot string
+	Edges    serviceedges.Edges
 }
 
 // Session is one hermetic acceptance run with isolated home and log directories.
@@ -159,7 +160,7 @@ func (c *Command) Run() error {
 	}
 	stdinIsTTY := false
 	stdoutIsTTY := false
-	process, err := root.BuildProcess(ctx, serviceedges.Edges{})
+	process, err := root.BuildProcess(ctx, c.harness.Edges)
 	if err != nil {
 		return fmt.Errorf("build root process: %w", err)
 	}
@@ -224,7 +225,12 @@ func (f *ScenarioFailure) Error() string {
 // NewHarness prepares isolated production root-process invocations.
 func NewHarness(t testing.TB, repoRoot string) *Harness {
 	t.Helper()
-	return &Harness{RepoRoot: repoRoot}
+	return &Harness{
+		RepoRoot: repoRoot,
+		Edges: serviceedges.Edges{
+			BrowserOpener: func(context.Context, string) error { return nil },
+		},
+	}
 }
 
 // NewSession allocates isolated home and log directories for one scenario.

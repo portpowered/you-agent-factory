@@ -142,6 +142,7 @@ func planCoverageManifestUpdate(manifest coverageManifest, minimums map[string]p
 		Version:             manifest.Version,
 		Lane:                manifest.Lane,
 		DefaultFloorPercent: manifest.DefaultFloorPercent,
+		FloorHolds:          slices.Clone(manifest.FloorHolds),
 		Packages:            make([]coverageManifestEntry, 0, len(packages)),
 	}
 	updates := make([]coverageManifestUpdate, 0, len(packages))

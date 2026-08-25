@@ -78,6 +78,45 @@ describe("workstation editable resolution lookups", () => {
     expect(resolveWorkerModelProvider(factory, "missing")).toBeNull();
   });
 
+  it("limits explicit script and poller workstation choices to compatible workers", () => {
+    const factory = {
+      name: "Factory",
+      workers: [
+        { name: "model", type: "MODEL_WORKER" as const },
+        { name: "script", type: "SCRIPT_WORKER" as const },
+        { name: "poller", type: "POLLER_WORKER" as const },
+        { name: "hosted", type: "HOSTED_WORKER" as const },
+      ],
+      workstations: [],
+    };
+
+    expect(resolveWorkerOptions(factory, "SCRIPT_RUN")).toEqual(["script"]);
+    expect(resolveWorkerOptions(factory, "POLLER_RUN")).toEqual([
+      "script",
+      "poller",
+      "hosted",
+    ]);
+  });
+
+  it("retains legacy model workers for explicit MODEL_WORKSTATION choices", () => {
+    const factory = {
+      name: "Factory",
+      workers: [
+        { name: "legacy-model", type: "MODEL_WORKER" as const },
+        { name: "inference", type: "INFERENCE_WORKER" as const },
+        { name: "agent", type: "AGENT_WORKER" as const },
+        { name: "script", type: "SCRIPT_WORKER" as const },
+      ],
+      workstations: [],
+    };
+
+    expect(resolveWorkerOptions(factory, "MODEL_WORKSTATION")).toEqual([
+      "legacy-model",
+      "agent",
+      "script",
+    ]);
+  });
+
   it("returns no shared worker workstations when the selected workstation has no worker", () => {
     expect(
       resolveSharedWorkerWorkstationNames(

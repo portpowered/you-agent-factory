@@ -31,7 +31,7 @@ Every contributor **MUST** review this standard before conducting or requesting 
 
 ### functional tests
 - Request changes when a functional-test PR violates any of the five functional-test construction preferences in [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) without a documented, in-scope exception.
-- Request changes when functional tests bypass `root.BuildProcess` + `Process.Execute` by default or invoke a built `you` CLI without proving OS/process-boundary behavior that `BuildProcess` cannot express.
+- Request changes when functional tests bypass `root.BuildProcess` + `Process.Execute` or invoke a built `you` CLI; executable and OS-process behavior belongs in the integration lane.
 - Request changes when functional tests use HTTP/API for ordinary customer flows without an API-owned contract or explicit CLI+API parity justification.
 - Request changes when functional tests replace external effects outside `edges.Edges` or prefer custom in-process provider fakes over `ProviderCommandRunner` and other command-runner edge mocks.
 - Request changes when functional tests use `--with-mock-workers` / `MockWorkers` outside `tests/functional/workers/mock/...` cells that own the workers/mock feature.
@@ -52,7 +52,7 @@ Before approval, reviewers **SHOULD** confirm:
 - The general test-coverage check does not establish same-pull-request execution or actual property measurement; reviewers **MUST** verify that any cited CI gate measured the relevant property on the change's own pull request. Missing property-specific output or a gate that can fail before measuring it **MUST NOT** count as evidence, and counted ratchets **MUST** be checked against the observed count and recorded baseline rather than failing-target identity.
 - Review comments are clearly marked as blocking or non-blocking.
 - AI-generated code, if present, has been checked against real APIs, real behavior, and project conventions.
-- For PRs that change functional tests under `tests/functional/...`, the five construction preferences from [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) are satisfied: `root.BuildProcess` + `Process.Execute` by default (built CLI only for OS/process-boundary proof), CLI-over-API for ordinary flows, external effects replaced only through `edges.Edges` with `ProviderCommandRunner`/command-runner edge mocks preferred, mocked Codex over MockWorkers except in workers/mock feature cells, and RC-fix over sleeps or timeout-padded wait helpers unless justified in-code.
+- For PRs that change functional tests under `tests/functional/...`, the five construction preferences from [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) are satisfied: `root.BuildProcess` + `Process.Execute` with no built CLI, CLI-over-API for ordinary flows, external effects replaced only through `edges.Edges` with `ProviderCommandRunner`/command-runner edge mocks preferred, mocked Codex over MockWorkers except in workers/mock feature cells, and RC-fix over sleeps or timeout-padded wait helpers unless justified in-code.
 
 ## Regulations
 
@@ -94,7 +94,7 @@ AI-generated code **MUST** receive the same or greater scrutiny as human-written
 
 When a PR changes functional tests, a reviewer **MUST** request changes if any of the five construction preferences in [general-backend-standards.md §7](./general-backend-standards.md#7-testing-strategy-and-test-pyramid) is violated without a documented, in-scope exception:
 
-1. Functional application tests **MUST** construct through `root.BuildProcess` and execute through `Process.Execute` by default. A built `you` CLI **MAY** be used only when the cell must prove OS/process-boundary behavior that `BuildProcess` cannot express.
+1. Functional application tests **MUST** construct through `root.BuildProcess` and execute through `Process.Execute`. They **MUST NOT** build or invoke the `you` CLI; executable and OS-process behavior belongs in the integration lane.
 2. Functional tests **MUST** prefer public CLI invocation over HTTP/API for ordinary customer flows. HTTP or API entry **MAY** be used only for API-owned contracts or explicit CLI+API parity cells.
 3. External effects **MUST** be replaced only through `edges.Edges`. Functional tests **MUST** prefer `ProviderCommandRunner` and other command-runner edge mocks over custom in-process provider fakes.
 4. Functional tests **MUST** prefer mocked Codex or another real inference-provider variant through the command-runner edge and sanitized goldens over `--with-mock-workers` / `MockWorkers`, except for cells under `tests/functional/workers/mock/...` that own the workers/mock feature.

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -103,7 +102,7 @@ func TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI(t *testing.
 	homeDir := t.TempDir()
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
 	if err != nil {

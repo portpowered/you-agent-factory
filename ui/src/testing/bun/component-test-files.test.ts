@@ -79,4 +79,17 @@ describe("classifyComponentTestSource", () => {
       runner: "vitest",
     });
   });
+
+  it("routes nested workstation graph tests through Vitest before explicit Bun suffixes", () => {
+    expect(
+      classifyComponentTestSource(
+        "src/features/current-selection/workstation-selection/components/editable/poller/workstation-editable-configuration-section.poller.bun.component.test.tsx",
+        "",
+      ),
+    ).toMatchObject({
+      reason:
+        "imports workspace graph packages that Bun resolves through declaration files",
+      runner: "vitest",
+    });
+  });
 });

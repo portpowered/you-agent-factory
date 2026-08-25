@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -22,7 +21,7 @@ func TestFactorySessionsRootPublishesDetachedOperationsThroughProcess(t *testing
 	if err := process.Execute(help.Input); err != nil {
 		t.Fatalf("execute canonical process help: %v", err)
 	}
-	operations := root.DetachedOperationsFromProcess(process)
+	operations := process.DetachedOperations()
 	if operations == nil {
 		t.Fatal("canonical process published nil detached operations")
 	}

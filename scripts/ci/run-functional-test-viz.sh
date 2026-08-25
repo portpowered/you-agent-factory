@@ -40,6 +40,27 @@ handle_interrupt() {
 trap 'handle_interrupt 130' INT
 trap 'handle_interrupt 143' TERM
 
+# The make invocation is the full diagnostic source of truth, so retain every
+# byte in command.log. The compact inventory and verdict are handed to the
+# always-run publisher below; suppressing those same lines from this step keeps
+# the coverage step and verdict-report step complementary instead of repeated.
+filter_compact_functional_verdict() {
+  awk '
+    /^!!! COVERAGE FLOOR POLICY: advisory !!!$/ { next }
+    /^Package floors and missing-manifest findings are report-only/ { next }
+    /^Set -package-floor-policy=blocking to restore blocking enforcement\./ { next }
+    /^Functional suite inventory:/ { next }
+    /^total: \(statements\)/ { next }
+    /^Functional package coverage verdict:/ { next }
+    /^  floor violation:/ { next }
+    /^  floor violations: none$/ { next }
+    /^  package=/ { next }
+    /^  tally:/ { next }
+    /^(Go|go) coverage (found |.* below minimum |.* meets minimum )/ { next }
+    { print }
+  '
+}
+
 if ! command -v timeout >/dev/null 2>&1; then
   printf '%s\n' "Functional CI runner: GNU timeout is required to enforce budget=$budget; diagnostics retained under $artifact_root." \
     | tee -a "$log_path" >&2
@@ -56,16 +77,22 @@ timeout --signal=TERM --kill-after=30s "$budget" \
     FUNCTIONAL_SHORT="$short" \
     FUNCTIONAL_QUARANTINE="$quarantine" \
     FUNCTIONAL_GOCOVERAGE_EXIT_FILE="$gocoverage_exit_path" \
-    2>&1 | tee -a "$log_path"
+    2>&1 | tee -a "$log_path" | filter_compact_functional_verdict
 pipeline_status=("${PIPESTATUS[@]}")
 set -e
 
 command_status="${pipeline_status[0]}"
 tee_status="${pipeline_status[1]}"
+filter_status="${pipeline_status[2]}"
 if [ "$tee_status" -ne 0 ]; then
   printf '%s\n' "Functional CI runner: diagnostic log writer failed with exit=$tee_status; tier failed closed." \
     | tee -a "$log_path" >&2
   exit "$tee_status"
+fi
+if [ "$filter_status" -ne 0 ]; then
+  printf '%s\n' "Functional CI runner: compact verdict filter failed with exit=$filter_status; tier failed closed." \
+    | tee -a "$log_path" >&2
+  exit "$filter_status"
 fi
 
 if [ "$command_status" -eq 124 ]; then

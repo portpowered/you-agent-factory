@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 func TestExecuteReportsPassingCoverage(t *testing.T) {
@@ -45,10 +42,10 @@ func TestExecuteReportsPassingCoverage(t *testing.T) {
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	if strings.Contains(got, "\t\tcoverage: 75.0% of statements") {
@@ -135,7 +132,7 @@ func TestExecuteReportsPackageSummariesForCompleteManifest(t *testing.T) {
 	}
 
 	got := stdout.String()
-	wantSummary := configPackage + "\tcoverage: 100.0% of statements\n"
+	wantSummary := "package=" + configPackage + " coverage=100.0% floor=100.0% delta=+0.0pp status=PASS lane=unit\n"
 	if strings.Count(got, wantSummary) != 1 {
 		t.Fatalf("execute() stdout = %q, want one package summary %q", got, wantSummary)
 	}
@@ -218,11 +215,12 @@ func TestExecuteReportsUncoveredBlocksForManifestRegression(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min:             0,
-		suite:           "unit",
-		coverpkg:        configPackage,
-		packages:        "./pkg/config",
-		packageManifest: manifestPath,
+		min:                 0,
+		suite:               "unit",
+		coverpkg:            configPackage,
+		packages:            "./pkg/config",
+		packageManifest:     manifestPath,
+		detailedDiagnostics: true,
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
@@ -267,11 +265,12 @@ func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min:             0,
-		suite:           "unit",
-		coverpkg:        strings.Join([]string{modulePath + "/pkg/services/factory_runtime", rootObservationPackage}, ","),
-		packages:        "./pkg/services/factory_runtime/internal/rootobservation",
-		packageManifest: manifestPath,
+		min:                 0,
+		suite:               "unit",
+		coverpkg:            strings.Join([]string{modulePath + "/pkg/services/factory_runtime", rootObservationPackage}, ","),
+		packages:            "./pkg/services/factory_runtime/internal/rootobservation",
+		packageManifest:     manifestPath,
+		detailedDiagnostics: true,
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
@@ -288,8 +287,8 @@ func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks
 	if strings.Count(err.Error(), "uncovered blocks:") != 1 || strings.Count(err.Error(), "(1 statement)") != 2 {
 		t.Fatalf("execute() error = %q, want exactly two uncovered blocks", err)
 	}
-	if !strings.Contains(stdout.String(), rootObservationPackage+"\tcoverage: 95.6% of statements") {
-		t.Fatalf("execute() stdout = %q, want rootobservation package summary", stdout.String())
+	if !strings.Contains(stdout.String(), "package="+rootObservationPackage+" coverage=95.6% floor=100.0% delta=-4.4pp status=FAIL lane=unit") {
+		t.Fatalf("execute() stdout = %q, want rootobservation package verdict", stdout.String())
 	}
 	wantDiagnostic := "coverage not evaluated: package=" + modulePath + "/pkg/services/factory_runtime lane=unit (no measurement in profile)\n"
 	if got := stderr.String(); got != wantDiagnostic {
@@ -362,7 +361,7 @@ func TestExecuteTotalOnlyReportsIndependentSuiteCoverageWithPackageSummaries(t *
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=n/a status=report-only lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary from the selected suite profile", got)
 	}
 	if stderr.Len() != 0 {
@@ -438,10 +437,10 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantFailure := "go coverage 100.0% is below minimum 100.1%"
@@ -565,10 +564,10 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=0.0% floor=80.0% delta=-80.0pp status=FAIL lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantFailure := strings.Join([]string{
@@ -620,10 +619,10 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=0.0% floor=80.0% delta=-80.0pp status=FAIL lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)"
@@ -877,123 +876,5 @@ func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 	}
 	if slices.Contains(testPackages, modulePath+"/pkg/config/exhaustiontests") {
 		t.Fatalf("listGoPackages() for test lane = %v, maintenance package must be excluded", testPackages)
-	}
-}
-
-func TestRepoRootDirFindsNearestAncestorWithGoMod(t *testing.T) {
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalDir); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
-
-	repoRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(repoRoot, "go.mod"), []byte("module example.com/test\n\ngo 1.25\n"), 0o600); err != nil {
-		t.Fatalf("write go.mod: %v", err)
-	}
-	nestedDir := filepath.Join(repoRoot, "pkg", "service", "nested")
-	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	if err := os.Chdir(nestedDir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-
-	got, err := repoRootDir()
-	if err != nil {
-		t.Fatalf("repoRootDir() error = %v", err)
-	}
-	if testutil.CanonicalPath(got) != testutil.CanonicalPath(repoRoot) {
-		t.Fatalf("repoRootDir() = %q, want %q", got, repoRoot)
-	}
-}
-
-func tempDirOutsideRepo(t *testing.T) string {
-	t.Helper()
-
-	repoRoot := testutil.CanonicalPath(testutil.MustRepoRoot(t))
-	candidates := []string{os.TempDir()}
-	if runtime.GOOS != "windows" {
-		candidates = append(candidates, "/tmp")
-	}
-
-	for _, base := range candidates {
-		tempRoot, err := os.MkdirTemp(base, "gocoveragecheck-*")
-		if err != nil {
-			continue
-		}
-		canonicalTemp := testutil.CanonicalPath(tempRoot)
-		if isPathWithin(canonicalTemp, repoRoot) {
-			if removeErr := os.RemoveAll(tempRoot); removeErr != nil {
-				t.Fatalf("remove in-repo temp dir %q: %v", tempRoot, removeErr)
-			}
-			continue
-		}
-		t.Cleanup(func() {
-			if removeErr := os.RemoveAll(tempRoot); removeErr != nil {
-				t.Fatalf("remove temp dir %q: %v", tempRoot, removeErr)
-			}
-		})
-		return tempRoot
-	}
-
-	t.Fatal("could not create temp dir outside repository")
-	return ""
-}
-
-func isPathWithin(child, parent string) bool {
-	rel, err := filepath.Rel(parent, child)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func TestRepoRootDirFailsWhenNoGoModExists(t *testing.T) {
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() error = %v", err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalDir); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
-
-	workingDir := filepath.Join(tempDirOutsideRepo(t), "pkg", "service")
-	if err := os.MkdirAll(workingDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	if err := os.Chdir(workingDir); err != nil {
-		t.Fatalf("Chdir() error = %v", err)
-	}
-
-	_, err = repoRootDir()
-	if err == nil {
-		t.Fatal("repoRootDir() unexpectedly succeeded")
-	}
-	if err.Error() != "resolve repository root: go.mod not found" {
-		t.Fatalf("repoRootDir() error = %q, want missing go.mod error", err.Error())
-	}
-}
-
-func TestFindZeroCoveragePackagesFromSummaries(t *testing.T) {
-	t.Parallel()
-
-	zeroCoveragePackages := findZeroCoveragePackagesFromSummaries(
-		[]packageCoverageSummary{
-			{importPath: modulePath + "/pkg/config", coverage: 0},
-			{importPath: modulePath + "/pkg/service", coverage: 100},
-		},
-		map[string]struct{}{
-			modulePath + "/pkg/config": {},
-		},
-	)
-	if len(zeroCoveragePackages) != 0 {
-		t.Fatalf("findZeroCoveragePackagesFromSummaries() = %v, want none", zeroCoveragePackages)
 	}
 }

@@ -32,9 +32,22 @@ const HEADROOM_EPSILON = 1e-9;
  */
 export function summarizeCoverageReport(coverage, timing, limits = {}) {
 	const resolved = { ...DEFAULT_COVERAGE_REPORT_LIMITS, ...limits };
+	const coverageSummary = summarizeCoverageArtifact(coverage, resolved);
+	const timingSummary = summarizeTimingArtifact(timing, resolved);
+	const timingByPackage = new Map(
+		timingSummary.packages.map((entry) => [entry.package, entry]),
+	);
+	coverageSummary.reportOnly = coverageSummary.reportOnly.map((entry) => ({
+		...entry,
+		timing: timingByPackage.get(entry.package) || null,
+	}));
+	coverageSummary.packageVerdicts = coverageSummary.packageVerdicts.map((entry) => ({
+		...entry,
+		timing: timingByPackage.get(entry.package) || null,
+	}));
 	return {
-		coverage: summarizeCoverageArtifact(coverage, resolved),
-		timing: summarizeTimingArtifact(timing, resolved),
+		coverage: coverageSummary,
+		timing: timingSummary,
 	};
 }
 
@@ -45,24 +58,31 @@ function summarizeCoverageArtifact(coverage, limits) {
 			packageFloorPolicy: "",
 			packageFloorFindings: [],
 			manifestDiagnostics: [],
+			reportOnly: [],
+			packageVerdicts: [],
 			violations: [],
 			violationCount: 0,
+			floorHoldCount: 0,
 			omittedViolations: 0,
 			nearFloor: [],
 			gatedCount: 0,
 			omitted: 0,
 		};
 	}
-	const ranked = coverage.packages
+	const packages = coverage.packages
 		.filter((entry) => entry && typeof entry.package === "string")
 		.map((entry) => ({
 			package: entry.package,
 			coveragePercent: measuredCoveragePercent(entry),
+			held: entry.packageFloorHeld === true,
 			floor:
 				typeof entry.packageFloor === "number" && Number.isFinite(entry.packageFloor)
 					? entry.packageFloor
 					: null,
-		}))
+		}));
+	const complete = coverage.complete !== false;
+	const packageFloorPolicy = textValue(coverage.packageFloorPolicy);
+	const ranked = packages
 		.filter((entry) => entry.floor !== null)
 		.map((entry) => ({ ...entry, headroom: entry.coveragePercent - entry.floor }))
 		.sort((left, right) =>
@@ -77,22 +97,37 @@ function summarizeCoverageArtifact(coverage, limits) {
 	// because 63.75 is not representable in binary. The tolerance is far below
 	// the two decimals a floor is authored with, so it can only absorb
 	// representation error, never a real shortfall.
-	const allViolations = ranked.filter((entry) => entry.headroom < -HEADROOM_EPSILON);
+	const allHolds = ranked.filter((entry) => entry.held && entry.headroom < -HEADROOM_EPSILON);
+	const allViolations = ranked.filter(
+		(entry) => !entry.held && entry.headroom < -HEADROOM_EPSILON,
+	);
 	// Coverage is never negative, so a package sitting on a 0% floor cannot
 	// regress through it. Unlisted packages in the functional lane now use a
 	// positive 15.00 default (unit uses 50.00), while explicit zero floors
 	// remain report-only for this near-floor table.
 	const contenders = ranked.filter(
-		(entry) => entry.headroom >= -HEADROOM_EPSILON && entry.floor > 0,
+		(entry) => !entry.held && entry.headroom >= -HEADROOM_EPSILON && entry.floor > 0,
 	);
 	const violations = allViolations.slice(0, limits.violations);
 	const nearFloor = contenders.slice(0, limits.packages);
+	const reportOnly = packages
+		.filter((entry) => entry.floor === null)
+		.sort((left, right) => left.package.localeCompare(right.package));
+	const packageVerdicts = [
+		...ranked.map((entry) => ({
+			...entry,
+			status: packageVerdictStatus(entry, packageFloorPolicy),
+		})),
+		...reportOnly.map((entry) => ({ ...entry, status: "report-only" })),
+	];
 	return {
 		available: true,
-		packageFloorPolicy: textValue(coverage.packageFloorPolicy),
+		packageFloorPolicy,
 		packageFloorFindings: diagnosticEntries(coverage.packageFloorFindings),
 		manifestDiagnostics: diagnosticEntries(coverage.manifestDiagnostics),
-		complete: coverage.complete !== false,
+		reportOnly,
+		packageVerdicts,
+		complete,
 		measurementReason: textValue(coverage.measurementReason),
 		coveredStatements: finiteNumber(coverage.coveredStatements),
 		measurableStatements: finiteNumber(coverage.measurableStatements),
@@ -100,6 +135,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 		packageCount: coverage.packages.length,
 		gatedCount: ranked.length,
 		violationCount: allViolations.length,
+		floorHoldCount: allHolds.length,
 		violations,
 		omittedViolations: allViolations.length - violations.length,
 		nearFloor,
@@ -109,8 +145,18 @@ function summarizeCoverageArtifact(coverage, limits) {
 
 function summarizeTimingArtifact(timing, limits) {
 	if (!timing || typeof timing !== "object" || !Array.isArray(timing.tests)) {
-		return { available: false, slowest: [], observed: 0, omitted: 0 };
+		return { available: false, packages: [], slowest: [], observed: 0, omitted: 0 };
 	}
+	const packages = Array.isArray(timing.packages)
+		? timing.packages
+			.filter((entry) => entry && typeof entry.package === "string")
+			.map((entry) => ({
+				package: entry.package,
+				seconds: finiteNumberOrNull(entry.seconds),
+				outcome: textValue(entry.outcome) || "unknown",
+			}))
+			.sort((left, right) => left.package.localeCompare(right.package))
+		: [];
 	const slowest = timing.tests
 		.filter((entry) => entry && typeof entry.package === "string" && typeof entry.test === "string")
 		.map((entry) => ({
@@ -127,6 +173,7 @@ function summarizeTimingArtifact(timing, limits) {
 	const shown = slowest.slice(0, limits.slowestTests);
 	return {
 		available: true,
+		packages,
 		complete: timing.complete !== false,
 		captureReason: textValue(timing.captureReason),
 		wallSeconds: finiteNumber(timing.wallSeconds),
@@ -160,21 +207,18 @@ export function renderCoverageReportBody(summary, options = {}) {
 	}
 	sections.push(`## ${heading}`, renderCoverageOverview(summary.coverage, coverageArtifactName));
 
-	const violations = renderPackageTable(summary.coverage.violations);
-	if (violations) {
-		sections.push(
-			`### Floor violations\n\n${violations}\n- ${summary.coverage.omittedViolations} additional violation(s) omitted.`,
-		);
-	}
-	const nearFloor = renderPackageTable(summary.coverage.nearFloor);
-	if (nearFloor) {
-		sections.push(
-			`### Closest to their floor\n\n${nearFloor}\n- ${summary.coverage.omitted} additional gated package(s) omitted.`,
-		);
+	const packageVerdicts = renderPackageVerdictTable(summary.coverage.packageVerdicts, {
+		includeDuration: options.includePackageDuration === true,
+		packageLimit: options.packageLimit,
+		partial: !summary.coverage.complete,
+	});
+	if (packageVerdicts) {
+		sections.push(`### Package verdicts\n\n${packageVerdicts}`);
 	}
 	const packageFloorFindings = renderDiagnostics(
 		"### Package-floor findings",
 		summary.coverage.packageFloorFindings,
+		options.includeUncoveredDetails === true,
 	);
 	if (packageFloorFindings) {
 		sections.push(packageFloorFindings);
@@ -182,9 +226,14 @@ export function renderCoverageReportBody(summary, options = {}) {
 	const manifestDiagnostics = renderDiagnostics(
 		"### Manifest findings",
 		summary.coverage.manifestDiagnostics,
+		options.includeUncoveredDetails === true,
 	);
 	if (manifestDiagnostics) {
 		sections.push(manifestDiagnostics);
+	}
+	if (options.includePackageTiming === true) {
+		const packageTiming = renderTimingPackageTable(summary.timing);
+		sections.push(`### ${options.packageTimingHeading || "Package timing"}\n\n${packageTiming}`);
 	}
 	sections.push(renderTimingOverview(summary.timing, timingArtifactName, options));
 	const slowest = renderSlowestTable(summary.timing.slowest);
@@ -209,6 +258,9 @@ function renderCoverageOverview(coverage, artifactName) {
 		`- Gated packages: ${coverage.gatedCount}`,
 		`- Floor violations: ${coverage.violationCount}`,
 	];
+	if (coverage.floorHoldCount > 0) {
+		lines.push(`- Remediation holds: ${coverage.floorHoldCount}`);
+	}
 	if (coverage.packageFloorPolicy === "advisory") {
 		lines.push(
 			"!!! COVERAGE FLOOR POLICY: advisory !!!",
@@ -226,11 +278,13 @@ function renderCoverageOverview(coverage, artifactName) {
 	return lines.join("\n");
 }
 
-function renderDiagnostics(heading, diagnostics) {
+function renderDiagnostics(heading, diagnostics, includeUncoveredDetails) {
 	if (!diagnostics || diagnostics.length === 0) {
 		return "";
 	}
-	return `${heading}\n\n${diagnostics.map((diagnostic) => `- ${diagnostic}`).join("\n")}`;
+	return `${heading}\n\n${diagnostics
+		.map((diagnostic) => `- ${includeUncoveredDetails ? diagnostic : compactCoverageDiagnostic(diagnostic)}`)
+		.join("\n")}`;
 }
 
 function renderTimingOverview(timing, artifactName, options = {}) {
@@ -267,14 +321,61 @@ function renderEffectiveConcurrencyUnavailable() {
 	return "- Effective concurrency: unavailable — requires a finite, non-negative packageElapsedSecondsSum and a positive finite wallSeconds";
 }
 
-function renderPackageTable(rows) {
+function renderPackageVerdictTable(rows, options = {}) {
 	if (!rows || rows.length === 0) {
 		return "";
 	}
-	const lines = ["| Package | Coverage % | Floor | Headroom |", "| --- | ---: | ---: | ---: |"];
-	for (const row of rows) {
+	const limit = Number.isInteger(options.packageLimit) && options.packageLimit > 0
+		? options.packageLimit
+		: rows.length;
+	const shownRows = rows.slice(0, limit);
+	const columns = ["Package", "Coverage %", "Floor", "Headroom", "Status"];
+	if (options.includeDuration) {
+		columns.push("Duration (s)", "Outcome");
+	}
+	const lines = [
+		`| ${columns.join(" | ")} |`,
+		`| ${columns.map((column) => (column === "Package" || column === "Status" || column === "Outcome" ? "---" : "---:")).join(" | ")} |`,
+	];
+	for (const row of shownRows) {
+		const floor = row.floor === null
+			? options.partial
+				? "n/a (partial run)"
+				: "n/a (report-only)"
+			: row.floor.toFixed(2);
+		const headroom = row.headroom === undefined ? "n/a" : row.headroom.toFixed(2);
+		const values = [
+			`\`${row.package}\``,
+			row.coveragePercent.toFixed(2),
+			floor,
+			headroom,
+			row.status,
+		];
+		if (options.includeDuration) {
+			values.push(
+				row.timing && row.timing.seconds !== null ? row.timing.seconds.toFixed(3) : "unavailable",
+				row.timing ? row.timing.outcome : "unavailable",
+			);
+		}
 		lines.push(
-			`| \`${row.package}\` | ${row.coveragePercent.toFixed(2)} | ${row.floor.toFixed(2)} | ${row.headroom.toFixed(2)} |`,
+			`| ${values.join(" | ")} |`,
+		);
+	}
+	const omitted = rows.length - shownRows.length;
+	if (omitted > 0) {
+		lines.push(`- ${omitted} additional package verdict(s) omitted.`);
+	}
+	return lines.join("\n");
+}
+
+function renderTimingPackageTable(timing) {
+	if (!timing.available || !timing.packages || timing.packages.length === 0) {
+		return "- Package timing: unavailable";
+	}
+	const lines = ["| Package | Duration (s) | Outcome |", "| --- | ---: | --- |"];
+	for (const row of timing.packages) {
+		lines.push(
+			`| \`${row.package}\` | ${row.seconds === null ? "unavailable" : row.seconds.toFixed(3)} | ${row.outcome} |`,
 		);
 	}
 	return lines.join("\n");
@@ -364,6 +465,10 @@ function finiteNumber(value) {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function finiteNumberOrNull(value) {
+	return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function deriveEffectiveConcurrency(packageElapsedSecondsSum, wallSeconds) {
 	if (
 		typeof packageElapsedSecondsSum !== "number" ||
@@ -405,6 +510,30 @@ function measuredCoveragePercent(entry) {
 
 function textValue(value) {
 	return typeof value === "string" ? value.trim() : "";
+}
+
+function packageVerdictStatus(entry, policy) {
+	if (entry.headroom < -HEADROOM_EPSILON) {
+		return policy === "advisory" ? "WARN" : "FAIL";
+	}
+	return "PASS";
+}
+
+function compactCoverageDiagnostic(diagnostic) {
+	const marker = "; uncovered blocks:";
+	let compact = diagnostic;
+	while (true) {
+		const markerIndex = compact.indexOf(marker);
+		if (markerIndex < 0) {
+			return compact.trim();
+		}
+		const tail = compact.slice(markerIndex + marker.length);
+		const nextField = tail.indexOf("; ");
+		if (nextField < 0) {
+			return compact.slice(0, markerIndex).trim();
+		}
+		compact = compact.slice(0, markerIndex) + tail.slice(nextField);
+	}
 }
 
 function diagnosticEntries(value) {

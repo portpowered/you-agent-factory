@@ -1,3 +1,4 @@
+import "../../../testing/vitest-dom-capabilities.setup";
 import "@testing-library/jest-dom/vitest";
 import {
   fireEvent,

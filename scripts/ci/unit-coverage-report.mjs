@@ -47,6 +47,8 @@ const UNIT_COVERAGE_RENDER_OPTIONS = {
 	timingArtifactName: "unit-timing-summary.json",
 	slowestHeading: "Slowest unit tests",
 	includeEffectiveConcurrency: true,
+	includePackageDuration: true,
+	packageLimit: UNIT_COVERAGE_PACKAGE_LIMIT,
 };
 
 /**
@@ -76,7 +78,11 @@ export function renderUnitCoverageComment(summary, metadata = {}) {
  * the comment marker, which is only meaningful on a pull request thread.
  */
 export function renderUnitCoverageJobSummary(summary, metadata = {}) {
-	return renderCoverageReportBody(summary, { ...UNIT_COVERAGE_RENDER_OPTIONS, metadata });
+	return renderCoverageReportBody(summary, {
+		...UNIT_COVERAGE_RENDER_OPTIONS,
+		packageLimit: UNIT_COVERAGE_SUMMARY_PACKAGE_LIMIT,
+		metadata,
+	});
 }
 
 /**

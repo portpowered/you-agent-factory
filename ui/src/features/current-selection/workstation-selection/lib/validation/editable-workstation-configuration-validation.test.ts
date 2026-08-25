@@ -136,6 +136,45 @@ describe("validateEditableWorkstationDraft logical move", () => {
 });
 
 describe("validateEditableWorkstationDraft model workstation", () => {
+  it("keeps the legacy MODEL_WORKER binding valid while rejecting an incompatible worker", () => {
+    const legacyModelValues = {
+      ...modelWorkstationValues,
+      workerName: "legacy-model",
+      workerOptions: ["legacy-model", "script-worker"],
+      workerTypeByName: {
+        "legacy-model": "MODEL_WORKER" as const,
+        "script-worker": "SCRIPT_WORKER" as const,
+        "inference-worker": "INFERENCE_WORKER" as const,
+      },
+    };
+
+    const validErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "Review the configured story.",
+        workerName: "legacy-model",
+      },
+      legacyModelValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(validErrors.workerName).toBeUndefined();
+
+    const incompatibleErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "Review the configured story.",
+        workerName: "inference-worker",
+      },
+      legacyModelValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(incompatibleErrors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerUnavailable,
+    );
+  });
+
   it("requires worker and prompt for MODEL_WORKSTATION drafts", () => {
     const errors = validateEditableWorkstationDraft(
       baseEditableWorkstationDraft,
@@ -236,6 +275,109 @@ describe("validateEditableWorkstationDraft model workstation", () => {
     expect(invalidPromptErrors.prompt).toBe(
       editableWorkstationValidationMessages.editableConfigurationPromptFieldHint,
     );
+  });
+});
+
+describe("validateEditableWorkstationDraft poller workstation", () => {
+  it("accepts poller-capable workers and rejects inference workers", () => {
+    const pollerValues = {
+      ...modelWorkstationValues,
+      behavior: "POLLER" as const,
+      behaviorOptions: ["POLLER" as const],
+      prompt: null,
+      workerName: "linear-poller",
+      workerOptions: ["linear-poller", "script-poller"],
+      workerTypeByName: {
+        "linear-poller": "HOSTED_WORKER" as const,
+        "script-poller": "SCRIPT_WORKER" as const,
+        reviewer: "MODEL_WORKER" as const,
+      },
+      workstationType: "POLLER_RUN" as const,
+      workstationTypeOptions: ["POLLER_RUN" as const],
+    };
+
+    const validErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        behavior: "POLLER",
+        prompt: "",
+        workerName: "linear-poller",
+        workstationType: "POLLER_RUN",
+      },
+      pollerValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(validErrors).toEqual({});
+
+    const incompatibleErrors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        behavior: "POLLER",
+        prompt: "",
+        workerName: "reviewer",
+        workstationType: "POLLER_RUN",
+      },
+      pollerValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+    expect(incompatibleErrors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerUnavailable,
+    );
+  });
+});
+
+describe("validateEditableWorkstationDraft script workstation", () => {
+  const scriptValues = {
+    ...modelWorkstationValues,
+    prompt: null,
+    workerName: "script-runner",
+    workerOptions: ["script-runner"],
+    workerTypeByName: { "script-runner": "SCRIPT_WORKER" as const },
+    workstationType: "SCRIPT_RUN" as const,
+    workstationTypeOptions: ["SCRIPT_RUN"] as const,
+  };
+
+  it("does not require prompt content or prompt validation for SCRIPT_RUN", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "",
+        workerName: "script-runner",
+        workstationType: "SCRIPT_RUN",
+      },
+      scriptValues,
+      {
+        diagnostics: [
+          { message: "prompt should not be checked", severity: "error" },
+        ],
+        result: { diagnostics: [], valid: false },
+        status: "ready",
+      },
+      editableWorkstationValidationMessages,
+    );
+
+    expect(errors).toEqual({});
+  });
+
+  it("blocks a missing or incompatible script worker with worker feedback", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "",
+        workerName: "reviewer",
+        workstationType: "SCRIPT_RUN",
+      },
+      scriptValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+
+    expect(errors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerUnavailable,
+    );
+    expect(errors.prompt).toBeUndefined();
   });
 });
 

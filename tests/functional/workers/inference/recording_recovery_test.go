@@ -13,7 +13,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -42,7 +41,7 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 	runner := &wsrFT009BlockingProviderRunner{started: make(chan struct{})}
 	dir := wsrFT004Factory(t)
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: writer,
 	})
@@ -274,7 +273,7 @@ func loadWSRFT009AfterRestart(
 	t.Helper()
 	writer := newWSRFT009DurableWriter(t, sidecarRoot, platformreplay.NewLocal(runtime.GOOS))
 	runner := &wsrFT009NeverCalledProviderRunner{}
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: writer,
 	})
@@ -282,7 +281,7 @@ func loadWSRFT009AfterRestart(
 		t.Fatalf("BuildProcess(restart): %v", err)
 	}
 	support.CleanupProcess(t, process)
-	reader := root.WorkerRecordingReaderFromProcess(process)
+	reader := process.WorkerRecordingReader()
 	if reader == nil {
 		t.Fatal("restart process did not expose Worker recording reader")
 	}

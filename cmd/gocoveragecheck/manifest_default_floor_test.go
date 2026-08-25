@@ -112,6 +112,40 @@ func TestCheckCoverageDefaultFloorEvaluatesUnlistedFunctionalPackages(t *testing
 	})
 }
 
+func TestCheckCoverageDefaultFloorSupportsHeldUnlistedPackages(t *testing.T) {
+	t.Parallel()
+
+	unlisted := modulePath + "/pkg/platform/unlisted"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "functional",
+		FloorHolds: []coverageManifestFloorHold{{
+			Package:       unlisted,
+			Justification: "current-main baseline is being restored",
+			Owner:         "coverage-remediation",
+			Deadline:      "2027-07-15",
+			RemovalGate:   "matching functional tests restore the lane default floor",
+		}},
+	}
+
+	failures, warnings := checkCoverageManifestWithEpsilon(
+		manifest,
+		map[string]packageCoverageTotals{unlisted: {coveredStatements: 0, totalStatements: 100}},
+		"minimums.json",
+		0,
+	)
+	if len(failures) != 0 || len(warnings) != 1 {
+		t.Fatalf("held default-floor result = failures %v warnings %v, want no failures and one warning", failures, warnings)
+	}
+	if !strings.Contains(warnings[0], "floor-source=lane-default") || !strings.Contains(warnings[0], "package coverage hold: package="+unlisted) {
+		t.Fatalf("held default-floor warning = %q, want package and lane-default details", warnings[0])
+	}
+	gates := coverageManifestGatedPackages(manifest, map[string]packageCoverageTotals{unlisted: {coveredStatements: 0, totalStatements: 100}})
+	if gate := gates[unlisted]; gate.FloorHold == nil || *gate.FloorHold != manifest.FloorHolds[0] {
+		t.Fatalf("held default-floor gate = %+v, want the staged hold", gate)
+	}
+}
+
 func runCoverageDefaultFloorCases(t *testing.T, unlisted string, tests []coverageDefaultFloorCase) {
 	t.Helper()
 	for _, tt := range tests {

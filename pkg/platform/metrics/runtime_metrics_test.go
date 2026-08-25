@@ -216,6 +216,40 @@ func TestRuntimeMetricsSinkDoesNotRecreateFileAfterClose(t *testing.T) {
 	}
 }
 
+func TestRuntimeMetricsNilAndClosedBoundariesRemainSafe(t *testing.T) {
+	var nilSink *RuntimeMetricsSink
+	if nilSink.Path() != "" || nilSink.RootDir() != "" || !nilSink.StartTimeUTC().IsZero() || nilSink.Config() != (RuntimeMetricsConfig{}) {
+		t.Fatalf("nil sink accessors = (%q, %q, %v, %#v), want zero values", nilSink.Path(), nilSink.RootDir(), nilSink.StartTimeUTC(), nilSink.Config())
+	}
+	if err := nilSink.Close(); err != nil {
+		t.Fatalf("nil sink Close() = %v, want nil", err)
+	}
+	if err := nilSink.WriteMetric(context.Background(), map[string]any{"metric_name": "ignored"}); err != nil {
+		t.Fatalf("nil sink WriteMetric() = %v, want nil", err)
+	}
+
+	sink, err := BuildRuntimeMetricsSink("session-closed-writer", "runtime-closed-writer", "", "", t.TempDir(), RuntimeMetricsConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink(): %v", err)
+	}
+	writer, ok := sink.writer.(*runtimeMetricsWriter)
+	if !ok {
+		t.Fatalf("sink writer = %T, want runtimeMetricsWriter", sink.writer)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("runtimeMetricsWriter.Close() = %v", err)
+	}
+	if _, err := writer.Write([]byte("late write")); !errors.Is(err, errRuntimeMetricsSinkClosed) {
+		t.Fatalf("runtimeMetricsWriter.Write(after close) = %v, want closed error", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("runtimeMetricsWriter.Close() second call = %v, want nil", err)
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("sink.Close() after writer close = %v", err)
+	}
+}
+
 func TestRuntimeMetricsSinkWritesStableJSONLEnvelope(t *testing.T) {
 	metricsDir := t.TempDir()
 	sink, err := BuildRuntimeMetricsSink(

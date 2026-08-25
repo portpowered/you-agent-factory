@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import {
   cleanup,
   fireEvent,
@@ -6,14 +7,6 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from "bun:test";
 
 const vi = { fn: mock };
 
@@ -262,14 +255,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         source: "workstation",
       },
       runnerName: "gemini",
-      runnerOptions: [
-        "codex",
-        "gemini",
-        "kiro",
-        "codex",
-        "opencode",
-        "pi",
-      ],
+      runnerOptions: ["codex", "gemini", "kiro", "codex", "opencode", "pi"],
       runnerSelectionSource: "workstation",
       workerModelProvider: null,
       sharedWorkerWorkstationNamesByWorkerName: {
@@ -2556,6 +2542,9 @@ describe("WorkstationDetailCard editable configuration", () => {
       within(resolvedSummarySection).getByText("Worker type"),
     ).toBeTruthy();
     expect(
+      within(resolvedSummarySection).getByText("MODEL_WORKER"),
+    ).toBeTruthy();
+    expect(
       within(resolvedSummarySection).getByText("Selected runner"),
     ).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
@@ -2587,6 +2576,11 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     const configuration = editableConfigurationSection();
+    expect(
+      within(configuration).getByRole("combobox", {
+        name: "Workstation type",
+      }),
+    ).toHaveTextContent("Model workstation (legacy)");
     expect(within(configuration).getByLabelText("Worker")).toBeTruthy();
     expect(within(configuration).getByLabelText("Kind")).toBeTruthy();
     expect(within(configuration).getByLabelText("Runner")).toBeTruthy();

@@ -161,6 +161,43 @@ func TestNewStarterRejectsNonLoopbackHostBeforeListenerEffect(t *testing.T) {
 	}
 }
 
+func TestNewStarterRejectsInvalidPortBeforeListenerEffect(t *testing.T) {
+	for _, port := range []int{0, 65536} {
+		t.Run(fmt.Sprintf("port-%d", port), func(t *testing.T) {
+			var calls int
+			starter, err := NewStarter(func(string, string) (net.Listener, error) {
+				calls++
+				return nil, errors.New("unexpected listener call")
+			}, nil, nil)
+			if err != nil {
+				t.Fatalf("NewStarter: %v", err)
+			}
+			err = starter(t.Context(), StartRequest{
+				Handler: http.NotFoundHandler(), Host: "localhost", Port: port,
+				Logger: zap.NewNop(),
+			})
+			if !IsBindError(err) {
+				t.Fatalf("starter error = %v, want BindError", err)
+			}
+			if calls != 0 {
+				t.Fatalf("listener calls = %d, want none for invalid port", calls)
+			}
+		})
+	}
+}
+
+func TestNewStarterRejectsNilListenerFromFactory(t *testing.T) {
+	starter, err := NewStarter(func(string, string) (net.Listener, error) {
+		return nil, nil
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("NewStarter: %v", err)
+	}
+	if err := starter(t.Context(), StartRequest{Handler: http.NotFoundHandler(), Port: 8123}); err == nil || err.Error() != "serve HTTP: listener is required" {
+		t.Fatalf("starter error = %v, want listener-required error", err)
+	}
+}
+
 func TestNewStarterAutoPortTriesThrough65535WithoutWrapping(t *testing.T) {
 	t.Parallel()
 

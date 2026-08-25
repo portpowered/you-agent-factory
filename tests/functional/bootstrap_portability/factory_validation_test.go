@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/root"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -27,7 +26,7 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 
 	// Act
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
 		Clock: clock.Ensure(nil),
 	})
 	if err != nil {

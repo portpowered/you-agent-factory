@@ -73,9 +73,21 @@ func checkCoverageDefaultFloor(
 	manifestPath string,
 	coverageBlocks map[string]coverageBlock,
 ) []string {
+	failures, _ := checkCoverageDefaultFloorWithHolds(manifest, totals, manifestPath, coverageBlocks, coverageManifestFloorHoldMap(manifest))
+	return failures
+}
+
+func checkCoverageDefaultFloorWithHolds(
+	manifest coverageManifest,
+	totals map[string]packageCoverageTotals,
+	manifestPath string,
+	coverageBlocks map[string]coverageBlock,
+	holds map[string]coverageManifestFloorHold,
+) ([]string, []string) {
 	listed := manifestPackageSet(manifest)
 	floor := manifest.defaultFloor()
 	failures := make([]string, 0)
+	warnings := make([]string, 0)
 	for _, importPath := range slices.Sorted(maps.Keys(totals)) {
 		if _, explicit := listed[importPath]; explicit {
 			continue
@@ -84,9 +96,45 @@ func checkCoverageDefaultFloor(
 		if coveragePassesFloor(floor, actual) {
 			continue
 		}
+		if hold, held := holds[importPath]; held {
+			warnings = append(warnings, formatHeldDefaultFloorRegression(manifest, importPath, floor, actual, coverageBlocks, hold))
+			continue
+		}
 		failures = append(failures, formatDefaultFloorRegression(manifest, importPath, floor, actual, manifestPath, coverageBlocks))
 	}
-	return failures
+	return failures, warnings
+}
+
+func formatHeldDefaultFloorRegression(
+	manifest coverageManifest,
+	importPath string,
+	floor coverageFloor,
+	actual packageCoverageTotals,
+	coverageBlocks map[string]coverageBlock,
+	hold coverageManifestFloorHold,
+) string {
+	actualPercent := float64(actual.coveredStatements) * 100 / float64(actual.totalStatements)
+	diagnostic := fmt.Sprintf(
+		"package coverage hold: package=%s lane=%s floor-source=lane-default expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points covered=%d/%d statements",
+		importPath,
+		manifest.Lane,
+		floor.String(),
+		actualPercent,
+		actualPercent-float64(floor)/100,
+		actual.coveredStatements,
+		actual.totalStatements,
+	)
+	if uncovered := formatUncoveredCoverageBlocks(coverageBlocks, importPath); uncovered != "" {
+		diagnostic += "; " + uncovered
+	}
+	return diagnostic + fmt.Sprintf(
+		"; staged blocking hold owner=%s deadline=%s; restore matching-%s-lane coverage to %s%% before removing this hold: %s",
+		hold.Owner,
+		hold.Deadline,
+		manifest.Lane,
+		floor.String(),
+		hold.RemovalGate,
+	)
 }
 
 // coveragePassesFloor reports whether actual satisfies floor. A package with no
@@ -133,6 +181,7 @@ func formatDefaultFloorRegression(
 // than an explicit entry.
 func coverageManifestGatedPackages(manifest coverageManifest, totals map[string]packageCoverageTotals) map[string]packageCoverageGate {
 	gates := packageGatesFromManifest(manifest)
+	holds := coverageManifestFloorHoldMap(manifest)
 	floor := manifest.defaultFloor()
 	for importPath, actual := range totals {
 		if _, explicit := gates[importPath]; explicit {
@@ -142,7 +191,11 @@ func coverageManifestGatedPackages(manifest coverageManifest, totals map[string]
 			continue
 		}
 		percent := float64(floor) / 100
-		gates[importPath] = packageCoverageGate{Floor: &percent}
+		gate := packageCoverageGate{Floor: &percent}
+		if hold, held := holds[importPath]; held {
+			gate.FloorHold = cloneCoverageManifestFloorHold(&hold)
+		}
+		gates[importPath] = gate
 	}
 	return gates
 }

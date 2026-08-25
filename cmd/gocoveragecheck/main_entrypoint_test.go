@@ -53,10 +53,10 @@ func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("main() stdout = %q, want total coverage line", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if got := stdout.String(); !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("main() stdout = %q, want package summary for pkg/config", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if got := stdout.String(); !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("main() stdout = %q, want package summary for pkg/service", got)
 	}
 	if got := stdout.String(); strings.Contains(got, "meets minimum") {
@@ -197,6 +197,7 @@ func TestMainPackageFloorPolicyAdvisoryReportsRegressionAndBlockingRestoresEnfor
 		wantExit       int
 		wantBanner     bool
 		wantSuccess    bool
+		wantStatus     string
 		wantDiagnostic string
 	}{
 		{
@@ -204,12 +205,14 @@ func TestMainPackageFloorPolicyAdvisoryReportsRegressionAndBlockingRestoresEnfor
 			policy:         coverageFloorPolicyAdvisory,
 			wantBanner:     true,
 			wantSuccess:    true,
+			wantStatus:     "WARN",
 			wantDiagnostic: "package coverage regression: package=" + configPackage + " lane=unit expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points covered=0/3 statements",
 		},
 		{
 			name:           "blocking",
 			policy:         coverageFloorPolicyBlocking,
 			wantExit:       1,
+			wantStatus:     "FAIL",
 			wantDiagnostic: "package coverage regression: package=" + configPackage + " lane=unit expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points covered=0/3 statements",
 		},
 	} {
@@ -244,6 +247,13 @@ func TestMainPackageFloorPolicyAdvisoryReportsRegressionAndBlockingRestoresEnfor
 			if !strings.Contains(stderr, tc.wantDiagnostic) {
 				t.Fatalf("main() stderr = %q, want regression diagnostic containing %q", stderr, tc.wantDiagnostic)
 			}
+			wantVerdict := "package=" + configPackage + " coverage=0.0% floor=80.0% delta=-80.0pp status=" + tc.wantStatus + " lane=unit"
+			if !strings.Contains(stdout, wantVerdict) {
+				t.Fatalf("main() stdout = %q, want compact package verdict %q", stdout, wantVerdict)
+			}
+			if strings.Contains(stdout, "uncovered blocks:") || strings.Contains(stderr, "uncovered blocks:") {
+				t.Fatalf("main() default diagnostics exposed uncovered source detail: stdout=%q stderr=%q", stdout, stderr)
+			}
 			if tc.wantSuccess {
 				if !strings.Contains(stdout, "Go coverage 0.0% meets minimum 0.0%.") {
 					t.Fatalf("main() stdout = %q, want successful aggregate message", stdout)
@@ -252,6 +262,47 @@ func TestMainPackageFloorPolicyAdvisoryReportsRegressionAndBlockingRestoresEnfor
 				t.Fatalf("main() stdout = %q, did not expect success message", stdout)
 			}
 		})
+	}
+
+	for _, policy := range []string{coverageFloorPolicyAdvisory, coverageFloorPolicyBlocking} {
+		t.Run(policy+" detailed diagnostics", func(t *testing.T) {
+			args := []string{
+				"-min=0",
+				"-suite=unit",
+				"-detailed-diagnostics",
+				"-package-floor-policy=" + policy,
+				"-package-manifest=" + manifestPath,
+				"-coverpkg=" + configPackage,
+				"-packages=./pkg/config",
+			}
+			_, stderr, _ := runMainForTest(t, args, fakeGoCoverageCommandWithMeasuredZeroConfig)
+			if !strings.Contains(stderr, "uncovered blocks: pkg/config/config.go:1 (3 statements)") {
+				t.Fatalf("main() detailed stderr = %q, want uncovered source detail", stderr)
+			}
+		})
+	}
+}
+
+func TestMainDefaultPackageFloorPolicyBlocksRegression(t *testing.T) {
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "80.00")
+	stdout, stderr, exitCode := runMainForTest(t, []string{
+		"-min=0",
+		"-suite=unit",
+		"-package-manifest=" + manifestPath,
+		"-coverpkg=" + configPackage,
+		"-packages=./pkg/config",
+	}, fakeGoCoverageCommandWithMeasuredZeroConfig)
+
+	if exitCode != 1 {
+		t.Fatalf("main() default policy exit code = %d, want 1; stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if strings.Contains(stderr, "COVERAGE FLOOR POLICY: advisory") || strings.Contains(stderr, "report-only") {
+		t.Fatalf("main() default policy emitted advisory guidance: %q", stderr)
+	}
+	want := "package coverage regression: package=" + configPackage + " lane=unit expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points"
+	if !strings.Contains(stderr, want) {
+		t.Fatalf("main() default policy stderr = %q, want %q", stderr, want)
 	}
 }
 
@@ -510,7 +561,7 @@ func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("main() stdout = %q, want total coverage line", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+	if got := stdout.String(); !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=0.0% floor=80.0% delta=-80.0pp status=FAIL lane=unit") {
 		t.Fatalf("main() stdout = %q, want package summary for pkg/config", got)
 	}
 	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)\n"
@@ -568,7 +619,7 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("main() stdout = %q, want total coverage line", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+	if got := stdout.String(); !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=0.0% floor=80.0% delta=-80.0pp status=FAIL lane=unit") {
 		t.Fatalf("main() stdout = %q, want package summary for pkg/config", got)
 	}
 	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)\n"
@@ -626,7 +677,7 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("main() stdout = %q, want total coverage line", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+	if got := stdout.String(); !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=0.0% floor=80.0% delta=-80.0pp status=FAIL lane=unit") {
 		t.Fatalf("main() stdout = %q, want package summary for pkg/config", got)
 	}
 	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)\n"
@@ -684,7 +735,7 @@ func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("main() stdout = %q, want total coverage line", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+	if got := stdout.String(); !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=0.0% floor=80.0% delta=-80.0pp status=FAIL lane=unit") {
 		t.Fatalf("main() stdout = %q, want package summary for pkg/config", got)
 	}
 	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)\n"

@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -132,7 +133,7 @@ type fixtureBackedMCPServer struct {
 func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
 	t.Helper()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
