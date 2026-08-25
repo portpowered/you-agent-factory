@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -442,15 +443,16 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 // contract for both collection and detail reads.
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
 	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := prepareModelsReadinessCache(t)
+	cache := prepareModelsReadinessCache(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		Env:                       environment,
+		Env:                       cache.Environment,
 		Edges: serviceedges.Edges{
 			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
 				return nil, errors.New("cache inspection failed")
 			},
+			ModelAssetResolveHomeDirectory: cache.resolveHome,
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
@@ -479,22 +481,20 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 // into a backend or filesystem diagnostic.
 func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := prepareModelsReadinessCache(t)
+	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-			if inspections.Add(1) <= 1 {
-				return nil, os.ErrNotExist
-			}
-			return nil, errors.New(`inspect C:\private\model-cache: access denied`)
-		},
-	})
+	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+		if inspections.Add(1) <= 1 {
+			return nil, os.ErrNotExist
+		}
+		return nil, errors.New(`inspect C:\private\model-cache: access denied`)
+	}))
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "readiness failure probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = environment
+	inputs.Input.Env = cache.Environment
 	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf("Process.Execute(models invoke) error = nil, want readiness failure; inspections=%d", inspections.Load())
@@ -513,18 +513,16 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 // provider or expose the dependency's error text through Process.Execute.
 func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := prepareModelsReadinessCache(t)
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-			return nil, context.Canceled
-		},
-	})
+	cache := prepareModelsReadinessCache(t)
+	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+		return nil, context.Canceled
+	}))
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "catalog cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = environment
+	inputs.Input.Env = cache.Environment
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want dependency cancellation")
 	}
@@ -539,24 +537,22 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 // can return a partial detail or invoke a provider.
 func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := prepareModelsReadinessCache(t)
+	cache := prepareModelsReadinessCache(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var startOnce sync.Once
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-			startOnce.Do(func() { close(started) })
-			<-release
-			return nil, context.Canceled
-		},
-	})
+	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+		startOnce.Do(func() { close(started) })
+		<-release
+		return nil, context.Canceled
+	}))
 	ctx, cancel := context.WithCancel(context.Background())
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "catalog request cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = environment
+	inputs.Input.Env = cache.Environment
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	select {
 	case <-started:
@@ -583,22 +579,20 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 // after catalog discovery has already succeeded.
 func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := prepareModelsReadinessCache(t)
+	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-			if inspections.Add(1) == 1 {
-				return nil, os.ErrNotExist
-			}
-			return nil, context.Canceled
-		},
-	})
+	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+		if inspections.Add(1) == 1 {
+			return nil, os.ErrNotExist
+		}
+		return nil, context.Canceled
+	}))
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "readiness cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = environment
+	inputs.Input.Env = cache.Environment
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want readiness cancellation")
 	}
@@ -613,24 +607,22 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 // observation.
 func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	environment := prepareModelsReadinessCache(t)
+	cache := prepareModelsReadinessCache(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	var inspections atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-			if inspections.Add(1) >= 2 {
-				cancel()
-			}
-			return nil, os.ErrNotExist
-		},
-	})
+	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+		if inspections.Add(1) >= 2 {
+			cancel()
+		}
+		return nil, os.ErrNotExist
+	}))
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "post-readiness cancellation probe",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	inputs.Input.Env = environment
+	inputs.Input.Env = cache.Environment
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want post-readiness cancellation")
 	}
@@ -639,17 +631,35 @@ func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *te
 	}
 }
 
-func prepareModelsReadinessCache(t *testing.T) []string {
+type modelsReadinessCache struct {
+	Environment   []string
+	HomeDirectory string
+}
+
+func (cache modelsReadinessCache) resolveHome() (string, error) {
+	return cache.HomeDirectory, nil
+}
+
+func (cache modelsReadinessCache) edges(
+	inspect func(string) (os.FileInfo, error),
+) serviceedges.Edges {
+	return serviceedges.Edges{
+		ModelAssetInspectPath:          inspect,
+		ModelAssetResolveHomeDirectory: cache.resolveHome,
+	}
+}
+
+func prepareModelsReadinessCache(t *testing.T) modelsReadinessCache {
 	t.Helper()
-	cacheDirectory := t.TempDir()
-	writeCachedOmniVoiceAssets(t, cacheDirectory)
 	homeDirectory := t.TempDir()
+	cacheDirectory := filepath.Join(homeDirectory, ".agent-factory", "models")
+	writeCachedOmniVoiceAssets(t, cacheDirectory)
 	environment := functionalHomeEnvironment(homeDirectory)
 	environment = replaceEnvironmentValue(environment, "HOME", homeDirectory)
 	environment = replaceEnvironmentValue(environment, "USERPROFILE", homeDirectory)
 	environment = replaceEnvironmentValue(environment, "XDG_CACHE_HOME", homeDirectory)
 	environment = replaceEnvironmentValue(environment, runcli.ModelCacheDirEnvironment, cacheDirectory)
-	return environment
+	return modelsReadinessCache{Environment: environment, HomeDirectory: homeDirectory}
 }
 
 func replaceEnvironmentValue(environment []string, name, value string) []string {
