@@ -63,7 +63,7 @@ func TestRecordingScopeQueryAndReplayFailuresRemainTyped(t *testing.T) {
 	fixture := newFinalizedQueryFixture(t)
 	assertProjectionCursorErrors(t, fixture)
 	assertReplayPlanErrors(t, fixture)
-	assertHistoricalSubscriptionHelperErrors(t, fixture)
+	assertHistoricalSubscriptionBoundaryErrors(t, fixture)
 }
 
 func assertProjectionCursorErrors(t *testing.T, fixture *scopedQueryFixture) {
@@ -102,21 +102,25 @@ func assertReplayPlanErrors(t *testing.T, fixture *scopedQueryFixture) {
 	}
 }
 
-func assertHistoricalSubscriptionHelperErrors(t *testing.T, fixture *scopedQueryFixture) {
+func assertHistoricalSubscriptionBoundaryErrors(t *testing.T, fixture *scopedQueryFixture) {
 	t.Helper()
 	expired := fixture.events[0].Cursor
 	expired.Sequence = 99
-	if _, err := newHistoricalScopeSubscription(context.Background(), fixture.events, &expired); !errors.Is(err, recordings.ErrReconnectCursorExpired) {
-		t.Fatalf("historical helper expired cursor error = %v, want ErrReconnectCursorExpired", err)
+	if _, err := fixture.root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{
+		Scope: fixture.ref, Cursor: &expired,
+	}); !errors.Is(err, recordings.ErrReconnectCursorExpired) {
+		t.Fatalf("historical subscription expired cursor error = %v, want ErrReconnectCursorExpired", err)
+	}
+	subscription, err := fixture.root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{
+		Scope: fixture.ref,
+	})
+	if err != nil {
+		t.Fatalf("SubscribeRecordingScope canceled delivery setup: %v", err)
 	}
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	subscription, err := newHistoricalScopeSubscription(canceled, fixture.events, nil)
-	if err != nil {
-		t.Fatalf("newHistoricalScopeSubscription canceled setup: %v", err)
-	}
-	if outcome := subscription(nil); outcome.Kind != recordings.SubscriptionClosed {
-		t.Fatalf("historical helper canceled outcome = %#v, want closed", outcome)
+	if outcome := subscription.Subscription(canceled); outcome.Kind != recordings.SubscriptionClosed {
+		t.Fatalf("historical subscription canceled outcome = %#v, want closed", outcome)
 	}
 }
 
@@ -546,4 +550,29 @@ func TestReplayInputLoaderReportsIgnoredFutureFields(t *testing.T) {
 	if result.Diagnostics == nil || !reflect.DeepEqual(result.Diagnostics.IgnoredJSONPaths, []string{"$.futureReplayField"}) {
 		t.Fatalf("diagnostics = %#v, want ignored future field", result.Diagnostics)
 	}
+}
+
+type recordingOperationLogEntry struct {
+	message string
+	fields  map[string]any
+}
+
+type recordingOperationLogger struct {
+	infos []recordingOperationLogEntry
+}
+
+func (logger *recordingOperationLogger) Debug(string, ...any)   {}
+func (logger *recordingOperationLogger) Warn(string, ...any)    {}
+func (logger *recordingOperationLogger) Error(string, ...any)   {}
+func (logger *recordingOperationLogger) Verbose(string, ...any) {}
+
+func (logger *recordingOperationLogger) Info(message string, fields ...any) {
+	values := make(map[string]any, len(fields)/2)
+	for index := 0; index+1 < len(fields); index += 2 {
+		key, ok := fields[index].(string)
+		if ok {
+			values[key] = fields[index+1]
+		}
+	}
+	logger.infos = append(logger.infos, recordingOperationLogEntry{message: message, fields: values})
 }

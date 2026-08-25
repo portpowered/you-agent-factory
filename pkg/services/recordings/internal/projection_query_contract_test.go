@@ -809,8 +809,25 @@ func TestBeginRecordingScopeCancellationWithoutClockCleansUp(t *testing.T) {
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		staticRecordingClock{at: time.Unix(1_700_000_500, 0).UTC()},
 	)
-	if runtimeRoot == nil {
-		t.Fatal("NewRuntimeRootWithHistoricalQueryAndAppender returned nil")
+	opening, ok := runtimeRoot.(recordings.RuntimeOpening)
+	if !ok || opening == nil {
+		t.Fatal("NewRuntimeRootWithHistoricalQueryAndAppender did not expose RuntimeOpening")
+	}
+	now := func() time.Time { return time.Unix(1_700_000_500, 0).UTC() }
+	opened, err := opening.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
+		Topology:         runtimeOpeningTopology{},
+		Now:              now,
+		FactorySessionID: "constructor-behavior",
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntime from composed constructor: %v", err)
+	}
+	opened.Ledger.RecordRunRequest()
+	if events := opened.Ledger.CanonicalEvents(); len(events) != 1 || events[0].Type != recordings.FactoryEventTypeRunRequest {
+		t.Fatalf("OpenRuntime ledger events = %#v, want one run request", events)
+	}
+	if err := opened.Recorder.Finalize(now().Add(time.Second)); err != nil {
+		t.Fatalf("Finalize composed runtime: %v", err)
 	}
 }
 
@@ -961,29 +978,4 @@ func newScopedQueryRootWithLogger(t *testing.T, logger logging.Logger) recording
 		t.Fatal("NewServiceWithLifecycleEffects returned nil")
 	}
 	return root
-}
-
-type recordingOperationLogEntry struct {
-	message string
-	fields  map[string]any
-}
-
-type recordingOperationLogger struct {
-	infos []recordingOperationLogEntry
-}
-
-func (logger *recordingOperationLogger) Debug(string, ...any)   {}
-func (logger *recordingOperationLogger) Warn(string, ...any)    {}
-func (logger *recordingOperationLogger) Error(string, ...any)   {}
-func (logger *recordingOperationLogger) Verbose(string, ...any) {}
-
-func (logger *recordingOperationLogger) Info(message string, fields ...any) {
-	values := make(map[string]any, len(fields)/2)
-	for index := 0; index+1 < len(fields); index += 2 {
-		key, ok := fields[index].(string)
-		if ok {
-			values[key] = fields[index+1]
-		}
-	}
-	logger.infos = append(logger.infos, recordingOperationLogEntry{message: message, fields: values})
 }
