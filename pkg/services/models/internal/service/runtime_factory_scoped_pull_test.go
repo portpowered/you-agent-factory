@@ -28,6 +28,25 @@ func TestRootPullModelForScopeValidatesBeforeRuntimeResolution(t *testing.T) {
 	}
 }
 
+func TestIsRemovableCacheAbsenceClassifiesAssetAbsenceErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, err := range []error{
+		models.ErrModelCacheNotFound,
+		models.ErrAssetSourceMissing,
+		models.ErrAssetSourceUnsupported,
+		models.ErrAssetUnavailable,
+		models.ErrNotAvailable,
+	} {
+		if !isRemovableCacheAbsence(err) {
+			t.Fatalf("isRemovableCacheAbsence(%v) = false, want true", err)
+		}
+	}
+	if isRemovableCacheAbsence(errors.New("cache is busy")) {
+		t.Fatal("isRemovableCacheAbsence(non-absence) = true, want false")
+	}
+}
+
 func TestRuntimeServicePullModelForScopeValidatesAndDelegates(t *testing.T) {
 	t.Parallel()
 

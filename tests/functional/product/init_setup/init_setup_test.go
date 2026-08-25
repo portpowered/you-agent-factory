@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const existingOperatorConfig = `{
@@ -440,7 +441,7 @@ func (fixture initFixture) execute(
 	args ...string,
 ) error {
 	fixture.t.Helper()
-	process, err := root.BuildProcess(fixture.t.Context(), edges)
+	process, err := support.BuildProcessWithContext(fixture.t.Context(), edges)
 	if err != nil {
 		return err
 	}
@@ -482,7 +483,7 @@ func (fixture initFixture) executeInteractive(
 	stdout io.Writer,
 ) error {
 	fixture.t.Helper()
-	process, err := root.BuildProcess(fixture.t.Context(), edges)
+	process, err := support.BuildProcessWithContext(fixture.t.Context(), edges)
 	if err != nil {
 		return err
 	}

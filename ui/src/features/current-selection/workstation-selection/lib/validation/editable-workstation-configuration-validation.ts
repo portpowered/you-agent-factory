@@ -3,6 +3,7 @@ import {
   isModelInvokeWorkstationType,
   resolveModelOperationByName,
   validateEditableModelInvokeBindings,
+  workstationUsesPromptOrientedEditing,
 } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import {
   workerSupportsPollerBehavior,
@@ -86,7 +87,7 @@ export function validateEditableWorkstationDraft(
   const isModelInvoke = isModelInvokeWorkstationType(draft.workstationType);
   const promptIsRequired =
     requiresWorkerAssignment &&
-    !isModelInvoke &&
+    workstationUsesPromptOrientedEditing(draft.workstationType) &&
     workstationBehaviorRequiresPrompt(draft.behavior);
 
   if (isModelInvoke && selectedEditableValues != null) {

@@ -26,6 +26,7 @@ const BUN_INCOMPATIBLE_WORKSPACE_GRAPH_FILES = new Set([
   "src/features/current-selection/workstation-selection/components/detail-card/workstation-detail-card.localization.test.tsx",
   "src/features/current-selection/workstation-selection/components/detail-card/workstation-detail-card.test.tsx",
   "src/features/current-selection/workstation-selection/components/editable/workstation-editable-configuration-section.bun.component.test.tsx",
+  "src/features/current-selection/workstation-selection/components/editable/poller/workstation-editable-configuration-section.poller.bun.component.test.tsx",
   "src/features/current-selection/workstation-selection/components/editable/workstation-editable-configuration-section.cron.test.tsx",
   "src/features/current-selection/workstation-selection/components/editable/workstation-editable-configuration-section.overwrite.test.tsx",
   "src/features/current-selection/workstation-selection/components/workstation-model-invoke-fields.test.tsx",

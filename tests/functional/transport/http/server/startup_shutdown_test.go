@@ -76,6 +76,8 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 		runtimeSnapshot.SysBytes < runtimeSnapshot.HeapInuseBytes || runtimeSnapshot.Goroutines <= 0 {
 		t.Fatalf("default runtime snapshot = %+v, want plausible live runtime values", runtimeSnapshot)
 	}
+	assertRuntimeDiagnosticsRejectsInvalidMethod(t, defaultServer.URL())
+	assertApplicationStatusRemainsAvailable(t, defaultServer.URL())
 	defaultServer.Stop(t)
 	assertRuntimeMemoryMetrics(t, metricsDir)
 
@@ -91,71 +93,182 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 
 func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPIServer) {
 	t.Helper()
-	index, err := http.Get(enabledServer.URL() + "/debug/pprof/")
-	if err != nil {
-		t.Fatalf("enabled GET pprof index: %v", err)
-	}
-	indexBody, err := io.ReadAll(index.Body)
-	_ = index.Body.Close()
-	if err != nil {
-		t.Fatalf("read enabled pprof index: %v", err)
-	}
-	if index.StatusCode != http.StatusOK || !strings.Contains(string(indexBody), "heap") {
-		t.Fatalf("enabled pprof index = (%d, %q), want HTTP 200 with heap profile", index.StatusCode, indexBody)
-	}
+	baseURL := enabledServer.URL()
+	assertPprofIndex(t, baseURL)
+	assertPprofHeap(t, baseURL)
+	assertPprofNamedProfiles(t, baseURL)
+	assertPprofCPU(t, baseURL)
+	assertPprofHeapDelta(t, baseURL)
+	assertPprofTrace(t, baseURL)
+	assertPprofTextEndpoints(t, baseURL)
+	assertPprofUnknownProfile(t, baseURL)
+	assertPprofInvalidQuery(t, baseURL)
+}
 
-	heap, err := http.Get(enabledServer.URL() + "/debug/pprof/heap")
+func getPprofResponse(t *testing.T, baseURL, path string) (*http.Response, []byte) {
+	t.Helper()
+	response, err := http.Get(baseURL + path)
 	if err != nil {
-		t.Fatalf("enabled GET pprof heap: %v", err)
+		t.Fatalf("GET %s: %v", path, err)
 	}
-	heapBody, err := io.ReadAll(heap.Body)
-	_ = heap.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
 	if err != nil {
-		t.Fatalf("read enabled pprof heap: %v", err)
+		t.Fatalf("read GET %s: %v", path, err)
 	}
-	if heap.StatusCode != http.StatusOK || len(heapBody) == 0 {
-		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heapBody))
+	return response, body
+}
+
+func assertPprofIndex(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "text/html; charset=utf-8" ||
+		response.Header.Get("X-Content-Type-Options") != "nosniff" ||
+		!strings.Contains(string(body), "heap") {
+		t.Fatalf("pprof index = (%d, %q), want HTTP 200 with heap profile", response.StatusCode, body)
 	}
-	heapProfile, err := profile.Parse(bytes.NewReader(heapBody))
+}
+
+func assertPprofHeap(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/heap")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "application/octet-stream" ||
+		response.Header.Get("Content-Disposition") != `attachment; filename="heap"` ||
+		response.Header.Get("X-Content-Type-Options") != "nosniff" || len(body) == 0 {
+		t.Fatalf("pprof heap = (%d, body length %d), want non-empty HTTP 200 response", response.StatusCode, len(body))
+	}
+	heapProfile, err := profile.Parse(bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("parse enabled live heap profile: %v", err)
 	}
 	if len(heapProfile.SampleType) == 0 || len(heapProfile.Sample) == 0 {
 		t.Fatalf("enabled live heap profile = %+v, want sample types and samples", heapProfile)
 	}
+}
 
+func assertPprofNamedProfiles(t *testing.T, baseURL string) {
+	t.Helper()
 	for _, path := range []string{"/debug/pprof/allocs", "/debug/pprof/goroutine"} {
-		response, err := http.Get(enabledServer.URL() + path)
-		if err != nil {
-			t.Fatalf("enabled GET %s: %v", path, err)
-		}
-		body, err := io.ReadAll(response.Body)
-		_ = response.Body.Close()
-		if err != nil {
-			t.Fatalf("read enabled GET %s: %v", path, err)
-		}
+		response, body := getPprofResponse(t, baseURL, path)
 		if response.StatusCode != http.StatusOK || len(body) == 0 {
-			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
+			t.Fatalf("GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
 		}
 	}
-	cpu, err := http.Get(enabledServer.URL() + "/debug/pprof/profile?seconds=1")
-	if err != nil {
-		t.Fatalf("enabled GET CPU profile: %v", err)
+}
+
+func assertPprofCPU(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/profile?seconds=1")
+	if response.StatusCode != http.StatusOK || len(body) == 0 {
+		t.Fatalf("CPU profile = (%d, body length %d), want non-empty HTTP 200 response", response.StatusCode, len(body))
 	}
-	cpuBody, err := io.ReadAll(cpu.Body)
-	_ = cpu.Body.Close()
-	if err != nil {
-		t.Fatalf("read enabled CPU profile: %v", err)
-	}
-	if cpu.StatusCode != http.StatusOK || len(cpuBody) == 0 {
-		t.Fatalf("enabled CPU profile = (%d, body length %d), want non-empty HTTP 200 response", cpu.StatusCode, len(cpuBody))
-	}
-	cpuProfile, err := profile.Parse(bytes.NewReader(cpuBody))
+	cpuProfile, err := profile.Parse(bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("parse enabled live CPU profile: %v", err)
 	}
 	if len(cpuProfile.SampleType) == 0 {
 		t.Fatalf("enabled live CPU profile = %+v, want sample types", cpuProfile)
+	}
+}
+
+func assertPprofHeapDelta(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/heap?seconds=1")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "application/octet-stream" ||
+		!strings.Contains(response.Header.Get("Content-Disposition"), `heap-delta`) || len(body) == 0 {
+		t.Fatalf("heap delta profile = (%d, headers=%v, body length=%d), want non-empty HTTP 200 profile", response.StatusCode, response.Header, len(body))
+	}
+	if parsed, err := profile.Parse(bytes.NewReader(body)); err != nil || parsed == nil || len(parsed.SampleType) == 0 {
+		t.Fatalf("parse heap delta profile = (%v, %+v), want a valid profile with sample types", err, parsed)
+	}
+}
+
+func assertPprofTrace(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/trace?seconds=0.01")
+	if response.StatusCode != http.StatusOK ||
+		response.Header.Get("Content-Type") != "application/octet-stream" ||
+		response.Header.Get("Content-Disposition") != `attachment; filename="trace"` || len(body) == 0 {
+		t.Fatalf("trace profile = (%d, headers=%v, body length=%d), want non-empty HTTP 200 profile", response.StatusCode, response.Header, len(body))
+	}
+}
+
+func assertPprofTextEndpoints(t *testing.T, baseURL string) {
+	t.Helper()
+	for _, path := range []string{"/debug/pprof/cmdline", "/debug/pprof/symbol"} {
+		response, body := getPprofResponse(t, baseURL, path)
+		if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			t.Fatalf("GET %s = (%d, headers=%v, body=%q), want text HTTP 200 response", path, response.StatusCode, response.Header, body)
+		}
+		if path == "/debug/pprof/symbol" && !strings.Contains(string(body), "num_symbols: 1") {
+			t.Fatalf("GET %s body = %q, want symbol count", path, body)
+		}
+	}
+}
+
+func assertPprofUnknownProfile(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/not-a-profile")
+	if response.StatusCode != http.StatusNotFound || response.Header.Get("X-Go-Pprof") != "1" ||
+		!strings.Contains(string(body), "Unknown profile") {
+		t.Fatalf("unknown pprof profile = (%d, headers=%v, body=%q), want HTTP 404 diagnostic", response.StatusCode, response.Header, body)
+	}
+}
+
+func assertPprofInvalidQuery(t *testing.T, baseURL string) {
+	t.Helper()
+	response, body := getPprofResponse(t, baseURL, "/debug/pprof/heap?seconds=not-a-duration")
+	if response.StatusCode != http.StatusBadRequest ||
+		response.Header.Get("Content-Type") != "text/plain; charset=utf-8" ||
+		response.Header.Get("X-Go-Pprof") != "1" ||
+		!strings.Contains(string(body), `invalid value for "seconds"`) {
+		t.Fatalf(
+			"invalid heap profile query = (%d, headers=%v, body=%q), want actionable HTTP 400 pprof error",
+			response.StatusCode,
+			response.Header,
+			body,
+		)
+	}
+}
+
+func assertRuntimeDiagnosticsRejectsInvalidMethod(t *testing.T, baseURL string) {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/debug/runtime", nil)
+	if err != nil {
+		t.Fatalf("construct invalid runtime diagnostics request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST /debug/runtime: %v", err)
+	}
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if err != nil {
+		t.Fatalf("read POST /debug/runtime response: %v", err)
+	}
+	if response.StatusCode != http.StatusMethodNotAllowed ||
+		response.Header.Get("Allow") != http.MethodGet || len(body) != 0 {
+		t.Fatalf(
+			"POST /debug/runtime = (%d, headers=%v, body=%q), want empty HTTP 405 with Allow: GET",
+			response.StatusCode,
+			response.Header,
+			body,
+		)
+	}
+}
+
+func assertApplicationStatusRemainsAvailable(t *testing.T, baseURL string) {
+	t.Helper()
+	response, err := http.Get(baseURL + "/status")
+	if err != nil {
+		t.Fatalf("GET /status after invalid diagnostics: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /status after invalid diagnostics status = %d, want %d", response.StatusCode, http.StatusOK)
 	}
 }
 
@@ -310,6 +423,95 @@ func TestAPIServerStartsOnConfiguredListenerAndServesStatus(t *testing.T) {
 	}
 }
 
+// TestAPIServerUsesPlatformStarterThroughRootProcess proves the customer run
+// path can use the real loopback listener and Serve lifecycle through the
+// replaceable API-server edge, rather than only an httptest transport.
+func TestAPIServerUsesPlatformStarterThroughRootProcess(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	configuredURL := reserveConfiguredLoopbackURL(t)
+	parsed, err := url.Parse(configuredURL)
+	if err != nil {
+		t.Fatalf("parse configured listener URL %q: %v", configuredURL, err)
+	}
+
+	platformStarter, err := platformhttpserver.NewStarter(net.Listen, nil, nil)
+	if err != nil {
+		t.Fatalf("NewStarter() error = %v", err)
+	}
+	bound := make(chan platformhttpserver.Binding, 1)
+	edges := serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			originalOnBound := request.OnBound
+			request.OnBound = func(binding platformhttpserver.Binding) {
+				bound <- binding
+				if originalOnBound != nil {
+					originalOnBound(binding)
+				}
+			}
+			return platformStarter(ctx, request)
+		},
+		BrowserOpener: func(context.Context, string) error { return nil },
+	}
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	home := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir,
+		"--continuously", "--with-server", "--quiet", "--no-record",
+		"--listen", parsed.Host, "--pprof",
+	})
+	inputs.Input.WorkingDirectory = dir
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	command := support.StartProcessCommand(t, process, inputs.Input)
+
+	var binding platformhttpserver.Binding
+	select {
+	case binding = <-bound:
+	case <-command.Done():
+		t.Fatalf("Process.Execute ended before listener binding: %v\nstdout=%s\nstderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
+	case <-time.After(15 * time.Second):
+		t.Fatal("timed out waiting for the root-built platform listener binding")
+	}
+	if binding.Host != parsed.Hostname() || binding.Port <= 0 {
+		t.Fatalf("platform listener binding = %+v, want %s and a positive port", binding, parsed.Hostname())
+	}
+	listenerURL := "http://" + net.JoinHostPort(binding.Host, strconv.Itoa(binding.Port))
+
+	statusResponse, err := (&http.Client{Timeout: 5 * time.Second}).Get(listenerURL + "/status")
+	if err != nil {
+		t.Fatalf("GET real platform listener status: %v", err)
+	}
+	statusBody, err := io.ReadAll(statusResponse.Body)
+	_ = statusResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("read real platform listener status: %v", err)
+	}
+	if statusResponse.StatusCode != http.StatusOK || len(statusBody) == 0 {
+		t.Fatalf("real platform listener status = (%d, body=%q), want non-empty HTTP 200 response", statusResponse.StatusCode, statusBody)
+	}
+
+	pprofResponse, err := (&http.Client{Timeout: 5 * time.Second}).Get(listenerURL + "/debug/pprof/")
+	if err != nil {
+		t.Fatalf("GET real platform listener pprof index: %v", err)
+	}
+	pprofBody, err := io.ReadAll(pprofResponse.Body)
+	_ = pprofResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("read real platform listener pprof index: %v", err)
+	}
+	if pprofResponse.StatusCode != http.StatusOK || len(pprofBody) == 0 {
+		t.Fatalf("real platform listener pprof index = (%d, body length=%d), want non-empty HTTP 200 response", pprofResponse.StatusCode, len(pprofBody))
+	}
+
+	command.Stop(t)
+	select {
+	case <-command.Done():
+	default:
+		t.Fatal("root-built Process.Execute did not join after cancellation")
+	}
+	assertListenerRefused(t, parsed.Host, listenerURL)
+}
+
 // TestAPIServerShutdownClosesListenerAndActiveStreams proves shutdown through the
 // public API server lifecycle closes the listener and terminates active public streams.
 func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
@@ -346,16 +548,14 @@ func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
 		)
 	}
 
-	stopDone := stopFunctionalAPIServerAsync(t, server)
-	waitForListenerClosed(t, parsed.Host, listenerURL, 10*time.Second)
-	assertActiveRequestTerminatedAfterShutdown(t, activeRequest)
-
+	server.Stop(t)
 	select {
-	case <-stopDone:
-	case <-time.After(10 * time.Second):
-		activeRequest.cancel()
-		t.Fatal("timed out waiting for API server shutdown to complete")
+	case <-server.Done():
+	default:
+		t.Fatal("Process.Execute remained active after API server Stop returned")
 	}
+	assertActiveRequestTerminatedAfterShutdown(t, activeRequest)
+	assertListenerRefused(t, parsed.Host, listenerURL)
 }
 
 // TestAPIServerBindFailureUnwindsStartedLifecycleRoles proves bind failure through
@@ -451,17 +651,6 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	}
 }
 
-func stopFunctionalAPIServerAsync(t *testing.T, server *support.FunctionalAPIServer) <-chan struct{} {
-	t.Helper()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		server.Stop(t)
-	}()
-	return done
-}
-
 type activeBlockingInvocation struct {
 	cancel context.CancelFunc
 	done   chan error
@@ -511,25 +700,20 @@ func assertActiveRequestTerminatedAfterShutdown(t *testing.T, request *activeBlo
 	}
 }
 
-func waitForListenerClosed(t *testing.T, listenerHost, listenerURL string, timeout time.Duration) {
+func assertListenerRefused(t *testing.T, listenerHost, listenerURL string) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		client := &http.Client{Timeout: 500 * time.Millisecond}
-		response, err := client.Get(listenerURL + "/status")
-		if err == nil {
-			_ = response.Body.Close()
-		} else {
-			rebound, listenErr := net.Listen("tcp4", listenerHost)
-			if listenErr == nil {
-				_ = rebound.Close()
-				return
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	response, err := client.Get(listenerURL + "/status")
+	if err == nil {
+		_ = response.Body.Close()
+		t.Fatalf("GET %s/status succeeded after Process.Execute joined", listenerURL)
 	}
-	t.Fatalf("listener %s remained reachable after %s", listenerHost, timeout)
+	rebound, listenErr := net.Listen("tcp4", listenerHost)
+	if listenErr != nil {
+		t.Fatalf("listener %s could not be rebound after Process.Execute joined: %v", listenerHost, listenErr)
+	}
+	_ = rebound.Close()
 }
 
 func isClosedConnectionError(err error) bool {

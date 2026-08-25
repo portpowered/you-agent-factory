@@ -47,6 +47,10 @@ type InvocationOperation interface {
 	ExportModelInvocationArtifact(string, string) error
 }
 
+type workingDirectoryFactoryResolver interface {
+	ResolveModelInvocationFactoryDirForWorkingDirectory(string, string) (string, error)
+}
+
 func invokeModelThroughBootstrap(
 	cfg invokeOptions,
 	responseMode *factoryapi.ModelInvocationResponseMode,
@@ -83,7 +87,7 @@ func resolveBootstrapInvokeConfig(cfg invokeOptions) (InvocationRequest, error) 
 	if cfg.Invocation == nil {
 		return InvocationRequest{}, fmt.Errorf("models invoke operation is required")
 	}
-	factoryDir, err := cfg.Invocation.ResolveModelInvocationFactoryDir(cfg.FactoryDir)
+	factoryDir, err := resolveBootstrapFactoryDir(cfg)
 	if err != nil {
 		return InvocationRequest{}, err
 	}
@@ -98,6 +102,15 @@ func resolveBootstrapInvokeConfig(cfg invokeOptions) (InvocationRequest, error) 
 		Logger:           logger,
 		Verbose:          cfg.Verbose,
 	}, nil
+}
+
+func resolveBootstrapFactoryDir(cfg invokeOptions) (string, error) {
+	if resolver, ok := cfg.Invocation.(workingDirectoryFactoryResolver); ok {
+		return resolver.ResolveModelInvocationFactoryDirForWorkingDirectory(
+			cfg.FactoryDir, cfg.WorkingDirectory,
+		)
+	}
+	return cfg.Invocation.ResolveModelInvocationFactoryDir(cfg.FactoryDir)
 }
 
 func runBootstrapModelInvocation(
@@ -128,17 +141,6 @@ func runBootstrapModelInvocation(
 		return modelinference.Result{}, err
 	}
 	return result, nil
-}
-
-func modelInvocationResponseFromResult(result modelinference.Result) factoryapi.ModelInvocationResponse {
-	return factoryapi.ModelInvocationResponse{
-		ModelName:        result.ModelName,
-		Worker:           result.Worker,
-		Operation:        result.Operation,
-		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Content:          derefGeneratedWorkContent(contentcontract.GeneratedPtrFromParts(result.Content)),
-		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
-	}
 }
 
 func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkContent {

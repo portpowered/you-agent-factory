@@ -3,6 +3,7 @@ import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import {
   type EditableModelInvokeBindingDraft,
   isModelInvokeWorkstationType,
+  workstationUsesPromptOrientedEditing,
 } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
@@ -206,7 +207,7 @@ export function buildReadyEditableWorkstationConfigurationState({
     resolvedValidationErrors,
   );
   const promptValidationBlocksPendingFactory =
-    !isModelInvokeWorkstationType(sessionState.draft.workstationType) &&
+    workstationUsesPromptOrientedEditing(sessionState.draft.workstationType) &&
     workstationRequiresWorkerAssignment({
       type: sessionState.draft.workstationType,
     }) &&

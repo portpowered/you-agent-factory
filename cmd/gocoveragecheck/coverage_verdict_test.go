@@ -98,25 +98,60 @@ func TestFunctionalCoverageVerdictOrdersViolationsBeforeNearFloorAndTally(t *tes
 		t.Fatalf("execute() error = %v, want the pkg/config floor regression", err)
 	}
 
-	violation := strings.Index(stdout, "  floor violation: package="+modulePath+"/pkg/config ")
-	configLine := strings.Index(stdout, "  package="+modulePath+"/pkg/config coverage=25.0% floor=80.0% delta=-55.0pp gate=fail lane=functional\n")
-	serviceLine := strings.Index(stdout, "  package="+modulePath+"/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp gate=pass lane=functional\n")
-	wireLine := strings.Index(stdout, "  package="+modulePath+"/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp gate=pass lane=functional\n")
+	configLine := strings.Index(stdout, "  package="+modulePath+"/pkg/config coverage=25.0% floor=80.0% delta=-55.0pp status=FAIL lane=functional\n")
+	serviceLine := strings.Index(stdout, "  package="+modulePath+"/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp status=PASS lane=functional\n")
+	wireLine := strings.Index(stdout, "  package="+modulePath+"/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp status=PASS lane=functional\n")
 	tally := strings.Index(stdout, "  tally: ")
-	if violation < 0 || configLine < 0 || serviceLine < 0 || wireLine < 0 || tally < 0 {
-		t.Fatalf("verdict block missing sections (violation=%d config=%d service=%d wire=%d tally=%d):\n%s", violation, configLine, serviceLine, wireLine, tally, stdout)
+	if configLine < 0 || serviceLine < 0 || wireLine < 0 || tally < 0 {
+		t.Fatalf("verdict block missing sections (config=%d service=%d wire=%d tally=%d):\n%s", configLine, serviceLine, wireLine, tally, stdout)
 	}
-	if !(violation < configLine && configLine < serviceLine && serviceLine < wireLine && wireLine < tally) {
-		t.Fatalf("verdict block order = violation@%d config@%d service@%d wire@%d tally@%d, want headroom order and tally last:\n%s", violation, configLine, serviceLine, wireLine, tally, stdout)
+	if !(configLine < serviceLine && serviceLine < wireLine && wireLine < tally) {
+		t.Fatalf("verdict block order = config@%d service@%d wire@%d tally@%d, want headroom order and tally last:\n%s", configLine, serviceLine, wireLine, tally, stdout)
 	}
-	if !strings.Contains(stdout, "delta=-55.0000 percentage-points covered=1/4 statements uncovered-blocks=2") {
-		t.Fatalf("floor violation line missing floor/actual/delta/blocks detail:\n%s", stdout)
+	if strings.Contains(stdout, "uncovered blocks:") || strings.Contains(stdout, "file.go:") {
+		t.Fatalf("default verdict exposed uncovered source detail:\n%s", stdout)
 	}
 	if !strings.Contains(stdout, "  tally: measured-packages=3 gated-packages=3 below-floor=1 near-floor=1 gate-failures=1\n") {
 		t.Fatalf("verdict tally line missing or wrong:\n%s", stdout)
 	}
 	if strings.Contains(stdout, "  near floor: package=") || strings.Contains(stdout, "not shown") {
 		t.Fatalf("verdict block retained the elided near-floor format:\n%s", stdout)
+	}
+}
+
+func TestFunctionalCoverageVerdictNamesHeldFloorWithoutCallingItAnActiveViolation(t *testing.T) {
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "functional", []manifestPackageSpec{
+		{
+			importPath: configPackage,
+			minimum:    "80.00",
+			floorHold: &coverageManifestFloorHold{
+				Justification: "current-main baseline is being restored",
+				Owner:         "coverage-remediation",
+				Deadline:      "2027-07-15",
+				RemovalGate:   "matching functional tests restore the existing floor",
+			},
+		},
+		{importPath: modulePath + "/pkg/service", minimum: "89.00"},
+		{importPath: modulePath + "/pkg/wire", minimum: "50.00"},
+	})
+
+	stdout, stderr, err := captureFunctionalVerdictRun(t, functionalVerdictConfig(manifestPath, jsonPath))
+	if err != nil {
+		t.Fatalf("execute() error = %v, want the staged hold to keep the blocking lane green; stdout=%s stderr=%s", err, stdout, stderr)
+	}
+	if strings.Contains(stderr, "advisory") || strings.Contains(stderr, "report-only") {
+		t.Fatalf("blocking staged run emitted advisory guidance: %s", stderr)
+	}
+	if !strings.Contains(stdout, "  package="+configPackage+" coverage=25.0% floor=80.0% delta=-55.0pp status=HOLD lane=functional\n") {
+		t.Fatalf("verdict did not distinguish the held package from active violations:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "floor hold:") || strings.Contains(stdout, "uncovered-blocks=") {
+		t.Fatalf("held verdict exposed verbose floor diagnostics:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "below-floor=0 near-floor=1 gate-failures=0") {
+		t.Fatalf("verdict tally treated the held package as an active failure:\n%s", stdout)
 	}
 }
 
@@ -128,9 +163,16 @@ func TestFunctionalCoverageRunSuppressesPerPackageCoverageLines(t *testing.T) {
 	if err == nil {
 		t.Fatalf("execute() error = nil, want a non-zero floor-violation outcome")
 	}
+	if !strings.Contains(stdout, "pkg/ functional coverage:\n") {
+		t.Fatalf("functional coverage report missing its explicit pkg/ section:\n%s", stdout)
+	}
 	for _, coverPackage := range functionalVerdictCoverPackages {
 		if raw := coverPackage + "\tcoverage: "; strings.Contains(stdout, raw) {
 			t.Fatalf("functional stdout still streams the raw per-package line %q:\n%s", raw, stdout)
+		}
+		row := "  package=" + coverPackage + " coverage="
+		if got := strings.Count(stdout, row); got != 1 {
+			t.Fatalf("functional coverage row %q appears %d times, want one:\n%s", row, got, stdout)
 		}
 	}
 	if strings.Contains(stdout, "coverage: 71.4% of statements") {
@@ -173,13 +215,10 @@ func TestFunctionalCoverageVerdictPassesWhenEveryPackageMeetsItsFloor(t *testing
 	if err != nil {
 		t.Fatalf("execute() error = %v, want a zero-exit outcome; stdout=%s", err, stdout)
 	}
-	if !strings.Contains(stdout, "  floor violations: none\n") {
-		t.Fatalf("verdict block missing the explicit no-violation line:\n%s", stdout)
-	}
 	for _, want := range []string{
-		"  package=" + modulePath + "/pkg/config coverage=25.0% floor=20.0% delta=+5.0pp gate=pass lane=functional\n",
-		"  package=" + modulePath + "/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp gate=pass lane=functional\n",
-		"  package=" + modulePath + "/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp gate=pass lane=functional\n",
+		"  package=" + modulePath + "/pkg/config coverage=25.0% floor=20.0% delta=+5.0pp status=PASS lane=functional\n",
+		"  package=" + modulePath + "/pkg/service coverage=90.0% floor=89.0% delta=+1.0pp status=PASS lane=functional\n",
+		"  package=" + modulePath + "/pkg/wire coverage=100.0% floor=50.0% delta=+50.0pp status=PASS lane=functional\n",
 	} {
 		if strings.Count(stdout, want) != 1 {
 			t.Fatalf("verdict line count for %q = %d, want one:\n%s", want, strings.Count(stdout, want), stdout)
@@ -196,10 +235,7 @@ func TestFunctionalCoverageVerdictPassesWhenEveryPackageMeetsItsFloor(t *testing
 	}
 }
 
-// TestUnitCoverageRunKeepsRawPerPackageCoverageLines pins the invocation that
-// publishes no coverage-summary artifact. Its stdout listing is the only copy
-// of the per-package measurement, so it is never collapsed.
-func TestUnitCoverageRunKeepsRawPerPackageCoverageLines(t *testing.T) {
+func TestUnitCoverageRunUsesCompactVerdictWithoutJSONArtifact(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
@@ -228,11 +264,14 @@ func TestUnitCoverageRunKeepsRawPerPackageCoverageLines(t *testing.T) {
 	}
 
 	got := stdout.String()
-	if !strings.Contains(got, configPackage+"\tcoverage: 100.0% of statements\n") {
-		t.Fatalf("unit lane lost its raw per-package coverage line:\n%s", got)
+	if !strings.Contains(got, "Unit package coverage verdict:\n") {
+		t.Fatalf("unit lane did not render its compact verdict:\n%s", got)
 	}
-	if strings.Contains(got, "package coverage verdict:") {
-		t.Fatalf("unit lane collapsed its only copy of the measurement into a verdict block:\n%s", got)
+	if !strings.Contains(got, "package="+configPackage+" coverage=100.0% floor=100.0% delta=+0.0pp status=PASS lane=unit") {
+		t.Fatalf("unit lane compact verdict omitted the measured package:\n%s", got)
+	}
+	if strings.Contains(got, "\tcoverage: ") {
+		t.Fatalf("unit lane still printed a raw per-package coverage line:\n%s", got)
 	}
 }
 
@@ -294,8 +333,8 @@ func TestCoverageVerdictReportsUngatedPackagesAfterGatedRows(t *testing.T) {
 	writeCoverageVerdict("Functional", result, nil)
 
 	got := stdout.String()
-	wantGated := "  package=" + gated + " coverage=25.0% floor=80.0% delta=-55.0pp gate=fail lane=functional\n"
-	wantUngated := "  package=" + ungated + " coverage=5.0% floor=none delta=n/a gate=report-only lane=functional\n"
+	wantGated := "  package=" + gated + " coverage=25.0% floor=80.0% delta=-55.0pp status=FAIL lane=functional\n"
+	wantUngated := "  package=" + ungated + " coverage=5.0% floor=n/a status=report-only lane=functional\n"
 	gatedIndex := strings.Index(got, wantGated)
 	ungatedIndex := strings.Index(got, wantUngated)
 	if gatedIndex < 0 || ungatedIndex < 0 || gatedIndex > ungatedIndex {

@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -66,7 +67,7 @@ func main() {
 			return serveInjectedHTTP(serverCtx, cfg.apiPort, request.Handler, ready)
 		},
 	}
-	process, err := root.BuildProcess(ctx, edges)
+	process, err := support.BuildProcessWithContext(ctx, edges)
 	if err != nil {
 		fatalf("build root process: %v", err)
 	}

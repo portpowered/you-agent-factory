@@ -105,6 +105,7 @@ type config struct {
 	packageMin                   float64
 	packageFloorEpsilon          float64
 	packageFloorPolicy           string
+	detailedDiagnostics          bool
 	packages                     string
 	profile                      string
 	short                        bool
@@ -128,6 +129,7 @@ type coverageResult struct {
 	manifestCompletenessWarnings []string
 	unmeasuredPackageDiagnostics []string
 	packageFloorPolicy           string
+	detailedDiagnostics          bool
 }
 
 type packageCoverageTotals struct {
@@ -169,17 +171,20 @@ func execute(cfg config) error {
 	}
 	result, err := run(cfg)
 	if err != nil {
+		result.packageFloorPolicy = cfg.packageFloorPolicyValue()
+		result.detailedDiagnostics = cfg.detailedDiagnostics
 		writeCoverageTestFailureWarning(err)
 		var validationErr *coverageManifestValidationError
 		if errors.As(err, &validationErr) {
 			// A malformed manifest aborts before the coverage-summary JSON is
-			// written, so this path keeps the complete per-package listing: it
-			// is the only surviving copy of the measurement.
+			// written, so keep the complete per-package listing: it is the
+			// only surviving copy of the measurement on this abort path.
 			writePackageCoverageSummaries(result.packageSummaries)
 		}
 		return err
 	}
 	result.packageFloorPolicy = cfg.packageFloorPolicyValue()
+	result.detailedDiagnostics = cfg.detailedDiagnostics
 
 	var failures []string
 	if result.actual < cfg.min {
@@ -211,7 +216,7 @@ func execute(cfg config) error {
 	cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusComplete)
 
 	if len(failures) > 0 {
-		return errors.New(strings.Join(failures, "\n"))
+		return errors.New(strings.Join(coverageDiagnosticsForOutput(cfg.detailedDiagnostics, failures), "\n"))
 	}
 	fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
 	return nil
@@ -240,6 +245,7 @@ func parseConfig() config {
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
 	flag.Float64Var(&cfg.packageFloorEpsilon, "package-floor-epsilon", defaultPackageFloorEpsilon, "allowed manifest package-floor drift in percentage points; only applies with -package-manifest")
 	flag.StringVar(&cfg.packageFloorPolicy, "package-floor-policy", coverageFloorPolicyBlocking, "package-floor enforcement policy: blocking or advisory")
+	flag.BoolVar(&cfg.detailedDiagnostics, "detailed-diagnostics", false, "include uncovered source-block details in coverage diagnostics")
 	flag.StringVar(&cfg.packages, "packages", "", "space-separated go test package patterns; overrides -suite package discovery")
 	flag.StringVar(&cfg.profile, "profile", "", "coverage profile output path; defaults to a temp file")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")

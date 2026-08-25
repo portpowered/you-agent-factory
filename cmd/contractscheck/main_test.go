@@ -240,6 +240,14 @@ func snapshotCommandTree(
 			return err
 		}
 		if entry.IsDir() {
+			// Git may create or remove transient administrative files (for
+			// example .git/objects/maintenance.lock) asynchronously after the
+			// fixture is initialized. Those files are outside the worktree that
+			// run is required to leave unchanged and would make this snapshot
+			// assertion flaky.
+			if path != root && filepath.Base(path) == ".git" {
+				return fs.SkipDir
+			}
 			return nil
 		}
 		relative, err := filepath.Rel(root, path)

@@ -83,6 +83,10 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 	}()
 
 	homeDir := t.TempDir()
+	streamFile := filepath.Join(t.TempDir(), "stream.wav")
+	if err := os.WriteFile(streamFile, []byte("RIFF....WAVE"), 0o644); err != nil {
+		t.Fatalf("write stream file: %v", err)
+	}
 	var capturedModel string
 	var capturedRequest factoryapi.ModelInvocationRequest
 	openTestModelRunner = func(_ context.Context, cfg *testModelRuntimeSelections) (testModelRunner, error) {
@@ -105,10 +109,7 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 					Worker:           "tts-worker",
 					Operation:        request.Operation,
 					ProviderLocality: string(factoryapi.WorkerModelLocalityLocal),
-					Content: []work.WorkContentPart{{
-						Type: work.WorkContentPartTypeText,
-						Text: "hello",
-					}},
+					StreamFile:       streamFile,
 				}, nil
 			},
 		}, nil
@@ -121,7 +122,7 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 		FactoryDir: t.TempDir(),
 		HomeDir:    homeDir,
 		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
+		OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 		Logger:     zap.NewNop(),
 		Output:     io.Discard,
 	}); err != nil {
@@ -141,14 +142,19 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 		openTestModelRunner = originalBuilder
 	}()
 
+	streamFile := filepath.Join(t.TempDir(), "stream.wav")
+	if err := os.WriteFile(streamFile, []byte("RIFF....WAVE"), 0o644); err != nil {
+		t.Fatalf("write stream file: %v", err)
+	}
 	openTestModelRunner = func(_ context.Context, _ *testModelRuntimeSelections) (testModelRunner, error) {
 		return &stubModelBootstrapRunner{
 			sessionReady: true,
 			invokeModel: func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
 				return modelinference.Result{
-					ModelName: modelName,
-					Worker:    "tts-worker",
-					Operation: request.Operation,
+					ModelName:  modelName,
+					Worker:     "tts-worker",
+					Operation:  request.Operation,
+					StreamFile: streamFile,
 				}, nil
 			},
 		}, nil
@@ -160,7 +166,7 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 		Text:       "hello world",
 		FactoryDir: t.TempDir(),
 		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
+		OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 		Output:     io.Discard,
 		Logger:     zap.NewNop(),
 	}); err != nil {
@@ -180,6 +186,22 @@ type capturingModelInvocationOperation struct {
 	request          modelinference.Request
 	result           modelinference.Result
 	err              error
+}
+
+type workingDirectoryResolverInvocation struct {
+	capturingModelInvocationOperation
+	resolvedFactoryDir string
+	gotExplicit        string
+	gotWorkingDir      string
+}
+
+func (operation *workingDirectoryResolverInvocation) ResolveModelInvocationFactoryDirForWorkingDirectory(
+	explicit string,
+	workingDirectory string,
+) (string, error) {
+	operation.gotExplicit = explicit
+	operation.gotWorkingDir = workingDirectory
+	return operation.resolvedFactoryDir, nil
 }
 
 func (c *capturingModelInvocationOperation) ResolveModelInvocationFactoryDir(explicit string) (string, error) {
@@ -279,6 +301,97 @@ func TestRunBootstrapModelInvocation_RejectsMissingInputs(t *testing.T) {
 		context.Background(), nil, InvocationRequest{}, "voice", factoryapi.ModelInvocationRequest{},
 	); err == nil || !strings.Contains(err.Error(), "models invoke operation is required") {
 		t.Fatalf("runBootstrapModelInvocation(nil operation) error = %v, want an operation requirement", err)
+	}
+}
+
+func TestResolveBootstrapInvokeConfigUsesWorkingDirectoryResolver(t *testing.T) {
+	t.Parallel()
+
+	operation := &workingDirectoryResolverInvocation{resolvedFactoryDir: "project/factory"}
+	defaults := operatorconfig.ResolvedDefaults{WorkerModelProvider: "codex"}
+	config, err := resolveBootstrapInvokeConfig(invokeOptions{
+		Invocation:       operation,
+		FactoryDir:       "",
+		WorkingDirectory: "project",
+		HomeDir:          "home",
+		OperatorDefaults: defaults,
+		Verbose:          true,
+	})
+	if err != nil {
+		t.Fatalf("resolveBootstrapInvokeConfig() error = %v", err)
+	}
+	if config.FactoryDir != "project/factory" || operation.gotExplicit != "" || operation.gotWorkingDir != "project" {
+		t.Fatalf("resolved factory target = %#v, explicit=%q workingDirectory=%q", config, operation.gotExplicit, operation.gotWorkingDir)
+	}
+	if config.HomeDir != "home" || config.OperatorDefaults != defaults || !config.Verbose || config.Logger == nil {
+		t.Fatalf("resolved invoke config = %#v, want defaults and a no-op logger", config)
+	}
+}
+
+func TestBootstrapProjectionHelpersHandleEmptyAndAuthoredValues(t *testing.T) {
+	t.Parallel()
+
+	if got := derefGeneratedWorkContent(nil); got != nil {
+		t.Fatalf("derefGeneratedWorkContent(nil) = %#v, want nil", got)
+	}
+	if got := generatedResolvedModelInvocationBindings(nil); got == nil || len(got) != 0 {
+		t.Fatalf("empty generated bindings = %#v, want a non-nil empty slice", got)
+	}
+	bindings := generatedResolvedModelInvocationBindings([]modelinference.ResolvedModelOperationBinding{{
+		Slot: "text", Source: "INPUT", Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText, Text: "hello",
+		}},
+	}})
+	if len(bindings) != 1 || bindings[0].Slot != "text" || bindings[0].Content == nil {
+		t.Fatalf("generated bindings = %#v, want one projected content binding", bindings)
+	}
+
+	label := "voice"
+	selector := &factoryapi.WorkstationOperationBindingSelector{Label: &label}
+	request := invocationRequestFromGenerated(factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Options: &factoryapi.ModelInvocationOptions{
+			ResponseMode: func() *factoryapi.ModelInvocationResponseMode {
+				mode := factoryapi.AUDIOSTREAM
+				return &mode
+			}(),
+		},
+		Bindings: &[]factoryapi.WorkstationOperationBinding{{Slot: "text", Selector: selector}},
+	})
+	if request.Options == nil || request.Options.ResponseMode == "" || len(request.Bindings) != 1 || request.Bindings[0].Selector == nil || request.Bindings[0].Selector.Label != label {
+		t.Fatalf("mapped invocation request = %#v, want options and selector binding", request)
+	}
+}
+
+func TestMapBootstrapModelInvokeErrorPreservesSentinelTaxonomy(t *testing.T) {
+	t.Parallel()
+
+	if mapBootstrapModelInvokeError(nil) != nil {
+		t.Fatal("mapBootstrapModelInvokeError(nil) = non-nil")
+	}
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "not found", err: modelinference.ErrNotFound, want: ErrModelNotFound},
+		{name: "missing", err: modelinference.ErrMissing, want: modelinference.ErrMissing},
+		{name: "unsupported response", err: modelinference.ErrUnsupportedResponseMode, want: modelinference.ErrUnsupportedResponseMode},
+		{name: "unknown", err: errors.New("runtime failed"), want: nil},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			mapped := mapBootstrapModelInvokeError(test.err)
+			if test.want == nil {
+				if !errors.Is(mapped, test.err) {
+					t.Fatalf("mapped error = %v, want original error", mapped)
+				}
+				return
+			}
+			if !errors.Is(mapped, test.want) {
+				t.Fatalf("mapped error = %v, want errors.Is %v", mapped, test.want)
+			}
+		})
 	}
 }
 

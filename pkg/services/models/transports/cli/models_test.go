@@ -56,13 +56,17 @@ func (fake commandServiceFake) Remove(cfg RemoveConfig) error {
 	}
 	return nil
 }
+
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
 	logger := zap.NewNop()
 	var diagnostics bytes.Buffer
 
 	handler := NewCommandHandler(
-		commandServiceFake{invoke: assertTransformedInvokeConfig(t, server, logger, &diagnostics)},
+		commandServiceFake{invoke: func(cfg InvokeConfig) error {
+			assertInvokeCommandConfig(t, cfg, server, logger, &diagnostics)
+			return nil
+		}},
 		func(*cobra.Command) io.Writer { return &diagnostics },
 		func() (string, error) { return "/home/tester", nil },
 		func(_ *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -330,7 +334,7 @@ func TestQueryModel_NotFoundUsesFriendlyError(t *testing.T) {
 	}
 }
 
-func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
+func TestInvoke_JSONWritesValidationOnlyResponse(t *testing.T) {
 	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
 		return modelinference.Result{
 			ModelName:        modelName,
@@ -356,9 +360,14 @@ func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"operation":"TTS"`} {
+	for _, want := range []string{"OMNIVOICE_Q4_K_M", `"operation":"TTS"`, `"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
 		if !bytes.Contains(out.Bytes(), []byte(want)) {
 			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+	for _, forbidden := range []string{`"content"`, `"worker"`, `"artifact"`} {
+		if bytes.Contains(out.Bytes(), []byte(forbidden)) {
+			t.Fatalf("validation output unexpectedly contains %q:\n%s", forbidden, out.String())
 		}
 	}
 }
@@ -472,7 +481,7 @@ func TestInvoke_JSONSurfacesClassifiedLoadingFailureFromBootstrap(t *testing.T) 
 		Text:       "hello world",
 		FactoryDir: t.TempDir(),
 		Logger:     zap.NewNop(),
-		JSON:       true,
+		OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 		Output:     io.Discard,
 	})
 	if err == nil {
@@ -870,10 +879,6 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		"models inspect request",
 		"modelName=\"OMNIVOICE_Q4_K_M\"",
 		"readiness=READY",
-		"models invoke bootstrap request",
-		"operation=\"TTS\"",
-		"models invoke bootstrap response",
-		"worker=tts-worker",
 		"models pull request",
 		"pullOutcome=INSTALLED_SUCCESSFULLY",
 		"readiness=READY",

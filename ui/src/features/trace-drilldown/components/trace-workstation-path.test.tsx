@@ -331,7 +331,7 @@ describe("TraceWorkstationPath explicit lineage", () => {
       screen
         .getByTestId("trace-react-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain('"backgroundColor":"var(--color-surface)"');
+    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
     expect(
       screen
         .getByTestId("trace-react-flow-controls")
@@ -439,7 +439,7 @@ describe("TraceWorkstationPath localization", () => {
       screen
         .getByTestId("trace-react-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain('"backgroundColor":"var(--color-surface)"');
+    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
   });
 });
 

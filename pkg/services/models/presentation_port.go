@@ -17,7 +17,11 @@ type PresentationOperatorDefaults struct {
 // PresentationScopeRequest is the consumer-owned request for a model
 // presentation scope. Models CLI adapters may alias this value contract.
 type PresentationScopeRequest struct {
-	FactoryDir       string
+	FactoryDir string
+	// WorkingDirectory carries the caller's process working directory to the
+	// Factory Session invocation boundary for default layout discovery. It is
+	// separate from FactoryDir so discovery remains owned by that boundary.
+	WorkingDirectory string
 	HomeDir          string
 	OperatorDefaults PresentationOperatorDefaults
 	Logger           *zap.Logger

@@ -2,7 +2,8 @@
  * Material-inspired color role tokens (Factory Dark baseline).
  *
  * Long-term theme API for dashboard UI. Product --color-af-* keys that map to
- * roles are defined in this file; foundation/chart keys remain in styles.css.
+ * roles are defined in this file; literal foundation values remain in
+ * color-palette-presets.css.
  *
  * Accent intent:
  * - primary: yellow brand accent (most prominent)
@@ -126,6 +127,44 @@
     0 0 0 4px var(--color-af-graph-selected-glow);
   --shadow-af-graph-error: 0 0 0 3px var(--color-error-container);
 
+  /* Supporting roles for chart series that need palette-aware light values. */
+  --color-error-bright: var(--color-af-foundation-danger-bright);
+  --color-info-bright: var(--color-af-foundation-info-bright);
+
+  /* --- Graph, focus, and overlay roles --- */
+  --color-overlay: rgb(
+    from var(--color-surface-container-highest) r g b /
+    0.08
+  );
+  --color-overlay-focus: rgb(
+    from var(--color-surface-container-highest) r g b /
+    0.1
+  );
+  --color-overlay-strong: var(--color-scrim);
+  --color-focus-ring: rgb(from var(--color-primary) r g b / 0.25);
+  --color-edge-muted: var(--color-on-surface-variant);
+  --color-edge-muted-soft: rgb(from var(--color-on-surface) r g b / 0.56);
+  --color-edge-danger-muted: var(--color-error);
+  --color-edge-muted-opacity: 1;
+  --color-edge-muted-soft-opacity: 1;
+  --color-edge-danger-muted-opacity: 1;
+  --color-graph-controls-surface: var(--color-surface);
+  --color-graph-controls-button-surface: var(--color-surface-container-high);
+  --color-graph-controls-button-surface-hover: var(--color-overlay);
+  --color-graph-controls-border: var(--color-outline);
+  --color-graph-controls-text: var(--color-on-surface-variant);
+  --color-graph-controls-text-hover: var(--color-on-surface);
+  --color-graph-focus-indicator: var(--color-on-surface);
+
+  /* --- Dashboard chart roles --- */
+  --color-chart-queued: var(--color-on-primary-container);
+  --color-chart-in-flight: var(--color-on-info-container);
+  --color-chart-completed: var(--color-on-success-container);
+  --color-chart-failed: var(--color-error-bright);
+  --color-chart-failure-trend: var(--color-error-bright);
+  --color-chart-rework-trend: var(--color-primary);
+  --color-chart-timing-trend: var(--color-info-bright);
+
   /* --- Product af-* keys (role-backed; formerly color-role-aliases.css) --- */
   --color-af-background: var(--color-background);
   --color-af-surface: var(--color-surface);
@@ -164,8 +203,36 @@
   --color-af-worker-surface: var(--color-tertiary-container);
   --color-af-worker-text: var(--color-on-tertiary-container);
 
-  /* Semantic border and overlay tokens for feedback and loading surfaces */
-  --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+  /* Product chart aliases. Keep consumed chart series on shared roles. */
+  --color-af-chart-queued: var(--color-chart-queued);
+  --color-af-chart-in-flight: var(--color-chart-in-flight);
+  --color-af-chart-completed: var(--color-chart-completed);
+  --color-af-chart-failed: var(--color-chart-failed);
+  --color-af-chart-failure-trend: var(--color-chart-failure-trend);
+  --color-af-chart-rework-trend: var(--color-chart-rework-trend);
+  --color-af-chart-timing-trend: var(--color-chart-timing-trend);
+
+  /* Graph, focus, and overlay product aliases stay on shared Material roles. */
+  --color-af-overlay: var(--color-overlay);
+  --color-af-overlay-focus: var(--color-overlay-focus);
+  --color-af-overlay-strong: var(--color-overlay-strong);
+  --color-af-focus-ring: var(--color-focus-ring);
+  --color-af-edge-muted: var(--color-edge-muted);
+  --color-af-edge-muted-soft: var(--color-edge-muted-soft);
+  --color-af-edge-danger-muted: var(--color-edge-danger-muted);
+  --color-af-graph-controls-surface: var(--color-graph-controls-surface);
+  --color-af-graph-controls-button-surface: var(
+    --color-graph-controls-button-surface
+  );
+  --color-af-graph-controls-button-surface-hover: var(
+    --color-graph-controls-button-surface-hover
+  );
+  --color-af-graph-controls-border: var(--color-graph-controls-border);
+  --color-af-graph-controls-text: var(--color-graph-controls-text);
+  --color-af-graph-controls-text-hover: var(--color-graph-controls-text-hover);
+  --color-af-graph-focus-indicator: var(--color-graph-focus-indicator);
+
+  /* Semantic border tokens for feedback and loading surfaces */
   --color-af-success-border: rgb(
     from var(--color-af-foundation-success) r g b /
     0.28
@@ -185,8 +252,9 @@
 }
 
 /*
- * Factory Light uses light-surface-appropriate ink for solid semantic fills.
- * Keep the shared Factory Dark roles and foundation palette values unchanged.
+ * Factory Light uses light-surface-appropriate ink for solid semantic fills
+ * and darker chart foregrounds on its light canvas. Keep the shared Factory
+ * Dark roles and foundation palette values unchanged.
  */
 [data-color-palette="factory-light"] {
   --color-on-primary-container: var(--color-af-foundation-accent-ink);
@@ -195,4 +263,19 @@
   --color-on-warning: var(--color-af-foundation-overlay);
   --color-on-error: var(--color-af-foundation-overlay);
   --color-on-info: var(--color-af-foundation-overlay);
+  --color-chart-queued: var(--color-on-warning-container);
+  --color-chart-failed: var(--color-error);
+  --color-chart-failure-trend: var(--color-error);
+}
+
+/*
+ * Keep the original Factory Dark graph strokes while the shared foreground
+ * roles remain palette-aware for the other presets. The opaque role colors
+ * preserve the contrast contract; these palette-specific opacities preserve
+ * the prior rendered alpha on the dark graph canvas.
+ */
+[data-color-palette="factory-dark"] {
+  --color-edge-muted-opacity: 0.18;
+  --color-edge-muted-soft-opacity: 0.1;
+  --color-edge-danger-muted-opacity: 0.32;
 }

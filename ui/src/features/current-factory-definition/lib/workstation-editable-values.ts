@@ -8,7 +8,12 @@ import {
   type RunnerSelectionSource,
   resolveRunnerSelection,
 } from "./runner-selection";
-import { preferredInferenceRunWorkstationType } from "./worker-workstation-taxonomy";
+import {
+  isPollerRunWorkstationType,
+  isScriptRunWorkstationType,
+  isWorkerCompatibleWithWorkstationType,
+  preferredInferenceRunWorkstationType,
+} from "./worker-workstation-taxonomy";
 import {
   applyEditableWorkstationInputs,
   resolveCanonicalWorkstation,
@@ -41,6 +46,7 @@ import {
   type EditableWorkstationBehavior,
   resolveEditableWorkstationBehavior,
   resolveEditableWorkstationBehaviorOptions,
+  workstationUsesRunnerEditing,
 } from "./workstation-behavior";
 import {
   normalizeEditableInputGuards,
@@ -156,7 +162,10 @@ export function resolveEditableWorkstationValues(
 
   return {
     behavior,
-    behaviorOptions: resolveEditableWorkstationBehaviorOptions(behavior),
+    behaviorOptions: resolveEditableWorkstationBehaviorOptions(
+      behavior,
+      workstationType,
+    ),
     cron:
       behavior === "CRON" ? resolveEditableWorkstationCron(workstation) : null,
     effectiveRunnerName: resolvedRunnerSelection.runnerId,
@@ -173,7 +182,11 @@ export function resolveEditableWorkstationValues(
           resolveEditableModelInvokeBindings(workstation.operationBindings),
         )
       : [],
-    prompt: workstation.body ?? null,
+    prompt:
+      isScriptRunWorkstationType(workstationType) ||
+      isPollerRunWorkstationType(workstationType)
+        ? null
+        : (workstation.body ?? null),
     resolvedRunnerSelection,
     runnerName: workstation.runner ?? null,
     runnerOptions: BUILT_IN_RUNNER_IDS,
@@ -188,7 +201,7 @@ export function resolveEditableWorkstationValues(
     workerTypeByName: resolveWorkerTypeByName(factory),
     workerModelProvider,
     workerName: workstation.worker ?? "",
-    workerOptions: resolveWorkerOptions(factory),
+    workerOptions: resolveWorkerOptions(factory, workstation.type),
     guards: resolveEditableWorkstationGuards(workstation),
     inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
@@ -261,9 +274,25 @@ export function applyEditableWorkstationDraft(
     return null;
   }
 
+  const legacyDefaultTypeIsUnchanged =
+    !workstation.type &&
+    draft.workstationType === resolveEditableWorkstationType(workstation);
+  const compatibilityWorkstationType = legacyDefaultTypeIsUnchanged
+    ? workstation.type
+    : draft.workstationType;
+
+  if (
+    !isWorkerCompatibleWithWorkstationType(
+      factory.workers.find((worker) => worker.name === draft.workerName)?.type,
+      compatibilityWorkstationType,
+    )
+  ) {
+    return null;
+  }
+
   const nextWorkstation = isModelInvokeWorkstationType(draft.workstationType)
     ? buildModelInvokeWorkstationFromDraft(workstation, draft, trimmedName)
-    : buildPromptOrientedWorkstationFromDraft(workstation, draft, trimmedName);
+    : buildPromptOrScriptWorkstationFromDraft(workstation, draft, trimmedName);
 
   return applyWorkstationNameChangeToFactory(
     factory,
@@ -274,12 +303,13 @@ export function applyEditableWorkstationDraft(
   );
 }
 
-function buildPromptOrientedWorkstationFromDraft(
+function buildPromptOrScriptWorkstationFromDraft(
   workstation: CanonicalWorkstation,
   draft: EditableWorkstationDraft,
   trimmedName: string,
 ): CanonicalWorkstation {
   const {
+    body: _existingBody,
     behavior: existingBehavior,
     cron: _existingCron,
     guards: _existingGuards,
@@ -290,23 +320,40 @@ function buildPromptOrientedWorkstationFromDraft(
     ...workstationWithoutCronRunner
   } = workstation;
 
-  return {
+  const behavior = isPollerRunWorkstationType(draft.workstationType)
+    ? "POLLER"
+    : draft.behavior;
+
+  const nextWorkstation = {
     ...workstationWithoutCronRunner,
-    body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
     type: draft.workstationType,
     worker: draft.workerName,
     ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
-    ...(draft.runnerName ? { runner: draft.runnerName } : {}),
-    ...(draft.behavior === DEFAULT_WORKSTATION_BEHAVIOR &&
+    ...(workstationUsesRunnerEditing(draft.workstationType, behavior) &&
+    draft.runnerName
+      ? { runner: draft.runnerName }
+      : {}),
+    ...(behavior === DEFAULT_WORKSTATION_BEHAVIOR &&
     existingBehavior === undefined
       ? {}
-      : { behavior: draft.behavior }),
-    ...(draft.behavior === "CRON" && draft.cron
+      : { behavior }),
+    ...(behavior === "CRON" && draft.cron
       ? { cron: buildCanonicalWorkstationCronFromDraft(draft.cron) }
       : {}),
   };
+
+  const isPromptless =
+    isScriptRunWorkstationType(draft.workstationType) ||
+    isPollerRunWorkstationType(draft.workstationType);
+  if (isPromptless) {
+    const { promptFile: _promptFile, ...promptlessWorkstation } =
+      nextWorkstation;
+    return promptlessWorkstation;
+  }
+
+  return { ...nextWorkstation, body: draft.prompt };
 }
 
 function buildModelInvokeWorkstationFromDraft(

@@ -1,4 +1,5 @@
 import { type Edge, type FitViewOptions, MarkerType } from "@xyflow/react";
+import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import { currentActivityGraphEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import type {
   GraphLayout,
@@ -6,15 +7,14 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import {
   type ActiveGraphHighlights,
   filterGraphEdgesForRenderedHandles,
   type HandleAssignments,
 } from "./react-flow-current-activity-card-graph";
 
-const EDGE_STROKE_MUTED = "var(--color-outline-variant)";
-const EDGE_STROKE_SOFT = "var(--color-outline)";
+const EDGE_STROKE_MUTED = "var(--color-af-edge-muted)";
+const EDGE_STROKE_SOFT = "var(--color-af-edge-muted-soft)";
 const EDGE_STROKE_DANGER_MUTED = "var(--color-af-edge-danger-muted)";
 const EDGE_STROKE_ACTIVE = "var(--color-success)";
 
@@ -78,6 +78,16 @@ function edgeMarkerColor(edge: PositionedEdge, activeFlow: boolean): string {
 
 function edgeSemantic(edge: PositionedEdge): boolean {
   return edge.outcomeKind !== "accepted" || edgeIsFailure(edge);
+}
+
+function edgeRoleClass(edge: PositionedEdge): string {
+  if (edge.sourcePlaceKind === "resource") {
+    return "agent-flow-edge--role-muted-soft";
+  }
+  if (edgeIsFailure(edge)) {
+    return "agent-flow-edge--role-danger-muted";
+  }
+  return "agent-flow-edge--role-muted";
 }
 
 function edgeLabel(
@@ -150,6 +160,7 @@ export function buildGraphEdges(
         semantic ? "agent-flow-edge--semantic" : "",
         muted ? "agent-flow-edge--muted" : "",
         pendingAddition ? "agent-flow-edge--pending-addition" : "",
+        edgeRoleClass(edge),
         hoverClassName ?? "",
       ]
         .filter(Boolean)

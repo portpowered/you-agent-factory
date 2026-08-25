@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -110,6 +111,45 @@ func TestCoverageSummaryRetainsFloorPolicyAndDiagnostics(t *testing.T) {
 	}
 }
 
+func TestDetailedDiagnosticsOnlyChangesJSONFindingPresentation(t *testing.T) {
+	floor := 80.0
+	detailedFinding := "package coverage regression: package=pkg/example lane=unit expected-minimum=80.00% actual=40.0000% delta=-40.0000 percentage-points covered=2/5 statements; uncovered blocks: pkg/example/file.go:41 (2 statements); restore coverage"
+	result := coverageResult{
+		actual:                 40,
+		packageFloorPolicy:     coverageFloorPolicyBlocking,
+		packageMinimumFailures: []string{detailedFinding},
+		packageSummaries:       []packageCoverageSummary{{importPath: "pkg/example", coverage: 40}},
+		packageTotals: map[string]packageCoverageTotals{
+			"pkg/example": {coveredStatements: 2, totalStatements: 5},
+		},
+		packageGates: map[string]packageCoverageGate{
+			"pkg/example": {Floor: &floor},
+		},
+	}
+
+	compact := buildCoverageSummaryJSON(result)
+	detailedResult := result
+	detailedResult.detailedDiagnostics = true
+	detailed := buildCoverageSummaryJSON(detailedResult)
+
+	wantCompactFinding := "package coverage regression: package=pkg/example lane=unit expected-minimum=80.00% actual=40.0000% delta=-40.0000 percentage-points covered=2/5 statements; restore coverage"
+	if compact.PackageFloorFindings[0] != wantCompactFinding {
+		t.Fatalf("default package finding = %q, want compact finding %q", compact.PackageFloorFindings[0], wantCompactFinding)
+	}
+	if detailed.PackageFloorFindings[0] != detailedFinding {
+		t.Fatalf("detailed package finding = %q, want full finding %q", detailed.PackageFloorFindings[0], detailedFinding)
+	}
+	if !reflect.DeepEqual(compact.Packages, detailed.Packages) {
+		t.Fatalf("package measurement changed with detailed diagnostics: compact=%+v detailed=%+v", compact.Packages, detailed.Packages)
+	}
+	if compact.CoveredStatements != detailed.CoveredStatements ||
+		compact.MeasurableStatements != detailed.MeasurableStatements ||
+		compact.CoveragePercent != detailed.CoveragePercent ||
+		compact.PackageFloorPolicy != detailed.PackageFloorPolicy {
+		t.Fatalf("coverage summary changed with detailed diagnostics: compact=%+v detailed=%+v", compact, detailed)
+	}
+}
+
 func TestExecuteOmitsJSONFileWhenJSONOutputOptionAbsent(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -146,10 +186,10 @@ func TestExecuteOmitsJSONFileWhenJSONOutputOptionAbsent(t *testing.T) {
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantSuccess := "Go coverage 100.0% meets minimum 80.0%."
@@ -238,6 +278,52 @@ func TestExecuteJSONReportsPackageFloorsFromManifest(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteJSONReportsHeldFloorWithoutDisablingBlockingPolicy(t *testing.T) {
+	_, stderr := stubCoverageExecute(t, fakeGoCoverageCommandWithMeasuredZeroConfig)
+
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{
+			importPath: configPackage,
+			minimum:    "80.00",
+			floorHold: &coverageManifestFloorHold{
+				Justification: "The current-main baseline is below the existing unit floor while matching-lane tests are restored.",
+				Owner:         "coverage-remediation",
+				Deadline:      "2027-07-15",
+				RemovalGate:   "Matching unit coverage reaches the existing floor and this hold is removed.",
+			},
+		},
+	})
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+
+	err := execute(config{
+		suite:           "unit",
+		min:             0,
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+		jsonOutput:      jsonPath,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v, want the staged hold to keep the blocking lane green", err)
+	}
+	if strings.Contains(stderr.String(), "COVERAGE FLOOR POLICY: advisory") || strings.Contains(stderr.String(), "report-only") {
+		t.Fatalf("held blocking run emitted advisory policy guidance: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "package coverage hold: package="+configPackage) ||
+		!strings.Contains(stderr.String(), "expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points") {
+		t.Fatalf("held blocking run lost the complete remediation diagnostic: %q", stderr.String())
+	}
+
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
+	if summary.PackageFloorPolicy != coverageFloorPolicyBlocking {
+		t.Fatalf("packageFloorPolicy = %q, want blocking", summary.PackageFloorPolicy)
+	}
+	if len(summary.Packages) != 1 || !summary.Packages[0].PackageFloorHeld {
+		t.Fatalf("package floor hold = %+v, want one held package", summary.Packages)
 	}
 }
 
@@ -479,8 +565,94 @@ func TestExecuteWritesIncompleteJSONWhenMeasurementFailsWithProfile(t *testing.T
 	if len(summary.Packages) == 0 {
 		t.Fatalf("incomplete coverage summary packages = %+v, want retained partial package totals", summary.Packages)
 	}
+	if len(summary.Packages) != 2 {
+		t.Fatalf("incomplete coverage summary packages = %d, want both measured packages", len(summary.Packages))
+	}
+	for _, entry := range summary.Packages {
+		if entry.PackageFloor != nil {
+			t.Fatalf("partial package %s has floor %v, want n/a until manifest evaluation", entry.Package, *entry.PackageFloor)
+		}
+	}
+	if summary.Packages[0].Package != modulePath+"/pkg/config" || summary.Packages[0].CoveragePercent != 100.0 {
+		t.Fatalf("partial config package = %+v, want measured 100.0%%", summary.Packages[0])
+	}
+	if summary.Packages[1].Package != modulePath+"/pkg/service" || summary.Packages[1].CoveragePercent != 100.0 {
+		t.Fatalf("partial service package = %+v, want measured 100.0%%", summary.Packages[1])
+	}
 	if !strings.Contains(summary.MeasurementReason, "did not complete") {
 		t.Fatalf("measurement reason = %q, want incomplete-measurement explanation", summary.MeasurementReason)
+	}
+}
+
+func TestExecuteFailedTestsDoNotEvaluatePackageFloors(t *testing.T) {
+	stdout, stderr := stubCoverageExecute(t, fakeGoCoverageCommandTestFailsWithObservedFailures)
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "80.00")
+	outputDir := t.TempDir()
+	jsonPath := filepath.Join(outputDir, "coverage-summary.json")
+
+	err := execute(config{
+		suite:              "unit",
+		min:                0,
+		packageFloorPolicy: coverageFloorPolicyBlocking,
+		packageManifest:    manifestPath,
+		coverpkg:           configPackage,
+		packages:           "./pkg/config",
+		profile:            filepath.Join(outputDir, "coverage.out"),
+		jsonOutput:         jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded for failed coverage tests")
+	}
+	if strings.Contains(err.Error(), "package coverage regression") {
+		t.Fatalf("execute() reclassified failed tests as a floor regression: %v", err)
+	}
+	wantDiagnostic := "coverage not evaluated: 2 failed tests observed; package floors were NOT checked because the coverage test run failed"
+	if got := stderr.String(); !strings.Contains(got, wantDiagnostic) {
+		t.Fatalf("execute() stderr = %q, want failed-test diagnostic containing %q", got, wantDiagnostic)
+	}
+	if strings.Contains(stdout.String(), "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect aggregate success", stdout.String())
+	}
+
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
+	if summary.Complete {
+		t.Fatal("failed-test coverage summary marked complete")
+	}
+	if summary.PackageFloorPolicy != coverageFloorPolicyBlocking {
+		t.Fatalf("packageFloorPolicy = %q, want active blocking policy", summary.PackageFloorPolicy)
+	}
+	if len(summary.PackageFloorFindings) != 0 {
+		t.Fatalf("packageFloorFindings = %v, want floors not evaluated", summary.PackageFloorFindings)
+	}
+	if len(summary.ManifestDiagnostics) != 0 {
+		t.Fatalf("manifestDiagnostics = %v, want no manifest findings from an incomplete run", summary.ManifestDiagnostics)
+	}
+}
+
+func TestExecuteIncompleteJSONRetainsAdvisoryPolicy(t *testing.T) {
+	stubCoverageExecute(t, fakeGoCoverageCommandTestFailsWithoutDetail)
+	outputDir := t.TempDir()
+	jsonPath := filepath.Join(outputDir, "coverage-summary.json")
+
+	err := execute(config{
+		suite:              "unit",
+		packageFloorPolicy: coverageFloorPolicyAdvisory,
+		coverpkg:           modulePath + "/pkg/config",
+		packages:           "./pkg/config",
+		profile:            filepath.Join(outputDir, "coverage.out"),
+		jsonOutput:         jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded for failed coverage tests")
+	}
+
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
+	if summary.PackageFloorPolicy != coverageFloorPolicyAdvisory {
+		t.Fatalf("packageFloorPolicy = %q, want active advisory policy", summary.PackageFloorPolicy)
+	}
+	if len(summary.PackageFloorFindings) != 0 {
+		t.Fatalf("packageFloorFindings = %v, want floors not evaluated", summary.PackageFloorFindings)
 	}
 }
 
@@ -524,10 +696,10 @@ func TestExecuteFloorFailureWithoutJSONOptionKeepsHumanDiagnostics(t *testing.T)
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	if strings.Contains(got, "meets minimum") {
@@ -611,6 +783,7 @@ type manifestPackageSpec struct {
 	importPath string
 	minimum    string
 	exception  *coverageManifestException
+	floorHold  *coverageManifestFloorHold
 }
 
 func stubCoverageExecute(t *testing.T, runner commandRunnerFunc) (stdout *bytes.Buffer, stderr *bytes.Buffer) {
@@ -675,7 +848,17 @@ func writePackageMinimumManifestWithEntries(t *testing.T, lane string, entries [
 	t.Helper()
 	manifestPath := filepath.Join(t.TempDir(), lane+"-minimums.json")
 	var packageBlocks []string
+	var floorHoldBlocks []string
 	for _, entry := range entries {
+		if entry.floorHold != nil {
+			floorHoldBlocks = append(floorHoldBlocks, fmt.Sprintf(`    {
+      "package": %q,
+      "justification": %q,
+      "owner": %q,
+      "deadline": %q,
+      "removalGate": %q
+    }`, entry.importPath, entry.floorHold.Justification, entry.floorHold.Owner, entry.floorHold.Deadline, entry.floorHold.RemovalGate))
+		}
 		if entry.exception != nil {
 			packageBlocks = append(packageBlocks, fmt.Sprintf(`    {
       "package": %q,
@@ -694,7 +877,11 @@ func writePackageMinimumManifestWithEntries(t *testing.T, lane string, entries [
       "minimum": %s
     }`, entry.importPath, entry.minimum))
 	}
-	data := fmt.Sprintf("{\n  \"version\": 1,\n  \"lane\": %q,\n  \"packages\": [\n%s\n  ]\n}\n", lane, strings.Join(packageBlocks, ",\n"))
+	floorHolds := ""
+	if len(floorHoldBlocks) > 0 {
+		floorHolds = fmt.Sprintf("\n  \"floorHolds\": [\n%s\n  ],", strings.Join(floorHoldBlocks, ",\n"))
+	}
+	data := fmt.Sprintf("{\n  \"version\": 1,\n  \"lane\": %q,%s\n  \"packages\": [\n%s\n  ]\n}\n", lane, floorHolds, strings.Join(packageBlocks, ",\n"))
 	if err := os.WriteFile(manifestPath, []byte(data), 0o600); err != nil {
 		t.Fatalf("write package minimum manifest: %v", err)
 	}

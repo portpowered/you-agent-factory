@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -21,6 +22,8 @@ const (
 	modelsRootDefaultErrorText     = "models command failed"
 	modelsRootMissingCachePrefix   = "model cache is not installed; run you models pull"
 )
+
+const modelsFactoryLayoutNotFoundCode = "CURRENT_FACTORY_NOT_FOUND"
 
 // modelsRootError preserves a Models CLI sentinel and the originating Models
 // error while exposing the safe diagnostic fields expected by the central CLI
@@ -88,6 +91,40 @@ func newModelsRootError(
 	}
 }
 
+// modelsFactoryLayoutNotFoundError preserves the searched Factory root while
+// exposing the not-found family expected by the process CLI boundary. The
+// resolver's cause remains available to callers that need errors.Is without
+// making the shared CLI renderer inspect private Factory Session errors.
+type modelsFactoryLayoutNotFoundError struct {
+	cause error
+}
+
+func (err *modelsFactoryLayoutNotFoundError) Error() string {
+	if err == nil || err.cause == nil {
+		return "Factory layout was not found"
+	}
+	return err.cause.Error()
+}
+
+func (err *modelsFactoryLayoutNotFoundError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func (err *modelsFactoryLayoutNotFoundError) CLIErrorCode() string {
+	return modelsFactoryLayoutNotFoundCode
+}
+
+func (err *modelsFactoryLayoutNotFoundError) CLIErrorFamily() factoryapi.ErrorFamily {
+	return factoryapi.ErrorFamilyNotFound
+}
+
+func (err *modelsFactoryLayoutNotFoundError) CLIErrorMessage() string {
+	return err.Error()
+}
+
 // mapModelsInvocationError preserves the Models invocation taxonomy at the
 // local CLI boundary. Generic invocation validation already carries a safe
 // public message; only the CLI diagnostic fields are missing when the error
@@ -146,6 +183,8 @@ func mapModelsRootError(err error) error {
 		return nil
 	}
 	switch {
+	case errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound):
+		return &modelsFactoryLayoutNotFoundError{cause: err}
 	case errors.Is(err, modelinference.ErrModelCacheNotFound):
 		return newModelsRootError(
 			modelsRootCacheNotFoundCode,

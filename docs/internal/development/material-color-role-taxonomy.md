@@ -8,8 +8,8 @@ Canonical reference for the dashboard UI Material-style color roles introduced i
 
 ## Source of truth
 
-- **Role tokens (long-term API):** `ui/src/styles/color-role-tokens.css` — use Tailwind utilities such as `bg-primary`, `text-on-surface`, `border-outline`.
-- **Product `--color-af-*` keys:** Role-backed mappings live in `ui/src/styles/color-role-tokens.css`; foundation palette keys, overlays, semantic border opacities, and chart series keys without role equivalents remain in `ui/src/styles.css`. These product keys are the supported surface until a later chart/overlay role pass retires or replaces them.
+- **Role tokens (long-term API):** `ui/packages/components/src/styles/color-role-tokens.css` — use Tailwind utilities such as `bg-primary`, `text-on-surface`, `border-outline`.
+- **Product `--color-af-*` keys:** Role-backed mappings live in `ui/packages/components/src/styles/color-role-tokens.css`; foundation palette keys and unrelated presentation aliases remain in `ui/src/styles.css`. The chart, edge, graph-control/focus, and overlay follow-up has completed: consumed aliases resolve through Material roles, while six zero-consumer aliases were retired.
 - **Factory palette keys:** `af-foundation-*` in `ui/src/styles.css` — baseline for Factory Dark; palette presets in `ui/src/styles/color-palette-presets.css` override these keys at runtime (US-008).
 - **Rollout & regression (US-010):** [material-color-role-migration-rollout.md](./material-color-role-migration-rollout.md) — phased rollout, regression matrix, and completed alias removal.
 
@@ -90,9 +90,9 @@ Do not use `warning` for draft/pending copy, `info` for brand row emphasis, or `
 
 ## Supported `--color-af-*` product keys
 
-Role-backed product keys (for example `af-text`, `af-surface`, `af-accent`, semantic surfaces) are defined in `ui/src/styles/color-role-tokens.css` and resolve to Material roles. Foundation keys (`af-foundation-*`), overlays (`af-overlay`), semantic `*-border` opacities, chart keys (`af-chart-*`), and graph-edge keys without role equivalents remain in `ui/src/styles.css` until a follow-up chart/overlay role pass.
+Role-backed product keys (for example `af-text`, `af-surface`, `af-accent`, semantic surfaces, chart series, graph edges, graph controls, focus, and overlays) are defined in `ui/packages/components/src/styles/color-role-tokens.css` and resolve to Material roles. Foundation keys (`af-foundation-*`) and unrelated presentation aliases remain in `ui/src/styles.css`. The retired zero-consumer keys are `--color-af-chart-grid-line`, `--color-af-chart-selection-fill`, `--color-af-chart-selection-stroke`, `--color-af-chart-cursor`, `--color-af-chart-active-dot-stroke`, and `--color-af-overlay-subtle`.
 
-Wiring contract: `ui/src/styles/color-role-tokens.test.ts` (`PRODUCT_AF_ROLE_PAIRS`) asserts each role-backed key maps to its documented role source.
+Wiring contract: `ui/src/styles/theme-role-regression.component.test.ts` resolves compiled role-backed variables, and `ui/src/features/work-outcome/components/work-chart/work-chart-color-role-behavior.component.test.tsx` verifies the four rendered chart series use palette-backed aliases.
 
 ## CSS variable reference
 
@@ -100,7 +100,7 @@ Neutral and accent/semantic roles register in Tailwind v4 `@theme` as `--color-<
 
 ### Feature and graph surfaces (US-009)
 
-Dashboard feature modules under `ui/src/features/` consume role utilities directly for neutral chrome and accent emphasis. Semantic `*-border`, overlay, shadow, chart, and graph-edge tokens that have no role equivalent yet remain on transitional `af-*` product keys in `ui/src/styles.css`.
+Dashboard feature modules under `ui/src/features/` consume role utilities directly for neutral chrome and accent emphasis. Semantic borders, overlays, shadows, chart series, and graph edges use their role-backed `af-*` aliases where consumed; the six zero-consumer aliases listed above were retired.
 
 | Area | Role usage |
 | --- | --- |

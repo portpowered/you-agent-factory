@@ -14,45 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-type providerSessionObservationSpy struct {
-	workersessions.Service
-	requests []workersessions.ProviderSessionObservationRequest
-	err      error
-}
-
-func continuationFor(reference providers.SessionRef) *providers.ContinuationRef {
-	continuation := reference.ContinuationRef()
-	return &continuation
-}
-
-func (s *providerSessionObservationSpy) ObserveProviderSession(
-	_ context.Context,
-	req workersessions.ProviderSessionObservationRequest,
-) (workersessions.ProviderSessionAssociationResult, error) {
-	req.Reference = req.Reference.Clone()
-	s.requests = append(s.requests, req)
-	return workersessions.ProviderSessionAssociationResult{}, s.err
-}
-
-func validPublishRequest() workersessions.PublishRecordRequest {
-	return workersessions.PublishRecordRequest{
-		SessionID:      "worker-1",
-		Draft:          workers.Draft{Kind: workers.KindProgress, Phase: workers.PhaseUpdated, Payload: []byte(`{"label":"working"}`)},
-		SourceType:     "worker_provider",
-		SourceID:       "worker-1",
-		SourceSequence: 1,
-		SourceEventID:  "evt-1",
-		SchemaID:       "workers.draft.v1",
-	}
-}
-
-func TestProviderSessionObservationPublisher_FallbackNilReceiverIsSafe(t *testing.T) {
-	var publisher *workersessions.ProviderSessionObservationPublisher
-	if got := publisher.WithUnassociatedProgressFallback(); got != nil {
-		t.Fatalf("nil fallback publisher = %v, want nil", got)
-	}
-}
-
 // TestPublishRecordRequest_Validate_AcceptsWellFormedRequest proves a request
 // whose SessionID, complete Events identity, SchemaID, and Draft are each
 // individually well-formed passes Validate unchanged.

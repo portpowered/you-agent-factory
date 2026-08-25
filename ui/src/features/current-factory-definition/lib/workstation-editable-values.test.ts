@@ -62,11 +62,7 @@ describe("resolveEditableWorkstationValues", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "claude",
-        "antigravity",
-      ],
+      runnerOptions: ["codex", "claude", "antigravity"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -446,11 +442,7 @@ describe("resolveEditableWorkstationValues", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "claude",
-        "antigravity",
-      ],
+      runnerOptions: ["codex", "claude", "antigravity"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -627,11 +619,7 @@ describe("resolveEditableWorkstationValues", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "claude",
-        "antigravity",
-      ],
+      runnerOptions: ["codex", "claude", "antigravity"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {
         coder: ["Code"],
@@ -2064,6 +2052,278 @@ describe("editable workstation name draft", () => {
 });
 
 describe("workstation taxonomy save projection", () => {
+  it("projects and saves MODEL_WORKSTATION/MODEL_WORKER without coercing the legacy aliases", () => {
+    const modelNode: DashboardWorkstationNode = {
+      model: "gpt-5.4",
+      node_id: "legacy-review",
+      transition_id: "legacy-review",
+      workstation_kind: WorkstationType.MODEL_WORKSTATION,
+      workstation_name: "Legacy Review",
+      worker_type: "legacy-model",
+    };
+    const modelFactory: CanonicalFactoryDefinition = {
+      metadata: { description: "Legacy model metadata survives edits." },
+      name: "Legacy Model Factory",
+      resources: [{ initial: 1, name: "review-slot" }],
+      version: { logical: "9", physical: "2026-06-01T00:00:00Z" },
+      workers: [
+        {
+          args: ["--json"],
+          command: "model-runner",
+          model: "gpt-5.4",
+          modelProvider: "CODEX",
+          name: "legacy-model",
+          type: WorkerType.MODEL_WORKER,
+        },
+        {
+          model: "gpt-5.4",
+          name: "inference-worker",
+          type: WorkerType.INFERENCE_WORKER,
+        },
+        {
+          command: "review.sh",
+          name: "script-worker",
+          type: WorkerType.SCRIPT_WORKER,
+        },
+      ],
+      workTypes: [{ name: "story" }],
+      workstations: [
+        {
+          behavior: "REPEATER",
+          body: "Review the story before approval.",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+          id: "legacy-review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Legacy Review",
+          onFailure: [{ state: "failed", workType: "story" }],
+          onRejection: [{ state: "queued", workType: "story" }],
+          outputs: [{ state: "approved", workType: "story" }],
+          promptFile: "prompts/legacy-review.md",
+          runner: "codex",
+          type: WorkstationType.MODEL_WORKSTATION,
+          worker: "legacy-model",
+        },
+        {
+          body: "Leave this workstation unchanged.",
+          id: "unrelated",
+          name: "Unrelated",
+          worker: "script-worker",
+        },
+      ],
+    };
+
+    const values = resolveEditableWorkstationValues(modelFactory, modelNode);
+    if (!values) {
+      throw new Error("expected legacy model workstation editable values");
+    }
+
+    expect(values.workstationType).toBe(WorkstationType.MODEL_WORKSTATION);
+    expect(values.workerName).toBe("legacy-model");
+    expect(values.prompt).toBe("Review the story before approval.");
+    expect(values.workerOptions).toEqual(["legacy-model", "script-worker"]);
+    expect(values.workstationTypeOptions).toEqual([
+      WorkstationType.MODEL_WORKSTATION,
+      WorkstationType.AGENT_RUN,
+      WorkstationType.INFERENCE_RUN,
+    ]);
+
+    const saved = applyEditableWorkstationDraft(modelFactory, modelNode, {
+      ...editableWorkstationDraftFromValues(values),
+      behavior: "STANDARD",
+      name: "Legacy Review Updated",
+      prompt: "Review the updated story before approval.",
+      runnerName: "claude",
+    });
+
+    expect(saved?.metadata).toEqual(modelFactory.metadata);
+    expect(saved?.resources).toEqual(modelFactory.resources);
+    expect(saved?.workTypes).toEqual(modelFactory.workTypes);
+    expect(saved?.workers).toEqual(modelFactory.workers);
+    expect(saved?.workstations?.[0]).toEqual({
+      behavior: "STANDARD",
+      body: "Review the updated story before approval.",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+      id: "legacy-review",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Legacy Review Updated",
+      onFailure: [{ state: "failed", workType: "story" }],
+      onRejection: [{ state: "queued", workType: "story" }],
+      outputs: [{ state: "approved", workType: "story" }],
+      promptFile: "prompts/legacy-review.md",
+      runner: "claude",
+      type: WorkstationType.MODEL_WORKSTATION,
+      worker: "legacy-model",
+    });
+    expect(saved?.workstations?.[1]).toEqual(modelFactory.workstations?.[1]);
+  });
+
+  it("projects and saves promptless SCRIPT_RUN workstations without adding a body", () => {
+    const scriptNode: DashboardWorkstationNode = {
+      model: "script",
+      node_id: "run-script",
+      transition_id: "run-script",
+      workstation_kind: WorkstationType.SCRIPT_RUN,
+      workstation_name: "Run Script",
+    };
+    const scriptFactory: CanonicalFactoryDefinition = {
+      metadata: { description: "Script factory metadata survives edits." },
+      name: "Script Factory",
+      resources: [{ initial: 1, name: "script-slot" }],
+      version: { logical: "4", physical: "2026-06-01T00:00:00Z" },
+      workers: [
+        {
+          args: ["--input", "story.json"],
+          command: "node",
+          name: "script-runner",
+          type: WorkerType.SCRIPT_WORKER,
+        },
+        {
+          model: "gpt-5.4",
+          name: "unrelated-model",
+          type: WorkerType.MODEL_WORKER,
+        },
+      ],
+      workTypes: [{ name: "story" }],
+      workstations: [
+        {
+          behavior: "STANDARD",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+          id: "run-script",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Run Script",
+          outputs: [{ state: "done", workType: "story" }],
+          runner: "codex",
+          type: WorkstationType.SCRIPT_RUN,
+          worker: "script-runner",
+        },
+        {
+          body: "Leave this workstation unchanged.",
+          id: "unrelated",
+          name: "Unrelated",
+          worker: "unrelated-model",
+        },
+      ],
+    };
+
+    const values = resolveEditableWorkstationValues(scriptFactory, scriptNode);
+    expect(values).toMatchObject({
+      prompt: null,
+      workerName: "script-runner",
+      workerOptions: ["script-runner"],
+      workstationType: WorkstationType.SCRIPT_RUN,
+      workstationTypeOptions: [WorkstationType.SCRIPT_RUN],
+    });
+    if (!values) {
+      throw new Error("expected editable script workstation values");
+    }
+
+    const saved = applyEditableWorkstationDraft(scriptFactory, scriptNode, {
+      ...editableWorkstationDraftFromValues(values),
+      name: "Run Script Updated",
+    });
+
+    expect(saved?.workers).toEqual(scriptFactory.workers);
+    expect(saved?.workTypes).toEqual(scriptFactory.workTypes);
+    expect(saved?.resources).toEqual(scriptFactory.resources);
+    expect(saved?.workstations?.[0]).toMatchObject({
+      behavior: "STANDARD",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+      id: "run-script",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Run Script Updated",
+      outputs: [{ state: "done", workType: "story" }],
+      runner: "codex",
+      type: WorkstationType.SCRIPT_RUN,
+      worker: "script-runner",
+    });
+    expect(saved?.workstations?.[0]).not.toHaveProperty("body");
+    expect(saved?.workstations?.[1]).toEqual(scriptFactory.workstations?.[1]);
+  });
+
+  it("projects POLLER_RUN workstations with poller behavior and saves without prompt fields", () => {
+    const pollerNode: DashboardWorkstationNode = {
+      node_id: "ingress",
+      transition_id: "ingress",
+      workstation_kind: WorkstationType.POLLER_RUN,
+      workstation_name: "Ingress",
+    };
+    const pollerFactory: CanonicalFactoryDefinition = {
+      name: "Poller Factory",
+      version: { logical: "5", physical: "2026-06-02T00:00:00Z" },
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear" },
+          name: "linear-poller",
+          provider: "LINEAR",
+          type: WorkerType.HOSTED_WORKER,
+        },
+        {
+          args: ["--watch"],
+          command: "./ingress.sh",
+          name: "script-poller",
+          type: WorkerType.SCRIPT_WORKER,
+        },
+        { name: "native-poller", type: WorkerType.POLLER_WORKER },
+        { model: "gpt-5.4", name: "reviewer", type: WorkerType.MODEL_WORKER },
+      ],
+      workstations: [
+        {
+          body: "This prompt is not part of poller execution.",
+          id: "ingress",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Ingress",
+          outputs: [{ state: "received", workType: "story" }],
+          promptFile: "prompts/unused.md",
+          runner: "codex",
+          type: WorkstationType.POLLER_RUN,
+          worker: "linear-poller",
+        },
+        {
+          body: "Leave this workstation unchanged.",
+          id: "review",
+          inputs: [{ state: "received", workType: "story" }],
+          name: "Review",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [{ name: "story" }],
+    };
+
+    const values = resolveEditableWorkstationValues(pollerFactory, pollerNode);
+    expect(values).toMatchObject({
+      behavior: "POLLER",
+      behaviorOptions: ["POLLER"],
+      prompt: null,
+      workerName: "linear-poller",
+      workerOptions: ["linear-poller", "script-poller", "native-poller"],
+      workstationType: WorkstationType.POLLER_RUN,
+      workstationTypeOptions: [WorkstationType.POLLER_RUN],
+    });
+    if (!values) {
+      throw new Error("expected editable poller workstation values");
+    }
+
+    const saved = applyEditableWorkstationDraft(pollerFactory, pollerNode, {
+      ...editableWorkstationDraftFromValues(values),
+      name: "Ingress Updated",
+    });
+
+    expect(saved?.workers).toEqual(pollerFactory.workers);
+    expect(saved?.workstations?.[1]).toEqual(pollerFactory.workstations?.[1]);
+    expect(saved?.workstations?.[0]).toMatchObject({
+      behavior: "POLLER",
+      id: "ingress",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Ingress Updated",
+      outputs: [{ state: "received", workType: "story" }],
+      type: WorkstationType.POLLER_RUN,
+      worker: "linear-poller",
+    });
+    expect(saved?.workstations?.[0]).not.toHaveProperty("body");
+    expect(saved?.workstations?.[0]).not.toHaveProperty("promptFile");
+    expect(saved?.workstations?.[0]).not.toHaveProperty("runner");
+  });
+
   it("round-trips new taxonomy workstation saves without downgrading to legacy names", () => {
     const taxonomyFactory: CanonicalFactoryDefinition = {
       name: "Legacy Factory",

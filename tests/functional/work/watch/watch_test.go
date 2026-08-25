@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,12 +32,12 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	moveProcess, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	moveProcess, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess(move) error = %v", err)
 	}
 	support.CleanupProcess(t, moveProcess)
-	watchProcess, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	watchProcess, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("root.BuildProcess(watch) error = %v", err)
 	}

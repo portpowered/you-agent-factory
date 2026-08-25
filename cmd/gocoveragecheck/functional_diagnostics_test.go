@@ -114,6 +114,7 @@ func TestWritePartialCoverageSnapshotSkipsUntrustworthyProfile(t *testing.T) {
 		filepath.Join(t.TempDir(), "missing-coverage.out"),
 		".",
 		[]string{modulePath + "/pkg/config"},
+		coverageFloorPolicyBlocking,
 		"tier budget expired",
 	)
 	if err != nil {

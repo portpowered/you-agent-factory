@@ -9,27 +9,10 @@
   --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-display: "Space Grotesk", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "Consolas", monospace;
-  /* Neutral/product af-* aliases: color-role-tokens.css */
+  /* Remaining foundation-derived compatibility alias. */
   --color-af-surface-subtle-muted: rgb(
     from var(--color-af-foundation-overlay) r g b /
     0.028
-  );
-  --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
-  --color-af-overlay-subtle: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.04
-  );
-  --color-af-overlay-focus: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.1
-  );
-  --color-af-overlay-strong: rgb(
-    from var(--color-af-foundation-background) r g b /
-    0.78
-  );
-  --color-af-focus-ring: rgb(
-    from var(--color-af-foundation-accent) r g b /
-    0.25
   );
   /* Text af-* aliases (on-surface*): color-role-tokens.css */
   /* Accent/semantic af-* aliases: color-role-tokens.css */
@@ -78,32 +61,8 @@
   --color-af-success-ink: var(--color-af-foundation-success-ink);
   --color-af-danger-bright: var(--color-af-foundation-danger-bright);
   --color-af-danger-ink: var(--color-af-foundation-danger-ink);
-  --color-af-chart-grid-line: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.032
-  );
-  --color-af-chart-queued: var(--color-af-accent-glow);
-  --color-af-chart-in-flight: var(--color-af-info-ink);
-  --color-af-chart-completed: var(--color-af-success-ink);
-  --color-af-chart-failed: var(--color-af-danger-bright);
-  --color-af-chart-failure-trend: var(--color-af-danger-bright);
-  --color-af-chart-rework-trend: var(--color-af-accent);
-  --color-af-chart-timing-trend: var(--color-af-info-bright);
-  --color-af-chart-selection-fill: var(--color-af-accent-surface);
-  --color-af-chart-selection-stroke: var(--color-af-accent-border);
-  --color-af-chart-cursor: var(--color-af-border-strong);
-  --color-af-chart-active-dot-stroke: var(--color-af-background);
   /* code / inverse text roles: text-color-role-tokens.css; role-backed af-* in color-role-tokens.css */
   --color-on-foreground: var(--color-on-inverse);
-  --color-af-edge-muted: var(--color-af-border-strong);
-  --color-af-edge-muted-soft: var(--color-af-border);
-  --color-af-edge-danger-muted: rgb(from var(--color-af-danger) r g b / 0.32);
-  --color-af-graph-controls-surface: var(--color-af-surface);
-  --color-af-graph-controls-button-surface: var(--color-af-surface-raised);
-  --color-af-graph-controls-button-surface-hover: var(--color-af-overlay);
-  --color-af-graph-controls-border: var(--color-af-border);
-  --color-af-graph-controls-text: var(--color-af-text-muted);
-  --color-af-graph-controls-text-hover: var(--color-af-text);
   --color-af-shadow: #000000;
   --shadow-af-card: 0 12px 28px rgb(from var(--color-af-shadow) r g b / 0.2);
   --shadow-af-panel: 0 18px 48px rgb(from var(--color-af-shadow) r g b / 0.24);
@@ -119,8 +78,7 @@
   --shadow-af-info-chip: 0 0 0 2px rgb(from var(--color-af-info) r g b / 0.12);
   --shadow-af-accent-chip: 0 0 0 2px
     rgb(from var(--color-af-accent) r g b / 0.18);
-  /* Factory graph visual-state role tokens. */
-  --color-af-graph-focus-indicator: var(--color-af-foundation-ink);
+  /* Factory graph visual-state shadow tokens. */
   --shadow-af-graph-danger: 0 0 0 2px
     rgb(from var(--color-af-danger) r g b / 0.2);
   --shadow-af-graph-warning: 0 0 0 2px
@@ -263,26 +221,44 @@
   :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow {
     @apply rounded-lg border border-af-border bg-af-surface-subtle shadow-none;
     --xy-controls-box-shadow: none;
-    --xy-controls-button-background-color: var(--color-af-surface-raised);
-    --xy-controls-button-background-color-hover: var(--color-af-overlay);
-    --xy-controls-button-border-color: var(--color-af-border);
-    --xy-controls-button-color: var(--color-af-text-muted);
-    --xy-controls-button-color-hover: var(--color-af-text);
+    --xy-controls-button-background-color: var(
+      --color-af-graph-controls-button-surface
+    );
+    --xy-controls-button-background-color-hover: var(
+      --color-af-graph-controls-button-surface-hover
+    );
+    --xy-controls-button-border-color: var(--color-af-graph-controls-border);
+    --xy-controls-button-color: var(--color-af-graph-controls-text);
+    --xy-controls-button-color-hover: var(
+      --color-af-graph-controls-text-hover
+    );
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame])
     .react-flow__controls {
-    @apply overflow-hidden rounded-lg border border-af-border bg-af-surface-raised shadow-none;
+    @apply overflow-hidden rounded-lg shadow-none;
+    border: 1px solid var(--color-af-graph-controls-border);
+    background-color: var(--color-af-graph-controls-surface);
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame])
     .react-flow__controls-button {
-    @apply border-b border-af-border bg-af-surface-raised text-af-text-muted transition-colors;
+    @apply border-b transition-colors;
+    border-color: var(--color-af-graph-controls-border);
+    background-color: var(--color-af-graph-controls-button-surface);
+    color: var(--color-af-graph-controls-text);
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame])
     .react-flow__controls-button:hover {
-    @apply bg-af-overlay text-af-text;
+    background-color: var(--color-af-graph-controls-button-surface-hover);
+    color: var(--color-af-graph-controls-text-hover);
+  }
+
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls-button:focus-visible {
+    outline: 2px solid var(--color-af-graph-focus-indicator);
+    outline-offset: -2px;
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame])
@@ -327,6 +303,30 @@
     .react-flow__edge.agent-flow-edge--muted
     .react-flow__edge-text {
     @apply fill-af-text-disabled;
+  }
+
+  [data-color-palette="factory-dark"]
+    [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--role-muted:not(
+      .agent-flow-edge--active
+    ):not(.agent-flow-edge--pending-addition):not(:hover) {
+    opacity: var(--color-edge-muted-opacity);
+  }
+
+  [data-color-palette="factory-dark"]
+    [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--role-muted-soft:not(
+      .agent-flow-edge--active
+    ):not(.agent-flow-edge--pending-addition):not(:hover) {
+    opacity: var(--color-edge-muted-soft-opacity);
+  }
+
+  [data-color-palette="factory-dark"]
+    [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--role-danger-muted:not(
+      .agent-flow-edge--active
+    ):not(.agent-flow-edge--pending-addition):not(:hover) {
+    opacity: var(--color-edge-danger-muted-opacity);
   }
 
   [data-current-activity-flow]

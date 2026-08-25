@@ -91,7 +91,7 @@ type rootProcess interface {
 
 func buildPullToReadyProcess(t *testing.T, edges serviceedges.Edges) rootProcess {
 	t.Helper()
-	process, err := root.BuildProcess(context.Background(), edges)
+	process, err := support.BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}

@@ -359,7 +359,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 			failedTestCountKnown = failedTestCountKnown && known
 		}
 
-		detail := mergeGoTestFailureDetail(batchStderr, coverageFailureDetailStdout(cfg, batchStdout))
+		detail := coverageFailureDetail(cfg, batchStdout, batchStderr)
 		batchFailurePrefix := failurePrefix
 		if len(plan.invocations) > 1 {
 			batchFailurePrefix = fmt.Sprintf("%s (batch %d/%d)", failurePrefix, index+1, len(plan.invocations))
@@ -412,13 +412,13 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 	}
 	var reporter *functionalStreamReporter
 	if cfg.stream {
-		reporter = configureCoverageInvocationStreaming(plan, true, observer)
+		reporter = configureCoverageInvocationStreamingForSuite(plan, true, cfg.suite == functionalCoverageSuite, observer)
 	} else {
 		reporter = configureCoverageInvocationObservation(plan, observer)
 	}
 	sink := io.Writer(nil)
 	var sinkMu *sync.Mutex
-	if cfg.stream {
+	if cfg.stream && cfg.suite != functionalCoverageSuite {
 		sink = stdoutWriter
 		sinkMu = &reporter.sinkMu
 	}
@@ -428,7 +428,14 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 		sink,
 		sinkMu,
 		func() error {
-			return writePartialCoverageSnapshot(cfg.jsonOutput, profilePath, repoRoot, coverPackages, partialCoverageReason(nil))
+			return writePartialCoverageSnapshot(
+				cfg.jsonOutput,
+				profilePath,
+				repoRoot,
+				coverPackages,
+				cfg.packageFloorPolicyValue(),
+				partialCoverageReason(nil),
+			)
 		},
 	)
 	snapshotter.publish(false, coverageLaneNoun(cfg.suite)+" run started", false)
@@ -437,7 +444,7 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 
 func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshotter, stdout string, testPackages []string, wallSeconds float64, laneErr error, expectedFunctionalInventory *functionalTestInventory) error {
 	runtimeInventoryGate := expectedFunctionalInventory != nil
-	if strings.TrimSpace(cfg.timingOutput) == "" && !runtimeInventoryGate {
+	if strings.TrimSpace(cfg.timingOutput) == "" && !runtimeInventoryGate && cfg.suite != functionalCoverageSuite {
 		if snapshotter != nil {
 			snapshotter.stopAndWait()
 		}
@@ -465,8 +472,12 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 	} else {
 		err = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
 	}
-	if err == nil && cfg.suite == "functional" {
-		writeFunctionalTimingInventorySummary(summary, cfg.short)
+	if err == nil && cfg.suite == functionalCoverageSuite {
+		if summary.Complete {
+			if reportErr := writeFunctionalTimingReport(summary); reportErr != nil {
+				err = errors.Join(err, reportErr)
+			}
+		}
 	}
 	return errors.Join(err, inventoryErr)
 }
@@ -494,6 +505,7 @@ func publishPartialCoverageIfNeeded(cfg config, profilePath string, repoRoot str
 		profilePath,
 		repoRoot,
 		coverPackages,
+		cfg.packageFloorPolicyValue(),
 		partialCoverageReason(errors.Join(laneErr, mergeErr)),
 	)
 }
@@ -617,6 +629,10 @@ func runCommand(invocation commandInvocation) (string, string, error) {
 }
 
 func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled bool, observers ...func(goTestTimingEvent)) *functionalStreamReporter {
+	return configureCoverageInvocationStreamingForSuite(plan, enabled, false, observers...)
+}
+
+func configureCoverageInvocationStreamingForSuite(plan *coverageInvocationPlan, enabled bool, suppressHumanOutput bool, observers ...func(goTestTimingEvent)) *functionalStreamReporter {
 	if !enabled {
 		return nil
 	}
@@ -624,10 +640,14 @@ func configureCoverageInvocationStreaming(plan *coverageInvocationPlan, enabled 
 	if len(observers) > 0 {
 		observer = observers[0]
 	}
-	reporter := newFunctionalStreamReporterWithObserver(stdoutWriter, observer)
+	reporter := newFunctionalStreamReporterWithObserverMode(stdoutWriter, observer, suppressHumanOutput)
 	for index := range plan.invocations {
 		plan.invocations[index].stdoutWriter = reporter.stdoutWriter()
-		plan.invocations[index].stderrWriter = reporter.stderrWriter(stderrWriter)
+		stderrSink := io.Writer(stderrWriter)
+		if suppressHumanOutput {
+			stderrSink = io.Discard
+		}
+		plan.invocations[index].stderrWriter = reporter.stderrWriter(stderrSink)
 	}
 	return reporter
 }
@@ -651,13 +671,21 @@ func configureCoverageInvocationObservation(plan *coverageInvocationPlan, observ
 // keeps a failing unit lane exactly as diagnosable as it is with timing capture
 // switched off.
 //
-// A streaming lane already forwarded the human text to its sink line by line,
-// so its buffer is returned unchanged.
+// A non-quiet streaming lane already forwarded the human text to its sink line
+// by line, so its buffer is returned unchanged. The functional lane uses a
+// quiet streaming reporter and is rendered by coverageFailureDetail instead.
 func coverageFailureDetailStdout(cfg config, stdout string) string {
 	if cfg.stream || strings.TrimSpace(cfg.timingOutput) == "" {
 		return stdout
 	}
 	return renderGoTestEventOutput(stdout)
+}
+
+func coverageFailureDetail(cfg config, stdout string, stderr string) string {
+	if cfg.suite == functionalCoverageSuite && (cfg.stream || strings.TrimSpace(cfg.timingOutput) != "") {
+		return mergeGoTestFailureDetail(stderr, renderFunctionalFailureDetail(stdout))
+	}
+	return mergeGoTestFailureDetail(stderr, coverageFailureDetailStdout(cfg, stdout))
 }
 
 // renderGoTestEventOutput reconstitutes the human-readable go test stream from

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -194,6 +195,47 @@ func TestRuntimeMetricsRootRetentionYieldsWhenRootSweepIsAlreadyClaimed(t *testi
 	}
 }
 
+func TestRuntimeMetricsCoordinationCancelsWaitingLocksAndClassifiesBusyClaims(t *testing.T) {
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	if _, err := coordination.TryLockRoot(" "); err == nil || !strings.Contains(err.Error(), "path is required") {
+		t.Fatalf("TryLockRoot(blank) = %v, want path validation", err)
+	}
+	root := t.TempDir()
+	rootLock, err := coordination.LockRoot(context.Background(), root)
+	if err != nil {
+		t.Fatalf("LockRoot(): %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := coordination.LockRoot(canceled, root); !errors.Is(err, context.Canceled) {
+		t.Fatalf("LockRoot(canceled while busy) = %v, want context.Canceled", err)
+	}
+	if _, err := coordination.TryLockRoot(root); !errors.Is(err, ErrRuntimeMetricsRootBusy) {
+		t.Fatalf("TryLockRoot(held) = %v, want ErrRuntimeMetricsRootBusy", err)
+	}
+	if err := rootLock.Close(); err != nil {
+		t.Fatalf("rootLock.Close(): %v", err)
+	}
+
+	artifact := filepath.Join(root, "2026", "08", "24", "010000.000000000-runtime-metrics-session-runtime-collision.log")
+	claim, err := coordination.Claim(artifact)
+	if err != nil {
+		t.Fatalf("Claim(): %v", err)
+	}
+	if _, err := coordination.TryClaim(artifact); !errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
+		t.Fatalf("TryClaim(held) = %v, want ErrRuntimeMetricsArtifactBusy", err)
+	}
+	if err := claim.Close(); err != nil {
+		t.Fatalf("claim.Close(): %v", err)
+	}
+	if _, err := coordination.TryClaimMarker(filepath.Join(root, "missing-marker")); err == nil {
+		t.Fatal("TryClaimMarker(missing) succeeded, want filesystem error")
+	}
+}
+
 func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaimAndMarker(t *testing.T) {
 	root := t.TempDir()
 	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "stale-claim-runtime-stale-collision", 9)
@@ -255,6 +297,41 @@ func TestRuntimeMetricsRootRetentionPreservesLiveClaimMarkerAfterArtifactMissing
 		t.Fatalf("Sweep(released missing artifact): %v", err)
 	}
 	assertRetentionPathAbsent(t, claimPath, "released claim marker after missing-artifact sweep")
+}
+
+func TestRuntimeMetricsRootRetentionProtectsArtifactChangedDuringClaim(t *testing.T) {
+	root := t.TempDir()
+	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "changed-runtime-changed-collision", 9)
+	coordination := &metricsTestCoordination{
+		tryRootLock: &metricsTestCloser{},
+		tryClaim:    &metricsTestCloser{},
+		onTryClaim: func(path string) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return
+			}
+			_ = os.WriteFile(path, append(data, 'x'), 0o600)
+		},
+	}
+	retention, err := NewRuntimeMetricsRetention(
+		platformfilesystem.Local{},
+		func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+		coordination,
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	report, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxBackups: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(changed artifact): %v", err)
+	}
+	if report.Protected.Files != 1 || report.Protected.Bytes != 10 || report.Removed.Files != 0 {
+		t.Fatalf("changed-artifact report = %#v, want protected 10-byte artifact", report)
+	}
+	assertRetentionPathExists(t, artifact, "changed artifact")
 }
 
 func TestRuntimeMetricsRootRetentionBoundsClaimMarkersAcrossEightCycles(t *testing.T) {
@@ -647,6 +724,171 @@ func newTestRuntimeMetricsRetention(t *testing.T, now time.Time) *RuntimeMetrics
 		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
 	}
 	return retention
+}
+
+func TestRuntimeMetricsRetentionValidatesConstruction(t *testing.T) {
+	if retention, err := NewRuntimeMetricsRetention(nil, time.Now); retention != nil || err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("NewRuntimeMetricsRetention(nil filesystem) = (%#v, %v)", retention, err)
+	}
+	if retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, nil); retention != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
+		t.Fatalf("NewRuntimeMetricsRetention(nil clock) = (%#v, %v)", retention, err)
+	}
+	coordination := &metricsTestCoordination{}
+	if retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, coordination, coordination); retention != nil || err == nil || !strings.Contains(err.Error(), "at most one") {
+		t.Fatalf("NewRuntimeMetricsRetention(two coordinators) = (%#v, %v)", retention, err)
+	}
+	if retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, nil); retention != nil || err == nil || !strings.Contains(err.Error(), "coordination is required") {
+		t.Fatalf("NewRuntimeMetricsRetention(nil coordinator) = (%#v, %v)", retention, err)
+	}
+
+	var nilRetention *RuntimeMetricsRetention
+	if _, err := nilRetention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{RootDirectory: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "retention is not configured") {
+		t.Fatalf("nil retention Sweep() = %v, want configuration error", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionValidatesSweepRequests(t *testing.T) {
+	root := t.TempDir()
+	coordination := &metricsTestCoordination{}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, func() time.Time {
+		return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	}, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := retention.Sweep(canceled, RuntimeMetricsRetentionRequest{RootDirectory: root}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled Sweep() = %v, want context.Canceled", err)
+	}
+	for _, request := range []RuntimeMetricsRetentionRequest{
+		{RootDirectory: ""},
+		{RootDirectory: "   "},
+		{RootDirectory: filepath.Join(root, "missing")},
+	} {
+		if _, err := retention.Sweep(nil, request); err == nil {
+			t.Fatalf("Sweep(%#v) succeeded, want request validation failure", request)
+		}
+	}
+	fileRoot := filepath.Join(root, "file")
+	if err := os.WriteFile(fileRoot, []byte("not a root"), 0o600); err != nil {
+		t.Fatalf("WriteFile(file root): %v", err)
+	}
+	if _, err := retention.Sweep(nil, RuntimeMetricsRetentionRequest{RootDirectory: fileRoot}); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("Sweep(file root) = %v, want directory validation", err)
+	}
+
+	zeroClock, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, func() time.Time { return time.Time{} }, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(zero clock): %v", err)
+	}
+	if _, err := zeroClock.Sweep(nil, RuntimeMetricsRetentionRequest{RootDirectory: root}); err == nil || !strings.Contains(err.Error(), "clock returned zero") {
+		t.Fatalf("Sweep(zero clock) = %v, want clock validation", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionReportsCoordinationOutcomes(t *testing.T) {
+	root := t.TempDir()
+	coordination := &metricsTestCoordination{}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	busyCoordination := &metricsTestCoordination{tryLockRootErr: ErrRuntimeMetricsRootBusy}
+	busyRetention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, busyCoordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(busy): %v", err)
+	}
+	busyReport, err := busyRetention.Sweep(nil, RuntimeMetricsRetentionRequest{RootDirectory: root})
+	if err != nil || !busyReport.Skipped || busyReport.RootDirectory != filepath.Clean(root) {
+		t.Fatalf("Sweep(busy) = %#v, %v, want skipped root report", busyReport, err)
+	}
+
+	coordination.tryLockRootErr = errors.New("root coordination failed")
+	if _, err := retention.Sweep(nil, RuntimeMetricsRetentionRequest{RootDirectory: root}); err == nil || !strings.Contains(err.Error(), "coordinate runtime metrics sweep") {
+		t.Fatalf("Sweep(coordination failure) = %v, want coordination context", err)
+	}
+	coordination.tryLockRootErr = nil
+	coordination.tryRootLock = &metricsTestCloser{err: errors.New("root close failed")}
+	if _, err := retention.Sweep(nil, RuntimeMetricsRetentionRequest{RootDirectory: root}); err == nil || !strings.Contains(err.Error(), "release runtime metrics sweep coordination") {
+		t.Fatalf("Sweep(root close failure) = %v, want release context", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("validation fixture changed unexpectedly: %v", err)
+	}
+}
+
+func TestRuntimeMetricsRetentionPreservesFailureReportsDuringInventoryAndRemoval(t *testing.T) {
+	root := t.TempDir()
+	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "failure-runtime-failure-collision", 9)
+	failureFS := &retentionFailureFileSystem{Local: platformfilesystem.Local{}, removeErr: errors.New("remove denied")}
+	coordination := &metricsTestCoordination{
+		tryRootLock: &metricsTestCloser{},
+		tryClaim:    &metricsTestCloser{},
+	}
+	retention, err := NewRuntimeMetricsRetention(
+		failureFS,
+		func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+		coordination,
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	report, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxBackups: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(remove failure): %v", err)
+	}
+	if report.Failed.Files != 1 || report.Removed.Files != 0 || len(report.Failures) == 0 {
+		t.Fatalf("remove-failure report = %#v, want one protected candidate failure", report)
+	}
+	assertRetentionPathExists(t, artifact, "failed removal artifact")
+
+	walkRoot := t.TempDir()
+	walkFS := &incompleteRetentionFileSystem{Local: platformfilesystem.Local{}, walkErr: errors.New("directory disappeared")}
+	walkRetention, err := NewRuntimeMetricsRetention(
+		walkFS,
+		func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+		&metricsTestCoordination{tryRootLock: &metricsTestCloser{}},
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(incomplete): %v", err)
+	}
+	walkReport, err := walkRetention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{RootDirectory: walkRoot})
+	if err != nil {
+		t.Fatalf("Sweep(incomplete inventory): %v", err)
+	}
+	if len(walkReport.Failures) == 0 || !strings.Contains(walkReport.Failures[len(walkReport.Failures)-1].Error.Error(), "inventory is incomplete") {
+		t.Fatalf("incomplete inventory report = %#v, want cleanup-skip failure", walkReport)
+	}
+}
+
+type retentionFailureFileSystem struct {
+	platformfilesystem.Local
+	removeErr error
+}
+
+func (filesystem *retentionFailureFileSystem) Remove(string) error {
+	return filesystem.removeErr
+}
+
+type incompleteRetentionFileSystem struct {
+	platformfilesystem.Local
+	walkErr error
+}
+
+func (filesystem *incompleteRetentionFileSystem) WalkDir(root string, walk fs.WalkDirFunc) error {
+	info, err := os.Stat(root)
+	if err != nil {
+		return err
+	}
+	if err := walk(root, fs.FileInfoToDirEntry(info), nil); err != nil {
+		return err
+	}
+	return walk(filepath.Join(root, "010000.000000000-runtime-metrics-failed-runtime-failed.log"), nil, filesystem.walkErr)
 }
 
 func writeRetentionArtifact(t *testing.T, root, date, clock, suffix string, size int) string {

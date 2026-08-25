@@ -1,25 +1,55 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { render, screen } from "@testing-library/react";
+import { ReactFlowProvider } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
-import { DashboardGraphFrame } from "./dashboard-graph";
-
-const dashboardGraphSourcePath = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "dashboard-graph.tsx",
-);
+import {
+  DashboardGraphBackground,
+  DashboardGraphControls,
+  DashboardGraphFrame,
+} from "./dashboard-graph";
 
 describe("dashboard graph chrome", () => {
   it("styles React Flow canvas and controls with Material role CSS variables", () => {
-    const source = readFileSync(dashboardGraphSourcePath, "utf8");
+    render(
+      <ReactFlowProvider>
+        <DashboardGraphBackground />
+        <DashboardGraphControls fitViewOptions={{}} />
+      </ReactFlowProvider>,
+    );
 
-    expect(source).toContain("color={DASHBOARD_GRAPH_BACKGROUND_COLOR}");
-    expect(source).toContain("var(--color-outline)");
-    expect(source).toContain("var(--color-surface-container-high)");
-    expect(source).toContain("var(--color-on-surface-variant)");
-    expect(source).toContain("var(--color-surface)");
+    const backgroundPattern = document.querySelector(
+      ".react-flow__background pattern",
+    );
+    expect(backgroundPattern).not.toBeNull();
+    expect(
+      document
+        .querySelector<SVGElement>(".react-flow__background")
+        ?.style.getPropertyValue("--xy-background-pattern-color-props"),
+    ).toBe("var(--color-outline)");
+
+    const controls = document.querySelector(".react-flow__controls");
+    expect(controls).not.toBeNull();
+    expect((controls as HTMLElement | null)?.style.backgroundColor).toBe(
+      "var(--color-af-graph-controls-surface)",
+    );
+
+    const zoomIn = screen.getByRole("button", { name: "Zoom In" });
+    expect(zoomIn).not.toBeNull();
+    expect(
+      (controls as HTMLElement | null)?.style.getPropertyValue(
+        "--xy-controls-button-background-color",
+      ),
+    ).toBe("var(--color-af-graph-controls-button-surface)");
+    expect(
+      (controls as HTMLElement | null)?.style.getPropertyValue(
+        "--xy-controls-button-border-color",
+      ),
+    ).toBe("var(--color-af-graph-controls-border)");
+    expect(
+      (controls as HTMLElement | null)?.style.getPropertyValue(
+        "--xy-controls-button-color",
+      ),
+    ).toBe("var(--color-af-graph-controls-text)");
   });
 });
 

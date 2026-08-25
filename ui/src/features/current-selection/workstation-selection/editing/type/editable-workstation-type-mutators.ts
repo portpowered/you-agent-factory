@@ -1,3 +1,7 @@
+import {
+  isPollerRunWorkstationType,
+  isWorkerCompatibleWithWorkstationType,
+} from "../../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import type {
@@ -29,6 +33,27 @@ export function resolveDraftForWorkstationTypeChange(
         selectedEditableValues,
       ),
       workstationType,
+    };
+  }
+
+  if (isPollerRunWorkstationType(workstationType)) {
+    const workerName = selectedEditableValues.workerOptions.find((name) =>
+      isWorkerCompatibleWithWorkstationType(
+        selectedEditableValues.workerTypeByName[name],
+        workstationType,
+      ),
+    );
+
+    return {
+      ...draft,
+      behavior: "POLLER",
+      cron: null,
+      operation: "",
+      operationBindings: [],
+      prompt: "",
+      runnerName: null,
+      workstationType,
+      ...(workerName ? { workerName } : {}),
     };
   }
 

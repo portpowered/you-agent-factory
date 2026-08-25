@@ -126,6 +126,80 @@ func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
 	assertArtifactExport(t, svc)
 }
 
+func TestCombinedServiceRecordingLifecycleAdapterPreservesDetachedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(&stubLedger{}, NewProjectionService())
+	lifecycle, ok := svc.(recordings.RecordingLifecycle)
+	if !ok {
+		t.Fatal("Recordings root does not implement RecordingLifecycle")
+	}
+	scope := recordings.LifecycleScope{FactorySessionID: "lifecycle-adapter"}
+	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{}); err != nil {
+		t.Fatalf("Begin disabled: %v", err)
+	}
+	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+		Enabled:     true,
+		RecordingID: "lifecycle-adapter",
+		Scope:       scope,
+		Artifact:    "artifact://lifecycle-adapter",
+	}); err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
+		RecordingID: "lifecycle-adapter",
+		Event: recordings.LifecycleEvent{
+			ID:         "lifecycle-adapter-event",
+			Sequence:   0,
+			Scope:      scope,
+			Cursor:     recordings.LifecycleEventCursor{StreamGenerationID: "generation-1"},
+			RecordedAt: time.Unix(1_700_000_600, 0).UTC(),
+			Kind:       "WORK_REQUEST",
+			Payload:    "{}",
+		},
+	}); err != nil {
+		t.Fatalf("AppendEvent: %v", err)
+	}
+	if _, err := lifecycle.Flush(recordings.FlushLifecycleRequest{RecordingID: "lifecycle-adapter"}); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if _, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: "lifecycle-adapter"}); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if err := lifecycle.Stop(recordings.StopLifecycleRequest{RecordingID: "lifecycle-adapter"}); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+		RecordingID: "lifecycle-adapter",
+		FinishedAt:  time.Unix(1_700_000_601, 0).UTC(),
+	})
+	if err != nil || finished.Status.State != recordings.LifecycleStateFinalized {
+		t.Fatalf("Finish = (%#v, %v), want finalized detached status", finished, err)
+	}
+
+	if _, err := lifecycle.Bind(recordings.BindLifecycleRequest{
+		RecordingID: "lifecycle-failure",
+		Artifact:    "artifact://lifecycle-failure",
+		Scope:       scope,
+	}); err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+	failed, err := lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
+		RecordingID: "lifecycle-failure",
+		Failure: recordings.LifecycleFailure{
+			Code: "adapter-failure", Message: "adapter failure",
+		},
+	})
+	if err != nil || failed.Status.State != recordings.LifecycleStateFailed || len(failed.Status.Failures) != 1 {
+		t.Fatalf("RecordFailure = (%#v, %v), want detached failed status", failed, err)
+	}
+	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{
+		Enabled: true, RecordingID: "missing-adapter-target", Scope: scope,
+	}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		t.Fatalf("Begin missing target = %v, want ErrMissingRecordingTarget", err)
+	}
+}
+
 func assertAppendSubscribe(t *testing.T, svc recordings.Service, ledger *stubLedger) {
 	t.Helper()
 	assertOrderedAppend(t, svc, ledger)
@@ -340,6 +414,15 @@ func scopedLegacyEvent(
 
 func assertProjectionQuery(t *testing.T, svc recordings.Service) {
 	t.Helper()
+	historical, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "unavailable"},
+	})
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	if !errors.As(err, &historicalErr) ||
+		historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable ||
+		historical.Recording.RecordingID != "" {
+		t.Fatalf("QueryHistoricalRecording without capability = (%#v, %v), want unavailable typed error", historical, err)
+	}
 	if _, err := svc.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
 		SelectedTick: -1,
 	}); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
@@ -420,6 +503,13 @@ func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
 		Scope:  scope,
 	}); !errors.Is(err, recordings.ErrInvalidProjectionScope) {
 		t.Fatalf("ValidateReconnectReplayFrom wrong scope = %v, want ErrInvalidProjectionScope", err)
+	}
+	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
+		Events: history,
+		Cursor: recordings.CanonicalEventCursor{Sequence: 0},
+		Scope:  scope,
+	}); !errors.Is(err, recordings.ErrMalformedProjectionOrder) {
+		t.Fatalf("ValidateReconnectReplayFrom malformed cursor = %v, want ErrMalformedProjectionOrder", err)
 	}
 }
 
@@ -1045,4 +1135,192 @@ func TestNewReplayClockAndExecutionNilArtifact(t *testing.T) {
 	if provider != nil || runner != nil || hooks != nil || planner != nil || err != nil {
 		t.Fatalf("NewReplayExecution(nil) = (%v,%v,%v,%v,%v), want nils", provider, runner, hooks, planner, err)
 	}
+}
+
+func TestCombinedServiceReplayArtifactCapabilityRoundTripsDetachedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	destination := filepath.Join(t.TempDir(), "portable", "recording.json")
+	publication, err := NewPortableArtifactPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
+	if err != nil {
+		t.Fatalf("NewPortableArtifactPublication: %v", err)
+	}
+	svc := NewServiceWithLifecycleEffects(
+		&stubLedger{},
+		NewProjectionService(),
+		nil,
+		nil,
+		nil,
+		publication,
+	)
+	capability, ok := svc.(recordings.RecordingReplayArtifacts)
+	if !ok {
+		t.Fatal("Recordings service does not expose RecordingReplayArtifacts")
+	}
+
+	const recordingID = recordings.ReplayRecordingID("recording-neutral-artifacts")
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-neutral-artifacts"}
+	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: recordings.RecordingID(recordingID),
+		Artifact:    recordings.RecordingArtifactReference(destination),
+		Scope:       scope,
+	})
+	if err != nil {
+		t.Fatalf("BindRecording: %v", err)
+	}
+	event := recordings.CanonicalEvent{
+		ID:         "neutral-artifact-event",
+		Sequence:   0,
+		Scope:      scope,
+		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
+		Kind:       "WORK_REQUEST",
+		Payload:    `{"work":"preserved"}`,
+		Cursor: recordings.CanonicalEventCursor{
+			StreamGenerationID: "generation-neutral-artifacts",
+			Sequence:           0,
+		},
+	}
+	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.Status.RecordingID,
+		Event:       event,
+	}); err != nil {
+		t.Fatalf("RecordRecordingEvent: %v", err)
+	}
+
+	assertCombinedReplayArtifactActiveErrors(t, capability, recordingID)
+
+	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: bound.Status.RecordingID,
+		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("FinishRecording: %v", err)
+	}
+	loaded := loadCombinedReplayArtifact(t, capability, recordingID)
+	assertCombinedLoadedReplay(t, loaded, recordingID, scope, event)
+	built := buildCombinedReplayArtifact(t, capability, recordingID)
+	assertCombinedBuiltArtifact(t, built, recordingID, destination, event)
+	assertCombinedArtifactOperations(t, capability, built.Artifact, scope, event)
+	assertCombinedArtifactPublication(t, capability, recordingID, destination)
+}
+
+func assertCombinedReplayArtifactActiveErrors(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) {
+	t.Helper()
+	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorNotFinalized) {
+		t.Fatalf("LoadReplay active = %v, want NOT_FINALIZED", err)
+	}
+	if _, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorUnavailable) {
+		t.Fatalf("BuildArtifact active = %v, want UNAVAILABLE", err)
+	}
+	if _, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: "missing-neutral-artifacts"}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorNotFound) {
+		t.Fatalf("LoadReplay missing = %v, want NOT_FOUND", err)
+	}
+}
+
+func loadCombinedReplayArtifact(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) recordings.LoadReplayResult {
+	t.Helper()
+	loaded, err := capability.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID})
+	if err != nil {
+		t.Fatalf("LoadReplay: %v", err)
+	}
+	return loaded
+}
+
+func assertCombinedLoadedReplay(t *testing.T, loaded recordings.LoadReplayResult, recordingID recordings.ReplayRecordingID, scope recordings.CanonicalEventScope, event recordings.CanonicalEvent) {
+	t.Helper()
+	if loaded.Replay.RecordingID != recordingID || loaded.Replay.Scope.FactorySessionID != scope.FactorySessionID ||
+		len(loaded.Replay.Events) != 1 || loaded.Replay.Events[0].ID != string(event.ID) || loaded.Replay.Events[0].Payload != event.Payload {
+		t.Fatalf("LoadReplay = %#v, want detached recording facts", loaded)
+	}
+}
+
+func buildCombinedReplayArtifact(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID) recordings.BuildArtifactResult {
+	t.Helper()
+	built, err := capability.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
+	if err != nil {
+		t.Fatalf("BuildArtifact: %v", err)
+	}
+	return built
+}
+
+func assertCombinedBuiltArtifact(t *testing.T, built recordings.BuildArtifactResult, recordingID recordings.ReplayRecordingID, destination string, event recordings.CanonicalEvent) {
+	t.Helper()
+	if built.Artifact.SchemaVersion != recordings.ArtifactSchemaV1 || built.Artifact.Summary.RecordingID != recordingID ||
+		built.Artifact.Summary.Reference != recordings.ArtifactReference(destination) || built.Artifact.Summary.EventCount != 1 ||
+		len(built.Artifact.Events) != 1 || built.Artifact.Events[0].ID != string(event.ID) {
+		t.Fatalf("BuildArtifact = %#v, want finalized detached artifact", built)
+	}
+}
+
+func assertCombinedArtifactOperations(t *testing.T, capability recordings.RecordingReplayArtifacts, artifact recordings.ArtifactEnvelope, scope recordings.CanonicalEventScope, event recordings.CanonicalEvent) {
+	t.Helper()
+	validated, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: artifact})
+	if err != nil || validated.Summary.EventCount != 1 {
+		t.Fatalf("ValidateArtifact = (%#v, %v), want one-event summary", validated, err)
+	}
+	summarized, err := capability.SummarizeArtifact(recordings.SummarizeArtifactRequest{Artifact: artifact})
+	if err != nil || summarized.Summary.Scope.FactorySessionID != scope.FactorySessionID {
+		t.Fatalf("SummarizeArtifact = (%#v, %v), want session scope", summarized, err)
+	}
+	encoded, err := capability.EncodeArtifact(recordings.EncodeArtifactRequest{Artifact: artifact})
+	if err != nil || len(encoded.Payload) == 0 {
+		t.Fatalf("EncodeArtifact = (%d bytes, %v), want payload", len(encoded.Payload), err)
+	}
+	decoded, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: encoded.Payload})
+	if err != nil || decoded.Artifact.Events[0].Payload != event.Payload {
+		t.Fatalf("DecodeArtifact = (%#v, %v), want preserved event payload", decoded, err)
+	}
+	assertCombinedArtifactValidationFailures(t, capability, artifact)
+}
+
+func assertCombinedArtifactValidationFailures(t *testing.T, capability recordings.RecordingReplayArtifacts, artifact recordings.ArtifactEnvelope) {
+	t.Helper()
+	tampered := artifact
+	tampered.Events = append([]recordings.ReplayEvent(nil), artifact.Events...)
+	tampered.Events[0].Payload = `{"changed":true}`
+	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: tampered}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorInvalidIntegrity) {
+		t.Fatalf("ValidateArtifact tampered = %v, want INVALID_INTEGRITY", err)
+	}
+	unsupported := artifact
+	unsupported.SchemaVersion = "recordings.portable-artifact.v99"
+	if _, err := capability.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: unsupported}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorUnsupportedSchema) {
+		t.Fatalf("ValidateArtifact unsupported = %v, want UNSUPPORTED_SCHEMA", err)
+	}
+	if _, err := capability.DecodeArtifact(recordings.DecodeArtifactRequest{}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorInvalid) {
+		t.Fatalf("DecodeArtifact empty = %v, want INVALID", err)
+	}
+}
+
+func assertCombinedArtifactPublication(t *testing.T, capability recordings.RecordingReplayArtifacts, recordingID recordings.ReplayRecordingID, destination string) {
+	t.Helper()
+	exported, err := capability.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: recordingID})
+	if err != nil || exported.Reference != recordings.ArtifactReference(destination) {
+		t.Fatalf("ExportArtifact = (%#v, %v), want published destination", exported, err)
+	}
+	read, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{RecordingID: recordingID, Reference: exported.Reference})
+	if err != nil || read.Artifact.Integrity.Digest != exported.Artifact.Integrity.Digest {
+		t.Fatalf("ReadArtifact = (%#v, %v), want exported digest", read, err)
+	}
+	if _, err := capability.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
+		RecordingID: recordingID, Reference: recordings.ArtifactReference(destination + ".other"),
+	}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorForeign) {
+		t.Fatalf("ReadArtifact foreign = %v, want FOREIGN", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := capability.ReadArtifact(canceled, recordings.ReadArtifactRequest{RecordingID: recordingID, Reference: exported.Reference}); !hasReplayArtifactErrorKind(err, recordings.ReplayArtifactErrorCancelled) {
+		t.Fatalf("ReadArtifact canceled = %v, want CANCELLED", err)
+	}
+}
+
+func hasReplayArtifactErrorKind(err error, want recordings.ReplayArtifactErrorKind) bool {
+	var artifactErr *recordings.ReplayArtifactError
+	return errors.As(err, &artifactErr) && artifactErr.Kind == want
 }

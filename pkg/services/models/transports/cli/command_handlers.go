@@ -153,7 +153,10 @@ func (h *CommandHandler) Invoke(
 		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
 		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings, OutputPath: invokeInputs.outputPath,
 		OutputMappings: invokeInputs.outputMappings, Output: cmd.OutOrStdout(),
-		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()),
+		// Leave FactoryDir empty so the Factory Session invocation boundary owns
+		// the documented default-layout discovery. A non-empty value is reserved
+		// for an explicit directory supplied by a caller of the Models service.
+		WorkingDirectory: startupcli.WorkingDirectory(cmd.Context()), HomeDir: homeDir,
 		OperatorDefaults: defaults, Logger: logger,
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
