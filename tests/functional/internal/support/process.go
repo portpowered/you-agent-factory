@@ -14,10 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
-	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -48,10 +45,6 @@ type ApplicationProcess interface {
 	ACPServer() ACPServer
 	ProviderRegistry() ProviderRegistry
 	WorkerRecordingReader() recordings.WorkerRecordingReader
-	CostsQuery() costs.CostsQuery
-	DetachedOperations() factorysessions.DetachedService
-	ExecutionRuntimeOpening() root.ExecutionRuntimeOpening
-	RuntimeMetricsQuery() factoryvisualization.RuntimeMetricsQuery
 }
 
 type applicationProcess struct {
@@ -60,10 +53,6 @@ type applicationProcess struct {
 	acpServer        ACPServer
 	providerRegistry ProviderRegistry
 	recordingReader  recordings.WorkerRecordingReader
-	costsQuery       costs.CostsQuery
-	detachedOps      factorysessions.DetachedService
-	executionOpening root.ExecutionRuntimeOpening
-	runtimeMetrics   factoryvisualization.RuntimeMetricsQuery
 }
 
 func (p applicationProcess) Close(ctx context.Context) error {
@@ -80,22 +69,6 @@ func (p applicationProcess) ProviderRegistry() ProviderRegistry {
 
 func (p applicationProcess) WorkerRecordingReader() recordings.WorkerRecordingReader {
 	return p.recordingReader
-}
-
-func (p applicationProcess) CostsQuery() costs.CostsQuery {
-	return p.costsQuery
-}
-
-func (p applicationProcess) DetachedOperations() factorysessions.DetachedService {
-	return p.detachedOps
-}
-
-func (p applicationProcess) ExecutionRuntimeOpening() root.ExecutionRuntimeOpening {
-	return p.executionOpening
-}
-
-func (p applicationProcess) RuntimeMetricsQuery() factoryvisualization.RuntimeMetricsQuery {
-	return p.runtimeMetrics
 }
 
 // BuildProcess constructs the same reusable process used by the production
@@ -155,10 +128,6 @@ func buildProcessWithContext(
 		acpServer:        process.ACPServer(),
 		providerRegistry: process.ProviderRegistry(),
 		recordingReader:  recordingReader,
-		costsQuery:       root.CostsQueryFromProcess(process),
-		detachedOps:      root.DetachedOperationsFromProcess(process),
-		executionOpening: root.ExecutionRuntimeOpeningFromProcess(process),
-		runtimeMetrics:   root.RuntimeMetricsQueryFromProcess(process),
 	}
 	return functionalProcess, recordingReader, nil
 }

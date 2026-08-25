@@ -7,7 +7,7 @@ import {
 	parseRecordedExitCode,
 } from "./functional-coverage-verdict.mjs";
 
-test("extracts the compact verdict and every package regression without raw stream noise", () => {
+test("extracts only the compact verdict without raw stream noise", () => {
 	const rawLine = `{"Time":"2026-08-20T00:00:00Z","Action":"run","Package":"github.com/portpowered/infinite-you/tests/functional"}`;
 	const log = [
 		rawLine,
@@ -26,14 +26,17 @@ test("extracts the compact verdict and every package regression without raw stre
 	assert.equal(extracted.foundInventory, true);
 	assert.equal(extracted.hasCoverageGateFailure, true);
 	assert.equal(
-		extracted.lines.filter((line) =>
-			line.startsWith("package coverage regression:"),
-		).length,
-		2,
+		extracted.lines.filter((line) => line.startsWith("  package=")).length,
+		1,
 	);
+	assert.equal(new Set(extracted.lines).size, extracted.lines.length);
 	assert.equal(extracted.text.includes(rawLine), false);
 	assert.equal(extracted.text.includes("make: ***"), false);
 	assert.match(extracted.text, /Functional suite inventory:/);
+	assert.doesNotMatch(
+		extracted.text,
+		/floor violation|package coverage regression|coverage manifest missing|coverage not evaluated|uncovered-blocks/,
+	);
 });
 
 test("retains the advisory banner and distinguishes report-only findings from failed tests", () => {
@@ -53,9 +56,9 @@ test("retains the advisory banner and distinguishes report-only findings from fa
 	assert.equal(extracted.hasAdvisoryFindings, true);
 	assert.equal(extracted.hasOrdinaryTestFailure, false);
 	assert.match(extracted.text, /COVERAGE FLOOR POLICY: advisory/);
-	assert.match(
+	assert.doesNotMatch(
 		extracted.text,
-		/coverage manifest missing entry: package=service-root/,
+		/package coverage regression|coverage manifest missing entry|coverage not evaluated/,
 	);
 });
 

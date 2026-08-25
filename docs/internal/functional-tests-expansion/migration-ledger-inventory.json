@@ -5,10 +5,10 @@
     "deletion_only_batches": 19,
     "functionallong_lane_rows": 85,
     "invalid_destinations": 0,
-    "lane_functionallong": 84,
-    "lane_short": 1057,
-    "ledger_rows": 1236,
-    "live_customer_scenarios": 1236,
+    "lane_functionallong": 85,
+    "lane_short": 1162,
+    "ledger_rows": 1247,
+    "live_customer_scenarios": 1247,
     "ready_workflow_catchall_drain": {
       "held_batch": "workflow-delete-08-guards",
       "released_batches": [
@@ -22,8 +22,8 @@
       ],
       "remaining_workflow_customer_scenarios": null
     },
-    "row_count": 1236,
-    "short_lane_rows": 1151,
+    "row_count": 1247,
+    "short_lane_rows": 1162,
     "specialty_targets_documented": 7,
     "story": "mig-workflow-ready-deletion-batches-009",
     "unmapped_scenarios": 0,
@@ -636,9 +636,9 @@
     {
       "source_path": "tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
-      "scenario": "TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance",
+      "scenario": "TestLocalModelInvoke_JSONWithoutOutputReportsValidationOnly",
       "lane": "short",
-      "destination": "tests/functional/models/invoke/cli_test.go",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "none",
       "specialty_targets": "test-root-process-acceptance",
       "deletion_only_batch": "n/a"
@@ -3524,46 +3524,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory/visualization/runtime_metrics/probe_cost_test.go",
-      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
-      "scenario": "TestProbeCostReplaysTheInstalledCodexFixture",
-      "lane": "short",
-      "destination": "tests/functional/factory/visualization/runtime_metrics/probe_cost_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/visualization/runtime_metrics/probe_cost_test.go",
-      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
-      "scenario": "TestProbeCostValidatorRejectsFalsePositiveReports",
-      "lane": "short",
-      "destination": "tests/functional/factory/visualization/runtime_metrics/probe_cost_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/visualization/runtime_metrics/probe_observability_test.go",
-      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
-      "scenario": "TestProbeObservabilityValidatorRejectsFalsePositiveReports",
-      "lane": "short",
-      "destination": "tests/functional/factory/visualization/runtime_metrics/probe_observability_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/visualization/runtime_metrics/probe_observability_test.go",
-      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
-      "scenario": "TestProbeObservabilityWorkerSessionListing",
-      "lane": "short",
-      "destination": "tests/functional/factory/visualization/runtime_metrics/probe_observability_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/factory/visualization/runtime_metrics/replay_priced_cost_test.go",
       "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
       "scenario": "TestReplayPricedUsageReachesPublicCosts",
@@ -3589,6 +3549,46 @@
       "scenario": "TestReplayUsageFixturesAreCanonicalAndSideEffectFree",
       "lane": "short",
       "destination": "tests/functional/factory/visualization/runtime_metrics/replay_usage_fixtures_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go",
+      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
+      "scenario": "TestRuntimeMetricsAndArtifactsThroughRootProcess",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go",
+      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
+      "scenario": "TestRuntimeMetricsPublicCoordinationAndOpenerValidation",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go",
+      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
+      "scenario": "TestRuntimeMetricsPublicOpenerValidatesRequestsAndCloses",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go",
+      "package": "you-agent-factory/tests/functional/factory/visualization/runtime_metrics",
+      "scenario": "TestRuntimeMetricsPublicReaderSelectionAndFailures",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory/visualization/runtime_metrics/runtime_artifact_flow_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4166,6 +4166,16 @@
     {
       "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
       "package": "you-agent-factory/tests/functional/models/model_list",
+      "scenario": "TestProcessModelsInvokeMissingFactoryLayoutReportsSearchedRoot",
+      "lane": "short",
+      "destination": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/model_list/presentation_collaborator_coverage_test.go",
+      "package": "you-agent-factory/tests/functional/models/model_list",
       "scenario": "TestProcessModelsList_ReusesCatalogScopeAcrossCommands",
       "lane": "short",
       "destination": "wrong-layer: models list presentation-collaborator coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/model_list/presentation_collaborator_coverage_test.go.",
@@ -4214,6 +4224,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/models/root_composition/catalog_cli_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/catalog_cli_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
       "package": "you-agent-factory/tests/functional/models/root_composition",
       "scenario": "TestGenericModelContractsRemainDetachedAtApplicationRoot",
@@ -4234,6 +4254,146 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogProjectsCustomModelThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogReadinessCancellationReturnsPublicFailure",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsInvokeCatalogRequestCancellationStopsReadiness",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsRootCompositionModelScenarios",
+      "lane": "short",
+      "destination": "tests/functional/models/root_composition/catalog_discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/models/root_composition/coded_diagnostics_test.go",
       "package": "you-agent-factory/tests/functional/models/root_composition",
       "scenario": "TestModelsLocalInspectUnknownMatchesHTTPDiagnostic",
@@ -4247,16 +4407,6 @@
       "source_path": "tests/functional/models/root_composition/coded_diagnostics_test.go",
       "package": "you-agent-factory/tests/functional/models/root_composition",
       "scenario": "TestModelsLocalInspectUnknownRendersCodedDiagnostic",
-      "lane": "short",
-      "destination": "tests/functional/models/root_composition/coded_diagnostics_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/models/root_composition/coded_diagnostics_test.go",
-      "package": "you-agent-factory/tests/functional/models/root_composition",
-      "scenario": "TestModelsLocalInvokeMissingRequiredSlotRendersBadRequest",
       "lane": "short",
       "destination": "tests/functional/models/root_composition/coded_diagnostics_test.go",
       "catch_all": "none",
@@ -4289,6 +4439,26 @@
       "scenario": "TestDeliveredCLIArtifactReachesProtocolFixture",
       "lane": "short",
       "destination": "tests/functional/models/root_composition/delivered_cli_story_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/delivered_embed_story_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestDeliveredEmbedCLIArtifactReachesProtocolFixture",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/delivered_embed_story_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/delivered_embed_story_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestDeliveredEmbedHTTPArtifactReachesProtocolFixture",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/delivered_embed_story_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4346,57 +4516,7 @@
     {
       "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
       "package": "you-agent-factory/tests/functional/models/root_composition",
-      "scenario": "TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess",
-      "lane": "short",
-      "destination": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "package": "you-agent-factory/tests/functional/models/root_composition",
       "scenario": "TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
-      "lane": "short",
-      "destination": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "package": "you-agent-factory/tests/functional/models/root_composition",
-      "scenario": "TestModelsInferenceInvokeActivatesThroughRootBuildProcess",
-      "lane": "short",
-      "destination": "wrong-layer: models root composition coverage not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/inference_invoke_test.go.",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "package": "you-agent-factory/tests/functional/models/root_composition",
-      "scenario": "TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration",
-      "lane": "short",
-      "destination": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "package": "you-agent-factory/tests/functional/models/root_composition",
-      "scenario": "TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess",
-      "lane": "short",
-      "destination": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/models/root_composition/inference_invoke_test.go",
-      "package": "you-agent-factory/tests/functional/models/root_composition",
-      "scenario": "TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution",
       "lane": "short",
       "destination": "tests/functional/models/root_composition/inference_invoke_test.go",
       "catch_all": "none",
@@ -4409,6 +4529,36 @@
       "scenario": "TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker",
       "lane": "short",
       "destination": "tests/functional/models/root_composition/inference_invoke_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/localai_cli_conformance_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestLocalAICLIConformanceMatrixRunsThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/localai_cli_conformance_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/localai_failure_conformance_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestLocalAIFailureDiagnosticsReachHTTPAndCLI",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/localai_failure_conformance_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/localai_http_conformance_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/localai_http_conformance_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4479,6 +4629,36 @@
       "scenario": "TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal",
       "lane": "short",
       "destination": "tests/functional/models/root_composition/story_003_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/story_004_embed_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/story_004_embed_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/story_004_embed_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsEmbedHTTPParityUsesTheSameFixtureThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/story_004_embed_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/models/root_composition/story_004_embed_test.go",
+      "package": "you-agent-factory/tests/functional/models/root_composition",
+      "scenario": "TestModelsEmbedRootCompositionBehavior",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/models/root_composition/story_004_embed_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4626,7 +4806,7 @@
     {
       "source_path": "tests/functional/observability/verification/functional_runner_contract_test.go",
       "package": "you-agent-factory/tests/functional/observability/verification",
-      "scenario": "TestCoverageTargetsSmoke_ForwardOneFloorPolicy",
+      "scenario": "TestCoverageTargetsSmoke_UseBlockingFloorPolicy",
       "lane": "short",
       "destination": "tests/functional/observability/verification/functional_runner_contract_test.go",
       "catch_all": "none",
@@ -8744,6 +8924,46 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/root_composition",
+      "scenario": "TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/root_composition",
+      "scenario": "TestProcessExecuteOpensRequestedFactorySessionThroughRoot",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/root_composition",
+      "scenario": "TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/root_composition",
+      "scenario": "TestProcessExecuteUnavailableFactoryDoesNotRegisterSession",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/sessions/root_composition/process_execute_runtime_opening_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/sessions/root_composition/process_lifecycle_close_test.go",
       "package": "you-agent-factory/tests/functional/sessions/root_composition",
       "scenario": "TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure",
@@ -8787,6 +9007,26 @@
       "source_path": "tests/functional/sessions/root_composition/secret_redaction_runtime_guard_test.go",
       "package": "you-agent-factory/tests/functional/sessions/root_composition",
       "scenario": "TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary",
+      "lane": "short",
+      "destination": "tests/functional/sessions/root_composition/secret_redaction_runtime_guard_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/root_composition/secret_redaction_runtime_guard_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/root_composition",
+      "scenario": "TestRecordedFactoryRedactsInlineSecretStepAndPreservesPlainStepAcrossLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/sessions/root_composition/secret_redaction_runtime_guard_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/root_composition/secret_redaction_runtime_guard_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/root_composition",
+      "scenario": "TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle",
       "lane": "short",
       "destination": "tests/functional/sessions/root_composition/secret_redaction_runtime_guard_test.go",
       "catch_all": "none",
@@ -9706,27 +9946,7 @@
     {
       "source_path": "tests/functional/transport/cli/process/exit_codes_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestBuiltCLIDeclaredCancellationExitCodes",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestBuiltCLIExitStatusForNonWorkerCommands",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestCLIInterruptedExitCode",
+      "scenario": "TestBuiltCLIInterruptedResponseStreamExitCode",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/exit_codes_test.go",
       "catch_all": "none",
@@ -9746,79 +9966,9 @@
     {
       "source_path": "tests/functional/transport/cli/process/exit_codes_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestCLIValidationFailureExitCode",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "test-root-process-acceptance",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
       "scenario": "TestCLIWorkerFailureExitCode",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/exit_codes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/graceful_shutdown_process_windows_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestWindowsGracefulStopReliability",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/graceful_shutdown_process_windows_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/graceful_shutdown_process_windows_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestWindowsHardKillFallbackRemainsAvailable",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/graceful_shutdown_process_windows_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestNewHardKillProcessControlCoordinatesCompetingTerminalOperations",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestNewHardKillProcessControlReleasesAfterFirstTerminalOperation",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestNewHardKillProcessControlReleasesAfterInitialStopFailure",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/hard_kill_successor_process_nonwindows_lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/hard_kill_successor_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestCLISuccessorAfterHardKillReportsPreRuntimeStagingContention",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/hard_kill_successor_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -9849,46 +9999,6 @@
       "scenario": "TestCLIVersionWritesOneMachineReadableVersion",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestBuiltCLIRunDirectorySelectionIgnoresOpenStdin",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/stdin_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestCLIEmptyRequiredStdinFailsWithoutDispatch",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/stdin_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestRunReadsPromptFromStdin",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/stdin_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestSubmitBatchReadsJSONFromStdin",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/stdin_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -9939,16 +10049,6 @@
       "scenario": "TestCLIUnknownCommandWritesSafeCodedStderr",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/unknown_command_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/cli/process/watch_abort_test.go",
-      "package": "you-agent-factory/tests/functional/transport/cli/process",
-      "scenario": "TestCLIWorkWatchStreamAbortReturnsNonZeroExit",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/watch_abort_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -10044,6 +10144,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/http/server/production_loopback_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIServerDiagnosticsUseProductionLoopbackStarter",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/transport/http/server/production_loopback_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/production_loopback_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/transport/http/server/production_loopback_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/production_loopback_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestListenerStopObserverReportsBoundedOpenListenerOutcomes",
+      "lane": "short",
+      "destination": "wrong-layer: live functional scenario is not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/transport/http/server/production_loopback_test.go.",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/http/server/routing_test.go",
       "package": "you-agent-factory/tests/functional/transport/http/server",
       "scenario": "TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback",
@@ -10117,6 +10247,16 @@
       "source_path": "tests/functional/transport/http/server/startup_shutdown_test.go",
       "package": "you-agent-factory/tests/functional/transport/http/server",
       "scenario": "TestAPIServerStartsOnConfiguredListenerAndServesStatus",
+      "lane": "short",
+      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/http/server/startup_shutdown_test.go",
+      "package": "you-agent-factory/tests/functional/transport/http/server",
+      "scenario": "TestAPIServerUsesPlatformStarterThroughRootProcess",
       "lane": "short",
       "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
       "catch_all": "none",
@@ -10387,36 +10527,6 @@
       "source_path": "tests/functional/transport/run_scoped_server/run_scoped_server_test.go",
       "package": "you-agent-factory/tests/functional/transport/run_scoped_server",
       "scenario": "TestRunScopedServerUsesProductionListenerAndReportsFallback",
-      "lane": "short",
-      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/server_binding/server_binding_test.go",
-      "package": "you-agent-factory/tests/functional/transport/server_binding",
-      "scenario": "TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL",
-      "lane": "short",
-      "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/server_binding/server_binding_test.go",
-      "package": "you-agent-factory/tests/functional/transport/server_binding",
-      "scenario": "TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput",
-      "lane": "short",
-      "destination": "tests/functional/transport/server_binding/server_binding_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/transport/server_binding/server_binding_test.go",
-      "package": "you-agent-factory/tests/functional/transport/server_binding",
-      "scenario": "TestBuiltExecutableServerInterruptExits130AndReleasesListener",
       "lane": "short",
       "destination": "tests/functional/transport/http/server/startup_shutdown_test.go",
       "catch_all": "none",
@@ -12951,8 +13061,8 @@
     "workflow_scenarios": 6
   },
   "summary": {
-    "customer_top_level_Test_scenarios": 1236,
+    "customer_top_level_Test_scenarios": 1247,
     "lane_functionallong": 85,
-    "lane_short": 1151
+    "lane_short": 1162
   }
 }
