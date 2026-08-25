@@ -2,6 +2,7 @@ package diagnostics_test
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -294,6 +296,17 @@ func TestRemoteSessionShowPreservesStructuredServerDiagnostic(t *testing.T) {
 				response.Family != factoryapi.ErrorFamilyNotFound ||
 				response.Message != "remote session is unavailable" {
 				t.Fatalf("server failure diagnostic = %#v, want preserved NOT_FOUND response", response)
+			}
+			if !debug {
+				var apiError *clihttp.APIError
+				if !errors.As(err, &apiError) {
+					t.Fatalf("server failure error = %T, want clihttp.APIError", err)
+				}
+				fallback := *apiError
+				fallback.DisplayMessage = ""
+				if got := fallback.Error(); got != response.Message {
+					t.Fatalf("APIError fallback message = %q, want %q", got, response.Message)
+				}
 			}
 			if debug {
 				for _, want := range []string{
