@@ -726,7 +726,6 @@ func findCatalogModel(
 	return factoryapi.ModelSummary{}
 }
 
-
 // TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess proves the
 // effective catalog projects every zero-configuration built-in through the
 // same public HTTP projection and keeps unknown detail reads customer-safe.
