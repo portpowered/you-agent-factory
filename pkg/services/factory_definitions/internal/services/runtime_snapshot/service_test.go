@@ -393,7 +393,30 @@ func TestResolveRuntimeSnapshotCarriesInvocationProvenance(t *testing.T) {
 	if got := snapshot.EffectiveFactory.Workstations[0].Env["secret/name~value"]; got != "super-secret" {
 		t.Fatalf("effective sensitive environment value = %q, want interpolated value", got)
 	}
-	assertInvocationSensitivePointers(t, snapshot.InvocationSensitiveJSONPointers)
+	wantSpans := []factorydefinitions.InvocationSensitiveJSONSpan{
+		{
+			JSONPointer: "/workers/0/args/0",
+			Start:       len("--token="),
+			End:         len("--token=") + len("super-secret"),
+		},
+		{
+			JSONPointer: "/workstations/0/env/secret~1name~0value",
+			Start:       0,
+			End:         len("super-secret"),
+		},
+	}
+	if !reflect.DeepEqual(snapshot.InvocationSensitiveJSONSpans, wantSpans) {
+		t.Fatalf("sensitive JSON spans = %#v, want %#v", snapshot.InvocationSensitiveJSONSpans, wantSpans)
+	}
+	if len(snapshot.InvocationSensitiveJSONPointers) != 0 {
+		t.Fatalf("legacy sensitive pointers = %#v, want none", snapshot.InvocationSensitiveJSONPointers)
+	}
+	if strings.Contains(strings.Join([]string{
+		wantSpans[0].JSONPointer,
+		wantSpans[1].JSONPointer,
+	}, "\n"), "super-secret") {
+		t.Fatal("sensitive invocation value was exposed in JSON span provenance")
+	}
 	if len(snapshot.BundledFiles) != 1 || snapshot.BundledFiles[0].TargetPath != "docs/README.md" {
 		t.Fatalf("bundled files = %#v, want loaded portable replacement", snapshot.BundledFiles)
 	}
@@ -475,20 +498,6 @@ type invocationSnapshotFixture struct {
 	workstationLoader         *testWorkstationLoader
 	receivedPath              string
 	receivedWorkstationLoader factorydefinitions.WorkstationLoader
-}
-
-func assertInvocationSensitivePointers(t *testing.T, pointers []string) {
-	t.Helper()
-	want := []string{
-		"/workers/0/args/0",
-		"/workstations/0/env/secret~1name~0value",
-	}
-	if !reflect.DeepEqual(pointers, want) {
-		t.Fatalf("sensitive JSON pointers = %#v, want %#v", pointers, want)
-	}
-	if strings.Contains(strings.Join(pointers, "\n"), "super-secret") {
-		t.Fatal("sensitive invocation value was exposed in JSON pointer provenance")
-	}
 }
 
 func TestResolveRuntimeSnapshotClassifiesEveryAutomationSourceKind(t *testing.T) {

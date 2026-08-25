@@ -618,17 +618,6 @@ func interpolateExecutionIO(
 	return next, nil
 }
 
-func interpolateExecutionField(
-	authored string,
-	args *work.InvocationArguments,
-	fieldPath string,
-	readFile FileReader,
-) (string, error) {
-	return interpolateExecutionFieldWithProvenance(
-		authored, args, fieldPath, readFile, "", nil,
-	)
-}
-
 func interpolateExecutionFieldWithProvenance(
 	authored string,
 	args *work.InvocationArguments,

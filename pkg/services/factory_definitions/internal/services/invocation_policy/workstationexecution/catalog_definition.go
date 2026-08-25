@@ -8,24 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// ResolveExecutionDefinition returns the fully interpolated Factory
-// configuration used by a one-shot runtime opening. It shares the catalog
-// resolver's interpolation and validation policy, but retains the complete
-// Factory configuration shape needed by Runtime activation rather than
-// reducing it to detached catalog entries.
-//
-// The returned definition is detached from the request. Callers should only
-// use this operation after effective invocation arguments have been prepared;
-// a nil argument set deliberately leaves the authored definition untouched so
-// long-lived runtimes can accept a later invocation.
-func ResolveExecutionDefinition(
-	ctx context.Context,
-	request ResolveExecutionCatalogRequest,
-) (*FactoryConfig, error) {
-	definition, _, err := ResolveExecutionDefinitionWithProvenance(ctx, request)
-	return definition, err
-}
-
 // ResolveExecutionDefinitionWithProvenance resolves one effective Factory
 // definition and records the exact rendered spans contributed by declared
 // sensitive invocation arguments. The provenance is intentionally separate
