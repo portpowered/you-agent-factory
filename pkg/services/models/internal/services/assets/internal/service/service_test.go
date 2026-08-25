@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -197,6 +198,133 @@ func TestInspectRuntimeCacheRejectsRevisionEscapingManagedCacheRoot(t *testing.T
 		Name:  "OMNIVOICE_Q4_K_M",
 	}); err == nil {
 		t.Fatal("InspectRuntimeCache succeeded for a revision outside the managed cache root")
+	}
+}
+
+func TestInspectRuntimeCacheReportsInvalidManagedManifest(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelRoot := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	if err := os.MkdirAll(modelRoot, 0o755); err != nil {
+		t.Fatalf("create model cache root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelRoot, metadataFileName), []byte("{"), 0o644); err != nil {
+		t.Fatalf("write invalid manifest: %v", err)
+	}
+	scopes := newScopes(t, "invalid-manifest")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.ManifestPresent || inspection.FailureReason != "managed cache manifest is invalid" {
+		t.Fatalf("invalid manifest inspection = %#v, want supported invalid-manifest diagnostics", inspection)
+	}
+}
+
+func TestInspectRuntimeCacheMarksVerifiedManagedManifest(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	scopes := newScopes(t, "verified-runtime-cache")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.Supported || !inspection.Installed || !inspection.IntegrityVerified || inspection.Revision != "verified-revision" || inspection.CacheBytes == 0 {
+		t.Fatalf("verified runtime cache inspection = %#v, want installed verified facts", inspection)
+	}
+}
+
+func TestInspectRuntimeCacheReportsCorruptManagedArtifact(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	corruptPath := filepath.Join(
+		cacheDirectory,
+		"OMNIVOICE_Q4_K_M",
+		"verified-revision",
+		"omnivoice-base-Q4_K_M.gguf",
+	)
+	if err := os.WriteFile(corruptPath, []byte("corrupt"), 0o644); err != nil {
+		t.Fatalf("corrupt cached artifact: %v", err)
+	}
+	scopes := newScopes(t, "corrupt-runtime-cache")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if inspection.Installed || inspection.IntegrityVerified || !inspection.PartialArtifacts ||
+		inspection.FailureReason != "asset integrity verification failed" {
+		t.Fatalf("corrupt runtime cache inspection = %#v, want failed integrity diagnostics", inspection)
+	}
+}
+
+func TestInspectRuntimeCacheReportsMissingManagedArtifact(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeVerifiedCacheFixture(t, cacheDirectory)
+	if err := os.Remove(filepath.Join(
+		cacheDirectory,
+		"OMNIVOICE_Q4_K_M",
+		"verified-revision",
+		"omnivoice-tokenizer-Q4_K_M.gguf",
+	)); err != nil {
+		t.Fatalf("remove cached artifact: %v", err)
+	}
+	scopes := newScopes(t, "missing-runtime-cache")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if inspection.Installed || inspection.IntegrityVerified || len(inspection.MissingAssets) != 1 ||
+		inspection.MissingAssets[0] != "omnivoice-tokenizer-Q4_K_M.gguf" {
+		t.Fatalf("missing runtime cache inspection = %#v, want one missing artifact", inspection)
+	}
+}
+
+func TestInspectRuntimeCachePreservesCancellationIdentityAndRedactsCause(t *testing.T) {
+	t.Parallel()
+
+	scopes := newScopes(t, "runtime-cache-cancelled")
+	ref := openScope(t, scopes, t.TempDir(), runtimeConfig(""))
+	secretCause := errors.New("HF_TOKEN=secret cache=C:\\private\\weights")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(secretCause)
+	service := newTestService(scopes, nil)
+
+	_, err := service.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrAssetCancelled) || !errors.Is(err, context.Canceled) || !errors.Is(err, secretCause) {
+		t.Fatalf("cancelled inspection error = %v, want typed cancellation and cause identity", err)
+	}
+	if err.Error() != models.ErrAssetCancelled.Error() || strings.Contains(err.Error(), "HF_TOKEN") {
+		t.Fatalf("cancelled inspection error leaked cause: %q", err.Error())
+	}
+	if errors.Unwrap(err) == nil {
+		t.Fatal("cancelled inspection error has no wrapped cause")
 	}
 }
 

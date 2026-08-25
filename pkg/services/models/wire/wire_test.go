@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	"go.uber.org/zap"
 )
 
@@ -230,6 +232,105 @@ func TestNewServiceReturnsPublishedRootInterface(t *testing.T) {
 	var service models.Service = mustNewWireService(t)
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
+	}
+}
+
+func TestInvocationRuntimeAdaptersPreserveGenericAndASRBackendFacts(t *testing.T) {
+	t.Parallel()
+
+	artifactRef := mustWireTestArtifactRef(t)
+
+	var genericRequest models.InvokeModelRequest
+	genericBackend := wireGenericBackend(artifactRef, &genericRequest)
+	runtime, err := inferenceRuntime(genericBackend, func(context.Context, models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{
+			Text:      "transcribed",
+			Segments:  []models.ASRBackendSegment{{ID: 1, Start: 0, End: 10, Text: "transcribed"}},
+			Artifacts: []models.InferenceArtifact{{Artifact: artifactRef, Name: "segments", SizeBytes: 4}},
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("inferenceRuntime: %v", err)
+	}
+
+	assertGenericWireInvocation(t, runtime, &genericRequest)
+	assertASRWireInvocation(t, runtime)
+}
+
+func mustWireTestArtifactRef(t *testing.T) models.InferenceArtifactRef {
+	t.Helper()
+	artifactRef, err := (models.InferenceArtifactRef{}).Parse("artifact:wire-test")
+	if err != nil {
+		t.Fatalf("parse artifact reference: %v", err)
+	}
+	return artifactRef
+}
+
+func wireGenericBackend(
+	artifactRef models.InferenceArtifactRef,
+	request *models.InvokeModelRequest,
+) InvocationBackend {
+	return func(_ context.Context, backendRequest models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		*request = backendRequest
+		return []models.InferenceContent{{Name: "text", Content: "generated"}}, []models.InferenceArtifact{{
+			Artifact: artifactRef, Name: "audio", MediaType: "audio/wav", SizeBytes: 12,
+			Properties: map[string]string{"source": "test"},
+		}}, nil
+	}
+}
+
+func assertGenericWireInvocation(t *testing.T, runtime invocationRuntime, request *models.InvokeModelRequest) {
+	t.Helper()
+	generic := models.InvokeModelRequest{ModelName: "voice", Operation: models.OperationTTS}
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: generic})
+	if err != nil {
+		t.Fatalf("generic invocation: %v", err)
+	}
+	if !reflect.DeepEqual(*request, generic) || len(result.Content) != 1 || result.Content[0].Content != "generated" {
+		t.Fatalf("generic result = %#v request = %#v, want backend facts and request %#v", result, *request, generic)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].RefValue != "artifact:wire-test" || result.Artifacts[0].Properties["source"] != "test" {
+		t.Fatalf("generic artifacts = %#v, want detached artifact facts", result.Artifacts)
+	}
+}
+
+func assertASRWireInvocation(t *testing.T, runtime invocationRuntime) {
+	t.Helper()
+	request := models.InvokeModelRequest{
+		Operation: models.OperationASR,
+		Inputs: []models.InferenceInput{
+			{Name: "audio", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: "audio"},
+			{Name: "prompt", Modality: models.ModalityText, ContentType: "text/plain", Content: "meeting"},
+		},
+		Parameters: []models.OperationParameter{{Name: "temperature", Value: 0.2}},
+	}
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request:   request,
+		Operation: models.Operation{Name: "asr"},
+	})
+	if err != nil {
+		t.Fatalf("ASR invocation: %v", err)
+	}
+	if len(result.Content) != 2 || result.Content[0].Content != "transcribed" || result.Content[1].Name != "segments" {
+		t.Fatalf("ASR content = %#v, want transcript and segments", result.Content)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].Name != "segments" {
+		t.Fatalf("ASR artifacts = %#v, want mapped backend artifact", result.Artifacts)
+	}
+	if _, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: request}); err != nil {
+		t.Fatalf("ASR request-operation fallback: %v", err)
+	}
+}
+
+func TestBackendInvocationRuntimePropagatesBackendFailure(t *testing.T) {
+	t.Parallel()
+
+	want := errors.New("backend unavailable")
+	runtime := backendInvocationRuntime{backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return nil, nil, want
+	}}
+	if _, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{}); !errors.Is(err, want) {
+		t.Fatalf("backend invocation error = %v, want %v", err, want)
 	}
 }
 

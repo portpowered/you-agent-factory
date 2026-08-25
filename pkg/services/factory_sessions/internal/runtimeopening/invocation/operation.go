@@ -133,14 +133,39 @@ func modelInvocationContext(
 }
 
 func (o *operation) ResolveModelInvocationFactoryDir(explicit string) (string, error) {
+	return o.resolveModelInvocationFactoryDir(explicit, "")
+}
+
+func (o *operation) ResolveModelInvocationFactoryDirForWorkingDirectory(
+	explicit string,
+	requestedWorkingDirectory string,
+) (string, error) {
+	return o.resolveModelInvocationFactoryDir(explicit, requestedWorkingDirectory)
+}
+
+func (o *operation) resolveModelInvocationFactoryDir(explicit, requestedWorkingDirectory string) (string, error) {
 	if root := strings.TrimSpace(explicit); root != "" {
 		return root, nil
 	}
-	cwd, err := o.workingDirectory.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve models invoke factory root: %w", err)
+	cwd := strings.TrimSpace(requestedWorkingDirectory)
+	if cwd == "" {
+		var err error
+		cwd, err = o.workingDirectory.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("resolve models invoke factory root: %w", err)
+		}
 	}
-	return o.resolveCurrentDir(filepath.Join(cwd, factorydefinitions.FactoryDir))
+	factoryRoot := filepath.Join(cwd, factorydefinitions.FactoryDir)
+	resolved, err := o.resolveCurrentDir(factoryRoot)
+	if err == nil {
+		return resolved, nil
+	}
+	if errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
+		if legacyResolved, legacyErr := o.resolveCurrentDir(cwd); legacyErr == nil {
+			return legacyResolved, nil
+		}
+	}
+	return "", fmt.Errorf("resolve models invoke factory root %s: %w", factoryRoot, err)
 }
 
 func (o *operation) ExportModelInvocationArtifact(sourcePath, destinationPath string) error {

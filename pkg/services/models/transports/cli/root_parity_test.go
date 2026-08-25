@@ -480,7 +480,7 @@ func TestRootAdapter_InvokeThroughRealClosedModelsScopeReturnsPublicClosedScopeE
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *testing.T) {
+func TestRootAdapter_InvokeJSONValidationResolvesThroughModelsRootCatalog(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
@@ -557,16 +557,15 @@ func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *t
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if !gotCatalog || !gotAcquire || !gotInvoke {
-		t.Fatalf("invoke path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
+	if !gotCatalog || gotAcquire || gotInvoke {
+		t.Fatalf("validation path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
 	}
 	for _, want := range []string{
 		"OMNIVOICE_Q4_K_M",
 		`"operation":"TTS"`,
-		`"worker":"tts-worker"`,
-		`"providerLocality":"LOCAL"`,
-		`"bindings"`,
-		`"text":"hello world"`,
+		`"mode":"VALIDATION_ONLY"`,
+		`"validationOnly":true`,
+		`"inferenceExecuted":false`,
 	} {
 		if !bytes.Contains(out.Bytes(), []byte(want)) {
 			t.Fatalf("Invoke() JSON missing %q:\n%s", want, out.String())
@@ -574,7 +573,7 @@ func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *t
 	}
 }
 
-func TestRootAdapter_InvokeJSONMapsAudioInferenceContent(t *testing.T) {
+func TestRootAdapter_InvokeJSONDoesNotProjectAudioInferenceContent(t *testing.T) {
 	t.Parallel()
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
@@ -629,9 +628,14 @@ func TestRootAdapter_InvokeJSONMapsAudioInferenceContent(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	for _, want := range []string{`"type":"AUDIO"`, "speech.wav", `"contentType":"audio/wav"`} {
+	for _, want := range []string{`"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
 		if !bytes.Contains(out.Bytes(), []byte(want)) {
 			t.Fatalf("Invoke() JSON missing %q:\n%s", want, out.String())
+		}
+	}
+	for _, forbidden := range []string{`"type":"AUDIO"`, "speech.wav", `"contentType":"audio/wav"`} {
+		if bytes.Contains(out.Bytes(), []byte(forbidden)) {
+			t.Fatalf("Invoke() JSON unexpectedly contained inference output %q:\n%s", forbidden, out.String())
 		}
 	}
 }
@@ -897,12 +901,12 @@ func TestRootAdapter_InvokeRejectsCatalogRuntimeThatIsNotReady(t *testing.T) {
 	})
 
 	err := service.Invoke(modelscli.InvokeConfig{
-		Context:   context.Background(),
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Operation: "TTS",
-		Text:      "hello world",
-		JSON:      true,
-		Output:    io.Discard,
+		Context:    context.Background(),
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		Operation:  "TTS",
+		Text:       "hello world",
+		OutputPath: "speech.wav",
+		Output:     io.Discard,
 	})
 	if !errors.Is(err, modelinference.ErrMissing) {
 		t.Fatalf("Invoke() error = %v, want errors.Is ErrMissing", err)

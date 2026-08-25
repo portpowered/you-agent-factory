@@ -3,7 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -12,20 +15,22 @@ import (
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot model invocation when no
-// factory API server is reachable on the configured loopback endpoint.
+// factory API server is configured.
 
 const failureBaselineUnreachableServer = "http://127.0.0.1:1"
 
-func TestFailureBaseline_NoServer_ModelsInvokeJSONUsesBootstrapInsteadOfUnreachableEndpoint(t *testing.T) {
+func TestFailureBaseline_NoServer_ModelsInvokeJSONIsValidationOnly(t *testing.T) {
 	originalBuilder := openTestModelRunner
 	defer func() {
 		openTestModelRunner = originalBuilder
 	}()
 
+	invoked := false
 	openTestModelRunner = func(_ context.Context, _ *testModelRuntimeSelections) (testModelRunner, error) {
 		return &stubModelBootstrapRunner{
 			sessionReady: true,
 			invokeModel: func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
+				invoked = true
 				return modelinference.Result{
 					ModelName: modelName,
 					Worker:    "tts-worker",
@@ -40,7 +45,6 @@ func TestFailureBaseline_NoServer_ModelsInvokeJSONUsesBootstrapInsteadOfUnreacha
 		ModelName:  "OMNIVOICE_Q4_K_M",
 		Operation:  "TTS",
 		Text:       "hello world",
-		Server:     failureBaselineUnreachableServer,
 		FactoryDir: t.TempDir(),
 		JSON:       true,
 		Output:     &out,
@@ -48,7 +52,15 @@ func TestFailureBaseline_NoServer_ModelsInvokeJSONUsesBootstrapInsteadOfUnreacha
 		t.Fatalf("Invoke: %v", err)
 	}
 	if out.Len() == 0 {
-		t.Fatal("expected JSON invoke output from bootstrap path")
+		t.Fatal("expected JSON validation output")
+	}
+	for _, want := range []string{`"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("validation output = %q, want %q", out.String(), want)
+		}
+	}
+	if invoked {
+		t.Fatal("validation-only invocation called the inference runner")
 	}
 }
 
@@ -78,5 +90,57 @@ func TestFailureBaseline_NoServer_ModelsInspectReportsUnreachableEndpoint(t *tes
 	want := "models endpoint not reachable at http://127.0.0.1:1/models/OMNIVOICE_Q4_K_M"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestInvoke_JSONFallbackValidatesModelAndOperationBeforeMetadata(t *testing.T) {
+	var inferenceCalled bool
+	originalBuilder := openTestModelRunner
+	t.Cleanup(func() { openTestModelRunner = originalBuilder })
+	openTestModelRunner = func(context.Context, *testModelRuntimeSelections) (testModelRunner, error) {
+		inferenceCalled = true
+		return nil, fmt.Errorf("inference must not start during validation")
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/models/missing":
+			writer.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(writer, `{"message":"model not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
+		case "/models/known":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(writer, `{"name":"known","operations":[{"name":"TTS"}],"capabilities":[],"diagnostics":{},"modalities":[],"resources":[],"managedRuntime":{"supportedOperations":[]}}`)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	cases := []struct {
+		name      string
+		model     string
+		operation string
+		want      string
+	}{
+		{name: "unknown model", model: "missing", operation: "TTS", want: "model not found"},
+		{name: "unsupported operation", model: "known", operation: "ASR", want: "does not support operation"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			var output bytes.Buffer
+			err := New(testHTTPProtocol(t), testModelInvocationBuilder).Invoke(InvokeConfig{
+				Context: context.Background(), ModelName: testCase.model, Operation: testCase.operation,
+				Text: "hello", Server: server.URL, JSON: true, Output: &output,
+			})
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("Invoke() error = %v, want failure containing %q", err, testCase.want)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("validation failure output = %q, want no metadata response", output.String())
+			}
+		})
+	}
+	if inferenceCalled {
+		t.Fatal("fallback validation started inference")
 	}
 }

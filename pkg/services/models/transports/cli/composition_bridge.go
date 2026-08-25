@@ -8,6 +8,7 @@ import (
 func presentationScopeRequestFromInvoke(cfg InvokeConfig) PresentationScopeRequest {
 	return PresentationScopeRequest{
 		FactoryDir:       cfg.FactoryDir,
+		WorkingDirectory: cfg.WorkingDirectory,
 		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: presentationOperatorDefaultsFromResolved(cfg.OperatorDefaults),
 		Logger:           cfg.Logger,

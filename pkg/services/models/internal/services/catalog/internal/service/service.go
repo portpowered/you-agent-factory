@@ -149,6 +149,10 @@ func (s *service) GetCatalogModel(
 			return models.GetModelResult{}, models.ErrUnavailable
 		}
 		detail.Summary.ManagedRuntime = overlayResolvedRuntime(detail.Summary.ManagedRuntime, current)
+		// Detail diagnostics historically includes the managed-runtime state for
+		// compatibility. Keep that duplicate projection sourced from the same
+		// resolved runtime as the canonical managedRuntime object.
+		detail.Diagnostics = mergeDiagnostics(detail.Diagnostics, detail.Summary.ManagedRuntime.Diagnostics)
 	}
 	return models.GetModelResult{Model: detail}, nil
 }

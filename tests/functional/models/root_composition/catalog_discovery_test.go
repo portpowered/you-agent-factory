@@ -1,7 +1,10 @@
 package root_composition_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -152,15 +155,30 @@ func assertGenericRuntimeFailures(t *testing.T) {
 	}
 }
 
-// TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle proves
-// catalog discovery through GET /models after runtime lifecycle starts on a process
-// constructed only through root.BuildProcess with edges.Edges effect replacement.
-func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
-	t.Parallel()
+// TestModelsRootCompositionModelScenarios groups the changed root-composition
+// scenarios so stability verification starts the expensive functional package
+// once while retaining named subtest coverage for each public behavior.
+func TestModelsRootCompositionModelScenarios(t *testing.T) {
+	t.Run("catalog discovery projects worker capabilities and Factory precedence", func(t *testing.T) {
+		runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t)
+	})
+	t.Run("generic CLI output modes reach the joined root", func(t *testing.T) {
+		runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t)
+	})
+	t.Run("inference invoke activates through the root BuildProcess", func(t *testing.T) {
+		runModelsInferenceInvokeActivatesThroughRootBuildProcess(t)
+	})
+	t.Run("pinned backend rejection happens before process start", func(t *testing.T) {
+		runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t)
+	})
+}
 
-	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
-
+// runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence
+// proves the public catalog preserves the authored worker/resource shape while
+// keeping a Factory declaration ahead of the built-in definition with the same
+// model name.
+func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
+	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -168,36 +186,83 @@ func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t 
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
-	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	if status.FactoryState != string(interfaces.FactoryStateRunning) {
-		t.Fatalf("GET /status factory_state = %q, want RUNNING", status.FactoryState)
+	listed := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	catalogModel := findCatalogModel(t, listed.Results, "OMNIVOICE_Q4_K_M", "GET /models")
+	if catalogModel.ProviderLocality != factoryapi.WorkerModelLocalityLocal ||
+		catalogModel.Status != factoryapi.ModelStatusREADY ||
+		len(catalogModel.Operations) != 2 ||
+		catalogModel.Operations[0].Name != "ASR" || catalogModel.Operations[1].Name != "TTS" {
+		t.Fatalf("catalog-model summary = %#v, want local READY ASR/TTS catalog", catalogModel)
+	}
+	if len(catalogModel.Resources) != 2 || catalogModel.Resources[0].Name != "a-cache" || catalogModel.Resources[1].Name != "z-cache" {
+		t.Fatalf("catalog-model resources = %#v, want stable a-cache/z-cache order", catalogModel.Resources)
 	}
 
-	models := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
-	var observed *factoryapi.ModelSummary
-	for index := range models.Results {
-		if models.Results[index].Name == "OMNIVOICE_Q4_K_M" {
-			observed = &models.Results[index]
-			break
-		}
+	detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
+	if len(detail.Capabilities) != 2 || detail.Capabilities[0].Worker != "a-worker" || detail.Capabilities[1].Worker != "z-worker" {
+		t.Fatalf("catalog-model capabilities = %#v, want stable worker order", detail.Capabilities)
 	}
-	if observed == nil {
-		t.Fatalf("GET /models did not include OMNIVOICE_Q4_K_M; results=%#v", models.Results)
+	if detail.Capabilities[0].ModelProvider == nil || *detail.Capabilities[0].ModelProvider != "codex" {
+		t.Fatalf("first catalog capability provider = %#v, want codex", detail.Capabilities[0].ModelProvider)
 	}
-	if observed.ProviderLocality != factoryapi.WorkerModelLocalityCloud {
-		t.Fatalf("GET /models provider locality = %q, want CLOUD", observed.ProviderLocality)
+	if len(detail.Capabilities[0].ResourceNames) != 1 || detail.Capabilities[0].ResourceNames[0] != "a-cache" {
+		t.Fatalf("first catalog capability resources = %#v, want a-cache", detail.Capabilities[0].ResourceNames)
 	}
-	if observed.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
-		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", observed.ManagedRuntime.Identity)
+
+	builtInOverride := findCatalogModel(t, listed.Results, "tts", "GET /models")
+	if len(builtInOverride.Operations) != 1 || builtInOverride.Operations[0].Name != "TTS" {
+		t.Fatalf("factory tts override = %#v, want the authored TTS operation", builtInOverride)
 	}
-	if observed.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("GET /models managed readiness = %s, want READY", observed.ManagedRuntime.ReadinessState)
+	overrideDetail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/tts")
+	if overrideDetail.Name != "tts" || len(overrideDetail.Capabilities) != 1 || overrideDetail.Capabilities[0].Worker != "factory-tts" {
+		t.Fatalf("factory tts detail = %#v, want Factory-owned tts capability", overrideDetail)
+	}
+	content := factoryapi.WorkContent{mustFunctionalTextPart(t, "catalog capability probe")}
+	body, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "TTS", Content: &content})
+	if err != nil {
+		t.Fatalf("marshal Factory-owned model invocation: %v", err)
+	}
+	response, err := http.Post(server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /models/OMNIVOICE_Q4_K_M/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusBadRequest {
+		t.Fatalf("Factory-owned model invocation status = %d, want non-success execution result", response.StatusCode)
+	}
+	unsupportedBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "ASR"})
+	if err != nil {
+		t.Fatalf("marshal unsupported Factory-owned model invocation: %v", err)
+	}
+	unsupported, err := http.Post(server.URL()+"/models/tts/invocations", "application/json", bytes.NewReader(unsupportedBody))
+	if err != nil {
+		t.Fatalf("POST /models/tts/invocations: %v", err)
+	}
+	defer unsupported.Body.Close()
+	if unsupported.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unsupported Factory-owned model invocation status = %d, want 400", unsupported.StatusCode)
 	}
 }
 
-func catalogDiscoveryFactoryConfig() map[string]any {
+func findCatalogModel(
+	t *testing.T,
+	models []factoryapi.ModelSummary,
+	name string,
+	operation string,
+) factoryapi.ModelSummary {
+	t.Helper()
+	for _, model := range models {
+		if model.Name == name {
+			return model
+		}
+	}
+	t.Fatalf("%s did not include %q; results=%#v", operation, name, models)
+	return factoryapi.ModelSummary{}
+}
+
+func richCatalogFactoryConfig() map[string]any {
 	return map[string]any{
-		"name": "models-catalog-discovery",
+		"name": "models-rich-catalog",
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -206,24 +271,38 @@ func catalogDiscoveryFactoryConfig() map[string]any {
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
-		"workers": []map[string]any{{
-			"name":          "tts-worker",
-			"type":          interfaces.WorkerTypeModel,
-			"model":         "OMNIVOICE_Q4_K_M",
-			"modelProvider": "CODEX",
-			"modelLocality": interfaces.ModelLocalityCloud,
-			"operations": []map[string]any{{
-				"name": "TTS",
-				"inputs": []map[string]any{{
-					"name":         "text",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
-					"required":     true,
-				}},
-				"outputs": []map[string]any{{
-					"name":         "audio",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
-				}},
-			}},
-		}},
+		"resources": []map[string]any{
+			{
+				"name": "z-cache", "type": interfaces.ResourceTypeModel, "capacity": 2,
+				"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND", "provider": "LOCAL",
+			},
+			{
+				"name": "a-cache", "type": interfaces.ResourceTypeModel, "capacity": 1,
+				"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND", "provider": "LOCAL",
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "z-worker", "type": interfaces.WorkerTypeModel, "model": "OMNIVOICE_Q4_K_M",
+				"modelProvider": "CODEX", "modelLocality": interfaces.ModelLocalityLocal,
+				"resources": []map[string]any{{"name": "z-cache", "capacity": 1}},
+				"operations": []map[string]any{
+					{"name": "TTS", "inputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}, "required": true}}, "outputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}}}},
+				},
+			},
+			{
+				"name": "a-worker", "type": interfaces.WorkerTypeModel, "model": "OMNIVOICE_Q4_K_M",
+				"modelProvider": "CODEX", "modelLocality": interfaces.ModelLocalityLocal,
+				"resources": []map[string]any{{"name": "a-cache", "capacity": 1}},
+				"operations": []map[string]any{
+					{"name": "ASR", "inputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}, "required": true}}, "outputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}}}},
+				},
+			},
+			{
+				"name": "factory-tts", "type": interfaces.WorkerTypeModel, "model": "tts",
+				"modelProvider": "CODEX", "modelLocality": interfaces.ModelLocalityCloud,
+				"operations": []map[string]any{{"name": "TTS", "inputs": []map[string]any{{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}}}, "outputs": []map[string]any{{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}}}}},
+			},
+		},
 	}
 }
