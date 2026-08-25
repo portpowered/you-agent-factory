@@ -112,6 +112,91 @@ func TestBuildProcessComposesRuntimeMetricsQuery(t *testing.T) {
 	}
 }
 
+func TestProcessCapabilityAccessorsResolveComposedBoundaries(t *testing.T) {
+	t.Parallel()
+
+	if projection := RecordingsProjectionFromProcess(nil); projection != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(nil) = %#v, want nil", projection)
+	}
+	if settings := OperatorSettingsFromProcess(nil); settings != nil {
+		t.Fatalf("OperatorSettingsFromProcess(nil) = %#v, want nil", settings)
+	}
+	var typedNil *initializerapplication.Process
+	if projection := RecordingsProjectionFromProcess(typedNil); projection != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(typed nil) = %#v, want nil", projection)
+	}
+	if settings := OperatorSettingsFromProcess(typedNil); settings != nil {
+		t.Fatalf("OperatorSettingsFromProcess(typed nil) = %#v, want nil", settings)
+	}
+
+	withoutCapabilities, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecutionAndCapabilities(without capabilities) error = %v", err)
+	}
+	if projection := RecordingsProjectionFromProcess(withoutCapabilities); projection != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(without capabilities) = %#v, want nil", projection)
+	}
+	if settings := OperatorSettingsFromProcess(withoutCapabilities); settings != nil {
+		t.Fatalf("OperatorSettingsFromProcess(without capabilities) = %#v, want nil", settings)
+	}
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: &rootWorkerRecordingReaderProbe{},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(composed capabilities) error = %v", err)
+	}
+	if projection := RecordingsProjectionFromProcess(process); projection == nil {
+		t.Fatal("RecordingsProjectionFromProcess(composed process) returned nil")
+	}
+	if settings := OperatorSettingsFromProcess(process); settings == nil {
+		t.Fatal("OperatorSettingsFromProcess(composed process) returned nil")
+	}
+
+	wrongProjection, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil,
+		nil, nil, nil, nil,
+		rootRecordingsProjectionCapabilityProbe{projection: struct{}{}}, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecutionAndCapabilities(wrong projection) error = %v", err)
+	}
+	if projection := RecordingsProjectionFromProcess(wrongProjection); projection != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(wrong type) = %#v, want nil", projection)
+	}
+
+	wrongSettings, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
+		nil, nil, rootWorkerProcessRegistry{}, rootWorkerProcessLifecycle{}, nil, nil,
+		nil, nil, nil, nil, nil,
+		rootOperatorSettingsCapabilityProbe{settings: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecutionAndCapabilities(wrong settings) error = %v", err)
+	}
+	if settings := OperatorSettingsFromProcess(wrongSettings); settings != nil {
+		t.Fatalf("OperatorSettingsFromProcess(wrong type) = %#v, want nil", settings)
+	}
+}
+
+type rootRecordingsProjectionCapabilityProbe struct {
+	projection any
+}
+
+func (probe rootRecordingsProjectionCapabilityProbe) RecordingsProjection() any {
+	return probe.projection
+}
+
+type rootOperatorSettingsCapabilityProbe struct {
+	settings any
+}
+
+func (probe rootOperatorSettingsCapabilityProbe) OperatorSettings() any {
+	return probe.settings
+}
+
 func TestCostsQueryFromProcessResolvesTypedCapability(t *testing.T) {
 	t.Parallel()
 
