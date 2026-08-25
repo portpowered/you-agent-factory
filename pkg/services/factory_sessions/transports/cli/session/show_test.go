@@ -52,7 +52,7 @@ func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
 		"Orchestrator kind:\tJAVASCRIPT",
 		"Session started:\t",
 		"Stop summary:\tkind=INTERRUPTED session=session-beta work=Review child [work-review-1] state=goal:review",
-		"Stop dispatch:\tdispatch-1 status=INTERRUPTED kind=JAVASCRIPT_AGENT workstation=review child",
+		"Stop dispatch:\tdispatch-1 status=INTERRUPTED confirmation=UNCONFIRMED kind=JAVASCRIPT_AGENT workstation=review child",
 		"Stop result:\tDispatch interrupted while waiting for review output",
 		"Recovery surface:\texisting dispatch retry, work repair, or session workflow controls",
 		"Recovery action:\tInspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery.",
@@ -135,6 +135,9 @@ func TestShow_JSONModeEmitsFactorySession(t *testing.T) {
 	}
 	if got.Id != "session-beta" || got.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("session = %#v, want JavaScript session-beta", got)
+	}
+	if got.Runtime.StopSummary == nil || got.Runtime.StopSummary.LatestDispatch == nil || got.Runtime.StopSummary.LatestDispatch.ConfirmationState != factoryapi.UNCONFIRMED {
+		t.Fatalf("dispatch confirmationState = %#v, want UNCONFIRMED", got.Runtime.StopSummary)
 	}
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {

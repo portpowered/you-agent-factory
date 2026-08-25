@@ -73,6 +73,20 @@ func TestShowJSONUsesObservationDocumentAndExactIdentity(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionConfirmationStateDefaultsUnknownValues(t *testing.T) {
+	session := generated.WorkerSessionObservation{ConfirmationState: generated.ConfirmationState("LEGACY")}
+	if got := workerSessionConfirmationState(session); got != generated.UNCONFIRMED {
+		t.Fatalf("confirmationState = %q, want UNCONFIRMED", got)
+	}
+}
+
+func TestWorkerSessionConfirmationStatePreservesConfirmed(t *testing.T) {
+	session := generated.WorkerSessionObservation{ConfirmationState: generated.CONFIRMED}
+	if got := workerSessionConfirmationState(session); got != generated.CONFIRMED {
+		t.Fatalf("confirmationState = %q, want CONFIRMED", got)
+	}
+}
+
 func assertShowExecutionFacts(t *testing.T, document map[string]json.RawMessage) {
 	t.Helper()
 	if string(document["model"]) != `"gpt-5.6-luna"` || string(document["reasoningEffort"]) != `"high"` {

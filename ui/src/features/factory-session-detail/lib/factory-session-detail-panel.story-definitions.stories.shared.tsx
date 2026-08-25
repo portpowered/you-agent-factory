@@ -255,6 +255,9 @@ export const DispatchDrilldownStates = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
+    expect(
+      await canvas.findByText("Durability confirmation: UNCONFIRMED"),
+    ).toBeTruthy();
     expect(await canvas.findByText("Execution mode: live")).toBeTruthy();
     expect(
       await canvas.findByText(

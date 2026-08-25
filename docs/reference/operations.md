@@ -542,6 +542,42 @@ reconstruct the recorded Factory state in a new live Factory Session with
 and writes a successor recording by default. Use `--record <successor-path>` to
 choose that path.
 
+### Read confirmation state before recovery
+
+Work, dispatch, and Worker Session reads include `confirmationState`. `CONFIRMED`
+means the reported state or outcome is covered by completed recording storage.
+`UNCONFIRMED` means the process has reported the fact, but the completed flush
+watermark does not cover its producing event yet. The value predicts whether a
+hard kill can lose or revise that fact. It does not change scheduling or
+reconciliation rules, and it does not guarantee a provider-side exactly-once
+effect.
+
+The recorder keeps its existing 250 ms cadence. A read can conservatively stay
+unconfirmed during a concurrent flush. The following real probe used an
+isolated factory on 2026-08-23. It captured the same `you work show --json`
+read before and after a completed flush interval:
+
+```text
+PS> 2026-08-23T15:35:28.1201791-07:00 you --server http://127.0.0.1:17437 --json work show batch-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e-durability-probe-work
+{"chainingTraceDepth":1,"confirmationState":"UNCONFIRMED","currentChainingTraceId":"trace-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","name":"durability-probe-work","requestId":"request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","state":{"name":"processing","type":"PROCESSING"},"tags":{"_work_name":"durability-probe-work","_work_type":"task"},"traceId":"trace-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","workId":"batch-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e-durability-probe-work","workTypeName":"task"}
+PS> 2026-08-23T15:35:35.6719323-07:00 you --server http://127.0.0.1:17437 --json work show batch-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e-durability-probe-work
+{"chainingTraceDepth":1,"confirmationState":"CONFIRMED","currentChainingTraceId":"trace-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","name":"durability-probe-work","requestId":"request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","state":{"name":"processing","type":"PROCESSING"},"tags":{"_work_name":"durability-probe-work","_work_type":"task"},"traceId":"trace-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","workId":"batch-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e-durability-probe-work","workTypeName":"task"}
+```
+
+The probe then hard-killed the process at `2026-08-23T15:35:51.3326794-07:00`.
+After restart, the same read returned the last durable state:
+
+```text
+PS> 2026-08-23T15:35:52.5535148-07:00 you --server http://127.0.0.1:17437 --json work show batch-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e-durability-probe-work
+{"chainingTraceDepth":1,"confirmationState":"CONFIRMED","currentChainingTraceId":"trace-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","name":"durability-probe-work","requestId":"request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","state":{"name":"processing","type":"PROCESSING"},"tags":{"_work_name":"durability-probe-work","_work_type":"task"},"traceId":"trace-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e","workId":"batch-request-b8c4cecb-5b5e-4358-96ad-25136dc9fc3e-durability-probe-work","workTypeName":"task"}
+```
+
+Use `UNCONFIRMED` as a prompt to wait for confirmation or inspect the
+reconciliation result after restart. Do not treat `CONFIRMED` as proof that a
+provider completed an external side effect exactly once. Providers can act
+before a process stops, so idempotency remains the recovery control for
+duplicate effects.
+
 Resume re-admits recorded non-terminal Work, including Work that was queued or
 in flight at the stop boundary. Terminal Work represented by the recording is
 not dispatched again, and a completed dispatch remains one completed dispatch

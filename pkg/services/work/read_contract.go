@@ -41,19 +41,28 @@ var ErrWorkNotFound = errors.New("Work not found")
 // Factory Runtime or peer implementation types. SupersededBy is a read-time
 // successor annotation for older terminal or failed same-name attempts.
 type ReadModel struct {
-	CursorID                 string
-	Name                     string
-	WorkID                   string
-	RequestID                string
-	WorkTypeName             string
-	State                    *State
-	SupersededBy             string
-	ChainingTraceDepth       int
-	CurrentChainingTraceID   string
-	PreviousChainingTraceIDs []string
-	TraceID                  string
-	Content                  []WorkContentPart
-	StructuredResult         any
+	CursorID     string
+	Name         string
+	WorkID       string
+	RequestID    string
+	WorkTypeName string
+	State        *State
+	// ConfirmationState reports whether the event that produced the current
+	// state is covered by the completed Recordings flush watermark. State
+	// access assigns UNCONFIRMED when the cursor or watermark is unavailable.
+	ConfirmationState ConfirmationState
+	// CurrentStateSequence is an internal read-boundary cursor. It is kept out
+	// of transport serialization; state access compares it with one sampled
+	// completed-flush sequence for the snapshot's stream generation.
+	CurrentStateSequence      int64 `json:"-"`
+	CurrentStateSequenceKnown bool  `json:"-"`
+	SupersededBy              string
+	ChainingTraceDepth        int
+	CurrentChainingTraceID    string
+	PreviousChainingTraceIDs  []string
+	TraceID                   string
+	Content                   []WorkContentPart
+	StructuredResult          any
 	// StructuredResultPresent preserves an explicitly stored JSON null in the
 	// detached read contract while keeping absent results distinguishable.
 	StructuredResultPresent bool
@@ -64,6 +73,21 @@ type ReadModel struct {
 	HumanApproval           *HumanApprovalReadModel
 	ExpectedArtifacts       []ExpectedArtifactReadModel
 }
+
+// ConfirmationState is the durability outcome for one Work read. It reports
+// only whether the current state event is covered by completed recording
+// storage; it does not describe runtime progress or a persistence error.
+type ConfirmationState string
+
+const (
+	ConfirmationStateConfirmed   ConfirmationState = "CONFIRMED"
+	ConfirmationStateUnconfirmed ConfirmationState = "UNCONFIRMED"
+)
+
+// CompletedFlushSequenceReader is the narrow durability capability consumed
+// by Work state access. The Recordings owner supplies the implementation at
+// composition time; Work does not depend on Recordings' service contract.
+type CompletedFlushSequenceReader = stateaccessquery.CompletedFlushSequenceReader
 
 // FailureDetail is the bounded, customer-safe explanation of the dispatch
 // that currently leaves this Work in a failed state. Work owns this detached
@@ -470,8 +494,12 @@ type WorkAdmission struct {
 // owner. Factory Sessions adapts its live runtime into this contract, so Work
 // never imports Factory Runtime and transports never observe engine types.
 type ReadSnapshot struct {
-	Items      []ReadModel
-	Admissions []WorkAdmission
+	// StreamGenerationID identifies the canonical event history that produced
+	// this snapshot. Numeric sequences are only comparable within this
+	// generation.
+	StreamGenerationID string
+	Items              []ReadModel
+	Admissions         []WorkAdmission
 }
 
 // StopSummary is the Work-owned detached copy of the stopped-state context

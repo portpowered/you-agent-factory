@@ -8,6 +8,10 @@ properties:
   name:
     type: string
     description: A human readable name for the work, not unique
+  confirmationState:
+    $ref: './ConfirmationState.yaml'
+    x-go-type-skip-optional-pointer: true
+    description: Whether the reported Work state or outcome is covered by completed recording storage.
   workId:
     type: string
     description: Unique identifier for the work

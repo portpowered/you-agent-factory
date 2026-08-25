@@ -892,7 +892,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Work'
+                $ref: '#/components/schemas/WorkRead'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -919,7 +919,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Work'
+                $ref: '#/components/schemas/WorkRead'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -3176,7 +3176,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/Work'
+            $ref: '#/components/schemas/WorkRead'
         paginationContext:
           $ref: '#/components/schemas/PaginationContext'
         counts:
@@ -3724,6 +3724,7 @@ components:
         - turnId
         - attemptId
         - state
+        - confirmationState
         - startedAt
         - endedAt
         - durationMillis
@@ -3792,6 +3793,9 @@ components:
             - WorkerSessionObservationStateFailed
             - WorkerSessionObservationStateCanceled
             - WorkerSessionObservationStateTerminated
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the reported Worker Session state or terminal outcome is covered by completed recording storage.
         startedAt:
           type: string
           format: date-time
@@ -6027,12 +6031,16 @@ components:
         - dispatchId
         - status
         - dispatchKind
+        - confirmationState
       properties:
         dispatchId:
           type: string
           description: Stable dispatch identifier that most directly explains the stopped state.
         status:
           $ref: '#/components/schemas/FactoryDispatchStatus'
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the reported dispatch status is covered by completed recording storage.
         dispatchKind:
           $ref: '#/components/schemas/FactoryDispatchKind'
         workstationName:
@@ -6494,6 +6502,7 @@ components:
         - id
         - status
         - dispatchKind
+        - confirmationState
       description: Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
       properties:
         id:
@@ -6501,6 +6510,9 @@ components:
           description: Stable dispatch identifier.
         status:
           $ref: '#/components/schemas/FactoryDispatchStatus'
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the event that produced the reported dispatch status is covered by completed recording storage.
         dispatchKind:
           $ref: '#/components/schemas/FactoryDispatchKind'
         phase:
@@ -6725,6 +6737,7 @@ components:
         - orchestratorKind
         - dispatchKind
         - status
+        - confirmationState
       properties:
         id:
           type: string
@@ -6741,6 +6754,9 @@ components:
           description: JavaScript workflow phase when the dispatch was created or observed.
         status:
           $ref: '#/components/schemas/FactoryDispatchStatus'
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the event that produced the reported dispatch status is covered by completed recording storage.
         label:
           type: string
           description: Customer-visible dispatch label.
@@ -14647,6 +14663,10 @@ components:
         name:
           type: string
           description: A human readable name for the work, not unique
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          x-go-type-skip-optional-pointer: true
+          description: Whether the reported Work state or outcome is covered by completed recording storage.
         workId:
           type: string
           description: Unique identifier for the work
@@ -14706,6 +14726,28 @@ components:
         failureDetail:
           $ref: '#/components/schemas/FailureDetail'
           description: Most recent bounded failure detail when this Work item is currently in a failed state.
+    ConfirmationState:
+      type: string
+      description: Whether the reported state or outcome is covered by completed recording storage.
+      enum:
+        - CONFIRMED
+        - UNCONFIRMED
+    WorkRead:
+      type: object
+      required:
+        - confirmationState
+      properties:
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+      allOf:
+        - $ref: '#/components/schemas/Work'
+        - type: object
+          required:
+            - confirmationState
+          properties:
+            confirmationState:
+              $ref: '#/components/schemas/ConfirmationState'
+      description: Work returned by a read API. The confirmation state describes only whether the reported Work state or outcome is covered by completed recording storage.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

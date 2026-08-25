@@ -6,7 +6,7 @@ properties:
   results:
     type: array
     items:
-      $ref: '../data-models/Work.yaml'
+      $ref: './WorkRead.yaml'
   paginationContext:
     $ref: './PaginationContext.yaml'
   counts:

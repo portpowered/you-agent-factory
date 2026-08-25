@@ -28,6 +28,7 @@ export interface FactorySessionDispatchPetriModel {
 export interface FactorySessionDispatchDrilldownModel {
   artifactLinks: FactorySessionDispatchArtifactLink[];
   attempt?: number;
+  confirmationState?: FactoryDispatch["confirmationState"];
   dispatchID: string;
   dispatchKind: string;
   failureDetail?: FactorySessionDispatchFailureDetailModel;
@@ -62,6 +63,7 @@ export function normalizeFactorySessionDispatchDetail(
       id: artifactID,
     })),
     attempt: dispatch.attempt,
+    confirmationState: dispatch.confirmationState,
     dispatchID: dispatch.id,
     dispatchKind: dispatch.dispatchKind,
     failureDetail: dispatch.failureDetail

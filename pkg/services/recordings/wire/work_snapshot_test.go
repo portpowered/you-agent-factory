@@ -56,6 +56,47 @@ func TestNewWorkSnapshotReaderConstructsReconstructWorldStateThroughRoot(t *test
 	}
 }
 
+func TestWorkSnapshotReaderPreservesGenerationAndCurrentStateSequence(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(factorydefinitions.WorkStateChangeEventPayload{WorkID: "work-story"})
+	if err != nil {
+		t.Fatalf("marshal state change: %v", err)
+	}
+	fake := &recordingsRootFake{
+		events: []recordings.CanonicalEvent{{
+			ID:       "event-state-change",
+			Sequence: 4,
+			Scope:    recordings.CanonicalEventScope{FactorySessionID: "session-replay"},
+			Cursor: recordings.CanonicalEventCursor{
+				StreamGenerationID: "generation-replay",
+				Sequence:           4,
+			},
+			Kind:    recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkStateChange),
+			Payload: string(payload),
+		}},
+		worldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Through: recordings.CanonicalEventCursor{
+				StreamGenerationID: "generation-replay",
+				Sequence:           4,
+			},
+			Payload: recordingsBackedWorldPayload(t, "work-story", "story", "review"),
+		},
+	}
+
+	snapshot, err := NewWorkSnapshotReader(fake).ReadWorkSnapshot(context.Background(), "session-replay")
+	if err != nil {
+		t.Fatalf("ReadWorkSnapshot: %v", err)
+	}
+	if snapshot.StreamGenerationID != "generation-replay" {
+		t.Fatalf("stream generation = %q, want generation-replay", snapshot.StreamGenerationID)
+	}
+	if len(snapshot.Items) != 1 || !snapshot.Items[0].CurrentStateSequenceKnown || snapshot.Items[0].CurrentStateSequence != 4 {
+		t.Fatalf("current state cursor = %#v, want known sequence 4", snapshot.Items)
+	}
+}
+
 func TestWorkAdmissionsFromCanonicalEventsPreserveRequestOrder(t *testing.T) {
 	t.Parallel()
 

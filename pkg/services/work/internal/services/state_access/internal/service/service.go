@@ -12,8 +12,9 @@ import (
 // Session adapter port and Recordings-backed reads through the private
 // Recordings adapter port.
 type Service struct {
-	sessions  stateaccess.SessionResolver
-	snapshots stateaccess.SnapshotReader
+	sessions   stateaccess.SessionResolver
+	snapshots  stateaccess.SnapshotReader
+	durability work.CompletedFlushSequenceReader
 }
 
 var _ stateaccess.Service = (*Service)(nil)
@@ -22,8 +23,13 @@ var _ stateaccess.Service = (*Service)(nil)
 func New(
 	sessions stateaccess.SessionResolver,
 	snapshots stateaccess.SnapshotReader,
+	durability ...work.CompletedFlushSequenceReader,
 ) *Service {
-	return &Service{sessions: sessions, snapshots: snapshots}
+	var reader work.CompletedFlushSequenceReader
+	if len(durability) > 0 {
+		reader = durability[0]
+	}
+	return &Service{sessions: sessions, snapshots: snapshots, durability: reader}
 }
 
 func (s *Service) SubmitWorkRequestForSession(

@@ -64,10 +64,11 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 		"Work type:\tstory\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-chain-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=BLOCKED session=session-beta state=story:blocked\n" +
-		"Stop dispatch:\tdispatch-review-1 status=FAILED kind=PETRI_TRANSITION workstation=Review\n" +
+		"Stop dispatch:\tdispatch-review-1 status=FAILED confirmation=UNCONFIRMED kind=PETRI_TRANSITION workstation=Review\n" +
 		"Stop result:\tprovider timeout\n" +
 		"Recovery surface:\texisting work repair, work move, or follow-up submission controls\n" +
 		"Recovery action:\tInspect the blocked work \"Review PRD\" [work-review-1], then use the existing work repair, work move, or follow-up submission controls to unblock it.\n"
@@ -115,6 +116,9 @@ func TestShow_JSONOutputIncludesFailureDetail(t *testing.T) {
 				Reason:  factoryapi.WorkFailureTypeInternalServerError,
 				Message: "root setup failed",
 			},
+			StopSummary: &factoryapi.FactoryStopSummary{
+				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{DispatchId: "dispatch-json-failed", Status: factoryapi.FactoryDispatchStatusFAILED, DispatchKind: factoryapi.FactoryDispatchKindPETRITRANSITION},
+			},
 		})
 	}))
 	defer srv.Close()
@@ -131,6 +135,9 @@ func TestShow_JSONOutputIncludesFailureDetail(t *testing.T) {
 	}
 	if got.FailureDetail == nil || got.FailureDetail.Reason != factoryapi.WorkFailureTypeInternalServerError || got.FailureDetail.Message != "root setup failed" {
 		t.Fatalf("failure detail = %#v, want structured JSON detail", got.FailureDetail)
+	}
+	if got.StopSummary == nil || got.StopSummary.LatestDispatch == nil || got.StopSummary.LatestDispatch.ConfirmationState != factoryapi.UNCONFIRMED {
+		t.Fatalf("dispatch confirmationState = %#v, want UNCONFIRMED", got.StopSummary)
 	}
 }
 
@@ -233,10 +240,11 @@ func TestShow_HumanOutputIncludesInterruptedStopSummary(t *testing.T) {
 		"Work type:\tgoal\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-review-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=INTERRUPTED session=session-beta state=goal:review\n" +
-		"Stop dispatch:\tdispatch-1 status=INTERRUPTED kind=JAVASCRIPT_AGENT workstation=review child\n" +
+		"Stop dispatch:\tdispatch-1 status=INTERRUPTED confirmation=UNCONFIRMED kind=JAVASCRIPT_AGENT workstation=review child\n" +
 		"Stop result:\tDispatch interrupted while waiting for review output\n" +
 		"Recovery surface:\texisting dispatch retry, work repair, or session workflow controls\n" +
 		"Recovery action:\tInspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery.\n"
@@ -290,6 +298,7 @@ func TestShow_HumanOutputIncludesPausedLifecycleStopSummary(t *testing.T) {
 		"Work type:\tgoal\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-review-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=PAUSED session=session-paused state=goal:review lifecycle=PAUSED\n"

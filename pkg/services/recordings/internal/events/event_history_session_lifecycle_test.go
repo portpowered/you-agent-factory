@@ -13,6 +13,26 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+type completedFlushWatermarkStub struct {
+	cursor recordings.CanonicalEventCursor
+	ok     bool
+}
+
+func (stub completedFlushWatermarkStub) CompletedFlushWatermark(string) (recordings.CanonicalEventCursor, bool) {
+	return stub.cursor, stub.ok
+}
+
+func TestFactoryEventHistoryForwardsCompletedFlushWatermark(t *testing.T) {
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	expected := recordings.CanonicalEventCursor{StreamGenerationID: "generation", Sequence: 7}
+	history.SetCompletedFlushWatermarkReader(completedFlushWatermarkStub{cursor: expected, ok: true})
+
+	got, ok := history.CompletedFlushWatermark("generation")
+	if !ok || got != expected {
+		t.Fatalf("CompletedFlushWatermark() = %#v, %v; want %#v, true", got, ok, expected)
+	}
+}
+
 func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketSequence(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 12, 10, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })

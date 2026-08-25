@@ -64,6 +64,17 @@ func (s ObservationScope) Normalized() ObservationScope {
 	return s
 }
 
+// ConfirmationState is the durability outcome for one Worker Session
+// observation. It reports only whether the event that produced the current
+// state or terminal outcome is covered by completed recording storage; it does
+// not describe Worker execution progress or recording health.
+type ConfirmationState string
+
+const (
+	ConfirmationStateConfirmed   ConfirmationState = "CONFIRMED"
+	ConfirmationStateUnconfirmed ConfirmationState = "UNCONFIRMED"
+)
+
 const DefaultWorkerSessionObservationListMaxResults = 50
 
 // ListWorkerSessionObservationsRequest is the bounded top-level observation
@@ -259,13 +270,25 @@ type Observation struct {
 	TurnID                   string
 	AttemptID                string
 	State                    State
-	StartedAt                *time.Time
-	EndedAt                  *time.Time
-	Duration                 *time.Duration
-	DurationBasis            DurationBasis
-	TokenUsage               *TokenUsage
-	TurnUsage                *TurnUsage
-	Transcript               TranscriptAvailability
+	// ConfirmationState reports whether the canonical event responsible for
+	// State or the terminal outcome is covered by the completed Recordings
+	// flush watermark. Process-local observations and reads without a known
+	// cursor remain UNCONFIRMED.
+	ConfirmationState ConfirmationState
+	// StreamGenerationID, StateSequence, and StateSequenceKnown are internal
+	// read-boundary cursor facts. They are intentionally excluded from public
+	// transport mapping; the runtime compares them with one sampled completed
+	// flush watermark before returning the observation.
+	StreamGenerationID string `json:"-"`
+	StateSequence      int64  `json:"-"`
+	StateSequenceKnown bool   `json:"-"`
+	StartedAt          *time.Time
+	EndedAt            *time.Time
+	Duration           *time.Duration
+	DurationBasis      DurationBasis
+	TokenUsage         *TokenUsage
+	TurnUsage          *TurnUsage
+	Transcript         TranscriptAvailability
 	// RecordingHealth is optional when the runtime has no durable Worker
 	// recording configured. When present it is the Recordings-owned health
 	// projection and never describes Worker execution outcome.

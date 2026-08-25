@@ -27,3 +27,8 @@ type Service interface {
 	QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
 	Snapshot(recordings.RecordingID) (Snapshot, error)
 }
+
+// CompletedFlushWatermarkReader aliases the narrow lifecycle capability so
+// the implementation can expose it without adding another named interface to
+// this private service root.
+type CompletedFlushWatermarkReader = recordings.CompletedFlushWatermarkReader

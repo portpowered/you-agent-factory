@@ -192,6 +192,14 @@
       ],
       "type": "object"
     },
+    "ConfirmationState": {
+      "description": "Whether the reported state or outcome is covered by completed recording storage.",
+      "enum": [
+        "CONFIRMED",
+        "UNCONFIRMED"
+      ],
+      "type": "string"
+    },
     "Diagnostics": {
       "additionalProperties": false,
       "properties": {
@@ -3199,6 +3207,9 @@
     "FactoryStopDispatchSummary": {
       "additionalProperties": false,
       "properties": {
+        "confirmationState": {
+          "$ref": "#/$defs/ConfirmationState"
+        },
         "dispatchId": {
           "description": "Stable dispatch identifier that most directly explains the stopped state.",
           "type": "string"
@@ -3220,7 +3231,8 @@
       "required": [
         "dispatchId",
         "status",
-        "dispatchKind"
+        "dispatchKind",
+        "confirmationState"
       ],
       "type": "object"
     },
@@ -5166,6 +5178,9 @@
           "description": "Current chaining depth for this work item when the runtime already knows its upstream lineage.",
           "minimum": 1,
           "type": "integer"
+        },
+        "confirmationState": {
+          "$ref": "#/$defs/ConfirmationState"
         },
         "content": {
           "$ref": "#/$defs/WorkContent"

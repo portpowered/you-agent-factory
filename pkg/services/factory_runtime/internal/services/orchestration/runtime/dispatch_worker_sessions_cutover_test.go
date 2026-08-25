@@ -888,6 +888,34 @@ type historicalProviderSessions struct {
 	err    error
 }
 
+type processLocalWorkerSessionService struct {
+	workersessions.Service
+	topLevelResult        workersessions.ListWorkerSessionObservationsResult
+	observationListResult workersessions.ListObservationsResult
+	getByWorkerResult     workersessions.Observation
+}
+
+func (s *processLocalWorkerSessionService) ListObservations(
+	context.Context,
+	workersessions.ListObservationsRequest,
+) (workersessions.ListObservationsResult, error) {
+	return s.observationListResult, nil
+}
+
+func (s *processLocalWorkerSessionService) ListWorkerSessionObservations(
+	context.Context,
+	workersessions.ListWorkerSessionObservationsRequest,
+) (workersessions.ListWorkerSessionObservationsResult, error) {
+	return s.topLevelResult, nil
+}
+
+func (s *processLocalWorkerSessionService) GetObservationByWorkerSessionID(
+	context.Context,
+	workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	return s.getByWorkerResult, nil
+}
+
 func (s *historicalProviderSessions) Project(providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
 	if s == nil {
 		return providersessions.ProjectResult{}, providersessions.ErrSessionStorageUnavailable

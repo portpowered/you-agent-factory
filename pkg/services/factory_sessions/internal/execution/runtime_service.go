@@ -248,18 +248,18 @@ type JavaScriptRuntimeService struct {
 	workerSessionsMu sync.RWMutex
 	workerSessions   map[string]string
 
-	mu            sync.RWMutex
-	sessions      map[string]*runtimeSessionState
-	startReplay   map[string]startReplayRecord
-	startInflight map[string]*startInflightFlight
-	controlReplay map[string]controlReplayRecord
-	liveChangeMu  sync.Mutex
+	mu                         sync.RWMutex
+	sessions                   map[string]*runtimeSessionState
+	startReplay                map[string]startReplayRecord
+	startInflight              map[string]*startInflightFlight
+	controlReplay              map[string]controlReplayRecord
+	liveChangeMu               sync.Mutex
+	dispatchDurabilityMu       sync.RWMutex
+	dispatchDurability         recording.CompletedFlushWatermarkReader
+	dispatchStreamGenerationID string
 }
 
-var _ Service = (*JavaScriptRuntimeService)(nil)
-
-// NewJavaScriptRuntimeService constructs one JavaScript runtime-backed durable
-// session service from explicit collaborators.
+// NewJavaScriptRuntimeService constructs the durable session service.
 func NewJavaScriptRuntimeService(
 	projectRoot string,
 	childExecutorMode string,
@@ -561,7 +561,7 @@ func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: cloneDispatchSummaries(state.dispatches),
+		Dispatches: s.dispatchesForRead(state.dispatches, state.events),
 	}, nil
 }
 
@@ -581,7 +581,7 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	for _, summary := range state.dispatches {
+	for _, summary := range s.dispatchesForRead(state.dispatches, state.events) {
 		if summary.ID == dispatchID {
 			detail := DispatchDetail{
 				DispatchSummary:  summary,

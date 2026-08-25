@@ -72,8 +72,105 @@ func (r workSnapshotReader) ReadWorkSnapshot(
 	if err != nil {
 		return work.ReadSnapshot{}, err
 	}
+	annotateWorkStateSequences(&snapshot, events)
 	snapshot.Admissions = workAdmissionsFromCanonicalEvents(events)
 	return snapshot, nil
+}
+
+// annotateWorkStateSequences attaches the latest canonical event position
+// known to have produced each projected Work state. The projection itself is
+// still the source of the state value; this pass only preserves the cursor
+// needed for the Work-owned durability comparison.
+func annotateWorkStateSequences(snapshot *work.ReadSnapshot, events []recordings.CanonicalEvent) {
+	if snapshot == nil {
+		return
+	}
+	if snapshot.StreamGenerationID == "" {
+		for _, event := range events {
+			if generation := strings.TrimSpace(string(event.Cursor.StreamGenerationID)); generation != "" {
+				snapshot.StreamGenerationID = generation
+				break
+			}
+		}
+	}
+	positions := make(map[string]int64)
+	known := make(map[string]bool)
+	for _, event := range events {
+		sequence := int64(event.Cursor.Sequence)
+		if sequence == 0 {
+			sequence = int64(event.Sequence)
+		}
+		for _, workID := range workIDsFromCanonicalEvent(event) {
+			if !known[workID] || sequence > positions[workID] {
+				positions[workID] = sequence
+				known[workID] = true
+			}
+		}
+	}
+	for index := range snapshot.Items {
+		workID := snapshot.Items[index].WorkID
+		if !known[workID] {
+			continue
+		}
+		snapshot.Items[index].CurrentStateSequence = positions[workID]
+		snapshot.Items[index].CurrentStateSequenceKnown = true
+	}
+}
+
+func workIDsFromCanonicalEvent(event recordings.CanonicalEvent) []string {
+	ids := make([]string, 0)
+	appendID := func(workID string) {
+		if strings.TrimSpace(workID) == "" {
+			return
+		}
+		for _, existing := range ids {
+			if existing == workID {
+				return
+			}
+		}
+		ids = append(ids, workID)
+	}
+	switch event.Kind {
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkRequest):
+		appendCanonicalContextWorkIDs(event, appendID)
+		var payload work.WorkRequestEventPayload
+		if json.Unmarshal([]byte(event.Payload), &payload) == nil {
+			for _, item := range payload.Works {
+				appendID(item.WorkID)
+			}
+		}
+		var legacy factorydefinitions.WorkRequestPayload
+		if json.Unmarshal([]byte(event.Payload), &legacy) == nil {
+			for _, item := range legacy.WorkItems {
+				appendID(item.ID)
+			}
+		}
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeWorkStateChange):
+		appendCanonicalContextWorkIDs(event, appendID)
+		var payload factorydefinitions.WorkStateChangeEventPayload
+		if json.Unmarshal([]byte(event.Payload), &payload) == nil {
+			appendID(payload.WorkID)
+		}
+	case recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeDispatchResponse):
+		appendCanonicalContextWorkIDs(event, appendID)
+		var payload factorydefinitions.WorkstationResponsePayload
+		if json.Unmarshal([]byte(event.Payload), &payload) == nil {
+			for _, item := range payload.OutputWork {
+				appendID(item.ID)
+			}
+		}
+	}
+	return ids
+}
+
+func appendCanonicalContextWorkIDs(event recordings.CanonicalEvent, appendID func(string)) {
+	var context factorydefinitions.FactoryEventContext
+	if json.Unmarshal([]byte(event.SourceContext), &context) != nil || context.WorkIDs == nil {
+		return
+	}
+	for _, workID := range *context.WorkIDs {
+		appendID(workID)
+	}
 }
 
 func workAdmissionsFromCanonicalEvents(events []recordings.CanonicalEvent) []work.WorkAdmission {

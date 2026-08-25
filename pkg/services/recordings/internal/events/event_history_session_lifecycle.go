@@ -69,6 +69,38 @@ type SessionLifecycleCompleteInput struct {
 // SessionLifecycleControlInput remains an alias for source compatibility.
 type SessionLifecycleControlInput = recordings.SessionLifecycleControlInput
 
+// SetCompletedFlushWatermarkReader binds the Recordings-owned durability
+// capability without wrapping the event history. Keeping the concrete history
+// visible preserves its optional projection, provenance, and telemetry seams.
+func (h *FactoryEventHistory) SetCompletedFlushWatermarkReader(
+	reader recordings.CompletedFlushWatermarkReader,
+) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.durabilityReader = reader
+	h.mu.Unlock()
+}
+
+// CompletedFlushWatermark returns the completed durable position for the
+// requested stream generation. The lifecycle service remains the watermark's
+// owner; the event history only forwards the read capability.
+func (h *FactoryEventHistory) CompletedFlushWatermark(
+	streamGenerationID string,
+) (recordings.CanonicalEventCursor, bool) {
+	if h == nil {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	h.mu.RLock()
+	reader := h.durabilityReader
+	h.mu.RUnlock()
+	if reader == nil {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	return reader.CompletedFlushWatermark(streamGenerationID)
+}
+
 // SetRuntimeReadMetricsRecorder binds optional process-level observation
 // telemetry without widening the RuntimeLedger contract.
 func (h *FactoryEventHistory) SetRuntimeReadMetricsRecorder(recorder recordings.RuntimeReadMetricsRecorder) {

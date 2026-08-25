@@ -33,7 +33,7 @@ func (s *Service) ListWork(
 	if err != nil {
 		return work.ListResult{}, mapQueryValidationError(err)
 	}
-	ordered := orderedReadModels(snapshot, selection)
+	ordered := orderedReadModels(s.readModels(snapshot), selection)
 	maxResults := normalized.MaxResults
 	if maxResults <= 0 {
 		maxResults = work.DefaultListMaxResults
@@ -69,7 +69,7 @@ func (s *Service) GetWork(
 	if err != nil {
 		return work.ReadModel{}, err
 	}
-	models := annotatedReadModels(snapshot)
+	models := s.readModels(snapshot)
 	for _, item := range models {
 		if item.CursorID == id {
 			return item, nil
@@ -153,8 +153,7 @@ func newSelection(options work.ListOptions) (stateaccessquery.Selection, error) 
 	})
 }
 
-func orderedReadModels(snapshot work.ReadSnapshot, selection stateaccessquery.Selection) []work.ReadModel {
-	annotated := annotatedReadModels(snapshot)
+func orderedReadModels(annotated []work.ReadModel, selection stateaccessquery.Selection) []work.ReadModel {
 	byID := make(map[string]work.ReadModel, len(annotated))
 	items := make([]stateaccessquery.Item, 0, len(annotated))
 	for _, item := range annotated {
@@ -176,6 +175,30 @@ func orderedReadModels(snapshot work.ReadSnapshot, selection stateaccessquery.Se
 		ordered = append(ordered, byID[item.ID])
 	}
 	return ordered
+}
+
+// readModels applies all response-wide read annotations after one snapshot
+// has been acquired. The durability watermark is sampled once here so every
+// row in a list response observes the same completed-flush boundary as a
+// corresponding show response observes for its snapshot.
+func (s *Service) readModels(snapshot work.ReadSnapshot) []work.ReadModel {
+	models := annotatedReadModels(snapshot)
+	sequence, available := s.sampleCompletedFlushSequence(snapshot.StreamGenerationID)
+	for index := range models {
+		models[index].ConfirmationState = work.ConfirmationStateUnconfirmed
+		if available && models[index].CurrentStateSequenceKnown &&
+			models[index].CurrentStateSequence <= sequence {
+			models[index].ConfirmationState = work.ConfirmationStateConfirmed
+		}
+	}
+	return models
+}
+
+func (s *Service) sampleCompletedFlushSequence(streamGenerationID string) (int64, bool) {
+	if s == nil || s.durability == nil || streamGenerationID == "" {
+		return 0, false
+	}
+	return s.durability.CompletedFlushSequence(streamGenerationID)
 }
 
 func annotatedReadModels(snapshot work.ReadSnapshot) []work.ReadModel {

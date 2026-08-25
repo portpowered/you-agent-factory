@@ -37,6 +37,7 @@ type workRuntimeAdapter struct {
 	// It is initialized by Assembly from the runtime's ledger and advances from
 	// appended events instead of replaying the full event history per read.
 	admissions  *workAdmissionProjection
+	ledger      recordings.Ledger
 	readMetrics factorysessions.InvocationMetricsRecorder
 }
 
@@ -129,7 +130,10 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	materialized := factoryruntime.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
 	names := runtimeWorkNames(materialized.Tokens)
 	sessionSummary := sessionprojection.ProjectFactorySessionStopSummary(a.sessionID, snapshot, nil)
-	result := work.ReadSnapshot{Items: make([]work.ReadModel, 0, len(materialized.Tokens))}
+	result := work.ReadSnapshot{
+		StreamGenerationID: snapshot.StreamGenerationID,
+		Items:              make([]work.ReadModel, 0, len(materialized.Tokens)),
+	}
 	for _, token := range materialized.Tokens {
 		_, inFlight := materialized.InFlightOnlyByID[token.ID]
 		item := runtimeWorkItem(token, snapshot.Topology, inFlight, names, runtimeReadFacts{
@@ -139,6 +143,7 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
+	annotateRuntimeWorkStateSequences(&result, a.ledger)
 	mappingDuration := a.clock.Now().Sub(mappingStarted)
 	admissionStarted := a.clock.Now()
 	admissionStats := workAdmissionReadStats{}
@@ -651,6 +656,95 @@ func runtimeWorkNames(tokens []*workers.Token) map[string]string {
 	}
 	return result
 }
+
+// annotateRuntimeWorkStateSequences preserves the latest canonical sequence
+// that can have produced each live Work state. Runtime snapshots already carry
+// the current values; the ledger supplies only the detached cursor needed for
+// the durability comparison at the Work state-access boundary.
+func annotateRuntimeWorkStateSequences(snapshot *work.ReadSnapshot, ledger recordings.Ledger) {
+	if snapshot == nil || ledger == nil {
+		return
+	}
+	if snapshot.StreamGenerationID == "" {
+		snapshot.StreamGenerationID = ledger.StreamGenerationID()
+	}
+	positions := make(map[string]int64)
+	known := make(map[string]bool)
+	for _, event := range ledger.CanonicalEvents() {
+		ids := runtimeWorkIDsFromEvent(event)
+		sequence := int64(event.Context.Sequence)
+		for _, workID := range ids {
+			if !known[workID] || sequence > positions[workID] {
+				positions[workID] = sequence
+				known[workID] = true
+			}
+		}
+	}
+	for index := range snapshot.Items {
+		workID := snapshot.Items[index].WorkID
+		if !known[workID] {
+			continue
+		}
+		snapshot.Items[index].CurrentStateSequence = positions[workID]
+		snapshot.Items[index].CurrentStateSequenceKnown = true
+	}
+}
+
+func runtimeWorkIDsFromEvent(event factorydefinitions.FactoryEvent) []string {
+	ids := make([]string, 0)
+	appendID := func(workID string) {
+		if strings.TrimSpace(workID) == "" {
+			return
+		}
+		for _, existing := range ids {
+			if existing == workID {
+				return
+			}
+		}
+		ids = append(ids, workID)
+	}
+	switch event.Type {
+	case factorydefinitions.FactoryEventTypeWorkRequest:
+		appendRuntimeContextWorkIDs(event, appendID)
+		var payload work.WorkRequestEventPayload
+		if json.Unmarshal(event.Payload, &payload) == nil {
+			for _, item := range payload.Works {
+				appendID(item.WorkID)
+			}
+		}
+		var legacy factorydefinitions.WorkRequestPayload
+		if json.Unmarshal(event.Payload, &legacy) == nil {
+			for _, item := range legacy.WorkItems {
+				appendID(item.ID)
+			}
+		}
+	case factorydefinitions.FactoryEventTypeWorkStateChange:
+		appendRuntimeContextWorkIDs(event, appendID)
+		var payload factorydefinitions.WorkStateChangeEventPayload
+		if json.Unmarshal(event.Payload, &payload) == nil {
+			appendID(payload.WorkID)
+		}
+	case factorydefinitions.FactoryEventTypeDispatchResponse:
+		appendRuntimeContextWorkIDs(event, appendID)
+		var payload factorydefinitions.WorkstationResponsePayload
+		if json.Unmarshal(event.Payload, &payload) == nil {
+			for _, item := range payload.OutputWork {
+				appendID(item.ID)
+			}
+		}
+	}
+	return ids
+}
+
+func appendRuntimeContextWorkIDs(event factorydefinitions.FactoryEvent, appendID func(string)) {
+	if event.Context.WorkIDs == nil {
+		return
+	}
+	for _, workID := range *event.Context.WorkIDs {
+		appendID(workID)
+	}
+}
+
 func runtimeFirstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {

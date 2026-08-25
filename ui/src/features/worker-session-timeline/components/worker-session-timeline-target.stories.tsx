@@ -62,6 +62,13 @@ export const MultipleObservations: Story = {
         "work-terminal-story",
       ),
     });
+    const secondTargetCard = secondTarget.closest("li");
+    await expect(secondTargetCard).not.toBeNull();
+    await expect(
+      await within(secondTargetCard as HTMLElement).findByText(
+        "Durability confirmation: UNCONFIRMED",
+      ),
+    ).toBeVisible();
 
     await userEvent.click(secondTarget);
     await expect(secondTarget).toHaveAttribute("aria-pressed", "true");

@@ -76,13 +76,13 @@ func TestList_HumanOutputRendersCompactStructuredResultTypes(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
-		"work-object\tobject\t\t\t\t{\"a\":\"first\",\"z\":2}\tnone\n" +
-		"work-array\tarray\t\t\t\t[\"first\",true,3]\tnone\n" +
-		"work-scalar\tscalar\t\t\t\t\"ready\"\tnone\n" +
-		"work-bool\tboolean\t\t\t\ttrue\tnone\n" +
-		"work-null\tnull\t\t\t\tnull\tnone\n" +
-		"work-omitted\tomitted\t\t\t\t\tnone\n"
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tCONFIRMATION STATE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-object\tobject\t\t\t\tUNCONFIRMED\t{\"a\":\"first\",\"z\":2}\tnone\n" +
+		"work-array\tarray\t\t\t\tUNCONFIRMED\t[\"first\",true,3]\tnone\n" +
+		"work-scalar\tscalar\t\t\t\tUNCONFIRMED\t\"ready\"\tnone\n" +
+		"work-bool\tboolean\t\t\t\tUNCONFIRMED\ttrue\tnone\n" +
+		"work-null\tnull\t\t\t\tUNCONFIRMED\tnull\tnone\n" +
+		"work-omitted\tomitted\t\t\t\tUNCONFIRMED\t\tnone\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}

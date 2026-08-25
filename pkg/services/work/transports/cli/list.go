@@ -87,6 +87,7 @@ func (service *service) List(cfg ListConfig) error {
 	if err != nil {
 		return err
 	}
+	normalizeWorkConfirmationStates(&result)
 	if cfg.JSON {
 		encoder := json.NewEncoder(cfg.Output)
 		return encoder.Encode(result)
@@ -478,7 +479,7 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		return err
 	}
 
-	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS"); err != nil {
+	if _, err := fmt.Fprintln(output, "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tCONFIRMATION STATE\tSTRUCTURED RESULT\tRELATIONS"); err != nil {
 		return err
 	}
 	for _, work := range result.Results {
@@ -489,12 +490,13 @@ func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) erro
 		}
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			stringValue(work.WorkId),
 			work.Name,
 			stringValue(work.WorkTypeName),
 			stateName,
 			stateType,
+			workConfirmationState(work),
 			structuredResult,
 			formatWorkRelations(work.Relations),
 		); err != nil {

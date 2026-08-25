@@ -16,8 +16,9 @@ import (
 func NewService(
 	sessions stateaccess.SessionResolver,
 	snapshots stateaccess.SnapshotReader,
+	durability ...work.CompletedFlushSequenceReader,
 ) stateaccess.Service {
-	return internalservice.New(sessions, snapshots)
+	return internalservice.New(sessions, snapshots, durability...)
 }
 
 type runtimeSessionResolver struct {

@@ -1,8 +1,10 @@
 import { Label, Text } from "@you-agent-factory/components/primitives";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
+import type { ReactNode } from "react";
 import type { WorkerSessionObservation } from "../../../api/worker-sessions";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
+import { DurabilityConfirmationState } from "../../../components/ui/durability-confirmation-state";
 import type { UseWorkerSessionTimelineTargetResult } from "../hooks/useWorkerSessionTimelineTarget";
 import type { WorkerSessionTimelineMessages } from "../messages/worker-session-timeline";
 
@@ -85,6 +87,15 @@ export function WorkerSessionTimelineTarget({
                 label={messages.providerSessionLabel}
                 value={providerSessionOrigin(messages, observation)}
               />
+              <TargetDetail
+                label={messages.durabilityConfirmationLabel}
+                value={
+                  <DurabilityConfirmationState
+                    label={messages.durabilityConfirmationLabel}
+                    state={observation.confirmationState}
+                  />
+                }
+              />
             </dl>
             <DashboardActionButton
               aria-label={messages.openWorkerSessionTargetLabel(
@@ -109,7 +120,7 @@ export function WorkerSessionTimelineTarget({
   );
 }
 
-function TargetDetail({ label, value }: { label: string; value: string }) {
+function TargetDetail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid min-w-0 gap-1">
       <Label as="dt">{label}</Label>

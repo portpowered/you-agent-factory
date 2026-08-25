@@ -4,12 +4,16 @@ required:
   - dispatchId
   - status
   - dispatchKind
+  - confirmationState
 properties:
   dispatchId:
     type: string
     description: Stable dispatch identifier that most directly explains the stopped state.
   status:
     $ref: '../data-models/FactoryDispatchStatus.yaml'
+  confirmationState:
+    $ref: '../data-models/ConfirmationState.yaml'
+    description: Whether the reported dispatch status is covered by completed recording storage.
   dispatchKind:
     $ref: '../data-models/FactoryDispatchKind.yaml'
   workstationName:

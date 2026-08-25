@@ -1,5 +1,6 @@
 import type { components } from "../generated/openapi";
 import {
+  ConfirmationState,
   FactoryOrchestratorKind,
   FactorySessionDurableLifecycleStatus,
   FactorySessionResultStatus,
@@ -122,6 +123,8 @@ export function dispatchSummariesToFactoryDispatches(
   return summaries.map((summary) => ({
     artifactIds: summary.outputArtifactIds,
     attempt: summary.attempt,
+    confirmationState:
+      summary.confirmationState ?? ConfirmationState.UNCONFIRMED,
     dispatchKind: summary.dispatchKind,
     failureDetail: summary.failureDetail,
     id: summary.id,

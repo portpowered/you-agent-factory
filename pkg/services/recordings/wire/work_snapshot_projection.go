@@ -21,7 +21,9 @@ func readSnapshotFromWorldState(view recordings.WorldStateView) (work.ReadSnapsh
 	if err := json.Unmarshal([]byte(view.Payload), &state); err != nil {
 		return work.ReadSnapshot{}, recordings.ErrInvalidProjectionInput
 	}
-	return readSnapshotFromFactoryWorldState(state), nil
+	snapshot := readSnapshotFromFactoryWorldState(state)
+	snapshot.StreamGenerationID = strings.TrimSpace(string(view.Through.StreamGenerationID))
+	return snapshot, nil
 }
 
 func readSnapshotFromFactoryWorldState(state factorydefinitions.FactoryWorldState) work.ReadSnapshot {
@@ -69,6 +71,16 @@ func readModelFromWorkItem(
 		FailureDetail:            currentWorkFailureDetail(item, state),
 	}
 	read.State = workStateFromItem(item, state, inFlight)
+	if changes := state.WorkStateChangesByWorkID[item.ID]; len(changes) > 0 {
+		latest := changes[0].Sequence
+		for _, change := range changes[1:] {
+			if change.Sequence > latest {
+				latest = change.Sequence
+			}
+		}
+		read.CurrentStateSequence = int64(latest)
+		read.CurrentStateSequenceKnown = true
+	}
 	read.HumanApproval = humanApprovalForWork(item.ID, state)
 	for _, relation := range state.RelationsByWorkID[item.ID] {
 		read.Relations = append(read.Relations, work.ReadRelation{

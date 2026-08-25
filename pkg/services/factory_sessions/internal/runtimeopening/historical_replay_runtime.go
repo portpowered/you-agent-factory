@@ -277,6 +277,7 @@ func preparePortableReplayRuntime(
 		resourceLeaseAdmission,
 		configured.Runtime.RuntimeInstanceID,
 		runtime.StreamGeneration(),
+		runtime.RecordingLedger(),
 		providerForDurable,
 		configured.Workers.MockWorkers,
 		providerCommandRunner,
@@ -433,6 +434,7 @@ func bindDurableExecutionCapabilities(
 	admission factoryruntime.ResourceCapacityLeaseAdmission,
 	runtimeID string,
 	generationID string,
+	recordingLedger recordings.Ledger,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	commandRunner platformprocess.CommandRunner,
@@ -440,6 +442,7 @@ func bindDurableExecutionCapabilities(
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) error {
 	setWorkerInvoker(execution, invoker)
+	setDispatchDurability(execution, recordingLedger, generationID)
 	if err := setWorkerExecution(
 		sessionID,
 		execution,
@@ -456,6 +459,21 @@ func bindDurableExecutionCapabilities(
 	setWorkerProgressPublisher(execution, progressPublisher)
 	setWorkerAttemptStarter(execution, attemptStarter)
 	return nil
+}
+
+func setDispatchDurability(
+	execution durableexecution.Service,
+	ledger recordings.Ledger,
+	generationID string,
+) {
+	reader, _ := ledger.(recordings.CompletedFlushWatermarkReader)
+	setter, ok := execution.(interface {
+		SetDispatchDurability(recordings.CompletedFlushWatermarkReader, string)
+	})
+	if !ok {
+		return
+	}
+	setter.SetDispatchDurability(reader, generationID)
 }
 
 type durableSessionStateReader interface {

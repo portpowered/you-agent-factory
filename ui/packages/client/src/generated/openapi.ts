@@ -1229,8 +1229,8 @@ export interface paths {
     put?: never;
     post?: never;
     /**
-     * Close one live factory session
-     * @description Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+     * Delete one stopped live factory session
+     * @description Deletes the selected non-default live factory session only after its runtime has already stopped. The request never implicitly stops an active runtime; default and active sessions return a typed conflict and remain registered.
      */
     delete: operations["closeFactorySession"];
     options?: never;
@@ -1518,7 +1518,7 @@ export interface components {
       requestId?: string;
     };
     ListWorkResponse: {
-      results: components["schemas"]["Work"][];
+      results: components["schemas"]["WorkRead"][];
       paginationContext?: components["schemas"]["PaginationContext"];
       counts?: components["schemas"]["ListWorkCountSummary"];
     };
@@ -1757,6 +1757,8 @@ export interface components {
       attemptId: string;
       /** @enum {string} */
       state: WorkerSessionObservationState;
+      /** @description Whether the reported Worker Session state or terminal outcome is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       /** Format: date-time */
       startedAt: string | null;
       /** Format: date-time */
@@ -2746,6 +2748,8 @@ export interface components {
       /** @description Stable dispatch identifier that most directly explains the stopped state. */
       dispatchId: string;
       status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Whether the reported dispatch status is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       dispatchKind: components["schemas"]["FactoryDispatchKind"];
       /** @description Customer-authored workstation name when one existing workstation run explains the stop. */
       workstationName?: string;
@@ -2994,6 +2998,8 @@ export interface components {
       /** @description Stable dispatch identifier. */
       id: string;
       status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Whether the event that produced the reported dispatch status is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       dispatchKind: components["schemas"]["FactoryDispatchKind"];
       /** @description Workflow phase when the dispatch was created or observed. */
       phase?: string;
@@ -3132,6 +3138,8 @@ export interface components {
       /** @description JavaScript workflow phase when the dispatch was created or observed. */
       phase?: string;
       status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Whether the event that produced the reported dispatch status is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       /** @description Customer-visible dispatch label. */
       label?: string;
       /**
@@ -7194,6 +7202,8 @@ export interface components {
     Work: {
       /** @description A human readable name for the work, not unique */
       name: string;
+      /** @description Whether the reported Work state or outcome is covered by completed recording storage. */
+      confirmationState?: components["schemas"]["ConfirmationState"];
       /** @description Unique identifier for the work */
       workId?: string;
       /** @description Identifier for the original request that created this work, if applicable */
@@ -7231,6 +7241,17 @@ export interface components {
       /** @description Most recent bounded failure detail when this Work item is currently in a failed state. */
       failureDetail?: components["schemas"]["FailureDetail"];
     };
+    /**
+     * @description Whether the reported state or outcome is covered by completed recording storage.
+     * @enum {string}
+     */
+    ConfirmationState: ConfirmationState;
+    /** @description Work returned by a read API. The confirmation state describes only whether the reported Work state or outcome is covered by completed recording storage. */
+    WorkRead: {
+      confirmationState: components["schemas"]["ConfirmationState"];
+    } & (WithRequired<components["schemas"]["Work"], "confirmationState"> & {
+      confirmationState: components["schemas"]["ConfirmationState"];
+    });
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
     /** @description One ordered canonical content part on a work item. */
@@ -7908,6 +7929,15 @@ export interface components {
         "application/json":
           | components["schemas"]["FactorySessionLifecycleControlResponse"]
           | components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The selected Factory Session cannot be deleted while it is the default session or its runtime is active. */
+    FactorySessionDeletionConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
       };
     };
     /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
@@ -8962,7 +8992,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Work"];
+          "application/json": components["schemas"]["WorkRead"];
         };
       };
       404: components["responses"]["NotFound"];
@@ -8993,7 +9023,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Work"];
+          "application/json": components["schemas"]["WorkRead"];
         };
       };
       400: components["responses"]["BadRequest"];
@@ -10065,14 +10095,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly. */
+        /** @description Stable live factory session identifier. The reserved `~default` compatibility session cannot be deleted. */
         session_id: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Session was stopped and removed from the live workspace. */
+      /** @description A stopped non-default session was removed from the live workspace. */
       204: {
         headers: {
           [name: string]: unknown;
@@ -10080,6 +10110,7 @@ export interface operations {
         content?: never;
       };
       404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionDeletionConflict"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -12045,6 +12076,15 @@ export const WorkRequestType = {
 } as const;
 export type WorkRequestType =
   (typeof WorkRequestType)[keyof typeof WorkRequestType];
+export const ConfirmationState = {
+  CONFIRMED: "CONFIRMED",
+  UNCONFIRMED: "UNCONFIRMED",
+} as const;
+export type ConfirmationState =
+  (typeof ConfirmationState)[keyof typeof ConfirmationState];
+type WithRequired<T, K extends keyof T> = T & {
+  [P in K]-?: T[P];
+};
 export const WorkContentPartType = {
   text: "text",
   image: "image",

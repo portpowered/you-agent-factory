@@ -612,6 +612,10 @@ func WorkerSessionTranscriptToAPI(result workersessions.ReadTranscriptResult) fa
 
 // WorkerSessionObservationToAPI maps one detached observation.
 func WorkerSessionObservationToAPI(observation workersessions.Observation) factoryapi.WorkerSessionObservation {
+	confirmationState := observation.ConfirmationState
+	if confirmationState == "" {
+		confirmationState = workersessions.ConfirmationStateUnconfirmed
+	}
 	result := factoryapi.WorkerSessionObservation{
 		WorkerSessionId:          observation.WorkerSessionID,
 		Direct:                   observation.Direct,
@@ -619,6 +623,7 @@ func WorkerSessionObservationToAPI(observation workersessions.Observation) facto
 		WorkIds:                  append([]string(nil), observation.WorkIDs...),
 		AttemptId:                observation.AttemptID,
 		State:                    factoryapi.WorkerSessionObservationState(observation.State),
+		ConfirmationState:        factoryapi.ConfirmationState(confirmationState),
 		DurationBasis:            factoryapi.WorkerSessionObservationDurationBasis(observation.DurationBasis),
 		Transcript:               factoryapi.WorkerSessionObservationTranscript(observation.Transcript),
 		Parse:                    workerSessionParseDiagnosticsToAPI(observation.Parse),

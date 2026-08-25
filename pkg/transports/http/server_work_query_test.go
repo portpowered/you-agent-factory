@@ -129,7 +129,7 @@ func assertStopSummaryJSON(t *testing.T, kind string) {
 	t.Helper()
 	rec := serveProgrammedGet(t, stoppedReadModel(kind), "work-1", nil)
 	got := decodeJSONResponse[factoryapi.Work](t, rec)
-	if got.StopSummary == nil || string(got.StopSummary.StopKind) != kind || got.StopSummary.LatestDispatch == nil || got.StopSummary.LatestDispatch.FailureDetail == nil {
+	if got.StopSummary == nil || string(got.StopSummary.StopKind) != kind || got.StopSummary.LatestDispatch == nil || got.StopSummary.LatestDispatch.ConfirmationState != factoryapi.UNCONFIRMED || got.StopSummary.LatestDispatch.FailureDetail == nil {
 		t.Fatalf("stop summary = %#v", got.StopSummary)
 	}
 }

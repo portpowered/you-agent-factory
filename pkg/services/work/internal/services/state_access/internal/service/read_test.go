@@ -320,6 +320,106 @@ func TestGetWorkByCursorOrWorkIDAndNotFound(t *testing.T) {
 	}
 }
 
+func TestWorkReadConfirmationUsesOneWatermarkSamplePerResponse(t *testing.T) {
+	t.Parallel()
+
+	reader := &completedFlushSequenceReader{sequence: 5, available: true}
+	snapshot := work.ReadSnapshot{
+		StreamGenerationID: "generation-confirmation",
+		Items: []work.ReadModel{
+			{CursorID: "cursor-confirmed", WorkID: "work-confirmed", Name: "confirmed", CurrentStateSequence: 3, CurrentStateSequenceKnown: true},
+			{CursorID: "cursor-pending", WorkID: "work-pending", Name: "pending", CurrentStateSequence: 8, CurrentStateSequenceKnown: true},
+		},
+	}
+	svc := internalservice.New(
+		stubSessionResolver{adapter: &recordingSessionAdapter{snapshot: snapshot}},
+		nil,
+		reader,
+	)
+
+	listed, err := svc.ListWork(context.Background(), "session-confirmation", work.ListOptions{})
+	if err != nil {
+		t.Fatalf("ListWork: %v", err)
+	}
+	if reader.calls != 1 || len(reader.generations) != 1 || reader.generations[0] != "generation-confirmation" {
+		t.Fatalf("watermark samples = %d/%v, want one sample for the snapshot generation", reader.calls, reader.generations)
+	}
+	if listed.Results[0].ConfirmationState != work.ConfirmationStateConfirmed || listed.Results[1].ConfirmationState != work.ConfirmationStateUnconfirmed {
+		t.Fatalf("confirmation states = %#v, want CONFIRMED then UNCONFIRMED", listed.Results)
+	}
+
+	shown, err := svc.GetWork(context.Background(), "session-confirmation", "work-pending")
+	if err != nil {
+		t.Fatalf("GetWork: %v", err)
+	}
+	if reader.calls != 2 || shown.ConfirmationState != work.ConfirmationStateUnconfirmed {
+		t.Fatalf("show confirmation = %#v with %d samples, want UNCONFIRMED and one new sample", shown, reader.calls)
+	}
+}
+
+func TestWorkReadConfirmationRemainsUnconfirmedUntilFlushCoversState(t *testing.T) {
+	t.Parallel()
+
+	reader := &completedFlushSequenceReader{sequence: 2, available: false}
+	adapter := &recordingSessionAdapter{snapshot: work.ReadSnapshot{
+		StreamGenerationID: "generation-reconcile",
+		Items: []work.ReadModel{{
+			CursorID:                  "cursor-reconcile",
+			WorkID:                    "work-reconcile",
+			Name:                      "reconcile",
+			CurrentStateSequence:      4,
+			CurrentStateSequenceKnown: true,
+		}},
+	}}
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, reader)
+
+	before, err := svc.GetWork(context.Background(), "session-reconcile", "work-reconcile")
+	if err != nil {
+		t.Fatalf("GetWork before flush: %v", err)
+	}
+	if before.ConfirmationState != work.ConfirmationStateUnconfirmed {
+		t.Fatalf("before flush confirmation = %q, want UNCONFIRMED", before.ConfirmationState)
+	}
+
+	reader.available = true
+	reader.sequence = 4
+	after, err := svc.GetWork(context.Background(), "session-reconcile", "work-reconcile")
+	if err != nil {
+		t.Fatalf("GetWork after flush: %v", err)
+	}
+	if after.ConfirmationState != work.ConfirmationStateConfirmed {
+		t.Fatalf("after flush confirmation = %q, want CONFIRMED", after.ConfirmationState)
+	}
+}
+
+func TestReplayWorkReadConfirmationUsesRecordedCursorAndWatermark(t *testing.T) {
+	t.Parallel()
+
+	reader := &completedFlushSequenceReader{sequence: 7, available: true}
+	snapshotReader := &recordingSnapshotReader{snapshot: work.ReadSnapshot{
+		StreamGenerationID: "generation-replay",
+		Items: []work.ReadModel{{
+			CursorID:                  "cursor-replay",
+			WorkID:                    "work-replay",
+			Name:                      "replayed",
+			CurrentStateSequence:      7,
+			CurrentStateSequenceKnown: true,
+		}},
+	}}
+	svc := internalservice.New(stubSessionResolver{}, snapshotReader, reader)
+
+	got, err := svc.GetWork(context.Background(), "session-replay", "work-replay")
+	if err != nil {
+		t.Fatalf("GetWork replay: %v", err)
+	}
+	if got.ConfirmationState != work.ConfirmationStateConfirmed {
+		t.Fatalf("replay confirmation = %q, want CONFIRMED", got.ConfirmationState)
+	}
+	if reader.calls != 1 || len(reader.generations) != 1 || reader.generations[0] != "generation-replay" {
+		t.Fatalf("replay watermark samples = %d/%v, want one generation-scoped sample", reader.calls, reader.generations)
+	}
+}
+
 func TestMoveWorkAndReadReturnsDetachedPostMoveReadModel(t *testing.T) {
 	t.Parallel()
 
@@ -386,6 +486,19 @@ func TestReadSnapshotFallsBackToTheSnapshotReaderWhenSessionUnavailable(t *testi
 type recordingSnapshotReader struct {
 	snapshot work.ReadSnapshot
 	err      error
+}
+
+type completedFlushSequenceReader struct {
+	sequence    int64
+	available   bool
+	calls       int
+	generations []string
+}
+
+func (reader *completedFlushSequenceReader) CompletedFlushSequence(generation string) (int64, bool) {
+	reader.calls++
+	reader.generations = append(reader.generations, generation)
+	return reader.sequence, reader.available
 }
 
 func (a *recordingSnapshotReader) ReadWorkSnapshot(

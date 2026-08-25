@@ -174,11 +174,28 @@ type DispatchQueryRequest struct {
 // DispatchStatus is the canonical dispatch lifecycle status shared across orchestrators.
 type DispatchStatus string
 
+// ConfirmationState is the durability outcome for one dispatch read. It
+// reports only whether the event that produced the current dispatch status is
+// covered by completed recording storage.
+type ConfirmationState string
+
+const (
+	ConfirmationStateConfirmed   ConfirmationState = "CONFIRMED"
+	ConfirmationStateUnconfirmed ConfirmationState = "UNCONFIRMED"
+)
+
 // DispatchSummary is the shared durable dispatch list projection.
 type DispatchSummary struct {
-	ID                    string
-	Status                DispatchStatus
-	DispatchKind          string
+	ID                string
+	Status            DispatchStatus
+	DispatchKind      string
+	ConfirmationState ConfirmationState
+	// StateSequence and StreamGenerationID are read-boundary metadata for
+	// comparing the current dispatch status with a completed flush watermark.
+	// They are intentionally not part of the transport representation.
+	StateSequence         int64  `json:"-"`
+	StateSequenceKnown    bool   `json:"-"`
+	StreamGenerationID    string `json:"-"`
 	Phase                 string
 	Label                 string
 	Attempt               int

@@ -43,6 +43,11 @@ func (service *combinedService) openRuntimeLedger(
 			return nil, "", fmt.Errorf("seed restored Factory Event history: %w", err)
 		}
 	}
+	if binder, ok := ledger.(interface {
+		SetCompletedFlushWatermarkReader(recordings.CompletedFlushWatermarkReader)
+	}); ok {
+		binder.SetCompletedFlushWatermarkReader(service)
+	}
 	routeKey := strings.TrimSpace(request.FactorySessionID)
 	if routeKey == "" {
 		routeKey = ledger.StreamGenerationID()

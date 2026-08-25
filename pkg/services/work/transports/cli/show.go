@@ -118,6 +118,7 @@ func (service *service) Show(cfg ShowConfig) error {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d error=decode", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		return fmt.Errorf("decode work response: %w", err)
 	}
+	normalizeWorkConfirmationState(&work)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -174,6 +175,7 @@ func renderShowResult(output io.Writer, work factoryapi.Work) error {
 		{label: "Work type", value: stringValue(work.WorkTypeName)},
 		{label: "State name", value: stateName},
 		{label: "State type", value: stateType},
+		{label: "Confirmation state", value: workConfirmationState(work)},
 		{label: "Trace", value: primaryWorkTrace(work)},
 		{label: "Relations", value: formatWorkRelations(work.Relations)},
 	}
@@ -257,6 +259,7 @@ func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDis
 	dispatchFields := []string{
 		dispatch.DispatchId,
 		fmt.Sprintf("status=%s", dispatch.Status),
+		fmt.Sprintf("confirmation=%s", stopDispatchConfirmationState(dispatch.ConfirmationState)),
 		fmt.Sprintf("kind=%s", dispatch.DispatchKind),
 	}
 	if workstation := trimmedString(dispatch.WorkstationName); workstation != "" {
@@ -264,6 +267,13 @@ func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDis
 	}
 	_, err := fmt.Fprintf(output, "Stop dispatch:\t%s\n", strings.Join(dispatchFields, " "))
 	return err
+}
+
+func stopDispatchConfirmationState(state factoryapi.ConfirmationState) factoryapi.ConfirmationState {
+	if state == factoryapi.CONFIRMED {
+		return state
+	}
+	return factoryapi.UNCONFIRMED
 }
 
 func writeOptionalStopSummaryLine(output io.Writer, label string, value *string) error {

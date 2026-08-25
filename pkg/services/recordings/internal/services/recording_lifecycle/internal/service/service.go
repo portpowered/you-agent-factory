@@ -46,10 +46,12 @@ type Service struct {
 	tickers         recordings.RecordingFlushTickerFactory
 	clock           recordings.RecordingClock
 	byID            map[string]*recordingSession
+	durableThrough  map[string]recordings.CanonicalEventCursor
 	nextRecordingID int
 }
 
 var _ recordinglifecycle.Service = (*Service)(nil)
+var _ recordinglifecycle.CompletedFlushWatermarkReader = (*Service)(nil)
 
 // New constructs one private recording-lifecycle owner.
 func New(
@@ -59,12 +61,32 @@ func New(
 	clocks ...recordings.RecordingClock,
 ) *Service {
 	return &Service{
-		targets: targets,
-		writer:  writer,
-		tickers: tickers,
-		clock:   firstClock(clocks),
-		byID:    make(map[string]*recordingSession),
+		targets:        targets,
+		writer:         writer,
+		tickers:        tickers,
+		clock:          firstClock(clocks),
+		byID:           make(map[string]*recordingSession),
+		durableThrough: make(map[string]recordings.CanonicalEventCursor),
 	}
+}
+
+// CompletedFlushWatermark returns the greatest cursor covered by a successful
+// recording flush for one canonical stream generation. The lifecycle mutex
+// makes reads safe while independent recording flushes publish their results.
+func (service *Service) CompletedFlushWatermark(
+	streamGenerationID string,
+) (recordings.CanonicalEventCursor, bool) {
+	if service == nil {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	generationID := strings.TrimSpace(streamGenerationID)
+	if generationID == "" {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	service.mu.Lock()
+	cursor, ok := service.durableThrough[generationID]
+	service.mu.Unlock()
+	return cursor, ok
 }
 
 func firstClock(clocks []recordings.RecordingClock) recordings.RecordingClock {

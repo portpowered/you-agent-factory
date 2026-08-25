@@ -120,6 +120,7 @@ export interface CurrentSelectionDispatchHistoryMessages {
   workstationDispatchesLabel: string;
   workstationLabel: string;
   workstationUnavailableValue: string;
+  durabilityConfirmationLabel: string;
 }
 
 const singularPlural = (count: number, singular: string, plural: string) =>
@@ -267,6 +268,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "Workstation dispatches",
     workstationLabel: "Workstation",
     workstationUnavailableValue: "Unavailable",
+    durabilityConfirmationLabel: "Durability confirmation",
   },
   ja: {
     dispatchHistoryCountLabel: (count: number) => `${count} 件のディスパッチ`,
@@ -405,6 +407,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "ワークステーションのディスパッチ",
     workstationLabel: "ワークステーション",
     workstationUnavailableValue: "利用不可",
+    durabilityConfirmationLabel: "永続化確認",
   },
   ko: {
     dispatchHistoryCountLabel: (count: number) => `${count}개 디스패치`,
@@ -541,6 +544,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "워크스테이션 디스패치",
     workstationLabel: "워크스테이션",
     workstationUnavailableValue: "사용할 수 없음",
+    durabilityConfirmationLabel: "지속성 확인",
   },
   "zh-CN": {
     dispatchHistoryCountLabel: (count: number) => `${count} 次分派`,
@@ -663,6 +667,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     workstationDispatchesLabel: "工作站分派",
     workstationLabel: "工作站",
     workstationUnavailableValue: "不可用",
+    durabilityConfirmationLabel: "持久化确认",
   },
 } satisfies LocalizedMessages<CurrentSelectionDispatchHistoryMessages>;
 

@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -135,6 +136,25 @@ func (s *Service) SetWorkerAttemptStarter(
 		return
 	}
 	setter.SetWorkerAttemptStarter(starter)
+}
+
+// SetDispatchDurability forwards the Recordings completed-flush capability to
+// the live execution implementation. Fake and replay backends do not need
+// this live-only binding and simply ignore it.
+func (s *Service) SetDispatchDurability(
+	reader recordings.CompletedFlushWatermarkReader,
+	streamGenerationID string,
+) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	setter, ok := s.Service.(interface {
+		SetDispatchDurability(recordings.CompletedFlushWatermarkReader, string)
+	})
+	if !ok {
+		return
+	}
+	setter.SetDispatchDurability(reader, streamGenerationID)
 }
 
 // SubscribeResponseEvents forwards durable-session response-event subscriptions

@@ -15,6 +15,7 @@ import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { DashboardStatusPill } from "../../../components/ui/dashboard-status-pill";
+import { DurabilityConfirmationState } from "../../../components/ui/durability-confirmation-state";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import type { FactorySessionArtifactDrilldownViewState } from "../hooks/use-factory-session-artifact-drilldown";
 import {
@@ -753,6 +754,10 @@ function DispatchSummaryRowContent({
             >
               {dispatch.status}
             </DashboardStatusPill>
+            <DurabilityConfirmationState
+              label={messages.durabilityConfirmationLabel}
+              state={dispatch.confirmationState}
+            />
           </div>
           <Text
             as="div"

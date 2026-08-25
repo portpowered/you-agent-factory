@@ -36,6 +36,7 @@ func NewService(
 	inspectSubmittedFile work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
+	durability ...work.CompletedFlushSequenceReader,
 ) work.FileSubmissionService {
 	return &applicationService{
 		runtimes:             runtimes,
@@ -46,6 +47,7 @@ func NewService(
 		stateAccess: stateaccesswire.NewService(
 			stateaccesswire.NewRuntimeSessionResolver(runtimes),
 			nil,
+			durability...,
 		),
 	}
 }

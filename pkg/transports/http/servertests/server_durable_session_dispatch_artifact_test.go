@@ -74,7 +74,8 @@ func TestGetFactorySessionDispatch_RuntimeBackedReturnsTypedDetail(t *testing.T)
 	response := getDurableDispatchDetail(t, server, dispatchArtifactSessionID, apiDispatchID)
 	if response.Id != apiDispatchID || response.SessionId != dispatchArtifactSessionID ||
 		response.OrchestratorKind != factoryapi.JAVASCRIPT ||
-		response.Label == nil || *response.Label != "summarize-findings" {
+		response.Label == nil || *response.Label != "summarize-findings" ||
+		response.ConfirmationState != factoryapi.UNCONFIRMED {
 		t.Fatalf("response = %#v, want typed JavaScript dispatch detail", response)
 	}
 }

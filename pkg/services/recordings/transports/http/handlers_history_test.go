@@ -332,7 +332,8 @@ func TestHistoricalResultAndDispatchMapsSelectedWorldState(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
 		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
 	)
-	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"id":"dispatch-petri"`) {
+	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"id":"dispatch-petri"`) ||
+		!strings.Contains(list.Body.String(), `"confirmationState":"CONFIRMED"`) {
 		t.Fatalf("dispatch list = %d %s, want default Petri kind", list.Code, list.Body.String())
 	}
 
@@ -342,7 +343,8 @@ func TestHistoricalResultAndDispatchMapsSelectedWorldState(t *testing.T) {
 		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches/dispatch-js", nil),
 		factoryapi.SessionID(sessionID), factoryapi.DispatchID("dispatch-js"),
 	)
-	if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), `"orchestratorKind":"JAVASCRIPT"`) {
+	if detail.Code != http.StatusOK || !strings.Contains(detail.Body.String(), `"orchestratorKind":"JAVASCRIPT"`) ||
+		!strings.Contains(detail.Body.String(), `"confirmationState":"CONFIRMED"`) {
 		t.Fatalf("dispatch detail = %d %s, want JavaScript orchestrator projection", detail.Code, detail.Body.String())
 	}
 

@@ -1,4 +1,7 @@
 actions:
+    - target: $.components.schemas.ListWorkResponse.properties.results
+      update:
+        x-go-type: '[]Work'
     - target: $.components.schemas.FactoryWebhookDispatchStatus
       update:
         x-enum-varnames:

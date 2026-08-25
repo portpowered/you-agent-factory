@@ -19,6 +19,14 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// CompletedFlushWatermarkReader is the narrow durability capability exposed
+// by the recording lifecycle without widening the broad Recordings service
+// contract. Its cursor is comparable only within the requested stream
+// generation.
+type CompletedFlushWatermarkReader interface {
+	CompletedFlushWatermark(streamGenerationID string) (CanonicalEventCursor, bool)
+}
+
 // ErrReconnectCursorNotFound reports that an acknowledged cursor does not
 // identify an event in the selected ledger stream.
 var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")
@@ -1317,7 +1325,10 @@ type RecordingSnapshot struct {
 }
 
 // RecordingSnapshotWriter persists one consistent lifecycle snapshot at the
-// Recordings-private service target.
+// Recordings-private service target. A nil error is the completed durability
+// boundary: implementations must return only after the snapshot's write and
+// fsync have succeeded. The completed-flush watermark is advanced after this
+// function returns nil.
 type RecordingSnapshotWriter func(string, RecordingSnapshot) error
 
 // RecordingFlushTicker is the exact scheduling handle owned by one active

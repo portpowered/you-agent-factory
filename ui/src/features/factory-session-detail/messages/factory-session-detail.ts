@@ -46,6 +46,7 @@ export interface FactorySessionDetailMessages
   childDispatchCountsLabel: string;
   collapseDispatchDetailLabel: (dispatchID: string) => string;
   dispatchAttemptLabel: string;
+  durabilityConfirmationLabel: string;
   dispatchDetailErrorState: string;
   dispatchDetailHeading: string;
   dispatchDetailMissingState: (dispatchID: string) => string;
@@ -277,6 +278,7 @@ const factorySessionDetailMessagesByLocale = {
       `Collapse dispatch detail for ${dispatchID}`,
     childDispatchCountsLabel: "Child dispatches",
     dispatchAttemptLabel: "Attempt",
+    durabilityConfirmationLabel: "Durability confirmation",
     dispatchDetailErrorState: "The dispatch detail could not be loaded.",
     dispatchDetailHeading: "Dispatch detail",
     dispatchDetailLoadingState: "Loading dispatch detail…",
@@ -390,6 +392,7 @@ const factorySessionDetailMessagesByLocale = {
       `收起 ${dispatchID} 的调度详情`,
     childDispatchCountsLabel: "子调度",
     dispatchAttemptLabel: "尝试次数",
+    durabilityConfirmationLabel: "持久化确认",
     dispatchDetailErrorState: "无法加载调度详情。",
     dispatchDetailHeading: "调度详情",
     dispatchDetailLoadingState: "正在加载调度详情…",

@@ -223,10 +223,11 @@ func historicalDispatchInput(
 	dispatch recordings.HistoricalDispatch,
 ) factorysessionmapping.HistoricalDispatchInput {
 	return factorysessionmapping.HistoricalDispatchInput{
-		ID:           dispatch.ID,
-		Status:       string(dispatch.Status),
-		DispatchKind: historicalDispatchKind(dispatch),
-		Usage:        dispatch.Usage,
+		ID:                dispatch.ID,
+		Status:            string(dispatch.Status),
+		DispatchKind:      historicalDispatchKind(dispatch),
+		ConfirmationState: "CONFIRMED",
+		Usage:             dispatch.Usage,
 	}
 }
 

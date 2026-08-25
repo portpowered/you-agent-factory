@@ -46,6 +46,12 @@ const (
 	UNKNOWN      CheckpointResumabilityStatus = "UNKNOWN"
 )
 
+// Defines values for ConfirmationState.
+const (
+	CONFIRMED   ConfirmationState = "CONFIRMED"
+	UNCONFIRMED ConfirmationState = "UNCONFIRMED"
+)
+
 // Defines values for CostsLineItemPriceSource.
 const (
 	BUILTIN          CostsLineItemPriceSource = "BUILT_IN"
@@ -1689,6 +1695,9 @@ type CommandDiagnostic struct {
 	WorkingDir    *string    `json:"workingDir,omitempty"`
 }
 
+// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+type ConfirmationState string
+
 // CostsCoverage defines model for CostsCoverage.
 type CostsCoverage struct {
 	// EncounteredProviderModels Distinct provider/model pairs encountered in the selection.
@@ -2421,6 +2430,9 @@ type FactoryDispatch struct {
 
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
+
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
 	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
@@ -3819,6 +3831,9 @@ type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
 
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
+
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
 	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
 
@@ -4866,6 +4881,9 @@ type FactoryStateResponseEventPayload struct {
 
 // FactoryStopDispatchSummary defines model for FactoryStopDispatchSummary.
 type FactoryStopDispatchSummary struct {
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
+
 	// DispatchId Stable dispatch identifier that most directly explains the stopped state.
 	DispatchId string `json:"dispatchId"`
 
@@ -8168,6 +8186,9 @@ type Work struct {
 	// ChainingTraceDepth Current chaining depth for this work item when the runtime already knows its upstream lineage.
 	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
 
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState *ConfirmationState `json:"confirmationState,omitempty"`
+
 	// Content Ordered canonical content parts for one work item.
 	Content *WorkContent `json:"content,omitempty"`
 
@@ -8422,6 +8443,63 @@ type WorkPropagation struct {
 
 // WorkPropagationMode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
 type WorkPropagationMode string
+
+// WorkRead defines model for WorkRead.
+type WorkRead struct {
+	// ChainingTraceDepth Current chaining depth for this work item when the runtime already knows its upstream lineage.
+	ChainingTraceDepth *int `json:"chainingTraceDepth,omitempty"`
+
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content *WorkContent `json:"content,omitempty"`
+
+	// CurrentChainingTraceId Explicit chaining-trace identifier for this submitted work item.
+	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
+
+	// ExpectedArtifacts Effective expected artifact declarations and their latest recorded verification state.
+	ExpectedArtifacts *[]WorkExpectedArtifact `json:"expectedArtifacts,omitempty"`
+	FailureDetail     *FailureDetail          `json:"failureDetail,omitempty"`
+
+	// HumanApproval Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology.
+	HumanApproval *HumanApproval `json:"humanApproval,omitempty"`
+
+	// Name A human readable name for the work, not unique
+	Name string `json:"name"`
+
+	// Payload Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. A batch is rejected atomically with a 400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit. The reported payloadBytes value is a byte count, not a character count.
+	Payload interface{} `json:"payload,omitempty"`
+
+	// PreviousChainingTraceIds Explicit predecessor chaining traces that directly caused this work item.
+	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
+
+	// Relations Current outbound relationships attached to this listed source work item when returned by read APIs.
+	Relations *[]Relation `json:"relations,omitempty"`
+
+	// RequestId Identifier for the original request that created this work, if applicable
+	RequestId *string `json:"requestId,omitempty"`
+
+	// State A lifecycle state that a work item can occupy inside one work type.
+	State       *WorkState          `json:"state,omitempty"`
+	StopSummary *FactoryStopSummary `json:"stopSummary,omitempty"`
+
+	// StructuredResult Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
+	StructuredResult interface{} `json:"structuredResult,omitempty"`
+
+	// SupersededBy Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.
+	SupersededBy *string    `json:"supersededBy,omitempty"`
+	Tags         *StringMap `json:"tags,omitempty"`
+
+	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
+	TraceId *string `json:"traceId,omitempty"`
+
+	// WorkId Unique identifier for the work
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkTypeName Configured work type name from factory.json for this submitted work item.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
+}
 
 // WorkRequest defines model for WorkRequest.
 type WorkRequest struct {
@@ -8891,6 +8969,9 @@ type WorkerSessionInterruptSnapshotState string
 type WorkerSessionObservation struct {
 	// AttemptId Stable attempt or dispatch identity.
 	AttemptId string `json:"attemptId"`
+
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
 
 	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
 	Direct        bool                                  `json:"direct"`
