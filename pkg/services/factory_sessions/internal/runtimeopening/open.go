@@ -228,6 +228,7 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	factorysessionexecutionService := durableExecution.Service
+	setPersistenceWarningLogger(factorysessionexecutionService, logger)
 	if factorySessionsRuntimeAssembly == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions runtime assembly is required")
 	}
@@ -701,6 +702,18 @@ func setWorkerInvoker(execution any, runtime factoryruntime.Service) {
 		return
 	}
 	setter.SetWorkerInvoker(runtime)
+}
+
+func setPersistenceWarningLogger(execution durableexecution.Service, logger *zap.Logger) {
+	if execution == nil {
+		return
+	}
+	setter, ok := execution.(interface {
+		SetPersistenceWarningLogger(*zap.Logger)
+	})
+	if ok {
+		setter.SetPersistenceWarningLogger(logger)
+	}
 }
 
 // workerExecutionSetter is the narrow live-session child capability. The

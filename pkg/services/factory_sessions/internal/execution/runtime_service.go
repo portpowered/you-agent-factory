@@ -18,6 +18,7 @@ import (
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // NewDurableSessionID allocates one durable Factory Session identifier.
@@ -268,12 +269,25 @@ type JavaScriptRuntimeService struct {
 	dispatchDurabilityMu       sync.RWMutex
 	dispatchDurability         recording.CompletedFlushWatermarkReader
 	dispatchStreamGenerationID string
+	persistenceWarningLogger   *zap.Logger
 
 	runLifecycleMu sync.Mutex
 	runWaitGroup   sync.WaitGroup
 	runClosed      bool
 	closeOnce      sync.Once
 	closeErr       error
+}
+
+var _ Service = (*JavaScriptRuntimeService)(nil)
+
+// SetPersistenceWarningLogger binds the session-scoped logger used for safe
+// durable snapshot size warnings. Runtime opening supplies this after it has
+// resolved the Factory Session identity; construction itself remains inert.
+func (s *JavaScriptRuntimeService) SetPersistenceWarningLogger(logger *zap.Logger) {
+	if s == nil {
+		return
+	}
+	s.persistenceWarningLogger = logger
 }
 
 // NewJavaScriptRuntimeService constructs the durable session service.
