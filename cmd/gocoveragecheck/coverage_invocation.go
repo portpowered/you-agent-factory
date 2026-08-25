@@ -473,7 +473,6 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 		err = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
 	}
 	if err == nil && cfg.suite == functionalCoverageSuite {
-		writeFunctionalTimingInventorySummary(summary, cfg.short)
 		if summary.Complete {
 			if reportErr := writeFunctionalTimingReport(summary); reportErr != nil {
 				err = errors.Join(err, reportErr)

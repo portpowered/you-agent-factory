@@ -202,43 +202,6 @@ func countTimingTestOutcomes(tests []functionalTestTimingJSON) (pass, fail, skip
 	return pass, fail, skip
 }
 
-func writeFunctionalTimingInventorySummary(summary functionalTimingSummaryJSON, short bool) {
-	packagePassCount, packageFailCount, packageSkipCount := 0, 0, 0
-	for _, pkg := range summary.Packages {
-		switch pkg.Outcome {
-		case timingOutcomePass:
-			packagePassCount++
-		case timingOutcomeFail:
-			packageFailCount++
-		case timingOutcomeSkip:
-			packageSkipCount++
-		}
-	}
-	deferredShortTests := 0
-	if short {
-		// The short tier deliberately leaves tests guarded by testing.Short in
-		// the discovered selection. Their skip outcomes are deferred work, not
-		// quarantine: the complete merge tier runs them with -short=false.
-		deferredShortTests = summary.TestSkipCount
-	}
-	fmt.Fprintf(
-		stdoutWriter,
-		"Functional suite inventory: discovered-packages=%d observed-packages=%d (pass=%d fail=%d skip=%d) top-level-tests=%d (pass=%d fail=%d skip=%d) deferred-short-tests=%d wall=%.3fs complete=%t\n",
-		summary.ExpectedPackageCount,
-		summary.PackageCount,
-		packagePassCount,
-		packageFailCount,
-		packageSkipCount,
-		summary.TestCount,
-		summary.TestPassCount,
-		summary.TestFailCount,
-		summary.TestSkipCount,
-		deferredShortTests,
-		summary.WallSeconds,
-		summary.Complete,
-	)
-}
-
 func roundTimingSeconds(seconds float64) float64 {
 	return math.Round(seconds*1000) / 1000
 }
@@ -283,7 +246,7 @@ func renderFunctionalTimingReport(summary functionalTimingSummaryJSON) string {
 			pkg.Seconds,
 			pkg.Outcome,
 		)
-		if pkg.Reason != "" {
+		if pkg.Outcome != timingOutcomePass && pkg.Reason != "" {
 			fmt.Fprintf(&report, " reason=%s", strings.Join(strings.Fields(pkg.Reason), " "))
 		}
 		report.WriteByte('\n')

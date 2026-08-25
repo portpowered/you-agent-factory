@@ -63,6 +63,7 @@ func TestFunctionalRunSuppressesSuccessfulChildChatterAndKeepsArtifacts(t *testi
 	}
 
 	for _, forbidden := range []string{
+		"Functional suite inventory:",
 		"TestNoisy",
 		"=== RUN",
 		"--- PASS",
@@ -70,6 +71,7 @@ func TestFunctionalRunSuppressesSuccessfulChildChatterAndKeepsArtifacts(t *testi
 		"ok  ",
 		"Functional package result:",
 		"Functional timing snapshot:",
+		"reason=PASS",
 		`{"Action"`,
 	} {
 		if strings.Contains(stdout, forbidden) {

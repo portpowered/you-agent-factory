@@ -98,12 +98,6 @@ func (writer *functionalStreamWriter) Write(data []byte) (int, error) {
 func (writer *functionalStreamWriter) Flush() error {
 	writer.reporter.mu.Lock()
 	defer writer.reporter.mu.Unlock()
-	if writer.reporter.suppressHumanOutput {
-		writer.pending = nil
-		writer.coverageContinuationBuffer = nil
-		writer.coverageOutputMode = functionalCoverageOutputNormal
-		return nil
-	}
 
 	if len(writer.pending) > 0 {
 		line := append([]byte(nil), writer.pending...)
@@ -111,6 +105,11 @@ func (writer *functionalStreamWriter) Flush() error {
 		if err := writer.writeLineLocked(line); err != nil {
 			return err
 		}
+	}
+	if writer.reporter.suppressHumanOutput {
+		writer.coverageContinuationBuffer = nil
+		writer.coverageOutputMode = functionalCoverageOutputNormal
+		return nil
 	}
 	return writer.flushCoverageContinuationLocked()
 }

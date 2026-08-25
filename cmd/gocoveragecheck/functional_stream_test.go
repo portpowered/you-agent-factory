@@ -136,6 +136,38 @@ func TestFunctionalStreamQuietModeSuppressesConcurrentSuccessfulOutput(t *testin
 	}
 }
 
+func TestFunctionalStreamQuietFlushObservesUnterminatedEvent(t *testing.T) {
+	var sink bytes.Buffer
+	var observed []goTestTimingEvent
+	reporter := newFunctionalStreamReporterWithObserverMode(&sink, func(event goTestTimingEvent) {
+		observed = append(observed, event)
+	}, true)
+	writer := reporter.stdoutWriter()
+	packageName := modulePath + "/tests/functional/quiet/timeout"
+	finalEvent := goTestTimingEvent{
+		Action:  timingOutcomeFail,
+		Package: packageName,
+		Elapsed: 2.5,
+	}
+	data, err := json.Marshal(finalEvent)
+	if err != nil {
+		t.Fatalf("marshal final quiet event: %v", err)
+	}
+	if _, err := writer.Write(data); err != nil {
+		t.Fatalf("write unterminated quiet event: %v", err)
+	}
+
+	if err := writer.Flush(); err != nil {
+		t.Fatalf("flush unterminated quiet event: %v", err)
+	}
+	if sink.Len() != 0 {
+		t.Fatalf("quiet flush emitted child output: %q", sink.String())
+	}
+	if len(observed) != 1 || observed[0] != finalEvent {
+		t.Fatalf("quiet flush observed = %+v, want final event %+v", observed, finalEvent)
+	}
+}
+
 func TestFunctionalStreamPreservesUnknownActionAndNormalOutputAndResult(t *testing.T) {
 	var sink bytes.Buffer
 	reporter := newFunctionalStreamReporter(&sink)
