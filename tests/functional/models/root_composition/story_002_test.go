@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestModelsPublicRemoveMissingCachePreservesJSONDiagnostic proves public removal preserves the structured missing-cache diagnostic.
 func TestModelsPublicRemoveMissingCachePreservesJSONDiagnostic(t *testing.T) {
 	const safeMessage = "model cache is not installed; run you models pull not-cached-model first"
 

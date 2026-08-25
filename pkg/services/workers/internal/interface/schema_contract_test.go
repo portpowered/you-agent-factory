@@ -43,7 +43,7 @@ func TestMockWorkersSchema_AllConfigObjectsAllowUnknownFields(t *testing.T) {
 	if !ok {
 		t.Fatal("$defs missing or not an object")
 	}
-	for _, name := range []string{"mockWorker", "rejectConfig", "scriptConfig", "usage", "workInput"} {
+	for _, name := range []string{"mockWorker", "gateConfig", "rejectConfig", "scriptConfig", "usage", "workInput"} {
 		def, ok := defs[name]
 		if !ok {
 			t.Fatalf("$defs[%q] missing", name)
@@ -73,6 +73,7 @@ func TestMockWorkersSchema_ExpressesB03TopologyFields(t *testing.T) {
 		"runType",
 		"scriptConfig",
 		"rejectConfig",
+		"gateConfig",
 		"usage",
 	}, "/$defs/mockWorker")
 
@@ -103,6 +104,13 @@ func TestMockWorkersSchema_ExpressesB03TopologyFields(t *testing.T) {
 		"stderr",
 		"exitCode",
 	}, "/$defs/rejectConfig")
+
+	gateConfig := defSchema(t, schema, "gateConfig")
+	assertPropertyNames(t, objectProperties(t, gateConfig, "/$defs/gateConfig"), []string{
+		"arrivedFile",
+		"releaseFile",
+		"timeout",
+	}, "/$defs/gateConfig")
 
 	usage := defSchema(t, schema, "usage")
 	assertPropertyNames(t, objectProperties(t, usage, "/$defs/usage"), []string{

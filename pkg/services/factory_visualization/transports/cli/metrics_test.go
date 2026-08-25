@@ -321,7 +321,10 @@ func TestMetricsCommand_QueryFailureDoesNotWritePartialOutput(t *testing.T) {
 }
 
 func TestRunMetricsCompletesDeterministicallyOnLargePartitionedStore(t *testing.T) {
-	const artifactCount = 20_000
+	// Two thousand artifacts still exercise multi-file traversal across every
+	// shard and three complete CLI queries without turning the unit lane into a
+	// filesystem throughput benchmark.
+	const artifactCount = 2_000
 	const readBudget = 30 * time.Second
 
 	homeDir := t.TempDir()

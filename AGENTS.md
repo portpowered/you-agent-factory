@@ -59,12 +59,15 @@ standard before changing code:
   state management, architecture, linting, testing, CI, and complexity.
 - `docs/internal/standards/code/general-website-standards.md` for React,
   accessibility, responsive design, styling, state, performance, and tests.
-- `docs/internal/standards/code/planning-standards.md` for PRDs, work stories,
-  acceptance criteria, and implementation plans.
+- `factory/docs/standards/planning-standards.md` and the templates indexed from
+  `factory/docs/standards/README.md` for PRDs, behavior lanes, acceptance
+  criteria, implementation tasks, and validation loopbacks.
 
-Treat files under `docs/internal/standards/` as normative. Development notes and
-process maps can provide examples and file inventories, but they do not override
-the standards.
+Treat files under `docs/internal/standards/` as normative for repository-wide
+engineering and writing policy. Treat files under `factory/docs/standards/` as
+normative for factory planning and delivery. Development notes and process maps
+can provide examples and file inventories, but they do not override the
+standards.
 
 ## Repository Map
 

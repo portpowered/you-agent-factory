@@ -3,8 +3,6 @@ package agypty
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
-	"fmt"
 )
 
 //go:embed testdata/argv_fixtures.json
@@ -35,24 +33,6 @@ type workspaceFixture struct {
 	RawPath     string   `json:"raw_path"`
 	WantSuffix  []string `json:"want_suffix,omitempty"`
 	WantError   string   `json:"want_error,omitempty"`
-}
-
-// LoadArgvFixtures returns hermetic argv corpus entries for unit tests.
-func LoadArgvFixtures() ([]argvFixture, error) {
-	var file argvFixtureFile
-	if err := json.Unmarshal(argvFixturesJSON, &file); err != nil {
-		return nil, fmt.Errorf("agypty: decode argv fixtures: %w", err)
-	}
-	return file.Fixtures, nil
-}
-
-// LoadWorkspaceFixtures returns hermetic workspace path corpus entries for unit tests.
-func LoadWorkspaceFixtures() ([]workspaceFixture, error) {
-	var file workspaceFixtureFile
-	if err := json.Unmarshal(workspaceFixturesJSON, &file); err != nil {
-		return nil, fmt.Errorf("agypty: decode workspace fixtures: %w", err)
-	}
-	return file.Fixtures, nil
 }
 
 // MockAllocator records Allocate calls and returns MockSession values for

@@ -60,33 +60,38 @@ func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 			if fixture.Provider != entry.Name || fixture.Protocol != "acp" || fixture.ProtocolVersion != "1" || fixture.Fixture != "initialize-conformance" {
 				t.Fatalf("package initialize fixture = %#v, want ACP v1 fixture for %q", fixture, entry.Name)
 			}
-
-			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-			testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "packaged ACP conformance", WorkTypeID: "task"})
-			writeACPWorker(t, dir, entry.Name)
-			t.Setenv(acpHelperEnvironment, "package-conformance")
-			release := filepath.Join(t.TempDir(), "acp-peer-release")
-			t.Setenv(acpPackageConformanceReleaseEnvironment, release)
-
-			var starts atomic.Int32
-			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(t, dir, serviceedges.Edges{
-				PlatformProcessCommandFactory: packagedACPCommandFactory(catalog.ACP, &starts),
-				ProvidersExecutableLocator:    availableExecutableLocator{},
-			}, 20*time.Second, func() {
-				if err := os.WriteFile(release, []byte("completed Work observed"), 0o600); err != nil {
-					t.Fatalf("release packaged ACP peer: %v", err)
-				}
-			})
-			if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-				t.Fatalf("completed work = %d, want 1; %s", got, packagedACPConformanceDiagnostics(t, events, entry.Name))
-			}
-			if got := starts.Load(); got != 1 {
-				t.Fatalf("%s ACP process starts = %d, want 1", entry.Name, got)
-			}
-			assertProviderSessionID(t, events, entry.Name, "acp-session-functional-1")
-			assertPackagedACPResponse(t, events, entry.Name)
 		})
 	}
+
+	// Every generated profile above is schema-checked against its own pinned
+	// fixture. Run the shared ACP implementation once: repeating the identical
+	// process/session lifecycle for all 20 command projections adds no distinct
+	// behavioral evidence and made this one test dominate the package runtime.
+	entry := catalog.ACP[0]
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "packaged ACP conformance", WorkTypeID: "task"})
+	writeACPWorker(t, dir, entry.Name)
+	t.Setenv(acpHelperEnvironment, "package-conformance")
+	release := filepath.Join(t.TempDir(), "acp-peer-release")
+	t.Setenv(acpPackageConformanceReleaseEnvironment, release)
+
+	var starts atomic.Int32
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: packagedACPCommandFactory(catalog.ACP, &starts),
+		ProvidersExecutableLocator:    availableExecutableLocator{},
+	}, 20*time.Second, func() {
+		if err := os.WriteFile(release, []byte("completed Work observed"), 0o600); err != nil {
+			t.Fatalf("release packaged ACP peer: %v", err)
+		}
+	})
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; %s", got, packagedACPConformanceDiagnostics(t, events, entry.Name))
+	}
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("%s ACP process starts = %d, want 1", entry.Name, got)
+	}
+	assertProviderSessionID(t, events, entry.Name, "acp-session-functional-1")
+	assertPackagedACPResponse(t, events, entry.Name)
 }
 
 func readPackagedACPInitializeFixture(t *testing.T, providerID string) packagedACPInitializeFixture {

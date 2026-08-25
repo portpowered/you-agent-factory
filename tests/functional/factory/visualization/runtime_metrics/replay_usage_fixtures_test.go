@@ -29,6 +29,7 @@ type replayUsageFixture struct {
 	totalTokens     int64
 }
 
+// TestReplayUsageFixturesAreCanonicalAndSideEffectFree proves replay usage fixtures remain canonical without external effects.
 func TestReplayUsageFixturesAreCanonicalAndSideEffectFree(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	fixtures := []replayUsageFixture{

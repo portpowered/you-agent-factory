@@ -991,7 +991,6 @@ without becoming nested services of their own.
 | `provider_sessions` | `reader_support_modules` | Path/blob/token/transcript support modules | Format implementation details beneath owning readers. |
 | `providers` | `native_adapters` | Native provider adapters | Codex/Claude/Cursor/OpenCode/Gemini/Kiro/Pi/Agy variants remain Execution-private modules. |
 | `recordings` | `projection_policy` | Projection policy helpers | Pure projection helpers stay under Recordings; Projection is not a top-level peer in this program. |
-| `system_initialization` | `legacy_migration` | Legacy Factory migration module | Deletion-only private module, not a nested subservice; removed when input inventory reaches zero. |
 | `work` | `invocation_return_policy` | Invocation input and return-policy modules | Deterministic parent-internal transformations exposed only through the Work root. |
 | `work` | `lineage_graph_modules` | Lineage and dependency-graph modules | Deterministic projections over Work contracts used by State Access; no separate store. |
 | `workers` | `prompting_worktree` | Prompting and worktree preparation | Request-scoped Workers modules without independent lifecycle. |

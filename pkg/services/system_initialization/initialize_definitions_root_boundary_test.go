@@ -124,7 +124,6 @@ func newDefinitionsRootService(
 		catalog,
 		installer,
 		os.Stat,
-		localMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -242,13 +241,11 @@ func TestInitializeDefinitionsRootBoundary_PartialFailureSurfacesRollbackFactsWh
 	if !errors.As(err, &partialFailure) {
 		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
 	}
-	if len(partialFailure.Facts) != 3 ||
-		partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
-		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
-		partialFailure.Facts[2].Step != systeminitialization.InitializeStepPackagedFactories ||
-		partialFailure.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
+	if len(partialFailure.Facts) != 2 ||
+		partialFailure.Facts[0].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		partialFailure.Facts[1].Step != systeminitialization.InitializeStepPackagedFactories ||
+		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
 	}
 }

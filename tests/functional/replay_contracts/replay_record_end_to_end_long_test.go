@@ -102,6 +102,7 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	})
 }
 
+// TestReplayDriftDisclosureOnStdoutForChangedWorkerDefinition proves replay discloses changed worker definitions on stdout.
 func TestReplayDriftDisclosureOnStdoutForChangedWorkerDefinition(t *testing.T) {
 	support.SkipLongFunctional(t, "slow replay drift disclosure CLI end-to-end smoke")
 

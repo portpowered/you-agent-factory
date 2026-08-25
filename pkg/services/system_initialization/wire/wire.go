@@ -18,14 +18,12 @@ func NewService(
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
 	inspectPath InspectPath,
-	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	initializer, err := bootstrapworkflow.New(
 		operatorSettings,
 		packagedCatalog,
 		packagedInstaller,
 		inspectPath,
-		migrationFiles,
 	)
 	if err != nil {
 		return nil, err

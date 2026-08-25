@@ -157,7 +157,10 @@ func provideConfiguredProvidersService(
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
 	}
 	if workersRunner != nil {
-		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(workersRunner)
+		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
+			workersRunner,
+			provideWorkersAgentToolFileSystem(edges),
+		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithWorkersCommandRunner(
 			workerswire.NewProviderCommandRunner(loggedRunner),
@@ -165,7 +168,10 @@ func provideConfiguredProvidersService(
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
-		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(edges.ProviderCommandRunner)
+		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
+			edges.ProviderCommandRunner,
+			provideWorkersAgentToolFileSystem(edges),
+		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
 		options = append(options, providerswire.WithWorkersCommandRunner(
@@ -177,7 +183,10 @@ func provideConfiguredProvidersService(
 	if err != nil {
 		return nil, err
 	}
-	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(commandRunner)
+	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
+		commandRunner,
+		provideWorkersAgentToolFileSystem(edges),
+	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
 	options = append(options, providerswire.WithWorkersCommandRunner(
@@ -1160,7 +1169,18 @@ func provideWorkerCurrentWorkingDirectory() func() (string, error) {
 }
 
 func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandRunnerFactory {
-	return workerswire.NewMockCommandRunner
+	return func(
+		config *workers.MockWorkersConfig,
+		runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
+		next platformprocess.CommandRunner,
+	) platformprocess.CommandRunner {
+		return workerswire.NewMockCommandRunner(
+			config,
+			runtimeConfig,
+			next,
+			platformfilesystem.Local{},
+		)
+	}
 }
 
 func provideConductorInvocationWithProgressFactory(

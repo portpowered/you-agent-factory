@@ -142,10 +142,6 @@ func TestNamedFactoryPathRootWrappersPreserveCanonicalLayouts(t *testing.T) {
 	if got, err := MapDir(root, "@you/goal"); err != nil || got != filepath.Join(root, "@you", "goal") {
 		t.Fatalf("MapDir() = %q, %v", got, err)
 	}
-	if got := LegacyNamedFactoriesRoot("home"); !strings.HasSuffix(got, filepath.Join(".you-agent-factory", "you-agent-factories")) {
-		t.Fatalf("LegacyNamedFactoriesRoot() = %q", got)
-	}
-
 	if err := ValidateName("../escape"); err == nil || !errors.Is(err, ErrInvalidName) {
 		t.Fatalf("ValidateName(../escape) = %v, want ErrInvalidName", err)
 	}

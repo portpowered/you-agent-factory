@@ -47,7 +47,7 @@ func TestYouConfigSchemaRuntimeObservabilitySettings(t *testing.T) {
 	}{
 		{name: "partial", document: `{"runtime":{"logging":{"compress":true}}}`, wantAccept: true},
 		{name: "complete", document: `{"runtime":{"logging":{"directory":"logs","maxSizeMB":1,"maxBackups":2,"maxAgeDays":3,"compress":true},"metrics":{"directory":"metrics","maxSizeMB":4,"maxBackups":5,"maxAgeDays":6,"compress":false}}}`, wantAccept: true},
-		{name: "unknown setting", document: `{"runtime":{"logging":{"unknown":true}}}`},
+		{name: "unknown setting", document: `{"runtime":{"logging":{"unknown":true}}}`, wantAccept: true},
 		{name: "empty directory", document: `{"runtime":{"metrics":{"directory":" "}}}`},
 		{name: "non-positive size", document: `{"runtime":{"logging":{"maxSizeMB":0}}}`},
 	}
@@ -83,6 +83,8 @@ func TestYouConfigSchemaValidFixtures(t *testing.T) {
 		{name: "backend scope sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "backend-scope-sibling.json")},
 		{name: "worker presets missing", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "worker-presets-missing.json")},
 		{name: "load defaults", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "load-defaults.json")},
+		{name: "future top-level field", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "invalid", "unknown-top-level.json")},
+		{name: "future nested defaults field", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "invalid", "unknown-nested-defaults.json")},
 		{name: "existing backend scope", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "internal", "services", "document", "identityinventory", "testdata", "fixtures", "valid", "existing-scope.json")},
 		{name: "defaults sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "internal", "services", "document", "identityinventory", "testdata", "fixtures", "valid", "defaults-sibling.json")},
 	}
@@ -109,8 +111,6 @@ func TestYouConfigSchemaRejectsInvalidFixtures(t *testing.T) {
 		fixture  string
 		wantPath string
 	}{
-		{name: "unknown top-level field", fixture: filepath.Join(fixtureRoot, "invalid", "unknown-top-level.json"), wantPath: ""},
-		{name: "unknown nested defaults field", fixture: filepath.Join(fixtureRoot, "invalid", "unknown-nested-defaults.json"), wantPath: "/defaults"},
 		{name: "preset empty id", fixture: filepath.Join(fixtureRoot, "invalid", "preset-empty-id.json"), wantPath: "/workerPresets/0/id"},
 		{name: "preset missing provider", fixture: filepath.Join(fixtureRoot, "invalid", "preset-missing-provider.json"), wantPath: "/workerPresets/0"},
 		{name: "preset symbolic provider", fixture: filepath.Join(fixtureRoot, "invalid", "preset-symbolic-provider.json"), wantPath: "/workerPresets/0/modelProvider"},

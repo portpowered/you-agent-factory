@@ -12,8 +12,8 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 	"go.uber.org/zap"
 )
 
@@ -210,7 +210,7 @@ func invocationRequestFromGenerated(request factoryapi.ModelInvocationRequest) m
 }
 
 func modelBindingsFromGenerated(bindings *[]factoryapi.WorkstationOperationBinding) []modelinference.ModelOperationBinding {
-	authored := factorydefinitionentry.OperationBindingsFromGenerated(bindings)
+	authored := workerinference.OperationBindingsFromGenerated(bindings)
 	result := make([]modelinference.ModelOperationBinding, len(authored))
 	for i := range authored {
 		result[i] = modelinference.ModelOperationBinding{

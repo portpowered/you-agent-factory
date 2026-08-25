@@ -22,6 +22,7 @@ const disallowedPermissionWorkflow = `return (async function () {
   });
 })();`
 
+// TestJavaScriptAgentRunCodexCommandCharacterization characterizes the public Codex command emitted by JavaScript agent execution.
 func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -79,6 +80,7 @@ func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 	}
 }
 
+// TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI proves disallowed agent permissions fail through the public CLI.
 func TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI(t *testing.T) {
 	t.Parallel()
 

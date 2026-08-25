@@ -296,30 +296,6 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 	}
 }
 
-func projectionSafeResponseDiagnostics() *workerexecution.SafeWorkDiagnostics {
-	return &workerexecution.SafeWorkDiagnostics{
-		RenderedPrompt: &workerexecution.SafeRenderedPromptDiagnostic{
-			SystemPromptHash: "system-hash",
-			UserMessageHash:  "user-hash",
-			Variables: map[string]string{
-				"prompt_source":  "factory-renderer",
-				"work_type_name": "task",
-			},
-		},
-		Provider: &workerexecution.SafeProviderDiagnostic{
-			Provider: "codex",
-			Model:    "gpt-5.4",
-			RequestMetadata: map[string]string{
-				"worker_type": "builder",
-			},
-			ResponseMetadata: map[string]string{
-				"provider_session_id": "resp-1",
-				"retry_count":         "1",
-			},
-		},
-	}
-}
-
 func assertSafeResponseDiagnosticsState(t *testing.T, state interfaces.FactoryWorldState) {
 	t.Helper()
 
@@ -610,6 +586,86 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 	return event
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity generated union payload fixtures stay on one type switch so every helper produces contract-valid events.
+func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload any) {
+	switch typed := payload.(type) {
+	case factoryapi.RunRequestEventPayload:
+		if err := event.Payload.FromRunRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.InitialStructureRequestEventPayload:
+		if err := event.Payload.FromInitialStructureRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.FactoryChangeEventPayload:
+		if err := event.Payload.FromFactoryChangeEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.WorkRequestEventPayload:
+		if err := event.Payload.FromWorkRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.DispatchRequestEventPayload:
+		if err := event.Payload.FromDispatchRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.InferenceRequestEventPayload:
+		if err := event.Payload.FromInferenceRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.InferenceResponseEventPayload:
+		if err := event.Payload.FromInferenceResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.ModelResponseEventPayload:
+		if err := event.Payload.FromModelResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.ScriptRequestEventPayload:
+		if err := event.Payload.FromScriptRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.ScriptResponseEventPayload:
+		if err := event.Payload.FromScriptResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.AgentRunResponseEventPayload:
+		if err := event.Payload.FromAgentRunResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.DispatchResponseEventPayload:
+		if err := event.Payload.FromDispatchResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.RelationshipChangeRequestEventPayload:
+		if err := event.Payload.FromRelationshipChangeRequestEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.FactoryStateResponseEventPayload:
+		if err := event.Payload.FromFactoryStateResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.WorkStateChangeEventPayload:
+		if err := event.Payload.FromWorkStateChangeEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.RunResponseEventPayload:
+		if err := event.Payload.FromRunResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.JavaScriptCheckpointRefEventPayload:
+		if err := event.Payload.FromJavaScriptCheckpointRefEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.JavaScriptPhaseChangeEventPayload:
+		if err := event.Payload.FromJavaScriptPhaseChangeEventPayload(typed); err != nil {
+			panic(err)
+		}
+	default:
+		assignGeneratedProjectionSessionLifecyclePayload(event, payload)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity session lifecycle fixture payloads stay on one generated-type switch for replay tests.
 func assignGeneratedProjectionSessionLifecyclePayload(event *factoryapi.FactoryEvent, payload any) {
 	switch typed := payload.(type) {
@@ -867,34 +923,24 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEventWithToken(1, t0.Add(time.Second), "tok-story-1", work.FactoryWorkItem{
-			ID:         "work-1",
-			WorkTypeID: "story",
-			TraceID:    "trace-1",
-			State:      "init",
+			ID: "work-1", WorkTypeID: "story", TraceID: "trace-1", State: "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-agent-1",
 			TransitionID: "execute-story",
 			Workstation:  interfaces.FactoryWorkstationRef{ID: "execute-story", Name: "Execute story"},
 			Inputs: []interfaces.WorkstationInput{{
-				TokenID:  "tok-story-1",
-				PlaceID:  "story:init",
+				TokenID: "tok-story-1", PlaceID: "story:init",
 				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		agentRunResponseEvent(3, t0.Add(3*time.Second), factoryapi.AgentRunResponseEventPayload{
-			AgentRunId:     "dispatch-agent-1/agent-run/1",
-			Outcome:        factoryapi.WorkOutcomeAccepted,
-			DurationMillis: 1200,
-			Diagnostics:    agentRunDiagnostics,
+			AgentRunId: "dispatch-agent-1/agent-run/1", Outcome: factoryapi.WorkOutcomeAccepted,
+			DurationMillis: 1200, Diagnostics: agentRunDiagnostics,
 		}),
 		workstationResponseEvent(4, t0.Add(4*time.Second), interfaces.WorkstationResponsePayload{
-			DispatchID:   "dispatch-agent-1",
-			TransitionID: "execute-story",
-			Result: interfaces.WorkstationResult{
-				Outcome: string(workerexecution.OutcomeAccepted),
-				Output:  "done",
-			},
+			DispatchID: "dispatch-agent-1", TransitionID: "execute-story",
+			Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted), Output: "done"},
 			DurationMillis: 1200,
 		}),
 	}
@@ -919,9 +965,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 }
 
 func agentRunResponseEvent(tick int, eventTime time.Time, payload factoryapi.AgentRunResponseEventPayload) factoryapi.FactoryEvent {
-	context := factoryapi.FactoryEventContext{
-		DispatchId: stringPtrForProjectionTest("dispatch-agent-1"),
-	}
+	context := factoryapi.FactoryEventContext{DispatchId: stringPtrForProjectionTest("dispatch-agent-1")}
 	return generatedProjectionEvent(
 		factoryapi.FactoryEventTypeAgentRunResponse,
 		"agent-run-response/"+payload.AgentRunId,

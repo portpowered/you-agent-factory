@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestConfigDrivenUnrecognizedProviderRefusalFailsOnce proves an unknown provider refusal does not enter the retry loop.
 func TestConfigDrivenUnrecognizedProviderRefusalFailsOnce(t *testing.T) {
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "process_failure_breaker",

@@ -518,7 +518,7 @@ supervisor, and pinned protocol client; `P3` alone owns CI workflow and
 artifact manifest files; each `V` lane owns its codec directory, fixtures,
 functional story, and reference section; `D1` alone owns deletions. Tasks
 submitted to factory workers follow
-`docs/internal/standards/templates/task-templates.md` and stay small
+`factory/docs/standards/task-template.md` and stay small
 enough for a low-context agent.
 
 `V2`'s llama.cpp audio/video input capability is the plan's stated risk;

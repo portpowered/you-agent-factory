@@ -65,12 +65,13 @@ type ContractFieldDocumentation struct {
 
 // ProjectContractFieldDocumentation returns canonical English and examples for every inventoried field.
 func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
-	documentation := make(map[string]ContractFieldDocumentation, 31)
+	documentation := make(map[string]ContractFieldDocumentation, 35)
 	mergeContractFieldDocumentation(documentation, projectContractTopLevelFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractMockWorkerEntryFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractWorkInputFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractScriptConfigFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractRejectConfigFieldDocumentation())
+	mergeContractFieldDocumentation(documentation, projectContractGateConfigFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractUsageFieldDocumentation())
 	return documentation
 }
@@ -170,6 +171,17 @@ func projectContractMockWorkerEntryFieldDocumentation() map[string]ContractField
 				},
 			},
 		},
+		"mockWorkers[].gateConfig": {
+			Title:       "Dispatch gate configuration",
+			Description: "Optional deterministic synchronization gate. The matched dispatch signals arrival, waits for release, then performs its configured run type.",
+			Examples: []any{
+				map[string]any{
+					"arrivedFile": "C:\\temp\\mock-gate\\arrived",
+					"releaseFile": "C:\\temp\\mock-gate\\release",
+					"timeout":     "15s",
+				},
+			},
+		},
 		"mockWorkers[].usage": {
 			Title:       "Mock usage declaration",
 			Description: "Optional canonical provider usage emitted for a matched mock dispatch. Provider and model are required when present.",
@@ -183,6 +195,26 @@ func projectContractMockWorkerEntryFieldDocumentation() map[string]ContractField
 					"reasoningOutputTokens": 100000,
 				},
 			},
+		},
+	}
+}
+
+func projectContractGateConfigFieldDocumentation() map[string]ContractFieldDocumentation {
+	return map[string]ContractFieldDocumentation{
+		"mockWorkers[].gateConfig.arrivedFile": {
+			Title:       "Arrival signal file",
+			Description: "Required absolute path created when the matched dispatch reaches the mock-worker boundary.",
+			Examples:    []any{"C:\\temp\\mock-gate\\arrived", "/tmp/mock-gate/arrived"},
+		},
+		"mockWorkers[].gateConfig.releaseFile": {
+			Title:       "Release signal file",
+			Description: "Required absolute path observed by the waiting dispatch. Creating it releases execution into the configured run type.",
+			Examples:    []any{"C:\\temp\\mock-gate\\release", "/tmp/mock-gate/release"},
+		},
+		"mockWorkers[].gateConfig.timeout": {
+			Title:       "Gate timeout",
+			Description: "Required positive duration bounding the wait for release so synchronization mistakes fail deterministically.",
+			Examples:    []any{"15s", "1m"},
 		},
 	}
 }

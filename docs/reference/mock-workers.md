@@ -50,6 +50,7 @@ when it matches.
 | `runType` | Yes | One of `accept`, `reject`, or `script`. |
 | `scriptConfig` | When `runType` is `script` | Command, args, env, and related script fields. |
 | `rejectConfig` | When `runType` is `reject` | Observable stdout, stderr, and exit code. |
+| `gateConfig` | No | Signals dispatch arrival, waits for an explicit release file, then applies the configured run type. |
 | `usage` | No | Provider/model identity and token counts for a matched dispatch. |
 
 Unknown JSON fields are rejected at load time.
@@ -70,6 +71,43 @@ Each `workInputs` entry narrows the match using any combination of:
 
 All specified selector fields on an entry must match for that entry to apply.
 Omit a selector field to leave it unconstrained.
+
+### Deterministic Dispatch Gates
+
+Use `gateConfig` when a test or local harness must observe a dispatch in
+progress before allowing its configured `accept`, `reject`, or `script`
+behavior to complete. The gate is orthogonal to `runType`: it first creates
+the arrival signal, waits for the release signal, and only then applies the
+selected outcome.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `arrivedFile` | Yes | Absolute path created when the matching dispatch reaches the mock-worker boundary. |
+| `releaseFile` | Yes | Different absolute path whose creation releases the dispatch. |
+| `timeout` | Yes | Positive duration such as `15s` bounding the wait for release. |
+
+```json
+{
+  "mockWorkers": [
+    {
+      "id": "hold-prerequisite-finish",
+      "workstationName": "finish",
+      "workInputs": [{"workId": "work-prerequisite"}],
+      "runType": "accept",
+      "gateConfig": {
+        "arrivedFile": "/tmp/finish-gate/arrived",
+        "releaseFile": "/tmp/finish-gate/release",
+        "timeout": "15s"
+      }
+    }
+  ]
+}
+```
+
+Gate paths are synchronization signals, not arbitrary delay controls. A
+missing release fails at the configured timeout instead of leaving a dispatch
+blocked indefinitely. The same mock-worker configuration is retained when a
+service-mode process opens additional Factory Sessions.
 
 ### Run Types
 

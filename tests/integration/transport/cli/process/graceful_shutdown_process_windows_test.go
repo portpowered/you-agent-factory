@@ -25,11 +25,11 @@ import (
 )
 
 const (
-	windowsGracefulStopIterations       = 10
-	windowsGracefulStopReadinessTimeout = 30 * time.Second
-	windowsGracefulStopTimeout          = 20 * time.Second
-	windowsGracefulStopScanTimeout      = 5 * time.Second
-	windowsGracefulStopCleanupTimeout   = 5 * time.Second
+	windowsGracefulStopReliabilityIterations = 10
+	windowsGracefulStopReadinessTimeout      = 30 * time.Second
+	windowsGracefulStopTimeout               = 20 * time.Second
+	windowsGracefulStopScanTimeout           = 5 * time.Second
+	windowsGracefulStopCleanupTimeout        = 5 * time.Second
 )
 
 type windowsGracefulStopTarget struct {
@@ -62,12 +62,19 @@ func TestWindowsGracefulStopReliability(t *testing.T) {
 	buildCtx, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancelBuild()
 	binaryPath := buildYouBinary(t, buildCtx, harness.RepoRoot)
+	iterations := windowsGracefulStopReliabilityIterations
+	if testing.Short() {
+		// The short functional lane proves each supported process boundary once.
+		// Repetition is reliability/stress evidence and remains in the non-short
+		// lane without charging every pull request for twenty process cycles.
+		iterations = 1
+	}
 
 	for _, scenario := range windowsGracefulStopScenarios() {
 		scenario := scenario
 		t.Run(scenario.name, func(t *testing.T) {
 			passes := 0
-			for iteration := 1; iteration <= windowsGracefulStopIterations; iteration++ {
+			for iteration := 1; iteration <= iterations; iteration++ {
 				result := runWindowsGracefulStopIteration(t, harness, binaryPath, scenario, iteration)
 				passes++
 				t.Logf(
@@ -76,7 +83,7 @@ func TestWindowsGracefulStopReliability(t *testing.T) {
 						"tasklist after:\n%s\n"+
 						"stop stdout=%q stderr=%q",
 					iteration,
-					windowsGracefulStopIterations,
+					iterations,
 					scenario.name,
 					result.pid,
 					result.elapsed.Round(time.Millisecond),
@@ -91,7 +98,7 @@ func TestWindowsGracefulStopReliability(t *testing.T) {
 				"graceful-stop reliability target=%s passes=%d/%d",
 				scenario.name,
 				passes,
-				windowsGracefulStopIterations,
+				iterations,
 			)
 		})
 	}

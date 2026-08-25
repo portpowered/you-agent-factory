@@ -108,6 +108,7 @@ func TestOperatorConfigCore_ModelOverlaysRoundTripAndReportTypedFailures(t *test
 	}
 }
 
+// TestOperatorConfigCore_FutureFieldsWarnAndSurviveConfigRewrite proves future settings fields warn and survive a configuration rewrite.
 func TestOperatorConfigCore_FutureFieldsWarnAndSurviveConfigRewrite(t *testing.T) {
 	initial := []byte(`{
   "backendScopeID": "scope-functional-compat",

@@ -296,7 +296,8 @@ Narrowest useful tier first, broadened where the surface is shared.
   import-graph tests.
 - `make verify-fast` before review; `make verify-pr` before merge.
 - Cancellation, panic, and dispatch-identity paths run under the race detector
-  with repeat/stress mode, per `planning-standards.md` regulation 7.
+  with repeat/stress mode, per `factory/docs/standards/planning-standards.md`
+  regulation 7.
 - `make test-functional` for the dispatch cutover packets, since Factory
   execution is shared surface.
 
@@ -306,7 +307,8 @@ deprecated.
 
 ## 9. Delivery boundary
 
-Per `planning-standards.md` regulation 9, a packet is complete only when required
+Per `factory/docs/standards/planning-standards.md` regulation 9, a packet is
+complete only when required
 CI is terminal and passing, blocking review conversations are explicitly
 addressed, conflicts with concurrent L1/L3/L4 work are resolved against current
 `main`, and the pull request is **merged**. Opening a PR, obtaining approval, or

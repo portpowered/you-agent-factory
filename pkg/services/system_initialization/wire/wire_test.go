@@ -41,31 +41,6 @@ func (installer *recordingPackagedInstaller) EnsurePackagedFactories(
 	panic("packaged install during inert construction")
 }
 
-type recordingMigrationFileSystem struct {
-	statCalls int
-}
-
-func (filesystem *recordingMigrationFileSystem) Stat(string) (fs.FileInfo, error) {
-	filesystem.statCalls++
-	panic("migration filesystem stat during inert construction")
-}
-
-func (filesystem *recordingMigrationFileSystem) ReadFile(string) ([]byte, error) {
-	panic("migration filesystem read during inert construction")
-}
-
-func (filesystem *recordingMigrationFileSystem) ReadDir(string) ([]fs.DirEntry, error) {
-	panic("migration filesystem readdir during inert construction")
-}
-
-func (filesystem *recordingMigrationFileSystem) MkdirAll(string, fs.FileMode) error {
-	panic("migration filesystem mkdir during inert construction")
-}
-
-func (filesystem *recordingMigrationFileSystem) Rename(string, string) error {
-	panic("migration filesystem rename during inert construction")
-}
-
 func validPackagedCatalog() factorydefinitions.PackagedFactoryCatalogOperations {
 	return factorydefinitions.PackagedFactoryCatalogOperations{
 		List: func(
@@ -93,7 +68,6 @@ func TestNewServiceReturnsPublishedServiceRoot(t *testing.T) {
 		func(string) (fs.FileInfo, error) {
 			panic("inspect path during inert construction")
 		},
-		&recordingMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -113,7 +87,6 @@ func TestNewServiceConstructionIsInert(t *testing.T) {
 
 	settings := &recordingOperatorSettings{}
 	installer := &recordingPackagedInstaller{}
-	migrationFiles := &recordingMigrationFileSystem{}
 	listCalls := 0
 	resolveCalls := 0
 	inspectCalls := 0
@@ -142,7 +115,6 @@ func TestNewServiceConstructionIsInert(t *testing.T) {
 			inspectCalls++
 			panic("inspect path during inert construction")
 		},
-		migrationFiles,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -152,16 +124,15 @@ func TestNewServiceConstructionIsInert(t *testing.T) {
 	}
 	if settings.loadCalls != 0 || settings.ensureCalls != 0 ||
 		installer.calls != 0 || listCalls != 0 || resolveCalls != 0 ||
-		inspectCalls != 0 || migrationFiles.statCalls != 0 {
+		inspectCalls != 0 {
 		t.Fatalf(
-			"NewService() invoked collaborators: settings.load=%d settings.ensure=%d installer=%d list=%d resolve=%d inspect=%d migration.stat=%d, want inert construction",
+			"NewService() invoked collaborators: settings.load=%d settings.ensure=%d installer=%d list=%d resolve=%d inspect=%d, want inert construction",
 			settings.loadCalls,
 			settings.ensureCalls,
 			installer.calls,
 			listCalls,
 			resolveCalls,
 			inspectCalls,
-			migrationFiles.statCalls,
 		)
 	}
 }
@@ -207,15 +178,12 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	}
 	validInstaller := wirePackagedInstaller{}
 	validInspectPath := os.Stat
-	validMigrationFiles := localMigrationFileSystem{}
-
 	tests := []struct {
 		name              string
 		operatorSettings  OperatorSettings
 		packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 		packagedInstaller factorydefinitions.PackagedFactoryInstaller
 		inspectPath       InspectPath
-		migrationFiles    LegacyFactoryMigrationFileSystem
 		wantErr           string
 	}{
 		{
@@ -224,7 +192,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			packagedCatalog:   validCatalog,
 			packagedInstaller: validInstaller,
 			inspectPath:       validInspectPath,
-			migrationFiles:    validMigrationFiles,
 			wantErr:           "construct system initialization: Operator Settings service is required",
 		},
 		{
@@ -233,7 +200,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			packagedCatalog:   validCatalog,
 			packagedInstaller: nil,
 			inspectPath:       validInspectPath,
-			migrationFiles:    validMigrationFiles,
 			wantErr:           "construct system initialization: Factory Definitions packaged installer is required",
 		},
 		{
@@ -242,7 +208,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			packagedCatalog:   factorydefinitions.PackagedFactoryCatalogOperations{},
 			packagedInstaller: validInstaller,
 			inspectPath:       validInspectPath,
-			migrationFiles:    validMigrationFiles,
 			wantErr:           "construct system initialization: Factory Definitions packaged catalog is required",
 		},
 		{
@@ -251,17 +216,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			packagedCatalog:   validCatalog,
 			packagedInstaller: validInstaller,
 			inspectPath:       nil,
-			migrationFiles:    validMigrationFiles,
 			wantErr:           "construct system initialization: inspect path edge is required",
-		},
-		{
-			name:              "legacy migration filesystem",
-			operatorSettings:  validSettings,
-			packagedCatalog:   validCatalog,
-			packagedInstaller: validInstaller,
-			inspectPath:       validInspectPath,
-			migrationFiles:    nil,
-			wantErr:           "construct system initialization: legacy Factory migration filesystem is required",
 		},
 	}
 	for _, test := range tests {
@@ -273,7 +228,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				test.packagedCatalog,
 				test.packagedInstaller,
 				test.inspectPath,
-				test.migrationFiles,
 			)
 			if err == nil {
 				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
@@ -354,7 +308,6 @@ func TestNewServiceInitializeAfterInertConstruction(t *testing.T) {
 			inspectCalls++
 			return os.Stat("")
 		},
-		localMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -409,7 +362,6 @@ func TestNewServiceConstructsBootstrapService(t *testing.T) {
 		},
 		wirePackagedInstaller{},
 		os.Stat,
-		localMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -417,16 +369,4 @@ func TestNewServiceConstructsBootstrapService(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewService() = nil")
 	}
-}
-
-type localMigrationFileSystem struct{}
-
-func (localMigrationFileSystem) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
-func (localMigrationFileSystem) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
-func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
-func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
-	return os.MkdirAll(path, mode)
-}
-func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
-	return os.Rename(oldPath, newPath)
 }

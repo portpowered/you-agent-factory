@@ -215,20 +215,6 @@ func TestResolveCodexSessionFile_RejectsAmbiguousTimestampPrefixedMatches(t *tes
 	}
 }
 
-func TestMatchesCodexSessionBaseName_AcceptsSupportedLayoutsOnly(t *testing.T) {
-	exact := "rollout-sess_123.jsonl"
-	for name, want := range map[string]bool{
-		exact: true,
-		"rollout-2026-05-20T17-35-24-sess_123.jsonl": true,
-		"rollout-backup-sess_123.jsonl":              false,
-		"rollout-sess_123.jsonl.bak":                 false,
-	} {
-		if got := MatchesSessionBaseName(name, "sess_123", exact); got != want {
-			t.Fatalf("MatchesSessionBaseName(%q) = %v, want %v", name, got, want)
-		}
-	}
-}
-
 func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {
 	root := t.TempDir()
 	writeCodexFixture(t, root, "rollout-backup-sess_123.jsonl")

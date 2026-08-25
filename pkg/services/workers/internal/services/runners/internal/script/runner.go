@@ -58,10 +58,6 @@ type runner struct {
 	record           workers.ScriptEventRecorder
 }
 
-type streamingCommandRunner interface {
-	workerprocess.StreamingCommandRunner
-}
-
 var _ workers.Runner = (*runner)(nil)
 
 // New validates and snapshots a Script Runner and its exact execution edges.

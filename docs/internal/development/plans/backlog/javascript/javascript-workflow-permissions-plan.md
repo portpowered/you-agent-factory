@@ -194,7 +194,7 @@ Acceptance criteria:
 ## Original documents
 
 - `docs/internal/development/plans/dynamic-workflows/dynamic-workflow-design.md`
-- `docs/internal/standards/code/planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 
 ## Delivery boundary
 

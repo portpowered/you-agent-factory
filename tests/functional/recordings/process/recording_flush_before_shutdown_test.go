@@ -157,6 +157,11 @@ func TestRecordingSteadyStateByteVolumeMatchesAcrossIdenticalEventPrefixes(t *te
 			if err != nil {
 				t.Fatalf("wait for steady-state durable event prefix: %v", err)
 			}
+			awaitRecordingShutdownWritesToSettle(t, writer)
+			before, err = readStandaloneRecording(recordPath)
+			if err != nil {
+				t.Fatalf("read settled steady-state recording: %v", err)
+			}
 			measurements = append(measurements, measurement{
 				events:       len(before.Events),
 				writeCalls:   writer.WriteCount(),
@@ -280,6 +285,27 @@ func (probe *recordingShutdownWriteProbe) BytesWritten() int64 {
 	probe.mu.Lock()
 	defer probe.mu.Unlock()
 	return probe.bytesWritten
+}
+
+func awaitRecordingShutdownWritesToSettle(t testing.TB, probe *recordingShutdownWriteProbe) {
+	t.Helper()
+	const quietPeriod = 250 * time.Millisecond
+	deadline := time.Now().Add(recordingShutdownObservationTimeout)
+	lastWrites := probe.WriteCount()
+	unchangedSince := time.Now()
+	for time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+		writes := probe.WriteCount()
+		if writes != lastWrites {
+			lastWrites = writes
+			unchangedSince = time.Now()
+			continue
+		}
+		if time.Since(unchangedSince) >= quietPeriod {
+			return
+		}
+	}
+	t.Fatalf("recording writes did not settle: writes=%d", lastWrites)
 }
 
 func awaitRecordingShutdownSignal(t testing.TB, signal <-chan struct{}, name string) {

@@ -121,6 +121,63 @@ func TestParseMockWorkersConfig_PreservesMockUsagePresenceAndExplicitZeroes(t *t
 	}
 }
 
+func TestParseMockWorkersConfig_PreservesAndClonesGate(t *testing.T) {
+	dir := t.TempDir()
+	arrivedFile := filepath.Join(dir, "arrived")
+	releaseFile := filepath.Join(dir, "release")
+	payload, err := json.Marshal(map[string]any{
+		"mockWorkers": []any{map[string]any{
+			"runType": "accept",
+			"gateConfig": map[string]any{
+				"arrivedFile": arrivedFile,
+				"releaseFile": releaseFile,
+				"timeout":     "15s",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal gate config: %v", err)
+	}
+
+	cfg, err := ParseMockWorkersConfig(payload)
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfig returned error: %v", err)
+	}
+	gate := cfg.MockWorkers[0].GateConfig
+	if gate == nil || gate.ArrivedFile != arrivedFile || gate.ReleaseFile != releaseFile || gate.Timeout != "15s" {
+		t.Fatalf("gateConfig = %#v, want parsed paths and timeout", gate)
+	}
+	clone := cfg.Clone()
+	clone.MockWorkers[0].GateConfig.Timeout = "1s"
+	if cfg.MockWorkers[0].GateConfig.Timeout != "15s" {
+		t.Fatal("Clone mutated the original gate declaration")
+	}
+}
+
+func TestParseMockWorkersConfig_RejectsInvalidGate(t *testing.T) {
+	absolute := filepath.Join(t.TempDir(), "absolute")
+	cases := []struct {
+		name    string
+		gate    MockWorkerGateConfig
+		message string
+	}{
+		{name: "missing arrival", gate: MockWorkerGateConfig{ReleaseFile: absolute, Timeout: "1s"}, message: "arrivedFile is required"},
+		{name: "relative arrival", gate: MockWorkerGateConfig{ArrivedFile: "arrived", ReleaseFile: absolute, Timeout: "1s"}, message: "arrivedFile must be absolute"},
+		{name: "same files", gate: MockWorkerGateConfig{ArrivedFile: absolute, ReleaseFile: absolute, Timeout: "1s"}, message: "must be different"},
+		{name: "missing timeout", gate: MockWorkerGateConfig{ArrivedFile: absolute + "-arrived", ReleaseFile: absolute, Timeout: ""}, message: "timeout must be a duration"},
+		{name: "zero timeout", gate: MockWorkerGateConfig{ArrivedFile: absolute + "-arrived", ReleaseFile: absolute, Timeout: "0s"}, message: "timeout must be positive"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &MockWorkersConfig{MockWorkers: []MockWorkerConfig{{RunType: MockWorkerRunTypeAccept, GateConfig: &tc.gate}}}
+			err := cfg.Validate()
+			if err == nil || !strings.Contains(err.Error(), tc.message) {
+				t.Fatalf("Validate error = %v, want message containing %q", err, tc.message)
+			}
+		})
+	}
+}
+
 func TestParseMockWorkersConfig_RejectsInvalidMockUsage(t *testing.T) {
 	cases := []struct {
 		name    string

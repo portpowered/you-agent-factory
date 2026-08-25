@@ -47,13 +47,6 @@ func (*Service) SimpleDashboardRenderData(
 	return dashboardprojections.SimpleDashboardRenderDataFromWorldState(state)
 }
 
-func (*Service) ProjectActiveThrottlePauses(
-	topology recordings.InitialStructurePayload,
-	pauses []recordings.ActiveThrottlePause,
-) []recordings.FactoryWorldThrottlePause {
-	return projections.ProjectActiveThrottlePauses(topology, pauses)
-}
-
 func (*Service) ProjectWorkstationRequests(
 	state recordings.FactoryWorldState,
 ) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {

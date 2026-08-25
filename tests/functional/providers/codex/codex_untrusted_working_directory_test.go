@@ -21,6 +21,7 @@ const (
 	codexUntrustedWorkingDirectoryExitCode = 1
 )
 
+// TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic proves an untrusted directory fails once with remediation guidance.
 func TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic(t *testing.T) {
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	runner := support.NewShapedProviderCommandRunner(codexUntrustedWorkingDirectoryCommandResult())
@@ -80,6 +81,7 @@ func TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic(t *test
 	}
 }
 
+// TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic proves an unknown Codex refusal fails once without misclassification.
 func TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic(t *testing.T) {
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
@@ -136,6 +138,7 @@ func TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic(t *testing.T) {
 	}
 }
 
+// TestCodexTrustedGitWorkingDirectoryStillCompletes proves trusted Git working directories continue through provider execution.
 func TestCodexTrustedGitWorkingDirectoryStillCompletes(t *testing.T) {
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	initTrustedGitRepository(t, dir)

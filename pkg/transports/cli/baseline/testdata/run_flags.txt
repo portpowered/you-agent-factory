@@ -9,6 +9,7 @@ named	a		canonical persisted factory name resolved from ./factory before ~/.you-
 no-record		false	disable the default replay artifact for this invocation
 output			invocation stdout mode: response-stream (default for one-shot text invocations) or primary for final-result-only output
 port		0	deprecated; use --server
+pprof		false	enable loopback-only Go pprof HTTP diagnostics for this local server; requires --with-server or --with-site
 provider			override the worker modelProvider for this run (for example cursor-acp)
 quiet		false	suppress dashboard output for quiet or CI-oriented runs
 record			path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used

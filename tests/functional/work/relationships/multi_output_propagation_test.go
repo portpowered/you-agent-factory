@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -15,7 +14,7 @@ import (
 // workstation fans out to multiple downstream work types, every completed branch
 // retains the submitted source name and trace identity while receiving distinct
 // generated Work IDs.
-func TestMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T) {
+func testMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T, baseURL string) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -27,9 +26,7 @@ func TestMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T) {
 		Tags:       map[string]string{"priority": "high"},
 	})
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("split-output"),
-	}, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("idea", "complete"): 1,
@@ -51,7 +48,7 @@ func TestMultiOutputFanoutPreservesSourceNameOnDownstreamWork(t *testing.T) {
 // TestMultiOutputNameAvailableOnDownstreamTask proves that a downstream work type
 // created by multi-output fanout can observe the submitted source name even when
 // only the downstream branch reaches a terminal state in the public Work listing.
-func TestMultiOutputNameAvailableOnDownstreamTask(t *testing.T) {
+func testMultiOutputNameAvailableOnDownstreamTask(t *testing.T, baseURL string) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -62,9 +59,7 @@ func TestMultiOutputNameAvailableOnDownstreamTask(t *testing.T) {
 		Payload:    []byte("idea about logging"),
 	})
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("downstream-ok"),
-	}, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "complete"): 1,
@@ -83,12 +78,10 @@ func TestMultiOutputNameAvailableOnDownstreamTask(t *testing.T) {
 // TestReviewerFanoutPreservesSharedNameDownstream proves that a scripted
 // multi-output reviewer fanout preserves the source document name on every
 // downstream review branch with distinct generated Work IDs.
-func TestReviewerFanoutPreservesSharedNameDownstream(t *testing.T) {
+func testReviewerFanoutPreservesSharedNameDownstream(t *testing.T, baseURL string) {
 	dir := scaffoldRelationshipReviewerFanoutFactory(t)
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("done"),
-	}, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("document", "complete"):     1,
@@ -107,7 +100,7 @@ func TestReviewerFanoutPreservesSharedNameDownstream(t *testing.T) {
 // TestDocReviewerPNGFanoutPreservesSharedNameDownstream proves that a packaged
 // doc-reviewer factory fans out to every authored review branch while preserving
 // the submitted document name on each downstream Work item.
-func TestDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T) {
+func testDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T, baseURL string) {
 	dir := support.ScaffoldFactoryFromExamplePNG(t, "examples/factories/doc-reviewer.png")
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -118,9 +111,7 @@ func TestDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T) {
 		Payload:    []byte("review this document"),
 	})
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("<COMPLETE>"),
-	}, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("document", "complete"):                 1,
@@ -139,7 +130,7 @@ func TestDocReviewerPNGFanoutPreservesSharedNameDownstream(t *testing.T) {
 // TestNtoNTypeMatchingCompletesEveryAuthoredBranch proves that independent
 // work types submitted into an N-to-N matching factory each complete at their
 // authored terminal states with preserved names, Work IDs, trace IDs, and tags.
-func TestNtoNTypeMatchingCompletesEveryAuthoredBranch(t *testing.T) {
+func testNtoNTypeMatchingCompletesEveryAuthoredBranch(t *testing.T, baseURL string) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "n_to_n_type_matching"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -159,9 +150,7 @@ func TestNtoNTypeMatchingCompletesEveryAuthoredBranch(t *testing.T) {
 		Tags:       map[string]string{"source": "figma"},
 	})
 
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("review-done"),
-	}, 5*time.Second)
+	_, listed, _ := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
 
 	assertRelationshipWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("idea", "complete"):   1,

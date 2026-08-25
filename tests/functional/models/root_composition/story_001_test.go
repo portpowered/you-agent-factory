@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestModelsPublicRemoveMissingCacheRendersServerDiagnostic proves public removal renders the server diagnostic for a missing cache entry.
 func TestModelsPublicRemoveMissingCacheRendersServerDiagnostic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodDelete || request.URL.Path != "/models/not-cached-model" {

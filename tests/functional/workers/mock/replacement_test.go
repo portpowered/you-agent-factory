@@ -148,6 +148,7 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 	}
 }
 
+// TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved proves compatible future fields do not alter mock dispatch behavior.
 func TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(t *testing.T) {
 	dir := scaffoldNamedReplacementFactory(t)
 	mockWorkersPath := writeRawMockWorkersConfig(t, `{

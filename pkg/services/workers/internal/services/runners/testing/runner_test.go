@@ -4,11 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -41,6 +45,91 @@ func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *tes
 	if got := string(result.Stdout); got != "mock worker accepted\nCOMPLETE" {
 		t.Fatalf("Stdout = %q, want default accepted output with stop token", got)
 	}
+}
+
+func TestMockWorkerCommandRunner_GateSignalsArrivalAndWaitsForRelease(t *testing.T) {
+	dir := t.TempDir()
+	arrivedFile := filepath.Join(dir, "arrived")
+	releaseFile := filepath.Join(dir, "release")
+	runner := &MockWorkerCommandRunner{
+		Config: &MockWorkersConfig{MockWorkers: []MockWorkerConfig{{
+			WorkerName: "worker",
+			RunType:    MockWorkerRunTypeAccept,
+			GateConfig: &MockWorkerGateConfig{
+				ArrivedFile: arrivedFile,
+				ReleaseFile: releaseFile,
+				Timeout:     "2s",
+			},
+		}}},
+		Files: platformfilesystem.Local{},
+		Next:  failCommandRunner{t: t},
+	}
+
+	type runResult struct {
+		result workerprocess.CommandResult
+		err    error
+	}
+	done := make(chan runResult, 1)
+	go func() {
+		result, err := runner.Run(context.Background(), workerprocess.CommandRequest{WorkerType: "worker"})
+		done <- runResult{result: result, err: err}
+	}()
+
+	waitForMockWorkerGateFile(t, arrivedFile)
+	select {
+	case got := <-done:
+		t.Fatalf("Run completed before release: result=%#v error=%v", got.result, got.err)
+	default:
+	}
+	if err := os.WriteFile(releaseFile, []byte("release\n"), 0o600); err != nil {
+		t.Fatalf("write release file: %v", err)
+	}
+
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatalf("Run returned error: %v", got.err)
+		}
+		if string(got.result.Stdout) != defaultMockWorkerAcceptedOutput {
+			t.Fatalf("Stdout = %q, want accepted output", got.result.Stdout)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not complete after release")
+	}
+}
+
+func TestMockWorkerCommandRunner_GateTimesOutWithoutRelease(t *testing.T) {
+	dir := t.TempDir()
+	runner := &MockWorkerCommandRunner{
+		Config: &MockWorkersConfig{MockWorkers: []MockWorkerConfig{{
+			RunType: MockWorkerRunTypeAccept,
+			GateConfig: &MockWorkerGateConfig{
+				ArrivedFile: filepath.Join(dir, "arrived"),
+				ReleaseFile: filepath.Join(dir, "release"),
+				Timeout:     "20ms",
+			},
+		}}},
+		Files: platformfilesystem.Local{},
+	}
+
+	_, err := runner.Run(context.Background(), workerprocess.CommandRequest{})
+	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("Run error = %v, want bounded gate timeout", err)
+	}
+}
+
+func waitForMockWorkerGateFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat gate file: %v", err)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("gate file %q was not created", path)
 }
 
 func TestMockWorkerCommandRunner_DefaultAcceptUsesDecisionEnvelopeForStructuredWorkstation(t *testing.T) {

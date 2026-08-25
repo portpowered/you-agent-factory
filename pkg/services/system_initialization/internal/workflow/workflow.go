@@ -23,7 +23,6 @@ type Initializer struct {
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller
 	inspectPath       InspectPath
-	migrationFiles    LegacyFactoryMigrationFileSystem
 }
 
 var _ systeminitialization.Service = (*Initializer)(nil)
@@ -34,7 +33,6 @@ func New(
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
 	inspectPath InspectPath,
-	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (*Initializer, error) {
 	if operatorSettings == nil {
 		return nil, fmt.Errorf("construct system initialization: Operator Settings service is required")
@@ -48,15 +46,11 @@ func New(
 	if inspectPath == nil {
 		return nil, fmt.Errorf("construct system initialization: inspect path edge is required")
 	}
-	if migrationFiles == nil {
-		return nil, fmt.Errorf("construct system initialization: legacy Factory migration filesystem is required")
-	}
 	return &Initializer{
 		operatorSettings:  operatorSettings,
 		packagedCatalog:   packagedCatalog,
 		packagedInstaller: packagedInstaller,
 		inspectPath:       inspectPath,
-		migrationFiles:    migrationFiles,
 	}, nil
 }
 
@@ -95,10 +89,6 @@ func (initializer *Initializer) Initialize(
 	if initializer.inspectPath == nil {
 		return systeminitialization.Result{}, fmt.Errorf("initialize system: inspect path edge is required")
 	}
-	if initializer.migrationFiles == nil {
-		return systeminitialization.Result{}, fmt.Errorf("initialize system: legacy Factory migration filesystem is required")
-	}
-
 	definitions, err := resolvePackagedDefinitions(ctx, initializer.packagedCatalog)
 	if err != nil {
 		return systeminitialization.Result{}, err
@@ -106,10 +96,6 @@ func (initializer *Initializer) Initialize(
 
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	namedFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
-	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot, initializer.migrationFiles); err != nil {
-		return systeminitialization.Result{}, err
-	}
-
 	if err := ensureSystemConfigParentIsDirectory(configPath, initializer.inspectPath); err != nil {
 		return systeminitialization.Result{}, err
 	}
@@ -122,12 +108,10 @@ func (initializer *Initializer) Initialize(
 		if err != nil {
 			return systeminitialization.Result{}, partialInitializeFailure(
 				"read existing operator config failed",
-				rollbackFactsAfterLegacyMigration(
-					systeminitialization.RollbackFact{
-						Step:    systeminitialization.InitializeStepSystemConfig,
-						Outcome: systeminitialization.RollbackStepUnresolved,
-					},
-				),
+				[]systeminitialization.RollbackFact{{
+					Step:    systeminitialization.InitializeStepSystemConfig,
+					Outcome: systeminitialization.RollbackStepUnresolved,
+				}},
 				fmt.Errorf("read existing operator config %q: %w", configPath, err),
 			)
 		}
@@ -140,12 +124,10 @@ func (initializer *Initializer) Initialize(
 		if err != nil {
 			return systeminitialization.Result{}, partialInitializeFailure(
 				"create system config failed",
-				rollbackFactsAfterLegacyMigration(
-					systeminitialization.RollbackFact{
-						Step:    systeminitialization.InitializeStepSystemConfig,
-						Outcome: systeminitialization.RollbackStepUnresolved,
-					},
-				),
+				[]systeminitialization.RollbackFact{{
+					Step:    systeminitialization.InitializeStepSystemConfig,
+					Outcome: systeminitialization.RollbackStepUnresolved,
+				}},
 				fmt.Errorf("create system config at %q: %w", configPath, err),
 			)
 		}
@@ -153,12 +135,10 @@ func (initializer *Initializer) Initialize(
 		if _, err := settings.LoadFileConfig(configPath); err != nil {
 			return systeminitialization.Result{}, partialInitializeFailure(
 				"validate created operator config failed",
-				rollbackFactsAfterLegacyMigration(
-					systeminitialization.RollbackFact{
-						Step:    systeminitialization.InitializeStepSystemConfig,
-						Outcome: systeminitialization.RollbackStepUnresolved,
-					},
-				),
+				[]systeminitialization.RollbackFact{{
+					Step:    systeminitialization.InitializeStepSystemConfig,
+					Outcome: systeminitialization.RollbackStepUnresolved,
+				}},
 				fmt.Errorf("validate created operator config %q: %w", configPath, err),
 			)
 		}
@@ -245,22 +225,14 @@ func partialInitializeFailure(
 	}
 }
 
-func rollbackFactsAfterLegacyMigration(extra ...systeminitialization.RollbackFact) []systeminitialization.RollbackFact {
-	facts := []systeminitialization.RollbackFact{{
-		Step:    systeminitialization.InitializeStepLegacyMigration,
-		Outcome: systeminitialization.RollbackStepCompleted,
-	}}
-	return append(facts, extra...)
-}
-
 func rollbackFactsAfterSystemConfig(
 	systemConfigOutcome systeminitialization.SystemConfigOutcome,
 	extra ...systeminitialization.RollbackFact,
 ) []systeminitialization.RollbackFact {
-	facts := rollbackFactsAfterLegacyMigration(systeminitialization.RollbackFact{
+	facts := []systeminitialization.RollbackFact{{
 		Step:    systeminitialization.InitializeStepSystemConfig,
 		Outcome: systemConfigRollbackOutcome(systemConfigOutcome),
-	})
+	}}
 	return append(facts, extra...)
 }
 

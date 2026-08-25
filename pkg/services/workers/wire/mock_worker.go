@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
@@ -17,9 +18,15 @@ import (
 // request-scoped mock behavior. The override is read from the detached
 // execution context, so concurrent Factory Sessions never share mutable mock
 // configuration.
-func NewContextualMockWorkerCommandRunner(next platformprocess.CommandRunner) platformprocess.CommandRunner {
+func NewContextualMockWorkerCommandRunner(
+	next platformprocess.CommandRunner,
+	files workers.AgentToolFileSystem,
+) platformprocess.CommandRunner {
 	return workerprocess.ProjectPlatformCommandRunner(
-		newContextualMockWorkerCommandRunner(workerprocess.AdaptPlatformCommandRunner(next)),
+		newContextualMockWorkerCommandRunner(
+			workerprocess.AdaptPlatformCommandRunner(next),
+			files,
+		),
 	)
 }
 
@@ -128,11 +135,15 @@ func workerCommandRequest(request providerCommandRequest) workerprocess.CommandR
 }
 
 type contextualMockWorkerCommandRunner struct {
-	next workerprocess.CommandRunner
+	next  workerprocess.CommandRunner
+	files workers.AgentToolFileSystem
 }
 
-func newContextualMockWorkerCommandRunner(next workerprocess.CommandRunner) workerprocess.CommandRunner {
-	return contextualMockWorkerCommandRunner{next: next}
+func newContextualMockWorkerCommandRunner(
+	next workerprocess.CommandRunner,
+	files workers.AgentToolFileSystem,
+) workerprocess.CommandRunner {
+	return contextualMockWorkerCommandRunner{next: next, files: files}
 }
 
 func (runner contextualMockWorkerCommandRunner) Run(
@@ -146,6 +157,7 @@ func (runner contextualMockWorkerCommandRunner) Run(
 	return (&runnermockworker.MockWorkerCommandRunner{
 		Config: config, Next: runner.next,
 		OutputPolicy: workerexecution.MockWorkerOutputPolicyFromContext(ctx),
+		Files:        runner.files,
 	}).Run(ctx, request)
 }
 
@@ -168,6 +180,7 @@ func (runner contextualMockWorkerCommandRunner) RunStreaming(
 	result, err := (&runnermockworker.MockWorkerCommandRunner{
 		Config: config, Next: runner.next,
 		OutputPolicy: workerexecution.MockWorkerOutputPolicyFromContext(ctx),
+		Files:        runner.files,
 	}).Run(ctx, request)
 	publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
 	return result, err

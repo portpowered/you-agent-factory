@@ -299,7 +299,7 @@ the repository audit and is constrained by:
 - `C:\Users\andre\work\portos\infinite-you\docs\architecture\structures.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\architecture\data-model.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\architecture\packaged-structure.md`
-- `C:\Users\andre\work\portos\infinite-you\docs\internal\standards\code\planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\internal\standards\code\code-review-standards.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\internal\standards\code\general-backend-standards.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\internal\standards\code\general-website-standards.md`

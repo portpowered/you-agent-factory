@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -18,11 +17,9 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
-	"go.uber.org/zap"
 )
 
 func TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive(t *testing.T) {
@@ -157,20 +154,6 @@ func TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource(t *testing.T)
 		t.Fatalf("provider command state after rejected interrupt = calls %d canceled=%t, want one active source", runner.callCount(), runner.wasCanceled())
 	}
 	functionalevidence.Covers(t, "rest/interruptWorkerSession")
-}
-
-func TestWorkerSessionHTTPControlRoutesReportUnavailableFromTopLevelServer(t *testing.T) {
-	server := transporthttp.NewServer(nil, nil, nil, nil, nil, zap.NewNop())
-	for _, action := range []string{"interrupt", "pause", "resume", "cancel", "terminate"} {
-		t.Run(action, func(t *testing.T) {
-			recorder := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodPost, "/worker-sessions/session-1/"+action, nil)
-			server.Handler().ServeHTTP(recorder, request)
-			if recorder.Code != http.StatusInternalServerError {
-				t.Fatalf("POST Worker Session %s status = %d, want 500; body=%s", action, recorder.Code, recorder.Body.String())
-			}
-		})
-	}
 }
 
 // WSR-FT-013: root.BuildProcess/Process.Execute hosts a customer-facing

@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
+// TODO: these are mostly empty and should just be deprecated.
 // FactorySaveAPI is the session-scoped factory definition read and persist seam.
 type FactorySaveAPI interface {
 	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)

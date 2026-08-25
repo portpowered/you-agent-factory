@@ -217,6 +217,11 @@ func (s *Server) handleLiveLifecycleControl(
 	operation string,
 	invoke func(apisurface.LiveSessionAPI, factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
+	if s.liveControl == nil && s.sessions == nil {
+		s.writeError(w, http.StatusNotImplemented, "live factory session "+operation+" is not implemented", "INTERNAL_ERROR")
+		return
+	}
+
 	control, diagnostics, err := decodeLifecycleControlRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {

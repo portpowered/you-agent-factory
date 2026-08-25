@@ -448,7 +448,7 @@ func buildCoverageVarianceReport(commit string, lane string, jobs int, samples [
 	return coverageVarianceReport{
 		commit:        strings.TrimSpace(commit),
 		suite:         lane,
-		command:       fmt.Sprintf("bash scripts/ci/run-functional-test-viz.sh (functional lane -jobs %d); then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs %d", jobs, jobs),
+		command:       fmt.Sprintf("make functional-test-viz FUNCTIONAL_DEFAULT_JOBS=%d; then go run ./cmd/gocoveragecheck -suite functional -variance-profiles <complete CI coverage.out files> -variance-output <report> -variance-commit <full SHA> -variance-jobs %d", jobs, jobs),
 		aggregation:   "Parse each count-mode Go coverage profile into canonical source blocks, sum statement counts by backend package, require identical package universes and total statement counts, then derive minimums from exact covered/total ratios.",
 		profileLabels: labels,
 		packages:      rows,

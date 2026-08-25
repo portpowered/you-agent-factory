@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	mockworkerbehavior "github.com/portpowered/infinite-you/pkg/services/workers/internal/mockworker"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -27,6 +28,7 @@ type MockWorkerCommandRunner struct {
 	RuntimeConfig interfaces.RuntimeDefinitionLookup
 	OutputPolicy  workers.OutputPolicy
 	Next          workerprocess.CommandRunner
+	Files         mockworkerbehavior.GateFileSystem
 }
 
 var _ workerprocess.CommandRunner = (*MockWorkerCommandRunner)(nil)
@@ -55,6 +57,11 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 			RequestID:  req.Execution.RequestID,
 			TraceID:    req.Execution.TraceID,
 		}, entry.Usage)
+	}
+	if entry.GateConfig != nil {
+		if err := mockworkerbehavior.WaitForGate(ctx, *entry.GateConfig, r.Files); err != nil {
+			return workerprocess.CommandResult{}, err
+		}
 	}
 
 	switch entry.RunType {

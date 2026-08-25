@@ -9,12 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
 )
 
 func TestNewProductionRegistryBuildsOneInertRegistryForEveryStrategy(t *testing.T) {
@@ -240,88 +238,6 @@ func TestNewProductionRegistryPreservesStrategyConstructionErrors(t *testing.T) 
 				t.Fatalf("NewProductionRegistry(%s) error = %v, want strategy identity", test.identity, err)
 			}
 		})
-	}
-}
-
-func TestNewInferenceCompositionRunnerDelegatesThroughRegistry(t *testing.T) {
-	var localRequest models.LocalInvocationRequest
-	local := localInvokerFunc(func(_ context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-		localRequest = request
-		return models.LocalInvocationResult{Handled: false}, nil
-	})
-	delegate := &compositionDelegate{}
-	runner := NewInferenceCompositionRunner(
-		delegate,
-		local,
-		models.RuntimeScopeRef{},
-		&interfaces.FactoryWorkerConfig{
-			Name:          "whisper-worker",
-			Type:          interfaces.WorkerTypeInference,
-			Model:         "WHISPER",
-			ModelLocality: models.RuntimeModelLocalityLocal,
-		},
-		[]interfaces.ResourceConfig{{
-			ID: "resource-1", Name: "gpu", Type: "MODEL", Capacity: 1, Model: "WHISPER",
-		}},
-	)
-
-	request := inferenceRequest()
-	request.RunnerID = workers.RunnerIDCodex
-	request.ModelOperation = "transcribe"
-	result, err := runner.Execute(t.Context(), request)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if result.Content != "delegated output" {
-		t.Fatalf("Execute() content = %q, want delegated output", result.Content)
-	}
-	if delegate.calls != 1 || delegate.request.RunnerID != workers.RunnerIDCodex {
-		t.Fatalf("delegate request = %#v calls=%d, want one codex attempt", delegate.request, delegate.calls)
-	}
-	if localRequest.ModelOperation != request.ModelOperation {
-		t.Fatalf("Models operation = %q, want %q", localRequest.ModelOperation, request.ModelOperation)
-	}
-}
-
-func TestNewInferenceCompositionRunnerLeavesIncompleteDependenciesUntouched(t *testing.T) {
-	delegate := &compositionDelegate{}
-	local := localInvokerFunc(func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-		return models.LocalInvocationResult{Handled: true, Content: "unexpected"}, nil
-	})
-	worker := &interfaces.FactoryWorkerConfig{
-		Name:          "whisper-worker",
-		Type:          interfaces.WorkerTypeInference,
-		ModelLocality: models.RuntimeModelLocalityLocal,
-	}
-
-	cases := []struct {
-		name   string
-		inner  workers.Runner
-		models runnerinference.LocalInvoker
-		worker *interfaces.FactoryWorkerConfig
-	}{
-		{name: "missing inner", inner: nil, models: local, worker: worker},
-		{name: "missing Models", inner: delegate, models: nil, worker: worker},
-		{name: "missing worker", inner: delegate, models: local, worker: nil},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			got := NewInferenceCompositionRunner(
-				test.inner, test.models, models.RuntimeScopeRef{}, test.worker, nil,
-			)
-			if got != test.inner {
-				t.Fatalf("NewInferenceCompositionRunner() = %T, want original %T", got, test.inner)
-			}
-		})
-	}
-}
-
-func TestRegistryExecutionRunnerRequiresRegistry(t *testing.T) {
-	_, err := (registryExecutionRunner{identity: runners.InferenceIdentity}).Execute(
-		t.Context(), workers.RunnerExecutionRequest{},
-	)
-	if err == nil {
-		t.Fatal("registryExecutionRunner.Execute() error = nil, want missing registry error")
 	}
 }
 

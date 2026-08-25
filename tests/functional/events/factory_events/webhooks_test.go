@@ -289,6 +289,7 @@ func assertFunctionalDurableAppenderFailurePaths(t *testing.T) {
 	}
 }
 
+// TestFunctionalLocalFilesystemPublishesReplacementAndTemporaryFiles proves local filesystem observations include replacement and temporary files.
 func TestFunctionalLocalFilesystemPublishesReplacementAndTemporaryFiles(t *testing.T) {
 	t.Parallel()
 

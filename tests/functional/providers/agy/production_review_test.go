@@ -35,23 +35,27 @@ type agyClipQAVerdict struct {
 // root.BuildProcess + Process.Execute boundary. The provider edge replays the
 // real AGY media traces, so the test never starts a live AGY process.
 func TestAgyProductionReviewRolesThroughRootBuildProcess(t *testing.T) {
-	t.Run("cold-watch-complete-report-contract", testAgyColdWatchCompleteReportContract)
-
-	t.Run("cold-watch-incomplete-real-traces-fail", testAgyColdWatchIncompleteRealTracesFail)
-
-	t.Run("missing-file-fails-work-after-provider-success", testAgyColdWatchMissingFile)
-
-	t.Run("clip-qa-structured-pass-with-audio-evidence", testAgyClipQAStructuredPass)
-
-	t.Run("clip-qa-structured-reroll-is-accepted", testAgyClipQAStructuredReroll)
-
-	t.Run("clip-qa-semantic-invalid-results-fail", testAgyClipQASemanticInvalidResults)
-
-	t.Run("clip-qa-missing-file-fails-work", testAgyClipQAMissingFile)
-
-	t.Run("clip-qa-schema-invalid-result-fails-work", testAgyClipQASchemaInvalid)
-
-	t.Run("clip-qa-provider-failure-fails-work", testAgyClipQAProviderFailure)
+	tests := []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{name: "cold-watch-complete-report-contract", run: testAgyColdWatchCompleteReportContract},
+		{name: "cold-watch-incomplete-real-traces-fail", run: testAgyColdWatchIncompleteRealTracesFail},
+		{name: "missing-file-fails-work-after-provider-success", run: testAgyColdWatchMissingFile},
+		{name: "clip-qa-structured-pass-with-audio-evidence", run: testAgyClipQAStructuredPass},
+		{name: "clip-qa-structured-reroll-is-accepted", run: testAgyClipQAStructuredReroll},
+		{name: "clip-qa-semantic-invalid-results-fail", run: testAgyClipQASemanticInvalidResults},
+		{name: "clip-qa-missing-file-fails-work", run: testAgyClipQAMissingFile},
+		{name: "clip-qa-schema-invalid-result-fails-work", run: testAgyClipQASchemaInvalid},
+		{name: "clip-qa-provider-failure-fails-work", run: testAgyClipQAProviderFailure},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.run(t)
+		})
+	}
 }
 
 func testAgyColdWatchCompleteReportContract(t *testing.T) {
@@ -119,6 +123,7 @@ func testAgyColdWatchIncompleteRealTracesFail(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			response, events, runner, assetPath := runAgyColdWatchInvocation(
 				t,
 				test.trace,
@@ -293,6 +298,7 @@ func testAgyClipQASemanticInvalidResults(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			verdict := validAgyClipQAVerdictPayload()
 			test.mutate(verdict)
 			response, events, runner, assetPath := runAgyClipQAInvocationWithStdout(

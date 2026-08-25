@@ -22,7 +22,11 @@ func TestProviderInvocationExecutorResolvesEverySelectionFromRequest(t *testing.
 	executor := NewProviderInvocationExecutor(invocation)
 
 	result, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
-		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-1", TransitionID: "t-1"},
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1", TransitionID: "t-1"},
+		InputTokens: []any{workerexecution.WorkInput{
+			WorkID:     "work-1",
+			InputNames: []string{"prerequisite"},
+		}},
 		WorkerType:       "worker-a",
 		ExecutorProvider: "codex",
 		ModelProvider:    "codex",
@@ -50,6 +54,9 @@ func TestProviderInvocationExecutorResolvesEverySelectionFromRequest(t *testing.
 	}
 	if !request.SkipPermissions || request.RunnerID != "codex" {
 		t.Fatalf("resolved request = %#v, want skip-permissions and codex runner", request)
+	}
+	if len(request.InputTokens) != 1 || request.InputTokens[0].(workerexecution.WorkInput).WorkID != "work-1" {
+		t.Fatalf("input tokens = %#v, want caller's resolved Work inputs", request.InputTokens)
 	}
 	if invocation.input.Attempt != 1 {
 		t.Fatalf("attempt = %d, want 1; attempt budgeting belongs to Worker Sessions", invocation.input.Attempt)

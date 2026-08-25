@@ -11,7 +11,7 @@ narrowed to the priority slice in `problems.md` (ASR, TTS on VibeVoice-7B,
 gemma-e4b omni text + media understanding, embeddings, CLI-first plus the
 factory TTS switch). Nothing here is scheduled; each section must be
 re-shaped into its own standards-conformant plan (per
-`docs/internal/standards/code/planning-standards.md`) before
+`factory/docs/standards/planning-standards.md`) before
 implementation, using the contracts the priority slice lands as its
 baseline.
 

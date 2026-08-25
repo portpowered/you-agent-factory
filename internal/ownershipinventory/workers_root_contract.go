@@ -15,7 +15,6 @@ const workersRootRelative = "pkg/services/workers"
 // Confirmed against docs/internal/packaged-service-structure/workers-root-contract-surface-inventory.md
 // (INV-WRK-TOPLEVEL).
 var WorkersThinRootContractFiles = []string{
-	"command.go",
 	"command_result_contracts.go",
 	"event_recording_contracts.go",
 	"execution_context.go",
@@ -29,7 +28,6 @@ var WorkersThinRootContractFiles = []string{
 	"interfaces.go",
 	"kind_phase_validation.go",
 	"kind_phase_validation_test.go",
-	"mock_worker.go",
 	"mock_workers_contracts.go",
 	"progress_observations.go",
 	"prompt_template_contracts.go",
@@ -37,11 +35,8 @@ var WorkersThinRootContractFiles = []string{
 	"proposal_mappers_test.go",
 	"proposed_output_contracts.go",
 	"proposed_output_contracts_test.go",
-	"pty_contracts.go",
 	"response_drafts.go",
 	"runner_policy_contracts.go",
-	"runner_process.go",
-	"runner_process_log_context.go",
 	"runtime_hooks.go",
 	"runtime_opening.go",
 	"safe_diagnostics.go",
@@ -142,4 +137,4 @@ const WorkersRootContractPreCutoverFileCount = 41
 
 // WorkersRootContractBaselineFileCount is the inventoried root .go file count
 // after CLN-WRK-CONTRACT-ROOTS cutover completes.
-const WorkersRootContractBaselineFileCount = 40
+const WorkersRootContractBaselineFileCount = 35

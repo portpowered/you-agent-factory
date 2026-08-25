@@ -6,8 +6,7 @@ import bootstrapworkflow "github.com/portpowered/infinite-you/pkg/services/syste
 // here only for service composition. They are intentionally absent from the
 // peer-facing system_initialization root package.
 type (
-	InspectPath                      = bootstrapworkflow.InspectPath
-	LegacyFactoryMigrationFileSystem = bootstrapworkflow.LegacyFactoryMigrationFileSystem
-	OperatorSettings                 = bootstrapworkflow.OperatorSettings
-	OperatorSettingsFunctions        = bootstrapworkflow.OperatorSettingsFunctions
+	InspectPath               = bootstrapworkflow.InspectPath
+	OperatorSettings          = bootstrapworkflow.OperatorSettings
+	OperatorSettingsFunctions = bootstrapworkflow.OperatorSettingsFunctions
 )

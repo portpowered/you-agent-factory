@@ -73,7 +73,14 @@ type RuntimeActivationMockWorker struct {
 	RunType         string
 	ScriptConfig    *RuntimeActivationMockScript
 	RejectConfig    *RuntimeActivationMockReject
+	GateConfig      *RuntimeActivationMockGate
 	Usage           *RuntimeActivationMockUsage
+}
+
+type RuntimeActivationMockGate struct {
+	ArrivedFile string
+	ReleaseFile string
+	Timeout     string
 }
 
 type RuntimeActivationMockUsage struct {
@@ -158,6 +165,10 @@ func (inputs RuntimeActivationInputs) Clone() RuntimeActivationInputs {
 				reject.ExitCode = &value
 			}
 			clonedWorker.RejectConfig = &reject
+		}
+		if worker.GateConfig != nil {
+			gate := *worker.GateConfig
+			clonedWorker.GateConfig = &gate
 		}
 		if worker.Usage != nil {
 			usage := *worker.Usage

@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type MockWorkerRunType string
@@ -43,6 +45,7 @@ type MockWorkerConfig struct {
 	RunType         MockWorkerRunType       `json:"runType"`
 	ScriptConfig    *MockWorkerScriptConfig `json:"scriptConfig,omitempty"`
 	RejectConfig    *MockWorkerRejectConfig `json:"rejectConfig,omitempty"`
+	GateConfig      *MockWorkerGateConfig   `json:"gateConfig,omitempty"`
 	Usage           *MockWorkerUsageConfig  `json:"usage,omitempty"`
 }
 
@@ -69,6 +72,15 @@ type MockWorkerRejectConfig struct {
 	Stdout   string `json:"stdout,omitempty"`
 	Stderr   string `json:"stderr,omitempty"`
 	ExitCode *int   `json:"exitCode,omitempty"`
+}
+
+// MockWorkerGateConfig pauses one matched dispatch at the mock-worker boundary
+// until a caller creates ReleaseFile. ArrivedFile is created before the wait so
+// tests and local harnesses can synchronize on execution state without sleeps.
+type MockWorkerGateConfig struct {
+	ArrivedFile string `json:"arrivedFile"`
+	ReleaseFile string `json:"releaseFile"`
+	Timeout     string `json:"timeout"`
 }
 
 // MockWorkerUsageConfig declares provider-neutral usage for one matched mock
@@ -117,6 +129,10 @@ func (config *MockWorkersConfig) Clone() *MockWorkersConfig {
 				reject.ExitCode = &exitCode
 			}
 			clone.MockWorkers[index].RejectConfig = &reject
+		}
+		if worker.GateConfig != nil {
+			gate := *worker.GateConfig
+			clone.MockWorkers[index].GateConfig = &gate
 		}
 		clone.MockWorkers[index].Usage = worker.Usage.Clone()
 	}
@@ -411,6 +427,11 @@ func (config MockWorkerConfig) Validate() error {
 			return fmt.Errorf("usage: %w", err)
 		}
 	}
+	if config.GateConfig != nil {
+		if err := config.GateConfig.Validate(); err != nil {
+			return fmt.Errorf("gateConfig: %w", err)
+		}
+	}
 	switch config.RunType {
 	case MockWorkerRunTypeAccept:
 		return nil
@@ -433,6 +454,35 @@ func (config MockWorkerConfig) Validate() error {
 	default:
 		return fmt.Errorf("runType must be one of %q, %q, or %q; got %q", MockWorkerRunTypeAccept, MockWorkerRunTypeScript, MockWorkerRunTypeReject, config.RunType)
 	}
+}
+
+// Validate keeps gate synchronization bounded and invocation-independent.
+func (config MockWorkerGateConfig) Validate() error {
+	arrivedFile := strings.TrimSpace(config.ArrivedFile)
+	releaseFile := strings.TrimSpace(config.ReleaseFile)
+	if arrivedFile == "" {
+		return fmt.Errorf("arrivedFile is required")
+	}
+	if releaseFile == "" {
+		return fmt.Errorf("releaseFile is required")
+	}
+	if !filepath.IsAbs(arrivedFile) {
+		return fmt.Errorf("arrivedFile must be absolute")
+	}
+	if !filepath.IsAbs(releaseFile) {
+		return fmt.Errorf("releaseFile must be absolute")
+	}
+	if filepath.Clean(arrivedFile) == filepath.Clean(releaseFile) {
+		return fmt.Errorf("arrivedFile and releaseFile must be different")
+	}
+	timeout, err := time.ParseDuration(strings.TrimSpace(config.Timeout))
+	if err != nil {
+		return fmt.Errorf("timeout must be a duration: %w", err)
+	}
+	if timeout <= 0 {
+		return fmt.Errorf("timeout must be positive")
+	}
+	return nil
 }
 
 func (usage MockWorkerUsageConfig) Validate() error {

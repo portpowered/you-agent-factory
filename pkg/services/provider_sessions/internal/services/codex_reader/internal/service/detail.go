@@ -283,12 +283,6 @@ func matchesCodexSessionBaseName(baseName, id, exactName string) bool {
 	return matches[2] == id
 }
 
-// MatchesSessionBaseName reports whether a file name is a supported Codex
-// rollout layout for the requested session.
-func MatchesSessionBaseName(baseName, id, exactName string) bool {
-	return matchesCodexSessionBaseName(baseName, id, exactName)
-}
-
 func classifyCodexSessionFileLayout(baseName, exactName string) codexSessionFileLayout {
 	if baseName == exactName {
 		return codexSessionFileLayoutExact

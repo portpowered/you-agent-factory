@@ -1680,10 +1680,6 @@ type ProjectionService interface {
 		int,
 	) (FactoryWorldState, error)
 	SimpleDashboardRenderData(FactoryWorldState) SimpleDashboardRenderData
-	ProjectActiveThrottlePauses(
-		InitialStructurePayload,
-		[]ActiveThrottlePause,
-	) []FactoryWorldThrottlePause
 	ProjectWorkstationRequests(
 		FactoryWorldState,
 	) WorkstationFactoryWorldWorkstationRequestProjectionSlice

@@ -22,7 +22,7 @@ func TestCanonicalRuntimeBridgeHelpers(t *testing.T) {
 	if hooks.MarkLoadFinished == nil || hooks.MarkLoadRequested == nil {
 		t.Fatal("LocalRuntimeHooks() returned incomplete model recording hooks")
 	}
-	if NewMockCommandRunner(nil, nil, stubCanonicalCommandRunner{}) == nil {
+	if NewMockCommandRunner(nil, nil, stubCanonicalCommandRunner{}, nil) == nil {
 		t.Fatal("NewMockCommandRunner() returned nil")
 	}
 
@@ -48,7 +48,7 @@ func TestCanonicalMockCommandRunnerUsesDetachedOverride(t *testing.T) {
 		func(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 			return platformprocess.CommandResult{Stdout: []byte("forwarded " + request.Command)}, nil
 		},
-	))
+	), nil)
 	result, err := runner.Run(context.Background(), platformprocess.CommandRequest{Command: "codex"})
 	if err != nil || string(result.Stdout) != "forwarded codex" {
 		t.Fatalf("Run() = %#v, %v", result, err)
@@ -175,7 +175,7 @@ func TestCanonicalMockCommandRunnerPublishesCompletedOutputForBufferedEdge(t *te
 func TestCanonicalMockCommandRunnerRequiresNextCommandRunner(t *testing.T) {
 	t.Parallel()
 
-	runner := NewContextualMockWorkerCommandRunner(nil)
+	runner := NewContextualMockWorkerCommandRunner(nil, nil)
 	_, err := runner.Run(context.Background(), platformprocess.CommandRequest{Command: "codex"})
 	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
 		t.Fatalf("Run(no next runner) error = %v, want a required-next-runner failure", err)
@@ -318,7 +318,7 @@ type canonicalStreamingCommandRunner interface {
 func canonicalStreamingMockCommandRunner(t *testing.T, next platformprocess.CommandRunner) canonicalStreamingCommandRunner {
 	t.Helper()
 
-	runner, ok := NewContextualMockWorkerCommandRunner(next).(canonicalStreamingCommandRunner)
+	runner, ok := NewContextualMockWorkerCommandRunner(next, nil).(canonicalStreamingCommandRunner)
 	if !ok {
 		t.Fatal("NewContextualMockWorkerCommandRunner() does not satisfy the canonical streaming command contract")
 	}

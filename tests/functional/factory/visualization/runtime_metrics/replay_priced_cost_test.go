@@ -27,6 +27,7 @@ const (
 	replayPricedMillionTokenUnit int64 = 1_000_000
 )
 
+// TestReplayPricedUsageReachesPublicCosts proves replayed priced usage reaches the public cost projection.
 func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	fixturePath := filepath.Join(

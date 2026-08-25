@@ -40,11 +40,11 @@ renderer can apply a locale catalog with explicit English fallback behavior.
 
 This plan follows these repository standards and active plans:
 
-- `docs/internal/standards/code/planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - `docs/internal/standards/code/code-review-standards.md`
 - `docs/internal/standards/code/general-backend-standards.md`
 - `docs/internal/standards/code/general-website-standards.md`, section 9
-- `docs/internal/standards/templates/task-templates.md`
+- `factory/docs/standards/task-template.md`
 - `docs/architecture/data-model.md`
 - `docs/internal/development/plans/customer-prose-clarity-program.md`
 - `docs/internal/development/plans/customer-prose-standard-and-enforcement.md`

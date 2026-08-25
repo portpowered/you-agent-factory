@@ -1,12 +1,13 @@
 package mockworkers
 
 func topologyFieldRecords() []FieldRecord {
-	fields := make([]FieldRecord, 0, 31)
+	fields := make([]FieldRecord, 0, 35)
 	fields = append(fields, topologyTopLevelFields()...)
 	fields = append(fields, topologyMockWorkerEntryFields()...)
 	fields = append(fields, topologyWorkInputSelectorFields()...)
 	fields = append(fields, topologyScriptConfigFields()...)
 	fields = append(fields, topologyRejectConfigFields()...)
+	fields = append(fields, topologyGateConfigFields()...)
 	fields = append(fields, topologyUsageFields()...)
 	return fields
 }
@@ -110,6 +111,16 @@ func topologyMockWorkerEntryFields() []FieldRecord {
 			ValidationOwner:      ownerValidate,
 		},
 		{
+			ID:                   "mockWorkers[].gateConfig",
+			JSONPath:             "mockWorkers[].gateConfig",
+			JSONName:             "gateConfig",
+			ValueType:            "object",
+			ParentField:          "mockWorkers[]",
+			Required:             "optional",
+			DefaultEmptyBehavior: "omitted gateConfig executes the matched run type immediately; when present all gate fields are required",
+			ValidationOwner:      ownerValidate,
+		},
+		{
 			ID:                   "mockWorkers[].usage",
 			JSONPath:             "mockWorkers[].usage",
 			JSONName:             "usage",
@@ -118,6 +129,42 @@ func topologyMockWorkerEntryFields() []FieldRecord {
 			Required:             "optional",
 			DefaultEmptyBehavior: "omitted usage emits no token usage observation; when present provider and model are required",
 			ValidationOwner:      ownerValidate,
+		},
+	}
+}
+
+func topologyGateConfigFields() []FieldRecord {
+	return []FieldRecord{
+		{
+			ID:                   "mockWorkers[].gateConfig.arrivedFile",
+			JSONPath:             "mockWorkers[].gateConfig.arrivedFile",
+			JSONName:             "arrivedFile",
+			ValueType:            "string absolute path",
+			ParentField:          "mockWorkers[].gateConfig",
+			Required:             "required when gateConfig is present",
+			DefaultEmptyBehavior: "missing, blank, or relative paths fail validation",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].gateConfig.releaseFile",
+			JSONPath:             "mockWorkers[].gateConfig.releaseFile",
+			JSONName:             "releaseFile",
+			ValueType:            "string absolute path",
+			ParentField:          "mockWorkers[].gateConfig",
+			Required:             "required when gateConfig is present",
+			DefaultEmptyBehavior: "missing, blank, relative, or arrival-equal paths fail validation",
+			ValidationOwner:      ownerValidate,
+		},
+		{
+			ID:                   "mockWorkers[].gateConfig.timeout",
+			JSONPath:             "mockWorkers[].gateConfig.timeout",
+			JSONName:             "timeout",
+			ValueType:            "string duration",
+			ParentField:          "mockWorkers[].gateConfig",
+			Required:             "required when gateConfig is present",
+			DefaultEmptyBehavior: "missing, invalid, or non-positive durations fail validation",
+			ValidationOwner:      ownerValidate,
+			Notes:                "bounds synchronization waits so a forgotten release fails instead of hanging a dispatch",
 		},
 	}
 }

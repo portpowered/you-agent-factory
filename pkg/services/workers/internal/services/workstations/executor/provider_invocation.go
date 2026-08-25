@@ -97,6 +97,7 @@ func (e *ProviderInvocationExecutor) Execute(
 func providerInvocationRequest(
 	request workerexecution.WorkstationExecutionRequest,
 ) workerexecution.ProviderInferenceRequest {
+	request = workerexecution.CloneWorkstationExecutionRequest(request)
 	runnerID := strings.TrimSpace(request.RunnerID)
 	if runnerID == "" {
 		// Provider invocation receives a detached request whose runner/provider
@@ -111,6 +112,7 @@ func providerInvocationRequest(
 		RunnerID:                 runnerID,
 		ExecutorProvider:         strings.TrimSpace(request.ExecutorProvider),
 		ProjectID:                request.ProjectID,
+		InputTokens:              request.InputTokens,
 		ModelOperation:           request.ModelOperation,
 		ModelBindings:            workerexecution.CloneResolvedModelOperationBindings(request.ModelBindings),
 		SystemPrompt:             request.SystemPrompt,
@@ -127,6 +129,7 @@ func providerInvocationRequest(
 		ReasoningEffort:          request.ReasoningEffort,
 		Continuation:             cloneContinuation(request.Continuation),
 		SkipPermissions:          request.SkipPermissions,
+		DeclaredSecretInvocationParameters: append([]string(nil), request.DeclaredSecretInvocationParameters...),
 	}
 }
 

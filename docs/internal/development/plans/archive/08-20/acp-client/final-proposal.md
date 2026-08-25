@@ -716,7 +716,7 @@ green CI without merge is not completion.
 - `docs/internal/projects/root-consolidation/proposal.md` — L2
 - `docs/internal/projects/acp-worker-events/proposal.md` — L4
 - `docs/architecture/{architecture,data-model,event-streams}.md`
-- `docs/internal/standards/code/planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - [ACP session config options](https://agentclientprotocol.com/rfds/session-config-options)
 - [ACP session resume](https://agentclientprotocol.com/rfds/session-resume)
 - [ACP session close](https://agentclientprotocol.com/rfds/session-close)

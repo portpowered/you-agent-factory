@@ -25,6 +25,7 @@ func TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot(t *testing.T) {
 	binaryPath := buildYouBinary(t, buildContext, testutil.MustRepoRoot(t))
 
 	t.Run("success preserves primary result", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 		defer cancel()
 		session := newConfiguredGoalSession(t, ctx, harness, "compiled-named-success")
@@ -51,6 +52,7 @@ func TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot(t *testing.T) {
 	})
 
 	t.Run("terminal failure preserves human detail", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 		defer cancel()
 		session := newConfiguredGoalSession(t, ctx, harness, "compiled-named-human-failure")
@@ -79,6 +81,7 @@ func TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot(t *testing.T) {
 	})
 
 	t.Run("terminal failure preserves JSON detail", func(t *testing.T) {
+		t.Parallel()
 		ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 		defer cancel()
 		session := newConfiguredGoalSession(t, ctx, harness, "compiled-named-json-failure")

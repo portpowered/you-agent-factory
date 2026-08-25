@@ -24,6 +24,7 @@ const (
 // CLI NDJSON response-stream run emits public Factory Event records followed by
 // exactly one terminal InvocationResult that decodes through the public contract.
 func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T) {
+	t.Parallel()
 	stdout := runGoalResponseStream(t)
 	records := decodeNDJSONRecords(t, stdout)
 
@@ -75,6 +76,7 @@ func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T)
 // strictly increasing Factory Session sequence values, with no records after the
 // terminal InvocationResult.
 func TestCLINDJSONSequenceIsMonotonic(t *testing.T) {
+	t.Parallel()
 	stdout := runGoalResponseStream(t)
 	records := decodeNDJSONRecords(t, stdout)
 
@@ -117,6 +119,7 @@ func TestCLINDJSONSequenceIsMonotonic(t *testing.T) {
 // invocation failure under CLI NDJSON response-stream mode ends with exactly one
 // failed InvocationResult and emits no stream records after that terminal record.
 func TestCLINDJSONFailureEndsWithOneTerminalResult(t *testing.T) {
+	t.Parallel()
 	stdout := runGoalResponseStreamFailure(t)
 	records := decodeNDJSONRecords(t, stdout)
 

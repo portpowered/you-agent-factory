@@ -30,6 +30,7 @@ var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
 const functionalTimingReportVersion = 1
+const functionalTestParallelism = 2
 
 type goTestEvent struct {
 	Action  string  `json:"Action"`
@@ -87,7 +88,10 @@ func runFunctionalTests(cfg config) error {
 		return fmt.Errorf("invalid -count=%d: value must be zero or greater", cfg.count)
 	}
 
-	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
+	// Package concurrency and in-package t.Parallel concurrency multiply. Keep
+	// the latter bounded so a high -jobs value cannot turn a 24-core host into
+	// hundreds of simultaneous root processes and instrumented test runtimes.
+	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs), fmt.Sprintf("-parallel=%d", functionalTestParallelism)}
 	if strings.TrimSpace(cfg.timingOutput) != "" {
 		args = append(args, "-json")
 	}

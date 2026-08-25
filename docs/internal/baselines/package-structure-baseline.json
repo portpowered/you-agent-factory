@@ -574,11 +574,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/reconciliation_root_composition_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/automations/script_poller_root_composition_test.go",
       "target": "automations"
     },
@@ -1321,11 +1316,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/current_factory_pointer.go",
       "target": "ResolveCurrentFactoryDirectory"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_definitions/default_paths.go",
-      "target": "LegacyNamedFactoriesRoot"
     },
     {
       "rule": "service-root-exported-function",
@@ -2700,11 +2690,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/runners/process",
-      "target": "pkg/services/workers/internal/services/runners"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runners/runner",
       "target": "pkg/services/workers/internal/services/runners"
     },
     {

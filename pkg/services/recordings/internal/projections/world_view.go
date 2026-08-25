@@ -2,60 +2,10 @@ package projections
 
 import (
 	"sort"
-	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {
-	activeIDs := make([]string, 0, len(state.ActiveDispatches))
-	for dispatchID, dispatch := range state.ActiveDispatches {
-		if dispatchHasCustomerWork(dispatch.WorkItemIDs, state.WorkItemsByID) {
-			activeIDs = append(activeIDs, dispatchID)
-		}
-	}
-	sort.Strings(activeIDs)
-	return activeIDs
-}
-
-func dispatchHasCustomerWork(ids []string, items map[string]work.FactoryWorkItem) bool {
-	return len(workItemRefsForIDs(work.WorkPayloadLineageProjection{}, ids, items)) > 0
-}
-
-func hasCustomerWorkItems(items map[string]work.FactoryWorkItem) bool {
-	for _, item := range items {
-		if !interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
-			return true
-		}
-	}
-	return false
-}
-
-func countTerminalByWorkType(terminal map[string]interfaces.FactoryTerminalWork) map[string]int {
-	counts := make(map[string]int)
-	for _, work := range terminal {
-		if work.Status == "FAILED" {
-			continue
-		}
-		if interfaces.IsSystemTimeWorkType(work.WorkItem.WorkTypeID) {
-			continue
-		}
-		counts[work.WorkItem.WorkTypeID]++
-	}
-	return nilIfEmpty(counts)
-}
-
-func countFailedByWorkType(failed map[string]work.FactoryWorkItem) map[string]int {
-	counts := make(map[string]int)
-	for _, work := range failed {
-		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {
-			continue
-		}
-		counts[work.WorkTypeID]++
-	}
-	return nilIfEmpty(counts)
-}
 
 func workRefsForActiveIDs(
 	lineage work.WorkPayloadLineageProjection,
@@ -85,14 +35,6 @@ func mergeWorkRefs(existing []interfaces.FactoryWorldWorkItemRef, additional []i
 	return merged
 }
 
-func workTypeIDsForWorkRefs(refs []interfaces.FactoryWorldWorkItemRef) []string {
-	var ids []string
-	for _, ref := range refs {
-		ids = appendUnique(ids, ref.WorkTypeID)
-	}
-	return sortedStrings(ids)
-}
-
 func filterCustomerPlaceIDs(placeIDs []string) []string {
 	filtered := make([]string, 0, len(placeIDs))
 	for _, placeID := range placeIDs {
@@ -118,30 +60,6 @@ func sortedMapKeys[T any](values map[string]T) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func nilIfEmpty(values map[string]int) map[string]int {
-	delete(values, "")
-	if len(values) == 0 {
-		return nil
-	}
-	return values
-}
-
-func workstationMatchesPause(
-	workstation interfaces.FactoryWorkstation,
-	workersByID map[string]interfaces.FactoryWorker,
-	pause interfaces.ActiveThrottlePause,
-) bool {
-	if workstation.WorkerID == "" {
-		return false
-	}
-	worker, ok := workersByID[workstation.WorkerID]
-	if !ok {
-		return false
-	}
-	provider := firstNonEmpty(worker.ModelProvider, worker.Provider)
-	return strings.EqualFold(provider, pause.Provider) && worker.Model == pause.Model
 }
 
 func workItemRefsForIDs(

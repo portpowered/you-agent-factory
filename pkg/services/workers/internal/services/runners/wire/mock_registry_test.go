@@ -143,6 +143,59 @@ func TestMockProductionRegistryResolveAndExecuteConcurrently(t *testing.T) {
 	}
 }
 
+func TestMockRunnerMatchesResolvedAndDispatchWorkInputs(t *testing.T) {
+	registry := newExplicitMockRegistry(t, &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
+			{
+				WorkInputs: []workers.MockWorkInputSelector{{
+					WorkID:    "resolved-work",
+					InputName: "prerequisite",
+				}},
+				RunType: workers.MockWorkerRunTypeReject,
+			},
+			{
+				WorkInputs: []workers.MockWorkInputSelector{{WorkID: "dispatch-work"}},
+				RunType:    workers.MockWorkerRunTypeReject,
+			},
+		},
+	}, nil)
+
+	for _, test := range []struct {
+		name    string
+		request workers.RunnerExecutionRequest
+	}{
+		{
+			name: "resolved Work input",
+			request: workers.RunnerExecutionRequest{
+				RunnerID: runners.MockIdentity,
+				InputTokens: []any{workers.WorkInput{
+					WorkID:     "resolved-work",
+					InputNames: []string{"prerequisite"},
+				}},
+			},
+		},
+		{
+			name: "dispatch token",
+			request: workers.RunnerExecutionRequest{
+				RunnerID: runners.MockIdentity,
+				Dispatch: work.WorkDispatch{InputTokens: []any{map[string]any{
+					"workId": "dispatch-work",
+				}}},
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := registry.Execute(t.Context(), runners.ExecuteRequest{
+				Identity: runners.MockIdentity,
+				Attempt:  test.request,
+			})
+			if err == nil {
+				t.Fatal("Execute() error = nil, want selector-specific rejection")
+			}
+		})
+	}
+}
+
 func TestNewMockProductionRegistryRejectsMissingConfig(t *testing.T) {
 	_, err := NewMockProductionRegistry(
 		runners.AgentDependencies{Providers: newAgentProvidersFake(), Publish: agentNoopPublisher},

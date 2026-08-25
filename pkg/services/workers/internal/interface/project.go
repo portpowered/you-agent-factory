@@ -123,7 +123,7 @@ func topologyNotAcceptedCapabilities() []NotAcceptedCapability {
 		},
 		{
 			Category: "dispatch delay or timing fields",
-			Reason:   "no per-entry delay, sleep, or dispatch-timing fields are accepted; scriptConfig.timeout only bounds local script execution",
+			Reason:   "no arbitrary delay or sleep is accepted; gateConfig only synchronizes a matched dispatch with explicit arrival and release files and a bounded timeout",
 		},
 		{
 			Category: "artifact payloads",

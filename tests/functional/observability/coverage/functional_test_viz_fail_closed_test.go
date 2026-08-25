@@ -17,25 +17,24 @@ import (
 func TestFunctionalTestVizFailClosed_BoundaryFailureStopsCoverageAndViz(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	artifactDir := t.TempDir()
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-fail'\n\t@exit 23\n",
-		"test-functional-coverage":  "@$(MAKE) functional-boundary-check\n\t@printf '%s\\n' 'stub:coverage-unexpected'\n\t@exit 99\n",
-	})
+	makefilePath := filepath.ToSlash(filepath.Join(repoRoot, "Makefile"))
+	goStub := writeFunctionalTestGoStub(t, "boundary-fail")
 
 	output, err := runMakefileTargetWithArgs(
 		repoRoot,
 		makefilePath,
 		"functional-test-viz",
 		"FUNCTIONAL_TEST_VIZ_DIR="+filepath.ToSlash(artifactDir),
+		"FUNCTIONAL_TEST_GO="+goStub,
 	)
 	if err == nil {
 		t.Fatalf("functional-test-viz unexpectedly succeeded after boundary failure:\n%s", output)
 	}
 	log := readFunctionalTestVizLog(t, artifactDir)
-	if !strings.Contains(log, "stub:boundary-fail") {
+	if !strings.Contains(log, "stub:boundary-boundary-fail") {
 		t.Fatalf("functional-test-viz log missing boundary failure marker:\n%s", log)
 	}
-	for _, unexpected := range []string{"stub:coverage-unexpected", "wrote catalog"} {
+	for _, unexpected := range []string{"Functional suite inventory:", "stub:catalog"} {
 		if strings.Contains(log, unexpected) {
 			t.Fatalf("functional-test-viz continued after boundary failure (%q present):\n%s", unexpected, log)
 		}
@@ -51,21 +50,15 @@ func TestFunctionalTestVizFailClosed_BoundaryFailureStopsCoverageAndViz(t *testi
 func TestFunctionalTestVizFailClosed_CoverageFailurePreservesWrittenArtifacts(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	artifactDir := t.TempDir()
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
-		"test-functional-coverage": "@$(MAKE) functional-boundary-check\n" +
-			"\t@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)\n" +
-			"\t@printf '%s\\n' 'mode: set' > $(FUNCTIONAL_TEST_VIZ_PROFILE)\n" +
-			"\t@printf '%s\\n' '{\"schemaVersion\":1,\"coveragePercent\":12.5}' > $(FUNCTIONAL_TEST_VIZ_JSON)\n" +
-			"\t@printf '%s\\n' 'stub:coverage-floor-fail'\n" +
-			"\t@exit 17\n",
-	})
+	makefilePath := filepath.ToSlash(filepath.Join(repoRoot, "Makefile"))
+	goStub := writeFunctionalTestGoStub(t, "coverage-fail")
 
 	output, err := runMakefileTargetWithArgs(
 		repoRoot,
 		makefilePath,
 		"functional-test-viz",
 		"FUNCTIONAL_TEST_VIZ_DIR="+filepath.ToSlash(artifactDir),
+		"FUNCTIONAL_TEST_GO="+goStub,
 	)
 	if err == nil {
 		t.Fatalf("functional-test-viz unexpectedly succeeded after coverage failure:\n%s", output)
@@ -77,12 +70,12 @@ func TestFunctionalTestVizFailClosed_CoverageFailurePreservesWrittenArtifacts(t 
 	if !strings.Contains(log, "stub:coverage-floor-fail") {
 		t.Fatalf("functional-test-viz log missing coverage failure marker:\n%s", log)
 	}
-	if strings.Contains(log, "wrote catalog") {
+	if strings.Contains(log, "stub:catalog") {
 		t.Fatalf("functional-test-viz rendered Markdown after coverage failure:\n%s", log)
 	}
 
 	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage.out", "mode: set")
-	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage-summary.json", `"coveragePercent":12.5`)
+	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage-summary.json", `"coveragePercent":80`)
 	assertFunctionalTestVizArtifactAbsent(t, artifactDir, "functional-tests.md")
 }
 
@@ -92,34 +85,25 @@ func TestFunctionalTestVizFailClosed_CoverageFailurePreservesWrittenArtifacts(t 
 func TestFunctionalTestVizFailClosed_RenderFailurePreservesEarlierArtifacts(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	artifactDir := t.TempDir()
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"functional-boundary-check": "@printf '%s\\n' 'stub:boundary-ok'\n",
-		"test-functional-coverage": "@$(MAKE) functional-boundary-check\n" +
-			"\t@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)\n" +
-			"\t@printf '%s\\n' 'mode: set' > $(FUNCTIONAL_TEST_VIZ_PROFILE)\n" +
-			"\t@printf '%s\\n' 'not-valid-coverage-summary-json' > $(FUNCTIONAL_TEST_VIZ_JSON)\n" +
-			"\t@printf '%s\\n' 'stub:coverage-ok'\n",
-	})
+	makefilePath := filepath.ToSlash(filepath.Join(repoRoot, "Makefile"))
+	goStub := writeFunctionalTestGoStub(t, "render-fail")
 
 	output, err := runMakefileTargetWithArgs(
 		repoRoot,
 		makefilePath,
 		"functional-test-viz",
 		"FUNCTIONAL_TEST_VIZ_DIR="+filepath.ToSlash(artifactDir),
+		"FUNCTIONAL_TEST_GO="+goStub,
 	)
 	if err == nil {
 		t.Fatalf("functional-test-viz unexpectedly succeeded after render failure:\n%s", output)
 	}
 	log := readFunctionalTestVizLog(t, artifactDir)
-	if !strings.Contains(log, "stub:boundary-ok") || !strings.Contains(log, "stub:coverage-ok") {
+	if !strings.Contains(log, "stub:boundary-ok") || !strings.Contains(log, "stub:catalog-fail") {
 		t.Fatalf("functional-test-viz log missing earlier step markers:\n%s", log)
 	}
-	if strings.Contains(log, "wrote catalog") {
-		t.Fatalf("functional-test-viz reported catalog success after render failure:\n%s", log)
-	}
-
 	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage.out", "mode: set")
-	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage-summary.json", "not-valid-coverage-summary-json")
+	assertFunctionalTestVizArtifactContains(t, artifactDir, "coverage-summary.json", `"coveragePercent":80`)
 	assertFunctionalTestVizArtifactAbsent(t, artifactDir, "functional-tests.md")
 }
 

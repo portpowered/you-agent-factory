@@ -57,7 +57,7 @@ mechanics.
 
 ## Original documents and normative inputs
 
-- `C:\Users\andre\work\portos\infinite-you\.claude\worktrees\test-cleanup\docs\internal\standards\code\planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - `C:\Users\andre\work\portos\infinite-you\.claude\worktrees\test-cleanup\docs\internal\standards\code\code-review-standards.md`
 - `C:\Users\andre\work\portos\infinite-you\.claude\worktrees\test-cleanup\docs\internal\standards\code\general-backend-standards.md`
 - `C:\Users\andre\work\portos\infinite-you\.claude\worktrees\test-cleanup\docs\architecture\architecture.md`
@@ -623,7 +623,7 @@ service paths and FSCP-10's guards and documentation are merged.
 
 Before a story is submitted to an implementation worker, convert that story
 into the structure required by
-`docs/internal/standards/templates/task-templates.md`: one-line problem
+`factory/docs/standards/task-template.md`: one-line problem
 statement, customer ask, expected solution, this plan's absolute path as the
 original document, explicit package/file changes, induced contracts, service
 changes, API changes, and focused tests. Keep each packet bounded to one story;

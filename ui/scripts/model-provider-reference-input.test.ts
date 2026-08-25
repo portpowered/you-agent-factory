@@ -70,11 +70,13 @@ describe("buildModelProviderReferenceInput", () => {
       catalog: catalogWithAddition,
     });
 
-    expect(input.index.at(-1)).toEqual({
+    expect(input.index.find((provider) => provider.id === "zed")).toEqual({
       ...addedProvider,
       referencePath: "/reference/model-providers/zed",
     });
-    expect(input.providers.at(-1)?.manifest).toEqual(addedProvider);
+    expect(
+      input.providers.find(({ manifest }) => manifest.id === "zed")?.manifest,
+    ).toEqual(addedProvider);
   });
 
   it("fails with an actionable diagnostic for schema-incompatible data", () => {
@@ -102,10 +104,13 @@ describe("buildModelProviderReferenceInput", () => {
   it("rejects duplicate identities and reference paths", () => {
     const invalidCatalog = cloneCatalog();
     invalidCatalog.providers.push(structuredClone(invalidCatalog.providers[0]));
+    const duplicatedID = invalidCatalog.providers[0].id;
 
     expect(() =>
       buildModelProviderReferenceInput({ catalog: invalidCatalog }),
-    ).toThrow(/semantically invalid: duplicate canonical provider id "agy"/);
+    ).toThrow(
+      `semantically invalid: duplicate canonical provider id "${duplicatedID}"`,
+    );
   });
 
   it("rejects canonical ID and alias shadowing", () => {

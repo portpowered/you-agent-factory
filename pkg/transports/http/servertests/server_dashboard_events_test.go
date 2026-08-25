@@ -260,7 +260,7 @@ func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, want := range []string{"<title>You Agent Factory Dashboard</title>", "Standalone live dashboard shell for You Agent Factory.", "You%20Agent%20Factory%20dashboard%20icon", "<div id=\"root\"></div>", "/dashboard/ui/assets/"} {
+	for _, want := range []string{"<title>You Agent Factory Dashboard</title>", "Standalone live dashboard shell for You Agent Factory.", `href="/dashboard/ui/favicon.ico"`, "<div id=\"root\"></div>", "/dashboard/ui/assets/"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("expected embedded dashboard shell to contain %q, got body: %s", want, rec.Body.String())
 		}

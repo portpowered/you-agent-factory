@@ -19,7 +19,7 @@ func TestPrimaryIndexHTML_UsesYouAgentFactoryMetadata(t *testing.T) {
 	for _, want := range []string{
 		"<title>You Agent Factory Dashboard</title>",
 		"Standalone live dashboard shell for You Agent Factory.",
-		"You%20Agent%20Factory%20dashboard%20icon",
+		`<link href="/favicon.ico" rel="icon" sizes="any" />`,
 		`<div id="root"></div>`,
 	} {
 		if !strings.Contains(shell, want) {

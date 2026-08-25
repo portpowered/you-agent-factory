@@ -122,7 +122,8 @@ type MockConfig struct {
 // MockDependencies are optional effects for mock script execution. Omitting
 // Next confines mock accept/reject behavior to the Workers testing feature path.
 type MockDependencies struct {
-	Next workerprocess.CommandRunner
+	Next  workerprocess.CommandRunner
+	Files workers.AgentToolFileSystem
 }
 
 // Service owns the immutable process-scoped runner registry and request-scoped

@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestMinimalWorkflowExampleValidation validates every minimal workflow example against the public definition contract.
 func TestMinimalWorkflowExampleValidation(t *testing.T) {
 	minimalWorkflow := support.AgentFactoryPath(t, filepath.Join("examples", "minimal-workflow"))
 	formerObjectShape := copyWithFormerObjectOnFailure(t, minimalWorkflow)
@@ -71,6 +72,7 @@ func TestMinimalWorkflowExampleValidation(t *testing.T) {
 	}
 }
 
+// TestReferenceFactoryExamplesValidation validates the reference Factory corpus against the public definition contract.
 func TestReferenceFactoryExamplesValidation(t *testing.T) {
 	for _, test := range []struct {
 		name string

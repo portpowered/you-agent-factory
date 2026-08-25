@@ -65,6 +65,7 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 	scenario.resumeAndFinish(t, second.URL(), boundary)
 }
 
+// TestSuccessorRecordingReplaysAgainstUnchangedCheckout proves successor recordings replay against an unchanged checkout.
 func TestSuccessorRecordingReplaysAgainstUnchangedCheckout(t *testing.T) {
 	t.Parallel()
 

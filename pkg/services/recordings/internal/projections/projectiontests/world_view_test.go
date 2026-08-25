@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

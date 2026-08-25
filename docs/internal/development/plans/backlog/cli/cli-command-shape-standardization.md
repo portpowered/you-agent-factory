@@ -68,7 +68,7 @@ A customer can predict that:
 
 ## Governing sources
 
-- `docs/internal/standards/code/planning-standards.md` governs the shape and
+- `factory/docs/standards/planning-standards.md` governs the shape and
   delivery requirements of this plan.
 - `docs/internal/standards/code/code-review-standards.md` and
   `docs/internal/standards/code/general-backend-standards.md` govern

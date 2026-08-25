@@ -176,7 +176,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/factory/visualization/runtime_metrics/costs_cli_test.go::TestMetricsCostsCLITraversesProductionHTTPRoute",
+          "test": "tests/functional/factory/visualization/runtime_metrics/end_to_end_costs_test.go::TestRuntimeCostsEndToEndFromProviderCompletion",
           "boundary": "cli"
         }
       ]

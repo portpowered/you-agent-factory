@@ -19,6 +19,74 @@ import (
 const codedDiagnosticModelName = "OMNIVOICE_Q4_K_M"
 const codedDiagnosticUnknownModelName = "missing-model"
 
+// TestModelsLocalInvokeMissingRequiredSlotRendersBadRequest proves a missing required slot renders a coded bad-request diagnostic.
+func TestModelsLocalInvokeMissingRequiredSlotRendersBadRequest(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	homeDir := t.TempDir()
+
+	for _, test := range []struct {
+		name  string
+		debug bool
+	}{
+		{name: "normal"},
+		{name: "debug", debug: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{
+				"you", "models", "invoke", "asr",
+				"--operation", "ASR", "--text", "x", "--json",
+			}
+			if test.debug {
+				args = append(args, "--debug")
+			}
+			inputs := support.FakeInputs(t.Context(), args)
+			inputs.Input.Env = functionalHomeEnvironment(homeDir)
+			inputs.Input.WorkingDirectory = factoryDir
+
+			err := process.Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute(models invoke asr) error = nil, want missing-slot failure")
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("models invoke missing-slot stdout = %q, want empty", inputs.Stdout())
+			}
+			var failure *modelservice.InvocationFailure
+			if !errors.As(err, &failure) || failure == nil || failure.Class != modelservice.InvocationFailureClassInvalidSlot {
+				t.Fatalf("models invoke missing-slot error = %v, failure = %#v, want typed invalid-slot failure", err, failure)
+			}
+
+			response := decodeFirstDiagnostic(t, inputs.Stderr())
+			if response.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") || response.Family != factoryapi.ErrorFamilyBadRequest ||
+				!strings.Contains(response.Message, "required input slot is missing: audio") {
+				t.Fatalf("models invoke missing-slot diagnostic = %#v, want BAD_REQUEST with actionable message; stderr=%q", response, inputs.Stderr())
+			}
+			for _, fallback := range []string{"CLI_COMMAND_FAILED", "INTERNAL_SERVER_ERROR", "command failed"} {
+				if strings.Contains(inputs.Stderr(), fallback) {
+					t.Fatalf("models invoke missing-slot diagnostic contains fallback %q: %q", fallback, inputs.Stderr())
+				}
+			}
+		})
+	}
+
+	pullInputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "pull", "missing-pull-model", "--json",
+	})
+	pullInputs.Input.Env = functionalHomeEnvironment(homeDir)
+	pullInputs.Input.WorkingDirectory = factoryDir
+	if err := process.Execute(pullInputs.Input); err == nil {
+		t.Fatal("Process.Execute(models pull missing-pull-model) error = nil, want not-found failure")
+	}
+	pullResponse := decodeFirstDiagnostic(t, pullInputs.Stderr())
+	if pullResponse.Code != factoryapi.ErrorResponseCodeNOTFOUND || pullResponse.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("models pull missing-model diagnostic = %#v, want NOT_FOUND/NOT_FOUND", pullResponse)
+	}
+}
+
+// TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic proves local removal renders a coded diagnostic for a missing cache entry.
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -62,6 +130,7 @@ func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 	}
 }
 
+// TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic proves local and HTTP removal expose equivalent missing-cache diagnostics.
 func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	const message = "model cache is not installed; run you models pull " + codedDiagnosticModelName + " first"
 
@@ -103,6 +172,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	}
 }
 
+// TestModelsLocalInspectUnknownRendersCodedDiagnostic proves local inspection renders a coded diagnostic for an unknown model.
 func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -146,6 +216,7 @@ func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 	}
 }
 
+// TestModelsLocalInspectUnknownMatchesHTTPDiagnostic proves local and HTTP inspection expose equivalent unknown-model diagnostics.
 func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet || request.URL.Path != "/models/"+codedDiagnosticUnknownModelName {

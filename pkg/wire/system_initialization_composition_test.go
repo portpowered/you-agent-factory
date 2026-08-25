@@ -137,7 +137,6 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenReportsC
 		loadOperatorConfig,
 		ensureOperatorBackendScope,
 		provideSystemInitializationInspectPath(edges),
-		provideSystemInitializationLegacyFactoryMigrationFileSystem(edges),
 		logging.NoopLogger{},
 	)
 	if err != nil {
