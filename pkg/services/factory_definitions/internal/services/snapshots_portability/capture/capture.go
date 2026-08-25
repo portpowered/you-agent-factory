@@ -99,6 +99,12 @@ func CaptureLoaded(
 	if err != nil {
 		return nil, fmt.Errorf("encode factory snapshot: %w", err)
 	}
+	if spanSource, ok := source.(factorydefinitions.InvocationSensitiveJSONSpanSource); ok {
+		object, err = redactInvocationSensitiveSpans(object, spanSource.InvocationSensitiveJSONSpans())
+		if err != nil {
+			return nil, fmt.Errorf("redact invocation-sensitive Factory snapshot: %w", err)
+		}
+	}
 	if factoryDir := source.FactoryDir(); factoryDir != "" {
 		object["factoryDirectory"] = factoryDir
 	}

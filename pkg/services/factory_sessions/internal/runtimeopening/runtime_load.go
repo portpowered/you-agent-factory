@@ -38,6 +38,18 @@ func (source *invocationSensitiveLoadedFactory) InvocationSensitiveJSONPointers(
 	return append([]string(nil), source.pointers...)
 }
 
+type invocationSensitiveSpanLoadedFactory struct {
+	factorydefinitions.MutableLoadedFactorySource
+	spans []factorydefinitions.InvocationSensitiveJSONSpan
+}
+
+func (source *invocationSensitiveSpanLoadedFactory) InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan {
+	if source == nil {
+		return nil
+	}
+	return append([]factorydefinitions.InvocationSensitiveJSONSpan(nil), source.spans...)
+}
+
 type runtimeReplayLoad struct {
 	legacyArtifact    *factorydefinitions.ReplayArtifact
 	portableRecording *recording.PortableRecording
@@ -345,7 +357,12 @@ func loadRuntimeSnapshot(
 	if err := applyOperatorDefaults(loaded, operatorDefaults); err != nil {
 		return nil, err
 	}
-	if len(snapshot.InvocationSensitiveJSONPointers) > 0 {
+	if len(snapshot.InvocationSensitiveJSONSpans) > 0 {
+		loaded = &invocationSensitiveSpanLoadedFactory{
+			MutableLoadedFactorySource: loaded,
+			spans:                      append([]factorydefinitions.InvocationSensitiveJSONSpan(nil), snapshot.InvocationSensitiveJSONSpans...),
+		}
+	} else if len(snapshot.InvocationSensitiveJSONPointers) > 0 {
 		loaded = &invocationSensitiveLoadedFactory{
 			MutableLoadedFactorySource: loaded,
 			pointers:                   append([]string(nil), snapshot.InvocationSensitiveJSONPointers...),

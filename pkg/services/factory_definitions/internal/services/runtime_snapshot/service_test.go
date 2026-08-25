@@ -119,6 +119,73 @@ func TestResolveRuntimeSnapshotInterpolatesInvocationValuesBeforeDetaching(t *te
 	}
 }
 
+func TestResolveRuntimeSnapshotTracksSensitiveRenderedSpans(t *testing.T) {
+	t.Parallel()
+
+	source := newTestLoadedSource()
+	source.config.Workers[0].ModelProvider = "codex"
+	source.config.Workers[0].Body = "left=${visible} middle=${secret} right=${placeholder}"
+	source.config.Workers[0].Command = "literal ${placeholder}"
+	source.config.Workstations[0].Body = "station-visible secret=${secret}"
+	resolver, err := runtimesnapshotwire.NewService(
+		func(_ []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func(_ string, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return source, nil
+		},
+		func() factorydefinitions.WorkstationLoader { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	secret := "secret-value"
+	result, err := resolver.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical: []byte(`{"name":"detached"}`),
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			Arguments: &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+				"visible":     {Values: []string{"visible-value"}},
+				"secret":      {Values: []string{secret}, Sensitive: true},
+				"placeholder": {Values: []string{"placeholder-like-value"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+	}
+
+	wantBody := "left=visible-value middle=" + secret + " right=placeholder-like-value"
+	if got := result.Snapshot.EffectiveFactory.Workers[0].Body; got != wantBody {
+		t.Fatalf("resolved worker body = %q, want %q", got, wantBody)
+	}
+	wantStart := len("left=visible-value middle=")
+	stationStart := len("station-visible secret=")
+	wantSpans := []factorydefinitions.InvocationSensitiveJSONSpan{
+		{
+			JSONPointer: "/workers/0/body",
+			Start:       wantStart,
+			End:         wantStart + len(secret),
+		},
+		{
+			JSONPointer: "/workstations/0/body",
+			Start:       stationStart,
+			End:         stationStart + len(secret),
+		},
+	}
+	if !reflect.DeepEqual(result.Snapshot.InvocationSensitiveJSONSpans, wantSpans) {
+		t.Fatalf(
+			"sensitive spans = %#v, want %#v",
+			result.Snapshot.InvocationSensitiveJSONSpans,
+			wantSpans,
+		)
+	}
+	if len(result.Snapshot.InvocationSensitiveJSONPointers) != 0 {
+		t.Fatalf("legacy sensitive pointers = %#v, want none", result.Snapshot.InvocationSensitiveJSONPointers)
+	}
+}
+
 func TestResolveRuntimeSnapshotAllowsLogicalWorkstationsDuringOneShotResolution(t *testing.T) {
 	t.Parallel()
 

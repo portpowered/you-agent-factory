@@ -3,6 +3,7 @@ package capture_test
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -15,6 +16,7 @@ import (
 type source struct {
 	dir     string
 	factory *factorydefinitions.FactoryConfig
+	spans   []factorydefinitions.InvocationSensitiveJSONSpan
 }
 
 func (s source) FactoryDir() string {
@@ -23,6 +25,10 @@ func (s source) FactoryDir() string {
 
 func (s source) FactoryConfig() *factorydefinitions.FactoryConfig {
 	return s.factory
+}
+
+func (s source) InvocationSensitiveJSONSpans() []factorydefinitions.InvocationSensitiveJSONSpan {
+	return append([]factorydefinitions.InvocationSensitiveJSONSpan(nil), s.spans...)
 }
 
 func (source) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
@@ -95,6 +101,121 @@ func TestCaptureLoadedRequiresRepresentationMapper(t *testing.T) {
 	)
 	if err == nil || err.Error() != "encode factory snapshot: map failed" {
 		t.Fatalf("CaptureLoaded mapper error = %v", err)
+	}
+}
+
+func TestCaptureLoadedRedactsOnlyProvenSensitiveSpans(t *testing.T) {
+	t.Parallel()
+
+	secretOne := "first-secret"
+	secretTwo := "second-secret"
+	body := "left=" + secretOne + " middle=visible right=" + secretTwo
+	factory := &factorydefinitions.FactoryConfig{
+		Name: "example",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: "worker",
+			Type: factorydefinitions.WorkerTypeAgent,
+			Body: body,
+		}},
+	}
+	firstStart := len("left=")
+	secondStart := len("left=" + secretOne + " middle=visible right=")
+	snapshot, err := snapshotsportabilitycapture.CaptureLoaded(
+		source{
+			factory: factory,
+			spans: []factorydefinitions.InvocationSensitiveJSONSpan{
+				{JSONPointer: "/workers/0/body", Start: firstStart, End: firstStart + len(secretOne)},
+				{JSONPointer: "/workers/0/body", Start: secondStart, End: secondStart + len(secretTwo)},
+			},
+		},
+		"",
+		nil,
+		factorysnapshot.ObjectFromFactoryConfig,
+	)
+	if err != nil {
+		t.Fatalf("CaptureLoaded() error = %v", err)
+	}
+	var object map[string]any
+	if err := snapshot.Decode(&object); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	workers, ok := object["workers"].([]any)
+	if !ok || len(workers) != 1 {
+		t.Fatalf("workers = %#v, want one worker", object["workers"])
+	}
+	worker, ok := workers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("worker type = %T, want object", workers[0])
+	}
+	gotBody, ok := worker["body"].(string)
+	if !ok {
+		t.Fatalf("worker body = %#v, want string", worker["body"])
+	}
+	wantBody := "left=<redacted> middle=visible right=<redacted>"
+	if gotBody != wantBody {
+		t.Fatalf("worker body = %q, want %q", gotBody, wantBody)
+	}
+	if strings.Contains(gotBody, secretOne) || strings.Contains(gotBody, secretTwo) {
+		t.Fatalf("redacted worker body still contains a secret: %q", gotBody)
+	}
+}
+
+func TestCaptureLoadedDoesNotScanPlaceholderLikeLiteralWithoutProvenance(t *testing.T) {
+	t.Parallel()
+
+	literal := "visible ${secret}"
+	snapshot, err := snapshotsportabilitycapture.CaptureLoaded(
+		source{factory: &factorydefinitions.FactoryConfig{
+			Name: "example",
+			Workers: []factorydefinitions.FactoryWorkerConfig{{
+				Name: "worker",
+				Type: factorydefinitions.WorkerTypeAgent,
+				Body: literal,
+			}},
+		}},
+		"",
+		nil,
+		factorysnapshot.ObjectFromFactoryConfig,
+	)
+	if err != nil {
+		t.Fatalf("CaptureLoaded() error = %v", err)
+	}
+	var object map[string]any
+	if err := snapshot.Decode(&object); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	workers := object["workers"].([]any)
+	worker := workers[0].(map[string]any)
+	if got := worker["body"]; got != literal {
+		t.Fatalf("literal worker body = %#v, want %q", got, literal)
+	}
+}
+
+func TestCaptureLoadedRejectsUnusableSensitiveSpanBeforeArtifact(t *testing.T) {
+	t.Parallel()
+
+	_, err := snapshotsportabilitycapture.CaptureLoaded(
+		source{
+			factory: &factorydefinitions.FactoryConfig{
+				Name: "example",
+				Workers: []factorydefinitions.FactoryWorkerConfig{{
+					Name: "worker",
+					Type: factorydefinitions.WorkerTypeAgent,
+					Body: "visible secret",
+				}},
+			},
+			spans: []factorydefinitions.InvocationSensitiveJSONSpan{{
+				JSONPointer: "/workers/0/body",
+				Start:       99,
+				End:         100,
+			}},
+		},
+		"",
+		nil,
+		factorysnapshot.ObjectFromFactoryConfig,
+	)
+	if err == nil {
+		t.Fatal("CaptureLoaded() error = nil, want invalid sensitive span")
 	}
 }
 
