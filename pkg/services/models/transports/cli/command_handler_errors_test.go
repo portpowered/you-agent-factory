@@ -874,3 +874,18 @@ func TestModelsInvocationDiagnosticCoversFailureClasses(t *testing.T) {
 		})
 	}
 }
+
+func TestModelsCLISlotMappingPreservesOptionalMetadataShape(t *testing.T) {
+	t.Parallel()
+
+	converted := slotsToGenerated([]modelinference.OperationSlot{
+		{Name: "opaque"},
+		{Name: "text", Modality: modelinference.ModalityText, Repeatable: true, MediaTypes: []string{"text/plain"}},
+	})
+	if len(converted) != 2 || converted[0].Modality != nil || converted[0].Repeatable != nil || converted[0].MediaTypes != nil {
+		t.Fatalf("optional slot mapping = %#v, want nil optional metadata", converted)
+	}
+	if converted[1].Modality == nil || *converted[1].Modality != factoryapi.ModelInvocationContentType(modelinference.ModalityText) || converted[1].Repeatable == nil || !*converted[1].Repeatable || converted[1].MediaTypes == nil {
+		t.Fatalf("declared slot mapping = %#v, want modality/repeatable/media metadata", converted[1])
+	}
+}

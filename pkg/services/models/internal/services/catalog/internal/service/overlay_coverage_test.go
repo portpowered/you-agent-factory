@@ -153,3 +153,114 @@ func TestCatalogRejectsInvalidOperatorOverlayDefinitions(t *testing.T) {
 		})
 	}
 }
+
+func TestCatalogRejectsInvalidOperatorOverlaysWithFieldDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	valid := func() models.ModelOverlay {
+		source := "file:///models/custom.gguf"
+		backend := "localai-test"
+		loadPolicy := models.LoadPolicyOnDemand
+		return models.ModelOverlay{
+			Source:     &source,
+			Backend:    &backend,
+			LoadPolicy: &loadPolicy,
+			Operations: []string{models.OperationOMNI},
+		}
+	}
+
+	blankSource := "   "
+	blankBackend := "\t"
+	invalidLoadPolicy := models.LoadPolicy("ALWAYS")
+	completeCustom := valid()
+	completeCustom.Operations = nil
+
+	tests := []invalidCatalogOverlayCase{
+		{
+			name:      "invalid model name",
+			overlays:  map[string]models.ModelOverlay{"bad/name": valid()},
+			modelName: "bad/name",
+			field:     "name",
+		},
+		{
+			name: "duplicate normalized names",
+			overlays: map[string]models.ModelOverlay{
+				"Alias":   valid(),
+				" alias ": valid(),
+			},
+			modelName: "Alias",
+			field:     "name",
+		},
+		{
+			name:      "built-in blank source",
+			overlays:  map[string]models.ModelOverlay{"llm": {Source: &blankSource}},
+			modelName: "llm",
+			field:     "source",
+		},
+		{
+			name:      "built-in blank backend",
+			overlays:  map[string]models.ModelOverlay{"llm": {Backend: &blankBackend}},
+			modelName: "llm",
+			field:     "backend",
+		},
+		{
+			name:      "invalid load policy",
+			overlays:  map[string]models.ModelOverlay{"llm": {LoadPolicy: &invalidLoadPolicy}},
+			modelName: "llm",
+			field:     "loadPolicy",
+		},
+		{
+			name:      "unsupported operation",
+			overlays:  map[string]models.ModelOverlay{"llm": {Operations: []string{"classify"}}},
+			modelName: "llm",
+			field:     "operations",
+		},
+		{
+			name:      "custom operation is required",
+			overlays:  map[string]models.ModelOverlay{"custom": completeCustom},
+			modelName: "custom",
+			field:     "operations",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			assertInvalidCatalogOverlay(t, test)
+		})
+	}
+}
+
+type invalidCatalogOverlayCase struct {
+	name      string
+	overlays  map[string]models.ModelOverlay
+	modelName string
+	field     string
+}
+
+func assertInvalidCatalogOverlay(t *testing.T, test invalidCatalogOverlayCase) {
+	t.Helper()
+	scopes := newRuntimeScopes(t, "catalog-overlay-"+test.name)
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+		OperatorModels: test.overlays,
+	})
+	if err != nil {
+		t.Fatalf("open scope: %v", err)
+	}
+	service := newCatalogService(t, scopes)
+	_, err = service.ListCatalog(context.Background(), models.ListModelsRequest{
+		Scope: publicScope(t, privateRef),
+	})
+
+	var failure models.ModelConfigurationFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("ListCatalog error = %v, want ModelConfigurationFailure", err)
+	}
+	if !errors.Is(err, models.ErrModelConfigurationInvalid) {
+		t.Fatalf("ListCatalog error = %v, want ErrModelConfigurationInvalid", err)
+	}
+	if failure.ModelName != test.modelName || failure.Field != test.field {
+		t.Fatalf("configuration failure = %#v, want model %q field %q", failure, test.modelName, test.field)
+	}
+}
