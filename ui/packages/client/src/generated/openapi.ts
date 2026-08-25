@@ -1229,8 +1229,8 @@ export interface paths {
     put?: never;
     post?: never;
     /**
-     * Close one live factory session
-     * @description Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+     * Delete one stopped live factory session
+     * @description Deletes the selected non-default live factory session only after its runtime has already stopped. The request never implicitly stops an active runtime; default and active sessions return a typed conflict and remain registered.
      */
     delete: operations["closeFactorySession"];
     options?: never;
@@ -7931,6 +7931,15 @@ export interface components {
           | components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The selected Factory Session cannot be deleted while it is the default session or its runtime is active. */
+    FactorySessionDeletionConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
     FactorySessionResourceCapacityConflict: {
       headers: {
@@ -10086,14 +10095,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly. */
+        /** @description Stable live factory session identifier. The reserved `~default` compatibility session cannot be deleted. */
         session_id: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Session was stopped and removed from the live workspace. */
+      /** @description A stopped non-default session was removed from the live workspace. */
       204: {
         headers: {
           [name: string]: unknown;
@@ -10101,6 +10110,7 @@ export interface operations {
         content?: never;
       };
       404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionDeletionConflict"];
       500: components["responses"]["InternalError"];
     };
   };

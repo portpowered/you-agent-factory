@@ -43,16 +43,16 @@ const (
 	UNKNOWN      CheckpointResumabilityStatus = "UNKNOWN"
 )
 
-// Defines values for CostsLineItemPriceSource.
-const (
-	BUILTIN          CostsLineItemPriceSource = "BUILT_IN"
-	OPERATORSUPPLIED CostsLineItemPriceSource = "OPERATOR_SUPPLIED"
-)
-
 // Defines values for ConfirmationState.
 const (
 	CONFIRMED   ConfirmationState = "CONFIRMED"
 	UNCONFIRMED ConfirmationState = "UNCONFIRMED"
+)
+
+// Defines values for CostsLineItemPriceSource.
+const (
+	BUILTIN          CostsLineItemPriceSource = "BUILT_IN"
+	OPERATORSUPPLIED CostsLineItemPriceSource = "OPERATOR_SUPPLIED"
 )
 
 // Defines values for CostsLineItemStatus.
