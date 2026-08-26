@@ -52,6 +52,7 @@ const (
 // wakes another dispatch without replacing the session or interrupting the
 // first one.
 func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
+	t.Parallel()
 	runner := newLiveCapacityBarrierRunner(1)
 	dir := scaffoldLiveCapacityFactory(t, 1)
 	server := startLiveCapacityServer(t, dir, runner)
@@ -113,6 +114,7 @@ func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
 // dispatch remains in flight. The effective capacity may equal in-use work,
 // but the active dispatch is neither interrupted nor restarted.
 func TestLiveResourceCapacityReductionPreservesActiveWork(t *testing.T) {
+	t.Parallel()
 	runner := newLiveCapacityBarrierRunner(1)
 	dir := scaffoldLiveCapacityFactory(t, 3)
 	server := startLiveCapacityServer(t, dir, runner)
@@ -145,6 +147,7 @@ func TestLiveResourceCapacityReductionPreservesActiveWork(t *testing.T) {
 // events, leaves the revision and usage unchanged, and allows the already
 // admitted mock dispatches to complete normally.
 func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
+	t.Parallel()
 	runner := newLiveCapacityBarrierRunner(2)
 	dir := scaffoldLiveCapacityFactory(t, 2)
 	server := startLiveCapacityServer(t, dir, runner)
@@ -206,6 +209,7 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 // stale pre-admission requests append nothing, and retained history resumes
 // after an acknowledged event cursor.
 func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
+	t.Parallel()
 	runner := newLiveCapacityBarrierRunner(0)
 	dir := scaffoldLiveCapacityFactory(t, 1)
 	server := startLiveCapacityServer(t, dir, runner)

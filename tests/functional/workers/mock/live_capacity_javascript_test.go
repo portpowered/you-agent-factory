@@ -26,6 +26,7 @@ import (
 // waits on reviewers capacity one, and a live increase admits it in the same
 // durable session with exactly two completed child dispatches.
 func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T) {
+	t.Parallel()
 	provider := newLiveCapacityJavaScriptProviderRunner()
 	dir := scaffoldLiveCapacityFactory(t, 1)
 	support.WriteAgentConfig(t, dir, liveCapacityWorker, "---\n"+

@@ -31,6 +31,7 @@ type batchProcessFailure struct {
 // --work path, which is distinct from the characterized one-shot --named
 // path, returns process status and stdout from the submitted Work outcome.
 func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
+	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	buildContext, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancelBuild()
@@ -68,6 +69,7 @@ func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
 
 // TestBuiltCLIBatchExitCodesAggregateFailureCauses proves batch CLI exit codes aggregate every failure cause.
 func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
+	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	buildContext, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancelBuild()

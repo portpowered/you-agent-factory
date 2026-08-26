@@ -23,6 +23,7 @@ const plainBatchContinuousIdleObservation = 500 * time.Millisecond
 // returns the canonical incomplete-drain diagnostic after a deterministic mock
 // worker completes its dispatch but leaves Work in PROCESSING.
 func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 	workFile := writePlainBatchDrainWork(t)
 	mockWorkersFile := writePlainBatchDrainMockWorkers(t)
@@ -61,6 +62,7 @@ func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
 }
 
 func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 
 	for _, scenario := range []struct {
@@ -128,6 +130,7 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 }
 
 func TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -151,6 +154,7 @@ func TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(t *testing.T)
 }
 
 func TestPlainBatchDrainStopsAfterWorkerActivationCancellation(t *testing.T) {
+	t.Parallel()
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

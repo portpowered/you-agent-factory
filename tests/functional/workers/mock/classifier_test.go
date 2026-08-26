@@ -26,6 +26,7 @@ const (
 // ownership cell can route a script-backed classifier through the canonical
 // process and Factory Event flow without invoking a model provider.
 func TestScriptWorkerClassifierRoutesWithoutModelCalls(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldScriptClassifierFactory(t)
 
 	scriptRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{

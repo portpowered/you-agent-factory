@@ -19,6 +19,7 @@ const characterizedNamedFactory = "@you/goal"
 // compiled executable and serialized mock workers because injected edges cannot
 // cross that OS process boundary.
 func TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot(t *testing.T) {
+	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	buildContext, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
 	defer cancelBuild()
