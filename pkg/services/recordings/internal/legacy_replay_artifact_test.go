@@ -379,7 +379,7 @@ func TestReplayInputLoaderReturnsPortableAndLegacyDomainOutcomes(t *testing.T) {
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			loader := NewReplayInputLoader(testCase.readFile, testCase.loadLegacy, logging.NoopLogger{})
+			loader := NewReplayInputLoader(testCase.readFile, nil, testCase.loadLegacy, nil, logging.NoopLogger{})
 			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
 			if err != nil {
 				t.Fatalf("LoadReplayInput() error = %v", err)
@@ -459,7 +459,7 @@ func TestReplayInputLoaderClassifiesDependencyAndValidationFailures(t *testing.T
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			loader := NewReplayInputLoader(testCase.readFile, testCase.loadLegacy, logging.NoopLogger{})
+			loader := NewReplayInputLoader(testCase.readFile, nil, testCase.loadLegacy, nil, logging.NoopLogger{})
 			result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{Path: "recording.json"})
 			if result.Portable != nil || result.Legacy != nil {
 				t.Fatalf("LoadReplayInput() result = %#v, want zero result", result)
@@ -488,6 +488,8 @@ func TestReplayInputLoaderPreservesDetachedPortableDiagnostics(t *testing.T) {
 		func(string) ([]byte, error) {
 			return []byte(`{"recordingKind":"` + recordings.KindJavaScriptFactorySession + `","schemaVersion":"2","replayCompatibilityVersion":"99"}`), nil
 		},
+		nil,
+		nil,
 		nil,
 		logging.NoopLogger{},
 	)
@@ -540,6 +542,8 @@ func TestReplayInputLoaderReportsIgnoredFutureFields(t *testing.T) {
 
 	loader := NewReplayInputLoader(
 		func(string) ([]byte, error) { return payload, nil },
+		nil,
+		nil,
 		nil,
 		logging.NoopLogger{},
 	)
