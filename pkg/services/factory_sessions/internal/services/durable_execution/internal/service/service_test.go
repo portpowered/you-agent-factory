@@ -254,8 +254,34 @@ func TestRecordPetriTokenMutationsRejectsUnsupportedExecution(t *testing.T) {
 	}
 }
 
+func TestServiceCloseForwardsOptionalExecutionOwner(t *testing.T) {
+	t.Parallel()
+
+	stub := &closeAwareExecutionStub{}
+	service, err := New(stub)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if stub.closeCalls != 1 {
+		t.Fatalf("execution close calls = %d, want 1", stub.closeCalls)
+	}
+}
+
 type executionWithoutMutation struct {
 	durableexecution.Service
+}
+
+type closeAwareExecutionStub struct {
+	executionStub
+	closeCalls int
+}
+
+func (s *closeAwareExecutionStub) Close() error {
+	s.closeCalls++
+	return nil
 }
 
 func TestServiceForwardsOptionalLiveChangeAndWorkerCapabilities(t *testing.T) {

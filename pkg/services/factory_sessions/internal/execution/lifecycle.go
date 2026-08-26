@@ -1,9 +1,13 @@
 package factorysessionexecution
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
+	"sync"
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -31,6 +35,173 @@ func ProjectedLifecycleControlStatus(lifecycleControlStatus string, factoryState
 		return trimmed
 	}
 	return LifecycleStatusFromFactoryRuntimeState(factoryState)
+}
+
+// HasDurableState performs the read-only persistence probe used while opening
+// the current board. It intentionally does not apply interrupted-session
+// resume validation or cache the snapshot: startup only needs to distinguish a
+// genuinely new session from a fresh process with prior durable state before
+// deciding whether missing board history may be treated as an initial open.
+func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil {
+		return false, ErrSessionNotFound
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return false, err
+	}
+
+	s.mu.RLock()
+	persistence := s.persistence
+	s.mu.RUnlock()
+	if persistence == nil {
+		return false, nil
+	}
+
+	snapshot, err := persistence.Load(id)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot could not be read",
+		}
+	}
+
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot is corrupted and cannot be inspected",
+		}
+	}
+	if strings.TrimSpace(persisted.Session.SessionID) != id {
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot has no matching session identity",
+		}
+	}
+	return true, nil
+}
+
+// Close cancels every asynchronous durable session owned by this service and
+// waits for the corresponding execution goroutines to finish their terminal
+// projection and persistence before returning. The owner is closed exactly
+// once; subsequent calls return the same shutdown result.
+func (s *JavaScriptRuntimeService) Close() error {
+	return s.closeWithTimeout(durableExecutionShutdownTimeout)
+}
+
+func (s *JavaScriptRuntimeService) closeWithTimeout(timeout time.Duration) error {
+	if s == nil {
+		return nil
+	}
+	s.closeOnce.Do(func() {
+		s.runLifecycleMu.Lock()
+		s.runClosed = true
+		s.runLifecycleMu.Unlock()
+
+		s.cancelAsyncRuns()
+		done := make(chan struct{})
+		go func() {
+			s.runWaitGroup.Wait()
+			close(done)
+		}()
+
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			s.closeErr = fmt.Errorf(
+				"close durable session execution: %w",
+				ErrDurableExecutionShutdownTimeout,
+			)
+		}
+	})
+	return s.closeErr
+}
+
+func (s *JavaScriptRuntimeService) cancelAsyncRuns() {
+	s.mu.RLock()
+	cancels := make([]context.CancelFunc, 0, len(s.sessions))
+	for _, state := range s.sessions {
+		if state != nil && state.runCancel != nil {
+			cancels = append(cancels, state.runCancel)
+		}
+	}
+	s.mu.RUnlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+// durableRunAdmission keeps session reservation, run-state publication, and
+// wait-group admission atomic with Close marking the owner closed. Without
+// this boundary, Close could finish between the early ensureOpen check and
+// launchAsyncRun, leaving a nonterminal session with no owning goroutine.
+type durableRunAdmission struct {
+	service     *JavaScriptRuntimeService
+	releaseOnce sync.Once
+}
+
+func (s *JavaScriptRuntimeService) beginRunAdmission() (*durableRunAdmission, error) {
+	s.runLifecycleMu.Lock()
+	if s.runClosed {
+		s.runLifecycleMu.Unlock()
+		return nil, ErrDurableExecutionClosed
+	}
+	return &durableRunAdmission{service: s}, nil
+}
+
+func (admission *durableRunAdmission) release() {
+	if admission == nil || admission.service == nil {
+		return
+	}
+	admission.releaseOnce.Do(func() {
+		admission.service.runLifecycleMu.Unlock()
+	})
+}
+
+func (admission *durableRunAdmission) launch(run func()) error {
+	if admission == nil || admission.service == nil {
+		return errors.New("durable execution run admission is required")
+	}
+	return admission.service.launchAsyncRunLocked(run)
+}
+
+// launchAsyncRunLocked admits one run while the caller holds runLifecycleMu.
+// The caller must release that mutex after the session's runCancel has been
+// published so Close can cancel the newly admitted run.
+func (s *JavaScriptRuntimeService) launchAsyncRunLocked(run func()) error {
+	if run == nil {
+		return errors.New("durable execution run is required")
+	}
+	if s.runClosed {
+		return ErrDurableExecutionClosed
+	}
+	s.runWaitGroup.Add(1)
+	go func() {
+		defer s.runWaitGroup.Done()
+		run()
+	}()
+	return nil
+}
+
+func (s *JavaScriptRuntimeService) ensureOpen() error {
+	s.runLifecycleMu.Lock()
+	defer s.runLifecycleMu.Unlock()
+	if s.runClosed {
+		return ErrDurableExecutionClosed
+	}
+	return nil
 }
 
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore

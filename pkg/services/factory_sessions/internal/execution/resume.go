@@ -21,24 +21,16 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	sessionID string,
 	req ResumeSessionRequest,
 ) (AsyncStartResult, error) {
-	if err := ctx.Err(); err != nil {
-		return AsyncStartResult{}, err
-	}
-	id, err := NormalizeSessionID(sessionID)
+	id, state, err := s.prepareResumeSession(ctx, sessionID, req)
 	if err != nil {
 		return AsyncStartResult{}, err
-	}
-	if strings.TrimSpace(req.RequestID) == "" {
-		return AsyncStartResult{}, NewValidationError("requestId", "requestId is required")
 	}
 
-	state, err := s.loadResumeSessionState(id)
+	admission, err := s.beginRunAdmission()
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if err := s.validateResumeSessionState(id, state); err != nil {
-		return AsyncStartResult{}, err
-	}
+	defer admission.release()
 
 	s.mu.Lock()
 	if existing, ok := s.sessions[id]; ok && existing.runCancel != nil {
@@ -90,24 +82,67 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	runDone := resumed.runDone
 	s.mu.Unlock()
 
-	go s.runResumedAsyncSession(
-		runCtx,
-		id,
-		normalized,
-		resolved,
-		sourceContent,
-		policyResolution,
-		state.checkpointSummary,
-		state.runtimeRecords,
-		resumingAt,
-		runDone,
-	)
+	if err := admission.launch(func() {
+		s.runResumedAsyncSession(
+			runCtx,
+			id,
+			normalized,
+			resolved,
+			sourceContent,
+			policyResolution,
+			state.checkpointSummary,
+			state.runtimeRecords,
+			resumingAt,
+			runDone,
+		)
+	}); err != nil {
+		runCancel()
+		s.mu.Lock()
+		if active, ok := s.sessions[id]; ok && active == &resumed {
+			active.runCancel = nil
+			close(runDone)
+			delete(s.sessions, id)
+		}
+		s.mu.Unlock()
+		admission.release()
+		return AsyncStartResult{}, err
+	}
+	admission.release()
 
 	snapshot, err := s.snapshotSessionState(id)
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
 	return s.asyncStartFromState(snapshot), nil
+}
+
+func (s *JavaScriptRuntimeService) prepareResumeSession(
+	ctx context.Context,
+	sessionID string,
+	req ResumeSessionRequest,
+) (string, runtimeSessionState, error) {
+	if err := ctx.Err(); err != nil {
+		return "", runtimeSessionState{}, err
+	}
+	if err := s.ensureOpen(); err != nil {
+		return "", runtimeSessionState{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return "", runtimeSessionState{}, err
+	}
+	if strings.TrimSpace(req.RequestID) == "" {
+		return "", runtimeSessionState{}, NewValidationError("requestId", "requestId is required")
+	}
+
+	state, err := s.loadResumeSessionState(id)
+	if err != nil {
+		return "", runtimeSessionState{}, err
+	}
+	if err := s.validateResumeSessionState(id, state); err != nil {
+		return "", runtimeSessionState{}, err
+	}
+	return id, state, nil
 }
 
 // HasRestorableState checks whether the live execution owner has enough

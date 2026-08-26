@@ -919,3 +919,64 @@ func terminalResponseEvents(events []responseevents.FactoryResponseEvent) []resp
 	}
 	return terminals
 }
+
+func TestJavaScriptRuntimeService_CloseReportsNonCooperativeRunTimeout(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Workflows: scriptedRuntimeWorkflows(func(
+			context.Context,
+			factory.JavaScriptRuntimeRequest,
+			factory.JavaScriptRuntimeHooks,
+		) (factory.JavaScriptRuntimeOutcome, error) {
+			close(entered)
+			<-release
+			return factory.JavaScriptRuntimeOutcome{OK: true}, nil
+		}),
+	})
+	defer func() {
+		close(release)
+		service.runWaitGroup.Wait()
+	}()
+	if _, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-timeout-001",
+		busyLoopWorkflowSource,
+		nil,
+		nil,
+	)); err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the non-cooperative workflow to start")
+	}
+
+	if err := service.closeWithTimeout(time.Millisecond); !errors.Is(err, ErrDurableExecutionShutdownTimeout) {
+		t.Fatalf("closeWithTimeout error = %v, want ErrDurableExecutionShutdownTimeout", err)
+	}
+}
+
+// TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession pins what makes
+// those routing keys distinct in the first place.
+//
+// Child dispatch identities are minted per session and start again at
+// dispatch-1 for each, while the Workers pool they share treats a dispatch ID
+// as single-use for its whole life. Two sessions submitting an unqualified
+// dispatch-1 would leave the second refused outright.
+func TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession(t *testing.T) {
+	first := newChildWorkerExecutor("dur-sess-first", nil, nil, nil, nil, "", 0)
+	second := newChildWorkerExecutor("dur-sess-second", nil, nil, nil, nil, "", 0)
+
+	firstID := first.workerDispatchIdentity("dispatch-1")
+	secondID := second.workerDispatchIdentity("dispatch-1")
+	if firstID == secondID {
+		t.Fatalf("two sessions submitted the same Workers dispatch identity %q", firstID)
+	}
+	if firstID != "dur-sess-first/dispatch-1" {
+		t.Fatalf("Workers dispatch identity = %q, want the session-scoped identity", firstID)
+	}
+}

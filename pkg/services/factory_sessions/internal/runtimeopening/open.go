@@ -250,6 +250,14 @@ func openRuntime(
 	}
 	cleanup := &runtimeOpeningCleanup{}
 	cleanup.OwnModelsScope(context.WithoutCancel(ctx), modelsBind)
+	if closer, ok := durableExecution.Service.(interface{ Close() error }); ok {
+		cleanup.Add(func() error {
+			if err := closer.Close(); err != nil {
+				return fmt.Errorf("close durable Factory Session execution: %w", err)
+			}
+			return nil
+		})
+	}
 	defer func() {
 		if err != nil {
 			err = cleanup.Unwind(err)

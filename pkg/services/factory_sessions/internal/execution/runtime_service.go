@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +55,17 @@ type runtimeSessionState struct {
 type startInflightFlight struct {
 	done chan struct{}
 }
+
+var (
+	// ErrDurableExecutionClosed reports a start raced with application
+	// shutdown after the durable execution owner stopped accepting work.
+	ErrDurableExecutionClosed = errors.New("durable execution service is closed")
+	// ErrDurableExecutionShutdownTimeout keeps a non-cooperative workflow from
+	// making shutdown appear complete while its owner is still running.
+	ErrDurableExecutionShutdownTimeout = errors.New("durable execution shutdown timed out")
+)
+
+const durableExecutionShutdownTimeout = 10 * time.Second
 
 func projectRuntimeSessionState(
 	sessionID string,
@@ -257,6 +267,12 @@ type JavaScriptRuntimeService struct {
 	dispatchDurabilityMu       sync.RWMutex
 	dispatchDurability         recording.CompletedFlushWatermarkReader
 	dispatchStreamGenerationID string
+
+	runLifecycleMu sync.Mutex
+	runWaitGroup   sync.WaitGroup
+	runClosed      bool
+	closeOnce      sync.Once
+	closeErr       error
 }
 
 // NewJavaScriptRuntimeService constructs the durable session service.
@@ -318,64 +334,13 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 	return s.persistence
 }
 
-// HasDurableState performs the read-only persistence probe used while opening
-// the current board. It intentionally does not apply interrupted-session
-// resume validation or cache the snapshot: startup only needs to distinguish a
-// genuinely new session from a fresh process with prior durable state before
-// deciding whether missing board history may be treated as an initial open.
-func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionID string) (bool, error) {
-	if s == nil {
-		return false, ErrSessionNotFound
-	}
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	id, err := NormalizeSessionID(sessionID)
-	if err != nil {
-		return false, err
-	}
-
-	s.mu.RLock()
-	persistence := s.persistence
-	s.mu.RUnlock()
-	if persistence == nil {
-		return false, nil
-	}
-
-	snapshot, err := persistence.Load(id)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil
-		}
-		return false, &ResumeError{
-			Outcome:   ResumeOutcomeCorruptedPersistence,
-			SessionID: id,
-			Message:   "persisted session snapshot could not be read",
-		}
-	}
-
-	var persisted PersistedRuntimeSessionState
-	if err := json.Unmarshal(snapshot, &persisted); err != nil {
-		return false, &ResumeError{
-			Outcome:   ResumeOutcomeCorruptedPersistence,
-			SessionID: id,
-			Message:   "persisted session snapshot is corrupted and cannot be inspected",
-		}
-	}
-	if strings.TrimSpace(persisted.Session.SessionID) != id {
-		return false, &ResumeError{
-			Outcome:   ResumeOutcomeCorruptedPersistence,
-			SessionID: id,
-			Message:   "persisted session snapshot has no matching session identity",
-		}
-	}
-	return true, nil
-}
-
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
+		return AsyncStartResult{}, err
+	}
+	if err := s.ensureOpen(); err != nil {
 		return AsyncStartResult{}, err
 	}
 	normalized, tupleHash, err := normalizeStartTuple(req)
@@ -400,6 +365,11 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	sourceContent := prepared.SourceContent
 	policyResolution := policyResolutionFromPrepared(prepared)
 
+	admission, err := s.beginRunAdmission()
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	defer admission.release()
 	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, true)
 	if err != nil {
 		return AsyncStartResult{}, err
@@ -443,7 +413,16 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.RUnlock()
-	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
+	if err := admission.launch(func() {
+		s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
+	}); err != nil {
+		runCancel()
+		s.mu.Lock()
+		reserved.state.runCancel = nil
+		close(runDone)
+		s.mu.Unlock()
+		return AsyncStartResult{}, err
+	}
 
 	result := s.asyncStartFromState(startState)
 	s.recordAsyncStartReplay(normalized.RequestID, result)
@@ -459,6 +438,9 @@ func (s *JavaScriptRuntimeService) startSync(
 	req StartRequest,
 ) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
+		return SyncStartResult{}, err
+	}
+	if err := s.ensureOpen(); err != nil {
 		return SyncStartResult{}, err
 	}
 	normalized, tupleHash, err := normalizeStartTuple(req)
@@ -484,6 +466,14 @@ func (s *JavaScriptRuntimeService) startSync(
 	policyResolution := policyResolutionFromPrepared(prepared)
 
 	waitTimeout, hasSyncWait := syncWaitTimeout(normalized)
+	var admission *durableRunAdmission
+	if hasSyncWait {
+		admission, err = s.beginRunAdmission()
+		if err != nil {
+			return SyncStartResult{}, err
+		}
+		defer admission.release()
+	}
 	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, !hasSyncWait)
 	if err != nil {
 		return SyncStartResult{}, err
@@ -505,7 +495,7 @@ func (s *JavaScriptRuntimeService) startSync(
 
 	if hasSyncWait {
 		return s.startWaitingSyncSession(
-			ctx, reserved, normalized, resolved, sourceContent, policyResolution, waitTimeout,
+			ctx, reserved, normalized, resolved, sourceContent, policyResolution, waitTimeout, admission,
 		)
 	}
 	return s.completeImmediateSyncStart(

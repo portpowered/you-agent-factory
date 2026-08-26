@@ -424,6 +424,7 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	sourceContent string,
 	policyResolution workflowsource.JavaScriptPolicyResolution,
 	waitTimeout time.Duration,
+	admission *durableRunAdmission,
 ) (SyncStartResult, error) {
 	startedAt := s.now()
 	running := projectRuntimeRunningSessionState(
@@ -446,16 +447,27 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	reserved.state.sourceContent = sourceContent
 	s.mu.Unlock()
 
-	go s.runAsyncSession(
-		runCtx,
-		reserved.state.session.SessionID,
-		normalized,
-		resolved,
-		sourceContent,
-		policyResolution,
-		startedAt,
-		runDone,
-	)
+	if err := admission.launch(func() {
+		s.runAsyncSession(
+			runCtx,
+			reserved.state.session.SessionID,
+			normalized,
+			resolved,
+			sourceContent,
+			policyResolution,
+			startedAt,
+			runDone,
+		)
+	}); err != nil {
+		runCancel()
+		s.mu.Lock()
+		reserved.state.runCancel = nil
+		close(runDone)
+		s.mu.Unlock()
+		admission.release()
+		return SyncStartResult{}, err
+	}
+	admission.release()
 
 	result, err := s.waitSyncCompletion(
 		ctx,

@@ -490,6 +490,7 @@ type javaScriptRuntimeServiceConfig struct {
 	InvocationExecutor    workers.InvocationExecutor
 	Persistence           runtimepersist.Store
 	Clock                 factory.Clock
+	CheckpointSummaries   factory.JavaScriptCheckpointSummaries
 	Workflows             factory.JavaScriptWorkflows
 	LiveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
@@ -516,12 +517,16 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 	if clock == nil {
 		clock = durableFixedClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	}
-	return NewJavaScriptRuntimeService(
-		config.ProjectRoot, config.ChildExecutorMode, config.InvocationExecutor,
-		config.Persistence, clock, testSyncWaitScheduler{}, checkpointfixtures.CheckpointSummariesFixture{
+	checkpointSummaries := config.CheckpointSummaries
+	if checkpointSummaries == nil {
+		checkpointSummaries = checkpointfixtures.CheckpointSummariesFixture{
 			BuildResult:  checkpointfixtures.ResumableCheckpointSummaryResult(),
 			LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
-		},
+		}
+	}
+	return NewJavaScriptRuntimeService(
+		config.ProjectRoot, config.ChildExecutorMode, config.InvocationExecutor,
+		config.Persistence, clock, testSyncWaitScheduler{}, checkpointSummaries,
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
