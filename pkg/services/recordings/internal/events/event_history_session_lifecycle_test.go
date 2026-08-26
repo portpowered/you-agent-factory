@@ -215,6 +215,96 @@ func TestFactoryStateToDurableLifecycleStatus_MapsLiveFactoryStates(t *testing.T
 	}
 }
 
+func TestFactoryEventHistory_SessionLifecycleGuardsAndOptionalPayloads(t *testing.T) {
+	t.Parallel()
+
+	t0 := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionPaused(SessionLifecycleControlInput{}, t0)
+	history.RecordSessionResumed(SessionLifecycleControlInput{}, t0)
+	history.RecordSessionStarted(SessionLifecycleStartInput{}, t0)
+	history.RecordSessionResultUpdated(SessionLifecycleResultInput{SessionID: "session-rich"}, t0)
+	history.RecordSessionCompleted(SessionLifecycleCompleteInput{}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID: "session-rich",
+		Outcome:   interfaces.FactorySessionLifecycleControlOutcome("REJECTED"),
+	}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID: "session-rich",
+		Outcome:   interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		Operation: interfaces.FactorySessionLifecycleControlKind("unsupported"),
+	}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID:      "session-rich",
+		Outcome:        interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		Operation:      interfaces.FactorySessionLifecycleControlPause,
+		PreviousStatus: interfaces.FactorySessionLifecycleStatusRunning,
+		NewStatus:      interfaces.FactorySessionLifecycleStatusRunning,
+	}, t0)
+
+	history.RecordSessionStarted(SessionLifecycleStartInput{
+		SessionID:           "session-rich",
+		OrchestratorKind:    interfaces.OrchestratorKindJavaScript,
+		OrchestratorDialect: "workflow-v1",
+		Source:              "runtime",
+		FactoryID:           "factory-rich",
+		SourceRef:           "workflow/main.js",
+		SourceHash:          "sha256:source",
+		PolicyHash:          "sha256:policy",
+		ArgsDigest:          "sha256:args",
+		Tick:                1,
+	}, t0)
+	// SESSION_STARTED is idempotent for a recording.
+	history.RecordSessionStarted(SessionLifecycleStartInput{SessionID: "session-rich"}, t0.Add(time.Second))
+	history.RecordSessionResultUpdated(SessionLifecycleResultInput{
+		SessionID:        "session-rich",
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		PhaseID:          "phase-review",
+		PhaseName:        "review",
+		Source:           "runtime",
+		Tick:             2,
+		ResultStatus:     interfaces.FactorySessionResultStatusFinal,
+		ResultSummary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "final result",
+		}},
+		ArtifactIDs: []string{"artifact-1"},
+	}, t0.Add(2*time.Second))
+
+	resultStatus := interfaces.FactorySessionResultStatusFailedWithPartial
+	history.RecordSessionCompleted(SessionLifecycleCompleteInput{
+		SessionID:        "session-rich",
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Source:           "runtime",
+		Tick:             3,
+		FinalStatus:      interfaces.FactorySessionLifecycleStatusFailed,
+		ResultStatus:     &resultStatus,
+		ArtifactIDs:      []string{"artifact-2"},
+		DispatchCounts:   &interfaces.FactorySessionChildDispatchCounts{Queued: 1, Running: 2, Completed: 3},
+		FailureDetail: &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureTypeUnknown,
+			Message: "partial failure",
+		},
+	}, t0.Add(-time.Second))
+	// SESSION_COMPLETED is also idempotent.
+	history.RecordSessionCompleted(SessionLifecycleCompleteInput{SessionID: "session-rich"}, t0.Add(4*time.Second))
+
+	events := history.CanonicalEvents()
+	if len(events) != 3 || events[0].Type != interfaces.FactoryEventTypeSessionStarted ||
+		events[1].Type != interfaces.FactoryEventTypeSessionResultUpdated ||
+		events[2].Type != interfaces.FactoryEventTypeSessionCompleted {
+		t.Fatalf("session lifecycle events = %#v, want started/result/completed", events)
+	}
+	var completed interfaces.FactorySessionCompletedEventPayload
+	if err := events[2].DecodePayload(&completed); err != nil {
+		t.Fatalf("decode completed payload: %v", err)
+	}
+	if completed.DurationMillis == nil || *completed.DurationMillis != 0 || completed.DispatchCounts == nil ||
+		completed.DispatchCounts.Queued != 1 || completed.FailureDetail == nil || completed.FailureDetail.Message != "partial failure" {
+		t.Fatalf("completed payload = %#v, want clamped duration and optional fields", completed)
+	}
+}
+
 func assertSessionLifecycleEventType(
 	t *testing.T,
 	event factoryapi.FactoryEvent,
