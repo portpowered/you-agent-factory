@@ -193,6 +193,15 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	grpc_protobuf_source="pinned"
 fi
 
+grpc_executable_suffix=""
+if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	# protoc launches protoc-gen-grpc itself on Windows, so the plugin path
+	# passed to CMake must name the PE executable explicitly. MSYS2's shell
+	# can resolve an omitted .exe suffix, but protoc's Windows process launch
+	# cannot.
+	grpc_executable_suffix=".exe"
+fi
+
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_git=""
 	if [[ "$TARGET_ID" == "windows-amd64" && -n "${WINDOWS_GIT_DIR:-}" ]]; then
@@ -203,6 +212,7 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_cmake_make_program=""
 	plan_windows_target=""
 	plan_grpc_protobuf_source=""
+	plan_grpc_executable_suffix=""
 	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
@@ -211,9 +221,10 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 		plan_cmake_make_program=" cmake_make_program=mingw32-make"
 		plan_windows_target=" windows_minimum_target=$windows_minimum_target"
 		plan_grpc_protobuf_source=" grpc_protobuf_source=$grpc_protobuf_source"
+		plan_grpc_executable_suffix=" grpc_executable_suffix=$grpc_executable_suffix"
 	fi
 	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_go_dynamic_loader$plan_grpc_dependency_mode"
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_grpc_executable_suffix$plan_go_dynamic_loader$plan_grpc_dependency_mode"
 	exit 0
 fi
 
@@ -288,8 +299,8 @@ grpc_added_cmake_args=""
 build_grpc_dependencies() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	local install_path="${grpc_path}/installed_packages"
-	local protoc_path="${install_path}/bin/protoc"
-	local plugin_path="${install_path}/bin/grpc_cpp_plugin"
+	local protoc_path="${install_path}/bin/protoc${grpc_executable_suffix}"
+	local plugin_path="${install_path}/bin/grpc_cpp_plugin${grpc_executable_suffix}"
 	local grpc_cmake_args="${grpc_dependency_cmake_args_text}"
 	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -DProtobuf_INCLUDE_DIRS=${install_path}/include -DProtobuf_PROTOC_EXECUTABLE=${protoc_path} -D_PROTOBUF_PROTOC=${protoc_path} -D_GRPC_CPP_PLUGIN_EXECUTABLE=${plugin_path} -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
 
@@ -317,7 +328,7 @@ build_grpc_dependencies() {
 	# gRPC installs the compiler as protoc. Keep the build in the upstream path,
 	# but make the verified executable available under the name it requests.
 	if [[ ! -e "${install_path}/bin/proto" ]]; then
-		ln -s protoc "${install_path}/bin/proto"
+		ln -s "protoc${grpc_executable_suffix}" "${install_path}/bin/proto"
 	fi
 }
 
@@ -352,7 +363,7 @@ run_direct_grpc_server_make() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	env \
 		"_PROTOBUF_PROTOC=${grpc_path}/installed_packages/bin/proto" \
-		"_GRPC_CPP_PLUGIN_EXECUTABLE=${grpc_path}/installed_packages/bin/grpc_cpp_plugin" \
+		"_GRPC_CPP_PLUGIN_EXECUTABLE=${grpc_path}/installed_packages/bin/grpc_cpp_plugin${grpc_executable_suffix}" \
 		"PATH=${grpc_path}/installed_packages/bin:${PATH}" \
 		CMAKE_ARGS="$cmake_args_text_arg" \
 		"$make_command" -C "$backend_path" "$@"
@@ -382,7 +393,7 @@ fs.writeFileSync(path, source.replace(needle, replacement));
 
 generate_go_protocol() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
-	local protoc_path="${grpc_path}/installed_packages/bin/protoc"
+	local protoc_path="${grpc_path}/installed_packages/bin/protoc${grpc_executable_suffix}"
 	local protocol_output="${LOCALAI_ROOT}/pkg/grpc/proto"
 	local go_bin
 

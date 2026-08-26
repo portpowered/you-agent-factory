@@ -278,6 +278,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		cmake_make_program: "mingw32-make",
 		windows_minimum_target: "0x0602",
 		grpc_protobuf_source: "pinned",
+		grpc_executable_suffix: ".exe",
 		go_dynamic_loader: "none",
 		grpc_dependency_mode: "standalone",
 	});
