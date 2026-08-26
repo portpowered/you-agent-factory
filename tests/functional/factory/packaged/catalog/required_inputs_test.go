@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -44,13 +47,19 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 		t.Fatal("packaged Factory matrix has no required-input cases")
 	}
 
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: sharedRequiredInputRunner,
+	})
+	support.CleanupProcess(t, process)
+
 	for _, testcase := range cases {
 		testcase := testcase
 		t.Run(testcase.factoryName, func(t *testing.T) {
-			t.Parallel()
 			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+			sharedRequiredInputRunner.setDelegate(runner)
 			run := runPackagedFactoryMissingRequiredInputInvocation(
 				t,
+				process,
 				runner,
 				testcase.factoryName,
 			)
@@ -64,6 +73,39 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 		})
 	}
 }
+
+// swappingProviderCommandRunner is an immutable process edge whose per-row
+// provider-command recorder is swapped between sequential invocations on the
+// shared required-input process. Each row still observes its own zero-call
+// assertion without rebuilding the root graph.
+type swappingProviderCommandRunner struct {
+	mu       sync.Mutex
+	delegate platformprocess.CommandRunner
+}
+
+func newSwappingProviderCommandRunner() *swappingProviderCommandRunner {
+	return &swappingProviderCommandRunner{}
+}
+
+func (r *swappingProviderCommandRunner) setDelegate(delegate platformprocess.CommandRunner) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.delegate = delegate
+}
+
+func (r *swappingProviderCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	delegate := r.delegate
+	r.mu.Unlock()
+	if delegate == nil {
+		return platformprocess.CommandResult{}, errors.New("no provider command runner installed for this invocation")
+	}
+	return delegate.Run(ctx, req)
+}
+
+// sharedRequiredInputRunner is the immutable swapping edge shared by every
+// sequential missing-required-input invocation in this test.
+var sharedRequiredInputRunner = newSwappingProviderCommandRunner()
 
 func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredInputCase, error) {
 	inventory, err := packagedfactorycatalog.Discover(
@@ -99,6 +141,7 @@ func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredI
 
 func runPackagedFactoryMissingRequiredInputInvocation(
 	t *testing.T,
+	process support.Process,
 	runner *support.RecordingCommandRunner,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
@@ -107,7 +150,7 @@ func runPackagedFactoryMissingRequiredInputInvocation(
 	if packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName) {
 		return runPackagedFactoryMissingRequiredInputHTTPInvocation(t, runner, factoryName)
 	}
-	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, runner, factoryName)
+	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, process, factoryName)
 }
 
 func packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName string) bool {
@@ -116,13 +159,14 @@ func packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName string) b
 
 func runPackagedFactoryMissingRequiredInputCLIInvocation(
 	t *testing.T,
-	runner *support.RecordingCommandRunner,
+	process support.Process,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
 	t.Helper()
 
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factoryName)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), factoryName)
 
 	args := []string{
 		"you", "--json", "run",
@@ -130,16 +174,14 @@ func runPackagedFactoryMissingRequiredInputCLIInvocation(
 		"--no-record",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = t.TempDir()
 	inputs.Input.Stdin = strings.NewReader("")
 	stdinIsTTY := true
 	inputs.Input.StdinIsTTY = &stdinIsTTY
 
 	run := packagedFactoryMissingRequiredInputRun{
-		execErr: support.BuildProcess(t, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}).Execute(inputs.Input),
+		execErr: process.Execute(inputs.Input),
 	}
 	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
 		if decodeErr := json.Unmarshal([]byte(stdout), &run.response); decodeErr != nil {

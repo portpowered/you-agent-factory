@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -185,6 +186,58 @@ func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
 		if strings.TrimSpace(factory.Description.Value) == "" || len(factory.Examples) == 0 {
 			t.Fatalf("GET /packaged-factories returned undiscoverable factory metadata: %#v", factory)
 		}
+	}
+}
+
+// TestPackagedFactoryCatalogCLIAPIParity proves directly that the public CLI
+// and API expose the same complete packaged name set: in a no-override
+// environment, every CLI factory-list entry with a @you/ prefix and an
+// unmaterialized "-" directory exactly equals the GET /packaged-factories
+// name set.
+func TestPackagedFactoryCatalogCLIAPIParity(t *testing.T) {
+	apiCatalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
+	if err != nil {
+		t.Fatalf("runtime packaged Factory catalog discovery: %v", err)
+	}
+	apiNames := make([]string, len(apiCatalog.Factories))
+	for index, factory := range apiCatalog.Factories {
+		apiNames[index] = factory.Name
+	}
+	slices.Sort(apiNames)
+
+	home := t.TempDir()
+	workingDirectory := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
+	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.WorkingDirectory = workingDirectory
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	var entries []listEntry
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &entries); err != nil {
+		t.Fatalf("decode factory list: %v\n%s", err, inputs.Stdout())
+	}
+	var cliNames []string
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name, "@you/") || entry.FactoryDirectory != "-" {
+			continue
+		}
+		cliNames = append(cliNames, entry.Name)
+	}
+
+	if missing, extra := nameSetDiff(apiNames, cliNames); len(missing) > 0 || len(extra) > 0 {
+		t.Fatalf(
+			"CLI/API packaged-name parity drift: missing from CLI %v, extra in CLI %v; api=%v cli=%v",
+			missing,
+			extra,
+			apiNames,
+			cliNames,
+		)
 	}
 }
 
@@ -431,14 +484,34 @@ func discoveredPackagedFactoryNamesViaHTTP(t *testing.T) ([]string, error) {
 	return names, nil
 }
 
+// sharedPackagedFactoryCatalog caches one local service-mode HTTP catalog
+// response for all compatible API-owned catalog observations in this package.
+// The server, root process, and temporary directories live entirely inside a
+// single fetch; only the immutable decoded response is reused across tests.
+var (
+	sharedPackagedFactoryCatalogOnce sync.Once
+	sharedPackagedFactoryCatalog     factoryapi.PackagedFactoryCatalogResponse
+	sharedPackagedFactoryCatalogErr  error
+)
+
 func discoveredPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactoryCatalogResponse, error) {
+	t.Helper()
+
+	sharedPackagedFactoryCatalogOnce.Do(func() {
+		sharedPackagedFactoryCatalog, sharedPackagedFactoryCatalogErr = fetchPackagedFactoryCatalogViaHTTP(t)
+	})
+	if sharedPackagedFactoryCatalogErr != nil {
+		return factoryapi.PackagedFactoryCatalogResponse{}, sharedPackagedFactoryCatalogErr
+	}
+	return sharedPackagedFactoryCatalog, nil
+}
+
+func fetchPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactoryCatalogResponse, error) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, packagedFactoryCatalogTestConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
+		FactoryDir: dir,
 	})
 
 	response, err := http.Get(server.URL() + "/packaged-factories")
@@ -463,6 +536,7 @@ func discoveredPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedF
 			return factoryapi.PackagedFactoryCatalogResponse{}, fmt.Errorf("catalog entry missing name: %#v", factory)
 		}
 	}
+	server.Stop(t)
 	return catalog, nil
 }
 
