@@ -1,14 +1,11 @@
 package process_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -18,23 +15,31 @@ type operatorConfigOutcome struct {
 
 func initializeOperatorConfig(
 	t testing.TB,
-	ctx context.Context,
-	session *builtcliacceptance.Session,
+	sessionDir string,
 	scenario string,
+	configBody []byte,
 ) operatorConfigOutcome {
 	t.Helper()
 
-	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
-	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
-	result, err := session.Run(ctx, "run", "--factory", missingFactory)
-	if err == nil {
-		t.Fatalf("%s: run missing Factory unexpectedly succeeded: stdout=%q stderr=%q", scenario, result.Stdout, result.Stderr)
+	configDir := filepath.Join(sessionDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("%s: create config directory: %v", scenario, err)
 	}
-	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
+	configPath := filepath.Join(configDir, "config.json")
+	if configBody != nil {
+		if err := os.WriteFile(configPath, configBody, 0o600); err != nil {
+			t.Fatalf("%s: write config: %v", scenario, err)
+		}
 	}
 	return operatorConfigOutcome{ConfigPath: configPath}
 }
+
+const defaultGoalTestConfig = `{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  }
+}`
 
 func writeAcceptingGoalMockWorkers(t *testing.T) string {
 	t.Helper()

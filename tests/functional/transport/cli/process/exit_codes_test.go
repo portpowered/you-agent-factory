@@ -2,7 +2,6 @@ package process_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -76,9 +75,7 @@ func TestBuiltCLIInterruptedResponseStreamExitCode(t *testing.T) {
 	}
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
-	defer cancel()
-	binaryPath := buildYouBinary(t, ctx, testutil.MustRepoRoot(t))
+	binaryPath := packageArtifact(t).Path
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	providerPIDFile := filepath.Join(t.TempDir(), "provider.pid")
@@ -156,28 +153,6 @@ func TestBuiltCLIInterruptedResponseStreamExitCode(t *testing.T) {
 	if !waitForContextCancellationProcessExit(providerPID, 15*time.Second) {
 		t.Fatalf("provider/external worker process %d still running after response-stream cancellation", providerPID)
 	}
-}
-
-func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
-	t.Helper()
-	tempDir, err := os.MkdirTemp("", "you-cli-functional-process-")
-	if err != nil {
-		t.Fatalf("create temporary CLI build directory: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(tempDir, binaryName)
-	command := exec.CommandContext(ctx, "go", "build", "-o", binaryPath, "./cmd/factory")
-	command.Dir = repoRoot
-	buildLog, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, buildLog)
-	}
-	return binaryPath
 }
 
 // TestCLISuccessExitCode proves a successful one-shot worker run reaches the

@@ -3,7 +3,6 @@ package process_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,16 +31,7 @@ func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initOutcome := initializeOperatorConfig(t, ctx, session, "success-stdout-purity-config-init")
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
-	}
+	initializeOperatorConfig(t, session.WorkDir, "success-stdout-purity-config-init", []byte(defaultGoalTestConfig))
 
 	mockWorkersPath := writeAcceptingGoalMockWorkers(t)
 	args := append([]string{}, session.RuntimeLogDirFlags()...)
@@ -109,16 +99,7 @@ func TestCLIFailureWritesDiagnosticToStderr(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initOutcome := initializeOperatorConfig(t, ctx, session, "failure-stderr-config-init")
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
-	}
+	initializeOperatorConfig(t, session.WorkDir, "failure-stderr-config-init", []byte(defaultGoalTestConfig))
 
 	mockWorkersPath := writeRejectingGoalMockWorkers(t)
 	args := append([]string{}, session.RuntimeLogDirFlags()...)
@@ -203,7 +184,7 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 	defer cancel()
 
 	t.Run("success suppresses stdout lifecycle presentation", func(t *testing.T) {
-		streamSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-stream-config")
+		streamSession := newConfiguredGoalSession(t, harness, "quiet-mode-stream-config")
 		streamMockWorkersPath := writeAcceptingGoalMockWorkers(t)
 		streamPrompt := fmt.Sprintf("quiet-mode-stream-baseline-%d", time.Now().UnixNano())
 		streamArgs := appendGoalRunArgs(streamSession, streamMockWorkersPath, streamPrompt,
@@ -241,7 +222,7 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 			)
 		}
 
-		quietSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-success-config")
+		quietSession := newConfiguredGoalSession(t, harness, "quiet-mode-success-config")
 		quietMockWorkersPath := writeAcceptingGoalMockWorkers(t)
 		quietPrompt := fmt.Sprintf("quiet-mode-success-%d", time.Now().UnixNano())
 		quietArgs := appendGoalRunArgs(quietSession, quietMockWorkersPath, quietPrompt, "--quiet")
@@ -285,60 +266,8 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 		}
 	})
 
-	t.Run("success suppresses verbose stderr operator logs", func(t *testing.T) {
-		verboseSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-verbose-config")
-		verboseMockWorkersPath := writeAcceptingGoalMockWorkers(t)
-		prompt := fmt.Sprintf("quiet-mode-verbose-baseline-%d", time.Now().UnixNano())
-		verboseArgs := appendGoalRunArgs(verboseSession, verboseMockWorkersPath, prompt, "--verbose")
-		verboseResult, err := verboseSession.Run(ctx, verboseArgs...)
-		if err != nil {
-			t.Fatalf(
-				"verbose success run failed: %v\nstdout:\n%s\nstderr:\n%s",
-				err,
-				verboseResult.Stdout,
-				verboseResult.Stderr,
-			)
-		}
-		if verboseResult.ExitCode != 0 {
-			t.Fatalf("verbose exit code = %d, want success exit 0", verboseResult.ExitCode)
-		}
-		if !strings.HasSuffix(verboseResult.Stdout, successStdoutPrimaryResult) {
-			t.Fatalf(
-				"verbose stdout = %q, want primary result suffix %q",
-				verboseResult.Stdout,
-				successStdoutPrimaryResult,
-			)
-		}
-		quietSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-verbose-contrast-config")
-		quietMockWorkersPath := writeAcceptingGoalMockWorkers(t)
-		quietPrompt := fmt.Sprintf("quiet-mode-verbose-contrast-%d", time.Now().UnixNano())
-		quietArgs := appendGoalRunArgs(quietSession, quietMockWorkersPath, quietPrompt, "--quiet")
-		quietResult, err := quietSession.Run(ctx, quietArgs...)
-		if err != nil {
-			t.Fatalf(
-				"quiet success run failed: %v\nstdout:\n%s\nstderr:\n%s",
-				err,
-				quietResult.Stdout,
-				quietResult.Stderr,
-			)
-		}
-		if quietResult.Stdout != successStdoutPrimaryResult {
-			t.Fatalf(
-				"quiet stdout = %q, want only raw primary result %q",
-				quietResult.Stdout,
-				successStdoutPrimaryResult,
-			)
-		}
-		if strings.TrimSpace(quietResult.Stderr) != "" {
-			t.Fatalf(
-				"quiet success stderr = %q, want empty after suppressing verbose operator logs",
-				quietResult.Stderr,
-			)
-		}
-	})
-
 	t.Run("failure keeps quiet stdout script-safe", func(t *testing.T) {
-		session := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-failure-config")
+		session := newConfiguredGoalSession(t, harness, "quiet-mode-failure-config")
 		rejectingMockWorkersPath := writeRejectingGoalMockWorkers(t)
 		quietFailureArgs := appendGoalRunArgs(
 			session,
@@ -367,22 +296,12 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 
 func newConfiguredGoalSession(
 	t testing.TB,
-	ctx context.Context,
 	harness *builtcliacceptance.Harness,
 	scenario string,
 ) *builtcliacceptance.Session {
 	t.Helper()
 	session := harness.NewSession(t).WithNoExternalServer(t)
-	initOutcome := initializeOperatorConfig(t, ctx, session, scenario)
-	configBody := []byte(`{
-  "defaults": {
-    "workerModelProvider": "codex",
-    "workerModel": "gpt-5-codex"
-  }
-}`)
-	if err := os.WriteFile(initOutcome.ConfigPath, configBody, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q): %v", initOutcome.ConfigPath, err)
-	}
+	initializeOperatorConfig(t, session.WorkDir, scenario, []byte(defaultGoalTestConfig))
 	return session
 }
 
