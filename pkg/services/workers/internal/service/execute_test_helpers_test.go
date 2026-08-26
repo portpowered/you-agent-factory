@@ -115,8 +115,9 @@ func (*recordingTemporaryFile) Close() error {
 }
 
 type stubRunner struct {
-	content string
-	execute func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
+	content        string
+	proposedOutput *workers.ProposedOutput
+	execute        func(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error)
 }
 
 func (runner *stubRunner) Execute(
@@ -126,7 +127,7 @@ func (runner *stubRunner) Execute(
 	if runner.execute != nil {
 		return runner.execute(ctx, request)
 	}
-	return workers.RunnerExecutionResult{Content: runner.content}, nil
+	return workers.RunnerExecutionResult{Content: runner.content, ProposedOutput: runner.proposedOutput}, nil
 }
 
 type staticRunners struct {

@@ -41,11 +41,11 @@
   "name": "tts",
   "resources": [
     {
-      "backend": "LLAMACPP",
+      "backend": "LOCALAI-VIBEVOICE",
       "capacity": 1,
       "loadPolicy": "ON_DEMAND",
-      "model": "OMNIVOICE_Q4_K_M",
-      "name": "omnivoice-cache",
+      "model": "tts",
+      "name": "tts-cache",
       "type": "MODEL"
     }
   ],
@@ -73,9 +73,13 @@
   ],
   "workers": [
     {
+      "args": [
+        "--grpc-endpoint",
+        "http://127.0.0.1:50051"
+      ],
       "body": "You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content.",
-      "command": "omnivoice-llamacpp",
-      "model": "OMNIVOICE_Q4_K_M",
+      "command": "vibevoice-cpp",
+      "model": "tts",
       "modelLocality": "LOCAL",
       "modelProvider": "CODEX",
       "name": "tts-executor",
@@ -104,7 +108,7 @@
       "resources": [
         {
           "capacity": 1,
-          "name": "omnivoice-cache"
+          "name": "tts-cache"
         }
       ],
       "type": "INFERENCE_WORKER"

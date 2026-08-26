@@ -570,6 +570,7 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 			Outcome:                     payload.Outcome,
 			Cancellation:                payload.Cancellation.Clone(),
 			Output:                      stringValue(payload.Output),
+			OutputContent:               replayOutputContentFromRecordedWork(recordedOutputWork),
 			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
 			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),
 			Error:                       stringValue(payload.Error),
@@ -583,6 +584,13 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 		},
 		diagnostics: diagnostics,
 	}, nil
+}
+
+func replayOutputContentFromRecordedWork(items []workdomain.FactoryWorkItem) []workdomain.WorkContentPart {
+	if len(items) == 0 || len(items[0].Content) == 0 {
+		return nil
+	}
+	return workdomain.CloneWorkContentParts(items[0].Content)
 }
 
 func workRequestEventWorks(items *[]work.WorkRequestEventWork) []work.WorkRequestEventWork {

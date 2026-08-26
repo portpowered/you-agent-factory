@@ -464,8 +464,12 @@ func assertRunnerExecutorSuccess(t *testing.T) {
 		Provider: &workerexecution.ProviderDiagnostic{Provider: "codex", ResponseMetadata: map[string]string{"source": "runner"}},
 	}
 	runner := &runnerExecutorTestDouble{result: workerexecution.RunnerExecutionResult{
-		Content:      "runner output",
-		Outcome:      workerexecution.OutcomeAccepted,
+		Content: "runner output",
+		Outcome: workerexecution.OutcomeAccepted,
+		ProposedOutput: &workerexecution.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeAudio,
+			URL:  "data:audio/wav;base64,YXVkaW8=",
+		}}},
 		Continuation: providerContinuation,
 		Diagnostics:  diagnostics,
 	}}
@@ -485,6 +489,13 @@ func assertRunnerExecutorSuccess(t *testing.T) {
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["source"] != "runner" {
 		t.Fatalf("runner diagnostics = %#v, want preserved safe metadata", result.Diagnostics)
+	}
+	if result.Response.ProposedOutput == nil || len(result.Response.ProposedOutput.Primary) != 1 ||
+		result.Response.ProposedOutput.Primary[0].URL != "data:audio/wav;base64,YXVkaW8=" {
+		t.Fatalf("runner proposed output = %#v, want preserved audio proposal", result.Response.ProposedOutput)
+	}
+	if result.Response.ProposedOutput == runner.result.ProposedOutput {
+		t.Fatal("runner executor reused the runner's proposed output pointer")
 	}
 	if runner.request.UserMessage != "hello" {
 		t.Fatalf("runner request = %#v, want forwarded request", runner.request)

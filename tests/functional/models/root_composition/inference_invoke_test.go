@@ -25,45 +25,37 @@ import (
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
-// runModelsInferenceInvokeActivatesThroughRootBuildProcess proves a process
-// constructed only through root.BuildProcess executes public Models invoke and
-// returns observable inference output while host, runtime, and asset external
-// effects are replaced exclusively through published edges.Edges fields.
+// TestModelsInferenceInvokeActivatesThroughRootBuildProcess proves a process
+// constructed only through root.BuildProcess executes the current built-in TTS
+// model and returns observable inference output while host, runtime, and asset
+// external effects are replaced exclusively through published edges.Edges
+// fields.
 func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
 	audio := []byte("RIFF....WAVE")
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/health":
+		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
-		case "/invoke":
-			var payload struct {
-				OutputFile string `json:"outputFile"`
-			}
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-				http.Error(writer, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if err := os.WriteFile(payload.OutputFile, audio, 0o644); err != nil {
-				http.Error(writer, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			writer.WriteHeader(http.StatusOK)
-		default:
-			http.NotFound(writer, request)
+			return
 		}
+		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
 
-	cacheDirectory := t.TempDir()
-	writeReadyOmniVoiceInvokeCache(t, cacheDirectory)
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
 
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	hostHTTP := &recordingModelHTTPClient{delegate: modelServer.Client()}
-	assetFiles := functionalModelAssetFileSystem{home: cacheDirectory}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
 
-	dir := support.ScaffoldFactory(t, localModelInferenceInvokeFactoryConfig(modelServer.URL))
-	environment := functionalHomeEnvironment(cacheDirectory)
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	environment := functionalHomeEnvironment(home)
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -78,30 +70,41 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 		ModelAssetOpenFile:             assetFiles.Open,
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostHTTPClient:            hostHTTP,
-		ModelRuntimeHTTPClient:         modelServer.Client(),
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			return pinnedTTSBackendSelection(), nil
+		},
+		ModelInvocationBackend: func(
+			context.Context,
+			models.InvokeModelRequest,
+		) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			return []models.InferenceContent{{
+				Name: "audio", Modality: models.ModalityAudio,
+				ContentType: "audio/wav", MediaType: "audio/wav", Content: string(audio),
+			}}, nil, nil
+		},
+		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
+	support.CleanupProcess(t, process)
 
-	assertRootModelsValidationOnly(t, process, environment, dir, rejectingNetwork, hostLauncher, hostHTTP)
-	assertRootModelsAudioOutput(t, process, environment, dir, audio)
-}
-
-func assertRootModelsValidationOnly(
-	t testing.TB,
-	process support.Process,
-	environment []string,
-	directory string,
-	rejectingNetwork *rejectingModelAssetHTTP,
-	hostLauncher *recordingModelHostLauncher,
-	hostHTTP *recordingModelHTTPClient,
-) {
-	t.Helper()
 	var output bytes.Buffer
-	if err := executeRootModelsCLI(t, process, directory, environment, &output, []string{
-		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+	jsonInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts",
 		"--operation", "TTS", "--text", "hello from root composition invoke",
-	}); err != nil {
+	})
+	jsonInvoke.Input.Env = environment
+	jsonInvoke.Input.WorkingDirectory = dir
+	jsonInvoke.Input.Stdout = &output
+	jsonInvoke.Input.Stderr = io.Discard
+	if err := process.Execute(jsonInvoke.Input); err != nil {
 		t.Fatalf("Process.Execute(models invoke --json) error = %v", err)
 	}
+
 	var response struct {
 		ModelName         string `json:"modelName"`
 		Operation         string `json:"operation"`
@@ -112,31 +115,36 @@ func assertRootModelsValidationOnly(
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
 	}
-	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Operation != "TTS" ||
+	if response.ModelName != "tts" || response.Operation != "TTS" ||
 		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
-		t.Fatalf("models invoke response = %#v, want validation-only metadata", response)
+		t.Fatalf("models invoke response = %#v, want validation-only tts/TTS metadata", response)
 	}
-	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || hostHTTP.Calls() != 0 {
-		t.Fatalf("validation-only effects = assets %d, host starts %d, host HTTP %d; want 0/0/0",
-			rejectingNetwork.Calls(), hostLauncher.Calls(), hostHTTP.Calls())
+	if rejectingNetwork.Calls() != 0 {
+		t.Fatalf("asset network calls = %d during invoke, want 0 via edges", rejectingNetwork.Calls())
 	}
+	assertRootTTSOutputFile(t, process, dir, environment, audio)
 }
 
-func assertRootModelsAudioOutput(
-	t testing.TB,
+func assertRootTTSOutputFile(
+	t *testing.T,
 	process support.Process,
-	environment []string,
 	directory string,
+	environment []string,
 	wantAudio []byte,
 ) {
 	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	var output bytes.Buffer
-	if err := executeRootModelsCLI(t, process, directory, environment, &output, []string{
-		"you", "models", "invoke", "OMNIVOICE_Q4_K_M",
+	audioInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "tts",
 		"--operation", "TTS", "--text", "write audio from root composition invoke",
 		"--output", audioPath,
-	}); err != nil {
+	})
+	audioInvoke.Input.Env = environment
+	audioInvoke.Input.WorkingDirectory = directory
+	audioInvoke.Input.Stdout = &output
+	audioInvoke.Input.Stderr = io.Discard
+	if err := process.Execute(audioInvoke.Input); err != nil {
 		t.Fatalf("Process.Execute(models invoke --output) error = %v", err)
 	}
 	written, err := os.ReadFile(audioPath)
@@ -146,6 +154,96 @@ func assertRootModelsAudioOutput(
 	if !bytes.Equal(written, wantAudio) {
 		t.Fatalf("models invoke audio = %q, want %q", written, wantAudio)
 	}
+}
+
+// TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration proves the built-in
+// tts definition reaches the joined kernel through root.BuildProcess and
+// Process.Execute without a redundant Factory resource or worker declaration.
+func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			writer.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	backendResolverCalls := 0
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			backendResolverCalls++
+			return pinnedTTSBackendSelection(), nil
+		},
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:    modelServer.Client(),
+		ModelRuntimeHTTPClient: modelServer.Client(),
+	})
+	support.CleanupProcess(t, process)
+
+	var output bytes.Buffer
+	jsonInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts", "--operation", "TTS", "--text", "joined cache input",
+	})
+	jsonInvoke.Input.Env = functionalHomeEnvironment(home)
+	jsonInvoke.Input.WorkingDirectory = dir
+	jsonInvoke.Input.Stdout = &output
+	jsonInvoke.Input.Stderr = io.Discard
+	if err := process.Execute(jsonInvoke.Input); err != nil {
+		t.Fatalf("Process.Execute(joined built-in invoke) error = %v", err)
+	}
+
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode joined models invoke output: %v\n%s", err, output.String())
+	}
+	if response.ModelName != "tts" || response.Operation != "TTS" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("joined models invoke response = %#v, want validation-only tts/TTS metadata", response)
+	}
+	if rejectingNetwork.Calls() != 0 {
+		t.Fatalf("joined asset network calls = %d, want 0 from content-addressed cache", rejectingNetwork.Calls())
+	}
+	if backendResolverCalls != 0 {
+		t.Fatalf("joined backend resolver calls = %d, want no inference attempt in validation-only mode", backendResolverCalls)
+	}
+
 }
 
 func builtInOnlyModelFactoryConfig() map[string]any {
@@ -372,12 +470,6 @@ func assertEffectiveBuiltinReadinessFailures(t *testing.T, serverURL string) {
 			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure.Body)
 		}
 	}
-	unsupported := postNamedBuiltinFailure(t, serverURL, models.BuiltInModelNameTTS, models.OperationASR)
-	if unsupported.StatusCode != http.StatusBadRequest ||
-		unsupported.Body.Family != factoryapi.ErrorFamilyBadRequest ||
-		unsupported.Body.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") {
-		t.Fatalf("POST /models/%s/invocations unsupported operation = status %d %#v, want bad-request taxonomy", models.BuiltInModelNameTTS, unsupported.StatusCode, unsupported.Body)
-	}
 }
 
 type namedBuiltinFailure struct {
@@ -418,6 +510,8 @@ func assertUnknownBuiltinFailure(t *testing.T, serverURL string) {
 }
 
 func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
+	t.Parallel()
+
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -504,7 +598,7 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	}
 	assertMappedGenericCLIResponse(t, &output)
 	if hostLauncher.Calls() != 1 {
-		t.Fatalf("mapped output response/effects = %q, starts %d; want one start for mapped execution", output.String(), hostLauncher.Calls())
+		t.Fatalf("mapped output response/effects = %q, starts %d; want one start for the mapped invocation", output.String(), hostLauncher.Calls())
 	}
 	closeRootProcess(t, process, "close multi-output root process")
 }
@@ -519,11 +613,11 @@ func assertGenericCLIValidationOnly(t testing.TB, output *bytes.Buffer) {
 		InferenceExecuted bool   `json:"inferenceExecuted"`
 	}
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
-		t.Fatalf("decode multi-output JSON = %v\n%s", err, output.String())
+		t.Fatalf("decode multi-output validation JSON = %v\n%s", err, output.String())
 	}
 	if response.ModelName != "llm" || response.Operation != "OMNI" ||
 		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
-		t.Fatalf("multi-output JSON = %#v, want validation-only metadata", response)
+		t.Fatalf("multi-output validation JSON = %#v, want validation-only metadata", response)
 	}
 }
 
@@ -626,6 +720,8 @@ func multiOutputModelFactoryConfig(endpoint string) map[string]any {
 }
 
 func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		http.NotFound(writer, request)
 	}))
@@ -668,10 +764,9 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
 
-	outputPath := filepath.Join(t.TempDir(), "audio.out")
+	outputPath := filepath.Join(t.TempDir(), "must-fail.wav")
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "must fail preflight",
-		"--output-map", "audio=" + outputPath,
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "must fail preflight", "--output", outputPath,
 	})
 	inputs.Input.Env = functionalHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = dir
@@ -688,41 +783,6 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 	}
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("pinned preflight asset network calls = %d, want 0", rejectingNetwork.Calls())
-	}
-}
-
-func localModelInferenceInvokeFactoryConfig(endpoint string) map[string]any {
-	return localModelReadinessAssetsHostFactoryConfig(endpoint)
-}
-
-func writeReadyOmniVoiceInvokeCache(t *testing.T, home string) {
-	t.Helper()
-	modelRoot := filepath.Join(home, ".agent-factory", "models", "OMNIVOICE_Q4_K_M")
-	revisionDir := filepath.Join(modelRoot, "rev-test")
-	if err := os.MkdirAll(revisionDir, 0o755); err != nil {
-		t.Fatalf("create model cache fixture: %v", err)
-	}
-	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
-	body := []byte("fixture")
-	digest := fmt.Sprintf("%x", sha256.Sum256(body))
-	for _, name := range files {
-		if err := os.WriteFile(filepath.Join(revisionDir, name), body, 0o644); err != nil {
-			t.Fatalf("write model cache fixture %s: %v", name, err)
-		}
-	}
-	metadata := map[string]any{
-		"modelName": "OMNIVOICE_Q4_K_M", "revision": "rev-test",
-		"files": []map[string]any{
-			{"path": files[0], "bytes": len(body), "sha256": digest},
-			{"path": files[1], "bytes": len(body), "sha256": digest},
-		},
-	}
-	data, err := json.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal model cache metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(modelRoot, ".managed-cache.json"), data, 0o644); err != nil {
-		t.Fatalf("write model cache metadata: %v", err)
 	}
 }
 

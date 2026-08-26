@@ -48,6 +48,7 @@ type resolvedWorkResult struct {
 	outcome                     workerexecution.WorkOutcome
 	selectedClassificationLabel string
 	output                      string
+	outputContent               []work.WorkContentPart
 	structuredResult            any
 	structuredResultPresent     bool
 	recordedOutputWork          []work.FactoryWorkItem
@@ -502,6 +503,7 @@ func resolveWorkResult(transition *petri.Transition, result *workerexecution.Wor
 		transitionID:                result.TransitionID,
 		outcome:                     result.Outcome,
 		output:                      result.Output,
+		outputContent:               work.CloneWorkContentParts(result.OutputContent),
 		structuredResult:            jsonvalue.Clone(result.StructuredResult),
 		structuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
 		selectedClassificationLabel: result.SelectedClassificationLabel,
@@ -837,6 +839,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			ConsumedTokens:          in.consumed,
 			InputColors:             in.inputColors,
 			Output:                  in.result.output,
+			OutputContent:           work.CloneWorkContentParts(in.result.outputContent),
 			StructuredResult:        in.result.structuredResult,
 			StructuredResultPresent: in.result.structuredResultPresent,
 			WorkPropagationMode:     workPropagationMode,

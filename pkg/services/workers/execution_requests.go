@@ -275,9 +275,13 @@ type ProviderInferenceRequest struct {
 	// ModelRuntime is the explicit request-owned Models projection for a
 	// managed inference attempt. It is intentionally excluded from provider
 	// payloads and is copied through the private runner boundary.
-	ModelRuntime    *ModelRuntimeInput `json:"-"`
-	SessionID       string             `json:"session_id,omitempty"`
-	WorkflowContext *Context           `json:"-"`
+	ModelRuntime *ModelRuntimeInput `json:"-"`
+	// ModelInvocationOverride is an opaque, request-scoped effect. The private
+	// managed inference runner asserts the Models InvokeModel shape; Workers
+	// does not publish a second service-root interface for replay.
+	ModelInvocationOverride any      `json:"-"`
+	SessionID               string   `json:"session_id,omitempty"`
+	WorkflowContext         *Context `json:"-"`
 	// Continuation is the opaque Providers-owned continuation. Providers owns
 	// decoding it and deciding whether the referenced attempt can continue.
 	Continuation *ProviderContinuationRef `json:"-"`
@@ -617,6 +621,10 @@ type ExecutionInput struct {
 	// serialized or retained by the process-scoped Workers service.
 	ProviderOverride      providers.Service             `json:"-"`
 	CommandRunnerOverride platformprocess.CommandRunner `json:"-"`
+	// ModelInvocationOverride carries the runtime-scoped managed-model effect
+	// used by deterministic replay. It is request-scoped so replay never
+	// replaces the process-wide Models service or its live backend.
+	ModelInvocationOverride any `json:"-"`
 	// PreparedRequestObserver receives the detached request after Workers has
 	// prepared request-scoped resources and before the runner starts. Runtime
 	// uses it to record the effective execution target without moving resource
@@ -702,10 +710,16 @@ type AttemptSummary struct {
 type ProviderContinuationRef = providers.ContinuationRef
 
 type ExecuteResult struct {
-	Correlation             ExecutionCorrelation
-	Outcome                 ExecutionOutcome
-	Cancellation            *DispatchCancellation
-	Output                  ProposedOutput
+	Correlation  ExecutionCorrelation
+	Outcome      ExecutionOutcome
+	Cancellation *DispatchCancellation
+	Output       ProposedOutput
+	// ProposedOutputPresent distinguishes a runner-owned detached proposal
+	// from the compatibility text projection synthesized from legacy runner
+	// content. Runtime must only materialize the former as structured content;
+	// the latter may contain a serialized Work payload that its legacy parser
+	// still needs to decode.
+	ProposedOutputPresent   bool `json:"-"`
 	StructuredResult        any
 	StructuredResultPresent bool
 	ArtifactVerification    *ExpectedArtifactVerification
@@ -918,78 +932,5 @@ func (result ExecuteResult) Clone() ExecuteResult {
 		continuation := *result.Continuation
 		clone.Continuation = &continuation
 	}
-	return clone
-}
-
-func cloneSafeDiagnostics(diagnostics *SafeDiagnostics) *SafeDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	clone := &SafeDiagnostics{
-		RenderedPrompt: cloneSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
-		Provider:       cloneSafeProviderDiagnostic(diagnostics.Provider),
-		AgentRun:       cloneSafeAgentRunDiagnostic(diagnostics.AgentRun),
-		Invocation:     CloneInvocationDiagnostic(diagnostics.Invocation),
-		Metadata:       cloneStringMap(diagnostics.Metadata),
-	}
-	if diagnostics.Command != nil {
-		clone.Command = &SafeCommandDiagnostic{
-			Command:    diagnostics.Command.Command,
-			Args:       append([]string(nil), diagnostics.Command.Args...),
-			Stdout:     diagnostics.Command.Stdout,
-			Stderr:     diagnostics.Command.Stderr,
-			ExitCode:   diagnostics.Command.ExitCode,
-			TimedOut:   diagnostics.Command.TimedOut,
-			Duration:   diagnostics.Command.Duration,
-			WorkingDir: diagnostics.Command.WorkingDir,
-		}
-	}
-	if diagnostics.Panic != nil {
-		clone.Panic = &PanicDiagnostic{
-			Message: diagnostics.Panic.Message,
-			Stack:   diagnostics.Panic.Stack,
-		}
-	}
-	return clone
-}
-
-func cloneSafeRenderedPromptDiagnostic(
-	diagnostic *SafeRenderedPromptDiagnostic,
-) *SafeRenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &SafeRenderedPromptDiagnostic{
-		SystemPromptHash: diagnostic.SystemPromptHash,
-		UserMessageHash:  diagnostic.UserMessageHash,
-		Variables:        cloneStringMap(diagnostic.Variables),
-	}
-}
-
-func cloneSafeProviderDiagnostic(diagnostic *SafeProviderDiagnostic) *SafeProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &SafeProviderDiagnostic{
-		Provider:         diagnostic.Provider,
-		Model:            diagnostic.Model,
-		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
-		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
-	}
-}
-
-func cloneSafeAgentRunDiagnostic(diagnostic *SafeAgentRunDiagnostic) *SafeAgentRunDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	clone := &SafeAgentRunDiagnostic{
-		ExecutionBehavior: diagnostic.ExecutionBehavior,
-		FailureClass:      diagnostic.FailureClass,
-		RecoveryAction:    diagnostic.RecoveryAction,
-		ToolPolicy:        diagnostic.ToolPolicy,
-		ToolCallCount:     diagnostic.ToolCallCount,
-	}
-	clone.ToolDiagnostics = append([]AgentRunToolDiagnostic(nil), diagnostic.ToolDiagnostics...)
-	clone.Transcript = append([]AgentRunTranscriptEntry(nil), diagnostic.Transcript...)
 	return clone
 }

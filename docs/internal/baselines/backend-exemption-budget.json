@@ -657,12 +657,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/models/model_invoke/cli_test.go#TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/orchestration/javascript/loading/named_factory_test.go#TestNamedJavaScriptFactoryUsesSameFactorySessionControls",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."

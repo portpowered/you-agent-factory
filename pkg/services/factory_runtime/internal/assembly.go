@@ -13,6 +13,7 @@ import (
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -201,6 +202,11 @@ func (a *Assembly) Assemble(
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
+	}
+	if _, ok := replayProvider.(interface {
+		InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
+	}); ok {
+		spec.ModelInvocationOverride = replayProvider
 	}
 	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
 	if err := a.configureRestoredWorldState(

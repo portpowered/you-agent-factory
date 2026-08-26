@@ -71,10 +71,11 @@ func (e *runnerExecutor) Execute(
 		return failedInvocationResult(attempt, err), err
 	}
 	response := workers.InferenceResponse{
-		Content:      result.Content,
-		Outcome:      result.Outcome,
-		Continuation: cloneContinuation(result.Continuation),
-		Diagnostics:  workers.CloneWorkDiagnostics(result.Diagnostics),
+		Content:        result.Content,
+		Outcome:        result.Outcome,
+		ProposedOutput: cloneProposedOutput(result.ProposedOutput),
+		Continuation:   cloneContinuation(result.Continuation),
+		Diagnostics:    workers.CloneWorkDiagnostics(result.Diagnostics),
 	}
 	return workers.InvocationResult{
 		Response:     response,
@@ -82,6 +83,14 @@ func (e *runnerExecutor) Execute(
 		Continuation: cloneContinuation(response.Continuation),
 		Diagnostics:  workers.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics),
 	}, nil
+}
+
+func cloneProposedOutput(output *workers.ProposedOutput) *workers.ProposedOutput {
+	if output == nil {
+		return nil
+	}
+	clone := output.Clone()
+	return &clone
 }
 
 func (e *Executor) Execute(

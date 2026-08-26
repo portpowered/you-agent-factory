@@ -202,6 +202,21 @@ func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Wo
 			TraceId:                  stringPtrIfNotEmpty(item.TraceID),
 			Tags:                     generatedStringMapPtr(item.Tags),
 		}
+		if len(item.Content) > 0 {
+			content := make(factoryapi.WorkContent, 0, len(item.Content))
+			for _, part := range item.Content {
+				raw, err := json.Marshal(part)
+				if err != nil {
+					panic(fmt.Sprintf("marshal replay output content: %v", err))
+				}
+				var decoded factoryapi.WorkContentPart
+				if err := json.Unmarshal(raw, &decoded); err != nil {
+					panic(fmt.Sprintf("decode replay output content: %v", err))
+				}
+				content = append(content, decoded)
+			}
+			generated.Content = &content
+		}
 		if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
 			if item.StructuredResult == nil {
 				generated.StructuredResult = json.RawMessage("null")

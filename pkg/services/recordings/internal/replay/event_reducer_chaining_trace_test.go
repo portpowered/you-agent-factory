@@ -46,6 +46,7 @@ func TestReplayCompletionFromEvent_DecodesWorkerExecutionPayload(t *testing.T) {
 			TransitionID:                "process",
 			Outcome:                     workerexecution.OutcomeFailed,
 			Output:                      "partial output",
+			OutputContent:               []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "inspect me"}},
 			Error:                       "provider timed out",
 			Feedback:                    "retry later",
 			SelectedClassificationLabel: "needs-review",

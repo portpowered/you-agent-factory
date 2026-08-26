@@ -51,6 +51,11 @@ func (s *Service) normalizeSuccessfulResult(
 ) (workers.ExecuteResult, error) {
 	result.Outcome = normalizeRunnerOutcome(runnerResult.Outcome)
 	result.Output = proposedOutputFromRunnerResult(runnerResult)
+	// A decision-envelope runner can return recorded Work without constructing
+	// the newer detached proposal field. Keep that legacy envelope payload on
+	// the explicit proposal path so Runtime sends it through Work validation.
+	result.ProposedOutputPresent = runnerResult.ProposedOutput != nil ||
+		len(runnerResult.RecordedOutputWork) > 0
 	switch result.Outcome {
 	case workers.ExecutionOutcomeFailed:
 		return result, errors.New("runner returned failed outcome")
@@ -275,13 +280,20 @@ func normalizeProviderOverrideResult(
 }
 
 func proposedOutputFromRunnerResult(result workers.RunnerExecutionResult) workers.ProposedOutput {
-	output := proposedOutputFromContent(result.Content)
+	output := workers.ProposedOutput{}
+	if result.ProposedOutput != nil {
+		output = result.ProposedOutput.Clone()
+	} else {
+		output = proposedOutputFromContent(result.Content)
+	}
 	output.Feedback = result.Feedback
 	output.Classification = result.Classification
 	// Decision-envelope reviewers record work on the envelope. The detached
 	// path must propose it just as the workstation executor did, so Runtime
 	// keeps validating and materializing those items.
-	output.ProposedWork = workers.ProposedWorkFromFactoryWorkItems(result.RecordedOutputWork)
+	if len(result.RecordedOutputWork) > 0 {
+		output.ProposedWork = workers.ProposedWorkFromFactoryWorkItems(result.RecordedOutputWork)
+	}
 	return output
 }
 

@@ -379,3 +379,10 @@ func (runnerCompositionModels) InvokeLocal(
 ) (models.LocalInvocationResult, error) {
 	return models.LocalInvocationResult{}, nil
 }
+
+func (runnerCompositionModels) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, nil
+}

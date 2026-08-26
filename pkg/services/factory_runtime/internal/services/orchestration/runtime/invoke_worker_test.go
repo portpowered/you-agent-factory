@@ -315,8 +315,9 @@ func TestStartThroughStatelessWorkersBuildsCorrelatedDetachedRequest(t *testing.
 	service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
 		observed = request
 		return workers.ExecuteResult{
-			Correlation: request.Correlation,
-			Outcome:     workers.ExecutionOutcomeAccepted,
+			Correlation:           request.Correlation,
+			Outcome:               workers.ExecutionOutcomeAccepted,
+			ProposedOutputPresent: true,
 			Output: workers.ProposedOutput{
 				Primary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "done"}},
 				ProposedWork: []workers.ProposedWork{{

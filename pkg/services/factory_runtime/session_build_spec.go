@@ -51,6 +51,9 @@ type SessionBuildSpec struct {
 	// command edge so direct Workers execution can reproduce recorded script
 	// effects even when normal composition supplied a host runner.
 	ReplayCommandRunner platformprocess.CommandRunner
+	// ModelInvocationOverride carries replay's managed-model effect through the
+	// request-scoped Workers boundary without replacing the process Models root.
+	ModelInvocationOverride any
 	// ReplayEvents carries the detached canonical event history for a legacy
 	// replay. Runtime execution may re-emit events while rebuilding state, but
 	// durable Worker Session streams must retain the artifact's original cursor

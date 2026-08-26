@@ -10,6 +10,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -459,6 +460,173 @@ func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInf
 		Continuation: cloneReplayContinuation(result.Continuation),
 		Diagnostics:  diagnostics,
 	}, nil
+}
+
+// InvokeModel implements the request-scoped managed-model replay effect. The
+// normal Models service remains responsible for live preparation and backend
+// execution; replay returns the detached output captured on the canonical
+// dispatch completion so no model host or invocation backend is consulted.
+func (s *SideEffects) InvokeModel(
+	ctx context.Context,
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	record, err := s.claim(ctx, "model", func(candidate sideEffectRecord) bool {
+		return candidate.hasCompletion && candidate.completion != nil
+	})
+	if err != nil {
+		return models.InvokeModelResult{}, err
+	}
+	if record.completion.result.Outcome == workerexecution.OutcomeFailed {
+		message := strings.TrimSpace(record.completion.result.Error)
+		if message == "" {
+			message = "recorded model invocation failed"
+		}
+		return models.InvokeModelResult{
+			ModelName: request.Model.NameOrURI,
+			Operation: request.Operation,
+			Status:    models.ModelInvocationStatusFailed,
+		}, errors.New(replayModelInvocationFailureDetail(message))
+	}
+
+	outputs, err := replayModelOutputs(record.completion.result)
+	if err != nil {
+		return models.InvokeModelResult{}, err
+	}
+	if len(outputs) == 0 {
+		return models.InvokeModelResult{}, fmt.Errorf("recorded model invocation has no output")
+	}
+	content := make([]models.InferenceContent, 0, len(outputs))
+	for _, output := range outputs {
+		content = append(content, models.InferenceContent{
+			Name:        output.Name,
+			Modality:    output.Modality,
+			ContentType: output.ContentType,
+			MediaType:   output.MediaType,
+			Content:     output.Content,
+		})
+	}
+	return models.InvokeModelResult{
+		ModelName: request.Model.NameOrURI,
+		Operation: request.Operation,
+		Status:    models.ModelInvocationStatusCompleted,
+		Content:   content,
+		Outputs:   outputs,
+	}, nil
+}
+
+// replayModelInvocationFailureDetail reverses the Worker-owned classification
+// around a recorded Models error. The live model boundary returns the detail
+// (for example, "model inference failed: backend failure") to the inference
+// runner, which adds the stable worker/model/operation context. A completion
+// records that outer classification, so replay must remove it before the
+// normal runner classifies the failure again or the public message is nested.
+func replayModelInvocationFailureDetail(message string) string {
+	message = strings.TrimSpace(message)
+	if !strings.HasPrefix(message, "inference failed for ") {
+		return message
+	}
+	if separator := strings.Index(message, ": "); separator >= 0 {
+		if detail := strings.TrimSpace(message[separator+2:]); detail != "" {
+			return detail
+		}
+	}
+	return message
+}
+
+func replayModelOutputs(result workerexecution.WorkResult) ([]models.InferenceOutput, error) {
+	content := result.OutputContent
+	if len(content) == 0 && len(result.RecordedOutputWork) > 0 {
+		content = result.RecordedOutputWork[0].Content
+	}
+	if len(content) == 0 {
+		return nil, nil
+	}
+	outputs := make([]models.InferenceOutput, 0, len(content))
+	for index, part := range content {
+		modality, value := replayModelOutputValue(part)
+		if modality == "" || strings.TrimSpace(value) == "" {
+			continue
+		}
+		name := strings.TrimSpace(part.Slot)
+		if name == "" {
+			name = fmt.Sprintf("output-%d", index)
+		}
+		mediaType := strings.TrimSpace(part.ContentType)
+		artifact, err := replayModelArtifact(part)
+		if err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, models.InferenceOutput{
+			Name:        name,
+			Modality:    modality,
+			ContentType: mediaType,
+			MediaType:   mediaType,
+			Content:     value,
+			Artifact:    artifact,
+		})
+	}
+	return outputs, nil
+}
+
+func replayModelArtifact(part work.WorkContentPart) (*models.InferenceArtifact, error) {
+	artifactID := strings.TrimSpace(part.ArtifactID)
+	if artifactID == "" {
+		return nil, nil
+	}
+	ref, err := (models.InferenceArtifactRef{}).Parse(artifactID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.InferenceArtifact{
+		Artifact:   ref,
+		Name:       strings.TrimSpace(part.Label),
+		MediaType:  strings.TrimSpace(part.ContentType),
+		Properties: replayArtifactProperties(part.Metadata),
+	}, nil
+}
+
+func replayArtifactProperties(metadata map[string]any) map[string]string {
+	if len(metadata) == 0 {
+		return nil
+	}
+	properties := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		key = strings.TrimSpace(key)
+		if key == "" || value == nil {
+			continue
+		}
+		properties[key] = fmt.Sprint(value)
+	}
+	if len(properties) == 0 {
+		return nil
+	}
+	return properties
+}
+
+func replayModelOutputValue(part work.WorkContentPart) (models.Modality, string) {
+	switch part.Type.Normalized() {
+	case work.WorkContentPartTypeText:
+		return models.ModalityText, part.Text
+	case work.WorkContentPartTypeJSON:
+		return models.ModalityJSON, string(part.JSON)
+	case work.WorkContentPartTypeAudio:
+		return models.ModalityAudio, firstReplayContentReference(part)
+	case work.WorkContentPartTypeImage:
+		return models.ModalityImage, firstReplayContentReference(part)
+	case work.WorkContentPartTypeBinary:
+		return models.ModalityBinary, firstReplayContentReference(part)
+	default:
+		return "", ""
+	}
+}
+
+func firstReplayContentReference(part work.WorkContentPart) string {
+	for _, value := range []string{part.URL, part.File, part.Text} {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func cloneReplayContinuation(reference *providers.ContinuationRef) *providers.ContinuationRef {

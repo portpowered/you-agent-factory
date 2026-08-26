@@ -1252,6 +1252,11 @@ func testInterruptReplayAndCancellationHelpers(t *testing.T) {
 	if _, err := awaitInterruptReplay(ctx, pending); !errors.Is(err, context.Canceled) {
 		t.Fatalf("awaitInterruptReplay(canceled) error = %v, want context.Canceled", err)
 	}
+	completedAfterCancel := &interruptReplay{done: make(chan struct{}), result: workersessions.InterruptResult{RequestID: "completed-after-cancel"}}
+	close(completedAfterCancel.done)
+	if result, err := awaitInterruptReplay(ctx, completedAfterCancel); err != nil || result.RequestID != "completed-after-cancel" {
+		t.Fatalf("awaitInterruptReplay(completed after cancellation) = %#v, %v, want retained replay", result, err)
+	}
 	completed := &interruptReplay{done: make(chan struct{}), result: workersessions.InterruptResult{Accepted: true}}
 	close(completed.done)
 	if result, err := awaitInterruptReplay(nil, completed); err != nil || !result.Accepted {
@@ -2915,6 +2920,101 @@ func TestObservationTurnUsageDiffersCumulativeInputCounters(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionUsageProjectionRetainsModelAndTokenLineage(t *testing.T) {
+	draft := usageProjectionTestDraft(t)
+	usage, model, ok := usageProjectionFromDraft(draft)
+	if !ok {
+		t.Fatal("usageProjectionFromDraft(valid) rejected a valid usage draft")
+	}
+	if usage == nil {
+		t.Fatal("usageProjectionFromDraft(valid) returned nil usage")
+	}
+	if usage.InputTokens == nil || *usage.InputTokens != 11 {
+		t.Fatalf("usageProjectionFromDraft(valid) input tokens = %#v, want 11", usage.InputTokens)
+	}
+	if usage.OutputTokens == nil || *usage.OutputTokens != 7 {
+		t.Fatalf("usageProjectionFromDraft(valid) output tokens = %#v, want 7", usage.OutputTokens)
+	}
+	if model != " tts " {
+		t.Fatalf("usageProjectionFromDraft(valid) model = %q, want preserved whitespace", model)
+	}
+}
+
+func TestWorkerSessionUsageProjectionUpdatesRegistry(t *testing.T) {
+	draft := usageProjectionTestDraft(t)
+	r := newTestRegistry(t)
+	r.observations["usage-session"] = &observation{}
+	r.updateUsageProjection("usage-session", draft)
+	r.updateUsageProjection("missing-session", draft)
+
+	got := r.observations["usage-session"]
+	if got == nil {
+		t.Fatal("updateUsageProjection() removed the existing observation")
+	}
+	if got.tokenUsage == nil {
+		t.Fatal("updateUsageProjection() did not retain token usage")
+	}
+	if got.usageModel != "tts" {
+		t.Fatalf("updateUsageProjection() model = %q, want normalized model", got.usageModel)
+	}
+	if got.tokenUsage.InputTokens == nil || *got.tokenUsage.InputTokens != 11 {
+		t.Fatalf("updateUsageProjection() input tokens = %#v, want 11", got.tokenUsage.InputTokens)
+	}
+}
+
+func TestWorkerSessionUsageProjectionBuildsDetachedObservationMetadata(t *testing.T) {
+	draft := usageProjectionTestDraft(t)
+	usage, _, ok := usageProjectionFromDraft(draft)
+	if !ok {
+		t.Fatal("usageProjectionFromDraft(valid) rejected a valid usage draft")
+	}
+
+	projected := baseObservation("usage-session", workersessions.Session{ID: "usage-session", State: workersessions.StateRunning}, &observation{usageModel: " tts "})
+	if projected.Model == nil {
+		t.Fatal("baseObservation() omitted the usage model")
+	}
+	if *projected.Model != "tts" {
+		t.Fatalf("baseObservation() model = %q, want trimmed model", *projected.Model)
+	}
+	cloned := cloneObservationTokenUsage(usage)
+	if cloned == nil {
+		t.Fatal("cloneObservationTokenUsage() returned nil")
+	}
+	if cloned.InputTokens == usage.InputTokens {
+		t.Fatal("cloneObservationTokenUsage() retained the input token pointer")
+	}
+}
+
+func TestWorkerSessionUsageProjectionRejectsInvalidDrafts(t *testing.T) {
+	payload := usageProjectionTestDraft(t).Payload
+	for name, invalid := range map[string]workers.Draft{
+		"wrong kind":   {Kind: workers.KindMessage, Phase: workers.PhaseUpdated, Payload: payload},
+		"invalid json": {Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: []byte("not-json")},
+		"empty usage":  {Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: []byte(`{}`)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, ok := usageProjectionFromDraft(invalid); ok {
+				t.Fatalf("usageProjectionFromDraft(%s) unexpectedly succeeded", name)
+			}
+		})
+	}
+}
+
+func usageProjectionTestDraft(t *testing.T) workers.Draft {
+	t.Helper()
+	inputTokens := int64(11)
+	outputTokens := int64(7)
+	payload, err := json.Marshal(usageProjectionPayload{
+		InputTokens:  &inputTokens,
+		OutputTokens: &outputTokens,
+		Model:        " tts ",
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal(usageProjectionPayload) error = %v", err)
+	}
+	return workers.Draft{Kind: workers.KindUsage, Phase: workers.PhaseUpdated, Payload: payload}
+}
+
 func TestInvokeSafeDiagnosticMessages(t *testing.T) {
 	for _, test := range []struct {
 		input string
@@ -3429,6 +3529,14 @@ func TestAwaitContinuationReplayAndObservationListIDsRemainDetachedAndDeterminis
 	cancel()
 	if _, err := awaitContinueReplay(canceled, pending); !errors.Is(err, context.Canceled) {
 		t.Fatalf("awaitContinueReplay(canceled) = %v, want context.Canceled", err)
+	}
+	completedAfterCancel := &continueReplay{
+		done:   make(chan struct{}),
+		result: workersessions.ContinueResult{RequestID: "completed-after-cancel"},
+	}
+	close(completedAfterCancel.done)
+	if got, err := awaitContinueReplay(canceled, completedAfterCancel); err != nil || got.RequestID != "completed-after-cancel" {
+		t.Fatalf("awaitContinueReplay(completed after cancellation) = %#v, %v, want retained replay", got, err)
 	}
 
 	r := &registry{
@@ -4668,6 +4776,14 @@ func testWorkerExecutionHandoffPreservesProcessObserver(t *testing.T) {
 	request := dispatchHandoff("handoff-dispatch")
 	var nilObserver processLifecycleObserver
 	nilObserver.ProcessExited(platformprocess.ProcessInfo{})
+	canceledSupervision := newSupervision("handoff-dispatch", "")
+	canceledSupervision.mu.Lock()
+	canceledSupervision.requestedAction = workersessions.ControlActionCancel
+	canceledSupervision.mu.Unlock()
+	processLifecycleObserver{supervision: canceledSupervision}.ProcessExited(platformprocess.ProcessInfo{})
+	if canceledSupervision.processGoneObserved() {
+		t.Fatal("ProcessExited marked a process gone after cancellation was requested")
+	}
 
 	customObserver := &coverageProcessObserver{}
 	customRequest := request
@@ -4713,6 +4829,7 @@ func testWorkerExecutionHandoffMapsWorkerOutcomes(t *testing.T) {
 		{name: "rejected", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeRejected}, terminal: workers.WorkstationDispatchTerminalOutcomeCompleted, outcome: workers.OutcomeRejected},
 		{name: "failed result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeFailed, Failure: &workers.ExecutionFailure{Message: "failed", Family: workers.WorkFailureFamilyTerminal, Type: workers.WorkFailureTypeUnknown}}, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeFailed},
 		{name: "canceled result", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeCanceled, cancellation: workers.DispatchCancellationReasonCanceled},
+		{name: "canceled error supplies missing cancellation", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeCanceled}, executeErr: workers.ErrWorkstationDispatchCanceled, terminal: workers.WorkstationDispatchTerminalOutcomeCanceled, outcome: workers.OutcomeCanceled, cancellation: workers.DispatchCancellationReasonCanceled, wantError: workers.ErrWorkstationDispatchCanceled},
 		{name: "provider returns context cancellation", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: context.Canceled, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeFailed, wantError: context.Canceled},
 		{name: "process gone", result: workers.ExecuteResult{Outcome: workers.ExecutionOutcomeAccepted}, executeErr: workers.ErrWorkstationDispatchProcessGone, terminal: workers.WorkstationDispatchTerminalOutcomeFailed, outcome: workers.OutcomeAccepted, reconciliation: workers.WorkstationDispatchReconciliationReasonProcessGone, wantError: workers.ErrWorkstationDispatchProcessGone},
 	}
@@ -4726,6 +4843,30 @@ func testWorkerExecutionHandoffMapsWorkerOutcomes(t *testing.T) {
 	result, err := dispatchResultFromExecute(requestWithOutput, workers.ExecuteResult{Output: output}, nil)
 	if err != nil || result.Result.Output != "primary output" {
 		t.Fatalf("dispatchResultFromExecute(primary text) = %#v, %v, want copied text", result, err)
+	}
+
+	managedOutput := workers.ProposedOutput{Primary: []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeAudio, ContentType: "audio/wav", URL: "data:audio/wav;base64,UklGRg=="},
+	}}
+	managedResult, err := dispatchResultFromExecute(requestWithOutput, workers.ExecuteResult{
+		Output:                managedOutput,
+		ProposedOutputPresent: true,
+	}, nil)
+	if err != nil || managedResult.ProposedOutput == nil || len(managedResult.ProposedOutput.Primary) != 1 ||
+		managedResult.ProposedOutput.Primary[0].ContentType != "audio/wav" ||
+		managedResult.ProposedOutput.Primary[0].URL != "data:audio/wav;base64,UklGRg==" {
+		t.Fatalf("dispatchResultFromExecute(managed proposal) = %#v, %v, want cloned audio proposal", managedResult, err)
+	}
+	managedOutput.Primary[0].URL = "changed"
+	if managedResult.ProposedOutput.Primary[0].URL != "data:audio/wav;base64,UklGRg==" {
+		t.Fatal("dispatchResultFromExecute(managed proposal) retained the input proposal backing slice")
+	}
+
+	canceledOutput, err := dispatchResultFromExecute(requestWithOutput, workers.ExecuteResult{
+		Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled},
+	}, nil)
+	if err != nil || canceledOutput.Result.Error != workers.ErrWorkstationDispatchCanceled.Error() {
+		t.Fatalf("dispatchResultFromExecute(cancellation) = %#v, %v, want canonical cancellation error", canceledOutput, err)
 	}
 }
 
@@ -5330,6 +5471,12 @@ func TestWorkerSessionSmallBoundaryBranchesRemainObservable(t *testing.T) {
 	}
 	if _, err := decodeObservationListCursor("not-base64"); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
 		t.Fatalf("decodeObservationListCursor(invalid) error = %v, want invalid pagination", err)
+	}
+	if got := contradictorySuccessDetail(true, "context=adapter"); !strings.Contains(got, "Workers adapter") {
+		t.Fatalf("contradictorySuccessDetail(adapter) = %q, want adapter detail", got)
+	}
+	if got := cancellationAttemptName(cancellationAttemptKind(99)); got != "unknown" {
+		t.Fatalf("cancellationAttemptName(unknown) = %q, want unknown", got)
 	}
 	if err := replayReadError(events.ErrUnresolvableCursor); !errors.Is(err, workersessions.ErrObservationCursorFuture) {
 		t.Fatalf("replayReadError(unresolvable cursor) = %v, want future cursor", err)

@@ -36,6 +36,7 @@ type runtimeWorkersServiceWithProgress struct {
 	providerOverride                  providers.Service
 	commandRunnerOverride             platformprocess.CommandRunner
 	replayCommandRunner               platformprocess.CommandRunner
+	modelInvocationOverride           any
 	skipBuiltInPrerequisiteValidation bool
 	invocationSkipPermissionsOverride *bool
 	workstationResolver               runtime.WorkstationExecutionResolver
@@ -71,6 +72,9 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 	}
 	if service.providerOverride != nil {
 		request.Input.ProviderOverride = service.providerOverride
+	}
+	if service.modelInvocationOverride != nil {
+		request.Input.ModelInvocationOverride = service.modelInvocationOverride
 	}
 	if service.publisher != nil {
 		request.Input.ProgressPublisher = service.publisher
@@ -462,6 +466,7 @@ func newRuntimeWorkersService(
 		providerOverride:                  spec.ProviderOverride,
 		commandRunnerOverride:             spec.CommandRunnerOverride,
 		replayCommandRunner:               spec.ReplayCommandRunner,
+		modelInvocationOverride:           spec.ModelInvocationOverride,
 		skipBuiltInPrerequisiteValidation: skipBuiltInPrerequisiteValidation,
 		invocationSkipPermissionsOverride: invocationOverride,
 		factorySessionID:                  sessionID,

@@ -435,6 +435,7 @@ func factoryTTSAudioPart(t *testing.T, item factoryapi.Work) factoryapi.WorkAudi
 type factoryTTSDispatchEvents struct {
 	workRequest      *factoryapi.FactoryEvent
 	dispatchRequest  *factoryapi.FactoryEvent
+	association      *factoryapi.FactoryEvent
 	modelRequest     *factoryapi.FactoryEvent
 	modelResponse    *factoryapi.FactoryEvent
 	dispatchResponse *factoryapi.FactoryEvent
@@ -483,6 +484,9 @@ func collectFactoryTTSDispatchEvents(
 		case factoryapi.FactoryEventTypeDispatchRequest:
 			factoryTTSRequireSessionID(t, event, sessionID)
 			observed.dispatchRequest = event
+		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
+			factoryTTSRequireSessionID(t, event, sessionID)
+			observed.association = event
 		case factoryapi.FactoryEventTypeModelRequest:
 			factoryTTSRequireSessionID(t, event, sessionID)
 			observed.modelRequest = event
@@ -494,7 +498,7 @@ func collectFactoryTTSDispatchEvents(
 			observed.dispatchResponse = event
 		}
 	}
-	if observed.workRequest == nil || observed.dispatchRequest == nil || observed.modelRequest == nil ||
+	if observed.workRequest == nil || observed.dispatchRequest == nil || observed.association == nil || observed.modelRequest == nil ||
 		observed.modelResponse == nil || observed.dispatchResponse == nil {
 		t.Fatalf("TTS Factory Events missing required request/dispatch/model/response records: %#v", observed)
 	}
