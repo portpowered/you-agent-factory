@@ -396,13 +396,33 @@ generate_go_protocol() {
 	local protoc_path="${grpc_path}/installed_packages/bin/protoc${grpc_executable_suffix}"
 	local protocol_output="${LOCALAI_ROOT}/pkg/grpc/proto"
 	local go_bin
+	local go_install_attempts=3
+	local go_install_retry_delay_seconds=5
+
+	install_go_tool() {
+		local module="$1"
+		local attempt
+
+		for ((attempt = 1; attempt <= go_install_attempts; attempt++)); do
+			if go install "$module"; then
+				return 0
+			fi
+			if ((attempt < go_install_attempts)); then
+				echo "retrying Go tool installation ${module} (${attempt}/${go_install_attempts})" >&2
+				sleep "$go_install_retry_delay_seconds"
+			fi
+		done
+
+		echo "failed to install Go tool ${module} after ${go_install_attempts} attempts" >&2
+		return 1
+	}
 
 	go_bin="$(go env GOPATH)/bin"
 	if command -v cygpath >/dev/null 2>&1; then
 		go_bin="$(cygpath -u "$go_bin")"
 	fi
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
+	install_go_tool google.golang.org/grpc/cmd/protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af
+	install_go_tool google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
 	mkdir -p "$protocol_output"
 	PATH="$go_bin:$PATH" "$protoc_path" \
 		--experimental_allow_proto3_optional \
