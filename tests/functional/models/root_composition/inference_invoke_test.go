@@ -90,6 +90,7 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 		},
 		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
+	support.CleanupProcess(t, process)
 
 	var output bytes.Buffer
 	jsonInvoke := support.FakeInputs(t.Context(), []string{
@@ -208,6 +209,7 @@ func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 		ModelHostHTTPClient:    modelServer.Client(),
 		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
+	support.CleanupProcess(t, process)
 
 	var output bytes.Buffer
 	jsonInvoke := support.FakeInputs(t.Context(), []string{
@@ -242,13 +244,6 @@ func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 		t.Fatalf("joined backend resolver calls = %d, want no inference attempt in validation-only mode", backendResolverCalls)
 	}
 
-	closer, ok := process.(interface{ Close(context.Context) error })
-	if !ok {
-		t.Fatal("root process does not expose lifecycle close")
-	}
-	if err := closer.Close(context.Background()); err != nil {
-		t.Fatalf("close joined root process: %v", err)
-	}
 }
 
 func builtInOnlyModelFactoryConfig() map[string]any {

@@ -146,6 +146,7 @@ func TestProcessLegacyModelsInvokeMissingFactoryLayoutReportsFailure(t *testing.
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 	workingDirectory := t.TempDir()
 	outputPath := filepath.Join(workingDirectory, "speech.wav")
 	inputs := support.FakeInputs(t.Context(), []string{
