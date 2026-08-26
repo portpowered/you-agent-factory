@@ -116,13 +116,6 @@
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
-      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
