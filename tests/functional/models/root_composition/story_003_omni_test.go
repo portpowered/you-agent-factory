@@ -146,7 +146,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		ModelAssetRenamePath: assetFiles.Rename, ModelAssetRemovePath: assetFiles.Remove,
 		ModelAssetReadFile: assetFiles.ReadFile, ModelAssetReadDirectory: assetFiles.ReadDir,
 		ModelAssetCreateFile: assetFiles.Create, ModelAssetOpenFile: assetFiles.Open,
-		ModelCLIInputReadFile: func(path string) ([]byte, error) {
+		ModelCLIInputReadFile: func(_ context.Context, path string, _ int64) ([]byte, error) {
 			fixture.inputReads = append(fixture.inputReads, path)
 			data, ok := fileInputs[path]
 			if !ok {

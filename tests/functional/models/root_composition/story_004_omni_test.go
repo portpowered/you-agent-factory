@@ -98,7 +98,7 @@ func buildCoordinatedOmniEnvironmentWithLauncher(
 		rejectingNetwork, assetFiles, hostLauncher,
 		&joinedProtocolNegotiator{}, nil, modelServer,
 	)
-	edges.ModelCLIInputReadFile = func(path string) ([]byte, error) {
+	edges.ModelCLIInputReadFile = func(_ context.Context, path string, _ int64) ([]byte, error) {
 		data, ok := inputFiles[path]
 		if !ok {
 			return nil, fmt.Errorf("unexpected fixture input path %q", path)
