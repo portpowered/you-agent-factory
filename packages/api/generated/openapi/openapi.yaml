@@ -1404,7 +1404,7 @@ paths:
         - Factory
       operationId: listFactorySessions
       summary: List factory sessions
-      description: Lists factory sessions for the requested scope. live returns workspace sessions kept open by the runtime host, including the reserved default session. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
+      description: Lists factory sessions for the requested scope. live returns workspace sessions kept open by the runtime host, including the reserved default session. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
       parameters:
         - $ref: '#/components/parameters/FactorySessionListScope'
       responses:
@@ -7685,17 +7685,24 @@ components:
           items:
             $ref: '#/components/schemas/FactorySessionDurableSummary'
           description: Persisted durable session summaries when scope is PERSISTED or ALL.
+        recordedSessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionRecordedSummary'
+          description: Read-only recorded Factory Session summaries when scope is HISTORY or ALL.
     FactorySessionListScope:
       type: string
-      description: Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
+      description: Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
       enum:
         - live
         - persisted
+        - history
         - all
       default: live
       x-enum-varnames:
         - FactorySessionListScopeLive
         - FactorySessionListScopePersisted
+        - FactorySessionListScopeHistory
         - FactorySessionListScopeAll
     FactorySessionDurableSummary:
       type: object
@@ -7754,6 +7761,41 @@ components:
         links:
           $ref: '#/components/schemas/FactorySessionExecutionLinks'
           description: Polling and inspection links for durable session clients.
+    FactorySessionRecordedSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - source
+        - artifactReference
+        - format
+      properties:
+        sessionId:
+          type: string
+          description: Canonical Factory Session UUID recovered from the recorded artifact.
+        source:
+          $ref: '#/components/schemas/FactorySessionRecordedSource'
+        artifactReference:
+          type: string
+          description: Root-relative recorded artifact reference; never a host filesystem authority.
+        format:
+          $ref: '#/components/schemas/FactorySessionRecordedFormat'
+    FactorySessionRecordedSource:
+      type: string
+      description: Explicit provenance for a read-only recorded Factory Session row.
+      enum:
+        - recorded-history
+      x-enum-varnames:
+        - FactorySessionRecordedSourceHistory
+    FactorySessionRecordedFormat:
+      type: string
+      description: Recording artifact format interpreted by the shared replay reader.
+      enum:
+        - V1_JSON
+        - V2_JSONL
+      x-enum-varnames:
+        - FactorySessionRecordedFormatV1JSON
+        - FactorySessionRecordedFormatV2JSONL
     FactorySessionDurableReadModel:
       type: object
       additionalProperties: false

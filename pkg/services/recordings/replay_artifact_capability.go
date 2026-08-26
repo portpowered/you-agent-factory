@@ -56,6 +56,44 @@ type ReplayInputLoader interface {
 	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 }
 
+// RecordedSessionInventory is the read-only Recordings capability used to
+// discover Factory Session histories that are no longer present in the live
+// registry. It deliberately exposes summaries rather than replay events.
+type RecordedSessionInventory interface {
+	ListRecordedSessions(RecordedSessionInventoryRequest) (RecordedSessionInventoryResult, error)
+}
+
+// RecordedSessionInventoryRequest selects the established recording root to
+// inspect. The root is supplied by the caller so Recordings does not select a
+// host-specific home directory or durable-session location.
+type RecordedSessionInventoryRequest struct {
+	RecordingRoot string
+}
+
+// RecordedSessionInventoryResult contains detached, deterministic recording
+// summaries. Complete replay histories never cross this boundary.
+type RecordedSessionInventoryResult struct {
+	Sessions []RecordedSessionSummary
+}
+
+// RecordedSessionSummary is the listing metadata for one recording artifact.
+// FactorySessionID is the canonical session identity shared with live session
+// views; ArtifactReference distinguishes multiple historical artifacts for
+// that identity without introducing a second session ID.
+type RecordedSessionSummary struct {
+	FactorySessionID  string
+	ArtifactReference string
+	Format            RecordedSessionFormat
+}
+
+// RecordedSessionFormat identifies the established on-disk recording format.
+type RecordedSessionFormat string
+
+const (
+	RecordedSessionFormatV1JSON  RecordedSessionFormat = "V1_JSON"
+	RecordedSessionFormatV2JSONL RecordedSessionFormat = "V2_JSONL"
+)
+
 // ReplayInputFamily identifies the historical replay document family selected
 // while loading a path-based replay input.
 type ReplayInputFamily string

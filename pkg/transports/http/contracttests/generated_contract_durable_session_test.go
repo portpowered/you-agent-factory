@@ -538,8 +538,9 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, listResponseProperties, "scope", "#/components/schemas/FactorySessionListScope")
 	assertArrayItemRef(t, listResponseProperties, "sessions", "#/components/schemas/FactorySessionSummary")
 	assertArrayItemRef(t, listResponseProperties, "durableSessions", "#/components/schemas/FactorySessionDurableSummary")
-	assertSchemaPropertiesPresent(t, listResponseProperties, "ListFactorySessionsResponse", "scope", "sessions", "durableSessions")
-	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionListScope"), "FactorySessionListScope", []string{"live", "persisted", "all"})
+	assertArrayItemRef(t, listResponseProperties, "recordedSessions", "#/components/schemas/FactorySessionRecordedSummary")
+	assertSchemaPropertiesPresent(t, listResponseProperties, "ListFactorySessionsResponse", "scope", "sessions", "durableSessions", "recordedSessions")
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionListScope"), "FactorySessionListScope", []string{"live", "persisted", "history", "all"})
 
 	getOperation := pathOperation(t, paths, "/factory-sessions/{session_id}", "get")
 	if got, _ := getOperation["operationId"].(string); got != "getFactorySession" {

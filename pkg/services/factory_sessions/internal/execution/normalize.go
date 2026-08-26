@@ -189,9 +189,9 @@ func NormalizeListSessionsRequest(req ListSessionsRequest) (ListSessionsRequest,
 		scope = DefaultSessionListScope
 	}
 	switch scope {
-	case SessionListScopeLive, SessionListScopePersisted, SessionListScopeAll:
+	case SessionListScopeLive, SessionListScopePersisted, SessionListScopeHistory, SessionListScopeAll:
 	default:
-		return ListSessionsRequest{}, NewValidationError("scope", "scope must be live, persisted, or all")
+		return ListSessionsRequest{}, NewValidationError("scope", "scope must be live, persisted, or all; history is also supported")
 	}
 
 	filters, err := normalizeSessionListFilters(req.Filters)

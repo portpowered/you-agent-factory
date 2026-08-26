@@ -2,13 +2,16 @@ type: string
 description: >-
   Session list scope. live returns workspace sessions kept open by the runtime
   host. persisted returns durable execution sessions stored outside the live
-  workspace. all returns both live and persisted session summaries.
+  workspace. history returns read-only recorded Factory Session artifacts. all
+  returns live, persisted, and recorded-history summaries.
 enum:
   - live
   - persisted
+  - history
   - all
 default: live
 x-enum-varnames:
   - FactorySessionListScopeLive
   - FactorySessionListScopePersisted
+  - FactorySessionListScopeHistory
   - FactorySessionListScopeAll

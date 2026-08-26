@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - source
+  - artifactReference
+  - format
+properties:
+  sessionId:
+    type: string
+    description: Canonical Factory Session UUID recovered from the recorded artifact.
+  source:
+    $ref: './FactorySessionRecordedSource.yaml'
+  artifactReference:
+    type: string
+    description: Root-relative recorded artifact reference; never a host filesystem authority.
+  format:
+    $ref: './FactorySessionRecordedFormat.yaml'

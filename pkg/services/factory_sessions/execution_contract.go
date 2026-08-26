@@ -370,13 +370,17 @@ type ListDispatchesResult struct {
 type ListSessionsRequest struct {
 	Scope   SessionListScope
 	Filters SessionListFilters
+	// ExcludeRecordedHistory lets a live-only transport preserve the existing
+	// aggregate durable read while explicitly suppressing Recordings history.
+	ExcludeRecordedHistory bool
 }
 
 // ListSessionsResult is the shared scoped session listing outcome.
 type ListSessionsResult struct {
-	Scope           SessionListScope
-	LiveSessions    []LiveSessionSummary
-	DurableSessions []DurableSessionListSummary
+	Scope            SessionListScope
+	LiveSessions     []LiveSessionSummary
+	DurableSessions  []DurableSessionListSummary
+	RecordedSessions []RecordedSessionListSummary
 }
 
 // LiveSessionSummary is the shared live workspace session row for scope=live and
@@ -696,6 +700,7 @@ const (
 const (
 	SessionListScopeLive      SessionListScope = "live"
 	SessionListScopePersisted SessionListScope = "persisted"
+	SessionListScopeHistory   SessionListScope = "history"
 	SessionListScopeAll       SessionListScope = "all"
 )
 

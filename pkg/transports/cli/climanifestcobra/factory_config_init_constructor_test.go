@@ -567,7 +567,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 		},
 	}, nil, nil)
 
-	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list")
+	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list", "--scope", "live")
 	if err != nil {
 		t.Fatalf("live list Execute() error = %v", err)
 	}
@@ -586,7 +586,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 	if !strings.Contains(stdout, "dur-sess-review-001") || !strings.Contains(stdout, "Factory Sessions (durable):") {
 		t.Fatalf("persisted list output = %q", stdout)
 	}
-	stdout, _, err = executeResolvedSessionWithOutput(t, services, "session", "list")
+	stdout, _, err = executeResolvedSessionWithOutput(t, services, "session", "list", "--scope", "live")
 	if err != nil {
 		t.Fatalf("empty live list Execute() error = %v", err)
 	}

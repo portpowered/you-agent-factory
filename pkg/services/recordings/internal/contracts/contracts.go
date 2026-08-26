@@ -187,15 +187,24 @@ type RuntimeScopeResult struct {
 // LoadReplayInputRequest selects one historical replay input by filesystem
 // path before a runtime recording scope exists.
 type LoadReplayInputRequest struct {
-	Path string
+	Path         string
+	MetadataOnly bool
 }
 
-// LoadReplayInputResult contains exactly one of Portable or Legacy, depending
-// on which replay input family the selected path contained.
+// LoadReplayInputResult contains either a fully decoded Portable or Legacy
+// input, or detached Metadata when the caller requested metadata-only mode.
+// Diagnostics may accompany a fully decoded portable input.
 type LoadReplayInputResult struct {
 	Portable    *PortableRecording
 	Legacy      *ReplayArtifact
+	Metadata    *ReplayInputMetadata
 	Diagnostics *ReplayInputDecodeDiagnostics
+}
+
+// ReplayInputMetadata contains only the identity needed to enumerate a
+// historical Factory Session. It deliberately has no event or payload fields.
+type ReplayInputMetadata struct {
+	FactorySessionID string
 }
 
 // ReplayInputDecodeDiagnostics contains safe metadata produced while loading
@@ -1710,6 +1719,10 @@ type WorldStateReconstructor func(
 // existing Runtime opening callers. It is not the peer-facing replay seam;
 // peers use LoadReplayRecording on Service.
 type ReplayArtifactLoader func(string) (*ReplayArtifact, error)
+
+// ReplayArtifactMetadataLoader loads only the bounded metadata needed to
+// identify one replay artifact. It does not construct the replay event list.
+type ReplayArtifactMetadataLoader func(string) (ReplayInputMetadata, error)
 
 // InitialStructureSource is the only topology capability Recordings consumes.
 // Factory Runtime implements it without exposing its concrete graph.

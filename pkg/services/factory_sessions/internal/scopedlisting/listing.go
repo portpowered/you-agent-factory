@@ -50,11 +50,18 @@ func List(
 	}
 
 	var durableResult factorysessions.ListSessionsResult
-	if scope == factorysessions.SessionListScopePersisted && durable == nil {
+	if (scope == factorysessions.SessionListScopePersisted || scope == factorysessions.SessionListScopeHistory) && durable == nil {
 		return factorysessions.ScopedSessionListResult{}, ErrDurableReaderRequired
 	}
 	if durable != nil {
-		result, err := durable.ListSessions(ctx, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll})
+		durableScope := factorysessions.SessionListScopeAll
+		if scope == factorysessions.SessionListScopeHistory {
+			durableScope = factorysessions.SessionListScopeHistory
+		}
+		result, err := durable.ListSessions(ctx, factorysessions.ListSessionsRequest{
+			Scope:                  durableScope,
+			ExcludeRecordedHistory: scope == factorysessions.SessionListScopePersisted,
+		})
 		if err != nil {
 			return factorysessions.ScopedSessionListResult{}, err
 		}
@@ -66,8 +73,10 @@ func List(
 		return strings.Compare(liveRows[left].ID, liveRows[right].ID) < 0
 	})
 	return factorysessions.ScopedSessionListResult{
-		Scope: scope, LiveSessions: liveRows,
-		DurableSessions: append([]factorysessions.DurableSessionListSummary(nil), scoped.DurableSessions...),
+		Scope:            scope,
+		LiveSessions:     liveRows,
+		DurableSessions:  append([]factorysessions.DurableSessionListSummary(nil), scoped.DurableSessions...),
+		RecordedSessions: append([]factorysessions.RecordedSessionListSummary(nil), scoped.RecordedSessions...),
 	}, nil
 }
 

@@ -44,6 +44,7 @@ type Assembly struct {
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
+	recordedSessionInventory     recordings.RecordedSessionInventory
 	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
@@ -86,6 +87,7 @@ func NewAssembly(
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
 ) roles.RuntimeAssembly {
 	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil || liveChangeCoordinator == nil {
 		return nil
@@ -110,6 +112,7 @@ func NewAssembly(
 		eventIDs:                     eventIDs,
 		sessionIDs:                   sessionIDs,
 		resolveHome:                  resolveHome,
+		recordedSessionInventory:     recordedSessionInventory,
 		directoryInspection:          directoryInspection,
 		namedPaths:                   namedPaths,
 		invocationInputFiles:         invocationInputFiles,
@@ -463,6 +466,7 @@ func (a *Assembly) Complete(
 		a.liveChangeCoordinator,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
+	gateway.bindRecordedSessionHistory(a.ListSessions)
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
@@ -818,38 +822,19 @@ func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.R
 	return result, nil
 }
 
-func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
-	owners := a.detachedOwners()
-	if len(owners) == 0 {
-		return factorysessions.ListSessionsResult{}, factorysessions.ErrDetachedServiceUnavailable
+func (a *Assembly) recordingRoot() (string, error) {
+	if a == nil || a.resolveHome == nil {
+		return "", fmt.Errorf("recorded session home directory resolver is required")
 	}
-	result := factorysessions.ListSessionsResult{Scope: request.Scope}
-	seenLive := make(map[string]struct{})
-	seenDurable := make(map[string]struct{})
-	for _, owner := range owners {
-		listed, err := owner.ListSessions(ctx, request)
-		if err != nil {
-			return factorysessions.ListSessionsResult{}, err
-		}
-		if result.Scope == "" {
-			result.Scope = listed.Scope
-		}
-		for _, session := range listed.LiveSessions {
-			if _, exists := seenLive[session.ID]; exists {
-				continue
-			}
-			seenLive[session.ID] = struct{}{}
-			result.LiveSessions = append(result.LiveSessions, session)
-		}
-		for _, session := range listed.DurableSessions {
-			if _, exists := seenDurable[session.SessionID]; exists {
-				continue
-			}
-			seenDurable[session.SessionID] = struct{}{}
-			result.DurableSessions = append(result.DurableSessions, session)
-		}
+	home, err := a.resolveHome()
+	if err != nil {
+		return "", fmt.Errorf("resolve recorded session home directory: %w", err)
 	}
-	return result, nil
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return "", fmt.Errorf("resolve recorded session home directory: empty path")
+	}
+	return filepath.Join(home, ".you-agent-factory", "recordings"), nil
 }
 
 func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

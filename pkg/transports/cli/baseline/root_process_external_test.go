@@ -65,8 +65,8 @@ func TestBuildProcessComposesTypedSessionAndModelsAdaptersAcrossExecutions(t *te
 		return stdout.String()
 	}
 
-	firstSession := execute("session", "list", "--port", strconv.Itoa(port), "--json")
-	secondSession := execute("session", "list", "--server", server.URL, "--json")
+	firstSession := execute("session", "list", "--scope", "live", "--port", strconv.Itoa(port), "--json")
+	secondSession := execute("session", "list", "--scope", "live", "--server", server.URL, "--json")
 	firstModels := execute("--server", server.URL, "models", "list", "--json")
 	secondModels := execute("models", "list", "--server", server.URL, "--json")
 
@@ -76,7 +76,7 @@ func TestBuildProcessComposesTypedSessionAndModelsAdaptersAcrossExecutions(t *te
 	if firstModels != "{\"results\":[]}\n" || secondModels != "{\"results\":[]}\n" {
 		t.Fatalf("models list outputs = (%q, %q), want stable JSON", firstModels, secondModels)
 	}
-	wantRequests := []string{"/factory-sessions", "/factory-sessions", "/models", "/models"}
+	wantRequests := []string{"/factory-sessions?scope=live", "/factory-sessions?scope=live", "/models", "/models"}
 	if strings.Join(requests, ",") != strings.Join(wantRequests, ",") {
 		t.Fatalf("typed adapter requests = %v, want %v", requests, wantRequests)
 	}

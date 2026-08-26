@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -77,7 +78,29 @@ func provideRecordingsRuntimeOpening(
 func provideFactorySessionReplayInputs(
 	loadReplay recordings.ReplayArtifactLoader,
 	replayFiles factorysessionwire.ReplayRecordingReader,
+	openFile recordings.RecordingOpenFile,
 	logger logging.Logger,
 ) recordings.ReplayInputLoader {
-	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
+	return recordingswire.NewReplayInputLoader(
+		recordings.RecordingReadFile(replayFiles), loadReplay, logger, openFile,
+	)
+}
+
+func provideRecordingOpenFile(edges serviceedges.Edges) recordings.RecordingOpenFile {
+	if edges.RecordingOpenFile != nil {
+		return edges.RecordingOpenFile
+	}
+	return platformfilesystem.Local{}.Open
+}
+
+func provideRecordedSessionInventory(
+	edges serviceedges.Edges,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+) recordings.RecordedSessionInventory {
+	readDir := edges.RecordingReadDirectory
+	if readDir == nil {
+		readDir = platformfilesystem.Local{}.ReadDir
+	}
+	return recordingswire.NewRecordedSessionInventory(readDir, replayInputs, logger)
 }

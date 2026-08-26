@@ -261,6 +261,7 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.eventsService,
 		in.clock,
 		in.liveChangeCoordinator,
+		nil,
 	)
 }
 

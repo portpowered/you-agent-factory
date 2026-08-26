@@ -35,9 +35,23 @@ type Service struct {
 	results           factoryruntime.SessionResultProjectionOperation
 	responseEvents    responsestreamservice.Service
 	durable           durableexecution.Service
+	recordedHistory   func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	invoker           roles.SessionInvoker
 	activate          func(context.Context, string) error
 	activationGateway factorydefinitions.DefinitionActivationGateway
+}
+
+// bindRecordedSessionHistory connects each runtime gateway to the
+// process-scoped recorded-history read owned by the Factory Sessions assembly.
+// The gateway remains the owner of the opened runtime's durable execution, but
+// history must be read from the process-wide artifact inventory so the HTTP
+// transport sees the same combined session list as the root service.
+func (s *Service) bindRecordedSessionHistory(
+	lister func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error),
+) {
+	if s != nil {
+		s.recordedHistory = lister
+	}
 }
 
 // New constructs a session gateway with explicit host and dataplane dependencies.

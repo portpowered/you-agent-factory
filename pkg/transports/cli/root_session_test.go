@@ -688,10 +688,8 @@ func TestSessionListCommand_LongHelpDocumentsDurableFactorySessions(t *testing.T
 
 	for _, want := range []string{
 		"durable Factory Sessions",
-		"--scope live|persisted|all",
-		"source identity",
-		"result availability",
-		"action availability",
+		"--live-only or --history-only",
+		"recorded-history provenance",
 	} {
 		if !strings.Contains(sessionCmd.Long, want) {
 			t.Fatalf("session long help missing %q:\n%s", want, sessionCmd.Long)
@@ -699,7 +697,9 @@ func TestSessionListCommand_LongHelpDocumentsDurableFactorySessions(t *testing.T
 	}
 	for _, want := range []string{
 		"durable Factory Sessions",
-		"Factory Session table",
+		"default scope is all",
+		"--scope history",
+		"Human output labels each source",
 		"ListFactorySessionsResponse",
 	} {
 		if !strings.Contains(listCmd.Long, want) {

@@ -57,8 +57,18 @@ func NewReplayInputLoader(
 	readFile recordings.RecordingReadFile,
 	loadLegacy recordings.ReplayArtifactLoader,
 	logger logging.Logger,
+	openFiles ...recordings.RecordingOpenFile,
 ) recordings.ReplayInputLoader {
-	return recordingsinternal.NewReplayInputLoader(readFile, loadLegacy, logger)
+	var openFile recordings.RecordingOpenFile
+	if len(openFiles) > 0 {
+		openFile = openFiles[0]
+	}
+	loadLegacyMetadata := func(path string) (recordings.ReplayInputMetadata, error) {
+		return replayimpl.LoadMetadata(openFile, path)
+	}
+	return recordingsinternal.NewReplayInputLoader(
+		readFile, openFile, loadLegacy, loadLegacyMetadata, logger,
+	)
 }
 
 // NewRuntimeRoot constructs the singular process-scoped Recordings authority.

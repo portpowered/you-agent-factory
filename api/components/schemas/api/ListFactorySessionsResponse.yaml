@@ -16,3 +16,8 @@ properties:
     items:
       $ref: './FactorySessionDurableSummary.yaml'
     description: Persisted durable session summaries when scope is PERSISTED or ALL.
+  recordedSessions:
+    type: array
+    items:
+      $ref: './FactorySessionRecordedSummary.yaml'
+    description: Read-only recorded Factory Session summaries when scope is HISTORY or ALL.

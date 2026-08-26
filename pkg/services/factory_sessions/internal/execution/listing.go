@@ -177,6 +177,22 @@ func SortLiveSessionSummaries(sessions []LiveSessionSummary) []LiveSessionSummar
 	return sorted
 }
 
+// SortRecordedSessionSummaries orders recorded history by canonical Factory
+// Session identity and then by the detached artifact reference.
+func SortRecordedSessionSummaries(summaries []RecordedSessionListSummary) []RecordedSessionListSummary {
+	if len(summaries) == 0 {
+		return nil
+	}
+	sorted := append([]RecordedSessionListSummary(nil), summaries...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].SessionID != sorted[j].SessionID {
+			return strings.Compare(sorted[i].SessionID, sorted[j].SessionID) < 0
+		}
+		return strings.Compare(sorted[i].ArtifactReference, sorted[j].ArtifactReference) < 0
+	})
+	return sorted
+}
+
 // ApplySessionListScope shapes one listing result for the requested scope.
 // DeriveSessionActionAvailability classifies which lifecycle controls are valid
 // for one durable session status.
@@ -200,6 +216,7 @@ func ApplySessionListScope(result ListSessionsResult, request ListSessionsReques
 
 	durable := FilterDurableSessionSummaries(result.DurableSessions, request.Filters)
 	live := append([]LiveSessionSummary(nil), result.LiveSessions...)
+	recorded := SortRecordedSessionSummaries(result.RecordedSessions)
 
 	switch scope {
 	case SessionListScopeLive:
@@ -212,11 +229,17 @@ func ApplySessionListScope(result ListSessionsResult, request ListSessionsReques
 			Scope:           scope,
 			DurableSessions: SortDurableSessionSummaries(FilterPersistedSessionSummaries(durable)),
 		}
+	case SessionListScopeHistory:
+		return ListSessionsResult{
+			Scope:            scope,
+			RecordedSessions: recorded,
+		}
 	default:
 		return ListSessionsResult{
-			Scope:           scope,
-			LiveSessions:    SortLiveSessionSummaries(DeduplicateLiveSessionsForAllScope(live, durable)),
-			DurableSessions: SortDurableSessionSummaries(durable),
+			Scope:            scope,
+			LiveSessions:     SortLiveSessionSummaries(DeduplicateLiveSessionsForAllScope(live, durable)),
+			DurableSessions:  SortDurableSessionSummaries(durable),
+			RecordedSessions: recorded,
 		}
 	}
 }

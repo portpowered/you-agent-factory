@@ -111,6 +111,7 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		eventsService,
 		&wireTestClock{},
 		factorysessionwire.NewLiveChangeCoordinator(),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("provide Factory Sessions service: %v", err)

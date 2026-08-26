@@ -226,6 +226,179 @@ func TestList_JSONModeEmitsListFactorySessionsResponse(t *testing.T) {
 	}
 }
 
+func TestList_JSONModeCombinesLiveAndRecordedHistoryForAllScope(t *testing.T) {
+	var gotScope string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotScope = r.URL.Query().Get("scope")
+		w.Header().Set("Content-Type", "application/json")
+		recorded := []factoryapi.FactorySessionRecordedSummary{{
+			SessionId:         "019e0000-0000-7000-8000-000000000042",
+			Source:            factoryapi.FactorySessionRecordedSourceHistory,
+			ArtifactReference: "2026/08/24/019e0000-0000-7000-8000-000000000042.jsonl",
+			Format:            factoryapi.FactorySessionRecordedFormatV2JSONL,
+		}}
+		scope := factoryapi.FactorySessionListScopeAll
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
+			Scope:            &scope,
+			Sessions:         []factoryapi.FactorySessionSummary{sampleSessionSummary()},
+			RecordedSessions: &recorded,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := NewList(testHTTPProtocol(t), recordedListRequestPreparation{})(ListConfig{
+		Context: context.Background(), Server: srv.URL, Scope: string(fse.SessionListScopeAll), JSON: true, Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if gotScope != string(fse.SessionListScopeAll) {
+		t.Fatalf("request scope = %q, want all", gotScope)
+	}
+	var got factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode JSON: %v\n%s", err, out.String())
+	}
+	if got.RecordedSessions == nil || len(*got.RecordedSessions) != 1 || (*got.RecordedSessions)[0].Source != factoryapi.FactorySessionRecordedSourceHistory {
+		t.Fatalf("recorded sessions = %#v, want explicit history provenance", got.RecordedSessions)
+	}
+}
+
+func TestList_HumanModeCombinesLiveAndRecordedHistory(t *testing.T) {
+	sharedID := "019e0000-0000-7000-8000-000000000044"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		scope := factoryapi.FactorySessionListScopeAll
+		recorded := []factoryapi.FactorySessionRecordedSummary{
+			{
+				SessionId:         sharedID,
+				Source:            factoryapi.FactorySessionRecordedSourceHistory,
+				ArtifactReference: "2026/08/23/legacy.json",
+				Format:            factoryapi.FactorySessionRecordedFormatV1JSON,
+			},
+			{
+				SessionId:         "019e0000-0000-7000-8000-000000000045",
+				Source:            factoryapi.FactorySessionRecordedSourceHistory,
+				ArtifactReference: "2026/08/24/current.jsonl",
+				Format:            factoryapi.FactorySessionRecordedFormatV2JSONL,
+			},
+		}
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
+			Scope: &scope,
+			Sessions: []factoryapi.FactorySessionSummary{{
+				FactoryDir: "/workspace/fleet/alpha",
+				FolderPath: "/workspace/fleet",
+				Id:         sharedID,
+				Project:    "alpha",
+				Target: factoryapi.FactorySessionTargetRef{
+					Kind: factoryapi.FactorySessionTargetRefKindNamed,
+					Name: stringPtr("alpha"),
+				},
+			}},
+			RecordedSessions: &recorded,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{
+		Context: context.Background(),
+		Scope:   string(fse.SessionListScopeAll),
+		Port:    serverPort(t, srv),
+		Output:  &out,
+		DurableLister: func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+			return fse.ListSessionsResult{Scope: fse.SessionListScopeAll}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "SESSION ID\tPROJECT\tFOLDER PATH") || !strings.Contains(output, "Factory Sessions (recorded history):") {
+		t.Fatalf("output missing combined human sections: %q", output)
+	}
+	if strings.Count(output, sharedID) != 2 {
+		t.Fatalf("shared session ID occurrences = %d, want live and recorded representations:\n%s", strings.Count(output, sharedID), output)
+	}
+	if !strings.Contains(output, "legacy.json\tV1_JSON") || !strings.Contains(output, "current.jsonl\tV2_JSONL") {
+		t.Fatalf("output missing both recorded formats: %q", output)
+	}
+	if !strings.Contains(output, "019e0000-0000-7000-8000-000000000045") {
+		t.Fatalf("output missing recorded-only session: %q", output)
+	}
+}
+
+func TestList_HistoryOnlyRequestsRecordedSource(t *testing.T) {
+	var gotScope string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotScope = r.URL.Query().Get("scope")
+		w.Header().Set("Content-Type", "application/json")
+		recorded := []factoryapi.FactorySessionRecordedSummary{{
+			SessionId:         "019e0000-0000-7000-8000-000000000043",
+			Source:            factoryapi.FactorySessionRecordedSourceHistory,
+			ArtifactReference: "2026/08/23/019e0000-0000-7000-8000-000000000043.json",
+			Format:            factoryapi.FactorySessionRecordedFormatV1JSON,
+		}}
+		scope := factoryapi.FactorySessionListScopeHistory
+		_ = json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
+			Scope:            &scope,
+			RecordedSessions: &recorded,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := NewList(testHTTPProtocol(t), recordedListRequestPreparation{})(ListConfig{
+		Context: context.Background(), Server: srv.URL, HistoryOnly: true, JSON: true, Output: &out,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if gotScope != string(fse.SessionListScopeHistory) {
+		t.Fatalf("request scope = %q, want history", gotScope)
+	}
+	var got factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode JSON: %v\n%s", err, out.String())
+	}
+	if len(got.Sessions) != 0 || got.RecordedSessions == nil || len(*got.RecordedSessions) != 1 {
+		t.Fatalf("history-only response = %#v, want recorded rows only", got)
+	}
+}
+
+func TestList_ConflictingSourceFlagsFailBeforePreparationOrHTTP(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Context: context.Background(), Output: &out, LiveOnly: true, HistoryOnly: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("List conflict error = %v, want actionable mutual-exclusion error", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("conflict output = %q, want empty output", out.String())
+	}
+}
+
+type recordedListRequestPreparation struct{}
+
+func (recordedListRequestPreparation) PrepareListSessions(request fse.ListSessionsRequest) (fse.ListSessionsRequest, error) {
+	if request.Scope == "" {
+		request.Scope = fse.SessionListScopeLive
+	}
+	switch request.Scope {
+	case fse.SessionListScopeLive, fse.SessionListScopePersisted, fse.SessionListScopeHistory, fse.SessionListScopeAll:
+		return request, nil
+	default:
+		return fse.ListSessionsRequest{}, fmt.Errorf("unsupported scope %q", request.Scope)
+	}
+}
+
 func TestList_UnreachableServiceNamesEndpoint(t *testing.T) {
 	var out bytes.Buffer
 	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),

@@ -76,11 +76,20 @@ func mergeScopedSessionList(
 	}
 
 	var durableResult factorysessions.ListSessionsResult
-	if scope == factorysessions.SessionListScopePersisted && durable == nil {
+	requiresDurable := scope == factorysessions.SessionListScopePersisted ||
+		scope == factorysessions.SessionListScopeHistory || scope == factorysessions.SessionListScopeAll
+	if requiresDurable && durable == nil {
 		return factorysessions.ScopedSessionListResult{}, ErrDurableReaderRequired
 	}
 	if durable != nil {
-		result, err := durable.ListSessions(ctx, factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll})
+		durableScope := factorysessions.SessionListScopeAll
+		if scope == factorysessions.SessionListScopeHistory {
+			durableScope = factorysessions.SessionListScopeHistory
+		}
+		result, err := durable.ListSessions(ctx, factorysessions.ListSessionsRequest{
+			Scope:                  durableScope,
+			ExcludeRecordedHistory: scope == factorysessions.SessionListScopeLive || scope == factorysessions.SessionListScopePersisted,
+		})
 		if err != nil {
 			return factorysessions.ScopedSessionListResult{}, err
 		}
@@ -92,9 +101,10 @@ func mergeScopedSessionList(
 		return strings.Compare(liveRows[left].ID, liveRows[right].ID) < 0
 	})
 	return factorysessions.ScopedSessionListResult{
-		Scope:           scope,
-		LiveSessions:    liveRows,
-		DurableSessions: append([]factorysessions.DurableSessionListSummary(nil), scoped.DurableSessions...),
+		Scope:            scope,
+		LiveSessions:     liveRows,
+		DurableSessions:  append([]factorysessions.DurableSessionListSummary(nil), scoped.DurableSessions...),
+		RecordedSessions: append([]factorysessions.RecordedSessionListSummary(nil), scoped.RecordedSessions...),
 	}, nil
 }
 
@@ -148,6 +158,7 @@ func applySessionListScope(result factorysessions.ListSessionsResult, request fa
 
 	durable := append([]factorysessions.DurableSessionListSummary(nil), result.DurableSessions...)
 	live := append([]factorysessions.LiveSessionSummary(nil), result.LiveSessions...)
+	recorded := sortRecordedSessionSummaries(result.RecordedSessions)
 
 	switch scope {
 	case factorysessions.SessionListScopeLive:
@@ -160,11 +171,17 @@ func applySessionListScope(result factorysessions.ListSessionsResult, request fa
 			Scope:           scope,
 			DurableSessions: sortDurableSessionSummaries(filterPersistedSessionSummaries(durable)),
 		}
+	case factorysessions.SessionListScopeHistory:
+		return factorysessions.ListSessionsResult{
+			Scope:            scope,
+			RecordedSessions: recorded,
+		}
 	default:
 		return factorysessions.ListSessionsResult{
-			Scope:           scope,
-			LiveSessions:    sortLiveSessionSummaries(deduplicateLiveSessionsForAllScope(live, durable)),
-			DurableSessions: sortDurableSessionSummaries(durable),
+			Scope:            scope,
+			LiveSessions:     sortLiveSessionSummaries(deduplicateLiveSessionsForAllScope(live, durable)),
+			DurableSessions:  sortDurableSessionSummaries(durable),
+			RecordedSessions: recorded,
 		}
 	}
 }
@@ -233,6 +250,20 @@ func sortLiveSessionSummaries(sessions []factorysessions.LiveSessionSummary) []f
 	sorted := append([]factorysessions.LiveSessionSummary(nil), sessions...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return strings.Compare(sorted[i].ID, sorted[j].ID) < 0
+	})
+	return sorted
+}
+
+func sortRecordedSessionSummaries(summaries []factorysessions.RecordedSessionListSummary) []factorysessions.RecordedSessionListSummary {
+	if len(summaries) == 0 {
+		return nil
+	}
+	sorted := append([]factorysessions.RecordedSessionListSummary(nil), summaries...)
+	sort.SliceStable(sorted, func(left, right int) bool {
+		if sorted[left].SessionID != sorted[right].SessionID {
+			return strings.Compare(sorted[left].SessionID, sorted[right].SessionID) < 0
+		}
+		return strings.Compare(sorted[left].ArtifactReference, sorted[right].ArtifactReference) < 0
 	})
 	return sorted
 }

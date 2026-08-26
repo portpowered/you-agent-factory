@@ -111,6 +111,8 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionContractFixtureReader,
 	provideFactorySessionInvocationInputReader,
 	provideFactorySessionReplayRecordingReader,
+	provideRecordingOpenFile,
+	provideRecordedSessionInventory,
 	provideFactorySessionInitialWorkReader,
 	provideFactorySessionResolveHomeDirectory,
 	provideFactorySessionIDGenerator,

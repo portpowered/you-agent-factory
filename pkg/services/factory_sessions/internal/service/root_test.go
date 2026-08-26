@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestNewRootRetainsLiveChangeCoordinator(t *testing.T) {
@@ -83,6 +85,36 @@ func TestRootForRuntimeRejectsMissingLiveChangeCoordinator(t *testing.T) {
 	}
 }
 
+func TestRootListSessionsProjectsRecordedHistoryWithoutDetachedOwner(t *testing.T) {
+	t.Parallel()
+
+	inventory := &rootRecordedSessionInventory{result: recordings.RecordedSessionInventoryResult{
+		Sessions: []recordings.RecordedSessionSummary{
+			{FactorySessionID: "session-history", ArtifactReference: "2026/08/24/session-history.jsonl", Format: recordings.RecordedSessionFormatV2JSONL},
+		},
+	}}
+	inputs := validRootInputs(livechange.NewCoordinator())
+	inputs.resolveHome = func() (string, error) { return "operator-home", nil }
+	inputs.recordedSessionInventory = inventory
+	root, err := inputs.call()
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+
+	result, err := root.ListSessions(context.Background(), factorysessions.ListSessionsRequest{
+		Scope: factorysessions.SessionListScopeHistory,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions history: %v", err)
+	}
+	if inventory.request.RecordingRoot != filepath.Join("operator-home", ".you-agent-factory", "recordings") {
+		t.Fatalf("recording root = %q, want canonical recording root", inventory.request.RecordingRoot)
+	}
+	if len(result.RecordedSessions) != 1 || result.RecordedSessions[0].SessionID != "session-history" || result.RecordedSessions[0].Source != factorysessions.RecordedSessionListSourceHistory {
+		t.Fatalf("recorded projection = %#v, want one explicit history row", result.RecordedSessions)
+	}
+}
+
 func newRootForTest(coordinator factorysessioncontracts.LiveChangeCoordinator) (*Root, error) {
 	return validRootInputs(coordinator).call()
 }
@@ -104,6 +136,7 @@ type rootTestInputs struct {
 	responseStreams              responsestreamservice.Service
 	clock                        factoryruntime.Clock
 	liveChangeCoordinator        factorysessioncontracts.LiveChangeCoordinator
+	recordedSessionInventory     recordings.RecordedSessionInventory
 }
 
 func validRootInputs(coordinator factorysessioncontracts.LiveChangeCoordinator) rootTestInputs {
@@ -145,10 +178,21 @@ func (in rootTestInputs) call() (*Root, error) {
 		in.responseStreams,
 		in.clock,
 		in.liveChangeCoordinator,
+		in.recordedSessionInventory,
 	)
 }
 
 var _ factorysessioncontracts.LiveChangeCoordinator = (*livechange.Service)(nil)
+
+type rootRecordedSessionInventory struct {
+	request recordings.RecordedSessionInventoryRequest
+	result  recordings.RecordedSessionInventoryResult
+}
+
+func (inventory *rootRecordedSessionInventory) ListRecordedSessions(request recordings.RecordedSessionInventoryRequest) (recordings.RecordedSessionInventoryResult, error) {
+	inventory.request = request
+	return inventory.result, nil
+}
 
 type rootTestNamedPathResolver struct{}
 
