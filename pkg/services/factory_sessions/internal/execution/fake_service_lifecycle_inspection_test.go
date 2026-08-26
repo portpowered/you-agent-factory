@@ -894,7 +894,7 @@ func seedLegacyTerminalSnapshot(t *testing.T, sessionID string) (*petriCompactio
 	t.Helper()
 	store := &petriCompactionStore{}
 	legacy := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded, OrchestratorKind: interfaces.OrchestratorKindPetri}, result: ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusSucceeded}, petriMutations: legacyTerminalTokenMutations(7)}
-	encoded, err := json.Marshal(persistedSnapshotFromRuntimeState(legacy))
+	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(legacy, 0))
 	if err != nil {
 		t.Fatalf("marshal legacy snapshot: %v", err)
 	}

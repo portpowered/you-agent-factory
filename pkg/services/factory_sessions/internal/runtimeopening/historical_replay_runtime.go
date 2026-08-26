@@ -618,22 +618,6 @@ type currentBoardHistory struct {
 	events []factorydefinitions.FactoryEvent
 }
 
-// restoreCurrentBoardState loads a detached Factory world state through the
-// public Recordings history contract for callers that explicitly request a
-// current-board read.
-func restoreCurrentBoardState(
-	service historicalRecordingReader,
-	recordPath string,
-	sessionID string,
-	allowMissingHistory bool,
-) (*factorydefinitions.FactoryWorldState, error) {
-	history, err := restoreCurrentBoardHistory(service, recordPath, sessionID, allowMissingHistory)
-	if err != nil || history == nil {
-		return nil, err
-	}
-	return history.state, nil
-}
-
 // restoreCurrentBoardHistory loads both the detached board state and the
 // canonical Factory event prefix that produced it. The live successor seeds
 // its new Recordings ledger with that prefix so historical dispatch/Worker

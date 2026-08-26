@@ -770,7 +770,7 @@ func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionSt
 
 func encodedWarningStateBytes(t *testing.T, state runtimeSessionState) int {
 	t.Helper()
-	encoded, err := json.MarshalIndent(persistedSnapshotFromRuntimeState(state), "", "  ")
+	encoded, err := json.MarshalIndent(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, 0), "", "  ")
 	if err != nil {
 		t.Fatalf("marshal warning state: %v", err)
 	}

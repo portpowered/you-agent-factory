@@ -440,7 +440,9 @@ func newRecordedWorkerSessionObservation(
 	clock factory.Clock,
 	providerSessions providersessions.Service,
 ) workersessions.Service {
-	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, nil, "", nil)
+	return newRecordedWorkerSessionObservationWithRestoredState(
+		live, ledger, projector, clock, providerSessions, nil, "", nil, nil, nil,
+	)
 }
 
 func (s *recordedWorkerSessionObservation) ListObservations(

@@ -935,23 +935,6 @@ func restoredWorkRequestEventIsKnown(
 	return len(workIDs) > 0
 }
 
-func newRecordedWorkerSessionObservationWithRecording(
-	live workersessions.Service,
-	ledger recordings.RuntimeLedger,
-	projector factory.WorldStateProjector,
-	clock factory.Clock,
-	providerSessions providersessions.Service,
-	replayEvents []interfaces.FactoryEvent,
-	recordingID string,
-	recordingReader recordings.WorkerRecordingReader,
-	factorySessionIDs ...string,
-) workersessions.Service {
-	return newRecordedWorkerSessionObservationWithRestoredState(
-		live, ledger, projector, clock, providerSessions, replayEvents, recordingID,
-		recordingReader, nil, nil, factorySessionIDs...,
-	)
-}
-
 func newRecordedWorkerSessionObservationWithRestoredState(
 	live workersessions.Service,
 	ledger recordings.RuntimeLedger,
