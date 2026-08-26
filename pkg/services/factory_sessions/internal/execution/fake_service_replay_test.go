@@ -127,7 +127,7 @@ func TestPersistedTokenFailureHistoryRetainsHeadTailAndReloads(t *testing.T) {
 		petriMutations: []interfaces.TokenMutationRecord{failureMutation(history, 1)},
 	}
 
-	snapshot := persistedSnapshotFromRuntimeState(state)
+	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity)
 	if len(state.petriMutations[0].Token.History.FailureLog) != historySize {
 		t.Fatalf("live failure log length = %d, want %d", len(state.petriMutations[0].Token.History.FailureLog), historySize)
 	}
@@ -178,7 +178,7 @@ func TestPersistedTokenFailureHistoryWithinCapacityIsUnchanged(t *testing.T) {
 		petriMutations: []interfaces.TokenMutationRecord{failureMutation(history, 1)},
 	}
 
-	snapshot := persistedSnapshotFromRuntimeState(state)
+	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity)
 	got := snapshot.Records[0].PetriMutation.Token.History
 	if len(got.FailureLog) != len(history.FailureLog) {
 		t.Fatalf("failure log length = %d, want %d", len(got.FailureLog), len(history.FailureLog))

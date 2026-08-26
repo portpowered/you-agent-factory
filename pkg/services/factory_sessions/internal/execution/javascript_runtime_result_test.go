@@ -922,7 +922,7 @@ func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBef
 		SessionID: sessionID,
 		Status:    LifecycleStatusSucceeded,
 	}}
-	snapshot := persistedSnapshotFromRuntimeState(state)
+	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity)
 	exact, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal exact snapshot: %v", err)

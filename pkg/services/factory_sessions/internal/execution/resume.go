@@ -898,13 +898,6 @@ type PersistedRuntimeSessionState struct {
 	SourceContent     string
 }
 
-func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
-	return persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
-		state,
-		defaultPersistedTokenFailureLogCapacity,
-	)
-}
-
 // persistedSnapshotFromRuntimeStateWithFailureLogCapacity builds a detached
 // durable snapshot and compacts only its serialized Petri token histories.
 // A non-positive capacity disables compaction for deterministic regression
