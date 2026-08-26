@@ -4,6 +4,13 @@
   "defaultFloorPercent": 50.00,
   "floorHolds": [
     {
+      "package": "github.com/portpowered/infinite-you/pkg/initializer/application",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/platform/filesystem",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
@@ -20,6 +27,13 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/root",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
       "owner": "coverage-remediation",
       "deadline": "2027-07-15",
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
@@ -46,8 +60,64 @@
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/workerinference",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/packagedtts",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
       "owner": "coverage-remediation",
       "deadline": "2027-07-15",
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
@@ -76,6 +146,27 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/cli",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
       "owner": "coverage-remediation",
       "deadline": "2027-07-15",
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
@@ -116,8 +207,29 @@
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factory",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
+      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
       "owner": "coverage-remediation",
       "deadline": "2027-07-15",
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
