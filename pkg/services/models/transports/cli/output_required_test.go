@@ -523,22 +523,22 @@ func TestWriteGenericCLIOutputPathPublishesSingleOutput(t *testing.T) {
 func TestWriteGenericCLIOutputRejectsAmbiguousOrEmptyResults(t *testing.T) {
 	t.Parallel()
 
-	if err := writeGenericCLIOutput(io.Discard, modelinference.InvokeModelResult{}); err == nil || !strings.Contains(err.Error(), "multiple model outputs") {
+	if err := writeGenericCLIOutputWithCatalog(io.Discard, modelinference.InvokeModelResult{}, modelinference.Detail{}, ""); err == nil || !strings.Contains(err.Error(), "multiple model outputs") {
 		t.Fatalf("empty result error = %v, want multiple-output guidance", err)
 	}
-	if err := writeGenericCLIOutput(io.Discard, modelinference.InvokeModelResult{
+	if err := writeGenericCLIOutputWithCatalog(io.Discard, modelinference.InvokeModelResult{
 		Outputs: []modelinference.InferenceOutput{{Name: "text"}, {Name: "other", Content: "value"}},
-	}); err == nil || !strings.Contains(err.Error(), "multiple model outputs") {
+	}, modelinference.Detail{}, ""); err == nil || !strings.Contains(err.Error(), "multiple model outputs") {
 		t.Fatalf("multiple result error = %v, want multiple-output guidance", err)
 	}
-	if err := writeGenericCLIOutput(io.Discard, modelinference.InvokeModelResult{
+	if err := writeGenericCLIOutputWithCatalog(io.Discard, modelinference.InvokeModelResult{
 		Outputs: []modelinference.InferenceOutput{{Name: "text"}},
-	}); err == nil || !strings.Contains(err.Error(), "no inline output") {
+	}, modelinference.Detail{}, ""); err == nil || !strings.Contains(err.Error(), "no inline output") {
 		t.Fatalf("empty output error = %v, want no-inline guidance", err)
 	}
-	if err := writeGenericCLIOutput(genericOutputErrorWriter{}, modelinference.InvokeModelResult{
+	if err := writeGenericCLIOutputWithCatalog(genericOutputErrorWriter{}, modelinference.InvokeModelResult{
 		Outputs: []modelinference.InferenceOutput{{Name: "text", Content: "value"}},
-	}); err == nil || !strings.Contains(err.Error(), "response write failed") {
+	}, modelinference.Detail{}, ""); err == nil || !strings.Contains(err.Error(), "response write failed") {
 		t.Fatalf("output writer error = %v, want writer failure", err)
 	}
 }

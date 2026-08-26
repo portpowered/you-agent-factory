@@ -344,10 +344,6 @@ func genericCLIJSONResult(
 	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
 }
 
-func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelResult) error {
-	return writeGenericCLIOutputWithCatalog(output, result, modelinference.Detail{}, "")
-}
-
 func writeGenericCLIOutputWithCatalog(
 	output io.Writer,
 	result modelinference.InvokeModelResult,
