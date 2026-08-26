@@ -20,6 +20,36 @@ const (
 	durableSessionSnapshotSizeWarningCode             = "DURABLE_SESSION_SNAPSHOT_SIZE_THRESHOLD"
 )
 
+func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
+	if state == nil {
+		return runtimeSessionState{}
+	}
+	cloned := runtimeSessionState{
+		session:                   cloneSessionRead(state.session),
+		result:                    cloneResultRead(state.result),
+		dispatches:                cloneDispatchSummaries(state.dispatches),
+		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
+		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
+		artifacts:                 cloneArtifactSummaries(state.artifacts),
+		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
+		petriMutations:            clonePetriMutations(state.petriMutations),
+		petriSummaries:            clonePetriTokenSummaries(state.petriSummaries),
+		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
+		startRequest:              cloneStartRequestPtr(state.startRequest),
+		resolvedSource:            state.resolvedSource,
+		sourceContent:             state.sourceContent,
+		runDone:                   state.runDone,
+		responseEvents:            state.responseEvents,
+	}
+	if len(state.events) > 0 {
+		cloned.events = make([]json.RawMessage, len(state.events))
+		for i, event := range state.events {
+			cloned.events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return cloned
+}
+
 // ResumeInterruptedSession reconstructs one interrupted checkpointed session from
 // persisted checkpoint summaries plus durable session state and continues execution.
 func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
@@ -939,6 +969,10 @@ type PersistedRuntimeSessionState struct {
 	SourceContent     string
 }
 
+func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
+	return persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, 0)
+}
+
 // persistedSnapshotFromRuntimeStateWithFailureLogCapacity builds a detached
 // durable snapshot and compacts only its serialized Petri token histories.
 // A non-positive capacity disables compaction for deterministic regression
@@ -1031,11 +1065,15 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if err != nil {
 		return fmt.Errorf("marshal durable session snapshot: %w", err)
 	}
-	s.warnIfDurableSnapshotExceedsThreshold(state, int64(len(encoded)))
 	maxBytes := s.persistedSnapshotMaxBytes
 	if maxBytes <= 0 {
 		maxBytes = defaultPersistedSnapshotMaxBytes
 	}
+	s.warnIfDurableSnapshotExceedsThreshold(
+		state,
+		int64(len(encoded)),
+		durableSessionSnapshotWarningThresholdForMax(maxBytes),
+	)
 	if len(encoded) > maxBytes {
 		return &SnapshotSizeLimitError{
 			Path:        persistedSnapshotPath(s.persistence, s.projectRoot, sessionID),
@@ -1061,8 +1099,9 @@ func persistedSnapshotPath(store runtimepersist.Store, projectRoot, sessionID st
 func (s *JavaScriptRuntimeService) warnIfDurableSnapshotExceedsThreshold(
 	state runtimeSessionState,
 	encodedBytes int64,
+	thresholdBytes int64,
 ) {
-	if s == nil || s.persistenceWarningLogger == nil || encodedBytes < durableSessionSnapshotWarningThresholdBytes {
+	if s == nil || s.persistenceWarningLogger == nil || encodedBytes < thresholdBytes {
 		return
 	}
 	liveTokens, terminalTokens := retainedPetriTokenCounts(state)
@@ -1071,10 +1110,26 @@ func (s *JavaScriptRuntimeService) warnIfDurableSnapshotExceedsThreshold(
 		zap.String("code", durableSessionSnapshotSizeWarningCode),
 		zap.String("session_id", strings.TrimSpace(state.session.SessionID)),
 		zap.Int64("observed_bytes", encodedBytes),
-		zap.Int64("threshold_bytes", durableSessionSnapshotWarningThresholdBytes),
+		zap.Int64("threshold_bytes", thresholdBytes),
 		zap.Int("retained_live_tokens", liveTokens),
 		zap.Int("retained_terminal_tokens", terminalTokens),
 	)
+}
+
+// durableSessionSnapshotWarningThresholdForMax keeps the historical 100 MiB
+// warning meaningful when a larger bound is configured, while making the
+// default 64 MiB hard limit observable before rejection. A warning at 75% of
+// the active bound gives operators time to investigate without promising to
+// write a snapshot that the hard limit will reject.
+func durableSessionSnapshotWarningThresholdForMax(maxBytes int) int64 {
+	if maxBytes <= 0 {
+		maxBytes = defaultPersistedSnapshotMaxBytes
+	}
+	nearLimit := int64(maxBytes - maxBytes/4)
+	if nearLimit > 0 && nearLimit < durableSessionSnapshotWarningThresholdBytes {
+		return nearLimit
+	}
+	return durableSessionSnapshotWarningThresholdBytes
 }
 
 func retainedPetriTokenCounts(state runtimeSessionState) (liveTokens, terminalTokens int) {

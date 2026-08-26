@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -978,5 +979,55 @@ func TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession(t *testing.T) 
 	}
 	if firstID != "dur-sess-first/dispatch-1" {
 		t.Fatalf("Workers dispatch identity = %q, want the session-scoped identity", firstID)
+	}
+}
+
+func TestRecordPetriTokenMutations_CompactsCandidateAndPublishesOnlyAfterSave(t *testing.T) {
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	store := &petriCompactionStore{}
+	service := &JavaScriptRuntimeService{persistence: store, sessions: map[string]*runtimeSessionState{
+		sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
+	}}
+	if err := service.RecordPetriTokenMutations(sessionID, largeTerminalTokenMutations(3, "large-output")); err != nil {
+		t.Fatalf("RecordPetriTokenMutations: %v", err)
+	}
+	if store.saveCalls != 1 || len(service.sessions[sessionID].petriMutations) != 0 || len(service.sessions[sessionID].petriSummaries) != 1 {
+		t.Fatalf("saved candidate = calls %d, %d mutations, %d summaries, want 1, 0, 1", store.saveCalls, len(service.sessions[sessionID].petriMutations), len(service.sessions[sessionID].petriSummaries))
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(store.payload, &persisted); err != nil {
+		t.Fatalf("decode persisted compacted state: %v", err)
+	}
+	if len(persisted.Records) != 1 || persisted.Records[0].PetriSummary == nil || persisted.Records[0].PetriSummary.WorkID != "work-3" {
+		t.Fatalf("persisted records = %#v, want work-3 summary", persisted.Records)
+	}
+
+	const failedID = "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	wantErr := errors.New("checkpoint unavailable")
+	initial := largeTerminalTokenMutations(4, "large-output")
+	failedStore := &petriCompactionStore{saveErr: wantErr}
+	failedService := &JavaScriptRuntimeService{persistence: failedStore, sessions: map[string]*runtimeSessionState{
+		failedID: {session: SessionReadResult{SessionID: failedID, Status: LifecycleStatusRunning}, petriMutations: clonePetriMutations(initial)},
+	}}
+	if err := failedService.RecordPetriTokenMutations(failedID, []interfaces.TokenMutationRecord{initial[2]}); !errors.Is(err, wantErr) {
+		t.Fatalf("failed RecordPetriTokenMutations error = %v, want %v", err, wantErr)
+	}
+	if len(failedService.sessions[failedID].petriMutations) != len(initial) || len(failedService.sessions[failedID].petriSummaries) != 0 {
+		t.Fatalf("state after failed save = %d mutations, %d summaries, want original %d and 0", len(failedService.sessions[failedID].petriMutations), len(failedService.sessions[failedID].petriSummaries), len(initial))
+	}
+}
+
+func TestCompactPetriTokenHistory_PreservesReachableAndRetiresConsumedTerminalHistory(t *testing.T) {
+	reachable := largeTerminalTokenMutations(1, "active-output")
+	reachable[2].TransitionReachable = true
+	if retained, summaries := compactPetriTokenHistory(reachable, nil); len(retained) != len(reachable) || len(summaries) != 0 {
+		t.Fatalf("reachable terminal history = %d mutations, %d summaries, want lossless history", len(retained), len(summaries))
+	}
+	consumed := append(largeTerminalTokenMutations(2, "output"), interfaces.TokenMutationRecord{
+		DispatchID: "dispatch-2", TransitionID: "consume", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationConsume, TokenID: "token-2", FromPlace: "task:done", Terminal: true,
+	})
+	retained, summaries := compactPetriTokenHistory(consumed, nil)
+	if len(retained) != 0 || len(summaries) != 1 || !summaries[0].Retired || summaries[0].WorkID != "work-2" || summaries[0].State != "done" {
+		t.Fatalf("consumed terminal history = %d mutations, %#v, want one retired work-2 summary", len(retained), summaries)
 	}
 }

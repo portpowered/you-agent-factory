@@ -989,39 +989,3 @@ func assertBoardCLIListAndShows(
 		assertBoardWork(t, shown, want)
 	}
 }
-
-func assertBoardCLIWorkerSessionsForWork(
-	t *testing.T,
-	ctx context.Context,
-	daemon *boardPersistenceDaemon,
-	binaryPath, factoryDir, homeDir, workID string,
-) {
-	t.Helper()
-	output, err := runBoardPersistenceCLI(
-		ctx,
-		binaryPath,
-		factoryDir,
-		homeDir,
-		daemon.baseURL,
-		"--json",
-		"worker-sessions",
-		"list",
-		"--work-id",
-		workID,
-	)
-	if err != nil {
-		t.Fatalf("you worker-sessions list --work-id %s after restart: %v\noutput:\n%s", workID, err, output)
-	}
-	var response factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(bytes.TrimSpace(output), &response); err != nil {
-		t.Fatalf("decode worker-sessions list --work-id %s: %v\noutput:\n%s", workID, err, output)
-	}
-	if len(response.Sessions) == 0 {
-		t.Fatalf("worker-sessions list --work-id %s returned no historical attempts", workID)
-	}
-	for _, observation := range response.Sessions {
-		if observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting {
-			t.Fatalf("worker-sessions list --work-id %s returned non-terminal attempt %#v", workID, observation)
-		}
-	}
-}
