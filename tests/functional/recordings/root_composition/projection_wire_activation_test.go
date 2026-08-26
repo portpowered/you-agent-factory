@@ -343,6 +343,123 @@ func TestReplayArtifactLoaderReadsLegacyArtifactAndClockThroughRecordingWire(t *
 	if clock == nil || !clock.Now().Equal(artifact.RecordedAt) {
 		t.Fatalf("NewReplayClock(legacy) = %#v, want recorded time %s", clock, artifact.RecordedAt)
 	}
+	if recordingswire.NewReplayClock(nil) != nil {
+		t.Fatal("NewReplayClock(nil) returned a clock")
+	}
+}
+
+// TestReplayArtifactLoaderNormalizesHistoricalFailureDetailsThroughWire
+// proves legacy failure aliases are converted at the replay read boundary and
+// do not leak the old fields to callers of the normalized artifact.
+func TestReplayArtifactLoaderNormalizesHistoricalFailureDetailsThroughWire(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name          string
+		fields        map[string]any
+		wantReason    string
+		wantMessage   string
+		wantCanonical bool
+	}{
+		{
+			name:        "legacy reason and message",
+			fields:      map[string]any{"failureReason": "timeout", "failureMessage": "provider timed out"},
+			wantReason:  "timeout",
+			wantMessage: "provider timed out",
+		},
+		{
+			name:        "legacy error class uses safe fallback",
+			fields:      map[string]any{"errorClass": "provider failure"},
+			wantReason:  "unknown",
+			wantMessage: "Failure details were not recorded in this historical event.",
+		},
+		{
+			name: "canonical detail wins",
+			fields: map[string]any{
+				"failureDetail": map[string]any{"reason": "throttled", "message": "rate limited"},
+				"failureReason": "timeout",
+			},
+			wantReason:    "throttled",
+			wantMessage:   "rate limited",
+			wantCanonical: true,
+		},
+		{
+			name:        "expected artifacts alias",
+			fields:      map[string]any{"failureReason": "expected artifacts unsatisfied", "failureMessage": "missing output"},
+			wantReason:  "EXPECTED_ARTIFACTS_UNSATISFIED",
+			wantMessage: "missing output",
+		},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			payload := legacyReplayFailureFixture(t, testCase.fields)
+			loader := recordingswire.NewReplayArtifactLoader(
+				functionalReplayArtifactStorage{payload: payload},
+				factorydefinitionswire.FactorySnapshotJSONDecoder(),
+			)
+			artifact, err := loader("legacy-failure-recording.json")
+			if err != nil {
+				t.Fatalf("ReplayArtifactLoader(legacy failure): %v", err)
+			}
+			if len(artifact.Events) == 0 {
+				t.Fatal("normalized artifact has no events")
+			}
+			var eventPayload map[string]any
+			if err := json.Unmarshal(artifact.Events[0].Payload, &eventPayload); err != nil {
+				t.Fatalf("decode normalized event payload: %v", err)
+			}
+			detail, ok := eventPayload["failureDetail"].(map[string]any)
+			if !ok || detail["reason"] != testCase.wantReason || detail["message"] != testCase.wantMessage {
+				t.Fatalf("normalized failureDetail = %#v, want reason=%q message=%q", detail, testCase.wantReason, testCase.wantMessage)
+			}
+			for _, field := range []string{"failureReason", "failureMessage", "errorClass"} {
+				if _, exists := eventPayload[field]; exists {
+					t.Fatalf("normalized event payload still contains %q: %#v", field, eventPayload)
+				}
+			}
+			if testCase.wantCanonical && detail["reason"] != "throttled" {
+				t.Fatalf("canonical detail was not retained: %#v", detail)
+			}
+		})
+	}
+}
+
+func legacyReplayFailureFixture(t *testing.T, fields map[string]any) []byte {
+	t.Helper()
+	fixturePath := testutil.MustRepoPath(t, filepath.Join(
+		"tests", "functional", "work", "watch", "testdata", "production-retry-ledger.replay.json",
+	))
+	payload, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read replay fixture: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatalf("decode replay fixture: %v", err)
+	}
+	events, ok := document["events"].([]any)
+	if !ok || len(events) == 0 {
+		t.Fatal("replay fixture has no events")
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok {
+		t.Fatal("replay fixture first event is not an object")
+	}
+	eventPayload, ok := event["payload"].(map[string]any)
+	if !ok {
+		t.Fatal("replay fixture first event payload is not an object")
+	}
+	for key, value := range fields {
+		eventPayload[key] = value
+	}
+	event["payload"] = eventPayload
+	document["events"] = events
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode replay fixture: %v", err)
+	}
+	return encoded
 }
 
 // TestReplayArtifactLoaderRejectsInvalidV2FramingThroughRecordingWire keeps
