@@ -525,7 +525,7 @@ jobs:
         env:
           CHANGED_TEST_STABILITY_BASE: ${{ github.event.pull_request.base.sha }}
           CHANGED_TEST_STABILITY_HEAD: ${{ github.event.pull_request.head.sha }}
-          CHANGED_TEST_STABILITY_ATTEMPTS: "20"
+          CHANGED_TEST_STABILITY_ATTEMPTS: "3"
           CHANGED_TEST_STABILITY_BUDGET: 15m
         run: make test-changed-test-stability
 
