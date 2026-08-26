@@ -38,7 +38,10 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
 		sourceContent:             state.sourceContent,
+		runCancel:                 state.runCancel,
 		runDone:                   state.runDone,
+		eventConsumer:             state.eventConsumer,
+		presentedEventIDs:         clonePresentedEventIDs(state.presentedEventIDs),
 		responseEvents:            state.responseEvents,
 	}
 	if len(state.events) > 0 {
@@ -46,6 +49,17 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		for i, event := range state.events {
 			cloned.events[i] = append(json.RawMessage(nil), event...)
 		}
+	}
+	return cloned
+}
+
+func clonePresentedEventIDs(values map[string]struct{}) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]struct{}, len(values))
+	for eventID := range values {
+		cloned[eventID] = struct{}{}
 	}
 	return cloned
 }
