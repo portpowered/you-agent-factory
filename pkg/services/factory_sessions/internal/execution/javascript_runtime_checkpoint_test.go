@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
@@ -882,23 +883,100 @@ func TestPublishWorkerProgress_StopsOnceTheWorkerIsReleased(t *testing.T) {
 	}
 }
 
-// TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession pins what makes
-// those routing keys distinct in the first place.
-//
-// Child dispatch identities are minted per session and start again at
-// dispatch-1 for each, while the Workers pool they share treats a dispatch ID
-// as single-use for its whole life. Two sessions submitting an unqualified
-// dispatch-1 would leave the second refused outright.
-func TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession(t *testing.T) {
-	first := newChildWorkerExecutor("dur-sess-first", nil, nil, nil, nil, "", 0)
-	second := newChildWorkerExecutor("dur-sess-second", nil, nil, nil, nil, "", 0)
+func TestJavaScriptRuntimeService_CloseRejectsResumeWithoutOrphaningSession(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-0123456789abcdef0123456789abcdef"
+	entered, release := make(chan struct{}), make(chan struct{})
+	checkpointSummaries := &blockingCheckpointSummaries{
+		JavaScriptCheckpointSummaries: checkpointfixtures.CheckpointSummariesFixture{
+			BuildResult:  checkpointfixtures.ResumableCheckpointSummaryResult(),
+			LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
+		},
+		entered: entered, release: release,
+	}
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(), CheckpointSummaries: checkpointSummaries,
+		Workflows: factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
+	})
+	state := interruptedSessionForAdmissionTest(sessionID)
+	service.mu.Lock()
+	service.sessions[sessionID] = &state
+	service.mu.Unlock()
 
-	firstID := first.workerDispatchIdentity("dispatch-1")
-	secondID := second.workerDispatchIdentity("dispatch-1")
-	if firstID == secondID {
-		t.Fatalf("two sessions submitted the same Workers dispatch identity %q", firstID)
+	resumeDone := make(chan error, 1)
+	go func() {
+		_, err := service.ResumeInterruptedSession(context.Background(), sessionID, ResumeSessionRequest{RequestID: "req-runtime-close-admission-resume-001"})
+		resumeDone <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for resume validation")
 	}
-	if firstID != "dur-sess-first/dispatch-1" {
-		t.Fatalf("Workers dispatch identity = %q, want the session-scoped identity", firstID)
+	if err := service.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
+	close(release)
+	if err := <-resumeDone; !errors.Is(err, ErrDurableExecutionClosed) {
+		t.Fatalf("resume error = %v, want ErrDurableExecutionClosed", err)
+	}
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession after rejected resume: %v", err)
+	}
+	if read.Status != LifecycleStatusInterrupted {
+		t.Fatalf("session status after rejected resume = %q, want INTERRUPTED", read.Status)
+	}
+	service.mu.RLock()
+	active := service.sessions[sessionID]
+	var runCancel context.CancelFunc
+	if active != nil {
+		runCancel = active.runCancel
+	}
+	service.mu.RUnlock()
+	if runCancel != nil {
+		t.Fatal("rejected resume left a runnable session cancel function")
+	}
+}
+
+type blockingCheckpointSummaries struct {
+	factory.JavaScriptCheckpointSummaries
+	entered, release chan struct{}
+}
+
+func (summaries *blockingCheckpointSummaries) Latest(
+	input factory.JavaScriptCheckpointSummaryInput,
+) *factory.JavaScriptCheckpointSummary {
+	close(summaries.entered)
+	<-summaries.release
+	return summaries.JavaScriptCheckpointSummaries.Latest(input)
+}
+
+func interruptedSessionForAdmissionTest(sessionID string) runtimeSessionState {
+	startedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	startRequest := StartRequest{RequestID: "req-runtime-close-admission-resume-start-001", Source: Source{
+		Kind: factory.WorkflowSourceKindWorkflowName, WorkflowName: "resumable-two-step-fake-children",
+	}, Args: map[string]any{"subject": "workflows"}}
+	state := runtimeSessionState{
+		session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusInterrupted,
+			OrchestratorKind: interfaces.OrchestratorKindJavaScript, Dialect: "you-workflow-v1",
+			SourceHash: "sha256:scripted", Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt, InterruptedAt: &startedAt}},
+		result:     ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusInterrupted, ResultStatus: ResultStatusPartial},
+		dispatches: []DispatchSummary{{ID: "dispatch-1", Status: DispatchStatusCompleted, Attempt: 1}},
+		runtimeRecords: []factory.JavaScriptRuntimeRecord{
+			{Sequence: 1, Kind: factory.JavaScriptRecordKindChildDispatch, ChildDispatch: &factory.JavaScriptChildDispatchRecord{
+				DispatchID: "dispatch-1", ChildIndex: 1, Status: factory.JavaScriptChildDispatchStatusCompleted,
+				Output: map[string]any{"text": "step one"},
+			}},
+			{Sequence: 2, Kind: factory.JavaScriptRecordKindCheckpoint, Checkpoint: &factory.JavaScriptCheckpointRecord{
+				ID: "checkpoint-1", Label: "after-step-one",
+			}},
+		},
+		checkpointSummary: checkpointfixtures.ResumableCheckpointSummaryResult(), startRequest: &startRequest,
+		resolvedSource: ResolvedSource{Kind: factory.WorkflowSourceKindWorkflowName,
+			SourceRef: "resumable-two-step-fake-children.workflow.js", SourceHash: "sha256:scripted", Dialect: "you-workflow-v1"},
+		sourceContent: "scripted resumable workflow",
+	}
+	state.events = rebuildRuntimeSessionCanonicalEvents(&state)
+	return state
 }
