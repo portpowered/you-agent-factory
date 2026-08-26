@@ -888,7 +888,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 	assertFailedPreservesRequestContentResponse(t, generatedHistoryEvents(t, history))
 }
 
-func TestEventHistoryGeneratedHelpersFilterAndNormalizeInputs(t *testing.T) {
+func TestEventHistoryGeneratedHelpersMapInferencePayload(t *testing.T) {
 	t.Parallel()
 
 	request := &workerexecution.InferenceRequestEventPayload{InferenceRequestID: "request-1"}
@@ -908,6 +908,11 @@ func TestEventHistoryGeneratedHelpersFilterAndNormalizeInputs(t *testing.T) {
 	}); eventType != "" || payload != nil {
 		t.Fatalf("ambiguous inference payload = (%q, %#v), want empty", eventType, payload)
 	}
+}
+
+func TestEventHistoryGeneratedHelpersFilterSecretPointers(t *testing.T) {
+	t.Parallel()
+
 	if got := inferenceSecretProvenance(workerexecution.InferenceEvent{Kind: workerexecution.InferenceEventKindResponse}); got != nil {
 		t.Fatalf("response secret provenance = %#v, want nil", got)
 	}
@@ -917,6 +922,10 @@ func TestEventHistoryGeneratedHelpersFilterAndNormalizeInputs(t *testing.T) {
 	if got := recordingSecretsFromJSONPointers([]string{"/factory/name"}); len(got) != 1 || got[0].JSONPointer != "/factory/name" {
 		t.Fatalf("secret pointers = %#v, want one declared pointer", got)
 	}
+}
+
+func TestEventHistoryGeneratedHelpersMapConsumedWorkRefs(t *testing.T) {
+	t.Parallel()
 
 	refs := dispatchConsumedWorkRefsFromTokens([]workerexecution.Token{
 		{ID: "resource", Color: workerexecution.Color{DataType: workerexecution.DataTypeResource}},
@@ -927,6 +936,11 @@ func TestEventHistoryGeneratedHelpersFilterAndNormalizeInputs(t *testing.T) {
 	if len(refs) != 2 || refs[0].WorkID != "token-fallback" || refs[1].WorkID != "work-1" {
 		t.Fatalf("consumed work refs = %#v, want fallback and explicit work IDs", refs)
 	}
+}
+
+func TestEventHistoryGeneratedHelpersMapDispatchMetadata(t *testing.T) {
+	t.Parallel()
+
 	if dispatchRequestEventMetadataPtr("", workerexecution.ResolvedRunnerSelection{}) != nil {
 		t.Fatal("empty dispatch metadata returned non-nil value")
 	}
@@ -938,11 +952,20 @@ func TestEventHistoryGeneratedHelpersFilterAndNormalizeInputs(t *testing.T) {
 		*metadata.RunnerSelectionSource != workerexecution.RunnerSelectionSourceFactory {
 		t.Fatalf("dispatch metadata = %#v, want replay, runner, and source", metadata)
 	}
+}
+
+func TestEventHistoryGeneratedHelpersNormalizeEventRelation(t *testing.T) {
+	t.Parallel()
 
 	relation := eventRelation(work.FactoryRelation{Type: "blocks", SourceWorkName: "source", TargetWorkID: "target"})
 	if relation.TargetWorkName != "target" || relation.Type != work.WorkRelationType("blocks") {
 		t.Fatalf("event relation = %#v, want target ID fallback", relation)
 	}
+}
+
+func TestEventHistoryGeneratedHelpersProjectEventWorks(t *testing.T) {
+	t.Parallel()
+
 	items := eventWorks([]work.FactoryWorkItem{
 		{ID: "work-init", TraceID: "trace-init", State: "init"},
 		{ID: "work-done", DisplayName: "done", TraceID: "trace-done", State: "done"},
@@ -956,6 +979,11 @@ func TestEventHistoryGeneratedHelpersFilterAndNormalizeInputs(t *testing.T) {
 		items[4].State != nil {
 		t.Fatalf("event work projections = %#v, want state fallbacks", items)
 	}
+}
+
+func TestEventHistoryGeneratedHelpersFilterRequestEventContent(t *testing.T) {
+	t.Parallel()
+
 	content := requestEventContent([]work.WorkContentPart{
 		{Type: work.WorkContentPartTypeText, Text: "text"},
 		{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"valid":true}`)},

@@ -33,6 +33,66 @@ func TestFactoryEventHistoryForwardsCompletedFlushWatermark(t *testing.T) {
 	}
 }
 
+func TestFactoryEventHistory_FiltersSensitiveFactoryPointerProvenance(t *testing.T) {
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":   "factory-sensitive",
+		"nested": map[string]any{"key": "value"},
+		"items": []any{
+			map[string]any{"name": "first", "a/b": "slash", "a~b": "tilde"},
+			map[string]any{"name": "second"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	history.SetInitialStructureFactory(snapshot)
+	history.SetInvocationSensitiveJSONPointers([]string{
+		"",
+		"/name",
+		"/nested/key",
+		"/items/0/name",
+		"/items/0/a~1b",
+		"/items/0/a~0b",
+		"/items/1/name",
+		"/missing",
+		"/items/0/a~2b",
+		"/items/0/a~",
+	})
+
+	var duringAppend []recordings.RecordingSecret
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		duringAppend = history.SecretProvenanceDuringAppend(event)
+	})
+	history.RecordInitialStructure()
+
+	events := history.CanonicalEvents()
+	if len(events) != 1 {
+		t.Fatalf("canonical events = %d, want one initial structure event", len(events))
+	}
+	provenance := history.SecretProvenanceForEvent(events[0])
+	wantPointers := []string{
+		"/factory",
+		"/factory/name",
+		"/factory/nested/key",
+		"/factory/items/0/name",
+		"/factory/items/0/a~1b",
+		"/factory/items/0/a~0b",
+		"/factory/items/1/name",
+	}
+	if len(provenance) != len(wantPointers) || len(duringAppend) != len(wantPointers) {
+		t.Fatalf("filtered provenance = %#v, callback provenance = %#v, want %d entries", provenance, duringAppend, len(wantPointers))
+	}
+	for index, want := range wantPointers {
+		if provenance[index].JSONPointer != want || provenance[index].Provenance != recordings.RecordingSecretProvenanceDeclared {
+			t.Fatalf("provenance[%d] = %#v, want declared pointer %q", index, provenance[index], want)
+		}
+		if duringAppend[index] != provenance[index] {
+			t.Fatalf("during-append provenance[%d] = %#v, want detached copy %#v", index, duringAppend[index], provenance[index])
+		}
+	}
+}
+
 func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketSequence(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 12, 10, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })

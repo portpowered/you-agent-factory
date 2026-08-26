@@ -1,4 +1,4 @@
-package root_composition_test
+package wire_test
 
 import (
 	"bytes"
@@ -12,19 +12,90 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// TestRecordingsProjectionAndWorkSnapshotWiringUsesPublishedContracts keeps
-// the Recordings wire and projection-query paths observable together. The
-// query results are detached values: callers do not need the private ledger,
-// reducer, or projection implementation to read them.
-func TestRecordingsProjectionAndWorkSnapshotWiringUsesPublishedContracts(t *testing.T) {
+// TestRecordingsProjectionServiceReturnsDashboardAndWorkstationData keeps
+// detached projection results observable through the Recordings root.
+func TestRecordingsProjectionServiceReturnsDashboardAndWorkstationData(t *testing.T) {
 	t.Parallel()
 
+	scope, view := functionalRecordingsWorldStateView(t)
+	service := newFunctionalRecordingsRoot(t)
+	dashboard, err := service.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{WorldState: view})
+	if err != nil {
+		t.Fatalf("QuerySimpleDashboard: %v", err)
+	}
+	if dashboard.Data.InFlightDispatchCount != 1 || !dashboard.Data.Session.HasData {
+		t.Fatalf("dashboard data = %#v, want one active customer dispatch", dashboard.Data)
+	}
+	workstation, err := service.QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest{WorldState: view})
+	if err != nil {
+		t.Fatalf("QueryWorkstationRequests: %v", err)
+	}
+	if workstation.Projection.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("workstation projection is nil, want the active dispatch")
+	}
+	if _, ok := (*workstation.Projection.WorkstationRequestsByDispatchId)["dispatch-recordings-wire"]; !ok {
+		t.Fatalf("workstation projection = %#v, want dispatch-recordings-wire", workstation.Projection)
+	}
+	events := functionalRecordingsCanonicalEvents(scope)
+	if err := service.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
+		Events: events, Cursor: events[0].Cursor, Scope: scope,
+	}); err != nil {
+		t.Fatalf("ValidateReconnectReplayFrom: %v", err)
+	}
+}
+
+func TestRecordingsProjectionServiceRejectsInvalidReplayInputs(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings-wire"}
+	projection := recordingswire.NewProjectionService()
+	missingSequence := 99
+	legacyEvents := []factorydefinitions.FactoryEvent{
+		functionalRecordingsFactoryEvent("event-0", scope.FactorySessionID, 0),
+		functionalRecordingsFactoryEvent("event-1", scope.FactorySessionID, 1),
+	}
+	if err := projection.ValidateReconnectReplay(
+		legacyEvents,
+		factorydefinitions.FactoryEventReconnectCursor{AfterSequence: &missingSequence},
+		factorydefinitions.FactoryEventReconnectScope{SessionID: scope.FactorySessionID},
+	); !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
+		t.Fatalf("ValidateReconnectReplay(missing cursor) = %v, want ErrReconnectCursorNotFound", err)
+	}
+	if _, err := projection.ReconstructFactoryWorldState(nil, -1); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+		t.Fatalf("ReconstructFactoryWorldState(negative tick) = %v, want ErrInvalidProjectionInput", err)
+	}
+}
+
+func TestRecordingsWorkSnapshotReaderReturnsDetachedAdmission(t *testing.T) {
+	t.Parallel()
+
+	scope, view := functionalRecordingsWorldStateView(t)
+	reader := recordingswire.NewWorkSnapshotReader(&functionalWorkReadRoot{
+		events: []recordings.CanonicalEvent{functionalWorkRequestEvent(scope)},
+		view:   view,
+	})
+	snapshot, err := reader.ReadWorkSnapshot(context.Background(), scope.FactorySessionID)
+	if err != nil {
+		t.Fatalf("ReadWorkSnapshot: %v", err)
+	}
+	if len(snapshot.Items) != 1 || snapshot.Items[0].WorkID != "work-recordings-wire" {
+		t.Fatalf("work snapshot items = %#v, want one detached work item", snapshot.Items)
+	}
+	if len(snapshot.Admissions) != 1 || snapshot.Admissions[0].WorkID != "work-recordings-wire" || snapshot.Admissions[0].Name != "Review recording" {
+		t.Fatalf("work snapshot admissions = %#v, want canonical admission", snapshot.Admissions)
+	}
+	if recordingswire.NewWorkSnapshotReader(nil) != nil {
+		t.Fatal("NewWorkSnapshotReader(nil) returned a reader")
+	}
+}
+
+func functionalRecordingsWorldStateView(t *testing.T) (recordings.CanonicalEventScope, recordings.WorldStateView) {
+	t.Helper()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings-wire"}
 	workItem := work.FactoryWorkItem{
 		ID:          "work-recordings-wire",
@@ -70,72 +141,11 @@ func TestRecordingsProjectionAndWorkSnapshotWiringUsesPublishedContracts(t *test
 	if err != nil {
 		t.Fatalf("marshal world state: %v", err)
 	}
-	view := recordings.WorldStateView{
+	return scope, recordings.WorldStateView{
 		SchemaVersion: recordings.WorldStateViewSchemaV1,
 		Scope:         scope,
 		SelectedTick:  4,
 		Payload:       string(statePayload),
-	}
-
-	service := newFunctionalRecordingsRoot(t)
-	dashboard, err := service.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{WorldState: view})
-	if err != nil {
-		t.Fatalf("QuerySimpleDashboard: %v", err)
-	}
-	if dashboard.Data.InFlightDispatchCount != 1 || !dashboard.Data.Session.HasData {
-		t.Fatalf("dashboard data = %#v, want one active customer dispatch", dashboard.Data)
-	}
-
-	workstation, err := service.QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest{WorldState: view})
-	if err != nil {
-		t.Fatalf("QueryWorkstationRequests: %v", err)
-	}
-	if workstation.Projection.WorkstationRequestsByDispatchId == nil {
-		t.Fatal("workstation projection is nil, want the active dispatch")
-	}
-	if _, ok := (*workstation.Projection.WorkstationRequestsByDispatchId)["dispatch-recordings-wire"]; !ok {
-		t.Fatalf("workstation projection = %#v, want dispatch-recordings-wire", workstation.Projection)
-	}
-
-	events := functionalRecordingsCanonicalEvents(scope)
-	if err := service.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
-		Events: events, Cursor: events[0].Cursor, Scope: scope,
-	}); err != nil {
-		t.Fatalf("ValidateReconnectReplayFrom: %v", err)
-	}
-	projection := recordingswire.NewProjectionService()
-	missingSequence := 99
-	legacyEvents := []factorydefinitions.FactoryEvent{
-		functionalRecordingsFactoryEvent("event-0", scope.FactorySessionID, 0),
-		functionalRecordingsFactoryEvent("event-1", scope.FactorySessionID, 1),
-	}
-	if err := projection.ValidateReconnectReplay(
-		legacyEvents,
-		factorydefinitions.FactoryEventReconnectCursor{AfterSequence: &missingSequence},
-		factorydefinitions.FactoryEventReconnectScope{SessionID: scope.FactorySessionID},
-	); !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
-		t.Fatalf("ValidateReconnectReplay(missing cursor) = %v, want ErrReconnectCursorNotFound", err)
-	}
-	if _, err := projection.ReconstructFactoryWorldState(nil, -1); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
-		t.Fatalf("ReconstructFactoryWorldState(negative tick) = %v, want ErrInvalidProjectionInput", err)
-	}
-
-	reader := recordingswire.NewWorkSnapshotReader(&functionalWorkReadRoot{
-		events: []recordings.CanonicalEvent{functionalWorkRequestEvent(scope)},
-		view:   view,
-	})
-	snapshot, err := reader.ReadWorkSnapshot(context.Background(), scope.FactorySessionID)
-	if err != nil {
-		t.Fatalf("ReadWorkSnapshot: %v", err)
-	}
-	if len(snapshot.Items) != 1 || snapshot.Items[0].WorkID != workItem.ID {
-		t.Fatalf("work snapshot items = %#v, want one detached work item", snapshot.Items)
-	}
-	if len(snapshot.Admissions) != 1 || snapshot.Admissions[0].WorkID != workItem.ID || snapshot.Admissions[0].Name != workItem.DisplayName {
-		t.Fatalf("work snapshot admissions = %#v, want canonical admission", snapshot.Admissions)
-	}
-	if recordingswire.NewWorkSnapshotReader(nil) != nil {
-		t.Fatal("NewWorkSnapshotReader(nil) returned a reader")
 	}
 }
 
@@ -298,7 +308,7 @@ func TestReplayArtifactLoaderReadsV2ThroughRecordingWire(t *testing.T) {
 
 	loader := recordingswire.NewReplayArtifactLoader(
 		functionalReplayArtifactStorage{payload: v2RecordingFixture(t)},
-		factorydefinitionswire.FactorySnapshotJSONDecoder(),
+		decodeFunctionalFactorySnapshot,
 	)
 	artifact, err := loader("historical-recording.jsonl")
 	if err != nil {
@@ -330,7 +340,7 @@ func TestReplayArtifactLoaderReadsLegacyArtifactAndClockThroughRecordingWire(t *
 	}
 	loader := recordingswire.NewReplayArtifactLoader(
 		functionalReplayArtifactStorage{payload: payload},
-		factorydefinitionswire.FactorySnapshotJSONDecoder(),
+		decodeFunctionalFactorySnapshot,
 	)
 	artifact, err := loader("legacy-recording.json")
 	if err != nil {
@@ -396,7 +406,7 @@ func TestReplayArtifactLoaderNormalizesHistoricalFailureDetailsThroughWire(t *te
 			payload := legacyReplayFailureFixture(t, testCase.fields)
 			loader := recordingswire.NewReplayArtifactLoader(
 				functionalReplayArtifactStorage{payload: payload},
-				factorydefinitionswire.FactorySnapshotJSONDecoder(),
+				decodeFunctionalFactorySnapshot,
 			)
 			artifact, err := loader("legacy-failure-recording.json")
 			if err != nil {
@@ -489,7 +499,7 @@ func TestReplayArtifactLoaderRejectsInvalidV2FramingThroughRecordingWire(t *test
 		t.Run(name, func(t *testing.T) {
 			loader := recordingswire.NewReplayArtifactLoader(
 				functionalReplayArtifactStorage{payload: payload},
-				factorydefinitionswire.FactorySnapshotJSONDecoder(),
+				decodeFunctionalFactorySnapshot,
 			)
 			if _, err := loader("invalid-history.jsonl"); err == nil {
 				t.Fatal("ReplayArtifactLoader() error = nil, want v2 framing error")
@@ -588,4 +598,8 @@ func TestHistoricalReplayV2ArtifactRemainsReadableThroughRecordingsRoot(t *testi
 	if !bytes.Contains(payload, []byte(`"schemaVersion":"agent-factory.replay.v2"`)) {
 		t.Fatal("v2 fixture lost its framing schema")
 	}
+}
+
+func decodeFunctionalFactorySnapshot(payload []byte) (*factorydefinitions.FactorySnapshot, error) {
+	return factorydefinitions.NewFactorySnapshot(json.RawMessage(payload))
 }

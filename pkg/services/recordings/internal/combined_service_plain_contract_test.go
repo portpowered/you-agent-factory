@@ -1324,7 +1324,7 @@ func hasReplayArtifactErrorKind(err error, want recordings.ReplayArtifactErrorKi
 	var artifactErr *recordings.ReplayArtifactError
 	return errors.As(err, &artifactErr) && artifactErr.Kind == want
 }
-func TestCombinedServiceReadHelpersRejectInvalidInputsAndPreserveClockFacts(t *testing.T) {
+func TestCombinedServiceReadHelpersRejectUnavailableCapabilities(t *testing.T) {
 	t.Parallel()
 
 	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
@@ -1333,16 +1333,26 @@ func TestCombinedServiceReadHelpersRejectInvalidInputsAndPreserveClockFacts(t *t
 	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
 		t.Fatalf("QueryHistoricalRecording without capability = %v, want unavailable typed error", err)
 	}
+	svc.replayByKey = nil
+	if _, err := svc.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{ArtifactID: "artifact-1"}); !errors.Is(err, recordings.ErrInvalidReplayArtifact) {
+		t.Fatalf("artifact with unavailable map = %v, want ErrInvalidReplayArtifact", err)
+	}
+}
+
+func TestCombinedServiceReadHelpersRejectMalformedReplayCursor(t *testing.T) {
+	t.Parallel()
+
+	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-1"},
 		Cursor: recordings.CanonicalEventCursor{Sequence: -1},
 	}); !errors.Is(err, recordings.ErrMalformedProjectionOrder) {
 		t.Fatalf("malformed reconnect cursor = %v, want ErrMalformedProjectionOrder", err)
 	}
-	svc.replayByKey = nil
-	if _, err := svc.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{ArtifactID: "artifact-1"}); !errors.Is(err, recordings.ErrInvalidReplayArtifact) {
-		t.Fatalf("artifact with unavailable map = %v, want ErrInvalidReplayArtifact", err)
-	}
+}
+
+func TestCombinedServiceReadHelpersValidateEventScopeCursor(t *testing.T) {
+	t.Parallel()
 
 	events := []recordings.CanonicalEvent{
 		{Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "stream-1", Sequence: 0}},
@@ -1372,6 +1382,10 @@ func TestCombinedServiceReadHelpersRejectInvalidInputsAndPreserveClockFacts(t *t
 	if cursorInEvents(events, recordings.CanonicalEventCursor{Sequence: 9, StreamGenerationID: "stream-1"}) {
 		t.Fatal("missing cursor reported as present")
 	}
+}
+
+func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
+	t.Parallel()
 
 	want := time.Date(2026, 8, 26, 12, 0, 0, 0, time.FixedZone("test", 2*60*60))
 	if recordingClockNow(nil) != nil {
@@ -1384,6 +1398,7 @@ func TestCombinedServiceReadHelpersRejectInvalidInputsAndPreserveClockFacts(t *t
 	if got := clockNow(); !got.Equal(want) {
 		t.Fatalf("recordingClockNow callback returned %v, want %v", got, want)
 	}
+	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
 	svc.clock = nil
 	if got := svc.recordingFinishedAt(); !got.IsZero() {
 		t.Fatalf("finished time without clock = %v, want zero", got)
@@ -1394,7 +1409,7 @@ func TestCombinedServiceReadHelpersRejectInvalidInputsAndPreserveClockFacts(t *t
 	}
 }
 
-func TestRecordingLifecycleAdapterPreservesDetachedOperations(t *testing.T) {
+func TestRecordingLifecycleAdapterRejectsDetachedInputs(t *testing.T) {
 	t.Parallel()
 
 	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
@@ -1402,14 +1417,22 @@ func TestRecordingLifecycleAdapterPreservesDetachedOperations(t *testing.T) {
 	if _, err := service.LoadResumeInput(recordings.LoadResumeInputRequest{Path: "missing.json"}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("LoadResumeInput without a replay source = %v, want ErrMissingReplayArtifact", err)
 	}
-
 	if result, err := lifecycle.Begin(recordings.BeginRecordingRequest{}); err != nil || !reflect.DeepEqual(result, recordings.RecordingLifecycleResult{}) {
 		t.Fatalf("disabled lifecycle Begin = (%#v, %v), want zero result", result, err)
 	}
 	if _, err := lifecycle.Begin(recordings.BeginRecordingRequest{Enabled: true}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidTarget) {
 		t.Fatalf("lifecycle Begin without target = %v, want INVALID_TARGET", err)
 	}
+	if _, err := lifecycle.Bind(recordings.BindLifecycleRequest{RecordingID: "adapter-invalid"}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidTarget) {
+		t.Fatalf("lifecycle Bind without target = %v, want INVALID_TARGET", err)
+	}
+}
 
+func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	lifecycle := recordings.RecordingLifecycle(service)
 	begin, err := lifecycle.Begin(recordings.BeginRecordingRequest{
 		Enabled:     true,
 		RecordingID: "adapter-begin",
@@ -1428,7 +1451,13 @@ func TestRecordingLifecycleAdapterPreservesDetachedOperations(t *testing.T) {
 	}); err != nil || finished.Status.State != recordings.LifecycleStateFinalized {
 		t.Fatalf("lifecycle Finish after Begin = (%#v, %v), want finalized", finished, err)
 	}
+}
 
+func TestRecordingLifecycleAdapterBindsAndReportsFailure(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	lifecycle := recordings.RecordingLifecycle(service)
 	bound, err := lifecycle.Bind(recordings.BindLifecycleRequest{
 		RecordingID: "adapter-bind",
 		Artifact:    "artifact:adapter-bind",
@@ -1437,22 +1466,7 @@ func TestRecordingLifecycleAdapterPreservesDetachedOperations(t *testing.T) {
 	if err != nil || bound.Status.RecordingID != "adapter-bind" {
 		t.Fatalf("lifecycle Bind = (%#v, %v)", bound, err)
 	}
-	if _, err := lifecycle.Bind(recordings.BindLifecycleRequest{RecordingID: "adapter-invalid"}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorInvalidTarget) {
-		t.Fatalf("lifecycle Bind without target = %v, want INVALID_TARGET", err)
-	}
-
-	event := recordings.LifecycleEvent{
-		ID:       "adapter-event",
-		Sequence: 0,
-		Scope:    recordings.LifecycleScope{FactorySessionID: "adapter-session"},
-		Cursor: recordings.LifecycleEventCursor{
-			StreamGenerationID: "adapter-generation",
-			Sequence:           0,
-		},
-		RecordedAt: time.Date(2026, 8, 26, 12, 1, 0, 0, time.UTC),
-		Kind:       "WORK_REQUEST",
-		Payload:    "{}",
-	}
+	event := adapterLifecycleEvent()
 	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
 		RecordingID: bound.Status.RecordingID,
 		Event:       event,
@@ -1488,7 +1502,31 @@ func TestRecordingLifecycleAdapterPreservesDetachedOperations(t *testing.T) {
 	if status, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: bound.Status.RecordingID}); err != nil || status.Status.State != recordings.LifecycleStateFailed {
 		t.Fatalf("lifecycle Status before Finish = (%#v, %v), want failed", status, err)
 	}
+}
 
+func TestRecordingLifecycleAdapterRejectsTerminalAppendAfterFailedFinish(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	lifecycle := recordings.RecordingLifecycle(service)
+	bound, err := lifecycle.Bind(recordings.BindLifecycleRequest{
+		RecordingID: "adapter-terminal",
+		Artifact:    "artifact:adapter-terminal",
+		Scope:       recordings.LifecycleScope{FactorySessionID: "adapter-session"},
+	})
+	if err != nil {
+		t.Fatalf("lifecycle Bind: %v", err)
+	}
+	event := adapterLifecycleEvent()
+	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{RecordingID: bound.Status.RecordingID, Event: event}); err != nil {
+		t.Fatalf("lifecycle AppendEvent: %v", err)
+	}
+	if _, err := lifecycle.RecordFailure(recordings.RecordLifecycleFailureRequest{
+		RecordingID: bound.Status.RecordingID,
+		Failure:     recordings.LifecycleFailure{Code: "adapter_failed", Message: "adapter failure"},
+	}); err != nil {
+		t.Fatalf("lifecycle RecordFailure: %v", err)
+	}
 	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
 		RecordingID: bound.Status.RecordingID,
 		FinishedAt:  time.Date(2026, 8, 26, 12, 2, 0, 0, time.UTC),
@@ -1496,14 +1534,26 @@ func TestRecordingLifecycleAdapterPreservesDetachedOperations(t *testing.T) {
 	if err == nil || !hasLifecycleErrorKind(err, recordings.LifecycleErrorWriteFailed) || finished.Status.State != recordings.LifecycleStateFailed {
 		t.Fatalf("lifecycle Finish failed recording = (%#v, %v), want failed write outcome", finished, err)
 	}
-	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorTerminal) {
+	if _, err := lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{RecordingID: bound.Status.RecordingID, Event: event}); !hasLifecycleErrorKind(err, recordings.LifecycleErrorTerminal) {
 		t.Fatalf("lifecycle AppendEvent after Finish = %v, want TERMINAL", err)
 	}
 	if status, err := lifecycle.Status(recordings.LifecycleStatusRequest{RecordingID: bound.Status.RecordingID}); err != nil || status.Status.FinalizedAt == nil {
 		t.Fatalf("lifecycle Status after Finish = (%#v, %v), want finalized timestamp", status, err)
+	}
+}
+
+func adapterLifecycleEvent() recordings.LifecycleEvent {
+	return recordings.LifecycleEvent{
+		ID:       "adapter-event",
+		Sequence: 0,
+		Scope:    recordings.LifecycleScope{FactorySessionID: "adapter-session"},
+		Cursor: recordings.LifecycleEventCursor{
+			StreamGenerationID: "adapter-generation",
+			Sequence:           0,
+		},
+		RecordedAt: time.Date(2026, 8, 26, 12, 1, 0, 0, time.UTC),
+		Kind:       "WORK_REQUEST",
+		Payload:    "{}",
 	}
 }
 
