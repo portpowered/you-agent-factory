@@ -354,34 +354,38 @@ test("the Windows build plan resolves Git from the runner path bridge", async (t
 });
 
 function windowsBuildTimeout(workflow) {
-	const jobTimeout = workflow.match(/^\s+timeout-minutes:\s+(\d+)\s*$/m);
-	const buildStep = workflow.match(/^\s+- name: Build the backend package\s+([\s\S]*?)(?=^\s+- name: )/m);
-	if (!jobTimeout || !buildStep) throw new Error("workflow is missing the build job or backend build step");
-	const stepTimeout = buildStep[1].match(/^\s+timeout-minutes:\s+\$\{\{\s*matrix\.target\s*==\s*'windows-amd64'\s*&&\s*(\d+)\s*\|\|\s*(\d+)\s*\}\}\s*$/m);
-	if (!stepTimeout) throw new Error("Windows backend build must have a target-specific step timeout");
+	const jobTimeout = workflow.match(/^    timeout-minutes:\s+(\d+)\s*$/m);
+	const windowsBuild = workflow.match(/^\s+- name: Build the backend package on Windows\s+([\s\S]*?)(?=^\s+- name: Build the backend package on Unix)/m);
+	const unixBuild = workflow.match(/^\s+- name: Build the backend package on Unix\s+([\s\S]*?)(?=^\s+- name: Archive the Unix backend package)/m);
+	if (!jobTimeout || !windowsBuild || !unixBuild) throw new Error("workflow is missing the build job or platform-specific backend build steps");
+	const stepTimeout = windowsBuild[1].match(/^\s+timeout-minutes:\s+(\d+)\s*$/m);
+	if (!stepTimeout) throw new Error("Windows backend build must have an explicit step timeout");
 	const jobMinutes = Number(jobTimeout[1]);
 	const windowsMinutes = Number(stepTimeout[1]);
-	const unixMinutes = Number(stepTimeout[2]);
 	if (windowsMinutes < 45 || windowsMinutes > 60) throw new Error("Windows backend build timeout must be between 45 and 60 minutes");
 	if (windowsMinutes >= jobMinutes) throw new Error("Windows backend build timeout must be below the build job timeout");
-	if (unixMinutes !== jobMinutes) throw new Error("Darwin/Linux backend build timeout must remain equal to the job timeout");
-	return { jobMinutes, windowsMinutes, unixMinutes };
+	if (/^\s+timeout-minutes:/m.test(unixBuild[1])) throw new Error("Darwin/Linux backend build must retain the job timeout");
+	return { jobMinutes, windowsMinutes };
 }
 
-test("the Windows backend build has a bounded target-specific step timeout", async () => {
+test("the Windows backend build has a bounded platform-specific step timeout", async () => {
 	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 90, windowsMinutes: 60, unixMinutes: 90 });
+	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 360, windowsMinutes: 60 });
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("&& 60 || 90", "&& 44 || 90")),
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 44")),
 		/Windows backend build timeout must be between 45 and 60 minutes/,
 	);
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 90", "timeout-minutes: 60")),
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 61")),
+		/Windows backend build timeout must be between 45 and 60 minutes/,
+	);
+	assert.throws(
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 360", "timeout-minutes: 60")),
 		/Windows backend build timeout must be below the build job timeout/,
 	);
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("timeout-minutes: ${{ matrix.target == 'windows-amd64' && 60 || 90 }}", "timeout-minutes: 60")),
-		/Windows backend build must have a target-specific step timeout/,
+		() => windowsBuildTimeout(workflow.replace("        timeout-minutes: 60\n", "")),
+		/Windows backend build must have an explicit step timeout/,
 	);
 });
 
