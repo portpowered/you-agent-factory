@@ -296,6 +296,8 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	assert.match(buildScript, /backend\/cpp\/grpc/);
 	assert.doesNotMatch(buildScript, /backend\/grpc/);
 	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
+	assert.match(buildScript, /windows_minimum_target="0x0A00"/);
+	assert.match(buildScript, /-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=\$\{windows_minimum_target\}/);
 	assert.match(buildScript, /grpc-server/);
 	assert.match(buildScript, /llama-cpp-cpu-all/);
 });

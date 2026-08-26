@@ -123,6 +123,9 @@ rm -rf "${backend_path}/package"
 
 cmake_args=()
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	# The pinned cpp-httplib release rejects Windows 8 and older at compile time.
+	# Build the PE artifact against the Windows 10 API surface it requires.
+	windows_minimum_target="0x0A00"
 	# A static vcpkg triplet keeps third-party gRPC/protobuf/abseil libraries out
 	# of the runtime DLL closure. The link flags cover the MinGW C++ runtime;
 	# any remaining native DLL is staged and verified below.
@@ -139,6 +142,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		"-DVCPKG_OVERLAY_TRIPLETS=${overlay_triplets}"
 		"-DCMAKE_BUILD_TYPE=Release"
 		"-DBUILD_SHARED_LIBS=OFF"
+		"-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=${windows_minimum_target}"
 	)
 	export VCPKG_TRIPLET="$triplet"
 	export CXXFLAGS="${CXXFLAGS:-} -static-libgcc -static-libstdc++"
