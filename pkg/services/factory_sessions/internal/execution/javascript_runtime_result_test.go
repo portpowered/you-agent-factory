@@ -50,33 +50,43 @@ func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
 }
 
 func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
-	const maxBytes = 4096
-	threshold := durableSessionSnapshotWarningThresholdForMax(maxBytes)
-	if threshold >= maxBytes || threshold <= 0 {
-		t.Fatalf("warning threshold = %d, want a positive value below hard limit %d", threshold, maxBytes)
-	}
-	for _, tc := range []struct {
-		name  string
-		delta int
-		warn  bool
-	}{{"one byte below", -1, false}, {"at threshold", 0, true}} {
-		t.Run(tc.name, func(t *testing.T) {
-			core, observed := observer.New(zap.WarnLevel)
-			store := &petriCompactionStore{}
-			service := &JavaScriptRuntimeService{
-				persistence:              store,
-				persistenceWarningLogger: zap.New(core),
+	const mib = 1024 * 1024
+	for _, limit := range []struct {
+		name                    string
+		maxBytes, wantThreshold int
+	}{
+		{"default 64 MiB", 64 * mib, 48 * mib},
+		{"larger 128 MiB", 128 * mib, 100 * mib},
+	} {
+		t.Run(limit.name, func(t *testing.T) {
+			threshold := durableSessionSnapshotWarningThresholdForMax(limit.maxBytes)
+			if int(threshold) != limit.wantThreshold {
+				t.Fatalf("warning threshold = %d, want %d", threshold, limit.wantThreshold)
 			}
-			service.persistedSnapshotMaxBytes = maxBytes
-			state := exactEncodedSizeWarningState(t, int(threshold)+tc.delta)
-			if err := service.persistSessionSnapshot(state); err != nil {
-				t.Fatalf("persistSessionSnapshot: %v", err)
+			for _, boundary := range []struct {
+				name  string
+				delta int
+				warn  bool
+			}{{"one byte below", -1, false}, {"at threshold", 0, true}} {
+				t.Run(boundary.name, func(t *testing.T) {
+					core, observed := observer.New(zap.WarnLevel)
+					store := &runtimeRecordingStore{}
+					service := &JavaScriptRuntimeService{
+						persistence:              store,
+						persistenceWarningLogger: zap.New(core),
+					}
+					service.persistedSnapshotMaxBytes = limit.maxBytes
+					state := exactEncodedSizeWarningState(t, int(threshold)+boundary.delta)
+					if err := service.persistSessionSnapshot(state); err != nil {
+						t.Fatalf("persistSessionSnapshot: %v", err)
+					}
+					if got := len(store.payload); got != int(threshold)+boundary.delta {
+						t.Fatalf("persisted snapshot bytes = %d, want %d", got, int(threshold)+boundary.delta)
+					}
+					entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
+					assertSnapshotWarning(t, entries, boundary.warn, threshold)
+				})
 			}
-			if got := len(store.payload); got != int(threshold)+tc.delta {
-				t.Fatalf("persisted snapshot bytes = %d, want %d", got, int(threshold)+tc.delta)
-			}
-			entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
-			assertSnapshotWarning(t, entries, tc.warn, threshold)
 		})
 	}
 }
@@ -108,7 +118,7 @@ func TestPersistSessionSnapshotWarningDoesNotHideSaveFailure(t *testing.T) {
 	core, observed := observer.New(zap.WarnLevel)
 	const maxBytes = 4096
 	service := &JavaScriptRuntimeService{
-		persistence:              &petriCompactionStore{saveErr: wantErr},
+		persistence:              &runtimeRecordingStore{saveErr: wantErr},
 		persistenceWarningLogger: zap.New(core),
 	}
 	service.persistedSnapshotMaxBytes = maxBytes
@@ -975,25 +985,4 @@ func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
 		clone[key] = value
 	}
 	return clone
-}
-func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
-	t.Helper()
-	state := runtimeSessionState{
-		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
-		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
-		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
-	}
-	base := encodedWarningStateBytes(t, state)
-	state.sourceContent = "x"
-	if delta := encodedWarningStateBytes(t, state) - base; delta != 1 {
-		t.Fatalf("sourceContent encoded byte delta = %d, want 1", delta)
-	}
-	if targetSize < base {
-		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
-	}
-	state.sourceContent = strings.Repeat("x", targetSize-base)
-	if got := encodedWarningStateBytes(t, state); got != targetSize {
-		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
-	}
-	return state
 }

@@ -890,9 +890,9 @@ func TestLegacyTerminalSnapshot_MigratesOnNextSuccessfulSaveAndReload(t *testing
 	assertLegacyTerminalSnapshotCompacted(t, store, service, sessionID)
 }
 
-func seedLegacyTerminalSnapshot(t *testing.T, sessionID string) (*petriCompactionStore, *JavaScriptRuntimeService) {
+func seedLegacyTerminalSnapshot(t *testing.T, sessionID string) (*runtimeRecordingStore, *JavaScriptRuntimeService) {
 	t.Helper()
-	store := &petriCompactionStore{}
+	store := &runtimeRecordingStore{}
 	legacy := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded, OrchestratorKind: interfaces.OrchestratorKindPetri}, result: ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusSucceeded}, petriMutations: legacyTerminalTokenMutations(7)}
 	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(legacy, 0))
 	if err != nil {
@@ -904,7 +904,7 @@ func seedLegacyTerminalSnapshot(t *testing.T, sessionID string) (*petriCompactio
 	return store, &JavaScriptRuntimeService{persistence: store, sessions: make(map[string]*runtimeSessionState)}
 }
 
-func assertLegacyTerminalSnapshotCompacted(t *testing.T, store *petriCompactionStore, service *JavaScriptRuntimeService, sessionID string) {
+func assertLegacyTerminalSnapshotCompacted(t *testing.T, store *runtimeRecordingStore, service *JavaScriptRuntimeService, sessionID string) {
 	t.Helper()
 	saved, err := store.Load(sessionID)
 	if err != nil {
@@ -928,7 +928,7 @@ func assertLegacyTerminalSnapshotCompacted(t *testing.T, store *petriCompactionS
 
 func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBeforeSave(t *testing.T) {
 	root := t.TempDir()
-	store := &petriCompactionStore{}
+	store := &runtimeRecordingStore{}
 	service := &JavaScriptRuntimeService{persistence: store, projectRoot: root}
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	state := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded}}
@@ -962,7 +962,7 @@ func (reader *dispatchDurabilityReader) CompletedFlushWatermark(
 
 func TestRecordPetriTokenMutations_CompactsCandidateAndPublishesOnlyAfterSave(t *testing.T) {
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	store := &petriCompactionStore{}
+	store := &runtimeRecordingStore{}
 	service := &JavaScriptRuntimeService{persistence: store, sessions: map[string]*runtimeSessionState{
 		sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
 	}}
@@ -983,7 +983,7 @@ func TestRecordPetriTokenMutations_CompactsCandidateAndPublishesOnlyAfterSave(t 
 	const failedID = "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	wantErr := errors.New("checkpoint unavailable")
 	initial := largeTerminalTokenMutations(4, "large-output")
-	failedStore := &petriCompactionStore{saveErr: wantErr}
+	failedStore := &runtimeRecordingStore{saveErr: wantErr}
 	failedService := &JavaScriptRuntimeService{persistence: failedStore, sessions: map[string]*runtimeSessionState{
 		failedID: {session: SessionReadResult{SessionID: failedID, Status: LifecycleStatusRunning}, petriMutations: clonePetriMutations(initial)},
 	}}

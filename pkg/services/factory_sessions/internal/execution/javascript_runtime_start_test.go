@@ -978,23 +978,20 @@ func (service terminalWorkerService) Execute(
 	return result, nil
 }
 
-type petriCompactionStore struct {
-	saveCalls int
-	saveErr   error
-	payload   []byte
-}
-
-func (s *petriCompactionStore) Save(_ string, encoded []byte) error {
-	s.saveCalls++
-	if s.saveErr != nil {
-		return s.saveErr
+func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
+	t.Helper()
+	state := runtimeSessionState{
+		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
+		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
+		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
 	}
-	s.payload = append([]byte(nil), encoded...)
-	return nil
-}
-func (s *petriCompactionStore) Load(string) ([]byte, error) {
-	if len(s.payload) == 0 {
-		return nil, errors.New("not found")
+	base := encodedWarningStateBytes(t, state)
+	if targetSize < base {
+		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
 	}
-	return append([]byte(nil), s.payload...), nil
+	state.sourceContent = strings.Repeat("x", targetSize-base)
+	if got := encodedWarningStateBytes(t, state); got != targetSize {
+		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
+	}
+	return state
 }

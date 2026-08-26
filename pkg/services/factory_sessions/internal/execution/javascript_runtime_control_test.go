@@ -969,7 +969,7 @@ func TestInterruptedTerminalTimestamp_PrefersSessionLifecycle(t *testing.T) {
 
 func TestLegacyInterruptedSnapshot_RemainsLosslessOnSuccessfulSave(t *testing.T) {
 	const sessionID = "dur-sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-	store := &petriCompactionStore{}
+	store := &runtimeRecordingStore{}
 	state := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusInterrupted, OrchestratorKind: interfaces.OrchestratorKindPetri}, petriMutations: legacyTerminalTokenMutations(8)}
 	if err := (&JavaScriptRuntimeService{persistence: store}).persistSessionSnapshot(state); err != nil {
 		t.Fatalf("persist interrupted legacy snapshot: %v", err)

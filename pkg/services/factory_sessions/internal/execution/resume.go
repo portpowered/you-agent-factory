@@ -1127,19 +1127,18 @@ func (s *JavaScriptRuntimeService) warnIfDurableSnapshotExceedsThreshold(
 }
 
 // durableSessionSnapshotWarningThresholdForMax keeps the historical 100 MiB
-// warning meaningful when a larger bound is configured, while making the
-// default 64 MiB hard limit observable before rejection. A warning at 75% of
-// the active bound gives operators time to investigate without promising to
-// write a snapshot that the hard limit will reject.
+// warning for bounds that can accommodate it, while making smaller hard limits
+// observable before rejection. The default 64 MiB hard limit therefore warns
+// at 75%, or 48 MiB.
 func durableSessionSnapshotWarningThresholdForMax(maxBytes int) int64 {
 	if maxBytes <= 0 {
 		maxBytes = defaultPersistedSnapshotMaxBytes
 	}
-	nearLimit := int64(maxBytes - maxBytes/4)
-	if nearLimit > 0 && nearLimit < durableSessionSnapshotWarningThresholdBytes {
-		return nearLimit
+	if int64(maxBytes) >= durableSessionSnapshotWarningThresholdBytes {
+		return durableSessionSnapshotWarningThresholdBytes
 	}
-	return durableSessionSnapshotWarningThresholdBytes
+	nearLimit := int64(maxBytes - maxBytes/4)
+	return nearLimit
 }
 
 func retainedPetriTokenCounts(state runtimeSessionState) (liveTokens, terminalTokens int) {
