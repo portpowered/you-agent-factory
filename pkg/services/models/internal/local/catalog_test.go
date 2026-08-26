@@ -49,6 +49,67 @@ func TestListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
 	}
 }
 
+func TestBuildCatalog_PreservesBuiltInOmniCapabilityForAuthoredWorker(t *testing.T) {
+	t.Parallel()
+
+	catalog := BuildCatalog(&apisurface.RuntimeConfig{
+		Workers: []apisurface.RuntimeWorker{{
+			Name:          "llm-worker",
+			Type:          apisurface.RuntimeWorkerTypeModel,
+			Model:         apisurface.BuiltInModelNameLLM,
+			ModelLocality: apisurface.RuntimeModelLocalityLocal,
+			Operations: []apisurface.RuntimeOperation{{
+				Name: apisurface.OperationOMNI,
+				Inputs: []apisurface.RuntimeOperationSlot{
+					{Name: "prompt", ContentTypes: []string{string(apisurface.ModalityText)}, Required: true},
+					{Name: "image", ContentTypes: []string{string(apisurface.ModalityImage)}, Required: false},
+					{Name: "audio", ContentTypes: []string{string(apisurface.ModalityAudio)}, Required: false},
+					{Name: "parameters", ContentTypes: []string{string(apisurface.ModalityJSON)}, Required: false},
+				},
+				Outputs: []apisurface.RuntimeOperationSlot{
+					{Name: "text", ContentTypes: []string{string(apisurface.ModalityText)}, Required: true},
+				},
+			}},
+		}},
+	})
+
+	model, ok := catalog[CanonicalModelName(apisurface.BuiltInModelNameLLM)]
+	if !ok {
+		t.Fatalf("catalog does not contain built-in model %q: %#v", apisurface.BuiltInModelNameLLM, catalog)
+	}
+	var operation managedruntime.Operation
+	for _, candidate := range model.Detail.Operations {
+		if candidate.Name == apisurface.OperationOMNI {
+			operation = candidate
+			break
+		}
+	}
+	if operation.Name == "" {
+		t.Fatalf("operations = %#v, want OMNI", model.Detail.Operations)
+	}
+
+	findSlot := func(slots []managedruntime.OperationSlot, name string) (managedruntime.OperationSlot, bool) {
+		for _, slot := range slots {
+			if slot.Name == name {
+				return slot, true
+			}
+		}
+		return managedruntime.OperationSlot{}, false
+	}
+	image, ok := findSlot(operation.Inputs, "image")
+	if !ok || !image.Repeatable || image.Modality != apisurface.ModalityImage {
+		t.Fatalf("image slot = %#v, want repeatable IMAGE input", image)
+	}
+	video, ok := findSlot(operation.Inputs, "video")
+	if !ok || video.Modality != apisurface.ModalityVideo {
+		t.Fatalf("video slot = %#v, want canonical VIDEO input", video)
+	}
+	usage, ok := findSlot(operation.Outputs, "usage")
+	if !ok || usage.Modality != apisurface.ModalityJSON {
+		t.Fatalf("usage slot = %#v, want canonical JSON output", usage)
+	}
+}
+
 func TestGetModel_ReturnsUnavailableWithoutMatchingLocalModelResource(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(false))

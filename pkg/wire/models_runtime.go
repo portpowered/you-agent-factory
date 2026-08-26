@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -114,13 +116,23 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	if hostClock == nil {
 		hostClock = modelsClock{source: processClock}
 	}
+	protocolDialer := edges.ModelInvocationGRPCDialer
+	if isNilModelEdgeDependency(protocolDialer) {
+		protocolDialer = platformgrpc.NetworkDialer{}
+	}
 	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
 	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
 		protocolNegotiator = modelswire.PinnedGRPCNegotiator{
 			Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer},
 		}
 	}
-	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	if protocolNegotiator == nil {
+		protocolNegotiator = modelswire.NewPinnedGRPCHostProtocolNegotiator(protocolDialer)
+	}
+	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges)
+	if compatibilityErr != nil {
+		return nil, compatibilityErr
+	}
 	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
 	if backendArtifactResolver == nil {
 		var resolverErr error
@@ -159,7 +171,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 
-	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationBackend(
+	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -192,11 +204,27 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		protocolNegotiator,
 		compatibilityChecker,
 		backendArtifactResolver,
+		edges.ModelInvocationProtocolClient,
+		protocolDialer,
 		adaptModelInvocationBackend(edges.ModelInvocationBackend),
 		adaptModelASRBackend(edges.ModelASRBackend),
 		adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
 		edges.ModelResolveHuggingFaceRevision,
 	)
+}
+
+func provideModelHostCompatibilityChecker(
+	edges serviceedges.Edges,
+) (modelswire.HostCompatibilityChecker, error) {
+	checker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	if checker != nil {
+		return checker, nil
+	}
+	checker, err := modelswire.NewDefaultHostCompatibilityChecker()
+	if err != nil {
+		return nil, fmt.Errorf("construct Models host compatibility checker: %w", err)
+	}
+	return checker, nil
 }
 
 func newModelAssetHTTPClient() *http.Client {
@@ -495,9 +523,19 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostPr
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	return &modelsManagedProcess{cmd: cmd, healthEndpoint: endpoint, done: done}, nil
+	managed := &modelsManagedProcess{
+		cmd:            cmd,
+		healthEndpoint: endpoint,
+		finished:       make(chan struct{}),
+	}
+	go func() {
+		waitErr := cmd.Wait()
+		managed.mu.Lock()
+		managed.waitErr = waitErr
+		close(managed.finished)
+		managed.mu.Unlock()
+	}()
+	return managed, nil
 }
 
 type modelHostProcessLauncherAdapter struct {
@@ -636,38 +674,69 @@ type modelsManagedProcess struct {
 	mu             sync.Mutex
 	cmd            *exec.Cmd
 	healthEndpoint string
-	done           chan error
-	stopped        bool
+	// finished is broadcast to both the supervisor's Wait observer and the
+	// application lifecycle closer; a one-shot error channel would let one
+	// consumer strand the other during normal teardown.
+	finished chan struct{}
+	waitErr  error
+	stopped  bool
 }
 
 func (p *modelsManagedProcess) HealthEndpoint() string { return p.healthEndpoint }
 
 func (p *modelsManagedProcess) Wait() error {
-	if p == nil || p.done == nil {
+	if p == nil || p.finished == nil {
 		return nil
 	}
-	return <-p.done
+	<-p.finished
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.waitErr
 }
 
 func (p *modelsManagedProcess) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.stopped || p.cmd == nil || p.cmd.Process == nil {
+		p.mu.Unlock()
 		return nil
 	}
 	p.stopped = true
-	if err := p.cmd.Process.Kill(); err != nil {
-		return err
+	command := p.cmd
+	p.mu.Unlock()
+	if !p.processFinished() {
+		if err := command.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) && !p.processFinished() {
+			return err
+		}
+	}
+	if p.finished == nil {
+		return nil
 	}
 	select {
-	case <-p.done:
+	case <-p.finished:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (p *modelsManagedProcess) processFinished() bool {
+	if p == nil {
+		return true
+	}
+	if p.finished != nil {
+		select {
+		case <-p.finished:
+			return true
+		default:
+		}
+	}
+	return p.cmd != nil && p.cmd.ProcessState != nil
 }
 
 func provideModelsCLIInvocationOperation(

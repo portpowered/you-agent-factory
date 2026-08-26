@@ -212,6 +212,31 @@ func (o *Root) CloseRuntimeScope(
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
 
+// Close shuts down every supervised model host retained by the process-wide
+// Models root. This is an internal process-lifecycle hook; the public Models
+// contract remains focused on scoped customer operations.
+func (o *Root) Close(ctx context.Context) error {
+	if o == nil || o.runtimeHost == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	shutdown, ok := o.runtimeHost.(interface {
+		Shutdown(context.Context) error
+	})
+	if !ok {
+		return fmt.Errorf("Models runtime host does not support process shutdown")
+	}
+	if err := shutdown.Shutdown(ctx); err != nil {
+		return err
+	}
+	o.runtimeMu.Lock()
+	o.runtimeByScope = make(map[models.RuntimeScopeRef]models.Service)
+	o.runtimeMu.Unlock()
+	return nil
+}
+
 func (o *Root) ListCatalog(
 	ctx context.Context,
 	request models.ListModelsRequest,

@@ -26,6 +26,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -308,8 +309,15 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 			return nil
 		},
 	}
+	modelsClosed := false
+	modelsService := &closingModelsService{
+		onClose: func() error {
+			modelsClosed = true
+			return nil
+		},
+	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersService, eventsService, factoryTarget, &localWorkerSessionsBoundary{}, metricsOwner)
+	lifecycle, err := provideApplicationProcessLifecycle(providersService, modelsService, eventsService, factoryTarget, &localWorkerSessionsBoundary{}, metricsOwner)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -328,13 +336,16 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 	if !metricsClosed {
 		t.Fatal("composed ProcessLifecycle.Close() did not close metrics retention lifecycle")
 	}
+	if !modelsClosed {
+		t.Fatal("composed ProcessLifecycle.Close() did not close the Models lifecycle")
+	}
 
 	secondEventsService, err := eventswire.NewService()
 	if err != nil {
 		t.Fatalf("construct second events service: %v", err)
 	}
 
-	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, secondEventsService, nil, &localWorkerSessionsBoundary{}, nil)
+	nilFactoryLifecycle, err := provideApplicationProcessLifecycle(providersService, &closingModelsService{}, secondEventsService, nil, &localWorkerSessionsBoundary{}, nil)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle(nil factoryTarget) error = %v", err)
 	}
@@ -405,7 +416,7 @@ func TestProvideApplicationProcessLifecycle_ClosesProvidersAndEventsExactlyOnceA
 		onClose: func() error { closed = append(closed, "events"); return eventsCloseErr },
 	}
 
-	lifecycle, err := provideApplicationProcessLifecycle(providersStub, eventsStub, nil, &localWorkerSessionsBoundary{}, nil)
+	lifecycle, err := provideApplicationProcessLifecycle(providersStub, &closingModelsService{}, eventsStub, nil, &localWorkerSessionsBoundary{}, nil)
 	if err != nil {
 		t.Fatalf("provideApplicationProcessLifecycle() error = %v", err)
 	}
@@ -446,6 +457,22 @@ type closingEventsService struct {
 
 func (service *closingEventsService) Close(context.Context) error { return service.onClose() }
 
+// closingModelsService is the equivalent Models root stand-in. Its embedded
+// public interface keeps this test focused on the internal process lifecycle
+// hook rather than duplicating the full Models contract.
+type closingModelsService struct {
+	models.Service
+
+	onClose func() error
+}
+
+func (service *closingModelsService) Close(context.Context) error {
+	if service.onClose == nil {
+		return nil
+	}
+	return service.onClose()
+}
+
 type closingRuntimeMetricsOwner struct {
 	factoryruntime.RuntimeMetricsOwner
 	onClose func() error
@@ -460,7 +487,7 @@ func (owner *closingRuntimeMetricsOwner) Close(context.Context) error { return o
 func TestProvideApplicationProcessLifecycle_RequiresProvidersLifecycle(t *testing.T) {
 	t.Parallel()
 
-	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, nil, nil, &localWorkerSessionsBoundary{}, nil)
+	_, err := provideApplicationProcessLifecycle(nonLifecycleProvidersService{}, &closingModelsService{}, nil, nil, &localWorkerSessionsBoundary{}, nil)
 	if err == nil {
 		t.Fatal("provideApplicationProcessLifecycle() error = nil, want a construction error for a non-Lifecycle providers.Service")
 	}

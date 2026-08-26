@@ -14,6 +14,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
@@ -554,6 +555,7 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	})
 	protocol := &edgeModelHostProtocol{}
 	dialer := &edgeModelHostGRPCDialer{}
+	invocationDialer := platformgrpc.NetworkDialer{}
 	compatibility := &edgeModelHostCompatibilityChecker{}
 	merged := Merge(Edges{}, Edges{
 		ModelAssetResolveEnvironment:  environment,
@@ -561,6 +563,7 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 		ModelResolveBackendArtifact:   backendArtifactResolver,
 		ModelHostProtocolNegotiator:   protocol,
 		ModelHostGRPCDialer:           dialer,
+		ModelInvocationGRPCDialer:     invocationDialer,
 		ModelHostCompatibilityChecker: compatibility,
 	})
 	if merged.ModelAssetResolveEnvironment("CACHE") != "value:CACHE" {
@@ -581,6 +584,9 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	}
 	if merged.ModelHostGRPCDialer != dialer {
 		t.Fatal("gRPC dialer edge was not replaced")
+	}
+	if merged.ModelInvocationGRPCDialer != invocationDialer {
+		t.Fatal("invocation gRPC dialer edge was not replaced")
 	}
 	if merged.ModelHostCompatibilityChecker != compatibility {
 		t.Fatal("compatibility checker edge was not replaced")
@@ -635,6 +641,25 @@ func TestMergeAppliesCLIOutputInspectionReplacement(t *testing.T) {
 	)
 	if _, err := merged.ModelCLIOutputInspectPath("mapped.out"); !errors.Is(err, replacementErr) {
 		t.Fatalf("merged ModelCLIOutputInspectPath error = %v, want replacement error", err)
+	}
+}
+
+func TestMergeAppliesCLIInputReadReplacement(t *testing.T) {
+	t.Parallel()
+
+	defaultRead := ModelCLIInputReadFile(func(context.Context, string, int64) ([]byte, error) {
+		return []byte("default"), nil
+	})
+	replacementRead := ModelCLIInputReadFile(func(context.Context, string, int64) ([]byte, error) {
+		return []byte("replacement"), nil
+	})
+	merged := Merge(
+		Edges{ModelCLIInputReadFile: defaultRead},
+		Edges{ModelCLIInputReadFile: replacementRead},
+	)
+	got, err := merged.ModelCLIInputReadFile(context.Background(), "prompt.txt", 1024)
+	if err != nil || string(got) != "replacement" {
+		t.Fatalf("merged ModelCLIInputReadFile = (%q, %v), want replacement", got, err)
 	}
 }
 

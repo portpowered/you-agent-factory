@@ -140,7 +140,40 @@ func localAIConformanceEdges(
 		ModelRuntimeHTTPClient:         fixtureHostHTTPClient{},
 		ModelResolveBackendArtifact:    conformanceBackendArtifactResolver,
 		ModelInvocationBackend:         serviceedges.ModelInvocationBackend(fixture.InvocationBackend),
+		ModelInvocationProtocolClient:  localAIInvocationProtocolClient{fixture: fixture},
 	}, rejectingNetwork, compatibility, hostLauncher
+}
+
+type localAIInvocationProtocolClient struct {
+	fixture *localai.Fixture
+}
+
+func (client localAIInvocationProtocolClient) Predict(
+	ctx context.Context,
+	request models.InvocationProtocolRequest,
+) (models.InvocationProtocolResponse, error) {
+	if client.fixture == nil {
+		return models.InvocationProtocolResponse{}, fmt.Errorf("LocalAI conformance fixture is nil")
+	}
+	inputs := make([]models.InferenceInput, 0, len(request.Inputs))
+	for _, input := range request.Inputs {
+		inputs = append(inputs, models.InferenceInput{
+			Name: input.Slot, Modality: input.Modality, MediaType: input.MediaType,
+			ContentType: input.MediaType, Content: input.Content,
+		})
+	}
+	outputs, _, err := client.fixture.InvocationBackend(ctx, models.InvokeModelRequest{
+		Operation: request.Operation, Inputs: inputs, Parameters: request.Parameters,
+	})
+	if err != nil {
+		return models.InvocationProtocolResponse{}, err
+	}
+	for _, output := range outputs {
+		if output.Name == "text" {
+			return models.InvocationProtocolResponse{Text: output.Content}, nil
+		}
+	}
+	return models.InvocationProtocolResponse{}, fmt.Errorf("LocalAI conformance fixture returned no text output")
 }
 
 func writeGenericConformanceCaches(t *testing.T, home string) {

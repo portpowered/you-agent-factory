@@ -5,10 +5,11 @@ import (
 )
 
 // HostHandleSlot carries parent-private host-slot facts for one scoped invoke.
-// It does not expose supervisor handles, endpoints, processes, or filesystem
-// paths to peers.
+// Endpoint is consumed only by the parent-owned backend adapter and never
+// crosses the public Models boundary.
 type HostHandleSlot struct {
-	Reused bool
+	Reused   bool
+	Endpoint string
 }
 
 // InvocationArtifactSource is runtime-owned artifact materialization input kept

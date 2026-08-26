@@ -6,14 +6,119 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	"go.uber.org/zap"
 )
+
+type constructionEdges struct {
+	assetPlatform   models.AssetHostPlatform
+	assetHTTP       modelseffects.AssetHTTPDoer
+	assetEndpoints  models.RuntimeAssetEndpoints
+	assetMkdirAll   modelseffects.AssetMakeDirectories
+	assetStat       modelseffects.AssetInspectPath
+	assetHome       modelseffects.AssetResolveHomeDirectory
+	assetWriteFile  modelseffects.AssetWriteFile
+	assetRename     modelseffects.AssetRenamePath
+	assetRemove     modelseffects.AssetRemovePath
+	assetReadFile   modelseffects.AssetReadFile
+	assetReadDir    modelseffects.AssetReadDirectory
+	assetCreate     modelseffects.AssetCreateFile
+	assetOpen       modelseffects.AssetOpenFile
+	processLauncher modelseffects.HostProcessLauncher
+	hostHTTP        modelseffects.HostHTTPDoer
+	hostClock       modelseffects.HostClock
+	runtimeRunner   platformprocess.CommandRunner
+	runtimeHTTP     modelseffects.RuntimeHTTPDoer
+	runtimeInspect  modelseffects.RuntimeInspectFile
+	runtimeTempDir  modelseffects.RuntimeTempDirectory
+	runtimeTempFile modelseffects.RuntimeCreateTempFile
+	now             func() time.Time
+	issuerEntropy   platformrandom.Source
+}
+
+func validConstructionEdges() constructionEdges {
+	return constructionEdges{
+		assetPlatform: models.AssetHostPlatform{
+			OperatingSystem: runtime.GOOS,
+			Architecture:    runtime.GOARCH,
+		},
+		assetHTTP:       http.DefaultClient,
+		assetMkdirAll:   os.MkdirAll,
+		assetStat:       os.Stat,
+		assetHome:       os.UserHomeDir,
+		assetWriteFile:  os.WriteFile,
+		assetRename:     os.Rename,
+		assetRemove:     os.Remove,
+		assetReadFile:   os.ReadFile,
+		assetReadDir:    os.ReadDir,
+		assetCreate:     func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		assetOpen:       func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		processLauncher: inertProcessLauncher{},
+		hostHTTP:        http.DefaultClient,
+		hostClock:       inertHostClock{},
+		runtimeRunner:   inertCommandRunner{},
+		runtimeHTTP:     http.DefaultClient,
+		runtimeInspect:  os.Stat,
+		runtimeTempDir:  os.TempDir,
+		runtimeTempFile: func(dir, pattern string) (modelseffects.RuntimeTempFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		now:           func() time.Time { return time.Unix(123, 456) },
+		issuerEntropy: platformrandom.CryptoSource{},
+	}
+}
+
+func (edges constructionEdges) newServiceWithInvocationProtocol(
+	client InvocationProtocolClient,
+) (models.Service, error) {
+	return NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
+		edges.assetPlatform,
+		edges.assetHTTP,
+		edges.assetEndpoints,
+		edges.assetMkdirAll,
+		edges.assetStat,
+		edges.assetHome,
+		edges.assetWriteFile,
+		edges.assetRename,
+		edges.assetRemove,
+		edges.assetReadFile,
+		edges.assetReadDir,
+		edges.assetCreate,
+		edges.assetOpen,
+		edges.processLauncher,
+		edges.hostHTTP,
+		edges.hostClock,
+		edges.runtimeRunner,
+		edges.runtimeHTTP,
+		edges.runtimeInspect,
+		edges.runtimeTempDir,
+		edges.runtimeTempFile,
+		zap.NewNop(),
+		edges.now,
+		edges.issuerEntropy,
+		nil,
+		nil,
+		nil,
+		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
+		nil,
+		client,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+}
 
 type inertProcessLauncher struct{}
 
@@ -274,11 +379,11 @@ func TestInferenceRuntimeUsesASRBackendAndMapsResponse(t *testing.T) {
 		t.Fatalf("parse artifact reference: %v", err)
 	}
 	var received models.ASRBackendRequest
-	runtime, err := inferenceRuntime(
-		func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+		Backend: func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
 			return []models.InferenceContent{{Content: "generic"}}, nil, nil
 		},
-		func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		ASR: func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
 			received = request
 			return models.ASRBackendResponse{
 				Text:      "hello fixture",
@@ -286,8 +391,7 @@ func TestInferenceRuntimeUsesASRBackendAndMapsResponse(t *testing.T) {
 				Artifacts: []models.InferenceArtifact{{Artifact: artifactRef, Name: "transcript", MediaType: "audio/wav"}},
 			}, nil
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		t.Fatalf("inferenceRuntime() error = %v", err)
 	}

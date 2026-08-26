@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+// This is the message subset consumed by the pinned backend/backend.proto
+// protocol at PinnedProtocolRevision. Keeping the exact wire field numbers is
+// sufficient for the raw transport while keeping generated LocalAI types
+// private to this backend package.
+option go_package = "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai;localai";
+
+package backend;
+
+message HealthMessage {}
+
+message PredictOptions {
+  string Prompt = 1;
+  repeated string Images = 42;
+  repeated string Videos = 45;
+  repeated string Audios = 46;
+  map<string, string> Metadata = 52;
+}
+
+message Reply {
+  bytes message = 1;
+  int32 tokens = 2;
+  int32 prompt_tokens = 3;
+}

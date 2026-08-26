@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -175,6 +176,21 @@ type modelsInvokeInputs struct {
 	parameterSpecs []string
 	outputPath     string
 	outputMappings []string
+}
+
+func inferGenericCLIModelOperation(modelName string) string {
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case strings.ToLower(modelinference.BuiltInModelNameLLM):
+		return modelinference.OperationOMNI
+	case strings.ToLower(modelinference.BuiltInModelNameASR):
+		return modelinference.OperationASR
+	case strings.ToLower(modelinference.BuiltInModelNameTTS):
+		return modelinference.OperationTTS
+	case strings.ToLower(modelinference.BuiltInModelNameEmbed):
+		return modelinference.OperationEMBED
+	default:
+		return ""
+	}
 }
 
 func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, error) {

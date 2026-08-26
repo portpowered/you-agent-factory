@@ -81,3 +81,26 @@ func TestNewDefaultBackendArtifactResolverRejectsIncompatibleRequests(t *testing
 		t.Fatalf("cancelled resolve error = %v, want context.Canceled", err)
 	}
 }
+
+func TestNewDefaultHostCompatibilityCheckerUsesPinnedArtifactMatrix(t *testing.T) {
+	t.Parallel()
+
+	checker, err := NewDefaultHostCompatibilityChecker()
+	if err != nil {
+		t.Fatalf("NewDefaultHostCompatibilityChecker: %v", err)
+	}
+	if err := checker.Check(context.Background(), HostCompatibilityRequest{
+		Backend:   "localai-llamacpp",
+		ModelName: "llm",
+		Platform:  models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+	}); err != nil {
+		t.Fatalf("supported pinned host: %v", err)
+	}
+	if err := checker.Check(context.Background(), HostCompatibilityRequest{
+		Backend:   "localai-llamacpp",
+		ModelName: "llm",
+		Platform:  models.AssetHostPlatform{OperatingSystem: "freebsd", Architecture: "amd64"},
+	}); err == nil {
+		t.Fatal("unsupported pinned host unexpectedly passed compatibility")
+	}
+}

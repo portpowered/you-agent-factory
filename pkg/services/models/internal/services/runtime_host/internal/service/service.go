@@ -424,6 +424,27 @@ func (s *service) peekRuntimeSlot(slotKey string) *supervisedRuntime {
 	return s.runtimeSlots[slotKey]
 }
 
+// InvocationEndpoint returns the private endpoint for a ready supervised
+// runtime. It is an internal parent-to-adapter seam; public host snapshots
+// intentionally continue to omit transport addresses.
+func (s *service) InvocationEndpoint(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	modelName string,
+) (string, error) {
+	if err := hostContextError(ctx); err != nil {
+		return "", err
+	}
+	if s == nil {
+		return "", models.ErrUnavailable
+	}
+	slot := s.peekRuntimeSlot(runtimeSlotKey(scope, modelName))
+	if endpoint := slot.invocationEndpoint(); endpoint != "" {
+		return endpoint, nil
+	}
+	return "", models.ErrHostRuntimeNotReady
+}
+
 func (s *service) runtimeSlot(
 	slotKey string,
 	scope models.RuntimeScopeRef,

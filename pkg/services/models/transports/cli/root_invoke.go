@@ -62,21 +62,6 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	return service.invokeInScope(cfg, scope.Scope, modelName, operation, text)
 }
 
-func inferGenericCLIModelOperation(modelName string) string {
-	switch strings.ToLower(strings.TrimSpace(modelName)) {
-	case strings.ToLower(modelinference.BuiltInModelNameLLM):
-		return modelinference.OperationOMNI
-	case strings.ToLower(modelinference.BuiltInModelNameASR):
-		return modelinference.OperationASR
-	case strings.ToLower(modelinference.BuiltInModelNameTTS):
-		return modelinference.OperationTTS
-	case strings.ToLower(modelinference.BuiltInModelNameEmbed):
-		return modelinference.OperationEMBED
-	default:
-		return ""
-	}
-}
-
 func (service *rootService) invokeInScope(
 	cfg InvokeConfig,
 	scope modelinference.RuntimeScopeRef,
@@ -161,7 +146,23 @@ func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Deta
 	if isDirectTTSAlias(cfg) && strings.TrimSpace(cfg.OutputPath) != "" {
 		return true
 	}
+	if strings.TrimSpace(cfg.OutputPath) != "" && genericCLIOutputPathOperation(catalog, operation) {
+		return true
+	}
 	return genericCLIInlineOutput(cfg, catalog, operation)
+}
+
+func genericCLIOutputPathOperation(catalog modelinference.Detail, operation string) bool {
+	selected, ok := catalogOperationForName(catalog, operation)
+	if !ok || len(selected.Outputs) == 0 {
+		return false
+	}
+	for _, output := range selected.Outputs {
+		if output.Modality != modelinference.ModalityAudio {
+			return true
+		}
+	}
+	return false
 }
 
 func (service *rootService) invokeGenericInScope(
@@ -221,10 +222,10 @@ func (service *rootService) writeGenericCLIInvocationResult(
 		return service.writeGenericCLIOutputPath(cfg, result)
 	}
 	if genericCLIInlineOutput(cfg, catalog, operation) {
-		return writeGenericCLIOutput(cfg.Output, result)
+		return writeGenericCLIOutputWithCatalog(cfg.Output, result, catalog, operation)
 	}
 	if genericCLIStdoutOutput(cfg, catalog, operation) {
-		return writeGenericCLIOutput(cfg.Output, result)
+		return writeGenericCLIOutputWithCatalog(cfg.Output, result, catalog, operation)
 	}
 	response := modelInvocationResponseFromInferenceResult(result, catalog, text)
 	return json.NewEncoder(cfg.Output).Encode(response)
@@ -235,7 +236,7 @@ func validateCLIOutputShape(
 	catalog modelinference.Detail,
 	operation string,
 ) error {
-	selected, ok := catalogOperationForName(catalog, operation)
+	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
 	if len(cfg.OutputMappings) > 0 {
 		if strings.TrimSpace(cfg.OutputPath) != "" {
 			return fmt.Errorf("--output cannot be combined with explicit output mappings")
@@ -245,16 +246,17 @@ func validateCLIOutputShape(
 	if cfg.JSON {
 		return nil
 	}
-	if ok && len(selected.Outputs) > 1 {
+	outputSlots := genericCLIOutputSlots(selected.Outputs)
+	if ok && len(outputSlots) > 1 {
 		return fmt.Errorf(
 			"multiple model outputs require --json or explicit output mappings: %s",
-			genericOutputSlotNames(selected.Outputs),
+			genericOutputSlotNames(outputSlots),
 		)
 	}
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return nil
 	}
-	if !ok || len(selected.Outputs) != 1 || !genericCLIStdoutModality(selected.Outputs[0].Modality) {
+	if !ok || len(outputSlots) != 1 || !genericCLIStdoutModality(outputSlots[0].Modality) {
 		return fmt.Errorf("--output is required unless --json is set")
 	}
 	return nil
@@ -264,8 +266,9 @@ func genericCLIInlineOutput(cfg InvokeConfig, catalog modelinference.Detail, ope
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return false
 	}
-	selected, ok := catalogOperationForName(catalog, operation)
-	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
+	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
+	outputSlots := genericCLIOutputSlots(selected.Outputs)
+	return ok && len(outputSlots) == 1 && genericCLIInlineModality(outputSlots[0].Modality)
 }
 
 func genericCLIInlineModality(modality modelinference.Modality) bool {
@@ -276,8 +279,35 @@ func genericCLIStdoutOutput(cfg InvokeConfig, catalog modelinference.Detail, ope
 	if cfg.JSON || strings.TrimSpace(cfg.OutputPath) != "" {
 		return false
 	}
-	selected, ok := catalogOperationForName(catalog, operation)
-	return ok && len(selected.Outputs) == 1 && genericCLIStdoutModality(selected.Outputs[0].Modality)
+	selected, ok := catalogCLIOutputOperation(cfg, catalog, operation)
+	outputSlots := genericCLIOutputSlots(selected.Outputs)
+	return ok && len(outputSlots) == 1 && genericCLIStdoutModality(outputSlots[0].Modality)
+}
+
+func genericCLIOutputSlots(outputs []modelinference.OperationSlot) []modelinference.OperationSlot {
+	if len(outputs) <= 1 {
+		return append([]modelinference.OperationSlot(nil), outputs...)
+	}
+	required := make([]modelinference.OperationSlot, 0, len(outputs))
+	for _, output := range outputs {
+		if output.Required == nil || *output.Required {
+			required = append(required, output)
+		}
+	}
+	return required
+}
+
+func catalogCLIOutputOperation(
+	cfg InvokeConfig,
+	catalog modelinference.Detail,
+	operation string,
+) (modelinference.Operation, bool) {
+	if len(cfg.InputMappings) == 0 && strings.TrimSpace(cfg.Text) != "" {
+		if authored, authoredOK := catalogCapabilityOperationForName(catalog, operation); authoredOK {
+			return authored, true
+		}
+	}
+	return catalogOperationForName(catalog, operation)
 }
 
 func genericCLIStdoutModality(modality modelinference.Modality) bool {
@@ -314,11 +344,35 @@ func genericCLIJSONResult(
 	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
 }
 
-func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelResult) error {
-	if len(result.Outputs) != 1 {
+func writeGenericCLIOutputWithCatalog(
+	output io.Writer,
+	result modelinference.InvokeModelResult,
+	catalog modelinference.Detail,
+	operation string,
+) error {
+	var inline *modelinference.InferenceOutput
+	if len(result.Outputs) == 1 {
+		inline = &result.Outputs[0]
+	} else if selected, ok := catalogOperationForName(catalog, operation); ok {
+		for _, slot := range selected.Outputs {
+			if slot.Required != nil && !*slot.Required || !genericCLIInlineModality(slot.Modality) {
+				continue
+			}
+			for index := range result.Outputs {
+				if result.Outputs[index].Name != slot.Name {
+					continue
+				}
+				if inline != nil {
+					return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
+				}
+				inline = &result.Outputs[index]
+			}
+		}
+	}
+	if inline == nil {
 		return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
 	}
-	value := result.Outputs[0].Content
+	value := inline.Content
 	if value == "" {
 		return fmt.Errorf("model invocation returned no inline output")
 	}

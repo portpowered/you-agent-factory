@@ -16,9 +16,11 @@ import (
 	"strings"
 	"time"
 
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelcodecs "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
@@ -67,6 +69,34 @@ type EmbeddingBackend func(
 	context.Context,
 	models.EmbeddingBackendRequest,
 ) (models.EmbeddingBackendResponse, error)
+
+// InvocationProtocolClient is the provider-neutral construction port for the
+// pinned generic protocol. Protocol-native request types stay inside the
+// private LocalAI adapter.
+type InvocationProtocolClient interface {
+	Predict(context.Context, models.InvocationProtocolRequest) (models.InvocationProtocolResponse, error)
+}
+
+// InvocationProtocolDialer is the policy-free transport port used by the
+// pinned LocalAI adapter when no provider-neutral fixture client is supplied.
+type InvocationProtocolDialer = platformgrpc.Dialer
+
+// NewPinnedGRPCHostProtocolNegotiator exposes the LocalAI-owned readiness
+// adapter through the Models construction boundary without exporting any
+// backend-native message types.
+func NewPinnedGRPCHostProtocolNegotiator(
+	dialer InvocationProtocolDialer,
+) HostProtocolNegotiator {
+	return localai.NewPinnedGRPCHostProtocolNegotiator(dialer)
+}
+
+type invocationRuntimeOptions struct {
+	Backend   InvocationBackend
+	ASR       ASRBackend
+	Embedding EmbeddingBackend
+	Client    InvocationProtocolClient
+	Dialer    InvocationProtocolDialer
+}
 
 type invocationRuntime interface {
 	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
@@ -118,7 +148,7 @@ func NewService(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, nil, nil, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, invocationRuntimeOptions{},
 		revisionResolvers...,
 	)
 }
@@ -166,17 +196,15 @@ func NewServiceWithBackendArtifactResolver(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, nil, nil, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, invocationRuntimeOptions{},
 		revisionResolvers...,
 	)
 }
 
-// NewServiceWithBackendArtifactResolverAndInvocationBackend constructs the
-// Models root with both the pinned backend selector and one injected backend
-// operation effect. It exists as an additive construction variant so existing
-// callers retain the production input-echo default until a real backend
-// adapter is selected by the composition root.
-func NewServiceWithBackendArtifactResolverAndInvocationBackend(
+// NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer adds
+// the production transport used by the pinned LocalAI adapter while retaining
+// the injected generic and ASR backends used by deterministic fixtures.
+func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 	assetPlatform models.AssetHostPlatform,
 	assetHTTP AssetHTTPDoer,
 	assetEndpoints models.RuntimeAssetEndpoints,
@@ -209,6 +237,8 @@ func NewServiceWithBackendArtifactResolverAndInvocationBackend(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
+	invocationProtocol InvocationProtocolClient,
+	protocolDialer InvocationProtocolDialer,
 	invocationBackend InvocationBackend,
 	asrBackend ASRBackend,
 	embeddingBackend EmbeddingBackend,
@@ -220,7 +250,11 @@ func NewServiceWithBackendArtifactResolverAndInvocationBackend(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, invocationBackend, asrBackend, embeddingBackend, revisionResolvers...,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver,
+		invocationRuntimeOptions{
+			Backend: invocationBackend, ASR: asrBackend, Embedding: embeddingBackend,
+			Client: invocationProtocol, Dialer: protocolDialer,
+		}, revisionResolvers...,
 	)
 }
 
@@ -243,8 +277,7 @@ func newService(
 	hostClock HostClock,
 	runtimeRunner platformprocess.CommandRunner,
 	runtimeHTTP RuntimeHTTPDoer,
-	runtimeInspect RuntimeInspectFile,
-	runtimeTempDir RuntimeTempDirectory,
+	runtimeInspect RuntimeInspectFile, runtimeTempDir RuntimeTempDirectory,
 	runtimeTempFile RuntimeCreateTempFile,
 	logger *zap.Logger,
 	now func() time.Time,
@@ -257,9 +290,7 @@ func newService(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
-	invocationBackend InvocationBackend,
-	asrBackend ASRBackend,
-	embeddingBackend EmbeddingBackend,
+	runtimeOptions invocationRuntimeOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
@@ -320,7 +351,7 @@ func newService(
 		resolveEnvironment,
 		protocolNegotiator,
 		compatibilityChecker,
-		backendResolver, invocationBackend, asrBackend, embeddingBackend, revisionResolvers...,
+		backendResolver, runtimeOptions, revisionResolvers...,
 	)
 }
 
@@ -357,9 +388,7 @@ func composeModelsService(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
-	invocationBackend InvocationBackend,
-	asrBackend ASRBackend,
-	embeddingBackend EmbeddingBackend,
+	runtimeOptions invocationRuntimeOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
@@ -371,7 +400,7 @@ func composeModelsService(
 		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
 		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
-		compatibilityChecker, invocationBackend, asrBackend, embeddingBackend, now, issuerEntropy,
+		compatibilityChecker, runtimeOptions, now, issuerEntropy,
 		firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
@@ -412,6 +441,7 @@ func (runtime backendInvocationRuntime) Invoke(
 
 type operationInvocationRuntime struct {
 	generic   invocationRuntime
+	omni      invocationRuntime
 	asr       invocationRuntime
 	embedding invocationRuntime
 }
@@ -423,31 +453,30 @@ func (runtime operationInvocationRuntime) Invoke(
 	if runtime.asr != nil && isASROperation(request) {
 		return runtime.asr.Invoke(ctx, request)
 	}
+	if runtime.omni != nil && isOMNIOperation(request) {
+		return runtime.omni.Invoke(ctx, request)
+	}
 	if runtime.embedding != nil && isEmbeddingOperation(request) {
 		return runtime.embedding.Invoke(ctx, request)
 	}
 	return runtime.generic.Invoke(ctx, request)
 }
 
-func inferenceRuntime(
-	backend InvocationBackend,
-	asrBackend ASRBackend,
-	embeddingBackend EmbeddingBackend,
-) (invocationRuntime, error) {
-	generic := genericInvocationRuntime(backend)
-	if asrBackend == nil && embeddingBackend == nil {
-		return generic, nil
+func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, error) {
+	generic := genericInvocationRuntime(options.Backend)
+	runtime := operationInvocationRuntime{
+		generic: generic,
+		omni:    newInvocationRuntime(options.Client, options.Dialer),
 	}
-	runtime := operationInvocationRuntime{generic: generic}
-	if asrBackend != nil {
-		asr, err := newASRInvocationRuntime(asrBackend)
+	if options.ASR != nil {
+		asr, err := newASRInvocationRuntime(options.ASR)
 		if err != nil {
 			return nil, err
 		}
 		runtime.asr = asr
 	}
-	if embeddingBackend != nil {
-		embedding, err := newEmbeddingInvocationRuntime(embeddingBackend)
+	if options.Embedding != nil {
+		embedding, err := newEmbeddingInvocationRuntime(options.Embedding)
 		if err != nil {
 			return nil, err
 		}
@@ -501,6 +530,85 @@ func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime,
 			Embeddings: append([]float64(nil), response.Embeddings...),
 		}, nil
 	})
+}
+
+type omniInvocationRuntime struct {
+	codec    *localai.OmniCodec
+	fallback invocationRuntime
+}
+
+// newInvocationRuntime keeps OMNI on the pinned protocol path. A missing
+// client fails closed for OMNI while non-OMNI operations retain the generic
+// input-echo behavior used by lightweight composition tests.
+func newInvocationRuntime(
+	client InvocationProtocolClient,
+	dialer InvocationProtocolDialer,
+) invocationRuntime {
+	fallback := inference.InputEchoInvocationRuntime{}
+	if isNilDependency(client) {
+		client = nil
+	}
+	var protocolClient localai.ProtocolClient
+	if client != nil {
+		protocolClient = invocationProtocolAdapter{client: client}
+	} else if dialer != nil {
+		protocolClient = localai.NewPinnedGRPCProtocolClient(dialer)
+	}
+	return omniInvocationRuntime{
+		codec:    localai.NewPinnedOmniCodec(protocolClient),
+		fallback: fallback,
+	}
+}
+
+func (runtime omniInvocationRuntime) Invoke(
+	ctx context.Context,
+	request inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	if !isOMNIOperation(request) {
+		return runtime.fallback.Invoke(ctx, request)
+	}
+	if runtime.codec == nil {
+		return inference.InvocationRuntimeResult{}, models.ErrUnavailable
+	}
+	ctx = localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint)
+	content, err := runtime.codec.Invoke(ctx, request.Request, request.Operation)
+	if err != nil {
+		return inference.InvocationRuntimeResult{}, err
+	}
+	return inference.InvocationRuntimeResult{Content: content}, nil
+}
+
+type invocationProtocolAdapter struct {
+	client InvocationProtocolClient
+}
+
+func (adapter invocationProtocolAdapter) Predict(
+	ctx context.Context,
+	request localai.PredictRequest,
+) (localai.PredictResponse, error) {
+	inputs := make([]models.InvocationProtocolInput, len(request.Inputs))
+	for index, input := range request.Inputs {
+		inputs[index] = models.InvocationProtocolInput{
+			Slot: input.Slot, Modality: input.Modality, MediaType: input.MediaType,
+			Content: input.Content, Reference: input.Reference,
+		}
+	}
+	response, err := adapter.client.Predict(ctx, models.InvocationProtocolRequest{
+		Operation: models.OperationOMNI,
+		Prompt:    request.Prompt, Inputs: inputs, Parameters: request.Parameters,
+	})
+	if err != nil {
+		return localai.PredictResponse{}, err
+	}
+	return localai.PredictResponse{Text: response.Text, Usage: response.Usage}, nil
+}
+
+func isOMNIOperation(request inference.InvocationRuntimeRequest) bool {
+	operation := request.Operation.Name
+	if operation == "" {
+		operation = request.Request.Operation
+	}
+	return strings.EqualFold(strings.TrimSpace(operation), models.OperationOMNI)
 }
 
 func isASROperation(request inference.InvocationRuntimeRequest) bool {
@@ -592,9 +700,7 @@ func buildModelsServiceComponents(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
-	invocationBackend InvocationBackend,
-	asrBackend ASRBackend,
-	embeddingBackend EmbeddingBackend,
+	runtimeOptions invocationRuntimeOptions,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
 	revisionResolver func(context.Context, string) (string, error),
@@ -630,7 +736,7 @@ func buildModelsServiceComponents(
 	if err != nil {
 		return modelsServiceComponents{}, err
 	}
-	runtime, err := inferenceRuntime(invocationBackend, asrBackend, embeddingBackend)
+	runtime, err := inferenceRuntime(runtimeOptions)
 	if err != nil {
 		return modelsServiceComponents{}, err
 	}
