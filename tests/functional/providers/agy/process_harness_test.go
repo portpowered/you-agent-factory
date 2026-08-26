@@ -22,6 +22,7 @@ const agyFunctionalModel = agyGoldenModel
 // print-mode execution through the customer process boundary and
 // Providers-backed command adapter.
 func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
 		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, agyFunctionalModel),
@@ -64,6 +65,7 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 // TestAgyNativeFailureThroughRootBuildProcessIsSafe proves native Agy failures
 // remain safe and observable through the customer process boundary.
 func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderAntigravity,
@@ -107,6 +109,7 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 // TestAgyTimeoutFailureThroughRootBuildProcess proves timeout normalization
 // through the customer process boundary without leaking partial output.
 func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderAntigravity,
@@ -140,6 +143,7 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 // cancellation returns the canonical outcome through the Providers command
 // adapter.
 func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderAntigravity,

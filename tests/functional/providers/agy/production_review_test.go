@@ -400,7 +400,6 @@ func runAgyColdWatchInvocationWithStdout(
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, agyColdWatchFactoryName)
 
 	assetPath := filepath.Join(workingDirectory, asset)
 	if !strings.Contains(asset, "does-not-exist") {
@@ -410,11 +409,13 @@ func runAgyColdWatchInvocationWithStdout(
 	}
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   stdout,
+		Stdout: stdout,
 		ExitCode: 0,
 	})
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
 	support.CleanupProcess(t, process)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	assertAgyPackagedFactoryInstalled(t, process, env, workingDirectory, agyColdWatchFactoryName)
 	recordingPath := filepath.Join(t.TempDir(), "agy-cold-watch.replay.json")
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
@@ -423,7 +424,7 @@ func runAgyColdWatchInvocationWithStdout(
 		"--record", recordingPath,
 		"--output", "primary",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
 	err := process.Execute(inputs.Input)
 	if !expectFailure && err != nil {
@@ -466,7 +467,6 @@ func runAgyClipQAInvocationWithStdout(
 
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, agyClipQAFactoryName)
 
 	assetPath := filepath.Join(workingDirectory, asset)
 	if !strings.Contains(asset, "does-not-exist") {
@@ -480,6 +480,8 @@ func runAgyClipQAInvocationWithStdout(
 	runner := testutil.NewProviderCommandRunner(result)
 	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
 	support.CleanupProcess(t, process)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	assertAgyPackagedFactoryInstalled(t, process, env, workingDirectory, agyClipQAFactoryName)
 	recordingPath := filepath.Join(t.TempDir(), "agy-clip-qa.replay.json")
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
@@ -489,7 +491,7 @@ func runAgyClipQAInvocationWithStdout(
 		"--record", recordingPath,
 		"--output", "primary",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
 	err := process.Execute(inputs.Input)
 	if !expectFailure && err != nil {
