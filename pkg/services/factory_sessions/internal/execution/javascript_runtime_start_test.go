@@ -983,6 +983,7 @@ type petriCompactionStore struct {
 	saveErr   error
 	payload   []byte
 }
+
 func (s *petriCompactionStore) Save(_ string, encoded []byte) error {
 	s.saveCalls++
 	if s.saveErr != nil {
