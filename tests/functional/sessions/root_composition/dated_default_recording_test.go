@@ -109,6 +109,42 @@ func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProc
 	}
 }
 
+// TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess preserves the
+// current explicit-path append format while automatic recordings continue to
+// use whole-file .json snapshots.
+func TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-explicit-jsonl-recording")
+	recordingPath := filepath.Join(t.TempDir(), "explicit.replay.jsonl")
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", factoryDir, "--record", recordingPath})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(explicit JSONL recording) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	data, err := os.ReadFile(recordingPath)
+	if err != nil {
+		t.Fatalf("read explicit JSONL recording: %v", err)
+	}
+	if !bytes.HasSuffix(data, []byte("\n")) {
+		t.Fatalf("explicit JSONL recording = %q, want trailing newline", data)
+	}
+	lines := bytes.Split(bytes.TrimSuffix(data, []byte("\n")), []byte("\n"))
+	if len(lines) < 2 {
+		t.Fatalf("explicit JSONL recording has %d records, want multiple appended records", len(lines))
+	}
+	for index, line := range lines {
+		if !json.Valid(line) {
+			t.Fatalf("explicit JSONL record[%d] = %q, want valid JSON", index, line)
+		}
+	}
+}
+
 func executeDefaultRecordingRun(t *testing.T, factoryDir string, env []string) string {
 	t.Helper()
 
