@@ -53,7 +53,7 @@ func TestPetriTokenSummary_RoundTripsThroughTaggedDurableHistory(t *testing.T) {
 	if len(hydrated.petriMutations) != 0 || len(hydrated.petriSummaries) != 1 || hydrated.petriSummaries[0].WorkID != "work-summary" {
 		t.Fatalf("hydrated summary state = %d mutations, %#v", len(hydrated.petriMutations), hydrated.petriSummaries)
 	}
-	resaved := persistedSnapshotFromRuntimeState(hydrated)
+	resaved := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(hydrated, 0)
 	if len(resaved.Records) != 1 || resaved.Records[0].PetriSummary == nil {
 		t.Fatalf("resaved summary records = %#v", resaved.Records)
 	}
@@ -83,7 +83,7 @@ func legacyTerminalTokenMutations(index int) []interfaces.TokenMutationRecord {
 
 func encodePetriMutationSnapshot(t *testing.T, mutations []interfaces.TokenMutationRecord, summaries []PetriTokenSummary) []byte {
 	t.Helper()
-	encoded, err := json.Marshal(persistedSnapshotFromRuntimeState(runtimeSessionState{petriMutations: mutations, petriSummaries: summaries}))
+	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(runtimeSessionState{petriMutations: mutations, petriSummaries: summaries}, 0))
 	if err != nil {
 		t.Fatalf("marshal Petri snapshot: %v", err)
 	}

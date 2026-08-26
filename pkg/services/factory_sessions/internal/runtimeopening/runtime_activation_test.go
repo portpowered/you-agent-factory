@@ -23,6 +23,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func restoreCurrentBoardState(
+	service historicalRecordingReader,
+	recordPath string,
+	sessionID string,
+	allowMissingHistory bool,
+) (*factorydefinitions.FactoryWorldState, error) {
+	history, err := restoreCurrentBoardHistory(service, recordPath, sessionID, allowMissingHistory)
+	if err != nil || history == nil {
+		return nil, err
+	}
+	return history.state, nil
+}
+
 func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing.T) {
 	t.Parallel()
 

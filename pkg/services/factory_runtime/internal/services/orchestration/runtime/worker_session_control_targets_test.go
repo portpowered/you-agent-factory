@@ -957,7 +957,7 @@ func TestRecordedWorkerSessionObservationReplayUsesWatermarkForConfirmation(t *t
 		ScriptedRuntimeLedger: &recordingfixtures.ScriptedRuntimeLedger{GenerationID: generationID},
 		watermark:             recordings.CanonicalEventCursor{StreamGenerationID: generationID, Sequence: 3}, available: true,
 	}
-	service := newRecordedWorkerSessionObservationWithRecording(
+	service := newRecordedWorkerSessionObservationWithRestoredState(
 		nil, ledger,
 		func(_ []interfaces.FactoryEvent, _ int) (interfaces.FactoryWorldState, error) {
 			return interfaces.FactoryWorldState{CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
@@ -965,7 +965,7 @@ func TestRecordedWorkerSessionObservationReplayUsesWatermarkForConfirmation(t *t
 				Result: interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
 			}}}, nil
 		},
-		platformclock.Real{}, nil, replayEvents, "", nil,
+		platformclock.Real{}, nil, replayEvents, "", nil, nil, nil,
 	)
 
 	show, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID})
