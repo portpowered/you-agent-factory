@@ -12,9 +12,46 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix proves the
+// shared platform reservation boundary still provides collision-numbered names
+// for callers that explicitly opt into that policy. Recordings use the exact
+// named variant instead, but both policies must retain the platform's UTC date
+// layout and atomic file reservation behavior.
+func TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix(t *testing.T) {
+	t.Parallel()
+
+	reserver, err := platformruntimeartifact.NewReserver(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewReserver: %v", err)
+	}
+	root := t.TempDir()
+	at := time.Date(2026, time.August, 23, 12, 0, 0, 0, time.UTC)
+
+	first, err := reserver.ReserveNamedWithCollision(root, at, "session", ".json")
+	if err != nil {
+		t.Fatalf("ReserveNamedWithCollision first: %v", err)
+	}
+	second, err := reserver.ReserveNamedWithCollision(root, at, "session", ".json")
+	if err != nil {
+		t.Fatalf("ReserveNamedWithCollision second: %v", err)
+	}
+
+	wantDir := filepath.Join(root, "2026", "08", "23")
+	wantFirst := filepath.Join(wantDir, "session.json")
+	wantSecond := filepath.Join(wantDir, "session-2.json")
+	if first != wantFirst || second != wantSecond {
+		t.Fatalf("named reservation paths = %q, %q; want %q, %q", first, second, wantFirst, wantSecond)
+	}
+	if got := platformruntimeartifact.RuntimeArtifactPathComponents("session id", "json"); got != "session_id-json" {
+		t.Fatalf("RuntimeArtifactPathComponents() = %q, want %q", got, "session_id-json")
+	}
+}
 
 // TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess
 // proves two completed default-session runs reserve separate canonical files in
