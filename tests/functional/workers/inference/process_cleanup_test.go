@@ -34,6 +34,8 @@ func TestProcessGoneReleasesSameRouteAdmissionThroughRootProcess(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process-gone inherited-pipe observation is covered on the Unix process boundary")
 	}
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	childPIDFile := filepath.Join(t.TempDir(), "process-gone-child.pid")
 
@@ -102,6 +104,8 @@ then complete the second same-route Work after PROCESS_GONE reconciliation.
 // observable witness for workstation reconciliation and route release while
 // the Unix test above covers the real inherited-pipe process boundary.
 func TestProcessGoneReconciliationThroughRootProcess(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	const (
 		workID  = "work-process-gone-functional"

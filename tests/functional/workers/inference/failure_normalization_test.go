@@ -35,6 +35,8 @@ const (
 // non-zero is normalized into a public failed Work outcome with matching Factory
 // Event and Provider Session diagnostics, without hanging or reporting success.
 func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
@@ -92,6 +94,8 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 // successful provider call cannot advance Work when it returns no authoritative
 // completion evidence.
 func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
@@ -137,6 +141,8 @@ func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
 // exit code, artifact signal, and task-complete lifecycle record do not stand
 // in for an authoritative final provider response.
 func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
@@ -194,6 +200,8 @@ func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
 // failure classes through the customer process boundary, including throttle
 // exhaustion after default retry limits.
 func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
+	t.Parallel()
+
 	const defaultThrottleRetryCalls = 3 * 3
 
 	tests := []struct {

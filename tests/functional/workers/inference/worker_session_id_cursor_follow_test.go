@@ -32,6 +32,8 @@ import (
 // WSR-FT-011: exclusive Worker-ID cursor resume across restart and malformed,
 // foreign, future, stale, and unavailable cursor outcomes.
 func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-011-worker-id-cursor")
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-011-worker-id-cursor.replay.json")
 	homeDir := t.TempDir()

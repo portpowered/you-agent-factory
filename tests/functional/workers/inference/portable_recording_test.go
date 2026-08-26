@@ -44,6 +44,8 @@ type wsrFT006Case struct {
 // final-only fidelity, including a provider history without a Provider Session
 // reference and rejection of tampered ordering and overstated fidelity.
 func TestWSRFT006PortableWorkerRecordingParity(t *testing.T) {
+	t.Parallel()
+
 	cases := []wsrFT006Case{
 		{
 			name:            "streaming",
@@ -88,6 +90,8 @@ func TestWSRFT006PortableWorkerRecordingParity(t *testing.T) {
 // later recording at the same artifact path gets a fresh durable identity.
 // Both recordings use one reusable root-built process and the same writer.
 func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
+	t.Parallel()
+
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
 	firstDir := wsrFT006Factory(t, modelprovider.ProviderCodex, loaded)
 	support.ClearSeedInputs(t, firstDir)

@@ -25,6 +25,8 @@ const (
 // a matching completed snapshot, without final-only fidelity or synthesized
 // message-delta fabrication.
 func TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully(t *testing.T) {
+	t.Parallel()
+
 	loaded := loadStreamFidelityGoldenCase(t, modelprovider.ProviderClaude, claudeFullStreamGoldenCase)
 	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFullStream {
 		t.Fatalf(
@@ -80,6 +82,8 @@ func TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully(t *testing.T) {
 // message snapshots only—no fabricated message deltas and no final-only fidelity
 // on those snapshots.
 func TestProviderPartialStreamDoesNotFabricateMissingDeltas(t *testing.T) {
+	t.Parallel()
+
 	loaded := loadStreamFidelityGoldenCase(t, modelprovider.ProviderCodex, codexPartialStreamGoldenCase)
 	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityPartialStream {
 		t.Fatalf(

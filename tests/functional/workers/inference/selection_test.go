@@ -29,6 +29,8 @@ import (
 // that edge, and does not invoke a different registered provider edge for the
 // same work.
 func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
+	t.Parallel()
+
 	const (
 		selectedProviderID     = "selected.provider"
 		selectedProviderAlias  = "selected"
@@ -180,6 +182,8 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 // provider edges inert and factory startup fails with a stable validation error
 // before any provider invoke or customer process lifecycle starts.
 func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
+	t.Parallel()
+
 	const (
 		unknownProviderAlias    = "unknown-provider"
 		registeredProviderID    = "registered.provider"
@@ -305,6 +309,8 @@ func externalProviderManifest(t *testing.T, identity, alias string) inference.Ma
 // partially usable root. The error comes from the live runner registry path,
 // not from a source-only or private implementation assertion.
 func TestWorkersWireRejectsInvalidInferenceRunner(t *testing.T) {
+	t.Parallel()
+
 	providersRoot, err := inference.NewService()
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)

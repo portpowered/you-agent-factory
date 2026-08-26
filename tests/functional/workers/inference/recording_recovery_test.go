@@ -27,6 +27,8 @@ import (
 // WSR-FT-009: interrupted prefixes remain readable as INCOMPLETE and a
 // durable terminal derives COMPLETE even when completion metadata is absent.
 func TestWSRFT009CanonicalRestartRecoversWorkerHistory(t *testing.T) {
+	t.Parallel()
+
 	t.Run("interrupted prefix is readable after restart", testWSRFT009InterruptedPrefix)
 	t.Run("durable terminal derives completion after restart", testWSRFT009TerminalCompletion)
 }

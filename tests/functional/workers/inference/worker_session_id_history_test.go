@@ -27,6 +27,8 @@ import (
 // WSR-FT-010: live, restarted historical, and no-Provider-Session-reference
 // Worker-ID observation/transcript/event reads.
 func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "wsr-ft-010-worker-id-history")
 	artifactPath := filepath.Join(t.TempDir(), "wsr-ft-010-worker-id-history.replay.json")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
