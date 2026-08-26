@@ -94,6 +94,7 @@ FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
+FUNCTIONAL_LONG_COMPILE_PACKAGES := $(FUNCTIONAL_LONG_PACKAGES) ./pkg/services/models/internal/backendconformance
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
 RELEASE_DEFAULT_PACKAGES := ./tests/release/...
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestProviderCancellationTerminatesCompanionProcesses
@@ -235,7 +236,7 @@ endef
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
-.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime
+.PHONY: test-backend-verification test-backend-conformance test-backend-conformance-live test-root-process-acceptance long-tests long-tests-managed-runtime
 .PHONY: frontend-verification backend-verification ui-backend-integration
 
 .PHONY: verify-fast verify-pr verify-extended verify-build verify-lint verify-api
@@ -499,7 +500,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -595,10 +596,10 @@ test-release:
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-# Compile every functionallong-tagged functional package without running tests
+# Compile every functionallong-tagged package without running tests
 # or starting any of the long-test runtime dependencies.
 test-functional-long-compile:
-	$(GO) vet -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES)
+	$(GO) vet -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_COMPILE_PACKAGES)
 
 test-root-process-acceptance:
 	$(GO) test $(ROOT_PROCESS_ACCEPTANCE_PACKAGES) -count=1 -timeout $(ROOT_PROCESS_ACCEPTANCE_TIMEOUT)
@@ -642,6 +643,12 @@ test-backend-coverage:
 test-backend-verification:
 	$(MAKE) test-unit-coverage
 	$(MAKE) test-functional-coverage
+
+test-backend-conformance:
+	$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-backend-conformance-live:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./pkg/services/models/internal/backendconformance -run '^TestPublishedBackendArtifactLocations$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-backend-functional:
 	$(MAKE) test-functional-coverage

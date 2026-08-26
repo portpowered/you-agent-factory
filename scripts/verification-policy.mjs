@@ -232,6 +232,12 @@ function policyInputFromEnvironment() {
 				"BACKEND_STABILITY_RESULT",
 			),
 			directLane(
+				"Backend Conformance",
+				"RUN_BACKEND_CONFORMANCE",
+				"BACKEND_CONFORMANCE_REASON",
+				"BACKEND_CONFORMANCE_RESULT",
+			),
+			directLane(
 				"Backend Lint",
 				"RUN_BACKEND_LINT",
 				"BACKEND_LINT_REASON",

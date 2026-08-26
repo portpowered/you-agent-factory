@@ -19,6 +19,7 @@ const (
 	laneReadme                   = "README"
 	laneFrontend                 = "Frontend"
 	laneBackend                  = "Backend"
+	laneBackendConformance       = "Backend Conformance"
 	laneUIBackendIntegration     = "UI Backend Integration"
 	laneAPIPackage               = "API Package"
 	lanePackagedFactoriesPackage = "Packaged Factories Package"
@@ -30,6 +31,7 @@ var allLaneNames = []string{
 	laneReadme,
 	laneFrontend,
 	laneBackend,
+	laneBackendConformance,
 	laneUIBackendIntegration,
 	laneAPIPackage,
 	lanePackagedFactoriesPackage,
@@ -209,6 +211,8 @@ func classifyPath(path string) (string, []string) {
 		return "factory-content", nil
 	case isAPIContractPath(path):
 		return "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}
+	case isBackendConformancePath(path):
+		return backendConformanceClassification(path)
 	case strings.HasPrefix(path, "packages/api/"), strings.HasPrefix(path, "scripts/api-package"):
 		return "api-package", []string{laneAPIPackage, laneFrontend, laneBackend, laneUIBackendIntegration}
 	case strings.HasPrefix(path, "packages/packaged-factories/"), strings.HasPrefix(path, "scripts/packaged-factories"):
@@ -252,12 +256,38 @@ func isBackendPath(path string) bool {
 		strings.HasPrefix(path, "scripts/release/")
 }
 
+func isBackendConformancePath(path string) bool {
+	return strings.HasPrefix(path, "packages/packaged-factories/generated/factories/") ||
+		path == "pkg/services/models/catalog_contract.go" ||
+		strings.HasPrefix(path, "pkg/services/models/internal/backendregistry/") ||
+		path == "pkg/services/models/internal/artifacts/default-manifest.json" ||
+		strings.HasPrefix(path, "cmd/factory/") ||
+		strings.HasPrefix(path, "cmd/omnivoice-llamacpp/") ||
+		strings.HasPrefix(path, "scripts/release/")
+}
+
+func backendConformanceClassification(path string) (string, []string) {
+	if strings.HasPrefix(path, "packages/packaged-factories/generated/factories/") {
+		return "packaged-factories-package", []string{
+			laneBackendConformance,
+			lanePackagedFactoriesPackage,
+			laneBackend,
+		}
+	}
+	return "backend", []string{
+		laneBackendConformance,
+		laneBackend,
+		laneUIBackendIntegration,
+	}
+}
+
 func newLanePlans() map[string]lanePlan {
 	return map[string]lanePlan{
 		laneDocsReference:            {Name: laneDocsReference, Command: "make docs-reference-smoke"},
 		laneReadme:                   {Name: laneReadme, Command: "make readme-check"},
 		laneFrontend:                 {Name: laneFrontend, Command: "make frontend-verification"},
 		laneBackend:                  {Name: laneBackend, Command: "make backend-verification"},
+		laneBackendConformance:       {Name: laneBackendConformance, Command: "make test-backend-conformance"},
 		laneUIBackendIntegration:     {Name: laneUIBackendIntegration, Command: "make ui-backend-integration"},
 		laneAPIPackage:               {Name: laneAPIPackage, Command: "make api-package-verify"},
 		lanePackagedFactoriesPackage: {Name: lanePackagedFactoriesPackage, Command: "make packaged-factory-package-verify"},
