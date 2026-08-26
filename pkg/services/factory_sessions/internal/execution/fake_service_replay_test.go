@@ -58,6 +58,26 @@ func TestBuildCanonicalSessionEvents_RunningAndTerminalSessions(t *testing.T) {
 	assertCanonicalEventEnvelope(t, terminalEvents[2], "SESSION_COMPLETED", "session-completed/dur-sess-js-success-002")
 }
 
+func TestPetriTokenSummary_RoundTripsThroughTaggedDurableHistory(t *testing.T) {
+	snapshot := PersistedRuntimeSessionState{Records: []DurableSessionRecord{{Kind: DurableRecordKindPetriTokenSummary, PetriSummary: &PetriTokenSummary{TokenID: "token-summary", WorkID: "work-summary", WorkTypeID: "task", PlaceID: "task:done", State: "done"}}}}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal summary snapshot: %v", err)
+	}
+	var decoded PersistedRuntimeSessionState
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal summary snapshot: %v", err)
+	}
+	hydrated := runtimeStateFromPersistedSnapshot(decoded)
+	if len(hydrated.petriMutations) != 0 || len(hydrated.petriSummaries) != 1 || hydrated.petriSummaries[0].WorkID != "work-summary" {
+		t.Fatalf("hydrated summary state = %d mutations, %#v", len(hydrated.petriMutations), hydrated.petriSummaries)
+	}
+	resaved := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(hydrated, 0)
+	if len(resaved.Records) != 1 || resaved.Records[0].PetriSummary == nil {
+		t.Fatalf("resaved summary records = %#v", resaved.Records)
+	}
+}
+
 func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtifactsAndProviderSession(t *testing.T) {
 	t.Parallel()
 	artifactRef := factory.FormatArtifactURI("session-live-child", "child-artifact-1")
