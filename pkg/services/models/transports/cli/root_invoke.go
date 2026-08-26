@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
@@ -146,7 +147,23 @@ func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Deta
 	if isDirectTTSAlias(cfg) && strings.TrimSpace(cfg.OutputPath) != "" {
 		return true
 	}
+	if strings.TrimSpace(cfg.OutputPath) != "" && genericCLIOutputPathOperation(catalog, operation) {
+		return true
+	}
 	return genericCLIInlineOutput(cfg, catalog, operation)
+}
+
+func genericCLIOutputPathOperation(catalog modelinference.Detail, operation string) bool {
+	selected, ok := catalogOperationForName(catalog, operation)
+	if !ok || len(selected.Outputs) == 0 {
+		return false
+	}
+	for _, output := range selected.Outputs {
+		if output.Modality != modelinference.ModalityAudio {
+			return true
+		}
+	}
+	return false
 }
 
 func (service *rootService) invokeGenericInScope(
@@ -206,10 +223,10 @@ func (service *rootService) writeGenericCLIInvocationResult(
 		return service.writeGenericCLIOutputPath(cfg, result)
 	}
 	if genericCLIInlineOutput(cfg, catalog, operation) {
-		return writeGenericCLIOutput(cfg.Output, result, catalog, operation)
+		return writeGenericCLIOutputWithCatalog(cfg.Output, result, catalog, operation)
 	}
 	if genericCLIStdoutOutput(cfg, catalog, operation) {
-		return writeGenericCLIOutput(cfg.Output, result, catalog, operation)
+		return writeGenericCLIOutputWithCatalog(cfg.Output, result, catalog, operation)
 	}
 	response := modelInvocationResponseFromInferenceResult(result, catalog, text)
 	return json.NewEncoder(cfg.Output).Encode(response)
@@ -328,7 +345,11 @@ func genericCLIJSONResult(
 	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
 }
 
-func writeGenericCLIOutput(
+func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelResult) error {
+	return writeGenericCLIOutputWithCatalog(output, result, modelinference.Detail{}, "")
+}
+
+func writeGenericCLIOutputWithCatalog(
 	output io.Writer,
 	result modelinference.InvokeModelResult,
 	catalog modelinference.Detail,
@@ -1048,61 +1069,4 @@ func catalogCapabilityOperationForName(catalog modelinference.Detail, operation 
 		}
 	}
 	return modelinference.Operation{}, false
-}
-
-func inferenceContentToWorkParts(content []modelinference.InferenceContent) []work.WorkContentPart {
-	if len(content) == 0 {
-		return nil
-	}
-	parts := make([]work.WorkContentPart, 0, len(content))
-	for _, item := range content {
-		parts = append(parts, inferenceContentToWorkPart(item))
-	}
-	return parts
-}
-
-func inferenceContentToWorkPart(item modelinference.InferenceContent) work.WorkContentPart {
-	contentType := strings.TrimSpace(item.ContentType)
-	value := strings.TrimSpace(item.Content)
-	switch {
-	case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
-		return work.WorkContentPart{
-			Type:        work.WorkContentPartTypeAudio,
-			File:        value,
-			ContentType: contentType,
-			Slot:        "audio",
-		}
-	case strings.HasPrefix(strings.ToLower(contentType), "image/"):
-		return work.WorkContentPart{
-			Type:        work.WorkContentPartTypeImage,
-			URL:         value,
-			ContentType: contentType,
-			Slot:        "image",
-		}
-	case strings.EqualFold(contentType, "application/json"):
-		return work.WorkContentPart{
-			Type: work.WorkContentPartTypeJSON,
-			JSON: json.RawMessage(value),
-			Slot: "json",
-		}
-	default:
-		if contentType == "" {
-			contentType = "text/plain"
-		}
-		return work.WorkContentPart{
-			Type:        work.WorkContentPartTypeText,
-			Text:        value,
-			ContentType: contentType,
-			Slot:        "text",
-		}
-	}
-}
-
-func inferenceArtifactSourcePath(result modelinference.InvokeModelResult) (string, error) {
-	for _, artifact := range result.Artifacts {
-		if path := strings.TrimSpace(artifact.Artifact.String()); path != "" {
-			return path, nil
-		}
-	}
-	return "", fmt.Errorf("models invoke returned no streamed audio output")
 }

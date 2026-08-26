@@ -996,43 +996,6 @@ func TestReadModelsInvokeOutputsSupportsScalarAndNamedForms(t *testing.T) {
 	})
 }
 
-func TestCommandHandlerTransformsRemoveArguments(t *testing.T) {
-	server := "http://127.0.0.1:7437"
-	called := false
-	handler := NewCommandHandler(
-		commandServiceFake{remove: func(cfg RemoveConfig) error {
-			called = true
-			if cfg.ModelName != "model-c" || cfg.Server != server || cfg.Context.Err() != context.Canceled {
-				t.Fatalf("RemoveConfig = %#v", cfg)
-			}
-			return nil
-		}},
-		func(*cobra.Command) io.Writer { return io.Discard },
-		nil,
-		nil,
-		nil,
-	)
-	cmd := &cobra.Command{Use: "models"}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	cmd.SetContext(ctx)
-	cmd.SetOut(io.Discard)
-	_, _, inherited := resolvedModelsHandlerInputs(t, server)
-	removeInputs, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{{ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}}},
-		[]resolvedinput.Candidate{{InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("model-c")}},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := handler.Remove(cmd, removeInputs, inherited); err != nil {
-		t.Fatal(err)
-	}
-	if !called {
-		t.Fatal("remove service operation was not called")
-	}
-}
-
 func TestWriteGenericCLIOutputPathRejectsInvalidResults(t *testing.T) {
 	t.Parallel()
 

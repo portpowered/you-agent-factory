@@ -26,10 +26,6 @@ type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)
 type AssetOpenFile func(string) (io.ReadCloser, error)
 
-// ModelCLIInputReadFile is the host effect used by the Models CLI to load one
-// explicit @-prefixed generic input before media detection and invocation.
-type ModelCLIInputReadFile func(string) ([]byte, error)
-
 // ModelCLIOutputCreateTempFile is the host effect used by the Models CLI
 // output publisher. The caller selects the directory, naming pattern, and
 // publication lifecycle; the edge supplies only the writable handle.
@@ -38,6 +34,13 @@ type ModelCLIOutputCreateTempFile func(string, string) (interface {
 	io.Closer
 	Name() string
 }, error)
+
+// ModelCLIInputReadFile is the host effect used to load one explicit generic
+// CLI input. The CLI adapter owns mapping validation and media classification;
+// this edge supplies only the file bytes. maxBytes is the inclusive content
+// limit selected by the CLI transport, and implementations must honor ctx
+// while preparing the content.
+type ModelCLIInputReadFile func(context.Context, string, int64) ([]byte, error)
 
 // ModelBackendArtifactSelectionRequest contains the safe host facts needed by
 // the pinned backend publication selector. The edge owns manifest lookup;

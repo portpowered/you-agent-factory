@@ -647,17 +647,17 @@ func TestMergeAppliesCLIOutputInspectionReplacement(t *testing.T) {
 func TestMergeAppliesCLIInputReadReplacement(t *testing.T) {
 	t.Parallel()
 
-	defaultRead := ModelCLIInputReadFile(func(string) ([]byte, error) {
+	defaultRead := ModelCLIInputReadFile(func(context.Context, string, int64) ([]byte, error) {
 		return []byte("default"), nil
 	})
-	replacementRead := ModelCLIInputReadFile(func(string) ([]byte, error) {
+	replacementRead := ModelCLIInputReadFile(func(context.Context, string, int64) ([]byte, error) {
 		return []byte("replacement"), nil
 	})
 	merged := Merge(
 		Edges{ModelCLIInputReadFile: defaultRead},
 		Edges{ModelCLIInputReadFile: replacementRead},
 	)
-	got, err := merged.ModelCLIInputReadFile("prompt.txt")
+	got, err := merged.ModelCLIInputReadFile(context.Background(), "prompt.txt", 1024)
 	if err != nil || string(got) != "replacement" {
 		t.Fatalf("merged ModelCLIInputReadFile = (%q, %v), want replacement", got, err)
 	}

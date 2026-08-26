@@ -1029,7 +1029,7 @@ func TestWriteGenericCLIOutputSelectsDeclaredInlineOutput(t *testing.T) {
 		},
 	}}}}
 	var out bytes.Buffer
-	err := writeGenericCLIOutput(&out, modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+	err := writeGenericCLIOutputWithCatalog(&out, modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
 		{Name: "usage", Modality: modelinference.ModalityJSON, Content: `{"tokens":3}`},
 		{Name: "text", Modality: modelinference.ModalityText, Content: "answer"},
 	}}, catalog, modelinference.OperationOMNI)
@@ -1066,7 +1066,7 @@ func TestWriteGenericCLIOutputRejectsAmbiguousAndInvalidResults(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			var out bytes.Buffer
-			err := writeGenericCLIOutput(&out, test.result, test.cat, modelinference.OperationOMNI)
+			err := writeGenericCLIOutputWithCatalog(&out, test.result, test.cat, modelinference.OperationOMNI)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("writeGenericCLIOutput error = %v, want %q", err, test.want)
 			}
