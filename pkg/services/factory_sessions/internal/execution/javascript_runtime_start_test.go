@@ -815,7 +815,6 @@ func scriptedFailedRuntimeWorkflows() factory.JavaScriptWorkflows {
 		}, nil
 	})
 }
-
 func inlineWorkflowStartRequest(
 	requestID string,
 	source string,
@@ -839,7 +838,6 @@ func inlineWorkflowStartRequest(
 		RequestedPolicy: requestedPolicy,
 	}
 }
-
 func waitUntilSessionStatus(
 	t *testing.T,
 	service Service,
@@ -866,7 +864,6 @@ func waitUntilSessionStatus(
 	t.Fatalf("session %s did not reach status %q within %s", sessionID, want, timeout)
 	return SessionReadResult{}
 }
-
 func decodePrimaryResultMap(t *testing.T, raw json.RawMessage) map[string]any {
 	t.Helper()
 
@@ -889,7 +886,6 @@ func decodePrimaryResultMap(t *testing.T, raw json.RawMessage) map[string]any {
 	t.Fatalf("primary result content = %#v, want JSON part", content)
 	return nil
 }
-
 func writeSimpleFinalWorkflowProject(t *testing.T) string {
 	t.Helper()
 
@@ -915,7 +911,6 @@ func orchestrationJavaScriptFromWorkflows(workflows factory.JavaScriptWorkflows)
 	}
 	return orchestrationJavaScriptAdapter{workflows}
 }
-
 func (a orchestrationJavaScriptAdapter) RunJavaScript(
 	ctx context.Context,
 	req factory.JavaScriptRuntimeRequest,
@@ -930,7 +925,6 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
 }
-
 func newTerminalWorkersService(t *testing.T, provider providers.Service) WorkerExecution {
 	t.Helper()
 	return terminalWorkerService{provider: provider}
@@ -982,4 +976,22 @@ func (service terminalWorkerService) Execute(
 	result.Outcome = workers.ExecutionOutcomeAccepted
 	result.Output.Primary = []work.WorkContentPart{{Text: providerResult.Content}}
 	return result, nil
+}
+
+func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
+	t.Helper()
+	state := runtimeSessionState{
+		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
+		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
+		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
+	}
+	base := encodedWarningStateBytes(t, state)
+	if targetSize < base {
+		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
+	}
+	state.sourceContent = strings.Repeat("x", targetSize-base)
+	if got := encodedWarningStateBytes(t, state); got != targetSize {
+		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
+	}
+	return state
 }

@@ -26,6 +26,17 @@ type sessionGateway interface {
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 }
 
+// ResolveFactorySessionRuntimeID resolves a public Factory Session selector
+// to the canonical runtime identity without building the full read projection.
+// Transport adapters use this narrow capability for identity-only routing.
+func (a *Assembly) ResolveFactorySessionRuntimeID(sessionID string) (string, error) {
+	session := a.Resolve(sessionID)
+	if session == nil {
+		return "", fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
+	}
+	return livesession.CanonicalID(session), nil
+}
+
 // ObserveForSession routes a status read through the live-runtime capability
 // bound to the requested Factory Session.
 func (s *Service) ObserveForSession(

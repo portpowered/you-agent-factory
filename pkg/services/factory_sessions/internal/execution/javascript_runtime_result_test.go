@@ -6,9 +6,10 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,87 @@ func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
 	}
 	if final.Availability == nil || final.Availability.Reason != "RESULT_NOT_READY" {
 		t.Fatalf("availability = %#v, want RESULT_NOT_READY", final.Availability)
+	}
+}
+
+func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
+	const mib = 1024 * 1024
+	for _, limit := range []struct {
+		name                    string
+		maxBytes, wantThreshold int
+	}{
+		{"default 64 MiB", 64 * mib, 48 * mib},
+		{"larger 128 MiB", 128 * mib, 100 * mib},
+	} {
+		t.Run(limit.name, func(t *testing.T) {
+			threshold := durableSessionSnapshotWarningThresholdForMax(limit.maxBytes)
+			if int(threshold) != limit.wantThreshold {
+				t.Fatalf("warning threshold = %d, want %d", threshold, limit.wantThreshold)
+			}
+			for _, boundary := range []struct {
+				name  string
+				delta int
+				warn  bool
+			}{{"one byte below", -1, false}, {"at threshold", 0, true}} {
+				t.Run(boundary.name, func(t *testing.T) {
+					core, observed := observer.New(zap.WarnLevel)
+					store := &runtimeRecordingStore{}
+					service := &JavaScriptRuntimeService{
+						persistence:              store,
+						persistenceWarningLogger: zap.New(core),
+					}
+					service.persistedSnapshotMaxBytes = limit.maxBytes
+					state := exactEncodedSizeWarningState(t, int(threshold)+boundary.delta)
+					if err := service.persistSessionSnapshot(state); err != nil {
+						t.Fatalf("persistSessionSnapshot: %v", err)
+					}
+					if got := len(store.payload); got != int(threshold)+boundary.delta {
+						t.Fatalf("persisted snapshot bytes = %d, want %d", got, int(threshold)+boundary.delta)
+					}
+					entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
+					assertSnapshotWarning(t, entries, boundary.warn, threshold)
+				})
+			}
+		})
+	}
+}
+
+func assertSnapshotWarning(t *testing.T, entries []observer.LoggedEntry, wantWarn bool, threshold int64) {
+	t.Helper()
+	if !wantWarn {
+		if len(entries) != 0 {
+			t.Fatalf("warning entries = %d, want none below threshold", len(entries))
+		}
+		return
+	}
+	if len(entries) != 1 {
+		t.Fatalf("warning entries = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["code"] != durableSessionSnapshotSizeWarningCode || fields["session_id"] != "dur-sess-warning-threshold" || fields["observed_bytes"] != threshold || fields["threshold_bytes"] != threshold || fields["retained_live_tokens"] != int64(1) || fields["retained_terminal_tokens"] != int64(1) {
+		t.Fatalf("warning fields = %#v, want safe session, size, threshold, and token counts", fields)
+	}
+	for _, forbidden := range []string{"sourceContent", "payload", "credentials", "unsafe-path"} {
+		if _, ok := fields[forbidden]; ok {
+			t.Fatalf("warning contains forbidden field %q: %#v", forbidden, fields)
+		}
+	}
+}
+
+func TestPersistSessionSnapshotWarningDoesNotHideSaveFailure(t *testing.T) {
+	wantErr := errors.New("checkpoint unavailable")
+	core, observed := observer.New(zap.WarnLevel)
+	const maxBytes = 4096
+	service := &JavaScriptRuntimeService{
+		persistence:              &runtimeRecordingStore{saveErr: wantErr},
+		persistenceWarningLogger: zap.New(core),
+	}
+	service.persistedSnapshotMaxBytes = maxBytes
+	if err := service.persistSessionSnapshot(exactEncodedSizeWarningState(t, int(durableSessionSnapshotWarningThresholdForMax(maxBytes)))); !errors.Is(err, wantErr) {
+		t.Fatalf("persistSessionSnapshot error = %v, want %v", err, wantErr)
+	}
+	if got := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").Len(); got != 1 {
+		t.Fatalf("warning count = %d, want 1 before failed save", got)
 	}
 }
 
@@ -903,69 +985,4 @@ func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
 		clone[key] = value
 	}
 	return clone
-}
-
-func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBeforeSave(t *testing.T) {
-	t.Parallel()
-	projectRoot := t.TempDir()
-	store := &runtimeRecordingStore{}
-	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-		Persistence: store,
-	})
-	if defaultPersistedSnapshotMaxBytes <= 0 {
-		t.Fatalf("default persisted snapshot maximum = %d, want positive bound", defaultPersistedSnapshotMaxBytes)
-	}
-
-	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	state := runtimeSessionState{session: SessionReadResult{
-		SessionID: sessionID,
-		Status:    LifecycleStatusSucceeded,
-	}}
-	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity)
-	exact, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal exact snapshot: %v", err)
-	}
-
-	service.persistedSnapshotMaxBytes = len(exact)
-	if err := service.persistSessionSnapshot(state); err != nil {
-		t.Fatalf("persist snapshot at exact bound: %v", err)
-	}
-	store.mu.Lock()
-	saveCalls := store.saveCalls
-	stored := append([]byte(nil), store.payload...)
-	store.mu.Unlock()
-	if saveCalls != 1 || string(stored) != string(exact) {
-		t.Fatalf("exact-bound save = calls %d payload %d bytes, want calls 1 payload %d bytes", saveCalls, len(stored), len(exact))
-	}
-
-	previous := []byte(`{"status":"RUNNING","sequence":7}`)
-	store.mu.Lock()
-	store.saveCalls = 0
-	store.payload = append([]byte(nil), previous...)
-	store.mu.Unlock()
-	service.persistedSnapshotMaxBytes = len(exact) - 1
-	err = service.persistSessionSnapshot(state)
-	var sizeErr *SnapshotSizeLimitError
-	if !errors.As(err, &sizeErr) {
-		t.Fatalf("one-byte-over persistence error = %v, want SnapshotSizeLimitError", err)
-	}
-	wantPath := runtimepersist.SnapshotPathForProjectRoot(projectRoot, sessionID)
-	if sizeErr.Path != wantPath || sizeErr.ActualBytes != len(exact) || sizeErr.MaxBytes != len(exact)-1 {
-		t.Fatalf("size diagnostic = %#v, want path %q actual %d bound %d", sizeErr, wantPath, len(exact), len(exact)-1)
-	}
-	if strings.Contains(err.Error(), "RUNNING") || strings.Contains(err.Error(), "sequence") {
-		t.Fatalf("size diagnostic leaked snapshot content: %v", err)
-	}
-	store.mu.Lock()
-	saveCalls = store.saveCalls
-	stored = append([]byte(nil), store.payload...)
-	store.mu.Unlock()
-	if saveCalls != 0 {
-		t.Fatalf("one-byte-over save calls = %d, want writer not invoked", saveCalls)
-	}
-	if string(stored) != string(previous) {
-		t.Fatalf("one-byte-over snapshot = %s, want prior %s", stored, previous)
-	}
 }

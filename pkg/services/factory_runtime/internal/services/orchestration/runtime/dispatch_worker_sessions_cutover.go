@@ -225,7 +225,7 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 	if reader, ok := f.cfg.workerSessions.(recordings.WorkerRecordingReader); ok {
 		workerRecordingReader = reader
 	}
-	return newRecordedWorkerSessionObservationWithRecording(
+	return newRecordedWorkerSessionObservationWithRestoredState(
 		f.cfg.workerSessions,
 		f.eventHistory,
 		f.cfg.worldStateProjector,
@@ -234,6 +234,8 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 		f.cfg.replayEvents,
 		f.cfg.recordingID,
 		workerRecordingReader,
+		f.cfg.restoredWorldState,
+		f.cfg.restoredEventPrefix,
 		factorySessionID,
 	)
 }
@@ -242,15 +244,17 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 // the detached Worker Session observation vocabulary.
 type recordedWorkerSessionObservation struct {
 	workersessions.Service
-	ledger           recordings.RuntimeLedger
-	durability       recordings.CompletedFlushWatermarkReader
-	projector        factory.WorldStateProjector
-	clock            factory.Clock
-	providerSessions providersessions.Service
-	replayEvents     []interfaces.FactoryEvent
-	recordingID      string
-	recordingReader  recordings.WorkerRecordingReader
-	factorySessionID string
+	ledger              recordings.RuntimeLedger
+	durability          recordings.CompletedFlushWatermarkReader
+	projector           factory.WorldStateProjector
+	clock               factory.Clock
+	providerSessions    providersessions.Service
+	replayEvents        []interfaces.FactoryEvent
+	restoredWorldState  *interfaces.FactoryWorldState
+	restoredEventPrefix []interfaces.FactoryEvent
+	recordingID         string
+	recordingReader     recordings.WorkerRecordingReader
+	factorySessionID    string
 }
 
 var _ workersessions.Service = (*recordedWorkerSessionObservation)(nil)
@@ -265,7 +269,7 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 	}
 	ordered := cloneAndSortFactoryEvents(events)
 	selectedTick := latestFactoryEventTick(ordered)
-	world, err := s.projector(ordered, selectedTick)
+	world, err := s.projectRecordedWorldState(ctx, events, ordered, selectedTick)
 	if err != nil {
 		return nil, false, workersessions.ErrObservationProjectionUnavailable
 	}
@@ -436,7 +440,9 @@ func newRecordedWorkerSessionObservation(
 	clock factory.Clock,
 	providerSessions providersessions.Service,
 ) workersessions.Service {
-	return newRecordedWorkerSessionObservationWithRecording(live, ledger, projector, clock, providerSessions, nil, "", nil)
+	return newRecordedWorkerSessionObservationWithRestoredState(
+		live, ledger, projector, clock, providerSessions, nil, "", nil, nil, nil,
+	)
 }
 
 func (s *recordedWorkerSessionObservation) ListObservations(
@@ -449,7 +455,7 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err := observationContextError(ctx); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
-	if s == nil || s.ledger == nil || s.projector == nil {
+	if s == nil || s.ledger == nil || (s.projector == nil && s.restoredWorldState == nil) {
 		result, err := s.listLive(ctx, req)
 		if err == nil {
 			s.applyConfirmation(result.Observations, s.sampleCompletedFlushWatermark())
@@ -958,26 +964,4 @@ func historicalTranscriptResult(
 		return workersessions.ReadTranscriptResult{}, fmt.Errorf("validate historical Worker Session transcript: %w", err)
 	}
 	return result, nil
-}
-func newRecordedWorkerSessionObservationWithRecording(
-	live workersessions.Service,
-	ledger recordings.RuntimeLedger,
-	projector factory.WorldStateProjector,
-	clock factory.Clock,
-	providerSessions providersessions.Service,
-	replayEvents []interfaces.FactoryEvent,
-	recordingID string,
-	recordingReader recordings.WorkerRecordingReader,
-	factorySessionIDs ...string,
-) workersessions.Service {
-	factorySessionID := ""
-	if len(factorySessionIDs) > 0 {
-		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
-	}
-	return &recordedWorkerSessionObservation{
-		Service: live, ledger: ledger, projector: projector, clock: clock,
-		durability:       completedFlushWatermarkReader(ledger),
-		providerSessions: providerSessions, replayEvents: cloneAndSortFactoryEvents(replayEvents), recordingID: strings.TrimSpace(recordingID),
-		recordingReader: recordingReader, factorySessionID: factorySessionID,
-	}
 }

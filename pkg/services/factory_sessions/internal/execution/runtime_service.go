@@ -18,6 +18,7 @@ import (
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // NewDurableSessionID allocates one durable Factory Session identifier.
@@ -41,6 +42,7 @@ type runtimeSessionState struct {
 	artifacts                 []ArtifactSummary
 	runtimeRecords            []factory.JavaScriptRuntimeRecord
 	petriMutations            []interfaces.TokenMutationRecord
+	petriSummaries            []PetriTokenSummary
 	checkpointSummary         *factory.JavaScriptCheckpointSummary
 	startRequest              *StartRequest
 	resolvedSource            ResolvedSource
@@ -267,12 +269,25 @@ type JavaScriptRuntimeService struct {
 	dispatchDurabilityMu       sync.RWMutex
 	dispatchDurability         recording.CompletedFlushWatermarkReader
 	dispatchStreamGenerationID string
+	persistenceWarningLogger   *zap.Logger
 
 	runLifecycleMu sync.Mutex
 	runWaitGroup   sync.WaitGroup
 	runClosed      bool
 	closeOnce      sync.Once
 	closeErr       error
+}
+
+var _ Service = (*JavaScriptRuntimeService)(nil)
+
+// SetPersistenceWarningLogger binds the session-scoped logger used for safe
+// durable snapshot size warnings. Runtime opening supplies this after it has
+// resolved the Factory Session identity; construction itself remains inert.
+func (s *JavaScriptRuntimeService) SetPersistenceWarningLogger(logger *zap.Logger) {
+	if s == nil {
+		return
+	}
+	s.persistenceWarningLogger = logger
 }
 
 // NewJavaScriptRuntimeService constructs the durable session service.
@@ -873,6 +888,7 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 	}
 	candidate := cloneRuntimeSessionState(state)
 	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
+	compactRuntimePetriHistory(&candidate)
 	if err := s.persistSessionSnapshot(candidate); err != nil {
 		return err
 	}
@@ -882,35 +898,6 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 		s.sessions[id] = &candidate
 	}
 	return nil
-}
-
-func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
-	if state == nil {
-		return runtimeSessionState{}
-	}
-	cloned := runtimeSessionState{
-		session:                   cloneSessionRead(state.session),
-		result:                    cloneResultRead(state.result),
-		dispatches:                cloneDispatchSummaries(state.dispatches),
-		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
-		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
-		artifacts:                 cloneArtifactSummaries(state.artifacts),
-		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
-		petriMutations:            clonePetriMutations(state.petriMutations),
-		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
-		startRequest:              cloneStartRequestPtr(state.startRequest),
-		resolvedSource:            state.resolvedSource,
-		sourceContent:             state.sourceContent,
-		runDone:                   state.runDone,
-		responseEvents:            state.responseEvents,
-	}
-	if len(state.events) > 0 {
-		cloned.events = make([]json.RawMessage, len(state.events))
-		for i, event := range state.events {
-			cloned.events[i] = append(json.RawMessage(nil), event...)
-		}
-	}
-	return cloned
 }
 
 func (s *JavaScriptRuntimeService) syncStartFromState(state runtimeSessionState) SyncStartResult {

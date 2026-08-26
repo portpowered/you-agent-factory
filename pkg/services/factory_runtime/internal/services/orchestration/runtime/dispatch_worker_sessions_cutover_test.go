@@ -310,6 +310,59 @@ func TestRecordedWorkerSessionObservation_ListsHistoricalAttemptsInChronological
 	}
 }
 
+func TestRecordedWorkerSessionObservationUsesRestoredWorldState(t *testing.T) {
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	workID := "work-restored"
+	events := recordedObservationTestEvents(t, base, workID)
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{Events: events}
+	restored := interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{workID: {ID: workID}},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
+			{
+				DispatchID:  "dispatch-early",
+				StartedAt:   base.Add(time.Second),
+				CompletedAt: base.Add(3 * time.Second),
+				WorkItemIDs: []string{workID},
+				Result:      interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
+			},
+			{
+				DispatchID:  "dispatch-late",
+				StartedAt:   base.Add(5 * time.Second),
+				CompletedAt: base.Add(7 * time.Second),
+				WorkItemIDs: []string{workID},
+				Result:      interfaces.WorkstationResult{Outcome: string(workers.OutcomeAccepted)},
+			},
+		},
+	}
+	projectorCalls := 0
+	service := newRecordedWorkerSessionObservationWithRestoredState(
+		nil,
+		ledger,
+		func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+			projectorCalls++
+			return interfaces.FactoryWorldState{}, errors.New("full projection should not run for unchanged restored history")
+		},
+		platformclock.NewDeterministic(base, time.Second),
+		nil,
+		nil,
+		"",
+		nil,
+		&restored,
+		events,
+	)
+
+	result, err := service.ListObservations(context.Background(), workersessions.ListObservationsRequest{WorkID: workID})
+	if err != nil {
+		t.Fatalf("ListObservations() error = %v", err)
+	}
+	if projectorCalls != 0 {
+		t.Fatalf("full world projection calls = %d, want 0", projectorCalls)
+	}
+	if len(result.Observations) != 2 || result.Observations[0].State != workersessions.StateCompleted || result.Observations[1].State != workersessions.StateCompleted {
+		t.Fatalf("restored observations = %#v, want two completed attempts", result.Observations)
+	}
+}
+
 func TestRecordedWorkerSessionObservation_ReplaysHistoricalTerminalStream(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-recorded-stream"

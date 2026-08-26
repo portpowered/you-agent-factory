@@ -107,6 +107,7 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 	if preserveAppendOnly {
 		candidate.events = reconcileAppendOnlyCanonicalEvents(target.events, projected)
 	}
+	compactRuntimePetriHistory(&candidate)
 	if err := s.persistTerminalSessionState(candidate); err != nil {
 		return err
 	}

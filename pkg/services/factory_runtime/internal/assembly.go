@@ -107,6 +107,7 @@ func (a *Assembly) Assemble(
 	replayArtifact *factorydefinitions.ReplayArtifact,
 	resumeInput *recordings.LoadResumeInputResult,
 	restoredWorldState *factorydefinitions.FactoryWorldState,
+	restoredEventHistory []factorydefinitions.FactoryEvent,
 	automationService automations.Service,
 	serviceMode bool,
 ) (
@@ -214,6 +215,7 @@ func (a *Assembly) Assemble(
 		replayArtifact,
 		resumeInput,
 		restoredWorldState,
+		restoredEventHistory,
 		recordingsRuntime,
 	); err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
@@ -245,6 +247,7 @@ func (a *Assembly) configureRestoredWorldState(
 	replayArtifact *factorydefinitions.ReplayArtifact,
 	resumeInput *recordings.LoadResumeInputResult,
 	restoredWorldState *factorydefinitions.FactoryWorldState,
+	restoredEventHistory []factorydefinitions.FactoryEvent,
 	recordingsRuntime recordings.RuntimeOpening,
 ) error {
 	if spec == nil {
@@ -266,6 +269,7 @@ func (a *Assembly) configureRestoredWorldState(
 	// Live daemon openings supply detached current-board state explicitly.
 	if restoredWorldState != nil {
 		spec.RestoredWorldState = restoredWorldState
+		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEventHistory)
 		return nil
 	}
 	// Resume is a live continuation: reconstruct the successor's starting

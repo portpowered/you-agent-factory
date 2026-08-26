@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -874,9 +877,120 @@ type dispatchDurabilityReader struct {
 	calls     int
 }
 
+func TestLegacyTerminalSnapshot_MigratesOnNextSuccessfulSaveAndReload(t *testing.T) {
+	const sessionID = "dur-sess-dddddddddddddddddddddddddddddddd"
+	store, service := seedLegacyTerminalSnapshot(t, sessionID)
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil || read.Status != LifecycleStatusSucceeded {
+		t.Fatalf("GetSession legacy snapshot = %#v, %v, want SUCCEEDED", read, err)
+	}
+	if err := service.RecordPetriSessionCompletion(sessionID, PetriSessionCompletion{Status: LifecycleStatusSucceeded}); err != nil {
+		t.Fatalf("RecordPetriSessionCompletion migration: %v", err)
+	}
+	assertLegacyTerminalSnapshotCompacted(t, store, service, sessionID)
+}
+
+func seedLegacyTerminalSnapshot(t *testing.T, sessionID string) (*runtimeRecordingStore, *JavaScriptRuntimeService) {
+	t.Helper()
+	store := &runtimeRecordingStore{}
+	legacy := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded, OrchestratorKind: interfaces.OrchestratorKindPetri}, result: ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusSucceeded}, petriMutations: legacyTerminalTokenMutations(7)}
+	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(legacy, 0))
+	if err != nil {
+		t.Fatalf("marshal legacy snapshot: %v", err)
+	}
+	if err := store.Save(sessionID, encoded); err != nil {
+		t.Fatalf("seed legacy snapshot: %v", err)
+	}
+	return store, &JavaScriptRuntimeService{persistence: store, sessions: make(map[string]*runtimeSessionState)}
+}
+
+func assertLegacyTerminalSnapshotCompacted(t *testing.T, store *runtimeRecordingStore, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	saved, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load migrated snapshot: %v", err)
+	}
+	var migrated PersistedRuntimeSessionState
+	if err := json.Unmarshal(saved, &migrated); err != nil {
+		t.Fatalf("decode migrated snapshot: %v", err)
+	}
+	if len(migrated.Records) != 1 || migrated.Records[0].PetriSummary == nil || migrated.Records[0].PetriSummary.WorkID != "work-7" || migrated.Records[0].PetriSummary.State != "done" {
+		t.Fatalf("migrated records = %#v, want one work-7 summary", migrated.Records)
+	}
+	if strings.Contains(string(saved), "large-worker-output") || strings.Contains(string(saved), "structured_result") {
+		t.Fatal("migrated snapshot retained legacy worker output")
+	}
+	loaded, err := service.snapshotSessionState(sessionID)
+	if err != nil || len(loaded.petriMutations) != 0 || len(loaded.petriSummaries) != 1 {
+		t.Fatalf("hot migrated history = %d mutations, %d summaries, %v", len(loaded.petriMutations), len(loaded.petriSummaries), err)
+	}
+}
+
+func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBeforeSave(t *testing.T) {
+	root := t.TempDir()
+	store := &runtimeRecordingStore{}
+	service := &JavaScriptRuntimeService{persistence: store, projectRoot: root}
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	state := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded}}
+	exact, err := json.MarshalIndent(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity), "", "  ")
+	if err != nil {
+		t.Fatalf("marshal exact snapshot: %v", err)
+	}
+	service.persistedSnapshotMaxBytes = len(exact)
+	if err := service.persistSessionSnapshot(state); err != nil || store.saveCalls != 1 || string(store.payload) != string(exact) {
+		t.Fatalf("exact-bound persistence = %v, calls=%d bytes=%d, want one exact save", err, store.saveCalls, len(store.payload))
+	}
+	previous := []byte(`{"status":"RUNNING","sequence":7}`)
+	store.saveCalls, store.payload = 0, append([]byte(nil), previous...)
+	service.persistedSnapshotMaxBytes = len(exact) - 1
+	err = service.persistSessionSnapshot(state)
+	var sizeErr *SnapshotSizeLimitError
+	if !errors.As(err, &sizeErr) || sizeErr.Path != runtimepersist.SnapshotPathForProjectRoot(root, sessionID) || sizeErr.ActualBytes != len(exact) || sizeErr.MaxBytes != len(exact)-1 {
+		t.Fatalf("one-byte-over diagnostic = %v / %#v, want exact size rejection", err, sizeErr)
+	}
+	if strings.Contains(err.Error(), "RUNNING") || strings.Contains(err.Error(), "sequence") || store.saveCalls != 0 || string(store.payload) != string(previous) {
+		t.Fatalf("one-byte-over persistence changed prior snapshot or leaked content")
+	}
+}
+
 func (reader *dispatchDurabilityReader) CompletedFlushWatermark(
 	string,
 ) (recordings.CanonicalEventCursor, bool) {
 	reader.calls++
 	return reader.cursor, reader.available
+}
+
+func TestRecordPetriTokenMutations_CompactsCandidateAndPublishesOnlyAfterSave(t *testing.T) {
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	store := &runtimeRecordingStore{}
+	service := &JavaScriptRuntimeService{persistence: store, sessions: map[string]*runtimeSessionState{
+		sessionID: {session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning}},
+	}}
+	if err := service.RecordPetriTokenMutations(sessionID, largeTerminalTokenMutations(3, "large-output")); err != nil {
+		t.Fatalf("RecordPetriTokenMutations: %v", err)
+	}
+	if store.saveCalls != 1 || len(service.sessions[sessionID].petriMutations) != 0 || len(service.sessions[sessionID].petriSummaries) != 1 {
+		t.Fatalf("saved candidate = calls %d, %d mutations, %d summaries, want 1, 0, 1", store.saveCalls, len(service.sessions[sessionID].petriMutations), len(service.sessions[sessionID].petriSummaries))
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(store.payload, &persisted); err != nil {
+		t.Fatalf("decode persisted compacted state: %v", err)
+	}
+	if len(persisted.Records) != 1 || persisted.Records[0].PetriSummary == nil || persisted.Records[0].PetriSummary.WorkID != "work-3" {
+		t.Fatalf("persisted records = %#v, want work-3 summary", persisted.Records)
+	}
+
+	const failedID = "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	wantErr := errors.New("checkpoint unavailable")
+	initial := largeTerminalTokenMutations(4, "large-output")
+	failedStore := &runtimeRecordingStore{saveErr: wantErr}
+	failedService := &JavaScriptRuntimeService{persistence: failedStore, sessions: map[string]*runtimeSessionState{
+		failedID: {session: SessionReadResult{SessionID: failedID, Status: LifecycleStatusRunning}, petriMutations: clonePetriMutations(initial)},
+	}}
+	if err := failedService.RecordPetriTokenMutations(failedID, []interfaces.TokenMutationRecord{initial[2]}); !errors.Is(err, wantErr) {
+		t.Fatalf("failed RecordPetriTokenMutations error = %v, want %v", err, wantErr)
+	}
+	if len(failedService.sessions[failedID].petriMutations) != len(initial) || len(failedService.sessions[failedID].petriSummaries) != 0 {
+		t.Fatalf("state after failed save = %d mutations, %d summaries, want original %d and 0", len(failedService.sessions[failedID].petriMutations), len(failedService.sessions[failedID].petriSummaries), len(initial))
+	}
 }

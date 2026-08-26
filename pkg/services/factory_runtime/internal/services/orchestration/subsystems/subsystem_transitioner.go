@@ -338,6 +338,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 			result.DispatchID,
 			result.TransitionID,
 			resolved.outcome,
+			t.netDefinition,
 			mutations,
 		),
 	}
@@ -429,6 +430,7 @@ func mutationRecordsForDispatch(
 	dispatchID string,
 	transitionID string,
 	outcome workerexecution.WorkOutcome,
+	topology *state.Net,
 	mutations []interfaces.MarkingMutation,
 ) []interfaces.TokenMutationRecord {
 	if len(mutations) == 0 {
@@ -447,6 +449,7 @@ func mutationRecordsForDispatch(
 			ToPlace:      mutation.ToPlace,
 			Reason:       mutation.Reason,
 		}
+		record.Terminal, record.TransitionReachable = terminalMutationFacts(topology, mutation)
 		if mutation.NewToken != nil {
 			runtimeToken := factorytoken.FromWorker(*mutation.NewToken)
 			record.Token = workerTokenPointer(&runtimeToken)

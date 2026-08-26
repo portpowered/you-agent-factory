@@ -685,6 +685,7 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	*factorydefinitions.ReplayArtifact,
 	*recordings.LoadResumeInputResult,
 	*factorydefinitions.FactoryWorldState,
+	[]factorydefinitions.FactoryEvent,
 	automations.Service,
 	bool,
 ) (

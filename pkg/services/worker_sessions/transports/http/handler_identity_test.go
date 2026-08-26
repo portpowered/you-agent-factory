@@ -23,6 +23,30 @@ func (stub *sessionScopeResolverStub) ResolveWorkerSessionScope(context.Context,
 	return stub.scope, stub.err
 }
 
+type decoratedSessionScopeResolverStub struct {
+	sessionScopeResolverStub
+	observations workersessions.ObservationService
+	resolveCalls int
+}
+
+func (stub *decoratedSessionScopeResolverStub) ResolveWorkerSessionScope(ctx context.Context, sessionID string) (SessionScope, error) {
+	stub.resolveCalls++
+	return stub.sessionScopeResolverStub.ResolveWorkerSessionScope(ctx, sessionID)
+}
+
+func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSession(string) workersessions.ObservationService {
+	return stub.observations
+}
+
+type sessionObservationServiceStub struct {
+	workersessions.Service
+	result workersessions.ListObservationsResult
+}
+
+func (stub *sessionObservationServiceStub) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	return stub.result, nil
+}
+
 func assertListObservationExecutionFacts(t *testing.T, observation factoryapi.WorkerSessionObservation) {
 	t.Helper()
 	if observation.Model == nil || *observation.Model != "gpt-5.6-luna" ||
@@ -41,7 +65,7 @@ func assertFailureObservationExecutionFacts(t *testing.T, response factoryapi.Wo
 
 func TestListWorkerSessionsBySessionIDPreservesRequestedDefaultAlias(t *testing.T) {
 	resolvedID := "550e8400-e29b-41d4-a716-446655440000"
-	service := &fakeObservationService{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+	service := &sessionObservationServiceStub{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
 		WorkerSessionID:  "worker-session-default",
 		FactorySessionID: defaultFactorySessionAlias,
 		WorkIDs:          []string{"work-1"},
@@ -71,6 +95,37 @@ func TestListWorkerSessionsBySessionIDPreservesRequestedDefaultAlias(t *testing.
 	}
 	if len(response.Sessions) != 1 || response.Sessions[0].FactorySessionId == nil || *response.Sessions[0].FactorySessionId != defaultFactorySessionAlias {
 		t.Fatalf("default alias response = %#v, want one session scoped to %q", response.Sessions, defaultFactorySessionAlias)
+	}
+}
+
+func TestListWorkerSessionsBySessionIDValidatesWorkBeforeResolvingScope(t *testing.T) {
+	service := &sessionObservationServiceStub{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID:  "worker-session-1",
+		FactorySessionID: "session-1",
+		WorkIDs:          []string{"work-1"},
+		AttemptID:        "attempt-1",
+		State:            workersessions.StateCompleted,
+		DurationBasis:    workersessions.DurationBasisRecordedTimestamps,
+		Transcript:       workersessions.TranscriptAvailabilityUnavailable,
+	}}}}
+	resolver := &decoratedSessionScopeResolverStub{
+		sessionScopeResolverStub: sessionScopeResolverStub{scope: SessionScope{EffectiveID: "session-1"}},
+		observations:             service,
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}, resolver), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions?workId=work-1", nil),
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if resolver.resolveCalls != 1 {
+		t.Fatalf("Factory Session scope resolution calls = %d, want 1 after Work validation", resolver.resolveCalls)
 	}
 }
 

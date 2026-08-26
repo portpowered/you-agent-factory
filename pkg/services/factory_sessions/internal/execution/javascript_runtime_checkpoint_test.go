@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -979,4 +980,20 @@ func interruptedSessionForAdmissionTest(sessionID string) runtimeSessionState {
 	}
 	state.events = rebuildRuntimeSessionCanonicalEvents(&state)
 	return state
+}
+func largeTerminalTokenMutations(index int, body string) []interfaces.TokenMutationRecord {
+	id := strconv.Itoa(index)
+	token := &workers.Token{ID: "token-" + id, State: "init", Color: workers.Color{Name: "large Work", RequestID: "request-" + id, WorkID: "work-" + id, WorkTypeID: "task", DataType: workers.DataTypeWork, TraceID: "trace-" + id, Tags: map[string]string{"_last_output": body}, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: body}}, Payload: []byte(body), StructuredResult: map[string]any{"body": body}, StructuredResultPresent: true}}
+	return []interfaces.TokenMutationRecord{
+		{DispatchID: "dispatch-" + id, TransitionID: "submit", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationCreate, TokenID: token.ID, ToPlace: "task:init", Token: token},
+		{DispatchID: "dispatch-" + id, TransitionID: "process", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationMove, TokenID: token.ID, FromPlace: "task:init", ToPlace: "task:processing"},
+		{DispatchID: "dispatch-" + id, TransitionID: "process", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationMove, TokenID: token.ID, FromPlace: "task:processing", ToPlace: "task:done", Terminal: true},
+	}
+}
+func legacyTerminalTokenMutations(index int) []interfaces.TokenMutationRecord {
+	mutations := largeTerminalTokenMutations(index, "large-worker-output")
+	for index := range mutations {
+		mutations[index].Terminal, mutations[index].TransitionReachable = false, false
+	}
+	return mutations
 }

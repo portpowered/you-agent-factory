@@ -966,3 +966,34 @@ func TestInterruptedTerminalTimestamp_PrefersSessionLifecycle(t *testing.T) {
 		t.Fatalf("timestamp = %v, want prior startedAt", got)
 	}
 }
+
+func TestLegacyInterruptedSnapshot_RemainsLosslessOnSuccessfulSave(t *testing.T) {
+	const sessionID = "dur-sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	store := &runtimeRecordingStore{}
+	state := runtimeSessionState{session: SessionReadResult{SessionID: sessionID, Status: LifecycleStatusInterrupted, OrchestratorKind: interfaces.OrchestratorKindPetri}, petriMutations: legacyTerminalTokenMutations(8)}
+	if err := (&JavaScriptRuntimeService{persistence: store}).persistSessionSnapshot(state); err != nil {
+		t.Fatalf("persist interrupted legacy snapshot: %v", err)
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(store.payload, &persisted); err != nil {
+		t.Fatalf("decode interrupted snapshot: %v", err)
+	}
+	var mutationCount int
+	for _, record := range persisted.Records {
+		if record.Kind == DurableRecordKindPetriTokenMutation {
+			mutationCount++
+		}
+	}
+	if mutationCount != len(state.petriMutations) {
+		t.Fatalf("interrupted persisted mutation count = %d, want %d", mutationCount, len(state.petriMutations))
+	}
+}
+
+func encodedWarningStateBytes(t *testing.T, state runtimeSessionState) int {
+	t.Helper()
+	encoded, err := json.MarshalIndent(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, 0), "", "  ")
+	if err != nil {
+		t.Fatalf("marshal warning state: %v", err)
+	}
+	return len(encoded)
+}

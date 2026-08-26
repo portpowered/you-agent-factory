@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/internal/testutil/checkpointfixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -31,6 +32,15 @@ func TestNewFakeServiceRequiresExplicitClockBeforeFixtureIO(t *testing.T) {
 		!strings.Contains(err.Error(), "clock is required") {
 		t.Fatalf("NewFakeServiceFromContractFixtures(nil clock) = (%#v, %v), want required clock before IO", service, err)
 	}
+}
+
+func encodePetriMutationSnapshot(t *testing.T, mutations []interfaces.TokenMutationRecord, summaries []PetriTokenSummary) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(runtimeSessionState{petriMutations: mutations, petriSummaries: summaries}, 0))
+	if err != nil {
+		t.Fatalf("marshal Petri snapshot: %v", err)
+	}
+	return encoded
 }
 
 func TestNewFakeServiceFromContractFixturesRequiresInjectedReader(t *testing.T) {

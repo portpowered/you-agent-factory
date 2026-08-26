@@ -525,11 +525,14 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 			}
 		}
 		if operation == LifecycleControlPause {
-			if err := s.persistSessionSnapshot(cloneRuntimeSessionState(state)); err != nil {
+			candidate := cloneRuntimeSessionState(state)
+			compactRuntimePetriHistory(&candidate)
+			if err := s.persistSessionSnapshot(candidate); err != nil {
 				*state = cloneRuntimeSessionState(&priorState)
 				state.runCancel = priorRunCancel
 				return LifecycleControlResult{}, err
 			}
+			*state = candidate
 		}
 	}
 

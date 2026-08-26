@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -978,5 +979,20 @@ func TestChildWorkerExecutor_ScopesTheWorkersIdentityToItsSession(t *testing.T) 
 	}
 	if firstID != "dur-sess-first/dispatch-1" {
 		t.Fatalf("Workers dispatch identity = %q, want the session-scoped identity", firstID)
+	}
+}
+
+func TestCompactPetriTokenHistory_PreservesReachableAndRetiresConsumedTerminalHistory(t *testing.T) {
+	reachable := largeTerminalTokenMutations(1, "active-output")
+	reachable[2].TransitionReachable = true
+	if retained, summaries := compactPetriTokenHistory(reachable, nil); len(retained) != len(reachable) || len(summaries) != 0 {
+		t.Fatalf("reachable terminal history = %d mutations, %d summaries, want lossless history", len(retained), len(summaries))
+	}
+	consumed := append(largeTerminalTokenMutations(2, "output"), interfaces.TokenMutationRecord{
+		DispatchID: "dispatch-2", TransitionID: "consume", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationConsume, TokenID: "token-2", FromPlace: "task:done", Terminal: true,
+	})
+	retained, summaries := compactPetriTokenHistory(consumed, nil)
+	if len(retained) != 0 || len(summaries) != 1 || !summaries[0].Retired || summaries[0].WorkID != "work-2" || summaries[0].State != "done" {
+		t.Fatalf("consumed terminal history = %d mutations, %#v, want one retired work-2 summary", len(retained), summaries)
 	}
 }

@@ -372,6 +372,15 @@ func runBoardPersistenceSecondRestart(t *testing.T, scenario *boardPersistenceSc
 	if err != nil {
 		t.Fatalf("read second-restart Worker Session observations: %v", err)
 	}
+	assertBoardCLIWorkerSessionsForWork(
+		t,
+		scenario.cliContext,
+		third,
+		scenario.binaryPath,
+		scenario.factoryDir,
+		scenario.homeDir,
+		boardPersistenceProcessingWorkID,
+	)
 	for _, observation := range workerSessions.Sessions {
 		if observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting {
 			t.Fatalf("second restart left Worker Session %q in %s", observation.WorkerSessionId, observation.State)

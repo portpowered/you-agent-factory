@@ -113,6 +113,7 @@ type runtimeConfig struct {
 	petriMutationRecorder              factory.PetriMutationRecorder
 	completionDeliveryPlanner          factory.CompletionDeliveryPlanner
 	replayEvents                       []interfaces.FactoryEvent
+	restoredEventPrefix                []interfaces.FactoryEvent
 	inlineDispatch                     bool
 	quorumPolicy                       interfaces.QuorumPolicyService
 	outputShaping                      interfaces.InvocationOutputShapingService
@@ -212,6 +213,9 @@ func New(
 		workService:                        workService,
 		expectedArtifactFileSystem:         expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
 		decisionEnvelopes:                  firstDecisionEnvelopeService(decisionEnvelopes),
+	}
+	if restoredWorldState != nil && eventHistory != nil {
+		cfg.restoredEventPrefix = cloneFactoryEventsInOrder(eventHistory.CanonicalEvents())
 	}
 	if cfg.executeService != nil {
 		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)

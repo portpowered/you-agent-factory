@@ -638,13 +638,13 @@ func (a *Adapter) ListWorkerSessions(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
-	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
-	if err != nil {
-		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
-	}
 	workModel, err := a.work.GetWork(ctx, sessionID, workID)
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, err
+	}
+	scope, err := a.resolveWorkerSessionScope(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", err)
 	}
 
 	return a.listWorkerSessionsForWork(ctx, scope, workID, workModel.Name)

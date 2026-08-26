@@ -332,6 +332,15 @@ type TokenMutationRecord struct {
 	ToPlace      string                      `json:"to_place"`
 	Reason       string                      `json:"reason"`
 	Token        *workerexecution.Token      `json:"token,omitempty"`
+	// Terminal is an execution-owner fact about the token's destination (or
+	// source for CONSUME). It is populated by the runtime that owns the
+	// topology, rather than inferred from authored state names at persistence
+	// time. Older records leave it false and remain lossless until a current
+	// runtime supplies enough facts to compact them safely.
+	Terminal bool `json:"terminal,omitempty"`
+	// TransitionReachable reports whether a live transition can still use the
+	// terminal place. A consumed terminal token is unreachable by definition.
+	TransitionReachable bool `json:"transition_reachable,omitempty"`
 }
 
 // DispatchEntry tracks an in-flight dispatch awaiting a worker result.

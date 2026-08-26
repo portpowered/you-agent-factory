@@ -9,10 +9,60 @@ import (
 	"fmt"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"go.uber.org/zap"
 	"os"
 	"strings"
 	"time"
 )
+
+const (
+	durableSessionSnapshotWarningThresholdBytes int64 = 100 * 1024 * 1024
+	durableSessionSnapshotSizeWarningCode             = "DURABLE_SESSION_SNAPSHOT_SIZE_THRESHOLD"
+)
+
+func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
+	if state == nil {
+		return runtimeSessionState{}
+	}
+	cloned := runtimeSessionState{
+		session:                   cloneSessionRead(state.session),
+		result:                    cloneResultRead(state.result),
+		dispatches:                cloneDispatchSummaries(state.dispatches),
+		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
+		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
+		artifacts:                 cloneArtifactSummaries(state.artifacts),
+		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
+		petriMutations:            clonePetriMutations(state.petriMutations),
+		petriSummaries:            clonePetriTokenSummaries(state.petriSummaries),
+		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
+		startRequest:              cloneStartRequestPtr(state.startRequest),
+		resolvedSource:            state.resolvedSource,
+		sourceContent:             state.sourceContent,
+		runCancel:                 state.runCancel,
+		runDone:                   state.runDone,
+		eventConsumer:             state.eventConsumer,
+		presentedEventIDs:         clonePresentedEventIDs(state.presentedEventIDs),
+		responseEvents:            state.responseEvents,
+	}
+	if len(state.events) > 0 {
+		cloned.events = make([]json.RawMessage, len(state.events))
+		for i, event := range state.events {
+			cloned.events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return cloned
+}
+
+func clonePresentedEventIDs(values map[string]struct{}) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]struct{}, len(values))
+	for eventID := range values {
+		cloned[eventID] = struct{}{}
+	}
+	return cloned
+}
 
 // ResumeInterruptedSession reconstructs one interrupted checkpointed session from
 // persisted checkpoint summaries plus durable session state and continues execution.
@@ -970,7 +1020,7 @@ func persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
 }
 
 func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) runtimeSessionState {
-	events, runtimeRecords, petriMutations := runtimeHistoryFromPersistedSnapshot(snapshot)
+	events, runtimeRecords, petriMutations, petriSummaries := runtimeHistoryFromPersistedSnapshot(snapshot)
 	state := runtimeSessionState{
 		session:           cloneSessionRead(snapshot.Session),
 		result:            cloneResultRead(snapshot.Result),
@@ -978,6 +1028,7 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 		artifacts:         cloneArtifactSummaries(snapshot.Artifacts),
 		runtimeRecords:    cloneRuntimeRecords(runtimeRecords),
 		petriMutations:    clonePetriMutations(petriMutations),
+		petriSummaries:    clonePetriTokenSummaries(petriSummaries),
 		checkpointSummary: cloneCheckpointSummary(snapshot.CheckpointSummary),
 		startRequest:      cloneStartRequestPtr(snapshot.StartRequest),
 		resolvedSource:    snapshot.ResolvedSource,
@@ -999,6 +1050,7 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 }
 
 func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSessionState) error {
+	compactRuntimePetriHistory(&state)
 	return s.persistSessionSnapshot(state)
 }
 
@@ -1013,6 +1065,7 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if !shouldPersistSessionSnapshot(state) {
 		return nil
 	}
+	compactRuntimePetriHistory(&state)
 	failureLogCapacity := s.persistedFailureLogCapacity
 	if failureLogCapacity <= 0 {
 		failureLogCapacity = defaultPersistedTokenFailureLogCapacity
@@ -1026,6 +1079,11 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if maxBytes <= 0 {
 		maxBytes = defaultPersistedSnapshotMaxBytes
 	}
+	s.warnIfDurableSnapshotExceedsThreshold(
+		state,
+		int64(len(encoded)),
+		durableSessionSnapshotWarningThresholdForMax(maxBytes),
+	)
 	if len(encoded) > maxBytes {
 		return &SnapshotSizeLimitError{
 			Path:        persistedSnapshotPath(s.persistence, s.projectRoot, sessionID),
@@ -1048,11 +1106,66 @@ func persistedSnapshotPath(store runtimepersist.Store, projectRoot, sessionID st
 	return runtimepersist.SnapshotPathForProjectRoot(projectRoot, sessionID)
 }
 
+func (s *JavaScriptRuntimeService) warnIfDurableSnapshotExceedsThreshold(
+	state runtimeSessionState,
+	encodedBytes int64,
+	thresholdBytes int64,
+) {
+	if s == nil || s.persistenceWarningLogger == nil || encodedBytes < thresholdBytes {
+		return
+	}
+	liveTokens, terminalTokens := retainedPetriTokenCounts(state)
+	s.persistenceWarningLogger.Warn(
+		"durable Factory Session snapshot reached the size warning threshold",
+		zap.String("code", durableSessionSnapshotSizeWarningCode),
+		zap.String("session_id", strings.TrimSpace(state.session.SessionID)),
+		zap.Int64("observed_bytes", encodedBytes),
+		zap.Int64("threshold_bytes", thresholdBytes),
+		zap.Int("retained_live_tokens", liveTokens),
+		zap.Int("retained_terminal_tokens", terminalTokens),
+	)
+}
+
+// durableSessionSnapshotWarningThresholdForMax keeps the historical 100 MiB
+// warning for bounds that can accommodate it, while making smaller hard limits
+// observable before rejection. The default 64 MiB hard limit therefore warns
+// at 75%, or 48 MiB.
+func durableSessionSnapshotWarningThresholdForMax(maxBytes int) int64 {
+	if maxBytes <= 0 {
+		maxBytes = defaultPersistedSnapshotMaxBytes
+	}
+	if int64(maxBytes) >= durableSessionSnapshotWarningThresholdBytes {
+		return durableSessionSnapshotWarningThresholdBytes
+	}
+	nearLimit := int64(maxBytes - maxBytes/4)
+	return nearLimit
+}
+
+func retainedPetriTokenCounts(state runtimeSessionState) (liveTokens, terminalTokens int) {
+	index := indexPetriTokenHistory(state.petriMutations, state.petriSummaries)
+	for workID := range index.retainedSummaries {
+		if strings.TrimSpace(workID) != "" {
+			terminalTokens++
+		}
+	}
+	for workID, workFacts := range index.works {
+		if _, alreadyRetained := index.retainedSummaries[workID]; alreadyRetained {
+			continue
+		}
+		if _, terminal := terminalPetriTokenSummary(workFacts); terminal {
+			terminalTokens++
+			continue
+		}
+		liveTokens++
+	}
+	return liveTokens, terminalTokens
+}
+
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
 	if hasDurableLiveChangeEvents(state.events) {
 		return true
 	}
-	if len(state.petriMutations) > 0 {
+	if len(state.petriMutations) > 0 || len(state.petriSummaries) > 0 {
 		return true
 	}
 	if state.session.Status == LifecycleStatusPaused {
