@@ -101,7 +101,7 @@ func TestCheckRejectsManifestIntegrityAndLocatorDrift(t *testing.T) {
 	}{
 		{
 			name: "hash",
-			from: `"sha256": "4f745bc901d1e7004678d0ceab79ef38b0f7391658ad503ec1fedb2fbd6ab9b8"`,
+			from: `"sha256": "e044451f82fd9642e7a4d2eac8d5d24f42c7b1492cd3ac53f7048591f00efc45"`,
 			to:   `"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`,
 		},
 		{

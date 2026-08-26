@@ -823,7 +823,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-conformance, backend-test-stability, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-test-stability, backend-conformance, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:

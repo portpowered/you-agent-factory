@@ -454,7 +454,7 @@ test("the Windows backend build has a bounded platform-specific step timeout", a
 	);
 	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
 	assert.match(buildScript, /backend\/cpp\/grpc/);
-	assert.doesNotMatch(buildScript, /backend\/grpc/);
+	assert.match(buildScript, /compatibility_path="\$\{LOCALAI_ROOT\}\/backend\/grpc"/);
 	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
 	assert.match(buildScript, /windows_minimum_target="0x0A00"/);
 	assert.match(buildScript, /-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=\$\{windows_minimum_target\}/);
