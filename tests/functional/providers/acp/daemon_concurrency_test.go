@@ -12,15 +12,13 @@ import (
 )
 
 func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "serialize")
 	signals := t.TempDir()
-	promptHeld := filepath.Join(signals, "prompt-started")
-	release := filepath.Join(signals, "release")
-	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", promptHeld)
-	t.Setenv("YOU_TEST_ACP_RELEASE_SIGNAL", release)
+	fixture := functionalACPFixture("serialize")
+	fixture.PromptSignalPath = filepath.Join(signals, "prompt-started")
+	fixture.PromptReleasePath = filepath.Join(signals, "release")
 
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 	results := make(chan struct {
 		response factoryapi.FactorySessionSyncExecutionResponse
@@ -36,13 +34,13 @@ func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.
 	// The peer writes promptHeld immediately before it waits for release. The
 	// test owns release and does not create it until after this assertion, so
 	// the marker is the synchronization boundary; no timing pad is needed.
-	waitForACPTestFile(t, promptHeld)
+	waitForACPTestFile(t, fixture.PromptSignalPath)
 	select {
 	case result := <-results:
 		t.Fatalf("parallel invocation completed before the first prompt was released: response=%s error=%v", formatACPInvocationResponse(result.response), result.err)
 	default:
 	}
-	if err := os.WriteFile(release, []byte("release"), 0o600); err != nil {
+	if err := os.WriteFile(fixture.PromptReleasePath, []byte("release"), 0o600); err != nil {
 		t.Fatalf("release first prompt: %v", err)
 	}
 	select {

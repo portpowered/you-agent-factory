@@ -18,6 +18,7 @@ import (
 // tests. Keeping the peer as raw JSON-RPC also prevents shared SDK types from
 // hiding wire-compatibility failures.
 type functionalRPCPeer struct {
+	fixture      acpFixtureConfig
 	mode         string
 	scanner      *bufio.Scanner
 	writer       *bufio.Writer
@@ -30,7 +31,8 @@ type functionalRPCPeer struct {
 	retryAttempt int
 }
 
-func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runFunctionalRPCPeer(fixture acpFixtureConfig, stdin io.Reader, stdout, stderr io.Writer) error {
+	mode := fixture.Mode
 	if mode == "malformed" {
 		_, err := fmt.Fprintln(stdout, "{not-json")
 		return err
@@ -41,14 +43,14 @@ func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer
 	retryAttempt := 0
 	if mode == "retry-resume" {
 		var err error
-		retryAttempt, err = currentRetryAttempt()
+		retryAttempt, err = currentRetryAttempt(fixture.RetryAttemptDirectory)
 		if err != nil {
 			return err
 		}
 	}
 	peer := &functionalRPCPeer{
-		mode: mode, scanner: bufio.NewScanner(stdin), writer: bufio.NewWriter(stdout), stderr: stderr,
-		sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"), retryAttempt: retryAttempt,
+		fixture: fixture, mode: mode, scanner: bufio.NewScanner(stdin), writer: bufio.NewWriter(stdout), stderr: stderr,
+		sessionID: fixture.SessionID, retryAttempt: retryAttempt,
 	}
 	if closeOutput, ok := stdout.(io.Closer); ok {
 		peer.closeOutput = closeOutput
@@ -62,10 +64,9 @@ func runFunctionalRPCPeer(mode string, stdin io.Reader, stdout, stderr io.Writer
 	return peer.serve()
 }
 
-func currentRetryAttempt() (int, error) {
-	directory := os.Getenv(acpRetryAttemptDirectoryEnvironment)
+func currentRetryAttempt(directory string) (int, error) {
 	if directory == "" {
-		return 0, fmt.Errorf("retry-resume mode requires %s", acpRetryAttemptDirectoryEnvironment)
+		return 0, fmt.Errorf("retry-resume mode requires retryAttemptDirectory")
 	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
@@ -123,17 +124,17 @@ func (p *functionalRPCPeer) serve() error {
 				return err
 			}
 			if p.mode == "package-conformance" {
-				return waitForPackageConformanceRelease()
+				return p.waitForPackageConformanceRelease()
 			}
 			if p.mode == "disconnect-once" && p.sessions == 1 {
-				marker := os.Getenv(acpDisconnectMarkerEnvironment)
-				ready := os.Getenv(acpDisconnectReadyEnvironment)
-				release := os.Getenv(acpDisconnectReleaseEnvironment)
+				marker := p.fixture.DisconnectMarkerPath
+				ready := p.fixture.DisconnectReadyPath
+				release := p.fixture.DisconnectReleasePath
 				if marker == "" {
-					return fmt.Errorf("disconnect-once mode requires %s", acpDisconnectMarkerEnvironment)
+					return fmt.Errorf("disconnect-once mode requires disconnectMarkerPath")
 				}
 				if ready == "" || release == "" {
-					return fmt.Errorf("disconnect-once mode requires %s and %s", acpDisconnectReadyEnvironment, acpDisconnectReleaseEnvironment)
+					return fmt.Errorf("disconnect-once mode requires disconnectReadyPath and disconnectReleasePath")
 				}
 				if _, err := os.Stat(marker); os.IsNotExist(err) {
 					if err := os.WriteFile(ready, []byte("response-ready"), 0o600); err != nil {
@@ -183,15 +184,16 @@ func (p *functionalRPCPeer) serve() error {
 	return nil
 }
 
-func waitForPackageConformanceRelease() error {
+func (p *functionalRPCPeer) waitForPackageConformanceRelease() error {
 	// Keep the stdio peer alive until the test has observed the completed Work.
 	// The ACP client must drain the prompt's preceding session/update
 	// notifications after receiving the response; exiting here races that drain
 	// and turns a successful prompt into peer-disconnected.
-	release := os.Getenv(acpPackageConformanceReleaseEnvironment)
+	release := p.fixture.PackageConformanceReleasePath
 	if release == "" {
-		return fmt.Errorf("package-conformance mode requires %s", acpPackageConformanceReleaseEnvironment)
+		return fmt.Errorf("package-conformance mode requires packageConformanceReleasePath")
 	}
+
 	for {
 		if _, err := os.Stat(release); err == nil {
 			return nil
@@ -302,7 +304,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		return err
 	}
 	if p.mode == "crash-once" {
-		marker := os.Getenv("YOU_TEST_ACP_CRASH_MARKER")
+		marker := p.fixture.CrashMarkerPath
 		if _, err := os.Stat(marker); os.IsNotExist(err) {
 			if err := os.WriteFile(marker, []byte("crashed"), 0o600); err != nil {
 				return err
@@ -316,7 +318,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 			if err := p.respondError(request.ID, -32001, "temporarily unavailable", nil); err != nil {
 				return err
 			}
-			return holdFailedRetryPeer()
+			return holdFailedRetryPeer(p.fixture.RetryHoldPath)
 		case 2:
 			break
 		default:
@@ -324,10 +326,10 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	if p.mode == "serialize" && p.sessions == 1 {
-		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
+		if signal := p.fixture.PromptSignalPath; signal != "" {
 			_ = os.WriteFile(signal, []byte("first-prompt-started"), 0o600)
 		}
-		release := os.Getenv("YOU_TEST_ACP_RELEASE_SIGNAL")
+		release := p.fixture.PromptReleasePath
 		deadline := time.Now().Add(5 * time.Second)
 		for {
 			if _, err := os.Stat(release); err == nil {
@@ -340,7 +342,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	if p.mode == "block" {
-		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
+		if signal := p.fixture.PromptSignalPath; signal != "" {
 			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
 		}
 		for p.scanner.Scan() {
@@ -387,8 +389,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
 }
 
-func holdFailedRetryPeer() error {
-	holdMarker := os.Getenv(acpRetryHoldEnvironment)
+func holdFailedRetryPeer(holdMarker string) error {
 	if holdMarker == "" {
 		return nil
 	}
@@ -462,7 +463,7 @@ func (p *functionalRPCPeer) validatePromptPayload(request rpcEnvelope) error {
 		}
 		return nil
 	}
-	want := os.Getenv("YOU_TEST_ACP_CONTENT_SENTINEL")
+	want := p.fixture.ContentSentinel
 	found := false
 	for _, block := range params.Prompt {
 		text, _ := block["text"].(string)

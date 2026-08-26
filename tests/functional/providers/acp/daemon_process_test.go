@@ -38,7 +38,7 @@ const parallelACPAgentWorkflow = `return (async function () {
   return results;
 })();`
 
-func startACPDaemonProcess(t *testing.T, starts *atomic.Int32) *support.FunctionalAPIServer {
+func startACPDaemonProcess(t *testing.T, starts *atomic.Int32, fixture acpFixtureConfig) *support.FunctionalAPIServer {
 	t.Helper()
 	home, err := os.MkdirTemp("", "you-acp-daemon-")
 	if err != nil {
@@ -61,7 +61,7 @@ func startACPDaemonProcess(t *testing.T, starts *atomic.Int32) *support.Function
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
-			PlatformProcessCommandFactory: acpHelperCommandFactory(starts),
+			PlatformProcessCommandFactory: acpHelperCommandFactory(starts, fixture),
 			ProvidersExecutableLocator:    availableExecutableLocator{},
 		},
 	})

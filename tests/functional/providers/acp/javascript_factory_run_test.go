@@ -15,7 +15,6 @@ import (
 func TestJavaScriptFactoryAgentRunRoutesExecutorProviderThroughACP(t *testing.T) {
 	dir := writeACPJavaScriptFactory(t)
 	support.SetWorkingDirectory(t, dir)
-	t.Setenv(acpHelperEnvironment, "1")
 
 	var starts atomic.Int32
 	legacyRunner := support.NewRecordingCommandRunner("legacy provider route was unexpectedly invoked")
@@ -25,7 +24,7 @@ func TestJavaScriptFactoryAgentRunRoutesExecutorProviderThroughACP(t *testing.T)
 	inputs.Input.WorkingDirectory = dir
 	inputs.Input.Env = os.Environ()
 	err := support.BuildProcess(t, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 		ProviderCommandRunner:         legacyRunner,
 	}).Execute(inputs.Input)
@@ -58,7 +57,7 @@ func TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected(t *testing.T) 
 	})
 	inputs.Input.WorkingDirectory = dir
 	err := support.BuildProcess(t, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 		ProviderCommandRunner:         legacyRunner,
 	}).Execute(inputs.Input)

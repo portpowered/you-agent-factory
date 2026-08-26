@@ -67,7 +67,7 @@ func runBTRCP0ACPTarget(t *testing.T, mode string) btrcACPTargetRun {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP target characterization"}`))
 	writeACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, mode)
+	fixture := functionalACPFixture(mode)
 
 	var starts atomic.Int32
 	// The helper ACP process is the injected command/protocol edge, so it has
@@ -77,7 +77,7 @@ func runBTRCP0ACPTarget(t *testing.T, mode string) btrcACPTargetRun {
 	// bounded failure guard for a broken helper or runtime, not a sleep/polling
 	// synchronization mechanism.
 	session, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, btrcACPCompletionCeiling)
 	return btrcACPTargetRun{session: session, listed: listed, events: events, responseEvents: responseEvents, starts: starts.Load()}

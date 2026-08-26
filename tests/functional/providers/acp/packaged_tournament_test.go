@@ -17,7 +17,7 @@ import (
 )
 
 func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "tournament")
+	fixture := functionalACPFixture("tournament")
 	var starts atomic.Int32
 	homeDir := t.TempDir()
 	configDir := filepath.Join(homeDir, ".you-agent-factory")
@@ -32,7 +32,7 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir, WaitForServiceModeRuntime: true, Env: packagedACPEnvironment(homeDir),
 		Edges: serviceedges.Edges{
-			PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+			PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 			ProvidersExecutableLocator:    availableExecutableLocator{},
 		},
 	})

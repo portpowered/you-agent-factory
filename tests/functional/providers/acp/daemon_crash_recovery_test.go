@@ -12,11 +12,10 @@ import (
 )
 
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "crash-once")
-	marker := filepath.Join(t.TempDir(), "crashed")
-	t.Setenv("YOU_TEST_ACP_CRASH_MARKER", marker)
+	fixture := functionalACPFixture("crash-once")
+	fixture.CrashMarkerPath = filepath.Join(t.TempDir(), "crashed")
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 	first, err := invokeACPDaemonWorkflow(t, server, "crash", singleACPAgentWorkflow)
 	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
@@ -32,16 +31,16 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 }
 
 func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "disconnect-once")
 	dir := t.TempDir()
 	disconnectMarker := filepath.Join(dir, "disconnected")
 	readyMarker := filepath.Join(dir, "response-ready")
 	releaseMarker := filepath.Join(dir, "release")
-	t.Setenv(acpDisconnectMarkerEnvironment, disconnectMarker)
-	t.Setenv(acpDisconnectReadyEnvironment, readyMarker)
-	t.Setenv(acpDisconnectReleaseEnvironment, releaseMarker)
+	fixture := functionalACPFixture("disconnect-once")
+	fixture.DisconnectMarkerPath = disconnectMarker
+	fixture.DisconnectReadyPath = readyMarker
+	fixture.DisconnectReleasePath = releaseMarker
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 
 	first, err := invokeACPDaemonWorkflow(t, server, "disconnect-first", singleACPAgentWorkflow)

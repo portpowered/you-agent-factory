@@ -36,12 +36,10 @@ func TestFactoryMixesACPAndScriptWrapWorkersWithoutCrossRouting(t *testing.T) {
 	writeWorkstationDefinition(t, dir, "process-native")
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP branch"}`))
 	testutil.WriteSeedFile(t, dir, "native", []byte(`{"title":"native branch"}`))
-	t.Setenv(acpHelperEnvironment, "1")
-
 	var starts atomic.Int32
 	legacy := &legacyProvider{response: providers.ExecuteResult{Content: "native COMPLETE"}}
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 		ProviderOverride:              legacy,
 	}, 20*time.Second)
