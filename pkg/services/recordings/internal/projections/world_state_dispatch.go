@@ -443,6 +443,9 @@ func (r *factoryWorldReducer) recordDispatchCompletionState(
 	completion interfaces.FactoryWorldDispatchCompletion,
 ) {
 	r.stateValue.CompletedDispatches = append(r.stateValue.CompletedDispatches, completion)
+	if completion.TerminalWork != nil && completion.TerminalWork.Status == completedAutomationWorkStatus {
+		r.recordCompletedAutomationWork(*completion.TerminalWork)
+	}
 	if payload.Outcome == workerexecution.OutcomeFailed {
 		r.stateValue.FailedDispatches = append(r.stateValue.FailedDispatches, completion)
 		r.recordFailedCompletion(completion)
@@ -451,6 +454,16 @@ func (r *factoryWorldReducer) recordDispatchCompletionState(
 		r.addTraceDispatch(traceID, dispatchID)
 	}
 	r.appendProviderSessionRecord(dispatch, payload, completion)
+}
+
+func (r *factoryWorldReducer) recordCompletedAutomationWork(terminal interfaces.FactoryTerminalWork) {
+	workID := terminal.WorkItem.ID
+	if workID == "" {
+		return
+	}
+	r.stateValue.TerminalWorkByID[workID] = terminal
+	delete(r.stateValue.ActiveWorkItemsByID, workID)
+	r.addTraceTerminal(terminal.WorkItem.TraceID, workID)
 }
 
 func (r *factoryWorldReducer) appendProviderSessionRecord(

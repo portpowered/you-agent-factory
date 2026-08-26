@@ -266,11 +266,18 @@ func validateRestoredWorkState(
 	items map[string]work.FactoryWorkItem,
 	placements map[string]string,
 	resourcePlaceIDs map[string]struct{},
+	toleratedWorkIDs map[string]struct{},
 ) error {
 	if restored == nil || net == nil {
 		return nil
 	}
 	if err := validateRestoredWorkSourceIdentities(restored, items); err != nil {
+		return err
+	}
+	if err := validateRestoredWorkConsistency(restored); err != nil {
+		return err
+	}
+	if err := validateRestoredDispatchWorkReferences(restored, items); err != nil {
 		return err
 	}
 	occupiedWorkIDs, err := validateRestoredOccupancy(restored, net, items, resourcePlaceIDs)
@@ -283,7 +290,7 @@ func validateRestoredWorkState(
 	if err := validateRestoredDispatchInputs(restored, placements, occupiedWorkIDs, items); err != nil {
 		return err
 	}
-	return validateRestoredLiveWork(restored, placements)
+	return validateRestoredLiveWork(restored, placements, toleratedWorkIDs)
 }
 
 func validateRestoredOccupancy(
@@ -387,18 +394,19 @@ func validateRestoredPlacementMap(
 func validateRestoredLiveWork(
 	restored *interfaces.FactoryWorldState,
 	placements map[string]string,
+	toleratedWorkIDs map[string]struct{},
 ) error {
-	if err := requireRestoredWorkPlacements("active", restored.ActiveWorkItemsByID, placements); err != nil {
+	if err := requireRestoredWorkPlacements("active", restored.ActiveWorkItemsByID, placements, toleratedWorkIDs); err != nil {
 		return err
 	}
 	terminalItems := make(map[string]work.FactoryWorkItem, len(restored.TerminalWorkByID))
 	for workID, terminal := range restored.TerminalWorkByID {
 		terminalItems[workID] = terminal.WorkItem
 	}
-	if err := requireRestoredWorkPlacements("terminal", terminalItems, placements); err != nil {
+	if err := requireRestoredWorkPlacements("terminal", terminalItems, placements, toleratedWorkIDs); err != nil {
 		return err
 	}
-	return requireRestoredWorkPlacements("failed", restored.FailedWorkItemsByID, placements)
+	return requireRestoredWorkPlacements("failed", restored.FailedWorkItemsByID, placements, toleratedWorkIDs)
 }
 
 func validateRestoredDispatchInputs(
@@ -560,6 +568,7 @@ func requireRestoredWorkPlacements(
 	category string,
 	items map[string]work.FactoryWorkItem,
 	placements map[string]string,
+	toleratedWorkIDs map[string]struct{},
 ) error {
 	for workID, item := range items {
 		if workID == "" {
@@ -567,6 +576,9 @@ func requireRestoredWorkPlacements(
 		}
 		if workID == "" {
 			return fmt.Errorf("restore Work board: %s Work entry has no Work identity", category)
+		}
+		if _, tolerated := toleratedWorkIDs[workID]; tolerated {
+			continue
 		}
 		if _, exists := placements[workID]; !exists {
 			return fmt.Errorf(

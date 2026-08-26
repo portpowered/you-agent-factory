@@ -838,6 +838,7 @@ func seedRestoredWork(
 	now time.Time,
 	resourcePlaceIDs map[string]struct{},
 	excludedWorkIDs map[string]struct{},
+	toleratedWorkIDs map[string]struct{},
 ) (map[string]struct{}, error) {
 	seededWorkIDs := make(map[string]struct{})
 	if marking == nil || net == nil || restored == nil {
@@ -845,7 +846,7 @@ func seedRestoredWork(
 	}
 	items := restoredWorkItems(restored)
 	placements := restoredWorkPlacements(restored, items)
-	if err := validateRestoredWorkState(restored, net, items, placements, resourcePlaceIDs); err != nil {
+	if err := validateRestoredWorkState(restored, net, items, placements, resourcePlaceIDs, toleratedWorkIDs); err != nil {
 		return nil, err
 	}
 	requestIDs := restoredWorkRequestIDs(restored)
