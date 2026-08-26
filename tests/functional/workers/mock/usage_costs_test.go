@@ -23,6 +23,7 @@ const mockUsageWorkID = "mock-usage-costs"
 // documented mock-worker path produces one correlated, priceable usage row
 // without invoking a live provider or reading a recording fixture.
 func TestMockWorkerUsageIsVisibleAndPriceableThroughPublicCLI(t *testing.T) {
+	t.Parallel()
 	factoryDir := testutil.CopyFixtureDir(t, support.AgentFactoryPath(t, "examples/simple-tasks"))
 	support.WriteAgentConfig(t, factoryDir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	support.ClearSeedInputs(t, factoryDir)

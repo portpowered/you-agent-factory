@@ -35,6 +35,7 @@ const (
 // declared files are absent, while a runner that materializes the same literal
 // and templated glob reaches the normal terminal state.
 func TestExpectedArtifactsEnforceThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
 	t.Run("under-production routes to failure", func(t *testing.T) {
 		scenario := runArtifactRegistryScenario(t, false)
 		assertArtifactRegistryFailure(t, scenario)

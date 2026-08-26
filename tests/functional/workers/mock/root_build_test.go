@@ -23,6 +23,7 @@ const (
 // composition is selected by the customer --with-mock-workers input and still
 // publishes the correlated terminal dispatch through the public process.
 func TestMockWorkerSelectedThroughCustomerProcess(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{{
 			"name": rootMockWorkType,

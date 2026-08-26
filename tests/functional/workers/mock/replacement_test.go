@@ -45,6 +45,7 @@ const (
 // config replaces only the named workers while unmatched workers execute through
 // the real or injected provider path when unmatchedDispatchPolicy is passthrough.
 func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldNamedReplacementFactory(t)
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte(injectedProviderOutput)},
@@ -91,6 +92,7 @@ func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 // --with-mock-workers override fails before dispatch with a stable,
 // customer-visible diagnostic instead of silently accepting the bad override.
 func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldNamedReplacementFactory(t)
 
 	tests := []struct {
@@ -150,6 +152,7 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 
 // TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved proves compatible future fields do not alter mock dispatch behavior.
 func TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldNamedReplacementFactory(t)
 	mockWorkersPath := writeRawMockWorkersConfig(t, `{
 		"mockWorkers": [{
@@ -188,6 +191,7 @@ func TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(t *testi
 // rejection yields a stable public failed Work / Factory Event outcome without
 // live provider credentials.
 func TestMockWorkerFailureReturnsStablePublicFailure(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldMockRejectFactory(t)
 	exitCode := 7
 	runner := testutil.NewProviderCommandRunner(

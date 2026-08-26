@@ -25,6 +25,7 @@ const namedAgyMockModel = "gemini-3.6-flash-high"
 // the command completion log, and keeps the source Work correlation without
 // invoking the replaceable live ProviderCommandRunner edge.
 func TestNamedAgyMockPreservesDispatchMetadataAndCompletionLog(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderAntigravity,
