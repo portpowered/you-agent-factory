@@ -30,6 +30,7 @@ const (
 // contract preserves the Work admission diagnostic and emits no request or
 // dispatch observation for a mixed batch that contains an oversized Work.
 func TestAPIBatchUpsertRejectsOversizedWorkAtomically(t *testing.T) {
+	t.Parallel()
 	server := startPayloadSizeHTTPServer(t)
 	defer server.Stop(t)
 
@@ -82,6 +83,7 @@ func TestAPIBatchUpsertRejectsOversizedWorkAtomically(t *testing.T) {
 // payload of exactly 65,536 bytes reaches the public session-scoped Work and
 // Factory Event observations.
 func TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit(t *testing.T) {
+	t.Parallel()
 	server := startPayloadSizeHTTPServer(t)
 	defer server.Stop(t)
 

@@ -23,6 +23,8 @@ const (
 // submit flow creates Work whose customer-visible content carries the staged file
 // reference and metadata returned by POST /work/staged-files.
 func TestAPIStageAndSubmitFileCreatesExpectedWork(t *testing.T) {
+	t.Parallel()
+
 	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,

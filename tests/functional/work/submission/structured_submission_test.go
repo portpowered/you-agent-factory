@@ -15,6 +15,7 @@ import (
 // submit surface accepts a header-only structured submission and projects empty
 // customer-visible content after completion.
 func TestAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -52,6 +53,7 @@ func TestAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission(t *testing.T) {
 // TestAPISubmitWorkRejectsEmptyStructuredSubmission proves empty structured submit
 // items return HTTP 400 through the public submit surface.
 func TestAPISubmitWorkRejectsEmptyStructuredSubmission(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -75,6 +77,7 @@ func TestAPISubmitWorkRejectsEmptyStructuredSubmission(t *testing.T) {
 // TestAPISubmitWorkAcceptsOrderedTextSubmission proves ordered structured text
 // items are preserved in the customer-visible Work content projection.
 func TestAPISubmitWorkAcceptsOrderedTextSubmission(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -117,6 +120,7 @@ func TestAPISubmitWorkAcceptsOrderedTextSubmission(t *testing.T) {
 // TestAPISubmitWorkAcceptsCanonicalContentParts proves canonical content parts on
 // POST /work are preserved in the customer-visible Work projection.
 func TestAPISubmitWorkAcceptsCanonicalContentParts(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -159,6 +163,7 @@ func TestAPISubmitWorkAcceptsCanonicalContentParts(t *testing.T) {
 // TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner proves mixed text
 // and image structured submissions complete on a capability-supported runner.
 func TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -218,6 +223,7 @@ func TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner(t *testing.T) {
 // TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner proves mixed text
 // and image structured submissions fail before provider launch on unsupported runners.
 func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	support.WriteAgentConfig(
 		t,
@@ -268,6 +274,7 @@ func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) 
 // TestAPISubmitWorkRejectsForgedStructuredFileReference proves forged staged-file
 // references are rejected with HTTP 400 through the public submit surface.
 func TestAPISubmitWorkRejectsForgedStructuredFileReference(t *testing.T) {
+	t.Parallel()
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,

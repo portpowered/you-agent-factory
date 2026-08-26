@@ -53,6 +53,8 @@ func TestAPIPOSTSubmitAndQueryWork(t *testing.T) {
 // TestAPIBatchUpsertAcceptsWorksContent proves batch upsert through PUT
 // /work-requests accepts canonical works content and projects ordered content parts.
 func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
+	t.Parallel()
+
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -180,6 +182,8 @@ func TestCLIWorkTypeNameReachesLiveAPIHandler(t *testing.T) {
 // endpoints so automation can submit once and inspect the resulting Work identity
 // and payload without a second transport.
 func TestAPISubmitBatchThenListAndGetWork(t *testing.T) {
+	t.Parallel()
+
 	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -268,6 +272,8 @@ func TestAPISubmitBatchThenListAndGetWork(t *testing.T) {
 // Request and Work identities so retries and idempotent clients do not create
 // divergent identities for the same upsert key.
 func TestAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
 	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -350,6 +356,8 @@ func TestAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T) {
 // error outcome (structured 404 with NOT_FOUND family/code) rather than an opaque
 // 500 or unstructured failure body.
 func TestAPIUnknownWorkReturnsTypedNotFound(t *testing.T) {
+	t.Parallel()
+
 	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
