@@ -600,7 +600,7 @@ func persistResumeCoverageSnapshot(
 	state runtimeSessionState,
 ) {
 	t.Helper()
-	encoded, err := json.Marshal(persistedSnapshotFromRuntimeState(state))
+	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, defaultPersistedTokenFailureLogCapacity))
 	if err != nil {
 		t.Fatalf("marshal interrupted snapshot: %v", err)
 	}

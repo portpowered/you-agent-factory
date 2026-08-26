@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"strings"
-	"time"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func workContentJSONFromParts(parts []work.WorkContentPart) json.RawMessage {
@@ -227,7 +229,7 @@ func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionR
 			Kind: DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &cloned,
 		})
 	}
-	for _, mutation := range state.petriMutations {
+	for _, mutation := range clonePetriMutations(state.petriMutations) {
 		cloned := mutation
 		records = append(records, DurableSessionRecord{
 			Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &cloned,
@@ -283,6 +285,7 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 			continue
 		}
 		token := *mutations[i].Token
+		token.History = cloneWorkerHistory(token.History)
 		token.Color.StructuredResult = jsonvalue.Clone(token.Color.StructuredResult)
 		token.Color.StructuredResultPresent = jsonvalue.Present(
 			token.Color.StructuredResult,
@@ -291,6 +294,121 @@ func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interface
 		cloned[i].Token = &token
 	}
 	return cloned
+}
+
+func cloneWorkerHistory(value workerexecution.History) workerexecution.History {
+	value.TotalVisits = cloneStringIntMapPreserveNil(value.TotalVisits)
+	value.ConsecutiveFailures = cloneStringIntMapPreserveNil(value.ConsecutiveFailures)
+	value.PlaceVisits = cloneStringIntMapPreserveNil(value.PlaceVisits)
+	value.FailureLog = cloneFailuresPreserveNil(value.FailureLog)
+	return value
+}
+
+func cloneStringIntMapPreserveNil(values map[string]int) map[string]int {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]int, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneFailuresPreserveNil(values []workerexecution.Failure) []workerexecution.Failure {
+	if values == nil {
+		return nil
+	}
+	return append([]workerexecution.Failure{}, values...)
+}
+
+type durableSnapshotBounds struct {
+	persistedFailureLogCapacity int
+	persistedSnapshotMaxBytes   int
+}
+
+const (
+	// defaultPersistedTokenFailureLogCapacity bounds the failure records
+	// retained in each token copy written to a durable Factory Session
+	// snapshot. The live Factory Runtime history remains unbounded; this is a
+	// serialization policy.
+	defaultPersistedTokenFailureLogCapacity = 32
+
+	// defaultPersistedSnapshotMaxBytes bounds one encoded durable Factory
+	// Session snapshot before the persistence writer is invoked. The limit is
+	// deliberately a byte count because JSON encoding and filesystem writes are
+	// byte-oriented operations.
+	defaultPersistedSnapshotMaxBytes = 64 << 20
+)
+
+// SnapshotSizeLimitError reports a durable snapshot rejected before any
+// persistence writer is called. It intentionally identifies only the target,
+// measured size, and configured bound; snapshot content is never included.
+type SnapshotSizeLimitError struct {
+	Path        string
+	ActualBytes int
+	MaxBytes    int
+}
+
+func (e *SnapshotSizeLimitError) Error() string {
+	if e == nil {
+		return "durable session snapshot exceeds its configured byte limit"
+	}
+	return fmt.Sprintf(
+		"durable session snapshot %q is %d bytes; configured maximum is %d bytes",
+		e.Path,
+		e.ActualBytes,
+		e.MaxBytes,
+	)
+}
+
+// NonFatalPetriMutationPersistenceError marks a deterministic size rejection
+// as diagnosable runtime backpressure. The Factory Runtime can keep its
+// process loop alive while direct Factory Session callers still receive the
+// actionable error. Ordinary writer failures do not implement this marker
+// and retain their existing fatal propagation behavior.
+func (*SnapshotSizeLimitError) NonFatalPetriMutationPersistenceError() {}
+
+// compactPersistedTokenFailureLogs applies the durable snapshot retention
+// policy without changing the live runtime state from which the snapshot was
+// built. The retained records are an ordered oldest head followed by a newest
+// tail, and the omitted count is carried in the persisted History value.
+func compactPersistedTokenFailureLogs(
+	snapshot *PersistedRuntimeSessionState,
+	failureLogCapacity int,
+) {
+	if snapshot == nil || failureLogCapacity <= 0 {
+		return
+	}
+	for index := range snapshot.Records {
+		compactPersistedTokenFailureLog(
+			snapshot.Records[index].PetriMutation,
+			failureLogCapacity,
+		)
+	}
+}
+
+func compactPersistedTokenFailureLog(
+	mutation *interfaces.TokenMutationRecord,
+	failureLogCapacity int,
+) {
+	if mutation == nil || mutation.Token == nil {
+		return
+	}
+	history := mutation.Token.History
+	if len(history.FailureLog) <= failureLogCapacity {
+		return
+	}
+
+	headCount := failureLogCapacity / 2
+	tailCount := failureLogCapacity - headCount
+	dropped := len(history.FailureLog) - failureLogCapacity
+	retained := make([]workerexecution.Failure, 0, failureLogCapacity)
+	retained = append(retained, history.FailureLog[:headCount]...)
+	retained = append(retained, history.FailureLog[len(history.FailureLog)-tailCount:]...)
+	history.FailureLog = retained
+	history.FailureLogDroppedCount += dropped
+	mutation.Token.History = history
 }
 
 const (

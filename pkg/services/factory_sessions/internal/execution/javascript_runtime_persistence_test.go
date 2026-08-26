@@ -102,7 +102,7 @@ func TestTaggedDurableHistoryIsAuthoritativeDuringHydrationAndResave(t *testing.
 		t.Fatalf("hydrated Petri mutations = %#v, want tagged transition", hydrated.petriMutations)
 	}
 
-	resaved := persistedSnapshotFromRuntimeState(hydrated)
+	resaved := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(hydrated, defaultPersistedTokenFailureLogCapacity)
 	if len(resaved.Records) != 3 || resaved.Records[2].PetriMutation == nil || resaved.Records[2].PetriMutation.TransitionID != "approve" {
 		t.Fatalf("resaved tagged history = %#v, want lossless mixed records", resaved.Records)
 	}

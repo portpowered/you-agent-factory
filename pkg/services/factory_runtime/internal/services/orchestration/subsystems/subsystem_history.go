@@ -88,6 +88,11 @@ func buildHistory(consumedTokens []factorytoken.Token, result *workerexecution.W
 		if ih.LastError != "" {
 			history.LastError = ih.LastError
 		}
+		if ih.FailureLogDroppedCount > history.FailureLogDroppedCount {
+			// Companion tokens can carry the same compacted lineage history;
+			// retain the greatest omitted prefix rather than counting it twice.
+			history.FailureLogDroppedCount = ih.FailureLogDroppedCount
+		}
 		history.FailureLog = append(history.FailureLog, ih.FailureLog...)
 	}
 

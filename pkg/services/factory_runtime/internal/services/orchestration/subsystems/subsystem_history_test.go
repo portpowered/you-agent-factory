@@ -137,6 +137,25 @@ func TestHistorySubsystem_RepeatedSnapshotExecutionDoesNotDoubleCountVisitHistor
 	}
 }
 
+func TestBuildHistory_PreservesCompactedFailureCount(t *testing.T) {
+	history := buildHistory([]factorytoken.Token{{
+		Color: factorytoken.Color{WorkID: "task-1", WorkTypeID: "task"},
+		History: factorytoken.History{
+			FailureLogDroppedCount: 11,
+			FailureLog: []factorytoken.Failure{{
+				TransitionID: "review", Error: "latest failure",
+			}},
+		},
+	}}, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeFailed,
+	}, "task-1")
+
+	if history.FailureLogDroppedCount != 11 {
+		t.Fatalf("FailureLogDroppedCount = %d, want 11", history.FailureLogDroppedCount)
+	}
+}
+
 func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) {
 	consumed := []factorytoken.Token{
 		{

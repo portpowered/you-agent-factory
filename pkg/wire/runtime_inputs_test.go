@@ -510,8 +510,8 @@ func TestFactorySessionRuntimePersistenceUsesExplicitEdgeOrPlatformDefault(t *te
 	}
 
 	files = provideFactorySessionRuntimePersistenceFileSystem(serviceedges.Edges{})
-	if _, ok := files.(platformfilesystem.Local); !ok {
-		t.Fatalf("default runtime persistence filesystem = %T, want policy-free local adapter", files)
+	if _, ok := files.(runtimePersistenceFileSystem); !ok {
+		t.Fatalf("default runtime persistence filesystem = %T, want replay storage adapter", files)
 	}
 	store, err := provideFactorySessionRuntimePersistenceStoreFactory(files)(t.TempDir())
 	if err != nil {

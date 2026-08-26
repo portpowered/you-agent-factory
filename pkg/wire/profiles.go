@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -216,7 +218,30 @@ func provideFactorySessionRuntimePersistenceFileSystem(
 	if edges.FactorySessionRuntimePersistenceFileSystem != nil {
 		return edges.FactorySessionRuntimePersistenceFileSystem
 	}
-	return platformfilesystem.Local{}
+	return runtimePersistenceFileSystem{
+		directories: platformfilesystem.Local{},
+		storage:     platformreplay.NewLocal(runtime.GOOS),
+	}
+}
+
+// runtimePersistenceFileSystem preserves the established Sessions directory
+// lifecycle effect while routing snapshot bytes through replay.Storage's
+// temp-write, sync, close, and replace implementation.
+type runtimePersistenceFileSystem struct {
+	directories platformfilesystem.DirectoryCreator
+	storage     platformreplay.Storage
+}
+
+func (files runtimePersistenceFileSystem) MkdirAll(path string, mode fs.FileMode) error {
+	return files.directories.MkdirAll(path, mode)
+}
+
+func (files runtimePersistenceFileSystem) ReadFile(path string) ([]byte, error) {
+	return files.storage.ReadFile(path)
+}
+
+func (files runtimePersistenceFileSystem) WriteFile(path string, data []byte, _ fs.FileMode) error {
+	return files.storage.WriteFile(path, data)
 }
 
 func provideFactorySessionRuntimePersistenceStoreFactory(

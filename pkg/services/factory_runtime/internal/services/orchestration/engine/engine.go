@@ -683,6 +683,14 @@ func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.Com
 			continue
 		}
 		if err := e.recordPetriMutations(completed[i].OutputMutations); err != nil {
+			if isNonFatalPetriMutationPersistenceError(err) {
+				e.logger.Error(
+					"engine: durable Petri mutation snapshot rejected; continuing runtime loop",
+					"dispatch_id", completed[i].DispatchID,
+					"error", err,
+				)
+				continue
+			}
 			return fmt.Errorf("record completed dispatch %q Petri mutations: %w", completed[i].DispatchID, err)
 		}
 	}

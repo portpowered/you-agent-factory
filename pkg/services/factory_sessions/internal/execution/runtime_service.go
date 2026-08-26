@@ -217,9 +217,10 @@ type JavaScriptRuntimeService struct {
 	// helpers and tests. Production standalone opening supplies the narrow
 	// Workers Execute capability through directChildExecution; P6-C can remove
 	// this compatibility input after those callers are retired.
-	directChildInvocation   workers.InvocationExecutor
-	directChildExecution    childExecuteService
-	persistence             runtimepersist.Store
+	directChildInvocation workers.InvocationExecutor
+	directChildExecution  childExecuteService
+	persistence           runtimepersist.Store
+	durableSnapshotBounds
 	clock                   factory.Clock
 	syncWaits               SyncWaitScheduler
 	checkpointSummaries     factory.JavaScriptCheckpointSummaries
@@ -239,7 +240,6 @@ type JavaScriptRuntimeService struct {
 	invokerMu            sync.RWMutex
 	workerInvokerService factory.Service
 	workerExecution      *childWorkerExecutionBinding
-
 	// workerSessions maps one Workers dispatch identity to the durable session
 	// that owns that Worker. A Worker's progress arrives from Workers, which
 	// knows only the dispatch it belongs to, so this is what routes a child's

@@ -113,6 +113,10 @@ type History struct {
 	TotalDuration       time.Duration  `json:"total_duration"`
 	LastError           string         `json:"last_error"`
 	FailureLog          []Failure      `json:"failure_log"`
+	// FailureLogDroppedCount records failures omitted by a persistence-only
+	// retention boundary. It is zero for live, unbounded histories and for
+	// histories that fit within the configured durable snapshot capacity.
+	FailureLogDroppedCount int `json:"failure_log_dropped_count,omitempty"`
 }
 
 // Failure is one prior failed execution attempt exposed to Worker policy.
