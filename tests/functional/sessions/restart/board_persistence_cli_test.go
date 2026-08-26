@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -504,20 +505,74 @@ type boardPersistenceDaemon struct {
 	stopped    bool
 }
 
+// The checked-out you executable is immutable for the lifetime of one package
+// process while every mutable scenario input stays isolated per test, so all
+// real-CLI scenarios share exactly one current-checkout build. The shared
+// artifact lives in a dedicated package-scoped directory (never a global or
+// cross-invocation cache) that TestMain removes deterministically after every
+// daemon cleanup has completed.
+var (
+	boardPersistenceBinaryOnce   sync.Once
+	boardPersistenceBinaryDir    string
+	boardPersistenceBinaryPath   string
+	boardPersistenceBinaryErr    error
+	boardPersistenceBinaryOutput []byte
+	boardPersistenceBuildCount   atomic.Int64
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if boardPersistenceBinaryDir != "" {
+		if err := os.RemoveAll(boardPersistenceBinaryDir); err != nil {
+			fmt.Fprintf(os.Stderr, "remove package-scoped you build directory %q: %v\n", boardPersistenceBinaryDir, err)
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
+
 func buildBoardPersistenceBinary(t *testing.T) string {
 	t.Helper()
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
+	boardPersistenceBinaryOnce.Do(func() {
+		boardPersistenceBuildCount.Add(1)
+		binaryName := "you"
+		if runtime.GOOS == "windows" {
+			binaryName += ".exe"
+		}
+		dir, err := os.MkdirTemp("", "you-restart-package-build")
+		if err != nil {
+			boardPersistenceBinaryErr = fmt.Errorf("create package-scoped build directory: %w", err)
+			return
+		}
+		boardPersistenceBinaryDir = dir
+		path := filepath.Join(dir, binaryName)
+		build := exec.Command("go", "build", "-o", path, "./cmd/factory")
+		build.Dir = testutil.MustRepoRoot(t)
+		output, err := build.CombinedOutput()
+		boardPersistenceBinaryOutput = output
+		if err != nil {
+			boardPersistenceBinaryErr = fmt.Errorf("build fresh you binary: %w", err)
+			return
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			boardPersistenceBinaryErr = fmt.Errorf("stat built you binary: %w", err)
+			return
+		}
+		if info.Size() == 0 {
+			boardPersistenceBinaryErr = errors.New("built you binary is empty")
+			return
+		}
+		boardPersistenceBinaryPath = path
+	})
+	if boardPersistenceBinaryErr != nil {
+		t.Fatalf("build shared you binary: %v\n%s", boardPersistenceBinaryErr, boardPersistenceBinaryOutput)
 	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.CommandContext(t.Context(), "go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	output, err := build.CombinedOutput()
-	if err != nil {
-		t.Fatalf("build fresh you binary: %v\n%s", err, output)
+	t.Logf("reusing package-scoped you binary built once for this process: %q (builds=%d)", boardPersistenceBinaryPath, boardPersistenceBuildCount.Load())
+	if boardPersistenceBuildCount.Load() != 1 {
+		t.Fatalf("package-scoped you binary build count = %d, want exactly 1", boardPersistenceBuildCount.Load())
 	}
-	return binaryPath
+	return boardPersistenceBinaryPath
 }
 
 func startBoardPersistenceDaemon(
