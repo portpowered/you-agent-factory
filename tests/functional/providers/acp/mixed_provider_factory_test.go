@@ -14,6 +14,7 @@ import (
 )
 
 func TestFactoryMixesACPAndScriptWrapWorkersWithoutCrossRouting(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	factory := `{
   "name":"mixed-acp-native",

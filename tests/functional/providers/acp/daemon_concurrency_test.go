@@ -12,6 +12,7 @@ import (
 )
 
 func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.T) {
+	t.Parallel()
 	signals := t.TempDir()
 	fixture := functionalACPFixture("serialize")
 	fixture.PromptSignalPath = filepath.Join(signals, "prompt-started")

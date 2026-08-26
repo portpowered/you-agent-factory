@@ -15,6 +15,7 @@ import (
 )
 
 func TestACPUpdatesPublishExistingFactorySessionResponseEventsInOrder(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP response events"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -42,12 +43,13 @@ func TestACPUpdatesPublishExistingFactorySessionResponseEventsInOrder(t *testing
 }
 
 func TestACPFailurePublishesTerminalErrorEvent(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP partial failure"}`))
 	writeACPWorker(t, dir, "cursor-acp")
 	var starts atomic.Int32
 	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("fail")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -72,12 +74,13 @@ func TestACPFailurePublishesTerminalErrorEvent(t *testing.T) {
 }
 
 func TestACPAuthenticationRequiredMapsToCanonicalWorkerFailure(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP auth"}`))
 	writeACPWorker(t, dir, "cursor-acp")
 	var starts atomic.Int32
 	_, listed, factoryEvents := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("auth")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -99,12 +102,13 @@ func TestACPAuthenticationRequiredMapsToCanonicalWorkerFailure(t *testing.T) {
 }
 
 func TestACPModelIsAppliedOnlyThroughAdvertisedSessionConfig(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP model config"}`))
 	writeACPWorker(t, dir, "cursor-acp")
 	var starts atomic.Int32
 	factoryEvents, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("model")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
@@ -113,6 +117,7 @@ func TestACPModelIsAppliedOnlyThroughAdvertisedSessionConfig(t *testing.T) {
 }
 
 func TestACPReceivesCanonicalWorkResourceAsSDKResourceLink(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	writeACPWorker(t, dir, "cursor-acp")
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -123,7 +128,7 @@ func TestACPReceivesCanonicalWorkResourceAsSDKResourceLink(t *testing.T) {
 	})
 	var starts atomic.Int32
 	factoryEvents, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("resource")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {

@@ -8,6 +8,7 @@ import (
 )
 
 func TestProvidersShutdownCancelsActivePromptAndJoinsACPProcess(t *testing.T) {
+	t.Parallel()
 	signal := filepath.Join(t.TempDir(), "prompt-started")
 	fixture := functionalACPFixture("block")
 	fixture.PromptSignalPath = signal

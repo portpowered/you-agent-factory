@@ -23,6 +23,7 @@ import (
 // caller-visible outcome the daemon's cmd.Start() failure path maps to: the
 // run fails with a dependency-kind error rather than hanging or panicking.
 func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -53,6 +54,7 @@ func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 }
 
 func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP stderr redaction"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -98,6 +100,7 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 // mapping: the run fails, and the surfaced error reflects a canceled
 // attempt rather than a generic failure.
 func TestACPAgentSelfReportedCancellationMapsToCanceledFailure(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP self-reported cancellation"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -141,6 +144,7 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 		{mode: "fail", want: factoryapi.WorkFailureTypeUnknown},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
+			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP failure"}`))
 			writeACPWorker(t, dir, "cursor-acp")
@@ -162,6 +166,7 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 }
 
 func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"missing ACP executable"}`))
 	writeACPWorker(t, dir, "cursor-acp")

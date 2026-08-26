@@ -19,6 +19,7 @@ import (
 )
 
 func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *testing.T) {
+	t.Parallel()
 	fixture := functionalACPFixture("spawn")
 	var starts atomic.Int32
 	homeDir := t.TempDir()

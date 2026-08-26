@@ -11,12 +11,13 @@ import (
 )
 
 func TestYouRunReturnsUnsupportedFilesystemAndTerminalRPCsAtTheACPBoundary(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unsupported ACP client capabilities"}`))
 	writeACPWorker(t, dir, "cursor-acp")
 	var starts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("unsupported")),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {

@@ -12,6 +12,7 @@ import (
 )
 
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
+	t.Parallel()
 	fixture := functionalACPFixture("crash-once")
 	fixture.CrashMarkerPath = filepath.Join(t.TempDir(), "crashed")
 	var starts atomic.Int32
@@ -31,6 +32,7 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 }
 
 func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	disconnectMarker := filepath.Join(dir, "disconnected")
 	readyMarker := filepath.Join(dir, "response-ready")

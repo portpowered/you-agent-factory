@@ -45,6 +45,7 @@ type packagedACPInitializeFixture struct {
 // mapping remains covered by the focused cursor ACP resource fixture because
 // the other packaged profiles conservatively declare image input unsupported.
 func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
+	t.Parallel()
 	var catalog packagedACPConformanceCatalog
 	if err := json.Unmarshal(modelproviders.RuntimeACPJSON(), &catalog); err != nil {
 		t.Fatalf("decode generated ACP runtime catalog: %v", err)

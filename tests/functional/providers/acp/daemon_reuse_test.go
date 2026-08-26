@@ -9,6 +9,7 @@ import (
 )
 
 func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing.T) {
+	t.Parallel()
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts, functionalACPFixture("persistent"))
 	defer server.Stop(t)
@@ -25,6 +26,7 @@ func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing
 }
 
 func TestProvidersACPRejectsIncompatibleProtocolVersionAtStdioBoundary(t *testing.T) {
+	t.Parallel()
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts, functionalACPFixture("version"))
 	defer server.Stop(t)

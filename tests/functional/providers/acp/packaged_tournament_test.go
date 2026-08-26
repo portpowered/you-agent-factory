@@ -17,6 +17,7 @@ import (
 )
 
 func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *testing.T) {
+	t.Parallel()
 	fixture := functionalACPFixture("tournament")
 	var starts atomic.Int32
 	homeDir := t.TempDir()

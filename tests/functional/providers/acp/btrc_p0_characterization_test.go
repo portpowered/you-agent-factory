@@ -30,6 +30,7 @@ var btrcACPEventOrder = []factoryapi.FactoryEventType{
 const btrcACPCompletionCeiling = 20 * time.Second
 
 func TestBTRCP0ACPTargetSuccessCharacterization(t *testing.T) {
+	t.Parallel()
 	run := runBTRCP0ACPTarget(t, "1")
 	if run.starts != 1 {
 		t.Fatalf("ACP process starts = %d, want exactly one", run.starts)
@@ -42,6 +43,7 @@ func TestBTRCP0ACPTargetSuccessCharacterization(t *testing.T) {
 }
 
 func TestBTRCP0ACPTargetProtocolFailureCharacterization(t *testing.T) {
+	t.Parallel()
 	run := runBTRCP0ACPTarget(t, "fail")
 	if run.starts != 1 {
 		t.Fatalf("ACP process starts = %d, want exactly one", run.starts)
