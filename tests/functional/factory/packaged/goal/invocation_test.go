@@ -16,11 +16,11 @@ import (
 // @you/goal batch invocation through the public you run CLI with --quiet writes
 // only the primary result to stdout without echoing the submitted goal text.
 func TestPackagedGoalQuietCLIBatchReturnsPrimaryResultOnStdout(t *testing.T) {
-	scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
+	t.Parallel()
+	providerRunner := newPackagedGoalAcceptedProviderRunner(t)
 	goalText := fmt.Sprintf("functional-packaged-goal-quiet-cli-%d", time.Now().UnixNano())
 
-	stdout, stderr := runPackagedGoalQuietCLIBatch(t, mockWorkersPath, goalText)
+	stdout, stderr := runPackagedGoalQuietCLIBatch(t, providerRunner, goalText)
 	if stdout != packagedGoalMockWorkerAcceptedSummary {
 		t.Fatalf("stdout = %q, want only primary result %q", stdout, packagedGoalMockWorkerAcceptedSummary)
 	}
@@ -30,18 +30,24 @@ func TestPackagedGoalQuietCLIBatchReturnsPrimaryResultOnStdout(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty stderr on successful batch invocation", stderr)
 	}
+	if got := providerRunner.CallCount(); got != 1 {
+		t.Fatalf("provider invocation count = %d, want 1 for one-shot quiet batch", got)
+	}
 }
 
 // TestPackagedGoalQuietCLIBatchExitsWithoutContinuousMode proves packaged
 // @you/goal batch invocation through the public you run CLI exits after the
 // invocation completes instead of staying in continuous service mode.
 func TestPackagedGoalQuietCLIBatchExitsWithoutContinuousMode(t *testing.T) {
-	scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
+	t.Parallel()
+	providerRunner := newPackagedGoalAcceptedProviderRunner(t)
 	goalText := fmt.Sprintf("functional-packaged-goal-quiet-exit-%d", time.Now().UnixNano())
 
-	if err := runPackagedGoalQuietCLIBatchWithTimeout(t, mockWorkersPath, goalText, 20*time.Second); err != nil {
+	if err := runPackagedGoalQuietCLIBatchWithTimeout(t, providerRunner, goalText, 20*time.Second); err != nil {
 		t.Fatalf("packaged goal quiet CLI batch invocation: %v", err)
+	}
+	if got := providerRunner.CallCount(); got != 1 {
+		t.Fatalf("provider invocation count = %d, want 1 for one-shot batch exit", got)
 	}
 }
 
@@ -49,14 +55,18 @@ func TestPackagedGoalQuietCLIBatchExitsWithoutContinuousMode(t *testing.T) {
 // completes through the public session invocation API with an explicit summary
 // primary result distinct from the submitted goal text.
 func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
+	providerRunner := newPackagedGoalAcceptedProviderRunner(t)
 
 	submitted := "customer goal request text"
-	response := postPackagedGoalInvocation(t, dir, mockWorkersPath, submitted)
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, providerRunner, submitted)
 	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalMockWorkerAcceptedSummary)
 	if primaryResultText(t, response) == submitted {
 		t.Fatal("primaryResult echoed submitted goal text")
+	}
+	if got := providerRunner.CallCount(); got != 1 {
+		t.Fatalf("provider invocation count = %d, want 1 for accepted completion", got)
 	}
 }
 
@@ -65,6 +75,7 @@ func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
 // triggers another executor dispatch on the built-in repeater workstation, and
 // then completes with the post-continue primary result.
 func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	goalText := "invoke packaged goal after continue"
 	runner := support.NewShapedProviderCommandRunner(
@@ -99,6 +110,7 @@ func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 // fails a perpetually continuing goal after exactly twelve executor visits and
 // never launches a thirteenth attempt.
 func TestPackagedGoalContinueExhaustsAtVisitBound(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	results := make([]platformprocess.CommandResult, 12)
 	for index := range results {
@@ -120,6 +132,7 @@ func TestPackagedGoalContinueExhaustsAtVisitBound(t *testing.T) {
 // TestPackagedGoalNeedsChangesRepeatsThenCompletes proves the packaged goal
 // classifier's needs_changes decision feeds back into the same executor.
 func TestPackagedGoalNeedsChangesRepeatsThenCompletes(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("needs_changes", "finish the remaining work", "goal is not complete yet"))},
@@ -137,6 +150,7 @@ func TestPackagedGoalNeedsChangesRepeatsThenCompletes(t *testing.T) {
 // is a classifier result while user/session termination remains a separate
 // lifecycle control.
 func TestPackagedGoalBlockedDecisionStopsInInspectableBlockedState(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte(goalDecisionEnvelope("blocked", "requires operator credentials", "progress saved before blocker")),
@@ -162,19 +176,25 @@ func TestPackagedGoalBlockedDecisionStopsInInspectableBlockedState(t *testing.T)
 // success primary result when mock workers surface an invalid worker outcome on the
 // built-in execute-goal topology.
 func TestPackagedGoalUnknownDecisionFails(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath := writePackagedGoalFailingMockWorkersConfig(t)
+	providerRunner := newPackagedGoalFailingProviderRunner(t)
 
-	response := postPackagedGoalInvocation(t, dir, mockWorkersPath, "invoke packaged goal with failing worker")
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, providerRunner, "invoke packaged goal with failing worker")
 	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
+	if got := providerRunner.CallCount(); got != 1 {
+		t.Fatalf("provider invocation count = %d, want 1 for failing output", got)
+	}
 }
 
 // TestPackagedGoalPausedSubmissionResumes proves packaged @you/goal work submitted
 // while the Factory Session is paused stays buffered through the public pause/resume
 // control boundary and reaches the completed goal state only after resume.
 func TestPackagedGoalPausedSubmissionResumes(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	server := startPackagedGoalSessionServer(t, dir)
+	providerRunner := newPackagedGoalAcceptedProviderRunner(t)
+	server := startPackagedGoalSessionServer(t, dir, providerRunner)
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 	sessionPath := "/factory-sessions/" + factorysessions.DefaultSessionID
 
@@ -233,5 +253,8 @@ func TestPackagedGoalPausedSubmissionResumes(t *testing.T) {
 	completed := waitForPackagedGoalWorkIDsComplete(t, baseURL, []string{workID}, 15*time.Second)
 	if len(completed) != 1 || packagedGoalWorkStateName(completed[0].State) != "complete" {
 		t.Fatalf("completed work = %#v, want one completed goal after resume", completed)
+	}
+	if got := providerRunner.CallCount(); got < 1 {
+		t.Fatalf("provider invocation count = %d, want at least 1 after resume", got)
 	}
 }

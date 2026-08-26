@@ -8,15 +8,14 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -41,119 +40,57 @@ func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
 	return dir
 }
 
-func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
+// newPackagedGoalAcceptedProviderRunner returns a Codex-shaped command runner
+// that accepts every executor dispatch with the stable accepted decision
+// envelope while recording the exact provider call count.
+func newPackagedGoalAcceptedProviderRunner(t *testing.T) *packagedGoalRepeatingProviderRunner {
 	t.Helper()
-
-	cfg := workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      "goal-planner",
-				WorkstationName: packagedGoalPlanWorkstationName,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			},
-			{
-				WorkerName:      "goal-executor",
-				WorkstationName: packagedGoalExecuteWorkstationName,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			},
-			{
-				WorkerName:      "goal-checker",
-				WorkstationName: packagedGoalCheckWorkstationName,
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{"plain"},
-				},
-			},
-			{
-				WorkerName:      "goal-reviewer",
-				WorkstationName: packagedGoalReviewWorkstationName,
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{"accepted"},
-				},
-			},
-		},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal packaged goal mock-workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write packaged goal mock-workers config: %v", err)
-	}
-	return path
+	return newPackagedGoalRepeatingProviderRunner(t, goalDecisionEnvelope(
+		"accepted", "", packagedGoalMockWorkerAcceptedSummary,
+	))
 }
 
-func writePackagedGoalFailingMockWorkersConfig(t *testing.T) string {
+// newPackagedGoalFailingProviderRunner returns a Codex-shaped command runner
+// whose first execution fails exactly like the previous rejecting mock worker:
+// nonzero exit, empty stdout, and the stable provider-failure stderr.
+func newPackagedGoalFailingProviderRunner(t *testing.T) *support.ShapedProviderCommandRunner {
 	t.Helper()
-
-	cfg := workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      "goal-executor",
-				WorkstationName: packagedGoalExecuteWorkstationName,
-				RunType:         workers.MockWorkerRunTypeReject,
-				RejectConfig: &workers.MockWorkerRejectConfig{
-					Stderr: "mock provider failure",
-				},
-			},
-		},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal packaged goal failing mock-workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-failing.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write packaged goal failing mock-workers config: %v", err)
-	}
-	return path
-}
-
-func startPackagedGoalInvocationServer(t *testing.T, factoryDir, mockWorkersPath string) *support.FunctionalAPIServer {
-	t.Helper()
-
-	payload, err := os.ReadFile(mockWorkersPath)
-	if err != nil {
-		t.Fatalf("read customer mock-workers config: %v", err)
-	}
-	var mockWorkersConfig workers.MockWorkersConfig
-	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
-		t.Fatalf("decode customer mock-workers config: %v", err)
-	}
-
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		MockWorkersConfig:         &mockWorkersConfig,
+	return support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("mock provider failure"),
 	})
 }
 
-func postPackagedGoalInvocation(
-	t *testing.T,
-	factoryDir string,
-	mockWorkersPath string,
-	goalText string,
-) factoryapi.InvocationResponse {
+// newPackagedGoalRepeatingProviderRunner returns a command runner that answers
+// every dispatch with the same decision envelope payload.
+func newPackagedGoalRepeatingProviderRunner(t *testing.T, decisionEnvelope string) *packagedGoalRepeatingProviderRunner {
 	t.Helper()
-
-	_, response := invokePackagedGoal(t, factoryDir, mockWorkersPath, goalText)
-	return response
+	return &packagedGoalRepeatingProviderRunner{decisionEnvelope: decisionEnvelope}
 }
 
-func invokePackagedGoal(
-	t *testing.T,
-	factoryDir string,
-	mockWorkersPath string,
-	goalText string,
-) (*support.FunctionalAPIServer, factoryapi.InvocationResponse) {
-	t.Helper()
+// packagedGoalRepeatingProviderRunner records each provider dispatch and emits
+// the same Codex-shaped success payload for unbounded continuations such as
+// paused-session resume completion.
+type packagedGoalRepeatingProviderRunner struct {
+	mu               sync.Mutex
+	decisionEnvelope string
+	calls            int
+}
 
-	server := startPackagedGoalInvocationServer(t, factoryDir, mockWorkersPath)
-	return server, postPackagedGoalInvocationToServer(t, server, goalText)
+func (runner *packagedGoalRepeatingProviderRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	runner.calls++
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(runner.decisionEnvelope)}, nil
+}
+
+func (runner *packagedGoalRepeatingProviderRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
 }
 
 func invokePackagedGoalWithProviderRunner(
@@ -291,13 +228,19 @@ func primaryResultText(t *testing.T, response factoryapi.InvocationResponse) str
 	return part.Text
 }
 
-func startPackagedGoalSessionServer(t *testing.T, factoryDir string) *support.FunctionalAPIServer {
+func startPackagedGoalSessionServer(
+	t *testing.T,
+	factoryDir string,
+	providerRunner platformprocess.CommandRunner,
+) *support.FunctionalAPIServer {
 	t.Helper()
 
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: providerRunner,
+		},
 	})
 }
 
@@ -370,7 +313,7 @@ func packagedGoalWorkStateName(state *factoryapi.WorkState) string {
 
 func runPackagedGoalQuietCLIBatch(
 	t *testing.T,
-	mockWorkersPath string,
+	providerRunner platformprocess.CommandRunner,
 	goalText string,
 ) (stdout string, stderr string) {
 	t.Helper()
@@ -381,7 +324,8 @@ func runPackagedGoalQuietCLIBatch(
 	args := []string{
 		"you", "run",
 		"--named", packagedGoalFactoryName,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--provider", "CODEX",
+		"--model", "gpt-5.6-luna",
 		"--no-record",
 		"--quiet",
 		goalText,
@@ -390,7 +334,7 @@ func runPackagedGoalQuietCLIBatch(
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = t.TempDir()
 
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: providerRunner}).Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,
@@ -404,7 +348,7 @@ func runPackagedGoalQuietCLIBatch(
 
 func runPackagedGoalQuietCLIBatchWithTimeout(
 	t *testing.T,
-	mockWorkersPath string,
+	providerRunner platformprocess.CommandRunner,
 	goalText string,
 	timeout time.Duration,
 ) error {
@@ -416,7 +360,8 @@ func runPackagedGoalQuietCLIBatchWithTimeout(
 	args := []string{
 		"you", "run",
 		"--named", packagedGoalFactoryName,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--provider", "CODEX",
+		"--model", "gpt-5.6-luna",
 		"--no-record",
 		"--quiet",
 		goalText,
@@ -429,7 +374,7 @@ func runPackagedGoalQuietCLIBatchWithTimeout(
 
 	done := make(chan error, 1)
 	go func() {
-		done <- support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+		done <- support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: providerRunner}).Execute(inputs.Input)
 	}()
 
 	select {

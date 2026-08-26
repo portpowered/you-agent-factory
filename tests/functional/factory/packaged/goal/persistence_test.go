@@ -27,6 +27,7 @@ var persistentGoalWorkID = regexp.MustCompile(`persistent goal work ([A-Za-z0-9.
 // chooses needs_changes; the same executor then loads that state, persists
 // completion, and chooses accepted.
 func TestPackagedGoalPersistsProgressAndClassifiesLoopThroughRootProcess(t *testing.T) {
+	t.Parallel()
 	workspace := t.TempDir()
 	home := t.TempDir()
 	support.InstallPackagedFactory(t, home, factorydefinitions.PackagedGoalFactoryName)

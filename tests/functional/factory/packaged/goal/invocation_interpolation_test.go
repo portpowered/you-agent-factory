@@ -20,6 +20,7 @@ const customizedPackagedGoalFactoryName = "@test/goal"
 // omitted definition variable fails in Factory Definitions before provider
 // selection for both named and explicit-file packaged goal invocation.
 func TestPackagedGoalInterpolationFailureStopsBeforeProviderExecution(t *testing.T) {
+	t.Parallel()
 	provider := testutil.NewProviderCommandRunner()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: provider,
