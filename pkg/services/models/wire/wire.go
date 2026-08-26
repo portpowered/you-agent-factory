@@ -91,11 +91,11 @@ func NewPinnedGRPCHostProtocolNegotiator(
 }
 
 type invocationRuntimeOptions struct {
-	Backend InvocationBackend
-	ASR     ASRBackend
+	Backend   InvocationBackend
+	ASR       ASRBackend
 	Embedding EmbeddingBackend
-	Client  InvocationProtocolClient
-	Dialer  InvocationProtocolDialer
+	Client    InvocationProtocolClient
+	Dialer    InvocationProtocolDialer
 }
 
 type invocationRuntime interface {
@@ -530,7 +530,7 @@ func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime,
 			Embeddings: append([]float64(nil), response.Embeddings...),
 		}, nil
 	})
-	}
+}
 
 type omniInvocationRuntime struct {
 	codec    *localai.OmniCodec

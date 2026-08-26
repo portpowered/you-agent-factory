@@ -677,9 +677,9 @@ type modelsManagedProcess struct {
 	// finished is broadcast to both the supervisor's Wait observer and the
 	// application lifecycle closer; a one-shot error channel would let one
 	// consumer strand the other during normal teardown.
-	finished       chan struct{}
-	waitErr        error
-	stopped        bool
+	finished chan struct{}
+	waitErr  error
+	stopped  bool
 }
 
 func (p *modelsManagedProcess) HealthEndpoint() string { return p.healthEndpoint }
