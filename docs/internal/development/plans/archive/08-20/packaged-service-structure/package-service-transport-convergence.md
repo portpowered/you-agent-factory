@@ -34,7 +34,7 @@ translation before and after calling its one service root.
 This plan is aligned with:
 
 - `docs/internal/standards/code/general-backend-standards.md`
-- `docs/internal/standards/code/planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - `docs/architecture/packaged-structure.md`
 - `docs/architecture/data-model.md`
 - `docs/temp/projects/packaged-service-structure/package-service-factory-definitions.md`

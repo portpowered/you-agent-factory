@@ -193,24 +193,17 @@ type Edges struct {
 		Open(string) (io.ReadCloser, error)
 		Stat(string) (fs.FileInfo, error)
 	}
-	ProviderSessionResolveHomeDirectory     func() (string, error)
-	ProviderSessionCodexWalkDirectory       func(string, fs.WalkDirFunc) error
-	ProviderSessionCodexResolveSymlinks     func(string) (string, error)
-	ProviderSessionCursorWalkDirectory      func(string, fs.WalkDirFunc) error
-	ProviderSessionCursorResolveSymlinks    func(string) (string, error)
-	ProviderSessionCursorOpenDatabase       func(string, string) (*sql.DB, error)
-	ProviderSessionOperatingSystem          string
-	OperatorSettingsFileSystem              operatorsettings.FileSystem
-	OperatorSettingsCreateTemporaryFile     operatorsettings.CreateTemporaryFile
-	OperatorSettingsIDGenerator             operatorsettings.IDGenerator
-	SystemInitializationInspectPath         func(string) (fs.FileInfo, error)
-	SystemInitializationMigrationFileSystem interface {
-		Stat(string) (fs.FileInfo, error)
-		ReadFile(string) ([]byte, error)
-		ReadDir(string) ([]fs.DirEntry, error)
-		MkdirAll(string, fs.FileMode) error
-		Rename(string, string) error
-	}
+	ProviderSessionResolveHomeDirectory  func() (string, error)
+	ProviderSessionCodexWalkDirectory    func(string, fs.WalkDirFunc) error
+	ProviderSessionCodexResolveSymlinks  func(string) (string, error)
+	ProviderSessionCursorWalkDirectory   func(string, fs.WalkDirFunc) error
+	ProviderSessionCursorResolveSymlinks func(string) (string, error)
+	ProviderSessionCursorOpenDatabase    func(string, string) (*sql.DB, error)
+	ProviderSessionOperatingSystem       string
+	OperatorSettingsFileSystem           operatorsettings.FileSystem
+	OperatorSettingsCreateTemporaryFile  operatorsettings.CreateTemporaryFile
+	OperatorSettingsIDGenerator          operatorsettings.IDGenerator
+	SystemInitializationInspectPath      func(string) (fs.FileInfo, error)
 
 	Clock                            platformclock.Source
 	ACPWireRecorder                  wiretranscript.WireRecorder
@@ -601,9 +594,6 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.SystemInitializationInspectPath != nil {
 		defaults.SystemInitializationInspectPath = replacements.SystemInitializationInspectPath
-	}
-	if replacements.SystemInitializationMigrationFileSystem != nil {
-		defaults.SystemInitializationMigrationFileSystem = replacements.SystemInitializationMigrationFileSystem
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock

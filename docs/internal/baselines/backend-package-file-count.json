@@ -242,12 +242,6 @@
       "removalReason": "Partition recording event contracts by stable concern."
     },
     {
-      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
-      "fileCount": 16,
-      "owner": "recording-maintainers",
-      "removalReason": "Consolidate projection fixtures and focused scenarios."
-    },
-    {
       "packagePath": "pkg/services/recordings/internal/replay",
       "fileCount": 20,
       "owner": "recording-maintainers",

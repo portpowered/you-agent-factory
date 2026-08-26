@@ -590,8 +590,8 @@ func assertFactoryConfigSmokeGeneratedWorkstations(t *testing.T, factory factory
 	if firstWorkstation.Behavior == nil || *firstWorkstation.Behavior != factoryapi.WorkstationKindCron {
 		t.Fatalf("generated boundary workstation behavior = %#v, want CRON", firstWorkstation.Behavior)
 	}
-	if firstWorkstation.Type == nil || *firstWorkstation.Type != factoryapi.WorkstationTypeAgentRun {
-		t.Fatalf("generated boundary workstation type = %#v, want AGENT_RUN", firstWorkstation.Type)
+	if firstWorkstation.Type == nil || *firstWorkstation.Type != factoryapi.WorkstationTypeModelWorkstation {
+		t.Fatalf("generated boundary workstation type = %#v, want MODEL_WORKSTATION", firstWorkstation.Type)
 	}
 	if firstWorkstation.Guards == nil || len(*firstWorkstation.Guards) != 1 || (*firstWorkstation.Guards)[0].Type != factoryapi.WorkstationGuardTypeVISITCOUNT {
 		t.Fatalf("generated boundary workstation guards = %#v, want VISIT_COUNT", firstWorkstation.Guards)

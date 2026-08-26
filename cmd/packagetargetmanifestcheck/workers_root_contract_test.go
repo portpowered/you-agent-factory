@@ -20,8 +20,8 @@ func TestWorkersRootGoFilesMatchCommittedInventory(t *testing.T) {
 		t.Fatalf("live root .go files = %v, want committed inventory %v", live, want)
 	}
 
-	if len(live) != 40 {
-		t.Fatalf("live root .go file count = %d, want baseline 40", len(live))
+	if len(live) != 35 {
+		t.Fatalf("live root .go file count = %d, want baseline 35", len(live))
 	}
 }
 

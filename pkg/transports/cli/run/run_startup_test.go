@@ -508,7 +508,7 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 		FactoryDir:         "/tmp/project/factory/alpha",
 		Source:             interfaces.NamedFactoryResolutionSourceProjectLocal,
 		ProjectRoot:        "/tmp/project/factory",
-		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
 		PrecedenceDecision: interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal,
 	}
 

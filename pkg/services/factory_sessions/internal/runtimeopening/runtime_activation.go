@@ -238,6 +238,13 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 			}
 			converted.RejectConfig = reject
 		}
+		if worker.GateConfig != nil {
+			converted.GateConfig = &workers.MockWorkerGateConfig{
+				ArrivedFile: worker.GateConfig.ArrivedFile,
+				ReleaseFile: worker.GateConfig.ReleaseFile,
+				Timeout:     worker.GateConfig.Timeout,
+			}
+		}
 		if worker.Usage != nil {
 			converted.Usage = &workers.MockWorkerUsageConfig{
 				Provider:              worker.Usage.Provider,
@@ -869,6 +876,13 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 			if worker.RejectConfig.ExitCode != nil {
 				value := *worker.RejectConfig.ExitCode
 				converted.RejectConfig.ExitCode = &value
+			}
+		}
+		if worker.GateConfig != nil {
+			converted.GateConfig = &factoryruntime.RuntimeActivationMockGate{
+				ArrivedFile: worker.GateConfig.ArrivedFile,
+				ReleaseFile: worker.GateConfig.ReleaseFile,
+				Timeout:     worker.GateConfig.Timeout,
 			}
 		}
 		if worker.Usage != nil {

@@ -525,6 +525,11 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 			MockWorkers: &workers.MockWorkersConfig{
 				MockWorkers: []workers.MockWorkerConfig{{
 					RunType: workers.MockWorkerRunTypeScript,
+					GateConfig: &workers.MockWorkerGateConfig{
+						ArrivedFile: "/tmp/mock-arrived",
+						ReleaseFile: "/tmp/mock-release",
+						Timeout:     "15s",
+					},
 					ScriptConfig: &workers.MockWorkerScriptConfig{
 						Command: "run",
 						Env:     map[string]string{"TOKEN": "one"},
@@ -543,9 +548,21 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 	}
 	request.Workers.MockWorkers.MockWorkers[0].ScriptConfig.Env["TOKEN"] = "caller-mutated"
 	request.Workers.MockWorkers.MockWorkers[0].ScriptConfig.Args = []string{"caller-mutated"}
+	request.Workers.MockWorkers.MockWorkers[0].GateConfig.Timeout = "caller-mutated"
 	got := activation.Inputs.Workers.MockWorkers.MockWorkers[0]
 	if got.ScriptConfig.Env["TOKEN"] != "one" || len(got.ScriptConfig.Args) != 0 {
 		t.Fatalf("activation inputs retained caller mutation: %#v", got)
+	}
+	if got.GateConfig == nil || got.GateConfig.Timeout != "15s" {
+		t.Fatalf("activation gate inputs retained caller mutation: %#v", got.GateConfig)
+	}
+	opening, err := runtimeOpeningRequestFromActivation(activation)
+	if err != nil {
+		t.Fatalf("runtimeOpeningRequestFromActivation() error = %v", err)
+	}
+	gate := opening.Workers.MockWorkers.MockWorkers[0].GateConfig
+	if gate == nil || gate.ArrivedFile != "/tmp/mock-arrived" || gate.ReleaseFile != "/tmp/mock-release" || gate.Timeout != "15s" {
+		t.Fatalf("opening gate config = %#v, want detached activation values", gate)
 	}
 }
 

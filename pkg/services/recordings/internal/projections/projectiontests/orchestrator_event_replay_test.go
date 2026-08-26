@@ -8,40 +8,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
-
-func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJavaScriptProjection(t *testing.T) {
-	t0 := time.Date(2026, 6, 8, 17, 0, 0, 0, time.UTC)
-	workItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
-	events := []factoryapi.FactoryEvent{
-		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), workItem),
-		workStateChangeEvent(1, t0.Add(2*time.Second), "work-1", "init", "review", "task:init", "task:review", factoryapi.WorkStateChangeSourceAPI),
-	}
-
-	worldState, err := ReconstructFactoryWorldState(events, 1)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	if len(worldState.WorkStateChangesByWorkID["work-1"]) != 1 {
-		t.Fatalf("work state changes = %#v, want one Petri marking change", worldState.WorkStateChangesByWorkID["work-1"])
-	}
-	if worldState.JavaScriptRuntime != nil {
-		t.Fatalf("javascript runtime = %#v, want nil for Petri replay", worldState.JavaScriptRuntime)
-	}
-
-	view := BuildFactoryWorldView(worldState)
-	if view.Runtime.JavaScript != nil {
-		t.Fatalf("javascript projection = %#v, want nil for Petri replay", view.Runtime.JavaScript)
-	}
-	if len(view.Runtime.PlaceTokenCounts) == 0 && len(view.Runtime.CurrentWorkItemsByPlaceID) == 0 {
-		t.Fatalf("petri runtime projection = %#v, want marking occupancy", view.Runtime)
-	}
-}
 
 func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultProjection(t *testing.T) {
 	t0 := time.Date(2026, 6, 8, 17, 10, 0, 0, time.UTC)
@@ -97,32 +67,6 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 	if (*durableResult.ArtifactIds)[0] != (*eventPayload.ArtifactIds)[0] {
 		t.Fatalf("artifact ids differ: %q vs %q", (*durableResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
 	}
-}
-
-func TestReconstructFactoryWorldState_JavaScriptFixtureReconstructsPhaseCheckpointArtifactsWithoutPetriMarking(t *testing.T) {
-	t0 := time.Date(2026, 6, 8, 17, 5, 0, 0, time.UTC)
-	checkpointTime := t0.Add(3 * time.Second)
-	artifactTime := t0.Add(4 * time.Second)
-	events := []factoryapi.FactoryEvent{
-		javascriptRunRequestEvent(t0),
-		orchestratorPhaseChangedEvent(1, t0.Add(2*time.Second), "plan", "", factoryapi.ACTIVE, "Planning workflow"),
-		orchestratorPhaseChangedEvent(2, t0.Add(2500*time.Millisecond), "execute", "plan", factoryapi.ACTIVE, "Entered execute phase"),
-		orchestratorCheckpointWrittenEvent(2, checkpointTime),
-		javascriptArtifactCreatedEvent(2, artifactTime),
-	}
-
-	worldState, err := ReconstructFactoryWorldState(events, 2)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	assertJavaScriptWorldReplay(t, worldState)
-}
-
-func assertJavaScriptWorldReplay(t *testing.T, worldState interfaces.FactoryWorldState) {
-	t.Helper()
-	assertJavaScriptWorldStateReplay(t, worldState)
-	view := BuildFactoryWorldView(worldState)
-	assertJavaScriptWorldViewReplay(t, view)
 }
 
 func assertJavaScriptWorldStateReplay(t *testing.T, worldState interfaces.FactoryWorldState) {

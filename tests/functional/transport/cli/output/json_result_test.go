@@ -28,6 +28,7 @@ const (
 // stream ends with an InvocationResponse that decodes through the public
 // contract with completed terminal status.
 func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
+	t.Parallel()
 	stdout := runGoalSingleJSON(t)
 	response := decodeSingleJSONInvocationResponse(t, stdout)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
@@ -43,6 +44,7 @@ func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
 // with empty stdout, and terminal invocation failures end their stdout stream
 // with a failed InvocationResponse plus one stderr ErrorResponse.
 func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
+	t.Parallel()
 	t.Run("pre-terminal failure leaves stdout empty with one stderr ErrorResponse", func(t *testing.T) {
 		stdout, stderr, err := runSingleJSONInvocation(t, []string{
 			"you", "--json", "run", "--named", "@you/missing", "--no-record",
@@ -118,6 +120,7 @@ func jsonTerminalFailureFactoryPath(t *testing.T) string {
 // invocation arguments produce one standard client-error response in both
 // normal and quiet modes, before provider execution or runtime activation.
 func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		args     []string
@@ -187,6 +190,7 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 // failure payloads decode through the public contract and omit private runtime
 // vocabulary such as Petri internals and provider-session chunk fields.
 func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
+	t.Parallel()
 	t.Run("success stdout stays on public InvocationResponse fields", func(t *testing.T) {
 		stdout := runGoalSingleJSON(t)
 		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
@@ -209,6 +213,7 @@ func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
 // output selectors fail before product activation with one stderr ErrorResponse
 // and no product side effects.
 func TestCLIJSONOutputSelectionFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		args     []string

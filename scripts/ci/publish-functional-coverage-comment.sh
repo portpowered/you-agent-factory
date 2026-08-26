@@ -2,7 +2,7 @@
 
 # Renders the Backend Functional Coverage pull request comment body from the
 # coverage and timing artifacts the functional tier publishes. This is a
-# reporting-only sibling of publish-functional-test-summary.sh and is
+# reporting-only publication step and is
 # deliberately fail-open: a missing artifact, a malformed document, or a
 # missing node runtime writes an explicit "unavailable" body (or nothing) and
 # exits 0. A reporting failure must never turn a passing suite red.

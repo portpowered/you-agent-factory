@@ -147,6 +147,9 @@ func planCoverageManifestUpdate(manifest coverageManifest, minimums map[string]p
 	}
 	updates := make([]coverageManifestUpdate, 0, len(packages))
 	for _, importPath := range packages {
+		if !coverageRequirementApplies(manifest.Lane, importPath) {
+			continue
+		}
 		entry, found := existing[importPath]
 		if !found {
 			totals, ok := minimums[importPath]

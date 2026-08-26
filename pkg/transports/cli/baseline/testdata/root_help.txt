@@ -5,7 +5,7 @@ CPN-based workflow factory CLI for running factories, submitting work, and inspe
 
 How to use:
 Run you run --work ./docs/examples/startup-work.json to start the exact Current Factory at ./factory/factory.json with explicit Work and no local server.
-Use you server to serve that Current Factory API and dashboard continuously, or add --with-server or --with-site to own a server only for one run. See you <cmd> --help for subcommand details.
+Use you server for continuous, non-resumable hosting of the Current Factory API and dashboard. For restart-surviving hosting, use you run --with-server --continuously --record <path>. Add --with-server or --with-site to host one run. See you <cmd> --help for subcommand details.
 
 Agents:
 Start with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.
@@ -37,7 +37,7 @@ Available Commands:
   session         List, open, and close factory sessions on a running host
   submit          Submit work to a running factory
   work            Inspect work from a running factory
-  worker-sessions Inspect Worker Sessions for Work
+  worker-sessions Inspect Worker Sessions
   workers         Manage worker execution integrations
 
 Flags:

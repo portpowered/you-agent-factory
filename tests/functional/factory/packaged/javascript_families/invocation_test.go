@@ -97,6 +97,7 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 	}
 }
 
+// TestPackagedSpawnRunsAntigravityChildrenWithExactModel proves packaged spawning preserves the exact Antigravity child model.
 func TestPackagedSpawnRunsAntigravityChildrenWithExactModel(t *testing.T) {
 	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
 		t.Run("executorProvider="+executorProvider, func(t *testing.T) {

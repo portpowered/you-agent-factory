@@ -83,6 +83,12 @@ func prepareCoverageRunWithFunctionalMetadata(
 		// non-instrumented invocation is cached.
 		"-count=1",
 	}
+	if cfg.suite == functionalCoverageSuite {
+		// Package workers and t.Parallel workers multiply. An explicit bound
+		// prevents CPU-count-derived -p values from spawning hundreds of
+		// simultaneous instrumented root processes on larger hosts.
+		coverageTestArgs = append(coverageTestArgs, "-parallel=2")
+	}
 	if cfg.short {
 		coverageTestArgs = append(coverageTestArgs, "-short")
 	}

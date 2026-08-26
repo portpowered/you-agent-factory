@@ -1,5 +1,13 @@
 You are an autonomous coding agent working on a software project.
 
+## Required standards
+
+Before changing code, read `factory/docs/standards/implementation-standards.md`,
+`factory/docs/standards/task-template.md`, and the repository-wide standards
+relevant to the affected surfaces. The PRD defines scope; these standards define
+how you preserve the behavior lane's executable spine, produce evidence, handle
+scope growth, and hand work to review.
+
 ## Your Task
 
 1. Read the PRD at `prd.json` (in the current working directory)
@@ -17,6 +25,18 @@ You are an autonomous coding agent working on a software project.
 ## Important
 
 - Work on ONE story per iteration
+- Treat that story as one behavior slice or justified bounded enabler. Implement
+  the contract, backend, UI, tests, and documentation together when they are
+  jointly required for its observable outcome; do not defer the story's direct
+  behavioral proof to a later test task or to final loopback.
+- Run the story's declared verification at its highest feasible scope and
+  dependency fidelity. Record the exact procedure, artifact, observed result,
+  property proved, and remaining unproven edges. Do not claim a real edge from
+  substitute evidence.
+- Preserve the parent behavior lane's executable spine. If reality contradicts
+  the task, a prerequisite or authority is missing, or the smallest correct fix
+  materially exceeds the story, record a structured blocker and smallest plan
+  delta instead of silently broadening scope.
 - Commit frequently
 - Keep CI green: fix failures your diff caused. If a required check fails on a
   test in a package your diff does not touch and it reproduces on the base

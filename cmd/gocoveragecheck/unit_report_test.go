@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -70,14 +71,11 @@ func unitReportTimingEvents(t *testing.T, outcome string) string {
 
 func unitReportManifest(t *testing.T) string {
 	t.Helper()
-	// Measured coverage is config 25.00, service 90.00, wire 100.00, so these
-	// floors put all three inside the near-floor band with headroom ordering
-	// (service 1.00, wire 1.00, config 1.50) deliberately unequal to import-path
-	// ordering (config, service, wire).
+	// Wire remains in the requested coverage and test sets to prove the unit
+	// policy removes its coverage requirement without skipping its tests.
 	return writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
 		{importPath: modulePath + "/pkg/config", minimum: "23.50"},
 		{importPath: modulePath + "/pkg/service", minimum: "89.00"},
-		{importPath: modulePath + "/pkg/wire", minimum: "99.00"},
 	})
 }
 
@@ -112,6 +110,14 @@ func captureUnitReportRun(t *testing.T, cfg config, stream string, commandErr er
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
 		if invocation.name != "go" || len(invocation.args) == 0 || invocation.args[0] != "test" {
 			return "", "", fmt.Errorf("unexpected command %q %v", invocation.name, invocation.args)
+		}
+		if !slices.Contains(invocation.args, "./pkg/...") {
+			return "", "", fmt.Errorf("unit test invocation dropped wire-containing test package set: %v", invocation.args)
+		}
+		for _, arg := range invocation.args {
+			if strings.HasPrefix(arg, "-coverpkg=") && strings.Contains(arg, modulePath+"/pkg/wire") {
+				return "", "", fmt.Errorf("unit coverage invocation still requires wire coverage: %s", arg)
+			}
 		}
 		profilePath := helperCoverProfilePath(invocation.args[1:])
 		if profilePath == "" {
@@ -157,8 +163,8 @@ func TestUnitCoverageLaneWritesCoverageAndTimingJSON(t *testing.T) {
 		} `json:"packages"`
 	}
 	readUnitReportJSON(t, coveragePath, &coverage)
-	if len(coverage.Packages) != len(unitReportCoverPackages) {
-		t.Fatalf("coverage summary packages = %d, want %d", len(coverage.Packages), len(unitReportCoverPackages))
+	if len(coverage.Packages) != 2 {
+		t.Fatalf("coverage summary packages = %d, want the two non-wire packages", len(coverage.Packages))
 	}
 	floors := 0
 	for _, entry := range coverage.Packages {
@@ -166,8 +172,8 @@ func TestUnitCoverageLaneWritesCoverageAndTimingJSON(t *testing.T) {
 			floors++
 		}
 	}
-	if floors != len(unitReportCoverPackages) {
-		t.Fatalf("coverage summary carried %d package floors, want %d", floors, len(unitReportCoverPackages))
+	if floors != 2 {
+		t.Fatalf("coverage summary carried %d package floors, want two", floors)
 	}
 
 	var timing struct {
@@ -221,10 +227,8 @@ func TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten(t *tes
 		}
 	}
 
-	// All three packages sit inside the near-floor band with headroom service
-	// 1.00, wire 1.00, config 1.50. Ordering is headroom ascending with an
-	// import-path tiebreak, so the block must read service, wire, config —
-	// deliberately not the import-path order config, service, wire.
+	// Both required packages sit inside the near-floor band. Ordering is
+	// headroom ascending, so the block must read service, config.
 	block := stdout[strings.Index(stdout, "Unit package coverage verdict:"):]
 	var reported []string
 	for _, line := range strings.Split(block, "\n") {
@@ -232,7 +236,7 @@ func TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten(t *tes
 			reported = append(reported, strings.Fields(importPath)[0])
 		}
 	}
-	want := []string{modulePath + "/pkg/service", modulePath + "/pkg/wire", modulePath + "/pkg/config"}
+	want := []string{modulePath + "/pkg/service", modulePath + "/pkg/config"}
 	if strings.Join(reported, ",") != strings.Join(want, ",") {
 		t.Fatalf("near-floor order = %v, want headroom ascending %v:\n%s", reported, want, stdout)
 	}
@@ -245,8 +249,8 @@ func TestUnitCoverageLaneCollapsesPerPackageLinesWhenTheArtifactIsWritten(t *tes
 		} `json:"packages"`
 	}
 	readUnitReportJSON(t, coveragePath, &coverage)
-	if len(coverage.Packages) != len(unitReportCoverPackages) {
-		t.Fatalf("collapsed log lost packages: artifact carries %d, want %d", len(coverage.Packages), len(unitReportCoverPackages))
+	if len(coverage.Packages) != 2 {
+		t.Fatalf("collapsed log carries %d packages, want the two non-wire packages", len(coverage.Packages))
 	}
 }
 

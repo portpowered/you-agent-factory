@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
+	_ "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 )
 
 func TestComposedLifecycleHostExercisesVersionSurface(t *testing.T) {

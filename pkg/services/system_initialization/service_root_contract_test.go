@@ -194,10 +194,6 @@ func assertSealInitializePartialFailureWithRollbackFacts(
 		Message: "packaged factory install failed",
 		Facts: []systeminitialization.RollbackFact{
 			{
-				Step:    systeminitialization.InitializeStepLegacyMigration,
-				Outcome: systeminitialization.RollbackStepCompleted,
-			},
-			{
 				Step:    systeminitialization.InitializeStepSystemConfig,
 				Outcome: systeminitialization.RollbackStepRolledBackOrPreserved,
 			},
@@ -223,11 +219,9 @@ func assertSealInitializePartialFailureWithRollbackFacts(
 	if !errors.As(err, &got) {
 		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
 	}
-	if len(got.Facts) != 3 ||
-		got.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-		got.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-		got.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
-		got.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
+	if len(got.Facts) != 2 ||
+		got.Facts[0].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		got.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", got.Facts)
 	}
 }
@@ -269,7 +263,7 @@ func TestRootContract_ContractValuesStayInertWhenHeld(t *testing.T) {
 	}
 
 	// Holding contract values must not require a Service implementation or
-	// perform Settings persist, packaged install, legacy migration, Wire, or
+	// perform Settings persist, packaged install, Wire, or
 	// process-initializer work.
 	var (
 		_ systeminitialization.Request = request
@@ -427,10 +421,6 @@ func TestRootService_Characterization_InitializePartialFailureWithRollbackFacts(
 		Message: "packaged factory install failed",
 		Facts: []systeminitialization.RollbackFact{
 			{
-				Step:    systeminitialization.InitializeStepLegacyMigration,
-				Outcome: systeminitialization.RollbackStepCompleted,
-			},
-			{
 				Step:    systeminitialization.InitializeStepSystemConfig,
 				Outcome: systeminitialization.RollbackStepRolledBackOrPreserved,
 			},
@@ -458,11 +448,9 @@ func TestRootService_Characterization_InitializePartialFailureWithRollbackFacts(
 	if !errors.As(err, &got) {
 		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
 	}
-	if len(got.Facts) != 3 ||
-		got.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-		got.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-		got.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
-		got.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
+	if len(got.Facts) != 2 ||
+		got.Facts[0].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		got.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", got.Facts)
 	}
 }

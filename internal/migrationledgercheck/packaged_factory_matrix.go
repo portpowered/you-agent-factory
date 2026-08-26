@@ -3,12 +3,12 @@ package migrationledgercheck
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 )
 
 const packagedFactoryInvocationMatrixPrefix = "tests/functional/factory/packaged/"
@@ -17,7 +17,7 @@ const packagedFactoryInvocationMatrixPrefix = "tests/functional/factory/packaged
 // slug is bound to a declared packaged invocation-matrix destination cell in the
 // functional-test checklist.
 func CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath string) error {
-	embeddedSlugs, err := embeddedPackagedFactorySlugs()
+	embeddedSlugs, err := publishedPackagedFactorySlugs(repoRoot)
 	if err != nil {
 		return err
 	}
@@ -48,14 +48,15 @@ func CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath string) error 
 	return nil
 }
 
-func embeddedPackagedFactorySlugs() ([]string, error) {
+func publishedPackagedFactorySlugs(repoRoot string) ([]string, error) {
+	publicationRoot := filepath.Join(repoRoot, "packages", "packaged-factories")
 	inventory, err := packagedfactorycatalog.Discover(
 		context.Background(),
-		packagedfactories.Source(),
+		os.DirFS(publicationRoot),
 		"factories",
 	)
 	if err != nil {
-		return nil, fmt.Errorf("embedded packaged Factory inventory: %w", err)
+		return nil, fmt.Errorf("published packaged Factory inventory: %w", err)
 	}
 	slugs := make([]string, len(inventory.Entries))
 	for index, entry := range inventory.Entries {

@@ -638,7 +638,7 @@ type successfulWriteCapture struct {
 func TestReplayWriteAmplificationMeasurement(t *testing.T) {
 	t.Parallel()
 
-	counts := []int{10, 100, 1000}
+	counts := []int{10, 100, 300}
 	measurements := make([]writeAmplificationMeasurement, 0, len(counts))
 	for _, eventCount := range counts {
 		v1 := measureReplaySnapshotWrites(t, eventCount, false)
@@ -676,14 +676,19 @@ func TestReplayWriteAmplificationMeasurement(t *testing.T) {
 		assertMeasuredReplayArtifacts(t, eventCount, v1.data, v2.data)
 	}
 
-	// Growth is measured against the preceding tenfold corpus size. A v1
-	// whole-file flush therefore grows approximately 100x, while v2 grows
-	// approximately 10x plus its constant framing overhead.
-	if measurements[1].v1Growth <= 25 || measurements[2].v1Growth <= 25 {
-		t.Fatalf("v1 growth ratios = %.1fx, %.1fx, want quadratic amplification", measurements[1].v1Growth, measurements[2].v1Growth)
-	}
-	if measurements[1].v2Growth >= 20 || measurements[2].v2Growth >= 20 {
-		t.Fatalf("v2 growth ratios = %.1fx, %.1fx, want linear growth", measurements[1].v2Growth, measurements[2].v2Growth)
+	// Growth is measured against the preceding corpus size. V1 rewrites the
+	// whole history after every event and must grow quadratically, while v2
+	// appends each event once and must stay near linear growth. Using a bounded
+	// final corpus keeps this unit regression test fast under coverage; larger
+	// throughput measurements belong in the performance lane.
+	for index := 1; index < len(measurements); index++ {
+		scale := float64(measurements[index].eventCount) / float64(measurements[index-1].eventCount)
+		if measurements[index].v1Growth <= scale*scale/2 {
+			t.Fatalf("N=%d v1 growth ratio = %.1fx, want quadratic amplification for %.1fx corpus growth", measurements[index].eventCount, measurements[index].v1Growth, scale)
+		}
+		if measurements[index].v2Growth >= scale*2 {
+			t.Fatalf("N=%d v2 growth ratio = %.1fx, want linear growth for %.1fx corpus growth", measurements[index].eventCount, measurements[index].v2Growth, scale)
+		}
 	}
 	for _, measurement := range measurements {
 		if measurement.improvement <= 1 {
@@ -692,7 +697,7 @@ func TestReplayWriteAmplificationMeasurement(t *testing.T) {
 	}
 
 	t.Log("flush schedule: one snapshot flush after every event; final flush adds one terminal record")
-	t.Log("growth columns: total submitted bytes divided by the preceding tenfold corpus total; first row is baseline")
+	t.Log("growth columns: total submitted bytes divided by the preceding corpus total; first row is baseline")
 	t.Log("N | v1 bytes written | v2 bytes written | v1 growth | v2 growth | improvement ratio")
 	for index, measurement := range measurements {
 		v1Growth := "baseline"

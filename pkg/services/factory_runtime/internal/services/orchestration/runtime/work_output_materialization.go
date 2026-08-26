@@ -359,29 +359,6 @@ func providerSessionFromContinuation(
 	}
 }
 
-// materializeWorkerOutputForDispatch validates Worker-proposed output through
-// Work before the result enters Runtime state. Invalid proposals flip the
-// dispatch to FAILED without carrying RecordedOutputWork into mutations.
-func materializeWorkerOutputForDispatch(
-	ctx context.Context,
-	workService work.Service,
-	net *state.Net,
-	idGenerator work.RequestIDGenerator,
-	request workerexecution.WorkstationDispatchRequest,
-	result workerexecution.WorkResult,
-) workerexecution.WorkResult {
-	return applyMaterializedWorkerOutput(
-		ctx,
-		workService,
-		net,
-		idGenerator,
-		request.Execution.Dispatch,
-		result,
-		workerexecution.ProposedOutputFromLegacyWorkResult(result),
-		false,
-	)
-}
-
 // materializeWorkerOutputForDispatchWithProposal preserves the detached
 // Execute proposal until Runtime has handed it to Work. Legacy WorkResult
 // callers continue through the compatibility mapper above.

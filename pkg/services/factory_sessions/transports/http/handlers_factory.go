@@ -10,11 +10,12 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	validationentry "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryvalidation"
 	"go.uber.org/zap"
 )
 
+// TODO: this should be done under factory validations, why is this here?
 // ValidateFactory handles POST /factory-validations using factorydefinitionentry.ValidateFactoryAPI
 // with ProfileTopology (structural checks only; no canonical JSON load).
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +30,7 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	}
 	req := decoded.Value
 
-	result, err := factorydefinitionentry.ValidateFactoryAPI(r.Context(), req, s.factoryValidation)
+	result, err := validationentry.ValidateFactoryAPI(r.Context(), req, s.factoryValidation)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")

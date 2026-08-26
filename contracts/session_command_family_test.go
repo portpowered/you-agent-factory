@@ -48,7 +48,7 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 	}{
 		{id: "you.session.cancel", operationID: "cancelFactorySession"},
 		{id: "you.session.create", operationID: "openFactorySession", portMode: true},
-		{id: "you.session.delete", operationID: "closeFactorySession", argRequired: true, portMode: true},
+		{id: "you.session.delete", operationID: "closeFactorySession", argRequired: true},
 		{id: "you.session.list", operationID: "listFactorySessions", portMode: true},
 		{id: "you.session.pause", operationID: "pauseFactorySession"},
 		{id: "you.session.resource.set", operationID: "setFactorySessionResourceCapacity", argRequired: true},

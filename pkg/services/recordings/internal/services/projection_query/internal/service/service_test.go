@@ -23,12 +23,6 @@ func TestServiceProvidesProjectionQueryCapability(t *testing.T) {
 	if dashboard.Session.HasData {
 		t.Fatalf("dashboard session = %#v, want no projected data", dashboard.Session)
 	}
-	if pauses := capability.ProjectActiveThrottlePauses(
-		factorydefinitions.InitialStructurePayload{},
-		nil,
-	); len(pauses) != 0 {
-		t.Fatalf("active throttle pauses = %#v, want empty", pauses)
-	}
 	requests := capability.ProjectWorkstationRequests(state)
 	if requests.WorkstationRequestsByDispatchId != nil {
 		t.Fatalf("workstation request projection = %#v, want empty", requests)

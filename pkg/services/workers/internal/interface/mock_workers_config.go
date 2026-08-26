@@ -24,6 +24,7 @@ type MockWorkerConfig = workers.MockWorkerConfig
 type MockWorkInputSelector = workers.MockWorkInputSelector
 type MockWorkerScriptConfig = workers.MockWorkerScriptConfig
 type MockWorkerRejectConfig = workers.MockWorkerRejectConfig
+type MockWorkerGateConfig = workers.MockWorkerGateConfig
 type MockWorkerUsageConfig = workers.MockWorkerUsageConfig
 type MockWorkersConfigFileSystem = workers.MockWorkersConfigFileSystem
 type MockWorkersConfigLoader = workers.MockWorkersConfigLoader

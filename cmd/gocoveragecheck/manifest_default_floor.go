@@ -59,6 +59,9 @@ func (manifest coverageManifest) defaultFloor() coverageFloor {
 func manifestPackageSet(manifest coverageManifest) map[string]struct{} {
 	listed := make(map[string]struct{}, len(manifest.Packages))
 	for _, entry := range manifest.Packages {
+		if !coverageRequirementApplies(manifest.Lane, entry.Package) {
+			continue
+		}
 		listed[entry.Package] = struct{}{}
 	}
 	return listed
@@ -89,6 +92,9 @@ func checkCoverageDefaultFloorWithHolds(
 	failures := make([]string, 0)
 	warnings := make([]string, 0)
 	for _, importPath := range slices.Sorted(maps.Keys(totals)) {
+		if !coverageRequirementApplies(manifest.Lane, importPath) {
+			continue
+		}
 		if _, explicit := listed[importPath]; explicit {
 			continue
 		}
@@ -184,6 +190,10 @@ func coverageManifestGatedPackages(manifest coverageManifest, totals map[string]
 	holds := coverageManifestFloorHoldMap(manifest)
 	floor := manifest.defaultFloor()
 	for importPath, actual := range totals {
+		if !coverageRequirementApplies(manifest.Lane, importPath) {
+			delete(gates, importPath)
+			continue
+		}
 		if _, explicit := gates[importPath]; explicit {
 			continue
 		}

@@ -42,7 +42,7 @@ all temporary baseline entries from the accepted public scope.
 ## Planning basis
 
 This program follows
-`docs/internal/standards/code/planning-standards.md`:
+`factory/docs/standards/planning-standards.md`:
 
 - stories describe customer-visible comprehension and task-completion behavior;
 - enabling stories are limited to the standard and enforcement needed to make

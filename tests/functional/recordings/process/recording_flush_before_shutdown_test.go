@@ -22,10 +22,6 @@ import (
 
 const (
 	recordingShutdownObservationTimeout = 15 * time.Second
-	// Runtime-generated UUID and timestamp fields make raw JSON byte totals
-	// vary slightly between identical process runs. A larger difference would
-	// indicate an extra periodic snapshot rather than representation variance.
-	steadyStateByteVarianceBudget int64 = 256
 )
 
 // TestRecordingFlushBeforeProcessExecuteReturns proves the reusable lifecycle
@@ -113,91 +109,61 @@ func TestRecordingFlushBeforeProcessExecuteReturns(t *testing.T) {
 	)
 }
 
-// TestRecordingSteadyStateByteVolumeMatchesAcrossIdenticalEventPrefixes
-// compares two independent runs at the same durable N-event prefix before
-// either orderly stop begins. This protects the existing append/transition
-// cadence from an extra write; the final flush is measured separately above.
+// TestRecordingSteadyStateByteVolumeMatchesAcrossIdenticalEventPrefixes proves
+// that a settled recording does not rewrite itself without new events. This
+// directly protects against an extra periodic snapshot without comparing the
+// nondeterministic batching cadence of two independent asynchronous writers;
+// the final orderly-stop flush is measured separately above.
 func TestRecordingSteadyStateByteVolumeMatchesAcrossIdenticalEventPrefixes(t *testing.T) {
 	const steadyStateEventCount = 2
+	dir := support.ScaffoldSingleStepFactory(t, "recording-steady-state-byte-volume")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	recordPath := filepath.Join(t.TempDir(), "steady-state.replay.json")
+	runner := newRecordingShutdownBlockingRunner()
+	writer := newRecordingShutdownWriteProbe()
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		Args:                      []string{"--record", recordPath},
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+			RecordingWriteFile:    writer.WriteFile,
+		},
+	})
 
-	type measurement struct {
-		events       int
-		writeCalls   int
-		bytesWritten int64
+	for index := 0; index < steadyStateEventCount; index++ {
+		submitRecordingShutdownWork(t, server, fmt.Sprintf("recording-steady-state-work-%d", index))
 	}
-	measurements := make([]measurement, 0, 2)
-	for _, label := range []string{"control", "orderly-stop candidate"} {
-		label := label
-		t.Run(label, func(t *testing.T) {
-			dir := support.ScaffoldSingleStepFactory(t, "recording-steady-state-byte-volume")
-			support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-			recordPath := filepath.Join(t.TempDir(), "steady-state.replay.json")
-			runner := newRecordingShutdownBlockingRunner()
-			writer := newRecordingShutdownWriteProbe()
-			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-				FactoryDir:                dir,
-				Args:                      []string{"--record", recordPath},
-				WaitForServiceModeRuntime: true,
-				Edges: serviceedges.Edges{
-					ProviderCommandRunner: runner,
-					RecordingWriteFile:    writer.WriteFile,
-				},
-			})
-
-			for index := 0; index < steadyStateEventCount; index++ {
-				submitRecordingShutdownWork(t, server, fmt.Sprintf("recording-steady-state-work-%d", index))
-			}
-			awaitRecordingShutdownStarts(t, runner.starts, steadyStateEventCount, "steady-state provider dispatches")
-			before, err := waitForStandaloneRecordingEventCount(
-				recordPath,
-				"DISPATCH_REQUEST",
-				steadyStateEventCount,
-				recordingShutdownObservationTimeout,
-			)
-			if err != nil {
-				t.Fatalf("wait for steady-state durable event prefix: %v", err)
-			}
-			measurements = append(measurements, measurement{
-				events:       len(before.Events),
-				writeCalls:   writer.WriteCount(),
-				bytesWritten: writer.BytesWritten(),
-			})
-			t.Logf(
-				"steady-state recording measurement label=%s event_prefix=%d write_calls=%d bytes_written=%d",
-				label,
-				len(before.Events),
-				writer.WriteCount(),
-				writer.BytesWritten(),
-			)
-			server.Stop(t)
-		})
+	awaitRecordingShutdownStarts(t, runner.starts, steadyStateEventCount, "steady-state provider dispatches")
+	if _, err := waitForStandaloneRecordingEventCount(
+		recordPath,
+		"DISPATCH_REQUEST",
+		steadyStateEventCount,
+		recordingShutdownObservationTimeout,
+	); err != nil {
+		t.Fatalf("wait for steady-state durable event prefix: %v", err)
 	}
-
-	if len(measurements) != 2 {
-		t.Fatalf("steady-state measurements = %d, want 2", len(measurements))
+	awaitRecordingShutdownWritesToSettle(t, writer, 750*time.Millisecond)
+	before, err := readStandaloneRecording(recordPath)
+	if err != nil {
+		t.Fatalf("read settled steady-state recording: %v", err)
 	}
-	control, candidate := measurements[0], measurements[1]
-	byteDelta := control.bytesWritten - candidate.bytesWritten
-	if byteDelta < 0 {
-		byteDelta = -byteDelta
+	writesBefore := writer.WriteCount()
+	bytesBefore := writer.BytesWritten()
+	time.Sleep(500 * time.Millisecond)
+	after, err := readStandaloneRecording(recordPath)
+	if err != nil {
+		t.Fatalf("read steady-state recording after observation window: %v", err)
 	}
-	if control.events != candidate.events || control.writeCalls != candidate.writeCalls || byteDelta > steadyStateByteVarianceBudget {
+	if len(after.Events) != len(before.Events) || writer.WriteCount() != writesBefore || writer.BytesWritten() != bytesBefore {
 		t.Fatalf(
-			"steady-state byte comparison differs before orderly stop: control=(events=%d writes=%d bytes=%d) candidate=(events=%d writes=%d bytes=%d) byte_delta=%d budget=%d",
-			control.events, control.writeCalls, control.bytesWritten,
-			candidate.events, candidate.writeCalls, candidate.bytesWritten,
-			byteDelta, steadyStateByteVarianceBudget,
+			"settled recording changed without new events: before=(events=%d writes=%d bytes=%d) after=(events=%d writes=%d bytes=%d)",
+			len(before.Events), writesBefore, bytesBefore,
+			len(after.Events), writer.WriteCount(), writer.BytesWritten(),
 		)
 	}
-	t.Logf(
-		"steady-state byte comparison control_bytes=%d candidate_bytes=%d byte_delta=%d control_writes=%d candidate_writes=%d event_prefix=%d; final flush is measured only after this identical prefix",
-		control.bytesWritten,
-		candidate.bytesWritten,
-		byteDelta,
-		control.writeCalls,
-		candidate.writeCalls,
-		control.events,
-	)
+	t.Logf("steady-state recording remained unchanged events=%d writes=%d bytes=%d", len(before.Events), writesBefore, bytesBefore)
+	server.Stop(t)
 }
 
 func submitRecordingShutdownWork(t testing.TB, server *support.FunctionalAPIServer, name string) {
@@ -280,6 +246,26 @@ func (probe *recordingShutdownWriteProbe) BytesWritten() int64 {
 	probe.mu.Lock()
 	defer probe.mu.Unlock()
 	return probe.bytesWritten
+}
+
+func awaitRecordingShutdownWritesToSettle(t testing.TB, probe *recordingShutdownWriteProbe, quietPeriod time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(recordingShutdownObservationTimeout)
+	lastWrites := probe.WriteCount()
+	unchangedSince := time.Now()
+	for time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+		writes := probe.WriteCount()
+		if writes != lastWrites {
+			lastWrites = writes
+			unchangedSince = time.Now()
+			continue
+		}
+		if time.Since(unchangedSince) >= quietPeriod {
+			return
+		}
+	}
+	t.Fatalf("recording writes did not settle: writes=%d", lastWrites)
 }
 
 func awaitRecordingShutdownSignal(t testing.TB, signal <-chan struct{}, name string) {

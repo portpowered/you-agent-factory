@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 )
@@ -135,13 +134,6 @@ func sanitizeToolDiagnosticDetail(detail string) string {
 		return trimmed
 	}
 	return trimmed[:toolDiagnosticMaxLen] + "..."
-}
-
-func toolFailureDetail(toolName, arguments string, err error) string {
-	if err == nil {
-		return ""
-	}
-	return toolFailureDetailFromReason(toolName, arguments, toolFailureReason(err))
 }
 
 func toolFailureDetailFromReason(toolName, arguments, reason string) string {
@@ -306,75 +298,6 @@ func toolDefinitionsForPolicy(policy string) []messages.ToolDefinition {
 	}
 }
 
-// PolicyToolExecutor enforces agent tool policy and records safe diagnostics.
-type PolicyToolExecutor struct {
-	policy     string
-	workingDir string
-	recorder   *ToolDiagnosticRecorder
-	fileSystem workerexecution.AgentToolFileSystem
-}
-
-func NewPolicyToolExecutor(
-	fileSystem workerexecution.AgentToolFileSystem,
-	policy string,
-	workingDir string,
-	recorder *ToolDiagnosticRecorder,
-) *PolicyToolExecutor {
-	return &PolicyToolExecutor{
-		policy:     workerconfig.NormalizeAgentToolPolicy(policy),
-		workingDir: strings.TrimSpace(workingDir),
-		recorder:   recorder,
-		fileSystem: fileSystem,
-	}
-}
-
-func (executor *PolicyToolExecutor) Execute(ctx context.Context, call messages.ToolCall) (messages.ToolCallResponse, error) {
-	_ = ctx
-	toolName := strings.TrimSpace(call.Name)
-	executor.recorder.Record(toolName, "start", "")
-
-	switch executor.policy {
-	case workerconfig.AgentToolPolicyDisabled:
-		executor.recorder.Record(toolName, "denied", "policy=disabled")
-		return messages.ToolCallResponse{}, fmt.Errorf("%w: tools are disabled for this agent worker", ErrToolPolicyDenied)
-	case workerconfig.AgentToolPolicyReadOnly:
-		if toolName == ToolNameWriteFile {
-			executor.recorder.Record(toolName, "denied", "policy=read_only")
-			return messages.ToolCallResponse{}, fmt.Errorf("%w: write tools are not allowed in read-only mode", ErrToolPolicyDenied)
-		}
-	case workerconfig.AgentToolPolicyEnabled:
-	default:
-		executor.recorder.Record(toolName, "denied", "policy=invalid")
-		return messages.ToolCallResponse{}, fmt.Errorf("%w: unsupported tool policy %q", ErrToolPolicyDenied, executor.policy)
-	}
-
-	content, err := executor.executeBoundedTool(toolName, call.Arguments)
-	if err != nil {
-		safeErr := newToolRuntimeError(toolName, call.Arguments, err)
-		executor.recorder.Record(toolName, "failure", toolFailureDetailFromReason(toolName, call.Arguments, safeErr.reason))
-		return messages.ToolCallResponse{}, safeErr
-	}
-	executor.recorder.Record(toolName, "success", contentSummary(content))
-	return messages.ToolCallResponse{
-		ToolCallID: call.ID,
-		Name:       toolName,
-		Content:    content,
-	}, nil
-}
-
-func (executor *PolicyToolExecutor) executeBoundedTool(toolName, arguments string) (string, error) {
-	switch toolName {
-	case ToolNameReadFile:
-		return executor.readFile(arguments)
-	case ToolNameListDirectory:
-		return executor.listDirectory(arguments)
-	case ToolNameWriteFile:
-		return executor.writeFile(arguments)
-	default:
-		return "", fmt.Errorf("%w: %s", ErrToolNotSupported, toolName)
-	}
-}
-
 type pathArgument struct {
 	Path string `json:"path"`
 }
@@ -382,126 +305,6 @@ type pathArgument struct {
 type writeFileArgument struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
-}
-
-func (executor *PolicyToolExecutor) readFile(arguments string) (string, error) {
-	var args pathArgument
-	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-		return "", fmt.Errorf("read_file arguments must be JSON with path: %w", err)
-	}
-	path, err := executor.resolveBoundedPath(args.Path)
-	if err != nil {
-		return "", err
-	}
-	if executor.fileSystem == nil {
-		return "", ErrToolFileSystemRequired
-	}
-	data, err := executor.fileSystem.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read_file failed: %w", err)
-	}
-	return string(data), nil
-}
-
-func (executor *PolicyToolExecutor) listDirectory(arguments string) (string, error) {
-	var args pathArgument
-	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-		return "", fmt.Errorf("list_directory arguments must be JSON with path: %w", err)
-	}
-	path, err := executor.resolveBoundedPath(args.Path)
-	if err != nil {
-		return "", err
-	}
-	if executor.fileSystem == nil {
-		return "", ErrToolFileSystemRequired
-	}
-	entries, err := executor.fileSystem.ReadDir(path)
-	if err != nil {
-		return "", fmt.Errorf("list_directory failed: %w", err)
-	}
-	names := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			names = append(names, entry.Name()+"/")
-			continue
-		}
-		names = append(names, entry.Name())
-	}
-	return strings.Join(names, "\n"), nil
-}
-
-func (executor *PolicyToolExecutor) writeFile(arguments string) (string, error) {
-	var args writeFileArgument
-	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
-		return "", fmt.Errorf("write_file arguments must be JSON with path and content: %w", err)
-	}
-	path, err := executor.resolveBoundedPath(args.Path)
-	if err != nil {
-		return "", err
-	}
-	if executor.fileSystem == nil {
-		return "", ErrToolFileSystemRequired
-	}
-	if err := executor.fileSystem.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("write_file failed creating parent directories: %w", err)
-	}
-	if err := executor.fileSystem.WriteFile(path, []byte(args.Content), 0o644); err != nil {
-		return "", fmt.Errorf("write_file failed: %w", err)
-	}
-	return fmt.Sprintf("wrote %d bytes", len(args.Content)), nil
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func (executor *PolicyToolExecutor) resolveBoundedPath(relativePath string) (string, error) {
-	if executor == nil || executor.fileSystem == nil {
-		return "", ErrToolFileSystemRequired
-	}
-	trimmed := strings.TrimSpace(relativePath)
-	if trimmed == "" {
-		return "", errors.New("tool path is required")
-	}
-	if isAnyPlatformAbsolutePath(trimmed) {
-		return "", errors.New("tool path must be relative to the agent working directory")
-	}
-	base := executor.workingDir
-	if base == "" {
-		base = "."
-	}
-	cleaned := filepath.Clean(trimmed)
-	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", errors.New("tool path cannot escape the agent working directory")
-	}
-	absBase, err := executor.fileSystem.Abs(base)
-	if err != nil {
-		return "", fmt.Errorf("resolve agent working directory: %w", err)
-	}
-	absPath := filepath.Join(absBase, cleaned)
-	rel, err := filepath.Rel(absBase, absPath)
-	if err != nil {
-		return "", fmt.Errorf("resolve tool path: %w", err)
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", errors.New("tool path cannot escape the agent working directory")
-	}
-	info, err := executor.fileSystem.Stat(absBase)
-	if err != nil {
-		return "", fmt.Errorf("agent working directory is unavailable: %w", err)
-	}
-	if !info.IsDir() {
-		return "", errors.New("agent working directory must be a directory")
-	}
-	if _, err := executor.fileSystem.Stat(absPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("resolve tool path: %w", err)
-	}
-	return absPath, nil
-}
-
-func contentSummary(content string) string {
-	trimmed := strings.TrimSpace(content)
-	if trimmed == "" {
-		return "empty"
-	}
-	return fmt.Sprintf("bytes=%d", len(content))
 }
 
 func isToolPolicyError(err error) bool {

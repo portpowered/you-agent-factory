@@ -7,38 +7,13 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	. "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQueueInterruptReconcileAndArtifact(t *testing.T) {
-	t0 := time.Date(2026, 6, 9, 14, 10, 0, 0, time.UTC)
-	events := []factoryapi.FactoryEvent{
-		javascriptRunRequestEvent(t0),
-		dispatchQueuedEvent(1, t0.Add(2*time.Second)),
-		dispatchInterruptedEvent(2, t0.Add(3*time.Second)),
-		dispatchReconciledEvent(3, t0.Add(4*time.Second)),
-		javascriptArtifactCreatedEvent(3, t0.Add(5*time.Second)),
-	}
-
-	worldState, err := ReconstructFactoryWorldState(events, 3)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	assertJavaScriptDispatchLifecycleReplay(t, worldState)
-
-	view := BuildFactoryWorldView(worldState)
-	if view.Runtime.JavaScript == nil {
-		t.Fatal("javascript projection = nil, want dispatch lifecycle projection")
-	}
-	if view.Runtime.JavaScript.ChildDispatchCounts.Completed != 1 {
-		t.Fatalf("child dispatch counts = %#v, want one completed dispatch", view.Runtime.JavaScript.ChildDispatchCounts)
-	}
-	if len(view.Runtime.JavaScript.Artifacts) != 1 {
-		t.Fatalf("javascript artifacts = %#v, want one artifact", view.Runtime.JavaScript.Artifacts)
-	}
+func stringPointer(value string) *string {
+	return &value
 }
 
 func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleSuppressesLateReconcileAfterInterrupt(t *testing.T) {

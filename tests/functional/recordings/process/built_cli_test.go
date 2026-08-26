@@ -43,6 +43,7 @@ func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
 	return recordingProcessCLIBinary.path
 }
 
+// TestMain builds the CLI once for the recordings process package.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if recordingProcessCLIBinary.tempDir != "" {

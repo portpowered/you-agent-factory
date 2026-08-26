@@ -51,7 +51,7 @@ and horizontally durable Chat Sessions are separate follow-ons.
 - `C:\Users\andre\work\portos\infinite-you\docs\internal\projects\acp-client\final-proposal.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\internal\projects\acp-program\README.md`
 - `C:\Users\andre\work\portos\infinite-you\docs\reference\serve-acp.md`
-- `C:\Users\andre\work\portos\infinite-you\docs\internal\standards\code\planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - Git ref `dwro-s1-remote-placement-flags:prd.json`, which supplies the
   prerequisite root `--remote`, endpoint-only `--server`, command placement,
   and no-fallback behavior.

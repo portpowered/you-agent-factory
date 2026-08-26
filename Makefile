@@ -140,12 +140,15 @@ FUNCTIONAL_TEST_BUDGET ?= 35m
 FUNCTIONAL_SHORT ?= true
 CHANGED_TEST_STABILITY_BASE ?=
 CHANGED_TEST_STABILITY_HEAD ?= HEAD
-CHANGED_TEST_STABILITY_ATTEMPTS ?= 20
+CHANGED_TEST_STABILITY_ATTEMPTS ?= 3
 CHANGED_TEST_STABILITY_BUDGET ?= 15m
 CHANGED_TEST_STABILITY_JOBS ?= 4
-GO_UNIT_COVERAGE_PROFILE ?=
-GO_UNIT_COVERAGE_JSON_OUTPUT ?=
-GO_UNIT_COVERAGE_TIMING_OUTPUT ?=
+UNIT_COVERAGE_DIR ?= .artifacts/unit-coverage
+GO_UNIT_COVERAGE_PROFILE ?= $(UNIT_COVERAGE_DIR)/coverage.out
+GO_UNIT_COVERAGE_JSON_OUTPUT ?= $(UNIT_COVERAGE_DIR)/coverage-summary.json
+GO_UNIT_COVERAGE_TIMING_OUTPUT ?= $(UNIT_COVERAGE_DIR)/unit-timing-summary.json
+GO_UNIT_COVERAGE_LOG ?= $(UNIT_COVERAGE_DIR)/command.log
+UNIT_COVERAGE_GO ?= $(GO)
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
 GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT ?=
@@ -154,9 +157,12 @@ FUNCTIONAL_TEST_VIZ_PROFILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage.out
 FUNCTIONAL_TEST_VIZ_JSON ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage-summary.json
 FUNCTIONAL_TEST_VIZ_TIMING ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-timing-summary.json
 FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
-# The Linux CI wrapper sets this optional handoff so an ordinary
-# gocoveragecheck failure can be reported by its compact terminal verdict step.
-# An unset path preserves the historical fail-fast target behavior.
+FUNCTIONAL_TEST_VIZ_LOG ?= $(FUNCTIONAL_TEST_VIZ_DIR)/command.log
+FUNCTIONAL_COVERAGE_VERDICT_FILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-coverage-verdict.txt
+FUNCTIONAL_TEST_GO ?= $(GO)
+# Hosted CI sets this optional handoff so an ordinary gocoveragecheck failure
+# can be reported by its compact terminal verdict step. An unset path preserves
+# the historical fail-fast target behavior.
 FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
@@ -506,7 +512,7 @@ test-unit-fresh:
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
 # pull-request base ref/SHA; the command resolves its merge-base with head,
-# then gives every selected top-level Go test 20 isolated attempts within one
+# then gives every selected top-level Go test 3 isolated attempts within one
 # 15-minute total budget.
 test-changed-test-stability:
 	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET) -jobs $(CHANGED_TEST_STABILITY_JOBS)
@@ -526,7 +532,7 @@ test-integration:
 	$(GO) test ./pkg/services/providers/internal/services/execution/internal/adapters/claude -run '^TestClaudeCommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-contract:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/internal/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 # Cache-aware developer feedback; use test-functional-fresh for an
 # unconditional rerun.
@@ -542,35 +548,43 @@ test-functional-fresh:
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
-# functional-test-viz runs the boundary check, then the configured fresh
-# functional coverage tier exactly once (profile + gocoveragecheck
-# -json-output), then the FND-004 Markdown catalog generator. Artifacts land
-# under .artifacts/functional-test-viz/. The Linux CI wrapper enforces the
-# tier's FUNCTIONAL_TEST_BUDGET around this target and leaves the artifact root
-# intact when the budget or a later step fails.
+# functional-test-viz is the single functional-report entrypoint. It runs the
+# configured fresh functional coverage tier exactly once (including its
+# boundary check), renders and publishes the Markdown catalog when running in
+# GitHub Actions, retains the complete command stream in command.log, and prints
+# only pkg/ coverage plus functional-package latencies to the terminal. Artifacts
+# land under .artifacts/functional-test-viz/.
 #
-# Fail-closed composition: each recipe line must succeed before the next runs.
-# Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering
-# failures exit non-zero. The target never deletes the artifact root on failure,
-# so already-written diagnostics (for example coverage.out / coverage-summary.json
-# after a floor fail, or those files before a render fail) remain inspectable.
+# Fail-closed composition: boundary, suite, coverage-floor, metadata/inventory,
+# console-summary, or Markdown rendering failures exit non-zero. The target
+# never deletes the artifact root on failure, so already-written diagnostics
+# remain inspectable.
 # gocoveragecheck writes -json-output after a completed measurement even when a
 # floor fails. Without FUNCTIONAL_GOCOVERAGE_EXIT_FILE, Make stops before
-# Markdown so the failure stays non-zero; the Linux CI wrapper sets that path
-# to hand an ordinary exit-1 outcome to its compact verdict step.
+# Markdown so the failure stays non-zero; hosted CI sets that path to hand an
+# ordinary exit-1 outcome to its compact verdict step.
 functional-test-viz:
-	$(MAKE) functional-boundary-check
-	$(call ensure_directory,$(FUNCTIONAL_TEST_VIZ_DIR))
-	$(MAKE) test-functional-coverage \
-		GO_COVERAGE_FLOOR_POLICY=$(GO_COVERAGE_FLOOR_POLICY) \
-		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
-		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
-		GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT=$(FUNCTIONAL_TEST_VIZ_TIMING) \
-		FUNCTIONAL_GOCOVERAGE_EXIT_FILE=$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)
-	$(GO) run ./cmd/functionaltestviz \
-		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
-		-timing-summary $(FUNCTIONAL_TEST_VIZ_TIMING) \
-		-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN)
+	@$(GO) run ./cmd/functionaltestviz \
+		-run-suite \
+		-go "$(FUNCTIONAL_TEST_GO)" \
+		-root . \
+		-coverage-summary "$(FUNCTIONAL_TEST_VIZ_JSON)" \
+		-timing-summary "$(FUNCTIONAL_TEST_VIZ_TIMING)" \
+		-output "$(FUNCTIONAL_TEST_VIZ_MARKDOWN)" \
+		-log "$(FUNCTIONAL_TEST_VIZ_LOG)" \
+		-profile "$(FUNCTIONAL_TEST_VIZ_PROFILE)" \
+		-verdict "$(FUNCTIONAL_COVERAGE_VERDICT_FILE)" \
+		-exit-code-file "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" \
+		-tier "$(FUNCTIONAL_TEST_TIER)" \
+		-trigger "$(FUNCTIONAL_TEST_TRIGGER)" \
+		-budget "$(FUNCTIONAL_TEST_BUDGET)" \
+		-short=$(FUNCTIONAL_SHORT) \
+		-quarantine "$(FUNCTIONAL_QUARANTINE)" \
+		-jobs $(FUNCTIONAL_DEFAULT_JOBS) \
+		-minimum $(GO_FUNCTIONAL_COVERAGE_MIN) \
+		-package-manifest "$(GO_FUNCTIONAL_COVERAGE_MANIFEST)" \
+		-package-floor-policy "$(GO_COVERAGE_FLOOR_POLICY)" \
+		-test-timeout "$(GO_COVERAGE_TIMEOUT)"
 
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -695,14 +709,23 @@ test-coverage-go:
 	$(info make test-coverage-go is a compatibility alias for unit coverage; use make test-functional-coverage for the independent functional report.)
 	$(MAKE) test-unit-coverage
 
-# The three GO_UNIT_COVERAGE_* output paths are optional and independent. Each
-# is forwarded only when it is set, so an invocation with none of them set runs
-# exactly the command it ran before reporting existed. Setting the JSON or
-# timing path never changes the gate: gocoveragecheck's exit code stays the sole
-# pass/fail signal. Both local callers and hosted CI inherit the blocking
-# default; a manifest floor hold is the only lane-scoped staged exception.
+# test-unit-coverage is the single unit coverage entrypoint. Its Go runner owns
+# artifact cleanup, retains the complete checker stream in command.log, and
+# prints only pkg/ coverage plus package latencies. gocoveragecheck's exit code
+# remains the sole pass/fail signal. Floor policy defaults to blocking for local
+# callers; hosted CI sets GO_COVERAGE_FLOOR_POLICY=advisory for both lanes.
 test-unit-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),) $(if $(GO_UNIT_COVERAGE_JSON_OUTPUT),-json-output $(GO_UNIT_COVERAGE_JSON_OUTPUT),) $(if $(GO_UNIT_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_UNIT_COVERAGE_TIMING_OUTPUT),)
+	@$(GO) run ./cmd/unitcoverage \
+		-go "$(UNIT_COVERAGE_GO)" \
+		-root . \
+		-minimum $(GO_UNIT_COVERAGE_MIN) \
+		-package-manifest "$(GO_UNIT_COVERAGE_MANIFEST)" \
+		-package-floor-policy "$(GO_COVERAGE_FLOOR_POLICY)" \
+		-test-timeout "$(GO_COVERAGE_TIMEOUT)" \
+		-profile "$(GO_UNIT_COVERAGE_PROFILE)" \
+		-coverage-summary "$(GO_UNIT_COVERAGE_JSON_OUTPUT)" \
+		-timing-summary "$(GO_UNIT_COVERAGE_TIMING_OUTPUT)" \
+		-log "$(GO_UNIT_COVERAGE_LOG)"
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of

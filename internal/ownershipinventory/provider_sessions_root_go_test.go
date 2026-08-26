@@ -154,14 +154,7 @@ func TestProviderSessionsImplementationTestsFoldedToInternal(t *testing.T) {
 	}
 
 	internalRoot := filepath.Join(root, "pkg/services/provider_sessions/internal")
-	for _, name := range []string{
-		"details_providers_boundary_test.go",
-		"inspect_providers_boundary_test.go",
-		"project_providers_boundary_test.go",
-		"readers_providers_boundary_test.go",
-		"service_test.go",
-		"wire_behavioral_proof_test.go",
-	} {
+	for _, name := range []string{"service_test.go"} {
 		path := filepath.Join(internalRoot, name)
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("internal implementation test %s missing: %v", name, err)

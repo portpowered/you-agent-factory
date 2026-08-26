@@ -14,7 +14,6 @@ const workersRootRelative = "pkg/services/workers"
 // remain at pkg/services/workers/ during CLN-WRK-CONTRACT-ROOTS.
 // Mirrors internal/ownershipinventory WorkersThinRootContractFiles.
 var workersThinRootContractFiles = []string{
-	"command.go",
 	"command_result_contracts.go",
 	"event_recording_contracts.go",
 	"execution_context.go",
@@ -28,7 +27,6 @@ var workersThinRootContractFiles = []string{
 	"interfaces.go",
 	"kind_phase_validation.go",
 	"kind_phase_validation_test.go",
-	"mock_worker.go",
 	"mock_workers_contracts.go",
 	"progress_observations.go",
 	"prompt_template_contracts.go",
@@ -36,11 +34,8 @@ var workersThinRootContractFiles = []string{
 	"proposal_mappers_test.go",
 	"proposed_output_contracts.go",
 	"proposed_output_contracts_test.go",
-	"pty_contracts.go",
 	"response_drafts.go",
 	"runner_policy_contracts.go",
-	"runner_process.go",
-	"runner_process_log_context.go",
 	"runtime_hooks.go",
 	"runtime_opening.go",
 	"safe_diagnostics.go",

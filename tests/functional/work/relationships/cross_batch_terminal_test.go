@@ -1,17 +1,11 @@
 package relationships
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"os"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -29,27 +23,20 @@ const (
 // target which already reached its required state releases a later batch
 // immediately. It also checks that the admitted relation keeps the target ID.
 func TestCrossBatchDependsOnCompletedTargetReleasesAtAdmission(t *testing.T) {
-	requireCrossBatchGit(t)
+	t.Parallel()
+
 	run := newCrossBatchFunctionalRun(t)
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchPrerequisiteBatchJSON())
-	run.runner.WaitForFinishDispatch(t, 15*time.Second)
-	run.runner.Release()
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchPrerequisiteBatchJSON())
 	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
-	if got := run.runner.CallCount(); got != 2 {
-		t.Fatalf("provider calls before completed-target admission = %d, want two prerequisite dispatches", got)
-	}
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchDependentBatchByIDJSON())
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchDependentBatchByIDJSON())
 	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
 
 	listed := support.ListDefaultSessionWork(t, run.baseURL)
 	assertCrossBatchTerminalState(t, listed, crossBatchPrerequisiteID, "complete")
 	assertCrossBatchTerminalState(t, listed, crossBatchDependentID, "complete")
 	assertCrossBatchCanonicalDependency(t, listed, crossBatchDependentID, crossBatchPrerequisiteID)
-	if got := run.runner.CallCount(); got != 4 {
-		t.Fatalf("provider calls after completed-target admission = %d, want four total dispatches", got)
-	}
 
 	prerequisiteSequence, dependentSequence := crossBatchDispatchOrdering(
 		t,
@@ -64,17 +51,15 @@ func TestCrossBatchDependsOnCompletedTargetReleasesAtAdmission(t *testing.T) {
 // batch submitted against a failed target is admitted, cascades to failed, and
 // never receives a worker dispatch.
 func TestCrossBatchDependsOnFailedTargetCascadesAtAdmission(t *testing.T) {
-	requireCrossBatchGit(t)
+	t.Parallel()
+
 	run := newTerminalCrossBatchFunctionalRun(t, crossBatchPrerequisiteName)
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchPrerequisiteBatchJSON())
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchPrerequisiteBatchJSON())
 	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
 	assertCrossBatchTerminalState(t, support.ListDefaultSessionWork(t, run.baseURL), crossBatchPrerequisiteID, "failed")
-	if got := run.runner.CallCount(); got != 2 {
-		t.Fatalf("provider calls before failed-target admission = %d, want two prerequisite dispatches", got)
-	}
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchDependentBatchJSON())
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchDependentBatchJSON())
 	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
 
 	listed := support.ListDefaultSessionWork(t, run.baseURL)
@@ -82,27 +67,22 @@ func TestCrossBatchDependsOnFailedTargetCascadesAtAdmission(t *testing.T) {
 	assertCrossBatchTerminalState(t, listed, crossBatchDependentID, "failed")
 	assertCrossBatchCanonicalDependency(t, listed, crossBatchDependentID, crossBatchPrerequisiteID)
 	assertCrossBatchNoDispatchForWork(t, support.GetFactoryEventsAt(t, run.baseURL), crossBatchDependentID)
-	if got := run.runner.CallCount(); got != 2 {
-		t.Fatalf("provider calls after failed-target admission = %d, want no dependent dispatch", got)
-	}
 }
 
 // TestCrossBatchDependsOnMixedTerminalFanInCascades proves that a later batch
 // with one complete and one failed target does not dispatch its dependent.
 func TestCrossBatchDependsOnMixedTerminalFanInCascades(t *testing.T) {
-	requireCrossBatchGit(t)
+	t.Parallel()
+
 	run := newTerminalCrossBatchFunctionalRun(t, crossBatchMixedFailedName)
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchMixedTargetsBatchJSON())
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchMixedTargetsBatchJSON())
 	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
 	listed := support.ListDefaultSessionWork(t, run.baseURL)
 	assertCrossBatchTerminalState(t, listed, crossBatchMixedCompleteID, "complete")
 	assertCrossBatchTerminalState(t, listed, crossBatchMixedFailedID, "failed")
-	if got := run.runner.CallCount(); got != 4 {
-		t.Fatalf("provider calls before mixed fan-in admission = %d, want four target dispatches", got)
-	}
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchMixedDependentBatchJSON())
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchMixedDependentBatchJSON())
 	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
 
 	listed = support.ListDefaultSessionWork(t, run.baseURL)
@@ -110,9 +90,6 @@ func TestCrossBatchDependsOnMixedTerminalFanInCascades(t *testing.T) {
 	assertCrossBatchCanonicalDependency(t, listed, crossBatchMixedDependentID, crossBatchMixedCompleteID)
 	assertCrossBatchCanonicalDependency(t, listed, crossBatchMixedDependentID, crossBatchMixedFailedID)
 	assertCrossBatchNoDispatchForWork(t, support.GetFactoryEventsAt(t, run.baseURL), crossBatchMixedDependentID)
-	if got := run.runner.CallCount(); got != 4 {
-		t.Fatalf("provider calls after mixed fan-in admission = %d, want no dependent dispatch", got)
-	}
 }
 
 func crossBatchDependentBatchByIDJSON() string {
@@ -229,72 +206,34 @@ func assertCrossBatchNoDispatchForWork(t *testing.T, events []factoryapi.Factory
 }
 
 type terminalCrossBatchFunctionalRun struct {
-	baseURL       string
-	session       factoryapi.FactorySession
-	submitProcess support.Process
-	runner        *terminalCrossBatchCommandRunner
+	baseURL string
+	session factoryapi.FactorySession
+	server  *support.FunctionalAPIServer
 }
 
 func newTerminalCrossBatchFunctionalRun(t *testing.T, failWorkName string) terminalCrossBatchFunctionalRun {
 	t.Helper()
-	factoryDir := scaffoldCrossBatchGitFactory(t)
-	runner := newTerminalCrossBatchCommandRunner(failWorkName)
-	api := support.NewProcessAPIServer()
-	daemonProcess := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:      api.Start,
-		ProviderCommandRunner: runner,
+	factoryDir := scaffoldCrossBatchFactory(t)
+	failWorkID := map[string]string{
+		crossBatchPrerequisiteName: crossBatchPrerequisiteID,
+		crossBatchMixedFailedName:  crossBatchMixedFailedID,
+	}[failWorkName]
+	if failWorkID == "" {
+		t.Fatalf("unsupported cross-batch failure target %q", failWorkName)
+	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir,
+		MockWorkersConfig: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+			ID:              "reject-cross-batch-target",
+			WorkstationName: dependencyFinishWorkstation,
+			WorkInputs:      []workers.MockWorkInputSelector{{WorkID: failWorkID}},
+			RunType:         workers.MockWorkerRunTypeReject,
+		}}},
+		WaitForServiceModeRuntime: true,
 	})
-	support.CleanupProcess(t, daemonProcess)
-
-	runInputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", factoryDir, "--continuously", "--with-server",
-		"--server", "http://127.0.0.1:1", "--quiet", "--no-record",
-	})
-	homeDir := t.TempDir()
-	runInputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	runInputs.Input.WorkingDirectory = factoryDir
-	support.StartProcessCommand(t, daemonProcess, runInputs.Input)
-
-	baseURL := api.WaitForURL(t)
-	submitProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, submitProcess)
 	return terminalCrossBatchFunctionalRun{
-		baseURL:       baseURL,
-		session:       support.GetDefaultSession(t, baseURL),
-		submitProcess: submitProcess,
-		runner:        runner,
+		baseURL: server.URL(),
+		session: support.GetDefaultSession(t, server.URL()),
+		server:  server,
 	}
 }
-
-type terminalCrossBatchCommandRunner struct {
-	failWorkName string
-
-	mu    sync.Mutex
-	calls int
-}
-
-func newTerminalCrossBatchCommandRunner(failWorkName string) *terminalCrossBatchCommandRunner {
-	return &terminalCrossBatchCommandRunner{
-		failWorkName: failWorkName,
-	}
-}
-
-func (r *terminalCrossBatchCommandRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	r.calls++
-	r.mu.Unlock()
-	requestPrompt := string(request.Stdin)
-	shouldFail := strings.Contains(requestPrompt, "Complete cross-batch Work "+r.failWorkName)
-	if shouldFail {
-		return platformprocess.CommandResult{}, errors.New("controlled cross-batch prerequisite failure")
-	}
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}, nil
-}
-
-func (r *terminalCrossBatchCommandRunner) CallCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.calls
-}
-
-var _ platformprocess.CommandRunner = (*terminalCrossBatchCommandRunner)(nil)

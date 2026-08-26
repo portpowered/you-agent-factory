@@ -204,6 +204,7 @@ func assertStory003ListAfterPull(
 	return listedModel
 }
 
+// TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal proves removal reclaims unused assets and refuses assets still in use.
 func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T) {
 	cacheDirectory := t.TempDir()
 	writeCachedOmniVoiceAssets(t, cacheDirectory)

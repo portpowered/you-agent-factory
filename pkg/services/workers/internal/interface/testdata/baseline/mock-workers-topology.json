@@ -101,7 +101,7 @@
     },
     {
       "category": "dispatch delay or timing fields",
-      "reason": "no per-entry delay, sleep, or dispatch-timing fields are accepted; scriptConfig.timeout only bounds local script execution"
+      "reason": "no arbitrary delay or sleep is accepted; gateConfig only synchronizes a matched dispatch with explicit arrival and release files and a bounded timeout"
     },
     {
       "category": "artifact payloads",
@@ -202,6 +202,16 @@
       "parentField": "mockWorkers[]",
       "required": "optional",
       "defaultEmptyBehavior": "omitted rejectConfig is allowed when runType is reject",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].gateConfig",
+      "jsonPath": "mockWorkers[].gateConfig",
+      "jsonName": "gateConfig",
+      "valueType": "object",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted gateConfig executes the matched run type immediately; when present all gate fields are required",
       "validationOwner": "validate"
     },
     {
@@ -374,6 +384,37 @@
       "required": "optional",
       "defaultEmptyBehavior": "omitted exitCode leaves rejected exit code unset; when set must be between 1 and 255",
       "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].gateConfig.arrivedFile",
+      "jsonPath": "mockWorkers[].gateConfig.arrivedFile",
+      "jsonName": "arrivedFile",
+      "valueType": "string absolute path",
+      "parentField": "mockWorkers[].gateConfig",
+      "required": "required when gateConfig is present",
+      "defaultEmptyBehavior": "missing, blank, or relative paths fail validation",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].gateConfig.releaseFile",
+      "jsonPath": "mockWorkers[].gateConfig.releaseFile",
+      "jsonName": "releaseFile",
+      "valueType": "string absolute path",
+      "parentField": "mockWorkers[].gateConfig",
+      "required": "required when gateConfig is present",
+      "defaultEmptyBehavior": "missing, blank, relative, or arrival-equal paths fail validation",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].gateConfig.timeout",
+      "jsonPath": "mockWorkers[].gateConfig.timeout",
+      "jsonName": "timeout",
+      "valueType": "string duration",
+      "parentField": "mockWorkers[].gateConfig",
+      "required": "required when gateConfig is present",
+      "defaultEmptyBehavior": "missing, invalid, or non-positive durations fail validation",
+      "validationOwner": "validate",
+      "notes": "bounds synchronization waits so a forgotten release fails instead of hanging a dispatch"
     },
     {
       "id": "mockWorkers[].usage.provider",

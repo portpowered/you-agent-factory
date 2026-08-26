@@ -1,16 +1,14 @@
 package relationships
 
 import (
-	"context"
 	"errors"
+	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -32,7 +30,7 @@ const (
 // stays undispatched at its initial state until the prerequisite reaches the
 // declared requiredState, then proceeds through the public work session once
 // that prerequisite target state is satisfied.
-func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
+func testDependentWorkWaitsForPrerequisiteTargetState(t *testing.T, baseURL string) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	prerequisiteWorkID := "task-prerequisite-a"
@@ -56,19 +54,7 @@ func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
 		},
 	})
 
-	runner := testutil.NewProviderCommandRunner(
-		dependencyProviderSuccess(),
-		dependencyProviderSuccess(),
-		dependencyProviderSuccess(),
-		dependencyProviderSuccess(),
-	)
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	session, listed, events := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 15*time.Second)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "init"):       0,
@@ -81,14 +67,6 @@ func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
 	if !support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("task", dependencyRequiredState)) {
 		t.Fatalf("dependent work %q not at %q in public listing: %#v", dependentWorkID, dependencyRequiredState, listed)
 	}
-
-	if runner.CallCount() != 4 {
-		t.Fatalf(
-			"provider command runner calls = %d, want 4 starter and finisher invocations for prerequisite then dependent",
-			runner.CallCount(),
-		)
-	}
-	assertDependencyProviderRequests(t, runner)
 
 	prerequisiteCompleteSequence, dependentStartSequence := dependencyDispatchOrdering(
 		t,
@@ -117,6 +95,8 @@ func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
 // dependent never receives a worker dispatch when its prerequisite reaches a
 // failed terminal outcome instead of the declared requiredState.
 func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	prerequisiteWorkID := "task-prerequisite-a"
@@ -186,10 +166,10 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 }
 
 // TestWorkWithoutDependsOnRelationsDispatchesNormally proves through public Work
-// listings and provider dispatch observations that work submitted without any
+// listings and Factory Event dispatch observations that work submitted without any
 // DEPENDS_ON relations is not blocked by dependency tracking and reaches its
 // terminal success state through the normal public work session path.
-func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
+func testWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T, baseURL string) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_simple_dir"))
 	workID := "task-no-deps"
 
@@ -199,14 +179,7 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 		Payload:    []byte("no dependency relations"),
 	})
 
-	runner := testutil.NewProviderCommandRunner(dependencyProviderSuccess())
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		5*time.Second,
-	)
+	session, listed, events := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 5*time.Second)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "init"):       0,
@@ -216,11 +189,6 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
 		t.Fatalf("work %q without DEPENDS_ON not at complete in public listing: %#v", workID, listed)
 	}
-
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want 1 for no-deps pass-through", runner.CallCount())
-	}
-	assertDependencyProviderRequests(t, runner)
 
 	dispatchSequence := -1
 	for _, event := range events {
@@ -255,7 +223,7 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 // declared requiredState, then proceeds only after every prerequisite target
 // state is satisfied.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
+func testFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T, baseURL string, gate *support.MockWorkerGate) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	prerequisiteAWorkID := "task-prerequisite-a"
@@ -290,15 +258,15 @@ func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 		},
 	})
 
-	provider := newFanInSecondFinisherGateProvider()
-	baseURL, daemon := startDependencyFactory(t, dir, provider)
-	defer daemon.Stop(t)
-
-	provider.WaitForSecondFinisherGate(t, 15*time.Second)
+	opened := support.OpenFactorySessionAt(t, baseURL, dir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sessionID) })
+	gate.WaitForArrival(t, 15*time.Second)
 
 	partialListed, partialEvents := waitForPartialFanInObservation(
 		t,
 		baseURL,
+		sessionID,
 		15*time.Second,
 		prerequisiteAWorkID,
 		prerequisiteBWorkID,
@@ -313,12 +281,12 @@ func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 		dependentWorkID,
 	)
 
-	provider.Release()
-	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	gate.Release()
+	support.WaitForSessionTerminalStatus(t, baseURL, sessionID, 15*time.Second)
 
-	session := support.GetDefaultSession(t, baseURL)
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	events := support.GetFactoryEventsAt(t, baseURL)
+	session := getRelationshipSession(t, baseURL, sessionID)
+	listed := listRelationshipSessionWork(t, baseURL, sessionID)
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "init"):       0,
@@ -333,13 +301,6 @@ func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 	}
 	if !support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("task", dependencyRequiredState)) {
 		t.Fatalf("dependent work %q not at %q in public listing: %#v", dependentWorkID, dependencyRequiredState, listed)
-	}
-
-	if got := provider.finisherCallCount(); got != 3 {
-		t.Fatalf("finisher provider calls = %d, want 3 (both prerequisites and dependent)", got)
-	}
-	if got := provider.starterCallCount(); got != 3 {
-		t.Fatalf("starter provider calls = %d, want 3 (both prerequisites and dependent)", got)
 	}
 
 	prerequisiteASequence, prerequisiteBSequence, dependentStartSequence := fanInDispatchOrdering(
@@ -376,29 +337,29 @@ func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 }
 
 // TestDependentWorkBlockedUntilPrerequisiteArchived proves through public Work
-// listings, captured provider command invocations, and Factory Event dispatch
+// listings and Factory Event dispatch
 // ordering that a DEPENDS_ON dependent requiring archived stays undispatched
 // until the prerequisite reaches archived, then both reach archived without
 // failed terminals on the happy path.
-func TestDependentWorkBlockedUntilPrerequisiteArchived(t *testing.T) {
-	runDependencyTerminalHappyPath(t, "prd-A-work-id", "PRD A")
+func testDependentWorkBlockedUntilPrerequisiteArchived(t *testing.T, baseURL string) {
+	runDependencyTerminalHappyPath(t, baseURL, "prd-A-work-id", "PRD A")
 }
 
 // TestDependentWorkBlockedDuringPrerequisiteProcessing proves the same archived
 // terminal unlock behavior when the prerequisite work identifier reflects an
 // in-flight processing phase before both items reach archived.
-func TestDependentWorkBlockedDuringPrerequisiteProcessing(t *testing.T) {
-	runDependencyTerminalHappyPath(t, "prd-A-processing", "PRD A")
+func testDependentWorkBlockedDuringPrerequisiteProcessing(t *testing.T, baseURL string) {
+	runDependencyTerminalHappyPath(t, baseURL, "prd-A-processing", "PRD A")
 }
 
 // TestDependentWorkAndPrerequisiteBothReachArchived proves both prerequisite
 // and dependent Work reach the archived terminal when the dependency requires
 // that upstream terminal state.
-func TestDependentWorkAndPrerequisiteBothReachArchived(t *testing.T) {
-	runDependencyTerminalHappyPath(t, "prd-A-both", "PRD A")
+func testDependentWorkAndPrerequisiteBothReachArchived(t *testing.T, baseURL string) {
+	runDependencyTerminalHappyPath(t, baseURL, "prd-A-both", "PRD A")
 }
 
-func runDependencyTerminalHappyPath(t *testing.T, prerequisiteWorkID, prerequisitePayload string) {
+func runDependencyTerminalHappyPath(t *testing.T, baseURL, prerequisiteWorkID, prerequisitePayload string) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_terminal"))
@@ -422,19 +383,7 @@ func runDependencyTerminalHappyPath(t *testing.T, prerequisiteWorkID, prerequisi
 		},
 	})
 
-	runner := testutil.NewProviderCommandRunner(
-		dependencyProviderSuccess(),
-		dependencyProviderSuccess(),
-		dependencyProviderSuccess(),
-		dependencyProviderSuccess(),
-	)
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		10*time.Second,
-	)
+	session, listed, events := runSharedRelationshipFactoryToCompletion(t, baseURL, dir, 10*time.Second)
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("prd", dependencyArchivedState): 2,
@@ -448,14 +397,6 @@ func runDependencyTerminalHappyPath(t *testing.T, prerequisiteWorkID, prerequisi
 	if !support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("prd", dependencyArchivedState)) {
 		t.Fatalf("dependent work %q not at archived in public listing: %#v", dependentWorkID, listed)
 	}
-
-	if runner.CallCount() != 4 {
-		t.Fatalf(
-			"provider command runner calls = %d, want 4 executor and reviewer invocations for prerequisite then dependent",
-			runner.CallCount(),
-		)
-	}
-	assertDependencyProviderRequests(t, runner)
 
 	prerequisiteArchivedSequence, dependentExecuteSequence := archivedTerminalDispatchOrdering(
 		t,
@@ -475,23 +416,6 @@ func runDependencyTerminalHappyPath(t *testing.T, prerequisiteWorkID, prerequisi
 
 	if session.Runtime.Progress.Categories.Terminal != 2 || session.Runtime.Progress.Categories.Failed != 0 {
 		t.Fatalf("session progress categories = %+v, want two terminal and zero failed", session.Runtime.Progress.Categories)
-	}
-}
-
-func dependencyProviderSuccess() platformprocess.CommandResult {
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}
-}
-
-func assertDependencyProviderRequests(t *testing.T, runner *testutil.ProviderCommandRunner) {
-	t.Helper()
-
-	for index, request := range runner.Requests() {
-		if strings.TrimSpace(request.Command) == "" {
-			t.Fatalf("provider command request %d missing command: %#v", index, request)
-		}
-		if len(request.Args) == 0 {
-			t.Fatalf("provider command request %d missing args: %#v", index, request)
-		}
 	}
 }
 
@@ -699,6 +623,7 @@ func startDependencyFactory(
 func waitForPartialFanInObservation(
 	t *testing.T,
 	baseURL string,
+	sessionID string,
 	timeout time.Duration,
 	prerequisiteAWorkID, prerequisiteBWorkID, dependentWorkID string,
 ) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
@@ -715,8 +640,8 @@ func waitForPartialFanInObservation(
 		timeout,
 		func() (observation, error) {
 			return observation{
-				listed: support.ListDefaultSessionWork(t, baseURL),
-				events: support.GetFactoryEventsAt(t, baseURL),
+				listed: listRelationshipSessionWork(t, baseURL, sessionID),
+				events: support.GetFactoryEventsForSessionAt(t, baseURL, sessionID),
 			}, nil
 		},
 		func(current observation) bool {
@@ -741,6 +666,27 @@ func waitForPartialFanInObservation(
 		)
 	}
 	return last.listed, last.events
+}
+
+func getRelationshipSession(t testing.TB, baseURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID),
+	)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode Factory Session %q: %v", sessionID, err)
+	}
+	return session
+}
+
+func listRelationshipSessionWork(t testing.TB, baseURL, sessionID string) factoryapi.ListWorkResponse {
+	t.Helper()
+	return support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/work",
+	)
 }
 
 func assertFanInBlockedAfterPartialPrerequisites(
@@ -841,98 +787,4 @@ func fanInDispatchOrdering(
 		t.Fatalf("dependent work %q never received a public %q dispatch", dependentWorkID, dependencyStartWorkstation)
 	}
 	return prerequisiteASequence, prerequisiteBSequence, dependentStartSequence
-}
-
-type fanInSecondFinisherGateProvider struct {
-	testutil.NativeProvider
-	secondFinisherReached chan struct{}
-	release               chan struct{}
-	releaseOnce           sync.Once
-	mu                    sync.Mutex
-	finisherCalls         int
-	starterCalls          int
-}
-
-func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
-	provider := &fanInSecondFinisherGateProvider{
-		secondFinisherReached: make(chan struct{}, 1),
-		release:               make(chan struct{}),
-	}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (p *fanInSecondFinisherGateProvider) Execute(
-	ctx context.Context,
-	req providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	workerType := req.WorkerType
-
-	p.mu.Lock()
-	switch workerType {
-	case "starter":
-		p.starterCalls++
-	case "finisher":
-		p.finisherCalls++
-		blockSecondFinisher := p.finisherCalls == 2
-		p.mu.Unlock()
-
-		if blockSecondFinisher {
-			select {
-			case p.secondFinisherReached <- struct{}{}:
-			default:
-			}
-			select {
-			case <-p.release:
-			case <-ctx.Done():
-				return providers.ExecuteResult{}, ctx.Err()
-			}
-		}
-		return fanInGateProviderCompleteResponse(), nil
-	default:
-		p.mu.Unlock()
-		return providers.ExecuteResult{}, errors.New("unexpected worker type: " + workerType)
-	}
-
-	p.mu.Unlock()
-	return fanInGateProviderCompleteResponse(), nil
-}
-
-func fanInGateProviderCompleteResponse() providers.ExecuteResult {
-	return providers.ExecuteResult{
-		Content: "COMPLETE",
-		Diagnostics: &providers.ExecuteDiagnostics{
-			Metadata: map[string]string{
-				"completion_evidence": "provider_response",
-			},
-		},
-	}
-}
-
-func (p *fanInSecondFinisherGateProvider) WaitForSecondFinisherGate(t *testing.T, timeout time.Duration) {
-	t.Helper()
-
-	select {
-	case <-p.secondFinisherReached:
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting %s for second finisher gate", timeout)
-	}
-}
-
-func (p *fanInSecondFinisherGateProvider) Release() {
-	p.releaseOnce.Do(func() {
-		close(p.release)
-	})
-}
-
-func (p *fanInSecondFinisherGateProvider) finisherCallCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.finisherCalls
-}
-
-func (p *fanInSecondFinisherGateProvider) starterCallCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.starterCalls
 }

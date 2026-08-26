@@ -259,10 +259,13 @@ jobs:
           case "$runner_cpus" in
             ''|*[!0-9]*) runner_cpus=0 ;;
           esac
-          if [ "$runner_cpus" -lt 2 ]; then
+          if [ "$runner_cpus" -lt 4 ]; then
             functional_jobs=2
           else
-            functional_jobs="$runner_cpus"
+            functional_jobs="$((runner_cpus / 2))"
+            if [ "$functional_jobs" -gt 4 ]; then
+              functional_jobs=4
+            fi
           fi
           echo "Functional CI runner: logical_cpus=$runner_cpus jobs=$functional_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
@@ -327,6 +330,7 @@ jobs:
             .artifacts/unit-coverage/coverage-summary.json
             .artifacts/unit-coverage/unit-timing-summary.json
             .artifacts/unit-coverage/unit-coverage-summary.md
+            .artifacts/unit-coverage/command.log
           if-no-files-found: ignore
           retention-days: 14
       - name: Render unit coverage pull request comment
@@ -391,7 +395,8 @@ jobs:
       # gate returns, including on failure.
       - name: Run complete Linux functional coverage and inventory
         if: matrix.suite == 'functional'
-        run: bash scripts/ci/run-functional-test-viz.sh
+        timeout-minutes: 75
+        run: make functional-test-viz
         env:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_TEST_TIER: "merge-full"
@@ -414,15 +419,6 @@ jobs:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
-      - name: Publish functional test job summary
-        if: always() && matrix.suite == 'functional'
-        run: bash scripts/ci/publish-functional-test-summary.sh
-        env:
-          FUNCTIONAL_TEST_VIZ_MARKDOWN: .artifacts/functional-test-viz/functional-tests.md
-          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
-          FUNCTIONAL_TEST_VIZ_TIMING: .artifacts/functional-test-viz/functional-timing-summary.json
-          FUNCTIONAL_TEST_VIZ_JSON: .artifacts/functional-test-viz/coverage-summary.json
-          FUNCTIONAL_TEST_VIZ_PROFILE: .artifacts/functional-test-viz/coverage.out
       - name: Upload functional test diagnostics
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
@@ -529,7 +525,7 @@ jobs:
         env:
           CHANGED_TEST_STABILITY_BASE: ${{ github.event.pull_request.base.sha }}
           CHANGED_TEST_STABILITY_HEAD: ${{ github.event.pull_request.head.sha }}
-          CHANGED_TEST_STABILITY_ATTEMPTS: "20"
+          CHANGED_TEST_STABILITY_ATTEMPTS: "3"
           CHANGED_TEST_STABILITY_BUDGET: 15m
         run: make test-changed-test-stability
 

@@ -47,18 +47,6 @@ func (installer *routingPackagedInstaller) EnsurePackagedFactories(
 	return nil, nil
 }
 
-type localMigrationFileSystem struct{}
-
-func (localMigrationFileSystem) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
-func (localMigrationFileSystem) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
-func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
-func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
-	return os.MkdirAll(path, mode)
-}
-func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
-	return os.Rename(oldPath, newPath)
-}
-
 // TestRootService_InitializeRoutesThroughInternalWorkflow proves the published
 // root Service.Initialize seam is fulfilled through internal workflow ownership
 // rather than a second peer-facing Bootstrap authority interface.
@@ -85,7 +73,6 @@ func TestRootService_InitializeRoutesThroughInternalWorkflow(t *testing.T) {
 		},
 		installer,
 		os.Stat,
-		localMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -150,7 +137,6 @@ func TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootC
 		},
 		installer,
 		os.Stat,
-		localMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

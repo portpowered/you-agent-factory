@@ -37,6 +37,7 @@ func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
 	binaryPath := buildYouBinary(t, buildContext, testutil.MustRepoRoot(t))
 
 	t.Run("success quiet result exits zero", func(t *testing.T) {
+		t.Parallel()
 		runCompiledBatchQuietSuccess(t, binaryPath, harness)
 	})
 
@@ -49,19 +50,23 @@ func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
 	} {
 		policy := policy
 		t.Run("success "+policy.name+" policy keeps result", func(t *testing.T) {
+			t.Parallel()
 			runCompiledBatchSuccess(t, binaryPath, harness, policy.name, policy.extra)
 		})
 	}
 
 	t.Run("failed terminal Work exits nonzero with human detail", func(t *testing.T) {
+		t.Parallel()
 		runCompiledBatchHumanFailure(t, binaryPath, harness)
 	})
 
 	t.Run("failed terminal Work JSON is parseable", func(t *testing.T) {
+		t.Parallel()
 		runCompiledBatchJSONFailure(t, binaryPath, harness)
 	})
 }
 
+// TestBuiltCLIBatchExitCodesAggregateFailureCauses proves batch CLI exit codes aggregate every failure cause.
 func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	buildContext, cancelBuild := context.WithTimeout(t.Context(), 90*time.Second)
@@ -69,14 +74,17 @@ func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
 	binaryPath := buildYouBinary(t, buildContext, testutil.MustRepoRoot(t))
 
 	t.Run("all submitted Work failures are reported deterministically", func(t *testing.T) {
+		t.Parallel()
 		runCompiledBatchAllFailedHuman(t, binaryPath, harness)
 	})
 
 	t.Run("all submitted Work failures have a complete JSON collection", func(t *testing.T) {
+		t.Parallel()
 		runCompiledBatchAllFailedJSON(t, binaryPath, harness)
 	})
 
 	t.Run("mixed success and failure does not round to success", func(t *testing.T) {
+		t.Parallel()
 		runCompiledBatchMixed(t, binaryPath, harness)
 	})
 
@@ -89,6 +97,7 @@ func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
 	} {
 		policy := policy
 		t.Run("circuit breaker reports reason in "+policy.name+" output", func(t *testing.T) {
+			t.Parallel()
 			runCompiledBatchCircuitBreaker(t, binaryPath, harness, policy.json)
 		})
 	}
@@ -102,6 +111,7 @@ func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
 	} {
 		policy := policy
 		t.Run("script non-zero exit reports reason in "+policy.name+" output", func(t *testing.T) {
+			t.Parallel()
 			runCompiledBatchScriptFailure(t, binaryPath, harness, policy.json)
 		})
 	}

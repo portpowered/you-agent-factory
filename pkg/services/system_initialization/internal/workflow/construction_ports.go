@@ -10,16 +10,6 @@ import (
 // while initializing the system configuration.
 type InspectPath func(string) (fs.FileInfo, error)
 
-// LegacyFactoryMigrationFileSystem is the workflow-local filesystem port used
-// to migrate customer-owned Factories from the retired global catalog.
-type LegacyFactoryMigrationFileSystem interface {
-	Stat(string) (fs.FileInfo, error)
-	ReadFile(string) ([]byte, error)
-	ReadDir(string) ([]fs.DirEntry, error)
-	MkdirAll(string, fs.FileMode) error
-	Rename(string, string) error
-}
-
 // OperatorSettings is the workflow-local adapter port used to load and
 // initialize the operator configuration.
 type OperatorSettings interface {

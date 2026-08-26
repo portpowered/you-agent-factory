@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	_ "github.com/portpowered/infinite-you/pkg/services/providers/internal/testutil/execution"
 )
 
 func TestServiceInternalDelegationCoverage(t *testing.T) {

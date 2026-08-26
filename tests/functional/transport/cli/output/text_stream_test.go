@@ -35,6 +35,7 @@ const (
 // CLI run surfaces lifecycle progress on stdout while the invocation is still
 // in flight, before the terminal primary result is written.
 func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
+	t.Parallel()
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
 
@@ -83,6 +84,7 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 // InvocationResponse wrappers, retired automation record shapes, and operator
 // lifecycle chatter that clean invocation output must suppress.
 func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
+	t.Parallel()
 	t.Run("human response-stream lifecycle presentation", func(t *testing.T) {
 		stdout, stderr := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
 		assertStableWorkerProgress(t, stderr)
@@ -113,6 +115,7 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 // a non-quiet operator continuous CLI run with --with-server reports Factory
 // initiated and Dashboard URL startup output on stdout.
 func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI operator continuous text-stream startup")
 	}
@@ -181,6 +184,7 @@ waitForShutdown:
 // human response-stream CLI run ends with the documented cancellation outcome
 // and does not print successful-completion or primary-result claims on stdout.
 func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
+	t.Parallel()
 	externalWork := newCancellableExternalWorkRunner()
 	stdout := newInterruptibleStdoutCapture()
 	runArgs := runGoalHumanInterruptibleResponseStream(t, externalWork, stdout)

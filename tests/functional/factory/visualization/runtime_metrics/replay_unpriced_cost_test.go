@@ -21,6 +21,7 @@ const (
 	replayUnpricedTotalTokens  int64 = 1_500
 )
 
+// TestReplayOperatorPriceTableIsReversibleInPublicCosts proves operator price-table changes are reversible in public replayed costs.
 func TestReplayOperatorPriceTableIsReversibleInPublicCosts(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	fixturePath := filepath.Join(

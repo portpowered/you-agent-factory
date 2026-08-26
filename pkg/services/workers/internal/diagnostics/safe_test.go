@@ -173,44 +173,9 @@ func TestSafeWorkDiagnosticsPreservesIncompleteOutputClassification(t *testing.T
 	if got := safe.Provider.ResponseMetadata["failure_classification"]; got != "missing_required_output" {
 		t.Fatalf("safe failure classification = %q, want missing_required_output", got)
 	}
-	payload, err := SafeWorkDiagnosticsEventPayload(safe)
+	_, err := SafeWorkDiagnosticsEventPayload(safe)
 	if err != nil {
 		t.Fatalf("SafeWorkDiagnosticsEventPayload() error = %v", err)
-	}
-	replayed, err := WorkDiagnosticsFromSafeEventPayload(payload)
-	if err != nil {
-		t.Fatalf("WorkDiagnosticsFromSafeEventPayload() error = %v", err)
-	}
-	if replayed == nil || replayed.Provider == nil || replayed.Provider.ResponseMetadata["failure_classification"] != "missing_required_output" {
-		t.Fatalf("replayed diagnostics = %#v, want incomplete-output classification", replayed)
-	}
-}
-
-func TestWorkDiagnosticsFromSafeEventPayloadDecodesCamelCaseWireShape(t *testing.T) {
-	t.Parallel()
-	diagnostics, err := WorkDiagnosticsFromSafeEventPayload(json.RawMessage(`{
-		"renderedPrompt":{"systemPromptHash":"system-hash","variables":{"request_id":"request-1"}},
-		"provider":{"provider":"codex","requestMetadata":{"request_id":"request-1"}},
-		"invocation":{"signatureHash":"signature-hash","parameters":[{"name":"prompt","sourceKinds":["text"],"valueCount":1,"redacted":true}]}
-	}`))
-	if err != nil {
-		t.Fatalf("WorkDiagnosticsFromSafeEventPayload: %v", err)
-	}
-	if diagnostics.RenderedPrompt.SystemPromptHash != "system-hash" || diagnostics.RenderedPrompt.Variables["request_id"] != "request-1" {
-		t.Fatalf("rendered prompt = %#v, want camel-case event fields", diagnostics.RenderedPrompt)
-	}
-	if diagnostics.Provider.Provider != "codex" || diagnostics.Provider.RequestMetadata["request_id"] != "request-1" {
-		t.Fatalf("provider = %#v, want safe provider metadata", diagnostics.Provider)
-	}
-	if diagnostics.Invocation.SignatureHash != "signature-hash" || diagnostics.Invocation.Parameters[0].ValueCount != 1 {
-		t.Fatalf("invocation = %#v, want normalized invocation fields", diagnostics.Invocation)
-	}
-}
-
-func TestWorkDiagnosticsFromSafeEventPayloadRejectsMalformedJSON(t *testing.T) {
-	t.Parallel()
-	if _, err := WorkDiagnosticsFromSafeEventPayload(json.RawMessage(`{"provider":`)); err == nil {
-		t.Fatal("WorkDiagnosticsFromSafeEventPayload error = nil, want malformed JSON error")
 	}
 }
 

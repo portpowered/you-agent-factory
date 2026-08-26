@@ -127,11 +127,9 @@ func TestInitializeSettingsFailurePreservesPartialFailureRollbackFactsThroughRoo
 			if !strings.Contains(partialFailure.Cause.Error(), test.wantCause) {
 				t.Fatalf("Initialize() cause = %v, want substring %q", partialFailure.Cause, test.wantCause)
 			}
-			if len(partialFailure.Facts) != 2 ||
-				partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-				partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-				partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
-				partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
+			if len(partialFailure.Facts) != 1 ||
+				partialFailure.Facts[0].Step != systeminitialization.InitializeStepSystemConfig ||
+				partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepUnresolved {
 				t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
 			}
 

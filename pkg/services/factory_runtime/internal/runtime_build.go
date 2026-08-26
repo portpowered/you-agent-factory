@@ -25,6 +25,11 @@ type ProgressPublisherFactory func(string) workers.ProgressPublisher
 type DispatchCompletionFactory func(string) func(string)
 type InitialFactorySnapshotFactory = factorydefinitions.InitialFactorySnapshotFactory
 
+// TODO: these command runner overrides adn what else, should not exist within the factory runtime
+// Rather the invocation overridess should not be passed in to the commadn runner at all, they should be provideed logically
+// inside of the service.
+// factory session ID for the runtiem workers or whatever shoudl not be in the purview of the system here
+// It should be done within the context of the factory runtime/session
 type runtimeWorkersServiceWithProgress struct {
 	workers.Service
 	publisher                         workers.ProgressPublisher

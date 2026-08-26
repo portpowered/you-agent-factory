@@ -260,14 +260,18 @@ func TestGetDashboardUI_ReturnsEmbeddedShell(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	for _, want := range []string{"<title>You Agent Factory Dashboard</title>", "Standalone live dashboard shell for You Agent Factory.", "You%20Agent%20Factory%20dashboard%20icon", "<div id=\"root\"></div>", "/dashboard/ui/assets/"} {
-		if !strings.Contains(rec.Body.String(), want) {
-			t.Fatalf("expected embedded dashboard shell to contain %q, got body: %s", want, rec.Body.String())
+	body := rec.Body.String()
+	for _, want := range []string{"<title>You Agent Factory Dashboard</title>", "Standalone live dashboard shell for You Agent Factory.", "<div id=\"root\"></div>", "/dashboard/ui/assets/"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected embedded dashboard shell to contain %q, got body: %s", want, body)
 		}
 	}
+	if !strings.Contains(body, "You%20Agent%20Factory%20dashboard%20icon") && !strings.Contains(body, `href="/dashboard/ui/favicon.ico"`) {
+		t.Fatalf("expected embedded dashboard shell to contain a favicon, got body: %s", body)
+	}
 	for _, retired := range []string{"Infinite You Dashboard", "Standalone live dashboard shell for Infinite You.", "Infinite%20You%20dashboard%20icon"} {
-		if strings.Contains(rec.Body.String(), retired) {
-			t.Fatalf("expected embedded dashboard shell to retire %q, got body: %s", retired, rec.Body.String())
+		if strings.Contains(body, retired) {
+			t.Fatalf("expected embedded dashboard shell to retire %q, got body: %s", retired, body)
 		}
 	}
 }

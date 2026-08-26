@@ -84,6 +84,7 @@ const (
 	livePassthroughChildText = "passthrough child provider output"
 )
 
+// TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess proves child execution preserves model-embedded effort.
 func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *testing.T) {
 	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
 		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
@@ -132,6 +133,7 @@ func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *
 	}
 }
 
+// TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess proves child command rejection remains typed across the root process.
 func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *testing.T) {
 	const rejection = "Agy does not support a separate reasoning effort."
 

@@ -29,6 +29,7 @@ var (
 	cloneStringMap                                = factorymapping.CloneStringMap
 )
 
+// TODO: move to factory definitions
 // ParseWorkerConfig maps one authored AGENTS.md representation into its
 // canonical Worker configuration. Filesystem ownership remains with Factory
 // Definitions.

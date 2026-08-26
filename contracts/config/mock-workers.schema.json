@@ -65,6 +65,9 @@
       ],
       "description": "Selects a worker dispatch and declares the deterministic behavior to apply at the execution boundary.",
       "properties": {
+        "gateConfig": {
+          "$ref": "#/$defs/gateConfig"
+        },
         "id": {
           "type": "string"
         },
@@ -105,6 +108,36 @@
       },
       "required": [
         "runType"
+      ],
+      "type": "object"
+    },
+    "gateConfig": {
+      "additionalProperties": true,
+      "description": "Deterministically pauses a matched dispatch after signaling arrival and before applying its configured run type.",
+      "properties": {
+        "arrivedFile": {
+          "description": "Absolute path created when the dispatch reaches the mock-worker boundary.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "releaseFile": {
+          "description": "Absolute path whose creation releases the waiting dispatch.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Positive Go duration bounding the wait for release.",
+          "examples": [
+            "15s"
+          ],
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "arrivedFile",
+        "releaseFile",
+        "timeout"
       ],
       "type": "object"
     },
@@ -255,6 +288,138 @@
       "docs/examples/mock-workers-mixed.json"
     ],
     "fields": {
+      "mockWorkers[].gateConfig": {
+        "defaultEmptyBehavior": "omitted gateConfig executes the matched run type immediately; when present all gate fields are required",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional deterministic synchronization gate. The matched dispatch signals arrival, waits for release, then performs its configured run type.",
+              "id": "config.mock-workers.gate-config.description"
+            },
+            "title": {
+              "canonicalEnglish": "Dispatch gate configuration",
+              "id": "config.mock-workers.gate-config.title"
+            }
+          },
+          "examples": [
+            {
+              "arrivedFile": "C:\\temp\\mock-gate\\arrived",
+              "releaseFile": "C:\\temp\\mock-gate\\release",
+              "timeout": "15s"
+            }
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000008",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].gateConfig",
+        "jsonPath": "mockWorkers[].gateConfig",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].gateConfig.arrivedFile": {
+        "defaultEmptyBehavior": "missing, blank, or relative paths fail validation",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required absolute path created when the matched dispatch reaches the mock-worker boundary.",
+              "id": "config.mock-workers.gate-config.arrived-file.description"
+            },
+            "title": {
+              "canonicalEnglish": "Arrival signal file",
+              "id": "config.mock-workers.gate-config.arrived-file.title"
+            }
+          },
+          "examples": [
+            "C:\\temp\\mock-gate\\arrived",
+            "/tmp/mock-gate/arrived"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config.arrived-file",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000009",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].gateConfig.arrivedFile",
+        "jsonPath": "mockWorkers[].gateConfig.arrivedFile",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config.arrived-file",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].gateConfig.releaseFile": {
+        "defaultEmptyBehavior": "missing, blank, relative, or arrival-equal paths fail validation",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required absolute path observed by the waiting dispatch. Creating it releases execution into the configured run type.",
+              "id": "config.mock-workers.gate-config.release-file.description"
+            },
+            "title": {
+              "canonicalEnglish": "Release signal file",
+              "id": "config.mock-workers.gate-config.release-file.title"
+            }
+          },
+          "examples": [
+            "C:\\temp\\mock-gate\\release",
+            "/tmp/mock-gate/release"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config.release-file",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000010",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].gateConfig.releaseFile",
+        "jsonPath": "mockWorkers[].gateConfig.releaseFile",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config.release-file",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].gateConfig.timeout": {
+        "defaultEmptyBehavior": "missing, invalid, or non-positive durations fail validation",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required positive duration bounding the wait for release so synchronization mistakes fail deterministically.",
+              "id": "config.mock-workers.gate-config.timeout.description"
+            },
+            "title": {
+              "canonicalEnglish": "Gate timeout",
+              "id": "config.mock-workers.gate-config.timeout.title"
+            }
+          },
+          "examples": [
+            "15s",
+            "1m"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config.timeout",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000011",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].gateConfig.timeout",
+        "jsonPath": "mockWorkers[].gateConfig.timeout",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.gate-config.timeout",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "notes": "bounds synchronization waits so a forgotten release fails instead of hanging a dispatch",
+        "validationOwner": "validate"
+      },
       "mockWorkers": {
         "defaultEmptyBehavior": "missing mockWorkers decodes as an empty slice; nil after decode is normalized to []",
         "documentation": {
@@ -1313,7 +1478,7 @@
       },
       {
         "category": "dispatch delay or timing fields",
-        "reason": "no per-entry delay, sleep, or dispatch-timing fields are accepted; scriptConfig.timeout only bounds local script execution"
+        "reason": "no arbitrary delay or sleep is accepted; gateConfig only synchronizes a matched dispatch with explicit arrival and release files and a bounded timeout"
       },
       {
         "category": "artifact payloads",

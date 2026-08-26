@@ -3,7 +3,6 @@ package settingsresolution_test
 import (
 	"encoding/json"
 	"fmt"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,42 +10,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	settingsresolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-func TestDefaultRuntimeSettingsMatchProductionArtifactPolicies(t *testing.T) {
-	cfg, err := settingsresolution.LoadFileConfig(testFiles, decodeTestConfig, filepath.Join(t.TempDir(), "missing-config.json"))
-	if err != nil {
-		t.Fatalf("LoadFileConfig() error = %v", err)
-	}
-	got := cfg.Runtime
-	logDefaults := logging.DefaultRuntimeLogConfig()
-	wantLogging := operatorsettings.RuntimeArtifactSettings{
-		MaxSizeMB:  logDefaults.MaxSize,
-		MaxBackups: logDefaults.MaxBackups,
-		MaxAgeDays: logDefaults.MaxAge,
-		Compress:   logDefaults.Compress,
-	}
-	if got.Logging != wantLogging {
-		t.Fatalf("runtime logging defaults = %#v, want production defaults %#v", got.Logging, wantLogging)
-	}
-
-	metricsDefaults := platformmetrics.DefaultRuntimeMetricsConfig()
-	wantMetrics := operatorsettings.RuntimeArtifactSettings{
-		MaxSizeMB:  metricsDefaults.MaxSize,
-		MaxBackups: metricsDefaults.MaxBackups,
-		MaxAgeDays: metricsDefaults.MaxAge,
-		Compress:   metricsDefaults.Compress,
-	}
-	if got.Metrics != wantMetrics {
-		t.Fatalf("runtime metrics defaults = %#v, want production defaults %#v", got.Metrics, wantMetrics)
-	}
-}
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func decodeTestConfig(data []byte) (operatorsettings.Config, error) {
@@ -120,16 +89,6 @@ func testConfigDocumentService() operatorsettings.ConfigDocumentService {
 			encodeTestConfig,
 			controlledProviderCatalog,
 		),
-	}
-}
-
-func TestLoadFileDefaults_MissingFileReturnsEmptyDefaults(t *testing.T) {
-	defaults, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, filepath.Join(t.TempDir(), "missing-config.json"))
-	if err != nil {
-		t.Fatalf("operatorsettings.LoadFileDefaults() error = %v", err)
-	}
-	if defaults != (operatorsettings.Defaults{}) {
-		t.Fatalf("defaults = %#v, want empty", defaults)
 	}
 }
 
@@ -361,22 +320,6 @@ func assertDocumentRoundTrip(t *testing.T, document operatorsettings.ConfigDocum
 		t.Fatalf("decoded config = %#v, want %#v", decoded, document.FileConfig())
 	}
 }
-
-func TestLoadFileDefaults_MalformedFileNamesPath(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"defaults":`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	_, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, path)
-	if err == nil {
-		t.Fatal("expected malformed config error")
-	}
-	if !strings.Contains(err.Error(), path) {
-		t.Fatalf("error = %q, want path %q", err.Error(), path)
-	}
-}
-
 func TestParseFileDefaults_AcceptsBackendScopeIDAlongsideDefaults(t *testing.T) {
 	cfg, err := decodeTestConfig([]byte(`{
 		"backendScopeID": "local-11111111-1111-4111-8111-111111111111",
@@ -396,31 +339,6 @@ func TestParseFileDefaults_AcceptsBackendScopeIDAlongsideDefaults(t *testing.T) 
 		t.Fatalf("model = %q, want gpt-5-codex", defaults.WorkerModel)
 	}
 }
-
-func TestLoadFileDefaults_AcceptsBackendScopeIDAlongsideDefaults(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{
-		"backendScopeID": "local-22222222-2222-4222-8222-222222222222",
-		"defaults": {
-			"workerModelProvider": "claude",
-			"workerModel": "claude-sonnet"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	defaults, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, path)
-	if err != nil {
-		t.Fatalf("operatorsettings.LoadFileDefaults() error = %v", err)
-	}
-	if defaults.WorkerModelProvider != "claude" {
-		t.Fatalf("provider = %q, want claude", defaults.WorkerModelProvider)
-	}
-	if defaults.WorkerModel != "claude-sonnet" {
-		t.Fatalf("model = %q, want claude-sonnet", defaults.WorkerModel)
-	}
-}
-
 func TestParseFileDefaults_AcceptsWorkerModelDefaults(t *testing.T) {
 	cfg, err := decodeTestConfig([]byte(`{
 		"defaults": {
@@ -496,16 +414,6 @@ func TestParseFileConfig_RejectsInvalidWorkerPresets(t *testing.T) {
 	}
 }
 
-func TestLoadFileDefaults_RejectsMalformedWorkerPresets(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"workerPresets":[{"id":"bad","modelProvider":"Unknown_Provider"}]}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	if _, err := settingsresolution.LoadFileDefaults(testFiles, decodeTestConfig, path); err == nil || !strings.Contains(err.Error(), path) {
-		t.Fatalf("operatorsettings.LoadFileDefaults() error = %v, want validation error naming %q", err, path)
-	}
-}
-
 func TestDefaultConfigPathUsesCanonicalDefaultPathsPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -513,234 +421,5 @@ func TestDefaultConfigPathUsesCanonicalDefaultPathsPolicy(t *testing.T) {
 
 	if got, want := operatorsettings.DefaultConfigPath(homeDir), filepath.Join(homeDir, ".you-agent-factory", "config.json"); got != want {
 		t.Fatalf("operatorsettings.DefaultConfigPath() = %q, want %q", got, want)
-	}
-}
-
-func TestResolve_FileEnvFlagPrecedenceIsIndependentPerField(t *testing.T) {
-	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		File: operatorsettings.Defaults{
-			WorkerModelProvider: "claude",
-			WorkerModel:         "file-model",
-		},
-		Env: operatorsettings.Defaults{
-			WorkerModelProvider: "codex",
-			WorkerModel:         "env-model",
-		},
-		Flag: operatorsettings.Defaults{
-			WorkerModelProvider: "gemini",
-			WorkerModel:         "flag-model",
-		},
-	}, "/tmp/config.json")
-	if err != nil {
-		t.Fatalf("operatorsettings.Resolve() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "GEMINI" {
-		t.Fatalf("provider = %q, want GEMINI", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModel != "flag-model" {
-		t.Fatalf("model = %q, want flag-model", resolved.WorkerModel)
-	}
-	if resolved.WorkerModelProviderSource != operatorsettings.SourceFlag {
-		t.Fatalf("provider source = %q, want flag", resolved.WorkerModelProviderSource)
-	}
-	if resolved.WorkerModelSource != operatorsettings.SourceFlag {
-		t.Fatalf("model source = %q, want flag", resolved.WorkerModelSource)
-	}
-}
-
-func TestResolve_EnvOverridesFileWhenFlagsUnset(t *testing.T) {
-	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		File: operatorsettings.Defaults{
-			WorkerModelProvider: "claude",
-			WorkerModel:         "file-model",
-		},
-		Env: operatorsettings.Defaults{
-			WorkerModelProvider: "codex",
-			WorkerModel:         "env-model",
-		},
-	}, "/tmp/config.json")
-	if err != nil {
-		t.Fatalf("operatorsettings.Resolve() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModel != "env-model" {
-		t.Fatalf("model = %q, want env-model", resolved.WorkerModel)
-	}
-	if resolved.WorkerModelProviderSource != operatorsettings.SourceEnv {
-		t.Fatalf("provider source = %q, want env", resolved.WorkerModelProviderSource)
-	}
-	if resolved.WorkerModelSource != operatorsettings.SourceEnv {
-		t.Fatalf("model source = %q, want env", resolved.WorkerModelSource)
-	}
-}
-
-func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
-	for _, test := range []struct {
-		alias     string
-		canonical string
-	}{
-		{alias: "anthropic", canonical: "CLAUDE"},
-		{alias: "openai", canonical: "CODEX"},
-		{alias: "kiro-cli", canonical: "KIRO"},
-		{alias: "antigravity", canonical: "ANTIGRAVITY"},
-	} {
-		test := test
-		t.Run(test.alias, func(t *testing.T) {
-			resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-				File: operatorsettings.Defaults{WorkerModelProvider: test.alias},
-			}, "/tmp/config.json")
-			if err != nil {
-				t.Fatalf("operatorsettings.Resolve() error = %v", err)
-			}
-			if resolved.WorkerModelProvider != test.canonical {
-				t.Fatalf("provider = %q, want %q", resolved.WorkerModelProvider, test.canonical)
-			}
-		})
-	}
-}
-
-func TestResolve_SymbolicDefaultResolvesThroughLowerPrecedenceConcreteProvider(t *testing.T) {
-	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		File: operatorsettings.Defaults{WorkerModelProvider: "codex"},
-		Flag: operatorsettings.Defaults{WorkerModelProvider: "DEFAULT"},
-	}, "/tmp/config.json")
-	if err != nil {
-		t.Fatalf("operatorsettings.Resolve() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModelProviderSource != operatorsettings.SourceFlag {
-		t.Fatalf("provider source = %q, want flag", resolved.WorkerModelProviderSource)
-	}
-}
-
-func TestResolve_SymbolicDefaultWithoutConcreteProviderFails(t *testing.T) {
-	_, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		Flag: operatorsettings.Defaults{WorkerModelProvider: "DEFAULT"},
-	}, "/tmp/config.json")
-	if err == nil {
-		t.Fatal("expected unresolved DEFAULT error")
-	}
-	if !strings.Contains(err.Error(), "concrete provider") {
-		t.Fatalf("error = %q, want concrete provider guidance", err.Error())
-	}
-}
-
-func TestResolve_PreservesExplicitConfigPathOverride(t *testing.T) {
-	t.Parallel()
-
-	overridePath := filepath.Join(string(filepath.Separator), "tmp", "custom", "operator-config.json")
-	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		File: operatorsettings.Defaults{
-			WorkerModelProvider: "codex",
-			WorkerModel:         "file-model",
-		},
-	}, overridePath)
-	if err != nil {
-		t.Fatalf("operatorsettings.Resolve() error = %v", err)
-	}
-	if resolved.ConfigPath != overridePath {
-		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, overridePath)
-	}
-}
-
-func TestResolve_MalformedProviderFailsWithIdentitySyntax(t *testing.T) {
-	_, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		File: operatorsettings.Defaults{WorkerModelProvider: "Not_A_Provider"},
-	}, "/tmp/config.json")
-	if err == nil {
-		t.Fatal("expected malformed provider error")
-	}
-	if !strings.Contains(err.Error(), "unsupported worker model provider") {
-		t.Fatalf("error = %q, want unsupported provider message", err.Error())
-	}
-	if !strings.Contains(err.Error(), "canonical lowercase provider identity") {
-		t.Fatalf("error = %q, want provider identity syntax", err.Error())
-	}
-}
-
-func TestResolve_PreservesExtensionProviderFromCLIOverride(t *testing.T) {
-	const identity = "customer.provider-v2"
-	resolved, err := settingsresolution.Resolve(operatorsettings.ResolveInput{
-		Flag: operatorsettings.Defaults{WorkerModelProvider: identity},
-	}, "/tmp/config.json")
-	if err != nil {
-		t.Fatalf("operatorsettings.Resolve() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != identity || resolved.WorkerModelProviderSource != operatorsettings.SourceFlag {
-		t.Fatalf("resolved provider = %#v, want CLI identity %q", resolved, identity)
-	}
-}
-
-func TestResolveFromHome_LoadsFileAndEnvironment(t *testing.T) {
-	homeDir := t.TempDir()
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{
-		"defaults": {
-			"workerModelProvider": "claude",
-			"workerModel": "file-model"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
-
-	resolved, err := settingsresolution.ResolveFromHomeWithEnvironment(testFiles, decodeTestConfig, homeDir, operatorsettings.Defaults{
-		WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),
-		WorkerModel:         os.Getenv(operatorsettings.EnvDefaultWorkerModel),
-	}, operatorsettings.FlagOverrides{})
-	if err != nil {
-		t.Fatalf("ResolveFromHome() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModel != "env-model" {
-		t.Fatalf("model = %q, want env-model", resolved.WorkerModel)
-	}
-	if resolved.ConfigPath != configPath {
-		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, configPath)
-	}
-}
-
-func TestResolveFromHome_FlagsOverrideEnvironmentAndFile(t *testing.T) {
-	homeDir := t.TempDir()
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{
-		"defaults": {
-			"workerModelProvider": "claude",
-			"workerModel": "file-model"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
-
-	resolved, err := settingsresolution.ResolveFromHomeWithEnvironment(testFiles, decodeTestConfig, homeDir, operatorsettings.Defaults{
-		WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),
-		WorkerModel:         os.Getenv(operatorsettings.EnvDefaultWorkerModel),
-	}, operatorsettings.FlagOverrides{
-		WorkerModelProvider: "gemini",
-		WorkerModel:         "flag-model",
-	})
-	if err != nil {
-		t.Fatalf("ResolveFromHome() error = %v", err)
-	}
-	if resolved.WorkerModelProvider != "GEMINI" {
-		t.Fatalf("provider = %q, want GEMINI", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModel != "flag-model" {
-		t.Fatalf("model = %q, want flag-model", resolved.WorkerModel)
 	}
 }

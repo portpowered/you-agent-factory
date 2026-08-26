@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary proves declared secrets are redacted before recording persistence.
 func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing.T) {
 	secret := "story003-declared-secret-9e5c2a7f"
 	control := "story003-visible-control"

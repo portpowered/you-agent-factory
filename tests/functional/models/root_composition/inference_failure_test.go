@@ -64,6 +64,7 @@ func (effects *genericCLIOutputFailureEffects) Rename(oldPath, newPath string) e
 	return os.Rename(oldPath, newPath)
 }
 
+// TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly proves generic CLI inference emits exactly one stdout result.
 func TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly(t *testing.T) {
 	t.Parallel()
 
@@ -85,6 +86,7 @@ func TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly(t *testing.T) 
 	closeRootProcess(t, process, "close single-output root process")
 }
 
+// TestModelsGenericCLIProcessRollsBackMappedOutputsThroughEdges proves failed generic inference rolls back mapped outputs through injected edges.
 func TestModelsGenericCLIProcessRollsBackMappedOutputsThroughEdges(t *testing.T) {
 	t.Parallel()
 
@@ -126,6 +128,7 @@ func TestModelsGenericCLIProcessRollsBackMappedOutputsThroughEdges(t *testing.T)
 	closeRootProcess(t, process, "close rollback root process")
 }
 
+// TestModelsGenericCLIProcessCancellationStopsReadinessAndPublishesNothing proves cancellation stops readiness without publishing output.
 func TestModelsGenericCLIProcessCancellationStopsReadinessAndPublishesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +160,7 @@ func TestModelsGenericCLIProcessCancellationStopsReadinessAndPublishesNothing(t 
 	closeRootProcess(t, process, "close cancelled root process")
 }
 
+// TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing proves timeout stops readiness without publishing output.
 func TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing(t *testing.T) {
 	t.Parallel()
 
@@ -189,6 +193,7 @@ func TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing(t *test
 	closeRootProcess(t, process, "close timed-out root process")
 }
 
+// TestModelsGenericCLIProcessRedactsCrashedHostDetails proves crashed-host diagnostics redact sensitive process details.
 func TestModelsGenericCLIProcessRedactsCrashedHostDetails(t *testing.T) {
 	t.Parallel()
 

@@ -81,7 +81,7 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
-	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock)
+	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock, nil)
 	runnerRegistry, err := runnerswire.NewProductionRegistry(
 		agentDependencies,
 		scriptConfig,
@@ -150,7 +150,7 @@ func NewMockService(
 	); err != nil {
 		return nil, err
 	}
-	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock)
+	privateScriptDependencies := privateScriptDependencies(scriptDependencies, logger, clock, agentToolFiles)
 	runnerRegistry, err := runnerswire.NewMockProductionRegistry(
 		agentDependencies,
 		scriptConfig,
@@ -158,7 +158,10 @@ func NewMockService(
 		inferenceConfig,
 		inferenceDependencies,
 		MockConfig{WorkersConfig: mockWorkers},
-		runners.MockDependencies{Next: workerprocess.AdaptPlatformCommandRunner(mockDependencies.Next)},
+		runners.MockDependencies{
+			Next:  workerprocess.AdaptPlatformCommandRunner(mockDependencies.Next),
+			Files: agentToolFiles,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct mock Workers: %w", err)
@@ -191,9 +194,11 @@ func privateScriptDependencies(
 	dependencies ScriptDependencies,
 	logger logging.Logger,
 	clock func() time.Time,
+	gateFiles workers.AgentToolFileSystem,
 ) runners.ScriptDependencies {
 	commandRunner := newContextualMockWorkerCommandRunner(
 		workerprocess.AdaptPlatformCommandRunner(dependencies.CommandRunner),
+		gateFiles,
 	)
 	if commandRunner != nil && clock != nil {
 		commandRunner = workerprocess.CommandRunnerWithLogging(

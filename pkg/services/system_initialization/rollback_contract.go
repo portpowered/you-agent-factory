@@ -20,7 +20,6 @@ var ErrInitializePartialFailure = errors.New("system bootstrap initialize partia
 type InitializeStepID string
 
 const (
-	InitializeStepLegacyMigration   InitializeStepID = "legacy_migration"
 	InitializeStepSystemConfig      InitializeStepID = "system_config"
 	InitializeStepPackagedFactories InitializeStepID = "packaged_factories"
 )

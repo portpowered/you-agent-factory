@@ -19,6 +19,7 @@ import (
 const codedDiagnosticModelName = "OMNIVOICE_Q4_K_M"
 const codedDiagnosticUnknownModelName = "missing-model"
 
+// TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic proves local removal renders a coded diagnostic for a missing cache entry.
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -62,6 +63,7 @@ func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 	}
 }
 
+// TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic proves local and HTTP removal expose equivalent missing-cache diagnostics.
 func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	const message = "model cache is not installed; run you models pull " + codedDiagnosticModelName + " first"
 
@@ -103,6 +105,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	}
 }
 
+// TestModelsLocalInspectUnknownRendersCodedDiagnostic proves local inspection renders a coded diagnostic for an unknown model.
 func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 	for _, test := range []struct {
 		name  string
@@ -146,6 +149,7 @@ func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 	}
 }
 
+// TestModelsLocalInspectUnknownMatchesHTTPDiagnostic proves local and HTTP inspection expose equivalent unknown-model diagnostics.
 func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet || request.URL.Path != "/models/"+codedDiagnosticUnknownModelName {

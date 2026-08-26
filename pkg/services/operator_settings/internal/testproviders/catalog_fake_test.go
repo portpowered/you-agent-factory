@@ -21,21 +21,6 @@ func TestStandardCatalog_GetProviderRejectsRemovedCursorIdentity(t *testing.T) {
 	}
 }
 
-func TestCatalogFake_ListProvidersReturnsDetachedEntries(t *testing.T) {
-	t.Parallel()
-
-	fake := internaltestproviders.NewCatalogFake(
-		providers.Descriptor{ID: providers.IDCodex, Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
-	)
-	result, err := fake.ListProviders(context.Background(), providers.ListProvidersRequest{})
-	if err != nil {
-		t.Fatalf("ListProviders() = %v", err)
-	}
-	if len(result.Providers) != 1 || result.Providers[0].ID != providers.IDCodex {
-		t.Fatalf("providers = %#v, want one codex entry", result.Providers)
-	}
-}
-
 func TestCatalogFake_GetProviderRejectsInvalidRequest(t *testing.T) {
 	t.Parallel()
 

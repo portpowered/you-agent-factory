@@ -53,16 +53,6 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeW
 	return out
 }
 
-// WorkDiagnosticsFromSafeEventPayload decodes the public camel-case event shape
-// into canonical worker diagnostics without involving generated transport types.
-func WorkDiagnosticsFromSafeEventPayload(payload json.RawMessage) (*WorkDiagnostics, error) {
-	safe, err := SafeWorkDiagnosticsFromEventPayload(payload)
-	if err != nil {
-		return nil, err
-	}
-	return WorkDiagnosticsFromSafeWorkDiagnostics(safe), nil
-}
-
 // SafeWorkDiagnosticsFromEventPayload decodes the public camel-case event
 // shape into the worker-owned safe diagnostics contract.
 func SafeWorkDiagnosticsFromEventPayload(payload json.RawMessage) (*SafeWorkDiagnostics, error) {

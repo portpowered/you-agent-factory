@@ -2,7 +2,7 @@
 
 # Publishes the Backend Unit Coverage job summary from the coverage and timing
 # artifacts the unit lane writes. This is a reporting-only sibling of
-# publish-functional-test-summary.sh and is deliberately fail-open: a missing
+# functional test summary publication and is deliberately fail-open: a missing
 # artifact, a malformed document, or a missing node runtime writes an explicit
 # "unavailable" section and exits 0. A reporting failure must never turn a
 # passing suite red.

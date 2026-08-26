@@ -7,13 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -23,21 +21,6 @@ const (
 	modelResponseEventIDPrefix     = "factory-event/model-response"
 	modelExecutionOutputPreviewMax = 200
 )
-
-// Recorder persists one canonical model execution event.
-type Recorder = workerexecution.ModelEventRecorder
-
-type runner struct {
-	inner      workers.Runner
-	factoryCfg *interfaces.FactoryConfig
-	workerDef  *interfaces.FactoryWorkerConfig
-	recorder   Recorder
-	now        func() time.Time
-
-	mu              sync.Mutex
-	attempts        map[string]int
-	responseOrdinal int
-}
 
 type executionTrace struct {
 	mu sync.Mutex
@@ -52,143 +35,6 @@ type executionTrace struct {
 }
 
 type executionTraceKey struct{}
-
-// NewRunner wraps inner when model events can be recorded. A missing runner,
-// worker definition, or recorder leaves the runner unchanged.
-func NewRunner(
-	inner workers.Runner,
-	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.FactoryWorkerConfig,
-	recorder Recorder,
-	now func() time.Time,
-) workers.Runner {
-	if inner == nil || workerDef == nil || recorder == nil {
-		return inner
-	}
-	cloned := interfaces.CloneWorkerConfig(*workerDef)
-	return &runner{
-		inner: inner, factoryCfg: factoryCfg, workerDef: &cloned,
-		recorder: recorder, now: now, attempts: make(map[string]int),
-	}
-}
-
-func (r *runner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
-	if r == nil || r.inner == nil {
-		return workerexecution.RunnerExecutionResult{}, fmt.Errorf("model event recorder requires an inner runner")
-	}
-	if r.now == nil {
-		return workerexecution.RunnerExecutionResult{}, fmt.Errorf("model event recorder clock is required")
-	}
-	attempt := r.nextAttempt(request.Dispatch.DispatchID)
-	requestID := modelRequestID(request.Dispatch.DispatchID, attempt)
-	responseOrdinal := r.nextResponseOrdinal()
-	started := r.now()
-	trace := &executionTrace{}
-	ctx = context.WithValue(ctx, executionTraceKey{}, trace)
-	r.record(requestEvent(request, r.factoryCfg, r.workerDef, attempt, requestID, started))
-	response, err := r.inner.Execute(ctx, request)
-	finished := r.now()
-	r.record(responseEvent(request, response, err, r.factoryCfg, r.workerDef, trace, attempt, requestID, responseOrdinal, finished.Sub(started), finished))
-	r.clearAttempts(request.Dispatch.DispatchID)
-	return response, err
-}
-
-func (r *runner) record(event workerexecution.ModelEvent) {
-	if r != nil && r.recorder != nil {
-		// Recording is a detached observation side effect. A recorder panic must
-		// not rewrite the inner runner result or prevent terminal response work.
-		defer func() {
-			_ = recover()
-		}()
-		r.recorder(event)
-	}
-}
-
-func (r *runner) nextAttempt(dispatchID string) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.attempts[dispatchID]++
-	return r.attempts[dispatchID]
-}
-
-func (r *runner) clearAttempts(dispatchID string) {
-	r.mu.Lock()
-	delete(r.attempts, dispatchID)
-	r.mu.Unlock()
-}
-
-// nextResponseOrdinal returns a process-local ordinal for one recorded
-// response. A single counter keeps the runner's identity state bounded while
-// preserving distinct IDs for retries that reuse the request ordinal.
-func (r *runner) nextResponseOrdinal() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.responseOrdinal++
-	return r.responseOrdinal
-}
-
-func modelRequestID(dispatchID string, attempt int) string {
-	if strings.TrimSpace(dispatchID) == "" {
-		return fmt.Sprintf("model-request/%d", attempt)
-	}
-	return fmt.Sprintf("%s/model-request/%d", dispatchID, attempt)
-}
-
-func requestEvent(request workerexecution.RunnerExecutionRequest, factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.FactoryWorkerConfig, attempt int, requestID string, eventTime time.Time) workerexecution.ModelEvent {
-	payload := workerexecution.ModelRequestEventPayload{
-		ModelRequestID:   requestID,
-		Attempt:          attempt,
-		Operation:        strings.TrimSpace(request.ModelOperation),
-		Worker:           firstNonEmpty(request.WorkerType, workerName(workerDef)),
-		Model:            firstNonEmpty(request.Model, modelName(workerDef)),
-		ProviderLocality: firstNonEmpty(strings.TrimSpace(request.ModelLocality), modelLocality(workerDef)),
-		Resources:        resourceSummaries(factoryCfg, workerDef),
-		Bindings:         resolvedBindings(request.ModelBindings),
-		WorkingDirectory: stringPtr(request.WorkingDirectory),
-		Worktree:         stringPtr(request.Worktree),
-	}
-	return Event(request, workerexecution.ModelEventKindRequest, fmt.Sprintf("%s/%s", modelRequestEventIDPrefix, requestID), eventTime, &payload, nil)
-}
-
-func responseEvent(request workerexecution.RunnerExecutionRequest, response workerexecution.RunnerExecutionResult, err error, factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.FactoryWorkerConfig, trace *executionTrace, attempt int, requestID string, responseOrdinal int, duration time.Duration, eventTime time.Time) workerexecution.ModelEvent {
-	payload := workerexecution.ModelResponseEventPayload{
-		ModelRequestID:   requestID,
-		Attempt:          attempt,
-		Operation:        strings.TrimSpace(request.ModelOperation),
-		Worker:           firstNonEmpty(request.WorkerType, workerName(workerDef)),
-		Model:            firstNonEmpty(request.Model, modelName(workerDef)),
-		ProviderLocality: firstNonEmpty(strings.TrimSpace(request.ModelLocality), modelLocality(workerDef)),
-		Continuation:     cloneContinuation(response.Continuation),
-		DurationMillis:   duration.Milliseconds(),
-		Resources:        resourceSummaries(factoryCfg, workerDef),
-		Bindings:         resolvedBindings(request.ModelBindings),
-	}
-	if !continuationHasSessionIdentity(response.Continuation) {
-		payload.ProviderSession = providerSessionForRequest(request, workerDef)
-	}
-	if err != nil {
-		payload.Outcome = workerexecution.InferenceOutcomeFailed
-		payload.FailureDetail = modelFailureDetail(err)
-		payload.Diagnostics = Diagnostics(nil, err)
-	} else {
-		payload.Outcome = workerexecution.InferenceOutcomeSucceeded
-		payload.Diagnostics = Diagnostics(response.Diagnostics, nil)
-	}
-	if trace != nil {
-		trace.mu.Lock()
-		payload.ResourceWaitMillis = int64PtrIfPositive(trace.resourceWaitMillis)
-		payload.ResourceAcquired = boolPtr(trace.resourceAcquired)
-		payload.LoadRequested = boolPtr(trace.loadRequested)
-		payload.LoadReused = boolPtr(trace.loadReused)
-		payload.LoadDurationMillis = int64PtrIfPositive(trace.loadMillis)
-		trace.mu.Unlock()
-	}
-	payload.OutputContent = outputContent(response.Content)
-	if payload.OutputContent == nil {
-		payload.OutputPreview = stringPtr(truncate(strings.TrimSpace(response.Content), modelExecutionOutputPreviewMax))
-	}
-	return Event(request, workerexecution.ModelEventKindResponse, modelResponseEventID(request.Dispatch.DispatchID, responseOrdinal), eventTime, nil, &payload)
-}
 
 func providerSessionForRequest(
 	request workerexecution.RunnerExecutionRequest,
@@ -223,127 +69,6 @@ func continuationHasSessionIdentity(continuation *workerexecution.ProviderContin
 	}
 	return strings.TrimSpace(continuation.ProviderSessionID) != "" ||
 		strings.TrimSpace(continuation.ExternalRef) != ""
-}
-
-func modelResponseEventID(dispatchID string, ordinal int) string {
-	dispatchID = strings.TrimSpace(dispatchID)
-	if dispatchID == "" {
-		return fmt.Sprintf("%s/%d", modelResponseEventIDPrefix, ordinal)
-	}
-	return fmt.Sprintf("%s/%s/%d", modelResponseEventIDPrefix, dispatchID, ordinal)
-}
-
-func modelFailureDetail(err error) *workerexecution.FailureDetail {
-	var providerErr *workers.ProviderError
-	if errors.As(err, &providerErr) && providerErr != nil {
-		message := strings.TrimSpace(providerErr.Message)
-		if message == "" {
-			message = "The provider request failed without an available explanation."
-		}
-		return &workerexecution.FailureDetail{Reason: providerErr.Type, Message: message}
-	}
-	return &workerexecution.FailureDetail{
-		Reason:  workerexecution.WorkFailureTypeUnknown,
-		Message: "The model request failed without an available explanation.",
-	}
-}
-
-// Event constructs the canonical event envelope. It is exported for focused
-// contract tests and callers that already have request or response payloads.
-func Event(request workerexecution.RunnerExecutionRequest, kind workerexecution.ModelEventKind, id string, eventTime time.Time, requestPayload *workerexecution.ModelRequestEventPayload, responsePayload *workerexecution.ModelResponseEventPayload) workerexecution.ModelEvent {
-	return workerexecution.ModelEvent{
-		ID: id, Kind: kind, EventTime: interfaces.CanonicalEventTime(eventTime),
-		Tick: executionTick(request.Dispatch.Execution), DispatchID: request.Dispatch.DispatchID,
-		RequestID: request.Dispatch.Execution.RequestID,
-		TraceIDs:  stringsIfPresent(request.Dispatch.Execution.TraceID),
-		WorkIDs:   stringsIfPresent(request.Dispatch.Execution.WorkIDs...),
-		Request:   requestPayload, Response: responsePayload,
-	}
-}
-
-func executionTick(metadata work.ExecutionMetadata) int {
-	if metadata.CurrentTick != 0 {
-		return metadata.CurrentTick
-	}
-	return metadata.DispatchCreatedTick
-}
-
-func workerName(workerDef *interfaces.FactoryWorkerConfig) string {
-	if workerDef == nil {
-		return ""
-	}
-	return strings.TrimSpace(workerDef.Name)
-}
-
-func modelName(workerDef *interfaces.FactoryWorkerConfig) string {
-	if workerDef == nil {
-		return ""
-	}
-	return strings.TrimSpace(workerDef.Model)
-}
-
-func modelLocality(workerDef *interfaces.FactoryWorkerConfig) string {
-	if workerDef == nil {
-		return ""
-	}
-	return strings.TrimSpace(workerDef.ModelLocality)
-}
-
-func resolvedBindings(bindings []workerexecution.ResolvedModelOperationBinding) *[]workerexecution.ResolvedModelOperationBinding {
-	if len(bindings) == 0 {
-		return nil
-	}
-	cloned := workerexecution.CloneResolvedModelOperationBindings(bindings)
-	return &cloned
-}
-
-func resourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.FactoryWorkerConfig) *[]workerexecution.ModelResourceSummary {
-	if factoryCfg == nil || workerDef == nil || len(workerDef.Resources) == 0 {
-		return nil
-	}
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
-	for _, resource := range factoryCfg.Resources {
-		resourcesByName[resource.Name] = resource
-	}
-	summaries := make([]workerexecution.ModelResourceSummary, 0, len(workerDef.Resources))
-	seen := make(map[string]struct{}, len(workerDef.Resources))
-	for _, requirement := range workerDef.Resources {
-		resource, ok := resourcesByName[requirement.Name]
-		if !ok {
-			continue
-		}
-		if _, ok := seen[resource.Name]; ok {
-			continue
-		}
-		summaries = append(summaries, workerexecution.ModelResourceSummary{
-			Name: resource.Name, Type: strings.TrimSpace(resource.Type), Capacity: resource.Capacity,
-			Model: stringPtr(resource.Model), Backend: stringPtr(resource.Backend),
-			LoadPolicy: stringPtr(resource.LoadPolicy), Provider: stringPtr(resource.Provider),
-		})
-		seen[resource.Name] = struct{}{}
-	}
-	if len(summaries) == 0 {
-		return nil
-	}
-	return &summaries
-}
-
-func outputContent(raw string) *[]work.WorkContentPart {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil
-	}
-	var content []work.WorkContentPart
-	if err := json.Unmarshal([]byte(trimmed), &content); err == nil && len(content) != 0 {
-		return &content
-	}
-	var envelope struct {
-		Content []work.WorkContentPart `json:"content"`
-	}
-	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) != 0 {
-		return &envelope.Content
-	}
-	return &[]work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: raw}}
 }
 
 // Diagnostics returns the redacted event-safe diagnostics payload shared by

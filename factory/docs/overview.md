@@ -1,5 +1,10 @@
 # Factory Overview
 
+Planning and delivery work in this factory is governed by the canonical
+[factory standards](./standards/README.md). Workers must read the standard for
+their role before creating plans, implementing tasks, reviewing changes, or
+acting on validation loopback results.
+
 This factory coordinates autonomous work for **you-agent-factory**: the Go,
 OpenAPI, and React system for scheduling and orchestrating concurrent AI workers
 through the `you` CLI, backend runtime, and dashboard. The **ideafy**

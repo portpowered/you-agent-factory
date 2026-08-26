@@ -1119,7 +1119,6 @@ func TestProjectionServiceDelegates(t *testing.T) {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
 	_ = projection.SimpleDashboardRenderData(state)
-	_ = projection.ProjectActiveThrottlePauses(factorydefinitions.InitialStructurePayload{}, nil)
 	_ = projection.ProjectWorkstationRequests(state)
 	if err := projection.ValidateReconnectReplay(nil, factorydefinitions.FactoryEventReconnectCursor{}, factorydefinitions.FactoryEventReconnectScope{}); err != nil {
 		t.Fatalf("ValidateReconnectReplay: %v", err)

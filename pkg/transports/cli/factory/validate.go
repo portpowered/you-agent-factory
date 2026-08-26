@@ -11,7 +11,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
+	validationentry "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryvalidation"
 )
 
 // ValidateConfig holds parameters for factory validation output.
@@ -53,7 +53,7 @@ func ValidateWithServices(
 		return authoredSourceError(source, err)
 	}
 
-	result, err := factorydefinitionentry.ValidateFactoryAPI(
+	result, err := validationentry.ValidateFactoryAPI(
 		cfg.Context,
 		factory,
 		validate,

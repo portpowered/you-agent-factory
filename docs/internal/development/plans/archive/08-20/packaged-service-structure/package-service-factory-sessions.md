@@ -6,7 +6,7 @@ The target is one process-scoped `factorysessions.Service` that owns customer-vi
 
 This plan is aligned with:
 
-- `docs/internal/standards/code/planning-standards.md`
+- `factory/docs/standards/planning-standards.md`
 - `docs/internal/standards/code/general-backend-standards.md`
 - `docs/architecture/data-model.md`
 - `docs/architecture/packaged-structure.md`

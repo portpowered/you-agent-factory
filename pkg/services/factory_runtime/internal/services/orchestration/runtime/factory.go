@@ -297,6 +297,7 @@ func New(
 	impl.engine = runtimeEngine
 	return impl, nil
 }
+
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	if cfg.scheduler != nil {
 		scheduler.ApplyRuntimeConfig(cfg.scheduler, cfg.runtimeConfig)

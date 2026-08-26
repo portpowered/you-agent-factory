@@ -5,11 +5,15 @@ package mock
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	mockworkerbehavior "github.com/portpowered/infinite-you/pkg/services/workers/internal/mockworker"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -23,12 +27,14 @@ type Config struct {
 // Dependencies are optional effects for mock script passthrough. Production
 // Workers construction must leave this registry unregistered.
 type Dependencies struct {
-	Next workerprocess.CommandRunner
+	Next  workerprocess.CommandRunner
+	Files mockworkerbehavior.GateFileSystem
 }
 
 type runner struct {
 	config *workers.MockWorkersConfig
 	next   workerprocess.CommandRunner
+	files  mockworkerbehavior.GateFileSystem
 }
 
 var _ workers.Runner = (*runner)(nil)
@@ -38,12 +44,7 @@ func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 	if config.WorkersConfig == nil {
 		return nil, errors.New("construct mock runner: mock workers config is required")
 	}
-	snapshot := *config.WorkersConfig
-	snapshot.MockWorkers = append(
-		[]workers.MockWorkerConfig(nil),
-		config.WorkersConfig.MockWorkers...,
-	)
-	return &runner{config: &snapshot, next: dependencies.Next}, nil
+	return &runner{config: config.WorkersConfig.Clone(), next: dependencies.Next, files: dependencies.Files}, nil
 }
 
 // Execute evaluates one request-scoped mock decision without retaining caller
@@ -76,6 +77,11 @@ func (r *runner) Execute(
 		return acceptResult(), nil
 	}
 	recordMockWorkerUsage(ctx, request.Correlation, entry.Usage)
+	if entry.GateConfig != nil {
+		if err := mockworkerbehavior.WaitForGate(ctx, *entry.GateConfig, r.files); err != nil {
+			return workers.RunnerExecutionResult{}, err
+		}
+	}
 	switch entry.RunType {
 	case workers.MockWorkerRunTypeReject:
 		return workerexecution.ApplyMockWorkerUsageDiagnostics(
@@ -163,9 +169,128 @@ func (r *runner) match(
 			candidate.WorkstationName != request.WorkstationType {
 			continue
 		}
+		if !mockWorkInputSelectorsMatch(candidate.WorkInputs, mockRequestInputs(request)) {
+			continue
+		}
 		return candidate, true
 	}
 	return workers.MockWorkerConfig{}, false
+}
+
+func mockRequestInputs(request workers.RunnerExecutionRequest) []any {
+	inputs := make([]any, 0, len(request.InputTokens)+len(request.Dispatch.InputTokens))
+	inputs = append(inputs, request.InputTokens...)
+	inputs = append(inputs, request.Dispatch.InputTokens...)
+	return inputs
+}
+
+type mockInputToken struct {
+	ID         string            `json:"id"`
+	State      string            `json:"state"`
+	WorkID     string            `json:"workId"`
+	WorkTypeID string            `json:"workTypeId"`
+	TraceID    string            `json:"traceId"`
+	Tags       map[string]string `json:"tags"`
+	Payload    []byte            `json:"payload"`
+	Color      struct {
+		WorkID     string            `json:"work_id"`
+		WorkTypeID string            `json:"work_type_id"`
+		DataType   string            `json:"data_type"`
+		TraceID    string            `json:"trace_id"`
+		Tags       map[string]string `json:"tags"`
+		Payload    []byte            `json:"payload"`
+	} `json:"color"`
+}
+
+func mockWorkInputSelectorsMatch(selectors []workers.MockWorkInputSelector, raw []any) bool {
+	for _, selector := range selectors {
+		matched := false
+		for _, item := range raw {
+			if input, ok := item.(workers.WorkInput); ok && mockSelectorMatchesWorkInput(selector, input) {
+				matched = true
+				break
+			}
+			encoded, err := json.Marshal(item)
+			if err != nil {
+				continue
+			}
+			var token mockInputToken
+			if json.Unmarshal(encoded, &token) == nil && mockSelectorMatchesToken(selector, token) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func mockSelectorMatchesWorkInput(selector workers.MockWorkInputSelector, input workers.WorkInput) bool {
+	return (selector.WorkID == "" || selector.WorkID == input.WorkID) &&
+		(selector.WorkType == "" || selector.WorkType == input.WorkTypeID) &&
+		(selector.State == "" || selector.State == input.State) &&
+		(selector.InputName == "" || contains(input.InputNames, selector.InputName)) &&
+		(selector.TraceID == "" || selector.TraceID == input.Lineage.TraceID) &&
+		(selector.Channel == "" || selector.Channel == input.Tags["channel"]) &&
+		(selector.PayloadHash == "" || selector.PayloadHash == mockPayloadHash(workInputPayload(input)))
+}
+
+func mockSelectorMatchesToken(selector workers.MockWorkInputSelector, token mockInputToken) bool {
+	workID := firstNonEmpty(token.Color.WorkID, token.WorkID)
+	workTypeID := firstNonEmpty(token.Color.WorkTypeID, token.WorkTypeID)
+	traceID := firstNonEmpty(token.Color.TraceID, token.TraceID)
+	tags := token.Color.Tags
+	if tags == nil {
+		tags = token.Tags
+	}
+	payload := token.Color.Payload
+	if len(payload) == 0 {
+		payload = token.Payload
+	}
+	return (selector.WorkID == "" || selector.WorkID == workID) &&
+		(selector.WorkType == "" || selector.WorkType == workTypeID) &&
+		(selector.State == "" || selector.State == token.State) &&
+		selector.InputName == "" &&
+		(selector.TraceID == "" || selector.TraceID == traceID) &&
+		(selector.Channel == "" || selector.Channel == tags["channel"]) &&
+		(selector.PayloadHash == "" || selector.PayloadHash == mockPayloadHash(payload))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func workInputPayload(input workers.WorkInput) []byte {
+	for _, part := range input.Content {
+		if part.Type.Normalized() == "text" {
+			return []byte(part.Text)
+		}
+	}
+	return nil
+}
+
+func mockPayloadHash(payload []byte) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func acceptResult() workers.RunnerExecutionResult {

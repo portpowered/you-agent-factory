@@ -18,11 +18,13 @@ func NewMockCommandRunner(
 	config *workers.MockWorkersConfig,
 	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
 	next platformprocess.CommandRunner,
+	files workers.AgentToolFileSystem,
 ) platformprocess.CommandRunner {
 	return workerprocess.ProjectPlatformCommandRunner(&runnermockworker.MockWorkerCommandRunner{
 		Config:        config,
 		RuntimeConfig: runtimeConfig,
 		Next:          workerprocess.AdaptPlatformCommandRunner(next),
+		Files:         files,
 	})
 }
 

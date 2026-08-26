@@ -1,7 +1,10 @@
 package runtime_metrics_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,6 +110,64 @@ func writeDocumentedMetrics(t *testing.T, home string) {
 	records[1]["provider"] = "codex"
 	records[3]["provider"] = "${workerProvider}"
 	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-documented.log"), false, records)
+}
+
+const (
+	runtimeDispatchComplete     = "dispatch.completed"
+	runtimeDispatchDuration     = "dispatch.duration"
+	runtimeProviderDuration     = "provider.duration"
+	runtimeProviderFailed       = "provider.failed"
+	runtimeProviderInputTokens  = "provider.input_tokens"
+	runtimeProviderOutputTokens = "provider.output_tokens"
+)
+
+func writeRuntimeMetricsArtifact(
+	t *testing.T,
+	path string,
+	compressed bool,
+	records []map[string]any,
+	tail ...string,
+) {
+	t.Helper()
+	var content bytes.Buffer
+	encoder := json.NewEncoder(&content)
+	for _, record := range records {
+		if err := encoder.Encode(record); err != nil {
+			t.Fatalf("encode runtime metric: %v", err)
+		}
+	}
+	if len(tail) > 0 {
+		if _, err := io.WriteString(&content, tail[0]); err != nil {
+			t.Fatalf("write torn runtime metric: %v", err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", filepath.Dir(path), err)
+	}
+	if !compressed {
+		if err := os.WriteFile(path, content.Bytes(), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q): %v", path, err)
+		}
+		return
+	}
+
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("Create(%q): %v", path, err)
+	}
+	writer := gzip.NewWriter(file)
+	if _, err := writer.Write(content.Bytes()); err != nil {
+		_ = writer.Close()
+		_ = file.Close()
+		t.Fatalf("compress %q: %v", path, err)
+	}
+	if err := writer.Close(); err != nil {
+		_ = file.Close()
+		t.Fatalf("close gzip %q: %v", path, err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close %q: %v", path, err)
+	}
 }
 
 func discoverDocumentedLiveSession(

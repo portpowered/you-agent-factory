@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -23,7 +22,8 @@ const (
 // target visible in one Factory Session cannot satisfy admission in another,
 // and that the rejected batch admits none of its Work items.
 func TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T) {
-	requireCrossBatchGit(t)
+	t.Parallel()
+
 	run := newCrossBatchFunctionalRun(t)
 
 	opened := support.OpenFactorySessionAt(t, run.baseURL, run.session.FolderPath)
@@ -33,14 +33,12 @@ func TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T) {
 	otherSessionID := opened.Session.Id
 	baseline := listCrossBatchSessionWork(t, run.baseURL, otherSessionID)
 
-	executeCrossBatchSubmit(t, run.submitProcess, run.baseURL, crossBatchPrerequisiteBatchJSON())
-	run.runner.WaitForFinishDispatch(t, 15*time.Second)
-	run.runner.Release()
+	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchPrerequisiteBatchJSON())
 	assertCrossBatchWorkState(t, run.baseURL, crossBatchPrerequisiteID, "complete", "completed source-session target")
 
 	stdout, stderr, err := executeCrossBatchSubmitForSessionExpectingError(
 		t,
-		run.submitProcess,
+		run.server,
 		run.baseURL,
 		otherSessionID,
 		crossBatchCrossSessionBatchJSON(),
@@ -70,9 +68,6 @@ func TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T) {
 		if crossBatchSessionWorkListed(listed, workID) {
 			t.Fatalf("rejected cross-session batch admitted Work %q: %#v", workID, listed.Results)
 		}
-	}
-	if got := run.runner.CallCount(); got != 2 {
-		t.Fatalf("provider calls after cross-session rejection = %d, want only the source session's two dispatches", got)
 	}
 }
 
@@ -106,7 +101,7 @@ func crossBatchCrossSessionBatchJSON() string {
 
 func executeCrossBatchSubmitForSessionExpectingError(
 	t *testing.T,
-	process support.Process,
+	server *support.FunctionalAPIServer,
 	baseURL string,
 	sessionID string,
 	batchJSON string,
@@ -121,7 +116,7 @@ func executeCrossBatchSubmitForSessionExpectingError(
 	stdinIsTTY := true
 	inputs.Input.StdinIsTTY = &stdinIsTTY
 	inputs.Input.Stdin = strings.NewReader("")
-	err := process.Execute(inputs.Input)
+	err := server.Execute(t, inputs.Input)
 	return inputs.Stdout(), inputs.Stderr(), err
 }
 

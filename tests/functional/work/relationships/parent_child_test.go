@@ -43,6 +43,8 @@ const (
 // remains observable after the child dispatches and after event-history
 // reconstruction from the same session.
 func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	provider := testutil.NewMockProvider(
@@ -143,6 +145,8 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 // (ANY_CHILD_FAILED) surfaces on the parent Work as a failed customer-visible
 // state while PARENT_CHILD lineage remains observable on the child.
 func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "submitted_parent_child_filewatcher"))
 
 	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
@@ -231,6 +235,8 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 // dispatch observations that the executor input preserves the submitted payload,
 // tags, and work type identity for dispatched Work.
 func TestDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	payload := []byte(`{"feature": "dark mode", "priority": "high"}`)
@@ -275,6 +281,8 @@ func TestDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T) {
 // is attached to the next executor dispatch payload while the first dispatch
 // remains free of rejection-feedback tags.
 func TestRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
@@ -305,6 +313,8 @@ func TestRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T) {
 // DEPENDS_ON relations remain observable on the child dispatch token after both
 // prerequisite completion and child submission.
 func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -381,6 +391,8 @@ func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
 // prerequisite fails before reaching its required state, the dependent Work
 // projects to failed without reaching a successful terminal state.
 func TestDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	parentWorkID := "parent-work-id"
@@ -429,6 +441,8 @@ func TestDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T) {
 // parent→child→grandchild DEPENDS_ON chain reaches failed terminals on every
 // related Work item when the upstream finisher path fails.
 func TestTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	pWorkID := "P-work-id"
@@ -491,6 +505,8 @@ func TestTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T) {
 // Work listings and captured provider command invocations that a prerequisite
 // Work already at complete is left unchanged when a later dependent Work fails.
 func TestCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T) {
+	t.Parallel()
+
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	aWorkID := "A-work-id"

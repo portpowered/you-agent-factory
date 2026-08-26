@@ -114,6 +114,9 @@ func packageGatesFromManifest(manifest coverageManifest) map[string]packageCover
 	gates := make(map[string]packageCoverageGate, len(manifest.Packages))
 	holds := coverageManifestFloorHoldMap(manifest)
 	for _, entry := range manifest.Packages {
+		if !coverageRequirementApplies(manifest.Lane, entry.Package) {
+			continue
+		}
 		if entry.Exception != nil {
 			gates[entry.Package] = packageCoverageGate{
 				Exception: cloneCoverageManifestException(entry.Exception),

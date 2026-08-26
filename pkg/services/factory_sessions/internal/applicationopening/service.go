@@ -71,14 +71,6 @@ func New(
 	}
 }
 
-func (service *Service) OpenApplication(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	sinkID factorysessions.VisualizationSinkID,
-) (roles.OpenedProcessApplication, error) {
-	return service.openApplication(ctx, request, nil, sinkID)
-}
-
 // OpenApplicationWithCancellation opens one application with the explicit
 // invocation-local authority used by hosted administrative controls. The
 // authority is an operation input rather than part of the immutable runtime

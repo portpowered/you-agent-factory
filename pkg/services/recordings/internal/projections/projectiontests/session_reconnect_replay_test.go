@@ -43,10 +43,6 @@ func TestReconnectReplay_ReconstructsSessionLifecyclePhaseDispatchAndResultWitho
 		t.Fatalf("artifacts = %#v, want one artifact ref", worldState.Artifacts)
 	}
 
-	view := BuildFactoryWorldView(worldState)
-	if view.Runtime.JavaScript == nil || view.Runtime.JavaScript.Phase != "execute" {
-		t.Fatalf("javascript projection = %#v, want execute phase after merging ack state with reconnect replay", view.Runtime.JavaScript)
-	}
 }
 
 func canonicalReconnectProjectionEvents(t *testing.T, events []factoryapi.FactoryEvent) []interfaces.FactoryEvent {

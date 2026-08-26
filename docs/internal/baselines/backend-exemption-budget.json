@@ -747,7 +747,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/work/relationships/dependencies_test.go#TestFanInReleasesOnlyAfterEveryPrerequisite",
+      "target": "tests/functional/work/relationships/dependencies_test.go#testFanInReleasesOnlyAfterEveryPrerequisite",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
     },
@@ -1479,12 +1479,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/provider_sessions/internal/root_contracts_providers_boundary_identity_test.go#TestRootContracts_ProvidersRootBoundary_IdentityConstruction",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/provider_sessions/internal/services/codex_reader/internal/service/parser.go#parseCodexSessionDetails",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -1599,13 +1593,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/internal/projections/projectiontests/simple_dashboard_projection_test.go#TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/internal/projections/projectiontests/simple_dashboard_projection_test.go#assertTerminalProjection",
+      "target": "pkg/services/recordings/internal/projections/projectiontests/world_state_support_test.go#assignGeneratedProjectionPayload",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
@@ -1618,12 +1606,6 @@
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/recordings/internal/projections/projectiontests/world_state_test.go#TestReconstructFactoryWorldState_PreservesSafeInferenceAttemptDiagnostics",
-      "owner": "backend-maintainers",
-      "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/internal/projections/projectiontests/world_view_support_test.go#assignGeneratedProjectionPayload",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
@@ -1914,12 +1896,6 @@
       "target": "pkg/services/workers/internal/services/runners/wire/agent_failure_test.go#assertAgentFailureFacts",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/workers/internal/services/workstations/executor/agentrun/tools.go#PolicyToolExecutor.resolveBoundedPath",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",

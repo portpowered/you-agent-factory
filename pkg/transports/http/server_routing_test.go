@@ -31,6 +31,20 @@ func TestWrongMethodReturnsDocumentedMethodError(t *testing.T) {
 	assertJSONError(t, rec, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed")
 }
 
+func TestWorkerSessionControlRoutesReportUnavailableWithoutOwnerHandler(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	for _, action := range []string{"interrupt", "pause", "resume", "cancel", "terminate"} {
+		t.Run(action, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/worker-sessions/session-1/"+action, nil)
+			server.Handler().ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("POST Worker Session %s status = %d, want 500; body=%s", action, recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
 func TestServerWithRecordings_RoutesDurableResultToRecordingsAdapter(t *testing.T) {
 	t.Parallel()
 

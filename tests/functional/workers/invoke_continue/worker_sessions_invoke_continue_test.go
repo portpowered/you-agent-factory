@@ -143,6 +143,7 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
 }
 
+// TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields proves direct invocation tolerates future execution-file fields.
 func TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

@@ -2,15 +2,15 @@
   "formatVersion": 1,
   "declarations": [
     {
-      "test": "tests/functional/factory/visualization/runtime_metrics/costs_cli_test.go::TestMetricsCostsCLITraversesProductionHTTPRoute",
-      "stableIds": [
-        "cli/you.metrics.costs"
-      ]
-    },
-    {
       "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
       "stableIds": [
         "rest/getMetrics"
+      ]
+    },
+    {
+      "test": "tests/functional/factory/visualization/runtime_metrics/end_to_end_costs_test.go::TestRuntimeCostsEndToEndFromProviderCompletion",
+      "stableIds": [
+        "cli/you.metrics.costs"
       ]
     },
     {

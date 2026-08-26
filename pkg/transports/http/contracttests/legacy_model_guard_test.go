@@ -165,11 +165,24 @@ func TestProviderCatalogContract_UsesClosedPublicationVocabulary(t *testing.T) {
 func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *testing.T) {
 	t.Parallel()
 
+	wantIDs := []string{
+		"antigravity", "claude", "codex", "copilot-acp", "cursor-acp", "droid-acp",
+		"fast-agent-acp", "gemini-acp", "grok-build-acp", "iflow-acp", "kilocode-acp",
+		"kimi-acp", "kiro-acp", "mux-acp", "openclaw-acp", "opencode-acp", "pi-acp",
+		"pool-acp", "qoder-acp", "qwen-acp", "reasonix-acp", "trae-acp", "zeroclaw-acp",
+	}
 	wantPosture := map[string]providerPublicationPosture{
 		"antigravity": {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
 		"claude":      {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
 		"codex":       {factoryapi.ProviderTechnicalSupportLevelProduction, factoryapi.ProviderImplementationAvailabilityBundled},
-		"cursor":      {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
+	}
+	for _, id := range wantIDs {
+		if strings.HasSuffix(id, "-acp") {
+			wantPosture[id] = providerPublicationPosture{
+				factoryapi.ProviderTechnicalSupportLevelExperimental,
+				factoryapi.ProviderImplementationAvailabilityExternallySupplied,
+			}
+		}
 	}
 	doc := loadValidatedOpenAPIContract(t)
 	schema := doc.Components.Schemas["ProviderManifest"].Value
@@ -210,7 +223,6 @@ func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *tes
 	}
 
 	sort.Strings(ids)
-	wantIDs := []string{"antigravity", "claude", "codex"}
 	if !reflect.DeepEqual(ids, wantIDs) {
 		t.Fatalf("first-party provider ids = %v, want %v", ids, wantIDs)
 	}

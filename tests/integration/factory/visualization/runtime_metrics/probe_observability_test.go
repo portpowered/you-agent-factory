@@ -96,6 +96,7 @@ func TestProbeObservabilityWorkerSessionListing(t *testing.T) {
 	})
 }
 
+// TestProbeObservabilityValidatorRejectsFalsePositiveReports proves the validator rejects observability reports unsupported by runtime evidence.
 func TestProbeObservabilityValidatorRejectsFalsePositiveReports(t *testing.T) {
 	base := probeObsResult{Verdict: "PASS", HTTPStatus: http.StatusOK, ResultCount: 1}
 	for _, test := range []struct {

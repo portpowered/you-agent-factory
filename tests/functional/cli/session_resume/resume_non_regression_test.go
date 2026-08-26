@@ -34,6 +34,7 @@ func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadS
 	}
 }
 
+// TestCLIResumeSmokeLane_RetiredDispatchCommandLeavesRESTReadAvailable proves resume inspection remains available after retiring the dispatch command.
 func TestCLIResumeSmokeLane_RetiredDispatchCommandLeavesRESTReadAvailable(t *testing.T) {
 	t.Parallel()
 

@@ -279,10 +279,6 @@
       "name": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics"
     },
     {
-      "file": "cli/session_resume/resume_non_regression_test.go",
-      "name": "TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface"
-    },
-    {
       "file": "cli/session_resume/resume_smoke_test.go",
       "name": "TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay"
     },
@@ -1284,10 +1280,6 @@
     },
     {
       "file": "workers/transports/http/worker_sessions_lifecycle_test.go",
-      "name": "TestWorkerSessionHTTPControlRoutesReportUnavailableFromTopLevelServer"
-    },
-    {
-      "file": "workers/transports/http/worker_sessions_lifecycle_test.go",
       "name": "TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive"
     },
     {
@@ -1305,10 +1297,6 @@
     {
       "file": "workflow/config_driven_retry_loop_breaker_test.go",
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
-    },
-    {
-      "file": "workflow/config_driven_retry_loop_breaker_test.go",
-      "name": "TestConfigDrivenRetryLoopBreaker_TripsAfterThreeProcessFailures"
     },
     {
       "file": "workflow/review_retry_exhaustion_long_test.go",

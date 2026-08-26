@@ -149,30 +149,6 @@ func TestRunForOSWithCPUUsesDerivedUnitJobs(t *testing.T) {
 	}
 }
 
-func TestResolveCoverageLaneOverrides(t *testing.T) {
-	t.Parallel()
-
-	cfg := config{
-		coverpkg: "example.com/backend, example.com/shared",
-		packages: "./pkg/config ./tests/functional/runtime_api",
-	}
-
-	coverPackages, testPackages, err := resolveCoverageLane(cfg)
-	if err != nil {
-		t.Fatalf("resolveCoverageLane() error = %v", err)
-	}
-
-	wantCover := []string{"example.com/backend", "example.com/shared"}
-	if !slices.Equal(coverPackages, wantCover) {
-		t.Fatalf("cover packages = %v, want %v", coverPackages, wantCover)
-	}
-
-	wantTests := []string{"./pkg/config", "./tests/functional/runtime_api"}
-	if !slices.Equal(testPackages, wantTests) {
-		t.Fatalf("test packages = %v, want %v", testPackages, wantTests)
-	}
-}
-
 func TestReadPackageCoverageBaselineSkipsCommentsAndBlankLines(t *testing.T) {
 	t.Parallel()
 
@@ -649,54 +625,6 @@ func TestEvaluateCoverageIgnoresExternalTotalReportAndUsesMergedProfileCoverage(
 	}
 	if totalLine != "total: (statements) 60.0%" {
 		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 60.0%")
-	}
-}
-
-func TestCanonicalizeCoverageProfileMergesRepeatedBlocksInStableOrder(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := filepath.Clean(t.TempDir())
-	profilePath := writeCoverageProfile(t, strings.Join([]string{
-		"mode: count",
-		modulePath + "/pkg/service/factory.go:3.1,4.1 2 0",
-		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
-		modulePath + "/pkg/config/config.go:1.1,2.1 3 7",
-		modulePath + "/tests/functional/runtime_api/server.go:1.1,2.1 5 1",
-		modulePath + "/pkg/service/factory.go:3.1,4.1 2 4",
-		"",
-	}, "\n"))
-
-	coverPackages := []string{
-		modulePath + "/pkg/service",
-		modulePath + "/pkg/config",
-	}
-	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
-		t.Fatalf("canonicalizeCoverageProfile() error = %v", err)
-	}
-
-	got, err := os.ReadFile(profilePath)
-	if err != nil {
-		t.Fatalf("read canonical profile: %v", err)
-	}
-	want := strings.Join([]string{
-		"mode: count",
-		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
-		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
-		"",
-	}, "\n")
-	if string(got) != want {
-		t.Fatalf("canonical profile = %q, want %q", got, want)
-	}
-
-	totals, err := readCoverageProfileTotals(profilePath, repoRoot)
-	if err != nil {
-		t.Fatalf("readCoverageProfileTotals() error = %v", err)
-	}
-	if totals[modulePath+"/pkg/config"] != (packageCoverageTotals{coveredStatements: 3, totalStatements: 3}) {
-		t.Fatalf("config totals = %+v, want 3/3", totals[modulePath+"/pkg/config"])
-	}
-	if totals[modulePath+"/pkg/service"] != (packageCoverageTotals{coveredStatements: 2, totalStatements: 2}) {
-		t.Fatalf("service totals = %+v, want 2/2", totals[modulePath+"/pkg/service"])
 	}
 }
 

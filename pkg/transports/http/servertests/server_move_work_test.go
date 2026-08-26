@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -60,7 +59,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 	workAPI := moveWorkAPI{moveAndRead: func(_ context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
 		assertMoveWorkRequest(t, sessionID, workID, stateName, requestID, "~default", "missing-work", "complete", "")
-		return work.ReadModel{}, factory.ErrMoveWorkNotFound
+		return work.ReadModel{}, work.ErrMoveWorkNotFound
 	}}
 	srv := newMoveWorkTestServer(workAPI)
 
@@ -73,7 +72,7 @@ func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 func TestMoveWork_Returns400ForInvalidState(t *testing.T) {
 	workAPI := moveWorkAPI{moveAndRead: func(_ context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
 		assertMoveWorkRequest(t, sessionID, workID, stateName, requestID, "~default", "work-move-invalid", "nowhere", "")
-		return work.ReadModel{}, factory.ErrMoveWorkInvalidState
+		return work.ReadModel{}, work.ErrMoveWorkInvalidState
 	}}
 	srv := newMoveWorkTestServer(workAPI)
 

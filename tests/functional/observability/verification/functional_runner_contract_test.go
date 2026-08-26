@@ -5,7 +5,6 @@ package verification
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -148,55 +147,27 @@ exit 1
 	}
 }
 
-// TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics proves a
-// budget expiry fails the process while preserving output produced before the
-// interruption, including inventory and quarantine diagnostics.
+// TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics proves CI
+// bounds the single Make-owned functional report without a second runner.
 func TestFunctionalTestVizLaneScriptSmoke_TimesOutAndRetainsDiagnostics(t *testing.T) {
-	if _, err := exec.LookPath("timeout"); err != nil {
-		t.Skipf("GNU timeout is required for the Linux runner smoke: %v", err)
-	}
-
 	repoRoot := testutil.MustRepoPath(t, ".")
-	makePath := writeExecutableScript(t, "fake-make-functional-viz-timeout", `#!/bin/sh
-printf '%s\n' 'inventory: discovered-packages=147 observed-packages=12'
-printf '%s\n' 'quarantine: selector=./tests/functional/example bucket=ENVIRONMENT-DEPENDENT observed=skip'
-trap 'exit 143' TERM INT
-sleep 2
-`)
-	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-timeout-artifacts")
-
-	output, err := runScript(
-		repoRoot,
-		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
-		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
-		fmt.Sprintf("FUNCTIONAL_TEST_BUDGET=%s", "0.1s"),
-		"FUNCTIONAL_TEST_TIER=pr-short",
-		"FUNCTIONAL_TEST_TRIGGER=pull_request",
-		"FUNCTIONAL_SHORT=true",
-		fmt.Sprintf("MAKE_BIN=%s", makePath),
-	)
-	if err == nil {
-		t.Fatalf("functional runner unexpectedly succeeded after budget expiry:\n%s", output)
+	workflow, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("read CI workflow: %v", err)
 	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok || exitErr.ExitCode() != 124 {
-		t.Fatalf("functional runner exit = %v, want timeout exit code 124\n%s", err, output)
+	body := string(workflow)
+	functionalStep := "- name: Run complete Linux functional coverage and inventory"
+	start := strings.Index(body, functionalStep)
+	if start < 0 {
+		t.Fatalf("functional coverage workflow step is missing")
 	}
-
-	logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
-	if readErr != nil {
-		t.Fatalf("read timeout command log: %v", readErr)
+	section := body[start:]
+	if next := strings.Index(section[len(functionalStep):], "\n      - name:"); next >= 0 {
+		section = section[:len(functionalStep)+next]
 	}
-	log := string(logBody)
-	for _, expected := range []string{
-		"tier=pr-short trigger=pull_request short=true budget=0.1s selection=subtractive",
-		"inventory: discovered-packages=147 observed-packages=12",
-		"quarantine: selector=./tests/functional/example bucket=ENVIRONMENT-DEPENDENT observed=skip",
-		"tier timed out after budget=0.1s",
-		"partial diagnostics retained",
-	} {
-		if !strings.Contains(log, expected) {
-			t.Fatalf("timeout command log missing %q:\n%s", expected, log)
+	for _, required := range []string{"timeout-minutes: 75", "run: make functional-test-viz"} {
+		if !strings.Contains(section, required) {
+			t.Fatalf("functional coverage workflow step missing %q:\n%s", required, section)
 		}
 	}
 }

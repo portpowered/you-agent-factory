@@ -20,18 +20,6 @@ type fakeOperatorSettings struct {
 	backendScopeID         string
 }
 
-type localMigrationFileSystem struct{}
-
-func (localMigrationFileSystem) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
-func (localMigrationFileSystem) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
-func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
-func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
-	return os.MkdirAll(path, mode)
-}
-func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
-	return os.Rename(oldPath, newPath)
-}
-
 func (fake *fakeOperatorSettings) LoadFileConfig(path string) (operatorsettings.Config, error) {
 	fake.loadCalls = append(fake.loadCalls, path)
 	return operatorsettings.Config{BackendScopeID: fake.backendScopeID}, fake.loadErr
@@ -88,7 +76,7 @@ func newTestInitializer(
 ) *Initializer {
 	t.Helper()
 	catalog := newTestPackagedCatalog(definitions)
-	initializer, err := New(settings, catalog, installer, os.Stat, localMigrationFileSystem{})
+	initializer, err := New(settings, catalog, installer, os.Stat)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -302,65 +290,38 @@ func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	}
 }
 
-func TestInitializeMigratesLegacyFactoriesBeforePackagedInstallation(t *testing.T) {
+func TestInitializeLeavesRetiredGlobalFactoryRootUntouched(t *testing.T) {
 	homeDir := t.TempDir()
-	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "@you", "goal")
-	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+	retiredFactoryDir := filepath.Join(
+		homeDir,
+		".you-agent-factory",
+		"you-agent-factories",
+		"customer",
+	)
+	if err := os.MkdirAll(retiredFactoryDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	marker := []byte("customer-owned\n")
-	if err := os.WriteFile(filepath.Join(legacyDir, "customer-edit.txt"), marker, 0o600); err != nil {
+	markerPath := filepath.Join(retiredFactoryDir, "customer-edit.txt")
+	if err := os.WriteFile(markerPath, []byte("customer-owned\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
+	installer := &fakePackagedInstaller{}
+	result, err := newTestInitializer(t, &fakeOperatorSettings{}, installer, nil).Initialize(
+		t.Context(),
+		systeminitialization.Request{HomeDir: homeDir},
+	)
 	if err != nil {
 		t.Fatalf("Initialize() error = %v", err)
 	}
-	canonicalDir := filepath.Join(result.NamedFactoriesRoot, "@you", "goal")
-	got, err := os.ReadFile(filepath.Join(canonicalDir, "customer-edit.txt"))
-	if err != nil || string(got) != string(marker) {
-		t.Fatalf("migrated customer edit = %q, %v", got, err)
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("retired Factory content changed: %v", err)
 	}
-	if _, err := os.Stat(legacyDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("legacy directory remains after migration: %v", err)
+	if len(installer.calls) != 1 || installer.calls[0].root != result.NamedFactoriesRoot {
+		t.Fatalf("installer calls = %#v, want canonical root %q", installer.calls, result.NamedFactoriesRoot)
 	}
-}
-
-func TestInitializeLegacyFactoryConflictPreservesBothCopies(t *testing.T) {
-	homeDir := t.TempDir()
-	legacyDir := filepath.Join(factorydefinitions.LegacyNamedFactoriesRoot(homeDir), "customer")
-	canonicalDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "customer")
-	for _, dir := range []string{legacyDir, canonicalDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
-	if err == nil || !strings.Contains(err.Error(), "without overwriting") {
-		t.Fatalf("Initialize() conflict error = %v", err)
-	}
-	for _, dir := range []string{legacyDir, canonicalDir} {
-		if _, statErr := os.Stat(dir); statErr != nil {
-			t.Fatalf("conflict changed %s: %v", dir, statErr)
-		}
-	}
-}
-
-func TestInitializeRejectsInvalidLegacyCurrentFactoryPointer(t *testing.T) {
-	homeDir := t.TempDir()
-	legacyRoot := factorydefinitions.LegacyNamedFactoriesRoot(homeDir)
-	if err := os.MkdirAll(legacyRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(legacyRoot, factorydefinitions.CurrentFactoryPointerFile), []byte("../outside-root\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := newTestInitializer(t, &fakeOperatorSettings{}, &fakePackagedInstaller{}, nil).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})
-	if err == nil || !strings.Contains(err.Error(), "list legacy global Factories") {
-		t.Fatalf("Initialize() error = %v, want legacy inventory guidance", err)
+	if result.NamedFactoriesRoot == filepath.Dir(retiredFactoryDir) {
+		t.Fatalf("NamedFactoriesRoot = retired root %q", result.NamedFactoriesRoot)
 	}
 }
 
@@ -402,7 +363,7 @@ func TestInit_RejectsSystemConfigParentThatIsAFile(t *testing.T) {
 	}
 	inspect := func(string) (os.FileInfo, error) { return occupied, nil }
 	catalog := newTestPackagedCatalog(nil)
-	initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
+	initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -430,7 +391,7 @@ func TestInit_PropagatesInjectedConfigInspectionFailure(t *testing.T) {
 	}
 
 	catalog := newTestPackagedCatalog(nil)
-	initializer, constructionErr := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect, localMigrationFileSystem{})
+	initializer, constructionErr := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, inspect)
 	if constructionErr != nil {
 		t.Fatalf("New() error = %v", constructionErr)
 	}
@@ -514,11 +475,9 @@ func TestInit_ConfigCreationFailureReportsActionableError(t *testing.T) {
 		!strings.Contains(partialFailure.Cause.Error(), "write denied") {
 		t.Fatalf("Initialize() cause = %v, want actionable create-system-config failure", partialFailure.Cause)
 	}
-	if len(partialFailure.Facts) != 2 ||
-		partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
-		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
+	if len(partialFailure.Facts) != 1 ||
+		partialFailure.Facts[0].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
 	}
 }
@@ -540,13 +499,11 @@ func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) 
 	if !errors.As(err, &partialFailure) {
 		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
 	}
-	if len(partialFailure.Facts) != 3 ||
-		partialFailure.Facts[0].Step != systeminitialization.InitializeStepLegacyMigration ||
-		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepCompleted ||
-		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
-		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
-		partialFailure.Facts[2].Step != systeminitialization.InitializeStepPackagedFactories ||
-		partialFailure.Facts[2].Outcome != systeminitialization.RollbackStepUnresolved {
+	if len(partialFailure.Facts) != 2 ||
+		partialFailure.Facts[0].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		partialFailure.Facts[1].Step != systeminitialization.InitializeStepPackagedFactories ||
+		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
 	}
 }
@@ -580,9 +537,11 @@ func TestInitializePackagedFactoryFailureAfterSkippedSystemConfigReportsRollback
 	if !errors.As(err, &partialFailure) {
 		t.Fatalf("Initialize() error = %T(%v), want InitializePartialFailure", err, err)
 	}
-	if len(partialFailure.Facts) != 3 ||
-		partialFailure.Facts[1].Step != systeminitialization.InitializeStepSystemConfig ||
-		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved {
+	if len(partialFailure.Facts) != 2 ||
+		partialFailure.Facts[0].Step != systeminitialization.InitializeStepSystemConfig ||
+		partialFailure.Facts[0].Outcome != systeminitialization.RollbackStepRolledBackOrPreserved ||
+		partialFailure.Facts[1].Step != systeminitialization.InitializeStepPackagedFactories ||
+		partialFailure.Facts[1].Outcome != systeminitialization.RollbackStepUnresolved {
 		t.Fatalf("Initialize() rollback facts = %#v", partialFailure.Facts)
 	}
 }
@@ -625,7 +584,6 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 		},
 		installer,
 		os.Stat,
-		localMigrationFileSystem{},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -647,16 +605,16 @@ func TestInitializeCatalogFailureReturnsBeforeInstallationOrConfigMutation(t *te
 
 func TestNewRequiresInjectedServices(t *testing.T) {
 	catalog := newTestPackagedCatalog(nil)
-	if initializer, err := New(nil, catalog, &fakePackagedInstaller{}, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+	if initializer, err := New(nil, catalog, &fakePackagedInstaller{}, os.Stat); err == nil || initializer != nil {
 		t.Fatalf("New(nil Operator Settings) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, nil, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+	if initializer, err := New(&fakeOperatorSettings{}, catalog, nil, os.Stat); err == nil || initializer != nil {
 		t.Fatalf("New(nil packaged installer) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, factorydefinitions.PackagedFactoryCatalogOperations{}, &fakePackagedInstaller{}, os.Stat, localMigrationFileSystem{}); err == nil || initializer != nil {
+	if initializer, err := New(&fakeOperatorSettings{}, factorydefinitions.PackagedFactoryCatalogOperations{}, &fakePackagedInstaller{}, os.Stat); err == nil || initializer != nil {
 		t.Fatalf("New(nil packaged catalog) = (%#v, %v), want nil and error", initializer, err)
 	}
-	if initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, nil, localMigrationFileSystem{}); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
+	if initializer, err := New(&fakeOperatorSettings{}, catalog, &fakePackagedInstaller{}, nil); err == nil || initializer != nil || !strings.Contains(err.Error(), "inspect path edge is required") {
 		t.Fatalf("New(nil inspect path) = (%#v, %v), want nil and inspect-path error", initializer, err)
 	}
 }

@@ -444,6 +444,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 	}); err != nil {
 		return coverageResult{}, err
 	}
+	coverPackages = filterCoverageRequirementPackages(cfg.suite, coverPackages)
 
 	var prepared preparedCoverageRun
 	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {
@@ -559,14 +560,6 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 		baselinePath = filepath.Join(repoRoot, baselinePath)
 	}
 	return readPackageCoverageBaseline(baselinePath)
-}
-
-func resolveCoverageLane(cfg config) ([]string, []string, error) {
-	_, coverPackages, testPackages, err := resolveCoverageLaneWithDiscovery(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	return coverPackages, testPackages, nil
 }
 
 func resolveCoverPackages(cfg config) ([]string, error) {
@@ -688,14 +681,6 @@ func splitList(value string, separator string, filterEmpty bool) []string {
 	return items
 }
 
-func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packageCoverageTotals, error) {
-	_, coverageBlocks, err := scanCoverageProfile(bytes.NewReader(profileData), repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	return coverageTotals(coverageBlocks), nil
-}
-
 func scanCoverageProfile(profile io.Reader, repoRoot string) (string, map[string]coverageBlock, error) {
 	scanner := bufio.NewScanner(profile)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
@@ -782,11 +767,6 @@ func coverageTotals(coverageBlocks map[string]coverageBlock) map[string]packageC
 	}
 
 	return packageTotals
-}
-
-func canonicalizeCoverageProfile(profilePath string, repoRoot string, coverPackages []string) error {
-	_, err := canonicalizeCoverageProfileWithBlocks(profilePath, repoRoot, coverPackages)
-	return err
 }
 
 func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot string, coverPackages []string) error {
@@ -915,13 +895,6 @@ func coverageImportPath(filePath string, repoRoot string) (string, error) {
 		return "", err
 	}
 	return path.Dir(canonicalFilePath), nil
-}
-
-func formatZeroCoverageFailure(packages []string) string {
-	return fmt.Sprintf(
-		"go coverage found backend-owned packages with 0%% statement coverage: %s",
-		strings.Join(packages, ", "),
-	)
 }
 
 func formatInsufficientCoverageFailure(packages []packageCoverageSummary, minCoverage float64) string {

@@ -31,7 +31,6 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
-		"command.go",
 		"command_result_contracts.go",
 		"event_recording_contracts.go",
 		"execution_context.go",
@@ -45,7 +44,6 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 		"interfaces.go",
 		"kind_phase_validation.go",
 		"kind_phase_validation_test.go",
-		"mock_worker.go",
 		"mock_workers_contracts.go",
 		"progress_observations.go",
 		"prompt_template_contracts.go",
@@ -53,11 +51,8 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 		"proposal_mappers_test.go",
 		"proposed_output_contracts.go",
 		"proposed_output_contracts_test.go",
-		"pty_contracts.go",
 		"response_drafts.go",
 		"runner_policy_contracts.go",
-		"runner_process.go",
-		"runner_process_log_context.go",
 		"runtime_hooks.go",
 		"runtime_opening.go",
 		"safe_diagnostics.go",

@@ -15,6 +15,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 // the Costs service values those rows through the public CLI route. The
 // unconsumed dispatch.cost/provider.cost samples intentionally remain absent.
 func TestRuntimeCostsEndToEndFromProviderCompletion(t *testing.T) {
+	functionalevidence.Covers(t, "cli/you.metrics.costs")
 	factoryDir := scaffoldEndToEndCostsFactory(t)
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte(`{"title":"cost rollup"}`))
 	providerRunner := testutil.NewProviderCommandRunner(

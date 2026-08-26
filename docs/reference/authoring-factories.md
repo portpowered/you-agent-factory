@@ -627,10 +627,9 @@ you factory list --dir ./alternate-factories
 Packaged-only Factories remain visible without being installed and show `-`
 for their Factory directory.
 
-On upgrade, normal initializer startup moves valid factories from the retired
-`~/.you-agent-factory/you-agent-factories` root into the canonical root. If a
-factory already exists in both locations, initialization preserves both copies
-and reports the conflict so you can compare them without losing customer edits.
+The retired `~/.you-agent-factory/you-agent-factories` root is not read or migrated during startup.
+Move required Factory directories into
+`~/.you-agent-factory/factories` before starting this version.
 
 ### 5. Submit work
 

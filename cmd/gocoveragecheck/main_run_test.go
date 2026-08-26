@@ -793,44 +793,6 @@ func TestListGoPackagesWrapsListFailureWithoutDetail(t *testing.T) {
 	}
 }
 
-func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPackages(t *testing.T) {
-	originalCommandRunner := commandRunner
-	defer func() {
-		commandRunner = originalCommandRunner
-	}()
-
-	commandRunner = fakeGoListCommandWithExcludedPackagesOnly
-
-	_, _, err := resolveCoverageLane(config{})
-	if err == nil {
-		t.Fatal("resolveCoverageLane() unexpectedly succeeded")
-	}
-
-	want := "resolve go coverage lane: no packages matched"
-	if err.Error() != want {
-		t.Fatalf("resolveCoverageLane() error = %q, want %q", err.Error(), want)
-	}
-}
-
-func TestResolveCoverageLaneFailsWhenFunctionalDiscoveryMatchesNoMaintainedPackages(t *testing.T) {
-	originalCommandRunner := commandRunner
-	defer func() {
-		commandRunner = originalCommandRunner
-	}()
-
-	commandRunner = fakeGoListCommandWithCoverageButNoTestPackages
-
-	_, _, err := resolveCoverageLane(config{suite: "functional"})
-	if err == nil {
-		t.Fatal("resolveCoverageLane() unexpectedly succeeded")
-	}
-
-	want := "resolve go coverage lane: no packages matched"
-	if err.Error() != want {
-		t.Fatalf("resolveCoverageLane() error = %q, want %q", err.Error(), want)
-	}
-}
-
 func TestListGoPackagesFiltersDuplicatesAndExcludedPackages(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalDir, err := os.Getwd()

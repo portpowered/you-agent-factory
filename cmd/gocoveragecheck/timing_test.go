@@ -331,6 +331,9 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 	if !strings.Contains(strings.Join(gotArgs, " "), "-count=1") {
 		t.Fatalf("coverage go test args = %v, want explicit -count=1", gotArgs)
 	}
+	if !slicesContains(gotArgs, "-parallel=2") {
+		t.Fatalf("coverage go test args = %v, want bounded functional test parallelism", gotArgs)
+	}
 
 	data, readErr := os.ReadFile(timingPath)
 	if readErr != nil {

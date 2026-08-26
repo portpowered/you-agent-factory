@@ -2,11 +2,9 @@
 package wire
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -15,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service"
 	agentwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent/wire"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 )
 
 // NewService validates registrations into one immutable private registry.
@@ -120,7 +117,7 @@ func newProductionRegistry(
 	if mockConfig != nil {
 		mockImplementation, mockErr := mock.New(
 			mock.Config{WorkersConfig: mockConfig.WorkersConfig},
-			mock.Dependencies{Next: mockDependencies.Next},
+			mock.Dependencies{Next: mockDependencies.Next, Files: mockDependencies.Files},
 		)
 		if mockErr != nil {
 			return nil, invalidRunnerConstruction(runners.MockIdentity, mockErr)
@@ -143,21 +140,6 @@ func invalidRunnerConstruction(identity string, err error) error {
 	)
 }
 
-// NewScriptRegistry constructs one Script Runner from explicit effects and
-// publishes it through the immutable private registry.
-func NewScriptRegistry(
-	config runners.ScriptConfig,
-	dependencies runners.ScriptDependencies,
-) (runners.Service, error) {
-	implementation, err := scriptImplementation(config, dependencies)
-	service, registryErr := NewService([]runners.Registration{{
-		Identity: runners.ScriptIdentity,
-		Metadata: scriptMetadata(),
-		Runner:   implementation,
-	}})
-	return service, errors.Join(err, registryErr)
-}
-
 func scriptImplementation(
 	config runners.ScriptConfig,
 	dependencies runners.ScriptDependencies,
@@ -178,22 +160,6 @@ func scriptImplementation(
 		},
 	)
 }
-
-// NewInferenceRegistry constructs one Inference Runner from explicit effects
-// and publishes it through the immutable private registry.
-func NewInferenceRegistry(
-	config runners.InferenceConfig,
-	dependencies runners.InferenceDependencies,
-) (runners.Service, error) {
-	implementation, err := inferenceImplementation(config, dependencies)
-	service, registryErr := NewService([]runners.Registration{{
-		Identity: runners.InferenceIdentity,
-		Metadata: inferenceMetadata(),
-		Runner:   implementation,
-	}})
-	return service, errors.Join(err, registryErr)
-}
-
 func inferenceImplementation(
 	config runners.InferenceConfig,
 	dependencies runners.InferenceDependencies,
@@ -238,61 +204,6 @@ func agentImplementation(
 	)
 }
 
-// NewInferenceCompositionRunner constructs one registry-backed Inference
-// Runner that projects managed-runtime invocation ahead of the supplied
-// delegate. The returned adapter keeps execution behind Service.Execute.
-func NewInferenceCompositionRunner(
-	inner workers.Runner,
-	modelsService inference.LocalInvoker,
-	modelsScope models.RuntimeScopeRef,
-	worker *interfaces.FactoryWorkerConfig,
-	resources []interfaces.ResourceConfig,
-) workers.Runner {
-	if inner == nil || modelsService == nil || worker == nil {
-		return inner
-	}
-	registry, err := NewInferenceRegistry(
-		runners.InferenceConfig{
-			Worker:    inference.WorkerFromFactory(worker),
-			Resources: inference.ResourcesFromFactory(resources),
-			Scope:     modelsScope,
-		},
-		runners.InferenceDependencies{
-			Models:   modelsService,
-			Delegate: inner,
-		},
-	)
-	if err != nil {
-		return inner
-	}
-	return registryExecutionRunner{
-		registry: registry,
-		identity: runners.InferenceIdentity,
-	}
-}
-
-// registryExecutionRunner keeps transitional callers behind the same service
-// execution seam as the Workers root. Resolution remains selection-only and
-// the implementation is never exposed to a caller for direct execution.
-type registryExecutionRunner struct {
-	registry runners.Service
-	identity string
-}
-
-func (runner registryExecutionRunner) Execute(
-	ctx context.Context,
-	request workers.RunnerExecutionRequest,
-) (workers.RunnerExecutionResult, error) {
-	if runner.registry == nil {
-		return workers.RunnerExecutionResult{}, errors.New("runner registry is required")
-	}
-	return runner.registry.Execute(ctx, runners.ExecuteRequest{
-		Identity:             runner.identity,
-		RequiredCapabilities: request.RequiredOptionalCapabilities,
-		Attempt:              request,
-	})
-}
-
 func snapshotInferenceWorker(worker models.LocalWorker) models.LocalWorker {
 	worker.Resources = append([]models.LocalResource(nil), worker.Resources...)
 	return worker
@@ -302,7 +213,7 @@ func scriptMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.ScriptIdentity,
 		DisplayName: "Script",
-		Capabilities: workerrunner.NewCapabilities(
+		Capabilities: workers.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
@@ -331,7 +242,7 @@ func inferenceMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.InferenceIdentity,
 		DisplayName: "Inference",
-		Capabilities: workerrunner.NewCapabilities(
+		Capabilities: workers.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
@@ -360,7 +271,7 @@ func agentMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.AgentIdentity,
 		DisplayName: "Agent",
-		Capabilities: workerrunner.NewCapabilities(
+		Capabilities: workers.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
@@ -389,7 +300,7 @@ func mockMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.MockIdentity,
 		DisplayName: "Mock",
-		Capabilities: workerrunner.NewCapabilities(
+		Capabilities: workers.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,

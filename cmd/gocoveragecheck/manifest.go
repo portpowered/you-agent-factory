@@ -112,6 +112,9 @@ func newCoverageManifest(lane string, totals map[string]packageCoverageTotals, p
 	slices.Sort(packages)
 	entries := make([]coverageManifestEntry, 0, len(packages))
 	for _, importPath := range packages {
+		if !coverageRequirementApplies(lane, importPath) {
+			continue
+		}
 		entry, required, err := newCoverageManifestEntry(lane, importPath, totals[importPath])
 		if err != nil {
 			return coverageManifest{}, fmt.Errorf("generate %s coverage manifest for %s: %w", lane, importPath, err)
@@ -314,6 +317,9 @@ func checkCoverageManifest(manifest coverageManifest, totals map[string]packageC
 func formatUnmeasuredCoverageManifestDiagnostics(manifest coverageManifest, measuredTotals map[string]packageCoverageTotals) []string {
 	diagnostics := make([]string, 0)
 	for _, entry := range manifest.Packages {
+		if !coverageRequirementApplies(manifest.Lane, entry.Package) {
+			continue
+		}
 		if _, measured := measuredTotals[entry.Package]; measured {
 			continue
 		}
@@ -335,6 +341,9 @@ func checkCoverageManifestWithEpsilonAndBlocks(manifest coverageManifest, totals
 	warnings := make([]string, 0)
 	holds := coverageManifestFloorHoldMap(manifest)
 	for _, entry := range manifest.Packages {
+		if !coverageRequirementApplies(manifest.Lane, entry.Package) {
+			continue
+		}
 		if entry.Exception != nil {
 			continue
 		}
