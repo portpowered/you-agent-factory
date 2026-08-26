@@ -353,6 +353,42 @@ test("the Windows build plan resolves Git from the runner path bridge", async (t
 	assert.match(plan.git.replaceAll("\\", "/"), /\/git-bin\/git$/);
 });
 
+function windowsBuildTimeout(workflow) {
+	const jobTimeout = workflow.match(/^    timeout-minutes:\s+(\d+)\s*$/m);
+	const windowsBuild = workflow.match(/^\s+- name: Build the backend package on Windows\s+([\s\S]*?)(?=^\s+- name: Build the backend package on Unix)/m);
+	const unixBuild = workflow.match(/^\s+- name: Build the backend package on Unix\s+([\s\S]*?)(?=^\s+- name: Archive the Unix backend package)/m);
+	if (!jobTimeout || !windowsBuild || !unixBuild) throw new Error("workflow is missing the build job or platform-specific backend build steps");
+	const stepTimeout = windowsBuild[1].match(/^\s+timeout-minutes:\s+(\d+)\s*$/m);
+	if (!stepTimeout) throw new Error("Windows backend build must have an explicit step timeout");
+	const jobMinutes = Number(jobTimeout[1]);
+	const windowsMinutes = Number(stepTimeout[1]);
+	if (windowsMinutes < 45 || windowsMinutes > 60) throw new Error("Windows backend build timeout must be between 45 and 60 minutes");
+	if (windowsMinutes >= jobMinutes) throw new Error("Windows backend build timeout must be below the build job timeout");
+	if (/^\s+timeout-minutes:/m.test(unixBuild[1])) throw new Error("Darwin/Linux backend build must retain the job timeout");
+	return { jobMinutes, windowsMinutes };
+}
+
+test("the Windows backend build has a bounded platform-specific step timeout", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 360, windowsMinutes: 60 });
+	assert.throws(
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 44")),
+		/Windows backend build timeout must be between 45 and 60 minutes/,
+	);
+	assert.throws(
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 61")),
+		/Windows backend build timeout must be between 45 and 60 minutes/,
+	);
+	assert.throws(
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 360", "timeout-minutes: 60")),
+		/Windows backend build timeout must be below the build job timeout/,
+	);
+	assert.throws(
+		() => windowsBuildTimeout(workflow.replace("        timeout-minutes: 60\n", "")),
+		/Windows backend build must have an explicit step timeout/,
+	);
+});
+
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
 	const root = await matrixArtifactFixture(t);
 	const manifest = createManifest({ config, artifactDirectory: root, repository: "portpowered/infinite-you" });

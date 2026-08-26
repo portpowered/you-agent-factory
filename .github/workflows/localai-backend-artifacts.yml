@@ -204,6 +204,9 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: you-agent-factory
         shell: msys2 {0}
+        # Keep the Windows build below the job ceiling without changing the
+        # existing Darwin/Linux build budget.
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           bash scripts/build-localai-backend-artifact.sh
