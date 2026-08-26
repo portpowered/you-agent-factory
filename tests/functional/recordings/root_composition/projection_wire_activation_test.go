@@ -315,6 +315,36 @@ func TestReplayArtifactLoaderReadsV2ThroughRecordingWire(t *testing.T) {
 	}
 }
 
+// TestReplayArtifactLoaderReadsLegacyArtifactAndClockThroughRecordingWire
+// keeps the v1 compatibility path and its deterministic replay clock
+// observable alongside the v2 loader.
+func TestReplayArtifactLoaderReadsLegacyArtifactAndClockThroughRecordingWire(t *testing.T) {
+	t.Parallel()
+
+	fixturePath := testutil.MustRepoPath(t, filepath.Join(
+		"tests", "functional", "work", "watch", "testdata", "production-retry-ledger.replay.json",
+	))
+	payload, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read legacy replay fixture: %v", err)
+	}
+	loader := recordingswire.NewReplayArtifactLoader(
+		functionalReplayArtifactStorage{payload: payload},
+		factorydefinitionswire.FactorySnapshotJSONDecoder(),
+	)
+	artifact, err := loader("legacy-recording.json")
+	if err != nil {
+		t.Fatalf("ReplayArtifactLoader(legacy): %v", err)
+	}
+	if artifact == nil || len(artifact.Events) == 0 || artifact.Factory == nil {
+		t.Fatalf("ReplayArtifactLoader(legacy) artifact = %#v, want events and factory snapshot", artifact)
+	}
+	clock := recordingswire.NewReplayClock(artifact)
+	if clock == nil || !clock.Now().Equal(artifact.RecordedAt) {
+		t.Fatalf("NewReplayClock(legacy) = %#v, want recorded time %s", clock, artifact.RecordedAt)
+	}
+}
+
 // TestReplayArtifactLoaderRejectsInvalidV2FramingThroughRecordingWire keeps
 // malformed append-only records on the v2 path. The loader must report the
 // framing error rather than silently treating the input as a legacy artifact.
