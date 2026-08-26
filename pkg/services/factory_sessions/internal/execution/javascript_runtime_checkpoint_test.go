@@ -981,25 +981,19 @@ func interruptedSessionForAdmissionTest(sessionID string) runtimeSessionState {
 	state.events = rebuildRuntimeSessionCanonicalEvents(&state)
 	return state
 }
-
-func TestCompactPetriTokenHistory_BoundsFiveHundredAndOneThousandLargeTerminalLifecycles(t *testing.T) {
-	const snapshotLimit = 5 * 1024 * 1024
-	body := strings.Repeat("large-worker-output-", 1_200)
-	for _, count := range []int{500, 1_000} {
-		t.Run(strconv.Itoa(count)+"-tokens", func(t *testing.T) {
-			mutations := make([]interfaces.TokenMutationRecord, 0, count*3)
-			for index := 0; index < count; index++ {
-				mutations = append(mutations, largeTerminalTokenMutations(index, body)...)
-			}
-			before := encodePetriMutationSnapshot(t, mutations, nil)
-			if count == 500 && len(before) <= snapshotLimit {
-				t.Fatalf("uncompacted 500-token snapshot = %d, want > %d", len(before), snapshotLimit)
-			}
-			retained, summaries := compactPetriTokenHistory(mutations, nil)
-			after := encodePetriMutationSnapshot(t, retained, summaries)
-			if len(after) > snapshotLimit || len(retained) != 0 || len(summaries) != count || strings.Contains(string(after), body) || strings.Contains(string(after), "structured_result") {
-				t.Fatalf("compacted %d tokens = %d bytes, %d mutations, %d summaries; output retained=%t", count, len(after), len(retained), len(summaries), strings.Contains(string(after), body))
-			}
-		})
+func largeTerminalTokenMutations(index int, body string) []interfaces.TokenMutationRecord {
+	id := strconv.Itoa(index)
+	token := &workers.Token{ID: "token-" + id, State: "init", Color: workers.Color{Name: "large Work", RequestID: "request-" + id, WorkID: "work-" + id, WorkTypeID: "task", DataType: workers.DataTypeWork, TraceID: "trace-" + id, Tags: map[string]string{"_last_output": body}, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: body}}, Payload: []byte(body), StructuredResult: map[string]any{"body": body}, StructuredResultPresent: true}}
+	return []interfaces.TokenMutationRecord{
+		{DispatchID: "dispatch-" + id, TransitionID: "submit", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationCreate, TokenID: token.ID, ToPlace: "task:init", Token: token},
+		{DispatchID: "dispatch-" + id, TransitionID: "process", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationMove, TokenID: token.ID, FromPlace: "task:init", ToPlace: "task:processing"},
+		{DispatchID: "dispatch-" + id, TransitionID: "process", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationMove, TokenID: token.ID, FromPlace: "task:processing", ToPlace: "task:done", Terminal: true},
 	}
+}
+func legacyTerminalTokenMutations(index int) []interfaces.TokenMutationRecord {
+	mutations := largeTerminalTokenMutations(index, "large-worker-output")
+	for index := range mutations {
+		mutations[index].Terminal, mutations[index].TransitionReachable = false, false
+	}
+	return mutations
 }

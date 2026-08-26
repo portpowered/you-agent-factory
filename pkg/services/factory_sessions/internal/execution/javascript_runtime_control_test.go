@@ -988,3 +988,12 @@ func TestLegacyInterruptedSnapshot_RemainsLosslessOnSuccessfulSave(t *testing.T)
 		t.Fatalf("interrupted persisted mutation count = %d, want %d", mutationCount, len(state.petriMutations))
 	}
 }
+
+func encodedWarningStateBytes(t *testing.T, state runtimeSessionState) int {
+	t.Helper()
+	encoded, err := json.MarshalIndent(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, 0), "", "  ")
+	if err != nil {
+		t.Fatalf("marshal warning state: %v", err)
+	}
+	return len(encoded)
+}

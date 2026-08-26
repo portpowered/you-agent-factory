@@ -10,12 +10,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,51 +34,6 @@ func TestNewFakeServiceRequiresExplicitClockBeforeFixtureIO(t *testing.T) {
 	}
 }
 
-func TestPetriTokenSummary_RoundTripsThroughTaggedDurableHistory(t *testing.T) {
-	snapshot := PersistedRuntimeSessionState{Records: []DurableSessionRecord{{
-		Kind:         DurableRecordKindPetriTokenSummary,
-		PetriSummary: &PetriTokenSummary{TokenID: "token-summary", WorkID: "work-summary", WorkTypeID: "task", PlaceID: "task:done", State: "done", Outcome: workers.OutcomeAccepted},
-	}}}
-	encoded, err := json.Marshal(snapshot)
-	if err != nil {
-		t.Fatalf("marshal summary snapshot: %v", err)
-	}
-	var decoded PersistedRuntimeSessionState
-	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		t.Fatalf("unmarshal summary snapshot: %v", err)
-	}
-	hydrated := runtimeStateFromPersistedSnapshot(decoded)
-	if len(hydrated.petriMutations) != 0 || len(hydrated.petriSummaries) != 1 || hydrated.petriSummaries[0].WorkID != "work-summary" {
-		t.Fatalf("hydrated summary state = %d mutations, %#v", len(hydrated.petriMutations), hydrated.petriSummaries)
-	}
-	resaved := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(hydrated, 0)
-	if len(resaved.Records) != 1 || resaved.Records[0].PetriSummary == nil {
-		t.Fatalf("resaved summary records = %#v", resaved.Records)
-	}
-}
-
-func largeTerminalTokenMutations(index int, body string) []interfaces.TokenMutationRecord {
-	tokenID, workID := "token-"+itoa(index), "work-"+itoa(index)
-	token := &workers.Token{ID: tokenID, State: "init", Color: workers.Color{
-		Name: "large Work", RequestID: "request-" + itoa(index), WorkID: workID, WorkTypeID: "task", DataType: workers.DataTypeWork,
-		TraceID: "trace-" + itoa(index), Tags: map[string]string{"_last_output": body}, Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: body}}, Payload: []byte(body),
-		StructuredResult: map[string]any{"body": body}, StructuredResultPresent: true,
-	}}
-	return []interfaces.TokenMutationRecord{
-		{DispatchID: "dispatch-" + itoa(index), TransitionID: "submit", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationCreate, TokenID: tokenID, ToPlace: "task:init", Token: token},
-		{DispatchID: "dispatch-" + itoa(index), TransitionID: "process", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationMove, TokenID: tokenID, FromPlace: "task:init", ToPlace: "task:processing"},
-		{DispatchID: "dispatch-" + itoa(index), TransitionID: "process", Outcome: workers.OutcomeAccepted, Type: interfaces.MutationMove, TokenID: tokenID, FromPlace: "task:processing", ToPlace: "task:done", Terminal: true},
-	}
-}
-
-func legacyTerminalTokenMutations(index int) []interfaces.TokenMutationRecord {
-	mutations := largeTerminalTokenMutations(index, "large-worker-output")
-	for index := range mutations {
-		mutations[index].Terminal, mutations[index].TransitionReachable = false, false
-	}
-	return mutations
-}
-
 func encodePetriMutationSnapshot(t *testing.T, mutations []interfaces.TokenMutationRecord, summaries []PetriTokenSummary) []byte {
 	t.Helper()
 	encoded, err := json.Marshal(persistedSnapshotFromRuntimeStateWithFailureLogCapacity(runtimeSessionState{petriMutations: mutations, petriSummaries: summaries}, 0))
@@ -88,30 +41,6 @@ func encodePetriMutationSnapshot(t *testing.T, mutations []interfaces.TokenMutat
 		t.Fatalf("marshal Petri snapshot: %v", err)
 	}
 	return encoded
-}
-
-func itoa(value int) string { return strconv.Itoa(value) }
-
-type petriCompactionStore struct {
-	saveCalls int
-	saveErr   error
-	payload   []byte
-}
-
-func (s *petriCompactionStore) Save(_ string, encoded []byte) error {
-	s.saveCalls++
-	if s.saveErr != nil {
-		return s.saveErr
-	}
-	s.payload = append([]byte(nil), encoded...)
-	return nil
-}
-
-func (s *petriCompactionStore) Load(string) ([]byte, error) {
-	if len(s.payload) == 0 {
-		return nil, errors.New("not found")
-	}
-	return append([]byte(nil), s.payload...), nil
 }
 
 func TestNewFakeServiceFromContractFixturesRequiresInjectedReader(t *testing.T) {

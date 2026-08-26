@@ -976,3 +976,24 @@ func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
 	}
 	return clone
 }
+func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
+	t.Helper()
+	state := runtimeSessionState{
+		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
+		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
+		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
+	}
+	base := encodedWarningStateBytes(t, state)
+	state.sourceContent = "x"
+	if delta := encodedWarningStateBytes(t, state) - base; delta != 1 {
+		t.Fatalf("sourceContent encoded byte delta = %d, want 1", delta)
+	}
+	if targetSize < base {
+		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
+	}
+	state.sourceContent = strings.Repeat("x", targetSize-base)
+	if got := encodedWarningStateBytes(t, state); got != targetSize {
+		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
+	}
+	return state
+}
