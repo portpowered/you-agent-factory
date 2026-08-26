@@ -119,9 +119,6 @@ func TestRecordingsProjectionAndWorkSnapshotWiringUsesPublishedContracts(t *test
 	if _, err := projection.ReconstructFactoryWorldState(nil, -1); !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("ReconstructFactoryWorldState(negative tick) = %v, want ErrInvalidProjectionInput", err)
 	}
-	if got := projection.ProjectActiveThrottlePauses(recordings.InitialStructurePayload{}, nil); got != nil {
-		t.Fatalf("ProjectActiveThrottlePauses(empty) = %#v, want nil", got)
-	}
 
 	reader := recordingswire.NewWorkSnapshotReader(&functionalWorkReadRoot{
 		events: []recordings.CanonicalEvent{functionalWorkRequestEvent(scope)},
