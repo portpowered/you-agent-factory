@@ -15,6 +15,7 @@ import (
 )
 
 func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock accept payload"))
 
@@ -33,6 +34,7 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 }
 
 func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject payload"))
 	logDir := t.TempDir()
@@ -63,6 +65,7 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 }
 
 func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject zero exit payload"))
 	exitCode := 0

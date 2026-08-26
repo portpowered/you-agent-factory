@@ -24,6 +24,7 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 	if runtime.GOOS == "windows" {
 		t.Skip("executable shebang scripts are not supported on Windows")
 	}
+	t.Parallel()
 
 	factoryDir := installPackagedScriptRuntimeFixture(t, "packaged-script-runtime-success", "#!/bin/sh\nprintf 'packaged runtime success\\n'\n")
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte("input-payload"))
@@ -60,6 +61,7 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 	if runtime.GOOS == "windows" {
 		t.Skip("executable shebang scripts are not supported on Windows")
 	}
+	t.Parallel()
 
 	factoryDir := installPackagedScriptRuntimeFixture(t, "packaged-script-runtime-failure", "#!/bin/sh\nprintf 'packaged runtime failure\\n' >&2\nexit 23\n")
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte("input-payload"))
