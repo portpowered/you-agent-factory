@@ -13,13 +13,137 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
+
+// sharedLifecycleFixture owns one package-local API server reused by every
+// sequential CRUD lifecycle cell. All cells clean up the sessions they create,
+// so public list/get observations show no unintended state across cells.
+type sharedLifecycleFixture struct {
+	baseURL    string
+	factoryDir string
+	homeDir    string
+	cancel     context.CancelFunc
+	done       chan error
+	process    support.ApplicationProcess
+}
+
+var lifecycleFixture *sharedLifecycleFixture
+
+func TestMain(m *testing.M) {
+	fixture, err := startSharedLifecycleServer()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "start shared lifecycle API server: %v\n", err)
+		os.Exit(1)
+	}
+	lifecycleFixture = fixture
+	code := m.Run()
+	fixture.stop()
+	os.Exit(code)
+}
+
+func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	homeDir, err := os.MkdirTemp("", "session-lifecycle-shared-home")
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("create shared home dir: %w", err)
+	}
+	factoryDir, err := os.MkdirTemp("", "session-lifecycle-shared-factory")
+	if err != nil {
+		os.RemoveAll(homeDir)
+		cancel()
+		return nil, fmt.Errorf("create shared factory dir: %w", err)
+	}
+	configPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	rawConfig, err := json.Marshal(sessionLifecycleCRUDFactoryConfig())
+	if err != nil {
+		stopFailedFixture(cancel, factoryDir, homeDir, nil, nil)
+		return nil, fmt.Errorf("marshal shared factory config: %w", err)
+	}
+	if err := os.WriteFile(configPath, rawConfig, 0o644); err != nil {
+		stopFailedFixture(cancel, factoryDir, homeDir, nil, nil)
+		return nil, fmt.Errorf("write shared factory config: %w", err)
+	}
+
+	api := support.NewProcessAPIServer()
+	process, err := support.BuildProcessWithContext(ctx, serviceedges.Edges{
+		BrowserOpener:    func(context.Context, string) error { return nil },
+		APIServerStarter: api.Start,
+	})
+	if err != nil {
+		stopFailedFixture(cancel, factoryDir, homeDir, process, nil)
+		return nil, fmt.Errorf("build shared server root process: %w", err)
+	}
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "run", "--continuously", "--with-server", "--quiet", "--dir", factoryDir, "--no-record",
+	})
+	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	inputs.Input.WorkingDirectory = factoryDir
+	done := make(chan error, 1)
+	go func() { done <- process.Execute(inputs.Input) }()
+	baseURL, err := api.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		stopFailedFixture(cancel, factoryDir, homeDir, process, done)
+		return nil, fmt.Errorf("wait for shared server base URL: %w", err)
+	}
+	return &sharedLifecycleFixture{
+		baseURL:    baseURL,
+		factoryDir: factoryDir,
+		homeDir:    homeDir,
+		cancel:     cancel,
+		done:       done,
+		process:    process,
+	}, nil
+}
+
+func stopFailedFixture(
+	cancel context.CancelFunc,
+	factoryDir, homeDir string,
+	process support.ApplicationProcess,
+	done chan error,
+) {
+	cancel()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	if process != nil {
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelClose()
+		_ = process.Close(closeCtx)
+	}
+	os.RemoveAll(factoryDir)
+	os.RemoveAll(homeDir)
+}
+
+func (fixture *sharedLifecycleFixture) stop() {
+	fixture.cancel()
+	select {
+	case <-fixture.done:
+	case <-time.After(5 * time.Second):
+	}
+	closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelClose()
+	_ = fixture.process.Close(closeCtx)
+	os.RemoveAll(fixture.factoryDir)
+	os.RemoveAll(fixture.homeDir)
+}
+
+func sharedLifecycleServerURL(t *testing.T) string {
+	t.Helper()
+	if lifecycleFixture == nil {
+		t.Fatal("shared lifecycle API server is unavailable")
+	}
+	return lifecycleFixture.baseURL
+}
 
 // TestFactorySessionCreateListShowDelete proves the public CLI Factory Session
 // boundary supports a full create → list → show → terminate → delete lifecycle: a newly
@@ -29,14 +153,7 @@ const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
 // an open session participating in the owned runtime lifecycle.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionCreateListShowDelete(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
+	baseURL := sharedLifecycleServerURL(t)
 	processHarness := newRootProcessHarness(t)
 
 	newFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory")
@@ -47,7 +164,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	createOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	createOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "create",
 		"--dir", newFactoryDir,
@@ -69,7 +186,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	}
 	sessionID := created.Session.Id
 
-	listOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL, "session", "list")
+	listOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL, "session", "list")
 	if err != nil {
 		t.Fatalf("you session list: %v\noutput:\n%s", err, listOut)
 	}
@@ -80,7 +197,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		}
 	}
 
-	listJSONOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	listJSONOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "list",
 	)
@@ -95,7 +212,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session list JSON missing created session %q at %q: %#v", sessionID, newFactoryDir, listed.Sessions)
 	}
 
-	showOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	showOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "show", sessionID,
 	)
@@ -116,7 +233,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session show missing runtime status markers: %#v", shown)
 	}
 
-	terminateOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	terminateOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "terminate", sessionID,
 	)
@@ -124,7 +241,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("you session terminate: %v\noutput:\n%s", err, terminateOut)
 	}
 
-	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	deleteOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "delete", sessionID,
 	)
@@ -141,7 +258,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session delete confirmation = %q, want %q", deleted.SessionID, sessionID)
 	}
 
-	showAfterDeleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	showAfterDeleteOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "show", sessionID,
 	)
@@ -160,14 +277,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 // sessions and running session list returns both session IDs without collapsing
 // them into one row or omitting either expected identity.
 func TestFactorySessionListMultipleSessions(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
+	baseURL := sharedLifecycleServerURL(t)
 	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -177,19 +287,19 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 	if err := os.Mkdir(firstFactoryDir, 0o755); err != nil {
 		t.Fatalf("create first factory directory: %v", err)
 	}
-	firstSession := createSessionViaCLI(t, ctx, processHarness, primaryFactoryDir, baseURL, firstFactoryDir)
+	firstSession := createSessionViaCLI(t, ctx, processHarness, lifecycleWorkingDir(t), baseURL, firstFactoryDir)
 
 	secondFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory-b")
 	if err := os.Mkdir(secondFactoryDir, 0o755); err != nil {
 		t.Fatalf("create second factory directory: %v", err)
 	}
-	secondSession := createSessionViaCLI(t, ctx, processHarness, primaryFactoryDir, baseURL, secondFactoryDir)
+	secondSession := createSessionViaCLI(t, ctx, processHarness, lifecycleWorkingDir(t), baseURL, secondFactoryDir)
 
 	if firstSession.id == secondSession.id {
 		t.Fatalf("session ids must be distinct: first=%q second=%q", firstSession.id, secondSession.id)
 	}
 
-	listOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL, "session", "list")
+	listOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL, "session", "list")
 	if err != nil {
 		t.Fatalf("you session list: %v\noutput:\n%s", err, listOut)
 	}
@@ -203,7 +313,7 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 		}
 	}
 
-	listJSONOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	listJSONOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "list",
 	)
@@ -221,6 +331,10 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 		t.Fatalf("session list JSON missing second session %q at %q: %#v", secondSession.id, secondFactoryDir, listed.Sessions)
 	}
 	assertDistinctSessionListEntries(t, listed.Sessions, firstSession.id, secondSession.id)
+	t.Cleanup(func() {
+		cleanupSessionViaAPI(t, baseURL, secondSession.id)
+		cleanupSessionViaAPI(t, baseURL, firstSession.id)
+	})
 }
 
 // TestFactorySessionMissingShowAndDeleteFail proves the public CLI Factory Session
@@ -228,14 +342,7 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 // customer-visible not-found outcome, without removing or corrupting any still-open
 // session created for isolation proof.
 func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
+	baseURL := sharedLifecycleServerURL(t)
 	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -245,21 +352,22 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 	if err := os.Mkdir(isolationFactoryDir, 0o755); err != nil {
 		t.Fatalf("create isolation factory directory: %v", err)
 	}
-	openSession := createSessionViaCLI(t, ctx, processHarness, primaryFactoryDir, baseURL, isolationFactoryDir)
+	openSession := createSessionViaCLI(t, ctx, processHarness, lifecycleWorkingDir(t), baseURL, isolationFactoryDir)
+	t.Cleanup(func() { cleanupSessionViaAPI(t, baseURL, openSession.id) })
 
-	showOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	showOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "show", sessionLifecycleCRUDMissingSessionID,
 	)
 	assertCLISessionNotFoundFailure(t, "show", showOut, err, sessionLifecycleCRUDMissingSessionID, false)
 
-	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	deleteOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "delete", sessionLifecycleCRUDMissingSessionID,
 	)
 	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionLifecycleCRUDMissingSessionID, true)
 
-	showOut, err = runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	showOut, err = runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "show", openSession.id,
 	)
@@ -277,7 +385,7 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 		t.Fatalf("isolation session show folder path = %q, want %q", shown.FolderPath, isolationFactoryDir)
 	}
 
-	listJSONOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
+	listJSONOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
 		"session", "list",
 	)
@@ -301,14 +409,7 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 // DELETE /factory-sessions/{session_id} closes it so subsequent get/list no longer
 // treat it as an open live session.
 func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	baseURL := sharedLifecycleServerURL(t)
 	newFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory")
 	if err := os.Mkdir(newFactoryDir, 0o755); err != nil {
 		t.Fatalf("create factory directory: %v", err)
@@ -370,14 +471,7 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 // when get or close targets a missing session ID, without silently resolving to the
 // default or another live session.
 func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	baseURL := sharedLifecycleServerURL(t)
 	openFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-isolation-factory")
 	if err := os.Mkdir(openFactoryDir, 0o755); err != nil {
 		t.Fatalf("create factory directory: %v", err)
@@ -400,6 +494,7 @@ func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
 	if openSessionID == sessionLifecycleCRUDMissingSessionID {
 		t.Fatalf("open session id = %q, want distinct from missing probe id %q", openSessionID, sessionLifecycleCRUDMissingSessionID)
 	}
+	t.Cleanup(func() { cleanupSessionViaAPI(t, baseURL, openSessionID) })
 
 	assertAPISessionNotFound(t, baseURL, sessionLifecycleCRUDMissingSessionID)
 
@@ -437,14 +532,7 @@ func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
 // lists both as distinct entries, and stopping then deleting one session leaves the other
 // gettable and listable with its original public identity without adopting stopped state.
 func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	baseURL := sharedLifecycleServerURL(t)
 
 	firstFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory-a")
 	if err := os.Mkdir(firstFactoryDir, 0o755); err != nil {
@@ -474,6 +562,7 @@ func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
 	terminateSessionViaAPI(t, baseURL, firstSession.id)
 	closeSessionViaAPI(t, baseURL, firstSession.id)
 	assertAPISessionNotFound(t, baseURL, firstSession.id)
+	t.Cleanup(func() { cleanupSessionViaAPI(t, baseURL, secondSession.id) })
 
 	afterClose := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
 	if sessionListContains(afterClose.Sessions, firstSession.id, firstFactoryDir) {
@@ -548,7 +637,7 @@ type cliCreatedSession struct {
 func createSessionViaCLI(
 	t *testing.T,
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	processHarness *lifecycleClientProcess,
 	workingDir string,
 	serverURL string,
 	factoryDir string,
@@ -635,26 +724,63 @@ func sessionLifecycleCRUDFactoryConfig() map[string]any {
 	}
 }
 
-func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
+// lifecycleClientProcess owns one reusable root-built client process for all
+// sequential public CLI invocations of one lifecycle cell.
+type lifecycleClientProcess struct {
+	process support.ApplicationProcess
+}
+
+func newRootProcessHarness(t *testing.T) *lifecycleClientProcess {
 	t.Helper()
-	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		BrowserOpener: func(context.Context, string) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("build lifecycle client root process: %v", err)
+	}
+	support.CleanupProcess(t, process)
+	return &lifecycleClientProcess{process: process}
+}
+
+func lifecycleWorkingDir(t *testing.T) string {
+	t.Helper()
+	return support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+}
+
+// cleanupSessionViaAPI drives a created session to explicit terminal cleanup
+// through the same public API boundary, tolerating an already-terminal
+// session, so no cell leaves open-session residue for later cells.
+func cleanupSessionViaAPI(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	if strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	if err := terminateRemoteFunctionalSession(baseURL, sessionID); err != nil {
+		t.Errorf("terminate lifecycle cell session %s: %v", sessionID, err)
+	}
+	closeSessionViaAPI(t, baseURL, sessionID)
 }
 
 func runYouCLI(
 	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
+	client *lifecycleClientProcess,
 	workingDir string,
 	serverURL string,
 	args ...string,
 ) ([]byte, error) {
-	cmdArgs := []string{}
+	cmdArgs := []string{"you"}
 	if strings.TrimSpace(serverURL) != "" {
 		cmdArgs = append(cmdArgs, "--server", serverURL)
 	}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := processHarness.CommandContext(ctx, cmdArgs...)
-	cmd.Dir = workingDir
-	return cmd.CombinedOutput()
+	inputs := support.FakeInputs(ctx, cmdArgs)
+	inputs.Input.WorkingDirectory = workingDir
+	err := client.process.Execute(inputs.Input)
+	combined := inputs.Stdout()
+	if stderrText := inputs.Stderr(); strings.TrimSpace(stderrText) != "" {
+		combined += "\n" + stderrText
+	}
+	return []byte(combined), err
 }
 
 func sessionListContains(
