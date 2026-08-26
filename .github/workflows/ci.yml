@@ -529,6 +529,39 @@ jobs:
           CHANGED_TEST_STABILITY_BUDGET: 15m
         run: make test-changed-test-stability
 
+  backend-integration:
+    name: Backend Integration
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Verify Backend Integration event selection
+        env:
+          BACKEND_INTEGRATION_EVENT_NAME: ${{ github.event_name }}
+          BACKEND_INTEGRATION_REF: ${{ github.ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { selectBackendIntegration } from './scripts/ci/backend-integration-workflow.mjs';
+
+          const selection = selectBackendIntegration({
+            eventName: process.env.BACKEND_INTEGRATION_EVENT_NAME,
+            ref: process.env.BACKEND_INTEGRATION_REF,
+          });
+          if (!selection.selected || selection.error) {
+            throw new Error(`Backend Integration was not selected for its hosted event: ${JSON.stringify(selection)}`);
+          }
+          console.log(`Backend Integration selected for ${process.env.BACKEND_INTEGRATION_EVENT_NAME}`);
+          NODE
+      - run: make test-integration
+
   backend-lint:
     name: Backend Lint
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -748,7 +781,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-test-stability, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-test-stability, backend-integration, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -778,6 +811,8 @@ jobs:
           FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
           BACKEND_REASON: ${{ needs.classify.outputs.backend_reason }}
           UI_BACKEND_REASON: ${{ needs.classify.outputs.ui_backend_integration_reason }}
+          RUN_BACKEND_INTEGRATION: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+          BACKEND_INTEGRATION_REASON: "The installed-binary validation tier is required on pull requests and protected-main pushes."
           API_REASON: ${{ needs.classify.outputs.api_package_reason }}
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
           PROVIDERS_REASON: ${{ needs.classify.outputs.model_providers_package_reason }}
@@ -799,6 +834,7 @@ jobs:
           RUN_WORKFLOW_LINT: "true"
           WORKFLOW_LINT_REASON: "Every repository workflow must pass pinned schema-aware lint on every pull request and push to main."
           WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
+          BACKEND_INTEGRATION_RESULT: ${{ needs.backend-integration.result }}
           UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
           PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
           API_RESULT: ${{ needs.development-package.outputs.api_package_result }}

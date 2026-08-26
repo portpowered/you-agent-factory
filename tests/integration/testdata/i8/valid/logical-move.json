@@ -1,0 +1,22 @@
+{
+  "name": "i8-logical-move",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workstations": [
+    {
+      "name": "complete",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [{"workType": "task", "state": "init"}],
+      "outputs": [{"workType": "task", "state": "complete"}]
+    }
+  ]
+}

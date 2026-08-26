@@ -499,7 +499,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-integration-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -525,6 +525,8 @@ test-maintenance:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/model-providers ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/internal/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
+	$(GO) test -short ./tests/integration -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short ./tests/integration/harness -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
