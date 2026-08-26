@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,30 +84,109 @@ func TestModelAssetHTTPClientAllowsBodyPastFormerWholeTransferBudget(t *testing.
 
 func TestMetricsCLICompletesReportAfterStandardCLITimeout(t *testing.T) {
 	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
-		// This delay intentionally crosses the ordinary 10-second CLI timeout;
-		// metrics uses a separate policy for the documented retained-history
-		// workload.
-		time.Sleep(standardCLIHTTPTimeout + 100*time.Millisecond)
+	assertMetricsCLIHTTPTimeoutPolicies(t)
+	t.Run("success crosses local HTTP and renders report", testMetricsCLISuccess)
+	t.Run("transport failure preserves cause and output", testMetricsCLITransportFailure)
+}
+
+func assertMetricsCLIHTTPTimeoutPolicies(t *testing.T) {
+	t.Helper()
+	standard, err := provideStandardCLIHTTPProtocol()
+	if err != nil {
+		t.Fatalf("provideStandardCLIHTTPProtocol(): %v", err)
+	}
+	if standard.timeout != 10*time.Second {
+		t.Fatalf("standard CLI timeout = %s, want 10s", standard.timeout)
+	}
+	if metricsClient := newMetricsCLIHTTPClient(nil); metricsClient.Timeout != 5*time.Minute {
+		t.Fatalf("metrics CLI timeout = %s, want 5m", metricsClient.Timeout)
+	}
+}
+
+func testMetricsCLISuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/metrics" {
+			t.Errorf("request path = %q, want /metrics", request.URL.Path)
+		}
 		writer.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(writer).Encode(generatedclient.MetricsReport{
+		if err := json.NewEncoder(writer).Encode(generatedclient.MetricsReport{
 			Cost:      generatedclient.MetricsCost{Availability: "UNAVAILABLE"},
 			Providers: []generatedclient.MetricsBreakdown{{Key: "provider-a"}},
-		})
+		}); err != nil {
+			t.Errorf("encode metrics report: %v", err)
+		}
 	}))
 	defer server.Close()
 
+	transport := &metricsCLIForwardingTransport{next: http.DefaultTransport}
 	var output bytes.Buffer
-	operation := provideMetricsCLI()
-	err := operation(context.Background(), visualizationcli.MetricsConfig{
+	err := provideMetricsCLIWithHTTPTransport(transport)(context.Background(), visualizationcli.MetricsConfig{
 		Server:  server.URL,
 		GroupBy: "provider",
 		Output:  &output,
 	})
 	if err != nil {
-		t.Fatalf("metrics operation after standard timeout: %v", err)
+		t.Fatalf("metrics operation: %v", err)
 	}
-	if output.Len() == 0 {
-		t.Fatal("metrics operation wrote no report after delayed response")
+	if transport.requests != 1 || transport.requestPath != "/metrics" {
+		t.Fatalf("forwarded requests = %d at %q, want one /metrics request", transport.requests, transport.requestPath)
 	}
+	if transport.effectiveDeadline <= standardCLIHTTPTimeout {
+		t.Fatalf("effective metrics deadline = %s, want greater than standard timeout %s", transport.effectiveDeadline, standardCLIHTTPTimeout)
+	}
+	for _, want := range []string{"Breakdown by provider: 1 rows", "provider-a:"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("metrics output missing %q:\n%s", want, output.String())
+		}
+	}
+}
+
+func testMetricsCLITransportFailure(t *testing.T) {
+	wantCause := errors.New("injected metrics transport failure")
+	transport := &metricsCLIForwardingTransport{
+		next: metricsRoundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, wantCause
+		}),
+	}
+	var output bytes.Buffer
+	err := provideMetricsCLIWithHTTPTransport(transport)(context.Background(), visualizationcli.MetricsConfig{
+		Server:  "http://metrics.test",
+		GroupBy: "provider",
+		Output:  &output,
+	})
+	if err == nil {
+		t.Fatal("metrics operation error = nil, want transport failure")
+	}
+	var metricsErr *visualizationcli.MetricsError
+	if !errors.As(err, &metricsErr) || metricsErr.CLIErrorCode() != visualizationcli.MetricsQueryFailedCode {
+		t.Fatalf("error = %#v, want typed metrics query failure", err)
+	}
+	if !errors.Is(err, wantCause) {
+		t.Fatalf("error = %v, want injected cause preserved", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("failed metrics request wrote partial output %q", output.String())
+	}
+}
+
+type metricsCLIForwardingTransport struct {
+	next              http.RoundTripper
+	requests          int
+	requestPath       string
+	effectiveDeadline time.Duration
+}
+
+func (transport *metricsCLIForwardingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	transport.requests++
+	transport.requestPath = request.URL.Path
+	if deadline, ok := request.Context().Deadline(); ok {
+		transport.effectiveDeadline = time.Until(deadline)
+	}
+	return transport.next.RoundTrip(request)
+}
+
+type metricsRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip metricsRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
 }
