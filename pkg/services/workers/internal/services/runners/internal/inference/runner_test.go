@@ -181,6 +181,29 @@ func TestRunnerNormalizesModelsFailureWithoutSuccessfulOutput(t *testing.T) {
 	}
 }
 
+func TestRunnerRejectsMalformedManagedOutputWithoutSuccessfulOutput(t *testing.T) {
+	modelsEdge := &captureModelsService{result: models.InvokeModelResult{
+		Status: models.ModelInvocationStatusCompleted,
+		Outputs: []models.InferenceOutput{{
+			Name:     "json",
+			Modality: models.ModalityJSON,
+			Content:  "not-json",
+		}},
+	}}
+	runner := newTestRunner(t, modelsEdge, nil)
+
+	result, err := runner.Execute(context.Background(), validRequest())
+	if err == nil {
+		t.Fatal("Execute() returned nil error for malformed managed output")
+	}
+	if result.ProposedOutput != nil || result.Content != "" {
+		t.Fatalf("malformed result = %#v, want no successful output", result)
+	}
+	if modelsEdge.Calls() != 1 || modelsEdge.LegacyCalls() != 0 {
+		t.Fatalf("Models call counts = generic %d legacy %d, want 1/0", modelsEdge.Calls(), modelsEdge.LegacyCalls())
+	}
+}
+
 func TestRunnerDelegatesNonManagedInferenceWithoutModelsInvocation(t *testing.T) {
 	modelsEdge := &captureModelsService{}
 	delegate := &captureDelegateRunner{result: workers.RunnerExecutionResult{Content: "provider output"}}
@@ -212,6 +235,9 @@ func TestRunnerRejectsInvalidRequestsBeforeModelsInvocation(t *testing.T) {
 		{name: "missing operation", mutate: func(request *workers.RunnerExecutionRequest) { request.ModelOperation = "" }},
 		{name: "invalid binding", mutate: func(request *workers.RunnerExecutionRequest) {
 			request.ModelBindings[0].Slot = ""
+		}},
+		{name: "invalid binding content", mutate: func(request *workers.RunnerExecutionRequest) {
+			request.ModelBindings[0].Content[0].Type = work.WorkContentPartType("unsupported")
 		}},
 	}
 	for _, test := range tests {
