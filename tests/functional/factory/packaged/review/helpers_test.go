@@ -25,7 +25,14 @@ func runPackagedReviewCLIJSONInvocation(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedReviewFactoryName)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	support.CleanupProcess(t, process)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	support.InstallPackagedFactoryWithProcess(
+		t, process, env, t.TempDir(), factorydefinitions.PackagedReviewFactoryName,
+	)
 
 	args := []string{
 		"you", "--json", "run",
@@ -35,12 +42,9 @@ func runPackagedReviewCLIJSONInvocation(
 	args = append(args, extraArgs...)
 	args = append(args, requestText)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = t.TempDir()
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
@@ -67,7 +71,14 @@ func runPackagedReviewCLIJSONInvocationWithFactorySetup(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedReviewFactoryName)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	support.CleanupProcess(t, process)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	factoryDir := support.InstallPackagedFactoryWithProcess(
+		t, process, env, t.TempDir(), factorydefinitions.PackagedReviewFactoryName,
+	)
 	factoryName := factorydefinitions.PackagedReviewFactoryName
 	if configure != nil {
 		configure(t, factoryDir)
@@ -83,12 +94,9 @@ func runPackagedReviewCLIJSONInvocationWithFactorySetup(
 	args = append(args, extraArgs...)
 	args = append(args, requestText)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = t.TempDir()
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
@@ -205,7 +213,14 @@ func runPackagedReviewCLIJSONFailureInvocation(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedReviewFactoryName)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	support.CleanupProcess(t, process)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	support.InstallPackagedFactoryWithProcess(
+		t, process, env, t.TempDir(), factorydefinitions.PackagedReviewFactoryName,
+	)
 
 	args := []string{
 		"you", "--json", "run",
@@ -215,12 +230,9 @@ func runPackagedReviewCLIJSONFailureInvocation(
 	args = append(args, extraArgs...)
 	args = append(args, requestText)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = t.TempDir()
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
 	execErr := process.Execute(inputs.Input)
 
 	var response factoryapi.InvocationResponse
