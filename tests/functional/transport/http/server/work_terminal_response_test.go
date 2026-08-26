@@ -27,6 +27,7 @@ const (
 // and that a failure terminal outcome carrying the same content is never
 // reported as success.
 func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t *testing.T) {
+	t.Parallel()
 	t.Run("terminal success keeps ordered typed parts", func(t *testing.T) {
 		server := startWorkTerminalResponseServer(
 			t,

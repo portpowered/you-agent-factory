@@ -20,6 +20,7 @@ import (
 // public HTTP request that reaches a non-404 response on the live functional API
 // server.
 func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
+	t.Parallel()
 	inventory := loadRESTOperationInventory(t)
 	ctx := newRoutingReachabilityContext(t)
 	defer ctx.server.Stop(t)
@@ -123,6 +124,7 @@ func assertModelCacheNotFoundResponse(t *testing.T, response *http.Response) {
 // published OpenAPI surface return a structured not-found response at the public
 // HTTP contract boundary.
 func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -142,6 +144,7 @@ func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 }
 
 func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -214,6 +217,7 @@ func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
 // OpenAPI routes return the documented method-error response at the public HTTP
 // contract boundary instead of a not-found outcome that would hide the mismatch.
 func TestAPIWrongMethodReturnsDocumentedMethodError(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,

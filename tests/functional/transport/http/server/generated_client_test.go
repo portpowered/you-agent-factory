@@ -32,6 +32,7 @@ const generatedClientDeadline = 2 * time.Second
 // decoding against the live functional server, use a caller-owned HTTP dependency for
 // public requests, and honor caller-owned cancellation and deadline context bounds.
 func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
@@ -128,6 +129,7 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 // typed failure results with documented HTTP status and error family/code, not
 // opaque transport errors or unstructured response bodies.
 func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -185,6 +187,7 @@ func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
 // demonstrating typed success decoding for status and session-visible observations
 // after a representative work submission against the live runtime.
 func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
+	t.Parallel()
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,

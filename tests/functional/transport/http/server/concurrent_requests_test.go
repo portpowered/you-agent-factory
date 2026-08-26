@@ -25,6 +25,7 @@ import (
 // HTTP reads stay correlated to their originating session identity while unrelated
 // in-flight invocations hold concurrent server work.
 func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldConcurrentRequestsFactory(t)
 	blocking := newBlockingInvocationRunner()
 	edges := serviceedges.Edges{}
@@ -120,6 +121,7 @@ func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
 // TestAPICancelledRequestDoesNotCancelUnrelatedSession proves aborting one in-flight
 // Factory Session HTTP request leaves other sessions queryable with intact identity and status.
 func TestAPICancelledRequestDoesNotCancelUnrelatedSession(t *testing.T) {
+	t.Parallel()
 	dir := scaffoldConcurrentRequestsFactory(t)
 	blocking := newBlockingInvocationRunner()
 	edges := serviceedges.Edges{}

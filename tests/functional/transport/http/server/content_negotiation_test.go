@@ -19,6 +19,7 @@ import (
 // responses on the public HTTP API use the documented application/json media type
 // declared in the published OpenAPI contract.
 func TestAPIJSONRequestsAndResponsesUseDocumentedContentType(t *testing.T) {
+	t.Parallel()
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	requestMediaType := documentedJSONRequestMediaType(t, operation)
 	responseMediaType := documentedJSONSuccessResponseMediaType(t, operation)
@@ -87,6 +88,7 @@ func TestAPIJSONRequestsAndResponsesUseDocumentedContentType(t *testing.T) {
 // Media Type at the public HTTP contract boundary instead of accepting the body
 // or returning an unrelated validation or routing failure.
 func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
+	t.Parallel()
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	documentedRequestMediaType := documentedJSONRequestMediaType(t, operation)
 
@@ -124,6 +126,7 @@ func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
 // contract boundary instead of an unsupported media type rejection or an unstructured
 // error response.
 func TestAPIMalformedJSONReturnsStructured400(t *testing.T) {
+	t.Parallel()
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	requestMediaType := documentedJSONRequestMediaType(t, operation)
 
