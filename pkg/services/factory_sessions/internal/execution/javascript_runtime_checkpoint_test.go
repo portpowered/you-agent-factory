@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -979,4 +980,26 @@ func interruptedSessionForAdmissionTest(sessionID string) runtimeSessionState {
 	}
 	state.events = rebuildRuntimeSessionCanonicalEvents(&state)
 	return state
+}
+
+func TestCompactPetriTokenHistory_BoundsFiveHundredAndOneThousandLargeTerminalLifecycles(t *testing.T) {
+	const snapshotLimit = 5 * 1024 * 1024
+	body := strings.Repeat("large-worker-output-", 1_200)
+	for _, count := range []int{500, 1_000} {
+		t.Run(strconv.Itoa(count)+"-tokens", func(t *testing.T) {
+			mutations := make([]interfaces.TokenMutationRecord, 0, count*3)
+			for index := 0; index < count; index++ {
+				mutations = append(mutations, largeTerminalTokenMutations(index, body)...)
+			}
+			before := encodePetriMutationSnapshot(t, mutations, nil)
+			if count == 500 && len(before) <= snapshotLimit {
+				t.Fatalf("uncompacted 500-token snapshot = %d, want > %d", len(before), snapshotLimit)
+			}
+			retained, summaries := compactPetriTokenHistory(mutations, nil)
+			after := encodePetriMutationSnapshot(t, retained, summaries)
+			if len(after) > snapshotLimit || len(retained) != 0 || len(summaries) != count || strings.Contains(string(after), body) || strings.Contains(string(after), "structured_result") {
+				t.Fatalf("compacted %d tokens = %d bytes, %d mutations, %d summaries; output retained=%t", count, len(after), len(retained), len(summaries), strings.Contains(string(after), body))
+			}
+		})
+	}
 }

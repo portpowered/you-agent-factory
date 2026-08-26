@@ -900,36 +900,6 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 	return nil
 }
 
-func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
-	if state == nil {
-		return runtimeSessionState{}
-	}
-	cloned := runtimeSessionState{
-		session:                   cloneSessionRead(state.session),
-		result:                    cloneResultRead(state.result),
-		dispatches:                cloneDispatchSummaries(state.dispatches),
-		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
-		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
-		artifacts:                 cloneArtifactSummaries(state.artifacts),
-		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
-		petriMutations:            clonePetriMutations(state.petriMutations),
-		petriSummaries:            clonePetriTokenSummaries(state.petriSummaries),
-		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
-		startRequest:              cloneStartRequestPtr(state.startRequest),
-		resolvedSource:            state.resolvedSource,
-		sourceContent:             state.sourceContent,
-		runDone:                   state.runDone,
-		responseEvents:            state.responseEvents,
-	}
-	if len(state.events) > 0 {
-		cloned.events = make([]json.RawMessage, len(state.events))
-		for i, event := range state.events {
-			cloned.events[i] = append(json.RawMessage(nil), event...)
-		}
-	}
-	return cloned
-}
-
 func (s *JavaScriptRuntimeService) syncStartFromState(state runtimeSessionState) SyncStartResult {
 	async := s.asyncStartFromState(state)
 	result := SyncStartResult{AsyncStartResult: async}

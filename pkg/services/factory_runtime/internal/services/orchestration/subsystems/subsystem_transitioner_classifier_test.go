@@ -545,3 +545,105 @@ func buildExecutorReviewReconcileMarking(t *testing.T, tokens []*factorytoken.To
 	snapshot := marking.Snapshot()
 	return &snapshot
 }
+
+func TestTerminalMutationFacts_UseTopologyReachabilityAndConsumeFacts(t *testing.T) {
+	net := compactionTestNet()
+
+	tests := []struct {
+		name          string
+		mutation      interfaces.MarkingMutation
+		wantTerminal  bool
+		wantReachable bool
+	}{
+		{
+			name:         "unreferenced terminal destination",
+			mutation:     interfaces.MarkingMutation{Type: interfaces.MutationMove, ToPlace: "task:done"},
+			wantTerminal: true,
+		},
+		{
+			name:          "observed terminal dependency",
+			mutation:      interfaces.MarkingMutation{Type: interfaces.MutationMove, ToPlace: "task:observed"},
+			wantTerminal:  true,
+			wantReachable: true,
+		},
+		{
+			name:         "processing destination",
+			mutation:     interfaces.MarkingMutation{Type: interfaces.MutationMove, ToPlace: "task:processing"},
+			wantTerminal: false,
+		},
+		{
+			name:         "consumed terminal token",
+			mutation:     interfaces.MarkingMutation{Type: interfaces.MutationConsume, FromPlace: "task:observed"},
+			wantTerminal: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			terminal, reachable := terminalMutationFacts(net, test.mutation)
+			if terminal != test.wantTerminal || reachable != test.wantReachable {
+				t.Fatalf("terminalMutationFacts() = (%t, %t), want (%t, %t)", terminal, reachable, test.wantTerminal, test.wantReachable)
+			}
+		})
+	}
+}
+
+func TestBuildCompletedDispatch_UsesTransitionerTopologyForMutationFacts(t *testing.T) {
+	transitioner := &TransitionerSubsystem{netDefinition: compactionTestNet()}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}
+	result := &workerexecution.WorkResult{
+		DispatchID:   "dispatch-done",
+		TransitionID: "complete",
+	}
+	mutation := interfaces.MarkingMutation{
+		Type:    interfaces.MutationMove,
+		TokenID: "token-done",
+		ToPlace: "task:done",
+		NewToken: &workerexecution.Token{ID: "token-done", State: "done", Color: workerexecution.Color{
+			WorkID: "work-done", WorkTypeID: "task",
+		}},
+	}
+
+	completed := transitioner.buildCompletedDispatch(
+		snapshot,
+		result,
+		resolvedWorkResult{outcome: workerexecution.OutcomeAccepted},
+		nil,
+		[]interfaces.MarkingMutation{mutation},
+		time.Unix(0, 0),
+	)
+	if len(completed.OutputMutations) != 1 {
+		t.Fatalf("output mutations = %d, want 1", len(completed.OutputMutations))
+	}
+	record := completed.OutputMutations[0]
+	if !record.Terminal || record.TransitionReachable {
+		t.Fatalf("mutation topology facts = terminal=%t reachable=%t, want true/false", record.Terminal, record.TransitionReachable)
+	}
+}
+
+func compactionTestNet() *state.Net {
+	workType := &state.WorkType{
+		ID: "task",
+		States: []state.StateDefinition{
+			{Value: "processing", Category: state.StateCategoryProcessing},
+			{Value: "done", Category: state.StateCategoryTerminal},
+			{Value: "observed", Category: state.StateCategoryTerminal},
+		},
+	}
+	places := make(map[string]*petri.Place)
+	for _, place := range workType.GeneratePlaces() {
+		places[place.ID] = place
+	}
+	return &state.Net{
+		Places:    places,
+		WorkTypes: map[string]*state.WorkType{"task": workType},
+		Transitions: map[string]*petri.Transition{
+			"observe-terminal": {
+				ID: "observe-terminal",
+				InputArcs: []petri.Arc{{
+					PlaceID: "task:observed", Direction: petri.ArcInput, Mode: interfaces.ArcModeObserve,
+				}},
+			},
+		},
+	}
+}

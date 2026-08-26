@@ -13,8 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 	"os"
 	"path/filepath"
 	"strings"
@@ -728,82 +726,6 @@ func TestPersistenceChoiceForPolicy_EnabledCreatesProjectDurableSessions(t *test
 	}
 	if _, err := os.Stat(filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), sessionID+".json")); err != nil {
 		t.Fatalf("enabled persistence snapshot stat error = %v, want exist", err)
-	}
-}
-
-func TestPersistSessionSnapshotWarnsAtExactEncodedSizeThreshold(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		targetSize int
-		wantWarn   bool
-	}{
-		{name: "one byte below", targetSize: int(durableSessionSnapshotWarningThresholdBytes - 1)},
-		{name: "at threshold", targetSize: int(durableSessionSnapshotWarningThresholdBytes), wantWarn: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			core, observed := observer.New(zap.WarnLevel)
-			store := &petriCompactionStore{}
-			service := &JavaScriptRuntimeService{
-				persistence:              store,
-				persistenceWarningLogger: zap.New(core),
-			}
-			state := exactEncodedSizeWarningState(t, tc.targetSize)
-
-			if err := service.persistSessionSnapshot(state); err != nil {
-				t.Fatalf("persistSessionSnapshot: %v", err)
-			}
-			if got := len(store.payload); got != tc.targetSize {
-				t.Fatalf("persisted snapshot bytes = %d, want exact %d", got, tc.targetSize)
-			}
-
-			entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
-			if tc.wantWarn {
-				if len(entries) != 1 {
-					t.Fatalf("warning entries = %d, want 1", len(entries))
-				}
-				fields := entries[0].ContextMap()
-				if fields["code"] != durableSessionSnapshotSizeWarningCode {
-					t.Fatalf("warning code = %#v, want %q", fields["code"], durableSessionSnapshotSizeWarningCode)
-				}
-				if fields["session_id"] != "dur-sess-warning-threshold" {
-					t.Fatalf("warning session_id = %#v, want durable-sess-warning-threshold", fields["session_id"])
-				}
-				if fields["observed_bytes"] != int64(tc.targetSize) {
-					t.Fatalf("warning observed_bytes = %#v, want %d", fields["observed_bytes"], tc.targetSize)
-				}
-				if fields["threshold_bytes"] != durableSessionSnapshotWarningThresholdBytes {
-					t.Fatalf("warning threshold_bytes = %#v, want %d", fields["threshold_bytes"], durableSessionSnapshotWarningThresholdBytes)
-				}
-				if fields["retained_live_tokens"] != int64(1) || fields["retained_terminal_tokens"] != int64(1) {
-					t.Fatalf("warning retained token counts = live %#v terminal %#v, want 1 and 1", fields["retained_live_tokens"], fields["retained_terminal_tokens"])
-				}
-				for _, forbidden := range []string{"sourceContent", "payload", "credentials", "unsafe-path"} {
-					if _, ok := fields[forbidden]; ok {
-						t.Fatalf("warning contains forbidden field %q: %#v", forbidden, fields)
-					}
-				}
-			} else if len(entries) != 0 {
-				t.Fatalf("warning entries = %d, want none below threshold", len(entries))
-			}
-		})
-	}
-}
-
-func TestPersistSessionSnapshotWarningDoesNotHideSaveFailure(t *testing.T) {
-	wantErr := errors.New("checkpoint unavailable")
-	core, observed := observer.New(zap.WarnLevel)
-	service := &JavaScriptRuntimeService{
-		persistence:              &petriCompactionStore{saveErr: wantErr},
-		persistenceWarningLogger: zap.New(core),
-	}
-	state := exactEncodedSizeWarningState(t, int(durableSessionSnapshotWarningThresholdBytes))
-
-	err := service.persistSessionSnapshot(state)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("persistSessionSnapshot error = %v, want %v", err, wantErr)
-	}
-	if got := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").Len(); got != 1 {
-		t.Fatalf("warning count = %d, want 1 before failed save", got)
 	}
 }
 

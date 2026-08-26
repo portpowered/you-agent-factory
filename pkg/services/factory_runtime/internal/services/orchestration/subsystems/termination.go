@@ -190,6 +190,52 @@ func (tc *TerminationCheckSubsystem) allResourcesReturned(snapshot *petri.Markin
 	return true
 }
 
+func terminalMutationFacts(topology *state.Net, mutation interfaces.MarkingMutation) (bool, bool) {
+	if topology == nil {
+		return false, false
+	}
+	placeID := mutation.ToPlace
+	if mutation.Type == interfaces.MutationConsume {
+		placeID = mutation.FromPlace
+	}
+	if placeID == "" {
+		return false, false
+	}
+	category := topology.StateCategoryForPlace(placeID)
+	if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
+		return false, false
+	}
+	if mutation.Type == interfaces.MutationConsume {
+		return true, false
+	}
+	return true, terminalPlaceHasLiveInput(topology, placeID)
+}
+
+func terminalPlaceHasLiveInput(topology *state.Net, placeID string) bool {
+	place, ok := topology.Places[placeID]
+	if !ok || place == nil {
+		return true
+	}
+	for _, transition := range topology.Transitions {
+		if transition == nil {
+			continue
+		}
+		for _, arc := range transition.InputArcs {
+			if arc.PlaceID == placeID {
+				return true
+			}
+			if arc.Cardinality.Mode != petri.CardinalityAllTerminal {
+				continue
+			}
+			arcPlace, exists := topology.Places[arc.PlaceID]
+			if exists && arcPlace != nil && arcPlace.TypeID == place.TypeID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 const (
 	executorReviewWorkstationProcess = "process"
 	executorReviewWorkstationReview  = "review"
