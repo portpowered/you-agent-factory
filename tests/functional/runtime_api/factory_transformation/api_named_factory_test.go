@@ -14,6 +14,8 @@ import (
 )
 
 func TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface(t *testing.T) {
+	t.Parallel()
+
 	support.SkipLongFunctional(t, "slow named-factory API sweep")
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
@@ -47,6 +49,8 @@ func TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface(t *testi
 }
 
 func TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract(t *testing.T) {
+	t.Parallel()
+
 	support.SkipLongFunctional(t, "slow named-factory API sweep")
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
@@ -71,6 +75,8 @@ func TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonical
 }
 
 func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -115,6 +121,8 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *t
 }
 
 func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -157,6 +165,8 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidat
 }
 
 func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 

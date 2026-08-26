@@ -13,6 +13,8 @@ import (
 )
 
 func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryChange(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -82,6 +84,8 @@ func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryCh
 
 // backendsizecheck:ignore-function this end-to-end current-factory layout round-trip test keeps save, reload, persistence, and runtime assertions on one contract seam.
 func TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -189,6 +193,8 @@ func TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExe
 }
 
 func TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetadata(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -214,6 +220,8 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetad
 }
 
 func TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -285,6 +293,8 @@ func TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize(t *testing.T) {
 }
 
 func TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -329,6 +339,8 @@ func TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode(t *testing.T) {
 }
 
 func TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 

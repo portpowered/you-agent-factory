@@ -13,6 +13,8 @@ import (
 )
 
 func TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	createNamedFactoryFixture(

@@ -14,6 +14,8 @@ import (
 )
 
 func TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughActivationAndReadback(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -46,6 +48,8 @@ func TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughA
 }
 
 func TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 

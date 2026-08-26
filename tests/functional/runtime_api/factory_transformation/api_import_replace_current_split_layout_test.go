@@ -12,6 +12,8 @@ import (
 )
 
 func TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout(t *testing.T) {
+	t.Parallel()
+
 	replaceRoot := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(replaceRoot, interfaces.FactoryConfigFile),

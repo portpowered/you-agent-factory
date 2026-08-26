@@ -18,6 +18,8 @@ type portableLayoutVariantExpectation struct {
 }
 
 func TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize(t *testing.T) {
+	t.Parallel()
+
 	runCurrentFactoryPUTPortableLayoutVariant(t, portableLayoutVariantExpectation{
 		nodes: []map[string]any{
 			{
@@ -60,6 +62,8 @@ func TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize(t *testing
 }
 
 func TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithOneWaypoint(t *testing.T) {
+	t.Parallel()
+
 	runCurrentFactoryPUTPortableLayoutVariant(t, portableLayoutVariantExpectation{
 		nodes: layoutVariantSizedNodes(),
 		edges: []map[string]any{{
@@ -81,6 +85,8 @@ func TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithOneWaypoint(t *testing.T
 }
 
 func TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithMultipleWaypoints(t *testing.T) {
+	t.Parallel()
+
 	runCurrentFactoryPUTPortableLayoutVariant(t, portableLayoutVariantExpectation{
 		nodes: layoutVariantSizedNodes(),
 		edges: []map[string]any{{
@@ -108,6 +114,8 @@ func TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithMultipleWaypoints(t *tes
 }
 
 func TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize(t *testing.T) {
+	t.Parallel()
+
 	runCurrentFactoryPUTPortableLayoutVariant(t, portableLayoutVariantExpectation{
 		nodes: []map[string]any{
 			{"id": "workstation:plan-task", "position": map[string]any{"x": 144, "y": 288}},

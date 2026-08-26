@@ -10,6 +10,8 @@ import (
 )
 
 func TestSessionFactoryPUT_UpsertCreateAllowsOmittedVersion(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	server := startFactoryTransformationServer(t, rootDir)
@@ -25,6 +27,8 @@ func TestSessionFactoryPUT_UpsertCreateAllowsOmittedVersion(t *testing.T) {
 }
 
 func TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	server := startFactoryTransformationServer(t, rootDir)
@@ -54,6 +58,8 @@ func TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion(t *testing.T) {
 }
 
 func TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	server := startFactoryTransformationServer(t, rootDir)

@@ -21,6 +21,8 @@ import (
 )
 
 func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -50,6 +52,8 @@ func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFac
 }
 
 func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -80,6 +84,8 @@ func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T)
 }
 
 func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacement(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -133,6 +139,8 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 }
 
 func TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -193,6 +201,8 @@ func TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocume
 }
 
 func TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -276,6 +286,8 @@ func TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns(t *t
 }
 
 func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	createNamedFactoryFixture(
@@ -322,6 +334,8 @@ func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsol
 }
 
 func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -372,6 +386,8 @@ func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T
 }
 
 func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -411,6 +427,8 @@ func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.
 }
 
 func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFactory(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -488,6 +506,8 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 }
 
 func TestCurrentFactoryPUT_RequiresAdvancedSaveVersion(t *testing.T) {
+	t.Parallel()
+
 	// One FunctionalAPIServer for the whole advanced-version matrix. Each row
 	// restores a deterministic "alpha"/"task" baseline before asserting so a
 	// successful save (or rejected stale write) cannot contaminate later rows.

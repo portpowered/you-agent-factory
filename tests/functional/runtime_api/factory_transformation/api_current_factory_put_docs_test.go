@@ -15,6 +15,8 @@ import (
 )
 
 func TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -39,6 +41,8 @@ func TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent(t *test
 }
 
 func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -126,6 +130,8 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 }
 
 func TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -157,6 +163,8 @@ func TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion(
 }
 
 func TestCurrentFactoryPUT_RejectsInvalidDocTargets(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -191,6 +199,8 @@ func TestCurrentFactoryPUT_RejectsInvalidDocTargets(t *testing.T) {
 }
 
 func TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -214,6 +224,8 @@ func TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths(t *testing.T) {
 }
 
 func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
