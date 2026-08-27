@@ -13,6 +13,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // sharedRemoteCLI keeps one service-mode host and one reusable CLI root alive
@@ -77,6 +78,13 @@ func TestCLISharedRemoteScenarios(t *testing.T) {
 			test.run(t, remote)
 		})
 	}
+	functionalevidence.Covers(
+		t,
+		"cli/you.submit.batch",
+		"cli/you.work.approval.list",
+		"cli/you.work.approval.show",
+		"cli/you.work.move",
+	)
 }
 
 func (r *sharedRemoteCLI) run(
@@ -189,6 +197,8 @@ func testCLIExplicitSessionIsolation(t *testing.T, r *sharedRemoteCLI) {
 	assertIsolatedWorkList(t, listA, sessionA, workA, "remote-session-a-work", workB, "remote-session-b-work")
 	listB := runWorkListCLIJSON(t, ctx, r.process, factoryBDir, r.baseURL, sessionB, "")
 	assertIsolatedWorkList(t, listB, sessionB, workB, "remote-session-b-work", workA, "remote-session-a-work")
+	waitForWorkStateViaCLI(t, ctx, r.process, factoryADir, r.baseURL, sessionA, workA, "complete", 30*time.Second)
+	waitForWorkStateViaCLI(t, ctx, r.process, factoryBDir, r.baseURL, sessionB, workB, "complete", 30*time.Second)
 
 	factoryA := replaceFactoryViaCLIJSON(t, ctx, r, factoryADir, sessionA)
 	assertFactoryDirectory(t, "session A", factoryA, factoryADir)

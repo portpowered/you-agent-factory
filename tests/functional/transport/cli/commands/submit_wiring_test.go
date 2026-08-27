@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -113,7 +112,6 @@ func testCLISubmitBatchFile(t *testing.T, remote *sharedRemoteCLI) {
 		}
 	}
 
-	functionalevidence.Covers(t, "cli/you.submit.batch")
 }
 
 // TestCLISubmitUnavailableServer proves you submit batch exits with the documented

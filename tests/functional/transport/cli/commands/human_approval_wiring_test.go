@@ -9,7 +9,6 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func testCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors(t *testing.T, remote *sharedRemoteCLI) {
@@ -44,7 +43,6 @@ func testCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors(t *te
 	if strings.Contains(string(invalidOut), "release") || strings.Contains(string(invalidOut), "secret") {
 		t.Fatalf("argument error leaked Work content: %s", invalidOut)
 	}
-	functionalevidence.Covers(t, "cli/you.work.approval.list", "cli/you.work.approval.show")
 	remote.assertHealthy(t, remote.hostFactoryDir)
 }
 

@@ -12,7 +12,6 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -183,7 +182,6 @@ func testCLIWorkMoveChangesState(t *testing.T, remote *sharedRemoteCLI) {
 		t.Fatalf("work list JSON missing moved work %q at complete: %#v", workID, listed.Results)
 	}
 
-	functionalevidence.Covers(t, "cli/you.work.move")
 }
 
 // TestCLIWorkShowMissingReturnsNotFound proves you work show for a missing work id

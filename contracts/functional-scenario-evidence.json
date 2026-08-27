@@ -63,27 +63,17 @@
       ]
     },
     {
-	  "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLISharedRemoteScenarios/TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
-	  "stableIds": [
-	    "cli/you.work.approval.list",
-	    "cli/you.work.approval.show"
-	  ]
-	},
-	{
       "test": "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath",
       "stableIds": [
         "cli/you.run"
       ]
     },
     {
-      "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISharedRemoteScenarios/TestCLISubmitBatchFile",
+      "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
       "stableIds": [
-        "cli/you.submit.batch"
-      ]
-    },
-    {
-      "test": "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLISharedRemoteScenarios/TestCLIWorkMoveChangesState",
-      "stableIds": [
+        "cli/you.submit.batch",
+        "cli/you.work.approval.list",
+        "cli/you.work.approval.show",
         "cli/you.work.move"
       ]
     },
