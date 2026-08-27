@@ -48,6 +48,13 @@ var catalogCohortState struct {
 	err    error
 }
 
+var packagedFactoryCatalogState struct {
+	sync.Once
+	catalog factorydefinitions.PackagedFactoryCatalogOperations
+	names   []string
+	err     error
+}
+
 func catalogCohortForTest(t *testing.T) *catalogCohort {
 	t.Helper()
 
@@ -115,7 +122,11 @@ func newCatalogProfileCohort(
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	seedEveryInstalledPackagedFactory(t, home)
+	installed := make([]string, 0, len(allowedTargets))
+	for _, target := range allowedTargets {
+		installed = append(installed, strings.TrimPrefix(target, "factory:"))
+	}
+	seedInstalledPackagedFactories(t, home, installed)
 	support.SeedACPAgentProfile(t, home, defaultTarget, allowedTargets)
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
@@ -164,14 +175,30 @@ func seedInstalledPackagedFactory(t *testing.T, home, name string) {
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
 	}
 
-	published, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, _ := packagedFactoryCatalogForTest(t)
+	seedInstalledPackagedFactoryFromCatalog(t, globalRoot, catalog, name)
+}
+
+func seedInstalledPackagedFactories(t *testing.T, home string, names []string) {
+	t.Helper()
+
+	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
 	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
 	}
-	catalog, err := factorydefinitionswire.NewPackagedFactoryCatalog(published.All())
-	if err != nil {
-		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
+	catalog, _ := packagedFactoryCatalogForTest(t)
+	for _, name := range names {
+		seedInstalledPackagedFactoryFromCatalog(t, globalRoot, catalog, name)
 	}
+}
+
+func seedInstalledPackagedFactoryFromCatalog(
+	t *testing.T,
+	globalRoot string,
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	name string,
+) {
+	t.Helper()
 	resolved, err := catalog.ResolveBuiltInPackagedFactory(
 		context.Background(),
 		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: name},
@@ -191,6 +218,31 @@ func seedInstalledPackagedFactory(t *testing.T, home, name string) {
 	if err := os.WriteFile(configPath, resolved.Definition.JSON, 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", configPath, err)
 	}
+}
+
+func packagedFactoryCatalogForTest(
+	t *testing.T,
+) (factorydefinitions.PackagedFactoryCatalogOperations, []string) {
+	t.Helper()
+
+	packagedFactoryCatalogState.Do(func() {
+		published, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+		if err != nil {
+			packagedFactoryCatalogState.err = fmt.Errorf("load published catalog: %w", err)
+			return
+		}
+		catalog, err := factorydefinitionswire.NewPackagedFactoryCatalog(published.All())
+		if err != nil {
+			packagedFactoryCatalogState.err = fmt.Errorf("build packaged catalog: %w", err)
+			return
+		}
+		packagedFactoryCatalogState.catalog = catalog
+		packagedFactoryCatalogState.names = published.Names()
+	})
+	if packagedFactoryCatalogState.err != nil {
+		t.Fatalf("packaged Factory catalog: %v", packagedFactoryCatalogState.err)
+	}
+	return packagedFactoryCatalogState.catalog, append([]string(nil), packagedFactoryCatalogState.names...)
 }
 
 // assertSessionNewReturnsDefaultTarget drives one real "session/new" call on
@@ -264,17 +316,11 @@ func decodeRPCMessage(t *testing.T, out *bytes.Buffer) rpcMessage {
 func seedEveryInstalledPackagedFactory(t *testing.T, home string) []string {
 	t.Helper()
 
-	published, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	names := published.Names()
+	_, names := packagedFactoryCatalogForTest(t)
 	if len(names) == 0 {
 		t.Fatal("published packaged Factory catalog is empty")
 	}
-	for _, name := range names {
-		seedInstalledPackagedFactory(t, home, name)
-	}
+	seedInstalledPackagedFactories(t, home, names)
 	return names
 }
 
