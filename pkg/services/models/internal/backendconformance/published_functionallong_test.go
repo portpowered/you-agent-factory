@@ -27,6 +27,7 @@ func TestPublishedBackendArtifactLocations(t *testing.T) {
 			TargetID:  descriptor.Target.ID,
 			Location:  descriptor.Artifact.Location,
 			SizeBytes: descriptor.Artifact.SizeBytes,
+			SHA256:    descriptor.Artifact.SHA256,
 		})
 	}
 

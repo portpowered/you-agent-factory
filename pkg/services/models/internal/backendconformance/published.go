@@ -4,17 +4,19 @@ package backendconformance
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
 
-// PublishedArtifactRequestTimeout bounds each HEAD request made by the live
+// PublishedArtifactRequestTimeout bounds each GET request made by the live
 // publication verifier. The low-frequency workflow supplies an HTTP client
 // with the same bound; the request context keeps the contract true for test
 // clients and transports as well.
@@ -27,6 +29,7 @@ type PublishedArtifact struct {
 	TargetID  string
 	Location  string
 	SizeBytes int64
+	SHA256    string
 }
 
 // HTTPDoer is the small external-effect boundary used by the live verifier.
@@ -37,7 +40,8 @@ type HTTPDoer interface {
 }
 
 // PublishedArtifactFailure describes one backend/target-specific live failure.
-// The verifier never reads or includes response bodies.
+// The verifier streams response bodies without retaining or including them in
+// diagnostics.
 type PublishedArtifactFailure struct {
 	Artifact PublishedArtifact
 	Detail   string
@@ -76,9 +80,10 @@ func (err *PublishedArtifactValidationError) Error() string {
 	return builder.String()
 }
 
-// VerifyPublishedArtifactLocations sends one bounded HEAD request per pinned
-// artifact. The supplied client follows redirects using its normal policy, so
-// the status and Content-Length below always describe the final response.
+// VerifyPublishedArtifactLocations sends one bounded GET request per pinned
+// artifact. The response body, rather than a mutable or optional response
+// header, is the source of truth for measured size and SHA-256. The supplied
+// client follows redirects using its normal policy.
 func VerifyPublishedArtifactLocations(ctx context.Context, client HTTPDoer, entries []PublishedArtifact) error {
 	if ctx == nil {
 		return fmt.Errorf("published backend artifact verification requires a context")
@@ -103,7 +108,7 @@ func verifyPublishedArtifact(ctx context.Context, client HTTPDoer, entry Publish
 	requestContext, cancel := context.WithTimeout(ctx, PublishedArtifactRequestTimeout)
 	defer cancel()
 
-	request, err := http.NewRequestWithContext(requestContext, http.MethodHead, entry.Location, nil)
+	request, err := http.NewRequestWithContext(requestContext, http.MethodGet, entry.Location, nil)
 	if err != nil {
 		// Keep the raw request-construction error out of diagnostics because it
 		// can echo an unsafe URL or userinfo supplied by a custom test adapter.
@@ -117,39 +122,31 @@ func verifyPublishedArtifact(ctx context.Context, client HTTPDoer, entry Publish
 	if response == nil {
 		return publishedFailure(entry, "transport failure: HTTP client returned no response"), true
 	}
-	if response.Body != nil {
-		defer response.Body.Close()
+	if response.Body == nil {
+		return publishedFailure(entry, "final response omitted an artifact body"), true
 	}
+	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
 		return publishedFailure(entry, fmt.Sprintf("final response status %d; expected HTTP 200", response.StatusCode)), true
 	}
 
-	observedLength, detail := parseContentLength(response.Header, entry.SizeBytes)
-	if detail != "" {
-		return publishedFailure(entry, detail), true
+	hash := sha256.New()
+	observedLength, err := io.Copy(hash, response.Body)
+	if err != nil {
+		return publishedFailure(entry, responseBodyFailureDetail(requestContext, err)), true
+	}
+	if observedLength <= MinimumPinnedArtifactSizeBytes {
+		return publishedFailure(entry, fmt.Sprintf("measured response body %d bytes must be strictly greater than %d bytes (1 MiB)", observedLength, MinimumPinnedArtifactSizeBytes)), true
 	}
 	if observedLength != entry.SizeBytes {
-		return publishedFailure(entry, fmt.Sprintf("final response Content-Length %d bytes does not equal expected %d bytes", observedLength, entry.SizeBytes)), true
+		return publishedFailure(entry, fmt.Sprintf("measured response body size %d bytes does not equal expected %d bytes", observedLength, entry.SizeBytes)), true
+	}
+	actualSHA256 := hex.EncodeToString(hash.Sum(nil))
+	if actualSHA256 != entry.SHA256 {
+		return publishedFailure(entry, fmt.Sprintf("measured response body SHA-256 %s does not equal expected %s", actualSHA256, entry.SHA256)), true
 	}
 	return PublishedArtifactFailure{}, false
-}
-
-func parseContentLength(headers http.Header, expected int64) (int64, string) {
-	values := headers.Values("Content-Length")
-	if len(values) == 0 || strings.TrimSpace(strings.Join(values, ",")) == "" {
-		return 0, fmt.Sprintf("final response omitted Content-Length (expected %d bytes)", expected)
-	}
-	if len(values) != 1 {
-		return 0, fmt.Sprintf("final response has multiple Content-Length values (expected %d bytes)", expected)
-	}
-
-	raw := strings.TrimSpace(values[0])
-	observed, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || observed < 0 {
-		return 0, fmt.Sprintf("final response has malformed Content-Length %q (expected %d bytes)", raw, expected)
-	}
-	return observed, ""
 }
 
 func transportFailureDetail(requestContext context.Context, err error) string {
@@ -161,7 +158,18 @@ func transportFailureDetail(requestContext context.Context, err error) string {
 	default:
 		// Do not copy transport error strings into scheduled diagnostics: some
 		// clients include request URLs, credentials, or response details there.
-		return "transport failure: HEAD request could not be completed"
+		return "transport failure: GET request could not be completed"
+	}
+}
+
+func responseBodyFailureDetail(requestContext context.Context, err error) string {
+	switch {
+	case errors.Is(requestContext.Err(), context.DeadlineExceeded), errors.Is(err, context.DeadlineExceeded):
+		return "response body read exceeded its bounded timeout"
+	case errors.Is(requestContext.Err(), context.Canceled), errors.Is(err, context.Canceled):
+		return "response body read was canceled"
+	default:
+		return "response body could not be read"
 	}
 }
 

@@ -3,7 +3,10 @@
 package backendconformance
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +16,12 @@ import (
 )
 
 func TestVerifyPublishedArtifactLocationsHTTPServer(t *testing.T) {
+	validBody := publishedTestBody(MinimumPinnedArtifactSizeBytes + 1)
+	validDigest := publishedTestDigest(validBody)
+	exactFloorBody := publishedTestBody(MinimumPinnedArtifactSizeBytes)
+	exactFloorDigest := publishedTestDigest(exactFloorBody)
+	belowFloorBody := publishedTestBody(MinimumPinnedArtifactSizeBytes - 1)
+	belowFloorDigest := publishedTestDigest(belowFloorBody)
 	var (
 		mu      sync.Mutex
 		methods []string
@@ -24,63 +33,82 @@ func TestVerifyPublishedArtifactLocationsHTTPServer(t *testing.T) {
 
 		switch request.URL.Path {
 		case "/success":
-			response.Header().Set("Content-Length", "123")
-			response.WriteHeader(http.StatusOK)
+			writePublishedTestBody(response, validBody)
 		case "/redirect":
 			http.Redirect(response, request, "/success", http.StatusFound)
+		case "/missing-length":
+			response.WriteHeader(http.StatusOK)
+			if flusher, ok := response.(http.Flusher); ok {
+				flusher.Flush()
+			}
+			_, _ = response.Write(validBody)
 		case "/not-found":
 			response.WriteHeader(http.StatusNotFound)
-		case "/missing-length":
-			response.Header().Set("Transfer-Encoding", "chunked")
-			response.WriteHeader(http.StatusOK)
-		case "/mismatched-length":
-			response.Header().Set("Content-Length", "124")
-			response.WriteHeader(http.StatusOK)
+		case "/wrong-size", "/wrong-digest":
+			writePublishedTestBody(response, validBody)
+		case "/exact-floor":
+			writePublishedTestBody(response, exactFloorBody)
+		case "/below-floor":
+			writePublishedTestBody(response, belowFloorBody)
 		default:
 			response.WriteHeader(http.StatusNotImplemented)
 		}
 	}))
 	t.Cleanup(server.Close)
 
-	entry := func(path string) PublishedArtifact {
+	entry := func(path string, size int64, digest string) PublishedArtifact {
 		return PublishedArtifact{
 			BackendID: "localai-test",
 			TargetID:  "linux-amd64",
 			Location:  server.URL + path,
-			SizeBytes: 123,
+			SizeBytes: size,
+			SHA256:    digest,
 		}
 	}
 
-	t.Run("final 200 with exact length", func(t *testing.T) {
-		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/success")}); err != nil {
+	t.Run("final 200 with exact body size and digest", func(t *testing.T) {
+		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/success", int64(len(validBody)), validDigest)}); err != nil {
 			t.Fatalf("verification error = %v", err)
 		}
 	})
 
-	t.Run("follows redirect and keeps HEAD method", func(t *testing.T) {
-		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/redirect")}); err != nil {
+	t.Run("follows redirect and uses GET", func(t *testing.T) {
+		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/redirect", int64(len(validBody)), validDigest)}); err != nil {
 			t.Fatalf("verification error = %v", err)
 		}
 		mu.Lock()
 		defer mu.Unlock()
 		joined := strings.Join(methods, "|")
-		if !strings.Contains(joined, "HEAD /redirect") || !strings.Contains(joined, "HEAD /success") {
-			t.Fatalf("requests = %q, want HEAD on redirect and final URL", joined)
+		if !strings.Contains(joined, "GET /redirect") || !strings.Contains(joined, "GET /success") {
+			t.Fatalf("requests = %q, want GET on redirect and final URL", joined)
+		}
+		if strings.Contains(joined, "HEAD") {
+			t.Fatalf("requests = %q, did not expect HEAD", joined)
+		}
+	})
+
+	t.Run("does not depend on Content-Length", func(t *testing.T) {
+		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/missing-length", int64(len(validBody)), validDigest)}); err != nil {
+			t.Fatalf("verification error = %v", err)
 		}
 	})
 
 	for _, testCase := range []struct {
 		name       string
 		path       string
+		size       int64
+		digest     string
 		wantDetail string
 	}{
-		{name: "non-200", path: "/not-found", wantDetail: "final response status 404"},
-		{name: "missing length", path: "/missing-length", wantDetail: "omitted Content-Length"},
-		{name: "mismatched length", path: "/mismatched-length", wantDetail: "Content-Length 124 bytes does not equal expected 123 bytes"},
+		{name: "non-200", path: "/not-found", size: int64(len(validBody)), digest: validDigest, wantDetail: "final response status 404"},
+		{name: "mismatched size", path: "/wrong-size", size: int64(len(validBody) - 1), digest: validDigest, wantDetail: "measured response body size"},
+		{name: "mismatched digest", path: "/wrong-digest", size: int64(len(validBody)), digest: strings.Repeat("0", sha256.Size*2), wantDetail: "SHA-256"},
+		{name: "size exactly one MiB", path: "/exact-floor", size: int64(len(exactFloorBody)), digest: exactFloorDigest, wantDetail: "must be strictly greater than"},
+		{name: "size below one MiB", path: "/below-floor", size: int64(len(belowFloorBody)), digest: belowFloorDigest, wantDetail: "must be strictly greater than"},
 	} {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry(testCase.path)})
+			err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry(testCase.path, testCase.size, testCase.digest)})
 			if err == nil {
 				t.Fatal("verification error = nil, want failure")
 			}
@@ -94,35 +122,30 @@ func TestVerifyPublishedArtifactLocationsHTTPServer(t *testing.T) {
 	}
 }
 
-func TestVerifyPublishedArtifactLocationsRejectsMalformedContentLength(t *testing.T) {
+func TestVerifyPublishedArtifactLocationsRejectsMissingResponseBody(t *testing.T) {
 	client := staticHTTPDoer(func(*http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Length": []string{"not-a-number"}},
-			Body:       io.NopCloser(strings.NewReader("")),
-		}, nil
+		return &http.Response{StatusCode: http.StatusOK}, nil
 	})
 
 	err := VerifyPublishedArtifactLocations(context.Background(), client, []PublishedArtifact{{
-		BackendID: "localai-test", TargetID: "linux-amd64", Location: "https://example.test/backend.tar.gz", SizeBytes: 123,
+		BackendID: "localai-test", TargetID: "linux-amd64", Location: "https://example.test/backend.tar.gz",
+		SizeBytes: MinimumPinnedArtifactSizeBytes + 1, SHA256: strings.Repeat("0", sha256.Size*2),
 	}})
-	if err == nil || !strings.Contains(err.Error(), "malformed Content-Length") {
-		t.Fatalf("verification error = %v, want malformed Content-Length diagnostic", err)
+	if err == nil || !strings.Contains(err.Error(), "omitted an artifact body") {
+		t.Fatalf("verification error = %v, want missing-body diagnostic", err)
 	}
 }
 
 func TestVerifyPublishedArtifactLocationsClosesResponseBody(t *testing.T) {
-	body := &trackingReadCloser{}
+	bodyBytes := publishedTestBody(MinimumPinnedArtifactSizeBytes + 1)
+	body := &trackingReadCloser{Reader: bytes.NewReader(bodyBytes)}
 	client := staticHTTPDoer(func(*http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Length": []string{"123"}},
-			Body:       body,
-		}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
 	})
 
 	err := VerifyPublishedArtifactLocations(context.Background(), client, []PublishedArtifact{{
-		BackendID: "localai-test", TargetID: "linux-amd64", Location: "https://example.test/backend.tar.gz", SizeBytes: 123,
+		BackendID: "localai-test", TargetID: "linux-amd64", Location: "https://example.test/backend.tar.gz",
+		SizeBytes: int64(len(bodyBytes)), SHA256: publishedTestDigest(bodyBytes),
 	}})
 	if err != nil {
 		t.Fatalf("verification error = %v", err)
@@ -133,22 +156,34 @@ func TestVerifyPublishedArtifactLocationsClosesResponseBody(t *testing.T) {
 }
 
 func TestVerifyPublishedArtifactLocationsAddsBoundedRequestContext(t *testing.T) {
+	bodyBytes := publishedTestBody(MinimumPinnedArtifactSizeBytes + 1)
 	client := staticHTTPDoer(func(request *http.Request) (*http.Response, error) {
 		if _, ok := request.Context().Deadline(); !ok {
 			t.Fatal("request context has no deadline")
 		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Length": []string{"123"}},
-			Body:       io.NopCloser(strings.NewReader("")),
-		}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(bodyBytes))}, nil
 	})
 
 	if err := VerifyPublishedArtifactLocations(context.Background(), client, []PublishedArtifact{{
-		BackendID: "localai-test", TargetID: "linux-amd64", Location: "https://example.test/backend.tar.gz", SizeBytes: 123,
+		BackendID: "localai-test", TargetID: "linux-amd64", Location: "https://example.test/backend.tar.gz",
+		SizeBytes: int64(len(bodyBytes)), SHA256: publishedTestDigest(bodyBytes),
 	}}); err != nil {
 		t.Fatalf("verification error = %v", err)
 	}
+}
+
+func publishedTestBody(size int64) []byte {
+	return bytes.Repeat([]byte{'L'}, int(size))
+}
+
+func publishedTestDigest(body []byte) string {
+	digest := sha256.Sum256(body)
+	return hex.EncodeToString(digest[:])
+}
+
+func writePublishedTestBody(response http.ResponseWriter, body []byte) {
+	response.WriteHeader(http.StatusOK)
+	_, _ = response.Write(body)
 }
 
 type staticHTTPDoer func(*http.Request) (*http.Response, error)
@@ -158,10 +193,9 @@ func (doer staticHTTPDoer) Do(request *http.Request) (*http.Response, error) {
 }
 
 type trackingReadCloser struct {
+	io.Reader
 	closed bool
 }
-
-func (body *trackingReadCloser) Read([]byte) (int, error) { return 0, io.EOF }
 
 func (body *trackingReadCloser) Close() error {
 	body.closed = true
