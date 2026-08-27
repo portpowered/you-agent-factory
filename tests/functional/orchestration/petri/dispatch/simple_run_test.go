@@ -154,7 +154,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 			workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride: provider,
 		}, 10*time.Second)
 
@@ -166,6 +166,11 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			support.WorkCustomerLocation("task", "failed"):     0,
 		})
 		assertQuiescentSession(t, session, 1, 0)
+		assertDispatchTransitionSequence(
+			t,
+			assertPublicDispatchEvents(t, events, 2),
+			[]string{"step-one", "step-two"},
+		)
 		if provider.CallCount() != 2 {
 			t.Errorf("provider call count = %d, want 2", provider.CallCount())
 		}
@@ -308,7 +313,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			workerexecution.InferenceResponse{Content: "Code revised again. COMPLETE"},
 			workerexecution.InferenceResponse{Content: "Looks good now. ACCEPTED"},
 		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride: provider,
 		}, 30*time.Second)
 
@@ -322,6 +327,21 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertListedWorkStateTrace(t, listed, "story", "complete", originTraceID)
 		assertQuiescentSession(t, session, 1, 0)
+		dispatches := assertPublicDispatchEvents(t, events, 7)
+		assertDispatchTransitionSubsequence(t, dispatches, []string{
+			"plan-idea",
+			"execute-story",
+			"review-story",
+			"execute-story",
+			"review-story",
+			"execute-story",
+			"review-story",
+		})
+		assertDispatchTransitionOutcomes(t, dispatches, "review-story", []factoryapi.WorkOutcome{
+			factoryapi.WorkOutcomeRejected,
+			factoryapi.WorkOutcomeRejected,
+			factoryapi.WorkOutcomeAccepted,
+		})
 		if provider.CallCount() != 7 {
 			t.Errorf("provider call count = %d, want 7", provider.CallCount())
 		}
@@ -721,7 +741,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Stderr:   []byte("LLM timeout"),
 			ExitCode: 1,
 		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderCommandRunner: runner,
 		}, 10*time.Second)
 
@@ -731,6 +751,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			support.WorkCustomerLocation("prd", "complete"): 0,
 		})
 		assertQuiescentSession(t, session, 0, 1)
+		assertPublicDispatchEvents(t, events, 1)
 	})
 
 	t.Run("idea_plan_execute_review_script_failure_routes_plan_to_failed", func(t *testing.T) {
@@ -742,7 +763,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
 			"planner": {{Content: "Task processed successfully.\n<COMPLETE>\n"}},
 		})
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride: provider,
 			ScriptCommandRunner: nonZeroExitScriptCommandRunner{
 				stderr:   "script execution failed",
@@ -761,6 +782,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		if provider.CallCount("planner") != 1 {
 			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
 		}
+		assertPublicDispatchEvents(t, events, 1)
 	})
 
 	t.Run("idea_plan_execute_review_planner_failure_routes_idea_to_failed", func(t *testing.T) {
@@ -772,7 +794,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
 			"planner": {{Content: "Task processed unsuccessfully.<FAILED>"}},
 		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride:    provider,
 			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
 		}, 10*time.Second)
@@ -784,6 +806,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			support.WorkCustomerLocation("task", "init"):     0,
 		})
 		assertQuiescentSession(t, session, 0, 1)
+		assertPublicDispatchEvents(t, events, 1)
 	})
 
 	t.Run("idea_plan_execute_review_processor_exhaustion_routes_task_to_failed", func(t *testing.T) {
@@ -804,7 +827,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 				{Content: "Task execution failed.<FAILED>"},
 			},
 		})
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride:    provider,
 			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
 		}, 15*time.Second)
@@ -827,6 +850,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		if provider.CallCount("reviewer") != 0 {
 			t.Errorf("reviewer call count = %d, want 0 after processor exhaustion", provider.CallCount("reviewer"))
 		}
+		assertPublicDispatchEvents(t, events, provider.CallCount("planner")+provider.CallCount("processor"))
 	})
 }
 

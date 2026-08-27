@@ -36,7 +36,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		}
 		provider := testutil.NewMockProvider(responses...)
 
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride: provider,
 		}, 10*time.Second)
 
@@ -52,6 +52,10 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		if provider.CallCount() != 9 {
 			t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
 		}
+		dispatches := assertPublicDispatchEvents(t, events, provider.CallCount())
+		assertDispatchTransitionOutcomeCount(t, dispatches, "plan-idea", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 3)
 
 		assertResourceAvailability(t, session, "agent-slot", 2)
 	})
@@ -69,7 +73,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		}
 		provider := testutil.NewMockProvider(responses...)
 
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 			ProviderOverride: provider,
 		}, 30*time.Second)
 
@@ -85,6 +89,15 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		if provider.CallCount() != 9 {
 			t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
 		}
+		dispatches := assertPublicDispatchEvents(t, events, provider.CallCount())
+		assertDispatchTransitionOutcomeCount(t, dispatches, "plan-idea", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchesDoNotOverlap(t, dispatches, map[string]struct{}{
+			"plan-idea":     {},
+			"execute-story": {},
+			"review-story":  {},
+		})
 
 		assertResourceAvailability(t, session, "agent-slot", 1)
 	})
