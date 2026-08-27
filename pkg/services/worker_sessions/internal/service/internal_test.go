@@ -3080,13 +3080,7 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	if err != nil || !gotIdentity.ProviderSessionAvailable || gotIdentity.ProviderSession.ID != ref.ID {
 		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
 	}
-	listResult, err := noProvider.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
-	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) || len(listResult.Observations) != 1 || listResult.Observations[0].WorkerSessionID != "worker-1" {
-		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) = %#v, %v, want preserved base observation with optional projection error", listResult, err)
-	}
-	if listResult.Observations[0].State != workersessions.StateRunning || len(listResult.Observations[0].WorkIDs) != 1 || listResult.Observations[0].WorkIDs[0] != "work-1" {
-		t.Fatalf("ListWorkerSessionObservations preserved observation = %#v, want lifecycle and Work facts", listResult.Observations[0])
-	}
+	assertListPreservesBaseFactsWithoutProviderProjection(t, noProvider)
 	failed := newObservationRegistry(nil, nil)
 	failed.sessions["failed-worker"] = workersessions.Session{
 		ID:    "failed-worker",
@@ -3119,6 +3113,21 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	registry.sessions["no-metadata"] = observationSession("no-metadata", workersessions.StateRunning)
 	if _, _, ok := registry.loadObservationState("no-metadata"); ok {
 		t.Fatal("loadObservationState(missing metadata) = ok, want false")
+	}
+}
+
+func assertListPreservesBaseFactsWithoutProviderProjection(t *testing.T, registry *registry) {
+	t.Helper()
+	result, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
+	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) error = %v, want optional projection error", err)
+	}
+	if len(result.Observations) != 1 || result.Observations[0].WorkerSessionID != "worker-1" {
+		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) = %#v, %v, want preserved base observation", result, err)
+	}
+	observation := result.Observations[0]
+	if observation.State != workersessions.StateRunning || len(observation.WorkIDs) != 1 || observation.WorkIDs[0] != "work-1" {
+		t.Fatalf("ListWorkerSessionObservations preserved observation = %#v, want lifecycle and Work facts", observation)
 	}
 }
 
