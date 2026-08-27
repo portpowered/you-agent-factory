@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,16 +23,22 @@ import (
 
 const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
 
+const lifecycleFixtureShutdownTimeout = 5 * time.Second
+
 // sharedLifecycleFixture owns one package-local API server reused by every
-// sequential CRUD lifecycle cell. All cells clean up the sessions they create,
-// so public list/get observations show no unintended state across cells.
+// CRUD lifecycle cell and one reusable CLI client. All cells clean up the
+// sessions they create, so public list/get observations show no unintended
+// state across cells.
 type sharedLifecycleFixture struct {
-	baseURL    string
-	factoryDir string
-	homeDir    string
-	cancel     context.CancelFunc
-	done       chan error
-	process    support.ApplicationProcess
+	rootDir          string
+	baseURL          string
+	factoryDir       string
+	clientWorkingDir string
+	homeDir          string
+	cancel           context.CancelFunc
+	done             chan error
+	process          support.ApplicationProcess
+	client           *lifecycleClientProcess
 }
 
 var lifecycleFixture *sharedLifecycleFixture
@@ -43,98 +51,158 @@ func TestMain(m *testing.M) {
 	}
 	lifecycleFixture = fixture
 	code := m.Run()
-	fixture.stop()
+	if err := fixture.stop(); err != nil {
+		fmt.Fprintf(os.Stderr, "stop shared lifecycle fixture: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	os.Exit(code)
 }
 
 func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	homeDir, err := os.MkdirTemp("", "session-lifecycle-shared-home")
+	rootDir, err := os.MkdirTemp("", "session-lifecycle-shared-")
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("create shared home dir: %w", err)
+		return nil, fmt.Errorf("create shared fixture root: %w", err)
 	}
-	factoryDir, err := os.MkdirTemp("", "session-lifecycle-shared-factory")
-	if err != nil {
-		os.RemoveAll(homeDir)
-		cancel()
-		return nil, fmt.Errorf("create shared factory dir: %w", err)
+	cleanupRoot := func() {
+		_ = os.RemoveAll(rootDir)
 	}
-	configPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	rawConfig, err := json.Marshal(sessionLifecycleCRUDFactoryConfig())
-	if err != nil {
-		stopFailedFixture(cancel, factoryDir, homeDir, nil, nil)
-		return nil, fmt.Errorf("marshal shared factory config: %w", err)
+	homeDir := filepath.Join(rootDir, "home")
+	factoryDir := filepath.Join(rootDir, "server-factory")
+	clientWorkingDir := filepath.Join(rootDir, "client-working")
+	for name, dir := range map[string]string{
+		"home":           homeDir,
+		"server factory": factoryDir,
+		"client working": clientWorkingDir,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			cleanupRoot()
+			cancel()
+			return nil, fmt.Errorf("create shared %s directory: %w", name, err)
+		}
 	}
-	if err := os.WriteFile(configPath, rawConfig, 0o644); err != nil {
-		stopFailedFixture(cancel, factoryDir, homeDir, nil, nil)
-		return nil, fmt.Errorf("write shared factory config: %w", err)
+	for name, dir := range map[string]string{
+		"server": factoryDir,
+		"client": clientWorkingDir,
+	} {
+		if err := writeLifecycleFactory(dir); err != nil {
+			cleanupRoot()
+			cancel()
+			return nil, fmt.Errorf("write shared %s factory: %w", name, err)
+		}
 	}
 
 	api := support.NewProcessAPIServer()
+	resolveHome := func() (string, error) { return homeDir, nil }
 	process, err := support.BuildProcessWithContext(ctx, serviceedges.Edges{
-		BrowserOpener:    func(context.Context, string) error { return nil },
-		APIServerStarter: api.Start,
+		BrowserOpener:                      func(context.Context, string) error { return nil },
+		APIServerStarter:                   api.Start,
+		FactorySessionResolveHomeDirectory: resolveHome,
 	})
 	if err != nil {
-		stopFailedFixture(cancel, factoryDir, homeDir, process, nil)
+		stopFailedFixture(cancel, rootDir, process, nil)
 		return nil, fmt.Errorf("build shared server root process: %w", err)
 	}
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "run", "--continuously", "--with-server", "--quiet", "--dir", factoryDir, "--no-record",
 	})
-	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	inputs.Input.Env = lifecycleEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
 	done := make(chan error, 1)
 	go func() { done <- process.Execute(inputs.Input) }()
 	baseURL, err := api.WaitForBaseURL(15 * time.Second)
 	if err != nil {
-		stopFailedFixture(cancel, factoryDir, homeDir, process, done)
+		stopFailedFixture(cancel, rootDir, process, done)
 		return nil, fmt.Errorf("wait for shared server base URL: %w", err)
 	}
+	clientProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		BrowserOpener:                      func(context.Context, string) error { return nil },
+		FactorySessionResolveHomeDirectory: resolveHome,
+	})
+	if err != nil {
+		stopFailedFixture(cancel, rootDir, process, done)
+		return nil, fmt.Errorf("build shared client root process: %w", err)
+	}
 	return &sharedLifecycleFixture{
-		baseURL:    baseURL,
-		factoryDir: factoryDir,
-		homeDir:    homeDir,
-		cancel:     cancel,
-		done:       done,
-		process:    process,
+		rootDir:          rootDir,
+		baseURL:          baseURL,
+		factoryDir:       factoryDir,
+		clientWorkingDir: clientWorkingDir,
+		homeDir:          homeDir,
+		cancel:           cancel,
+		done:             done,
+		process:          process,
+		client: &lifecycleClientProcess{
+			process: clientProcess,
+			env:     lifecycleEnvironment(homeDir),
+		},
 	}, nil
 }
 
 func stopFailedFixture(
 	cancel context.CancelFunc,
-	factoryDir, homeDir string,
+	rootDir string,
 	process support.ApplicationProcess,
 	done chan error,
 ) {
 	cancel()
-	if done != nil {
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-		}
-	}
-	if process != nil {
-		closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancelClose()
-		_ = process.Close(closeCtx)
-	}
-	os.RemoveAll(factoryDir)
-	os.RemoveAll(homeDir)
+	_ = waitForLifecycleProcess(done)
+	_ = closeLifecycleProcess(process)
+	_ = os.RemoveAll(rootDir)
 }
 
-func (fixture *sharedLifecycleFixture) stop() {
-	fixture.cancel()
-	select {
-	case <-fixture.done:
-	case <-time.After(5 * time.Second):
+func (fixture *sharedLifecycleFixture) stop() error {
+	if fixture == nil {
+		return nil
 	}
-	closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+	var cleanupErrors []error
+	fixture.cancel()
+	if err := waitForLifecycleProcess(fixture.done); err != nil && !errors.Is(err, context.Canceled) {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("wait for shared server: %w", err))
+	}
+	if err := closeLifecycleProcess(fixture.process); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared server process: %w", err))
+	}
+	if fixture.client != nil {
+		if err := closeLifecycleProcess(fixture.client.process); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared client process: %w", err))
+		}
+	}
+	if err := os.RemoveAll(fixture.rootDir); err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("remove shared fixture root: %w", err))
+	}
+	return errors.Join(cleanupErrors...)
+}
+
+func waitForLifecycleProcess(done chan error) error {
+	if done == nil {
+		return nil
+	}
+	timer := time.NewTimer(lifecycleFixtureShutdownTimeout)
+	defer timer.Stop()
+	select {
+	case err := <-done:
+		return err
+	case <-timer.C:
+		return fmt.Errorf("timed out after %s", lifecycleFixtureShutdownTimeout)
+	}
+}
+
+func closeLifecycleProcess(process support.ApplicationProcess) error {
+	if process == nil {
+		return nil
+	}
+	closeCtx, cancelClose := context.WithTimeout(context.Background(), lifecycleFixtureShutdownTimeout)
 	defer cancelClose()
-	_ = fixture.process.Close(closeCtx)
-	os.RemoveAll(fixture.factoryDir)
-	os.RemoveAll(fixture.homeDir)
+	return process.Close(closeCtx)
+}
+
+func lifecycleEnvironment(homeDir string) []string {
+	environment := append([]string(nil), os.Environ()...)
+	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
 }
 
 func sharedLifecycleServerURL(t *testing.T) string {
@@ -185,6 +253,12 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session folder path = %q, want %q", created.Session.FolderPath, newFactoryDir)
 	}
 	sessionID := created.Session.Id
+	sessionDeleted := false
+	t.Cleanup(func() {
+		if !sessionDeleted {
+			cleanupSessionViaAPI(t, baseURL, sessionID)
+		}
+	})
 
 	listOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL, "session", "list")
 	if err != nil {
@@ -257,6 +331,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	if deleted.SessionID != sessionID {
 		t.Fatalf("session delete confirmation = %q, want %q", deleted.SessionID, sessionID)
 	}
+	sessionDeleted = true
 
 	showAfterDeleteOut, err := runYouCLI(ctx, processHarness, lifecycleWorkingDir(t), baseURL,
 		"--json",
@@ -432,6 +507,12 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 		t.Fatalf("open session folder path = %q, want %q", opened.Session.FolderPath, newFactoryDir)
 	}
 	sessionID := opened.Session.Id
+	closed := false
+	t.Cleanup(func() {
+		if !closed {
+			cleanupSessionViaAPI(t, baseURL, sessionID)
+		}
+	})
 
 	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
 	if !sessionListContains(listed.Sessions, sessionID, newFactoryDir) {
@@ -458,6 +539,7 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 
 	terminateSessionViaAPI(t, baseURL, sessionID)
 	closeSessionViaAPI(t, baseURL, sessionID)
+	closed = true
 	assertAPISessionNotFound(t, baseURL, sessionID)
 
 	afterClose := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
@@ -727,24 +809,25 @@ func sessionLifecycleCRUDFactoryConfig() map[string]any {
 // lifecycleClientProcess owns one reusable root-built client process for all
 // sequential public CLI invocations of one lifecycle cell.
 type lifecycleClientProcess struct {
+	mu      sync.Mutex
 	process support.ApplicationProcess
+	env     []string
 }
 
 func newRootProcessHarness(t *testing.T) *lifecycleClientProcess {
 	t.Helper()
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		BrowserOpener: func(context.Context, string) error { return nil },
-	})
-	if err != nil {
-		t.Fatalf("build lifecycle client root process: %v", err)
+	if lifecycleFixture == nil || lifecycleFixture.client == nil {
+		t.Fatal("shared lifecycle client process is unavailable")
 	}
-	support.CleanupProcess(t, process)
-	return &lifecycleClientProcess{process: process}
+	return lifecycleFixture.client
 }
 
 func lifecycleWorkingDir(t *testing.T) string {
 	t.Helper()
-	return support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+	if lifecycleFixture == nil || lifecycleFixture.clientWorkingDir == "" {
+		t.Fatal("shared lifecycle client working directory is unavailable")
+	}
+	return lifecycleFixture.clientWorkingDir
 }
 
 // cleanupSessionViaAPI drives a created session to explicit terminal cleanup
@@ -768,12 +851,18 @@ func runYouCLI(
 	serverURL string,
 	args ...string,
 ) ([]byte, error) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.process == nil {
+		return nil, errors.New("shared lifecycle client process is unavailable")
+	}
 	cmdArgs := []string{"you"}
 	if strings.TrimSpace(serverURL) != "" {
 		cmdArgs = append(cmdArgs, "--server", serverURL)
 	}
 	cmdArgs = append(cmdArgs, args...)
 	inputs := support.FakeInputs(ctx, cmdArgs)
+	inputs.Input.Env = append([]string(nil), client.env...)
 	inputs.Input.WorkingDirectory = workingDir
 	err := client.process.Execute(inputs.Input)
 	combined := inputs.Stdout()
@@ -781,6 +870,33 @@ func runYouCLI(
 		combined += "\n" + stderrText
 	}
 	return []byte(combined), err
+}
+
+func writeLifecycleFactory(dir string) error {
+	rawConfig, err := json.Marshal(sessionLifecycleCRUDFactoryConfig())
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), rawConfig, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", interfaces.FactoryConfigFile, err)
+	}
+	workstationPath := filepath.Join(
+		dir,
+		interfaces.WorkstationsDir,
+		"process-task",
+		interfaces.FactoryAgentsFileName,
+	)
+	if err := os.MkdirAll(filepath.Dir(workstationPath), 0o755); err != nil {
+		return fmt.Errorf("create workstation directory: %w", err)
+	}
+	if err := os.WriteFile(
+		workstationPath,
+		[]byte("---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"),
+		0o644,
+	); err != nil {
+		return fmt.Errorf("write workstation prompt: %w", err)
+	}
+	return nil
 }
 
 func sessionListContains(
