@@ -3975,7 +3975,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the shared --server selection; --port remains only for session list and create. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live sessions, recorded history, or durable Factory Sessions\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nSession list output identifies live, durable, and recorded-history provenance. Use --live-only or --history-only to select one source; the two flags are mutually exclusive. Session commands use the same default --port as work list. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
             "id": "you.session.description"
           },
           "title": {
@@ -5209,18 +5209,19 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "List factory sessions for the requested scope.\n\nlive returns workspace sessions kept open by the running host. persisted returns durable Factory Sessions from the deterministic provider loopback. all returns both live workspace sessions and durable Factory Sessions.\n\nHuman output prints the legacy live-session table for workspace rows and a durable Factory Session table with status, source identity, result availability, progress, and actions. Use --json to emit ListFactorySessionsResponse on stdout.",
+            "canonicalEnglish": "List factory sessions and read-only recorded history for the requested scope.\n\nThe default scope is all and returns live workspace sessions, durable Factory Sessions, and recorded-history artifacts. Use --live-only for live workspace sessions or --history-only for recorded artifacts. --live-only and --history-only are mutually exclusive. --scope persisted retains the durable Factory Session listing, and --scope history selects recorded history explicitly.\n\nHuman output labels each source and JSON output emits ListFactorySessionsResponse on stdout.",
             "id": "you.session.list.description"
           },
           "title": {
-            "canonicalEnglish": "List live and durable factory sessions",
+            "canonicalEnglish": "List live, durable, and recorded factory sessions",
             "id": "you.session.list.title"
           }
         },
         "examples": [
           "you session list",
-          "you session list --scope persisted",
-          "you session list --scope all --json"
+          "you session list --live-only",
+          "you session list --history-only --json",
+          "you session list --scope persisted"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.session.list",
@@ -5317,12 +5318,60 @@
           "valueType": "int",
           "visibility": "visible"
         },
+        "you.session.list.flag.live-only": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.list.flag.live-only",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.list.flag.live-only",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "live-only",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "usage": "list live Factory Sessions only; mutually exclusive with --history-only",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.session.list.flag.history-only": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.session.list.flag.history-only",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.list.flag.history-only",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "history-only",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "usage": "list recorded Factory Session history only; mutually exclusive with --live-only",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
         "you.session.list.flag.scope": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
-          "default": "live",
+          "default": "all",
           "id": "you.session.list.flag.scope",
           "lifecycle": {
             "formatVersion": "1.0.0",
@@ -5337,7 +5386,7 @@
           "required": false,
           "scope": "local",
           "shorthand": "",
-          "usage": "session list scope: live, persisted, or all",
+          "usage": "session list scope: live, persisted, history, or all",
           "valueType": "string",
           "visibility": "visible"
         },
@@ -5455,6 +5504,22 @@
         "acrossTiers": "replace",
         "multipleBindings": "reject"
       },
+      "relationships": {
+        "you.session.list.rel.source-selection": {
+          "id": "you.session.list.rel.source-selection",
+          "kind": "mutually-exclusive",
+          "participants": [
+            {
+              "id": "you.session.list.flag.live-only",
+              "type": "flag"
+            },
+            {
+              "id": "you.session.list.flag.history-only",
+              "type": "flag"
+            }
+          ]
+        }
+      },
       "runnable": true,
       "placement": "remote-only",
       "sideEffects": {
@@ -5464,7 +5529,7 @@
         }
       },
       "usage": {
-        "example": "  you session list\n\n  you session list --scope persisted\n\n  you session list --scope all --json",
+        "example": "  you session list\n\n  you session list --live-only\n\n  you session list --history-only --json\n\n  you session list --scope persisted",
         "line": "list"
       },
       "visibility": "visible"

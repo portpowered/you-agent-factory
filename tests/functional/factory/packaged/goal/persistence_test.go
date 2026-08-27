@@ -26,20 +26,39 @@ var persistentGoalWorkID = regexp.MustCompile(`persistent goal work ([A-Za-z0-9.
 // and classifier routing together. The first pass persists active progress and
 // chooses needs_changes; the same executor then loads that state, persists
 // completion, and chooses accepted.
+// Isolation is intentional: this fixture owns a unique workspace, customer
+// home, Work-derived state path, and provider selector because durable progress
+// and atomic replacement are the properties under test. Dependency fidelity is
+// local-real root.BuildProcess/Process.Execute, packaged Factory, and real
+// filesystem I/O, with only ProviderCommandRunner controlled at the external
+// provider-command edge.
 func TestPackagedGoalPersistsProgressAndClassifiesLoopThroughRootProcess(t *testing.T) {
-	workspace := t.TempDir()
-	home := t.TempDir()
-	support.InstallPackagedFactory(t, home, factorydefinitions.PackagedGoalFactoryName)
-	runner := &persistentGoalProviderRunner{workspace: workspace}
+	rootDir := t.TempDir()
+	workspace := filepath.Join(rootDir, "workspace")
+	home := filepath.Join(rootDir, "home")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatalf("create persistent Goal workspace: %v", err)
+	}
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("create persistent Goal home: %v", err)
+	}
+	model := nextPackagedGoalSelector("persistence")
+	runner := &persistentGoalProviderRunner{workspace: workspace, model: model}
+	environment := packagedGoalEnvironment(home)
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+	support.InstallPackagedFactoryWithProcess(
+		t, process, environment, workspace, factorydefinitions.PackagedGoalFactoryName,
+	)
 
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run", "--named", factorydefinitions.PackagedGoalFactoryName,
-		"--provider", "CODEX", "--model", "gpt-5.6-luna", "--no-record",
+		"--provider", "CODEX", "--model", model, "--no-record",
 		"--to", "persist progress and finish the classifier-controlled goal",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.Env = environment
 	inputs.Input.WorkingDirectory = workspace
-	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err != nil {
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("packaged goal invocation error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 
@@ -77,6 +96,7 @@ type persistentGoalState struct {
 type persistentGoalProviderRunner struct {
 	mu        sync.Mutex
 	workspace string
+	model     string
 	calls     int
 	statePath string
 }
@@ -88,6 +108,9 @@ func (runner *persistentGoalProviderRunner) Run(
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 
+	if got := packagedGoalModelSelector(request.Args); got != runner.model {
+		return platformprocess.CommandResult{}, fmt.Errorf("goal invocation used model %q, want unique selector %q", got, runner.model)
+	}
 	prompt := string(request.Stdin)
 	if !strings.Contains(prompt, "Persistent goal state file, relative to the current worker workspace:") ||
 		!strings.Contains(prompt, `"decision":"needs_changes"`) ||
@@ -125,7 +148,9 @@ func (runner *persistentGoalProviderRunner) Run(
 		if err != nil {
 			return platformprocess.CommandResult{}, err
 		}
-		if previous.Status != "active" || previous.Iteration != 1 ||
+		if previous.GoalID != workID ||
+			previous.Objective != "persist progress and finish the classifier-controlled goal" ||
+			previous.Status != "active" || previous.Iteration != 1 ||
 			!strings.Contains(prompt, "ordinary partial progress") {
 			return platformprocess.CommandResult{}, fmt.Errorf("second pass omitted persisted or prior progress: state=%#v prompt=%s", previous, prompt)
 		}

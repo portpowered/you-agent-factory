@@ -1,0 +1,86 @@
+{
+  "version": 2,
+  "story": "unit-test-optimization-c01-wire-timeout-witness-003",
+  "frozenReferenceBase": "9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff",
+  "measurementCommit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+  "counterfactual": {
+    "description": "Frozen reference base plus the measurement-only commits; no recovered Wire files are present.",
+    "measurementCommits": [
+      "bb83727ff313077751465c1aefbecfd8136e1372",
+      "ba8ef900ee29347295ac7657742fd1aab42f064c"
+    ],
+    "wireFilesChanged": false
+  },
+  "runner": {
+    "provider": "local-wsl",
+    "image": "ubuntu-24.04",
+    "imageVersion": "24.04.1-wsl2",
+    "os": "linux",
+    "architecture": "amd64",
+    "cpuModel": "13th Gen Intel(R) Core(TM) i7-13700K"
+  },
+  "toolchain": {
+    "goVersion": "go1.25.0",
+    "makeVersion": "GNU Make 4.3"
+  },
+  "capacity": {
+    "YOU_LOGICAL_CPUS": 4,
+    "YOU_EXPECTED_CONCURRENT_LANES": 4,
+    "UNIT_DEFAULT_JOBS": 2,
+    "computedLaneBudget": 2
+  },
+  "invalidations": [],
+  "acceptedSamples": [
+    {
+      "ordinal": 1,
+      "replacementFor": "baseline-make-run-1",
+      "timing": "baseline-make-run-1-replacement.v2.json",
+      "commit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+      "wallSeconds": 222.006,
+      "packageElapsedSecondsSum": 94.512,
+      "packageCount": 444,
+      "testCount": 18122,
+      "exitStatus": 0,
+      "validity": "accepted"
+    },
+    {
+      "ordinal": 2,
+      "timing": "baseline-make-run-2.v2.json",
+      "commit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+      "wallSeconds": 239.612,
+      "packageElapsedSecondsSum": 114.687,
+      "packageCount": 444,
+      "testCount": 18122,
+      "exitStatus": 0,
+      "validity": "accepted"
+    },
+    {
+      "ordinal": 3,
+      "timing": "baseline-make-run-3.v2.json",
+      "commit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+      "wallSeconds": 258.271,
+      "packageElapsedSecondsSum": 111.206,
+      "packageCount": 444,
+      "testCount": 18122,
+      "exitStatus": 0,
+      "validity": "accepted"
+    }
+  ],
+  "invalidAttempt": {
+    "ordinal": 1,
+    "timing": "baseline-make-run-1.v2.json",
+    "commit": "bb83727ff313077751465c1aefbecfd8136e1372",
+    "exitStatus": 1,
+    "complete": false,
+    "packageCount": 320,
+    "expectedPackageCount": 446,
+    "failedPackages": 1,
+    "skippedPackages": 1,
+    "reason": "The measurement-only discovery code included the Windows-only filesystemreplace test package on Linux; the lane stopped when go test reported build constraints excluded all files.",
+    "replacement": "baseline-make-run-1-replacement"
+  },
+  "redactions": [
+    "Local WSL and mounted-worktree paths in stdout and timing command fields are represented by repository-relative paths or a counterfactual-worktree placeholder.",
+    "No test payload or secret was redacted."
+  ]
+}

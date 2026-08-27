@@ -22,12 +22,12 @@ func TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout
 	}
 
 	namedRoot := t.TempDir()
-	seedNamedFactoryRoot(t, namedRoot, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, namedRoot, "alpha", "alpha-task")
 
-	replaceServer := startFactoryTransformationServer(t, replaceRoot)
-	namedServer := startFactoryTransformationServer(t, namedRoot)
+	replaceServer := startDocumentTransformationServer(t, replaceRoot, "")
+	namedServer := startDocumentTransformationServer(t, namedRoot, "alpha")
 
-	replaceCurrent := getCurrentFactory(t, replaceServer.URL())
+	replaceCurrent := getCurrentFactoryForSession(t, replaceServer.URL(), replaceServer.SessionID())
 	versionJSON, err := json.Marshal(versionDocument(advancedFactoryVersion(t, replaceCurrent.Version)))
 	if err != nil {
 		t.Fatalf("marshal replace-current version: %v", err)
@@ -38,11 +38,12 @@ func TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout
 		"imported-task",
 		string(versionJSON),
 	)
-	saveCurrentFactoryDefinition(t, replaceServer.URL(), importBody)
+	saveCurrentFactoryForSession(t, replaceServer.URL(), replaceServer.SessionID(), importBody)
 
-	createNamedFactoryFromBody(
+	createNamedFactoryFromBodyForSession(
 		t,
 		namedServer.URL(),
+		namedServer.SessionID(),
 		functionalImportEquivalentBundledDocument("imported", "imported", "imported-task", ""),
 	)
 

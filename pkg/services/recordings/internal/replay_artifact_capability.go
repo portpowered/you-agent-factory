@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -152,9 +153,11 @@ func (service *combinedService) ReadArtifact(
 // Its public ReplayInputLoader contract contains only that lifecycle-safe
 // operation.
 type replayInputLoader struct {
-	readFile   recordings.RecordingReadFile
-	loadLegacy recordings.ReplayArtifactLoader
-	logger     logging.Logger
+	readFile           recordings.RecordingReadFile
+	openFile           recordings.RecordingOpenFile
+	loadLegacy         recordings.ReplayArtifactLoader
+	loadLegacyMetadata recordings.ReplayArtifactMetadataLoader
+	logger             logging.Logger
 }
 
 var _ recordings.ReplayInputLoader = (*replayInputLoader)(nil)
@@ -164,20 +167,27 @@ var _ recordings.ReplayInputLoader = (*replayInputLoader)(nil)
 // Wire. It is inert: it performs no I/O until LoadReplayInput.
 func NewReplayInputLoader(
 	readFile recordings.RecordingReadFile,
+	openFile recordings.RecordingOpenFile,
 	loadLegacy recordings.ReplayArtifactLoader,
+	loadLegacyMetadata recordings.ReplayArtifactMetadataLoader,
 	logger logging.Logger,
 ) recordings.ReplayInputLoader {
 	return &replayInputLoader{
-		readFile:   readFile,
-		loadLegacy: loadLegacy,
-		logger:     logging.EnsureLogger(logger),
+		readFile:           readFile,
+		openFile:           openFile,
+		loadLegacy:         loadLegacy,
+		loadLegacyMetadata: loadLegacyMetadata,
+		logger:             logging.EnsureLogger(logger),
 	}
 }
 
 func (loader *replayInputLoader) LoadReplayInput(
 	request recordings.LoadReplayInputRequest,
 ) (recordings.LoadReplayInputResult, error) {
-	loader.logReplayInputIntent()
+	if request.MetadataOnly {
+		return loader.loadReplayInputMetadata(request.Path)
+	}
+	loader.logReplayInputIntent(false)
 	if loader.readFile == nil {
 		return loader.replayInputDependencyFailure("reader_unavailable", fmt.Errorf("Factory Session replay recording reader is required"))
 	}
@@ -261,6 +271,129 @@ func (loader *replayInputLoader) loadLegacyReplayInput(
 	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
 }
 
+func (loader *replayInputLoader) loadReplayInputMetadata(
+	path string,
+) (recordings.LoadReplayInputResult, error) {
+	loader.logReplayInputIntent(true)
+	if loader.openFile == nil {
+		return loader.replayInputDependencyFailure(
+			"metadata_reader_unavailable",
+			fmt.Errorf("Factory Session replay recording streaming reader is required"),
+		)
+	}
+	if loader.loadLegacyMetadata == nil {
+		return loader.replayInputDependencyFailure(
+			"legacy_metadata_loader_unavailable",
+			fmt.Errorf("replay artifact metadata loader is required"),
+		)
+	}
+	isPortable, err := loader.classifyPortableReplayInputMetadata(path)
+	if err != nil {
+		return loader.replayInputDependencyFailure("metadata_classification_failure", err)
+	}
+	if isPortable {
+		file, err := loader.openFile(path)
+		if err != nil {
+			return loader.replayInputDependencyFailure("metadata_open_failure", fmt.Errorf("open replay recording metadata: %w", err))
+		}
+		id, decodeErr := recordings.DecodePortableRecordingMetadata(file)
+		closeErr := file.Close()
+		if decodeErr != nil {
+			failure := newPortableReplayInputError(decodeErr)
+			loader.logReplayInputOutcome("validation_failure", string(failure.Diagnostic.Code), string(recordings.ReplayInputFamilyPortable), true)
+			return recordings.LoadReplayInputResult{}, failure
+		}
+		if closeErr != nil {
+			return loader.replayInputDependencyFailure("metadata_close_failure", fmt.Errorf("close replay recording metadata: %w", closeErr))
+		}
+		loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyPortable), true)
+		return recordings.LoadReplayInputResult{
+			Metadata: &recordings.ReplayInputMetadata{FactorySessionID: id},
+		}, nil
+	}
+	metadata, err := loader.loadLegacyMetadata(path)
+	if err != nil {
+		failure := newReplayInputError(recordings.ReplayInputFamilyLegacy, fmt.Errorf("load replay artifact metadata: %w", err))
+		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), string(recordings.ReplayInputFamilyLegacy), true)
+		return recordings.LoadReplayInputResult{}, failure
+	}
+	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy), true)
+	return recordings.LoadReplayInputResult{Metadata: &metadata}, nil
+}
+
+func (loader *replayInputLoader) classifyPortableReplayInputMetadata(path string) (bool, error) {
+	file, err := loader.openFile(path)
+	if err != nil {
+		return false, fmt.Errorf("open replay recording for classification: %w", err)
+	}
+	defer file.Close()
+	return isPortableReplayInputReader(file), nil
+}
+
+func isPortableReplayInputReader(reader io.Reader) bool {
+	decoder := json.NewDecoder(reader)
+	token, err := decoder.Token()
+	if err != nil {
+		return false
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return false
+	}
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return false
+		}
+		if keyText == "recordingKind" {
+			var kind string
+			if err := decoder.Decode(&kind); err != nil {
+				return false
+			}
+			return kind == recordings.KindJavaScriptFactorySession
+		}
+		if err := skipReplayInputJSONValue(decoder); err != nil {
+			return false
+		}
+	}
+	return false
+}
+
+func skipReplayInputJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		for decoder.More() {
+			if _, err := decoder.Token(); err != nil {
+				return err
+			}
+			if err := skipReplayInputJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+	case '[':
+		for decoder.More() {
+			if err := skipReplayInputJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
+	}
+	_, err = decoder.Token()
+	return err
+}
+
 func (loader *replayInputLoader) replayInputDependencyFailure(
 	classification string,
 	cause error,
@@ -274,11 +407,12 @@ func (loader *replayInputLoader) replayInputDependencyFailure(
 	return recordings.LoadReplayInputResult{}, failure
 }
 
-func (loader *replayInputLoader) logReplayInputIntent() {
+func (loader *replayInputLoader) logReplayInputIntent(metadataOnly bool) {
 	loader.logger.Info(
 		"recordings replay input accepted",
 		"operation", "load_replay_input",
 		"input_source", "filesystem_path",
+		"metadata_only", metadataOnly,
 	)
 }
 
@@ -286,6 +420,7 @@ func (loader *replayInputLoader) logReplayInputOutcome(
 	outcome string,
 	classification string,
 	family string,
+	metadataOnly ...bool,
 ) {
 	fields := []any{"operation", "load_replay_input", "outcome", outcome}
 	if classification != "" {
@@ -293,6 +428,9 @@ func (loader *replayInputLoader) logReplayInputOutcome(
 	}
 	if family != "" {
 		fields = append(fields, "replay_family", family)
+	}
+	if len(metadataOnly) > 0 {
+		fields = append(fields, "metadata_only", metadataOnly[0])
 	}
 	loader.logger.Info("recordings replay input outcome", fields...)
 }

@@ -93,6 +93,40 @@ func TestListPersistedSkipsLiveAndAppliesRecoverabilityPolicy(t *testing.T) {
 	if want := []string{"completed", "interrupted"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("persisted ids = %v, want %v", got, want)
 	}
+	if !durable.request.ExcludeRecordedHistory {
+		t.Fatalf("persisted durable request = %#v, want recorded history excluded", durable.request)
+	}
+}
+
+func TestListHistorySkipsLiveAndRequestsHistoryScope(t *testing.T) {
+	t.Parallel()
+	live := &scopedLiveReader{err: errors.New("must not read live")}
+	durable := &scopedDurableReader{result: factorysessions.ListSessionsResult{
+		LiveSessions: []factorysessions.LiveSessionSummary{{ID: "live-ignored"}},
+		DurableSessions: []factorysessions.DurableSessionListSummary{{
+			SessionID: "durable-ignored",
+		}},
+		RecordedSessions: []factorysessions.RecordedSessionListSummary{{
+			SessionID: "recorded-history",
+			Source:    factorysessions.RecordedSessionListSourceHistory,
+		}},
+	}}
+
+	result, err := scopedlisting.List(context.Background(), factorysessions.ListSessionsRequest{
+		Scope: factorysessions.SessionListScopeHistory,
+	}, live, durable)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if live.calls != 0 {
+		t.Fatalf("live calls = %d, want zero", live.calls)
+	}
+	if durable.request.Scope != factorysessions.SessionListScopeHistory {
+		t.Fatalf("durable request scope = %q, want history", durable.request.Scope)
+	}
+	if len(result.LiveSessions) != 0 || len(result.DurableSessions) != 0 || len(result.RecordedSessions) != 1 {
+		t.Fatalf("history result = %#v, want recorded rows only", result)
+	}
 }
 
 func TestListRequiresReadersForSelectedScopes(t *testing.T) {

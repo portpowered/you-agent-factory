@@ -1,20 +1,15 @@
 package catalog
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -44,14 +39,17 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 		t.Fatal("packaged Factory matrix has no required-input cases")
 	}
 
+	fixture := sharedCatalogProcess(t)
+	process := fixture.process
+
 	for _, testcase := range cases {
 		testcase := testcase
 		t.Run(testcase.factoryName, func(t *testing.T) {
-			t.Parallel()
 			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+			fixture.provider.setDelegate(runner)
 			run := runPackagedFactoryMissingRequiredInputInvocation(
 				t,
-				runner,
+				process,
 				testcase.factoryName,
 			)
 			assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
@@ -99,30 +97,23 @@ func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredI
 
 func runPackagedFactoryMissingRequiredInputInvocation(
 	t *testing.T,
-	runner *support.RecordingCommandRunner,
+	process support.Process,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
 	t.Helper()
-
-	if packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName) {
-		return runPackagedFactoryMissingRequiredInputHTTPInvocation(t, runner, factoryName)
-	}
-	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, runner, factoryName)
-}
-
-func packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName string) bool {
-	return false
+	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, process, factoryName)
 }
 
 func runPackagedFactoryMissingRequiredInputCLIInvocation(
 	t *testing.T,
-	runner *support.RecordingCommandRunner,
+	process support.Process,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
 	t.Helper()
 
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factoryName)
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	support.InstallPackagedFactoryWithProcess(t, process, env, t.TempDir(), factoryName)
 
 	args := []string{
 		"you", "--json", "run",
@@ -130,16 +121,14 @@ func runPackagedFactoryMissingRequiredInputCLIInvocation(
 		"--no-record",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = t.TempDir()
 	inputs.Input.Stdin = strings.NewReader("")
 	stdinIsTTY := true
 	inputs.Input.StdinIsTTY = &stdinIsTTY
 
 	run := packagedFactoryMissingRequiredInputRun{
-		execErr: support.BuildProcess(t, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}).Execute(inputs.Input),
+		execErr: process.Execute(inputs.Input),
 	}
 	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
 		if decodeErr := json.Unmarshal([]byte(stdout), &run.response); decodeErr != nil {
@@ -151,62 +140,6 @@ func runPackagedFactoryMissingRequiredInputCLIInvocation(
 			t.Fatalf("decode ErrorResponse stderr: %v\nstderr:\n%s", decodeErr, stderr)
 		}
 	}
-	return run
-}
-
-func runPackagedFactoryMissingRequiredInputHTTPInvocation(
-	t *testing.T,
-	runner *support.RecordingCommandRunner,
-	factoryName string,
-) packagedFactoryMissingRequiredInputRun {
-	t.Helper()
-
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-
-	emptyArgs := map[string]any{}
-	requestBody, err := json.Marshal(factoryapi.InvocationRequest{
-		Args: &emptyArgs,
-	})
-	if err != nil {
-		t.Fatalf("marshal invocation request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(server.URL(), "/") +
-		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(requestBody))
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-
-	payload, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read invocation response: %v", err)
-	}
-
-	run := packagedFactoryMissingRequiredInputRun{}
-	if response.StatusCode == http.StatusOK {
-		if decodeErr := json.Unmarshal(payload, &run.response); decodeErr != nil {
-			t.Fatalf("decode invocation response: %v\npayload:\n%s", decodeErr, string(payload))
-		}
-		return run
-	}
-	if decodeErr := json.Unmarshal(payload, &run.errorResponse); decodeErr != nil {
-		run.execErr = fmt.Errorf(
-			"POST %s status = %d: %s",
-			endpoint,
-			response.StatusCode,
-			string(payload),
-		)
-		return run
-	}
-	run.execErr = fmt.Errorf("%s: %s", run.errorResponse.Code, run.errorResponse.Message)
 	return run
 }
 

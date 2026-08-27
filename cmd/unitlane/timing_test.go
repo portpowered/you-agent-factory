@@ -48,6 +48,56 @@ func TestCollectUnitTimingCapturePreservesOutcomesAndCacheEvidence(t *testing.T)
 	}
 }
 
+func TestCollectUnitTimingCaptureRecordsSortedTestInventory(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/pkg/alpha"
+	stream := strings.Join([]string{
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "run", Package: pkg, Test: "TestZulu"}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "run", Package: pkg, Test: "TestAlpha/sub"}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "pass", Package: pkg, Test: "TestZulu", Elapsed: 0.2}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "pass", Package: pkg, Test: "TestAlpha/sub", Elapsed: 0.1}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "output", Package: pkg, Output: "ok  \t" + pkg + "\t0.200s\n"}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "pass", Package: pkg, Elapsed: 0.2}),
+		"",
+	}, "\n")
+
+	capture, err := collectUnitTimingCapture(strings.NewReader(stream), []string{pkg}, ioDiscard{})
+	if err != nil {
+		t.Fatalf("collectUnitTimingCapture() error = %v", err)
+	}
+	if !capture.Complete || len(capture.Packages) != 1 {
+		t.Fatalf("capture = %+v, want complete package/test capture", capture)
+	}
+	if got, want := capture.Packages[0].Tests, []string{"TestAlpha/sub", "TestZulu"}; !slices.Equal(got, want) {
+		t.Fatalf("test inventory = %v, want %v", got, want)
+	}
+}
+
+func TestCollectUnitTimingCaptureDeduplicatesRepeatedTestNamesAcrossTestPackages(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/pkg/alpha"
+	stream := strings.Join([]string{
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "pass", Package: pkg, Test: "TestSharedName", Elapsed: 0.1}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "pass", Package: pkg, Test: "TestSharedName", Elapsed: 0.1}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "output", Package: pkg, Output: "ok  \t" + pkg + "\t0.100s\n"}),
+		unitTimingEventLine(t, goTestUnitTimingEvent{Action: "pass", Package: pkg, Elapsed: 0.1}),
+		"",
+	}, "\n")
+
+	capture, err := collectUnitTimingCapture(strings.NewReader(stream), []string{pkg}, ioDiscard{})
+	if err != nil {
+		t.Fatalf("collectUnitTimingCapture() error = %v", err)
+	}
+	if !capture.Complete || len(capture.Packages) != 1 {
+		t.Fatalf("capture = %+v, want complete package capture", capture)
+	}
+	if got, want := capture.Packages[0].Tests, []string{"TestSharedName"}; !slices.Equal(got, want) {
+		t.Fatalf("test inventory = %v, want one deduplicated test name", got)
+	}
+}
+
 func TestCollectUnitTimingCaptureMarksMalformedAndTruncatedDataIncomplete(t *testing.T) {
 	t.Parallel()
 
@@ -118,7 +168,7 @@ func TestUnitTimingAccumulatorRanksMultiBatchPackagesDeterministically(t *testin
 		},
 	})
 
-	summary := accumulator.summary(1.75)
+	summary := accumulator.summaryWithRun(1.75, unitTimingRun{})
 	if !summary.Complete || summary.PackageCount != 3 || summary.ExpectedPackageCount != 3 {
 		t.Fatalf("summary = %+v, want complete three-package capture", summary)
 	}
@@ -168,6 +218,38 @@ func TestRenderUnitTimingSummaryJSONIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestRenderUnitTimingSummaryJSONSortsPackagesAndTests(t *testing.T) {
+	t.Parallel()
+
+	summary := unitTimingSummary{
+		Version:              unitTimingSummaryVersion,
+		Complete:             true,
+		Run:                  unitTimingRun{Command: "make test-unit-fresh", EnvironmentInvalidations: []string{}},
+		WallSeconds:          1,
+		PackageCount:         2,
+		ExpectedPackageCount: 2,
+		Packages: []unitPackageTiming{
+			{Package: modulePath + "/pkg/zulu", Tests: []string{"TestZulu", "TestAlpha"}},
+			{Package: modulePath + "/pkg/alpha", Tests: []string{"TestZulu"}},
+		},
+	}
+
+	data, err := renderUnitTimingSummaryJSON(summary)
+	if err != nil {
+		t.Fatalf("renderUnitTimingSummaryJSON() error = %v", err)
+	}
+	var decoded unitTimingSummary
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("decode rendered JSON: %v", err)
+	}
+	if got := []string{decoded.Packages[0].Package, decoded.Packages[1].Package}; !slices.IsSorted(got) {
+		t.Fatalf("JSON package order = %v, want sorted order", got)
+	}
+	if got := decoded.Packages[1].Tests; !slices.IsSorted(got) {
+		t.Fatalf("JSON test order = %v, want sorted order", got)
+	}
+}
+
 func TestWriteUnitTimingSummaryJSONReportsFilesystemFailure(t *testing.T) {
 	t.Parallel()
 
@@ -192,9 +274,22 @@ func TestRunUnitTestsWritesCompleteTimingArtifactAndReadableOutput(t *testing.T)
 	execCommand = fakeUnitLaneCommand
 	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
 	t.Setenv("UNITLANE_HELPER_TIMING_JSON", "1")
+	t.Setenv("UNIT_TIMING_COMMIT", strings.Repeat("a", 40))
+	t.Setenv("UNIT_RUNNER_PROVIDER", "test-provider")
+	t.Setenv("UNIT_RUNNER_IMAGE", "test-image")
+	t.Setenv("UNIT_RUNNER_IMAGE_VERSION", "test-image-version")
+	t.Setenv("UNIT_RUNNER_CPU_MODEL", "test-cpu")
+	t.Setenv("UNIT_TIMING_INVALIDATIONS", "z-invalid,a-invalid,z-invalid")
 	outputPath := filepath.Join(t.TempDir(), "unit-timing.json")
 
-	err := runUnitTests(config{jobs: 2, short: true, timeout: 2 * time.Minute, timingOutput: outputPath}, []string{modulePath + "/pkg/alpha"})
+	err := runUnitTests(config{
+		jobs:               2,
+		short:              true,
+		timeout:            2 * time.Minute,
+		timingOutput:       outputPath,
+		timingCommand:      "make test-unit-fresh UNIT_TIMING_OUTPUT=timing.json",
+		computedLaneBudget: 2,
+	}, []string{modulePath + "/pkg/alpha"})
 	if err != nil {
 		t.Fatalf("runUnitTests() error = %v", err)
 	}
@@ -206,11 +301,42 @@ func TestRunUnitTestsWritesCompleteTimingArtifactAndReadableOutput(t *testing.T)
 	if err := json.Unmarshal(data, &summary); err != nil {
 		t.Fatalf("decode timing artifact: %v\n%s", err, data)
 	}
-	if !summary.Complete || summary.PackageCount != 1 || summary.Packages[0].Cache != unitCacheExecuted {
+	if !summary.Complete || summary.PackageCount != 1 || summary.TestCount != 1 || summary.Packages[0].Cache != unitCacheExecuted {
 		t.Fatalf("summary = %+v, want complete executed package", summary)
+	}
+	if summary.Version != 2 || summary.Run.Commit != strings.Repeat("a", 40) || summary.Run.GoVersion == "" || summary.Run.Command != "make test-unit-fresh UNIT_TIMING_OUTPUT=timing.json" || summary.Run.UnitDefaultJobs != 2 || summary.Run.ComputedLaneBudget != 2 || summary.Run.Runner.Provider != "test-provider" || summary.Run.Runner.Image != "test-image" || summary.Run.Runner.ImageVersion != "test-image-version" || summary.Run.Runner.OS == "" || summary.Run.Runner.Architecture == "" || summary.Run.Runner.CPUModel != "test-cpu" || summary.Run.EnvironmentInvalidations == nil || !slices.Equal(summary.Run.EnvironmentInvalidations, []string{"a-invalid", "z-invalid"}) {
+		t.Fatalf("summary identity = %+v, want complete v2 run identity", summary.Run)
+	}
+	if !slices.Equal(summary.Packages[0].Tests, []string{"TestHelper"}) {
+		t.Fatalf("package test inventory = %v, want TestHelper", summary.Packages[0].Tests)
 	}
 	if !strings.Contains(output.String(), "ok  \t"+modulePath+"/pkg/alpha") || !strings.Contains(output.String(), "Unit lane timing summary") {
 		t.Fatalf("readable output = %q, want test output and timing summary", output.String())
+	}
+}
+
+func TestWriteUnitTimingSummaryJSONReplacesOutputAtomically(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "unit-timing.json")
+	first := unitTimingSummary{Version: unitTimingSummaryVersion, WallSeconds: 1}
+	second := unitTimingSummary{Version: unitTimingSummaryVersion, WallSeconds: 2}
+	if err := writeUnitTimingSummaryJSON(path, first); err != nil {
+		t.Fatalf("write first summary: %v", err)
+	}
+	if err := writeUnitTimingSummaryJSON(path, second); err != nil {
+		t.Fatalf("replace summary: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read replaced summary: %v", err)
+	}
+	var decoded unitTimingSummary
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("decode replaced summary: %v", err)
+	}
+	if decoded.WallSeconds != second.WallSeconds {
+		t.Fatalf("replaced wallSeconds = %v, want %v", decoded.WallSeconds, second.WallSeconds)
 	}
 }
 

@@ -503,6 +503,7 @@ type (
 	ListSessionsRequest          = factorysessions.ListSessionsRequest
 	ListSessionsResult           = factorysessions.ListSessionsResult
 	LiveSessionSummary           = factorysessions.LiveSessionSummary
+	RecordedSessionListSummary   = factorysessions.RecordedSessionListSummary
 	OrchestratorOverride         = factorysessions.OrchestratorOverride
 	PersistencePolicy            = factorysessions.PersistencePolicy
 	PhaseSummary                 = factorysessions.PhaseSummary
@@ -583,6 +584,7 @@ const (
 	SessionListScopeAll                    = factorysessions.SessionListScopeAll
 	SessionListScopeLive                   = factorysessions.SessionListScopeLive
 	SessionListScopePersisted              = factorysessions.SessionListScopePersisted
+	SessionListScopeHistory                = factorysessions.SessionListScopeHistory
 )
 
 var (

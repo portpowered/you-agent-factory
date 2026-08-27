@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/pprof/profile"
 )
 
 func TestHandlerWithPprofHandlesNilHandlerAndDirectProfileDispatch(t *testing.T) {
@@ -23,15 +26,38 @@ func TestHandlerWithPprofHandlesNilHandlerAndDirectProfileDispatch(t *testing.T)
 
 	request := httptest.NewRequest(http.MethodGet, pprofPath+"heap", nil)
 	response := httptest.NewRecorder()
-	pprofIndex(response, request)
+	pprofIndexWithWaiter(waitPprofDuration)(response, request)
 	if response.Code != http.StatusOK || response.Body.Len() == 0 {
 		t.Fatalf("direct pprof profile = (%d, %d bytes), want non-empty 200 response", response.Code, response.Body.Len())
+	}
+
+	waitCalls := 0
+	controlled := handlerWithPprof(http.NotFoundHandler(), true, nil, func(ctx context.Context, duration time.Duration) error {
+		if ctx == nil {
+			t.Fatal("controlled pprof waiter received nil context")
+		}
+		if duration != time.Second {
+			t.Fatalf("controlled pprof wait duration = %s, want 1s", duration)
+		}
+		waitCalls++
+		return nil
+	})
+	controlledResponse := httptest.NewRecorder()
+	controlled.ServeHTTP(controlledResponse, httptest.NewRequest(http.MethodGet, pprofPath+"heap?seconds=1", nil))
+	if controlledResponse.Code != http.StatusOK || controlledResponse.Body.Len() == 0 {
+		t.Fatalf("controlled heap delta = (%d, %d bytes), want non-empty 200 response", controlledResponse.Code, controlledResponse.Body.Len())
+	}
+	if _, err := profile.Parse(bytes.NewReader(controlledResponse.Body.Bytes())); err != nil {
+		t.Fatalf("parse controlled heap delta: %v", err)
+	}
+	if waitCalls != 1 {
+		t.Fatalf("controlled pprof waiter calls = %d, want 1", waitCalls)
 	}
 }
 
 func TestPprofIndexPreservesStandardHTMLLayout(t *testing.T) {
 	response := httptest.NewRecorder()
-	pprofIndex(response, httptest.NewRequest(http.MethodGet, pprofPath, nil))
+	pprofIndexWithWaiter(waitPprofDuration)(response, httptest.NewRequest(http.MethodGet, pprofPath, nil))
 
 	body := response.Body.String()
 	if !strings.Contains(body, "<ul>\n<li><div class=profile-name>") {
@@ -44,14 +70,14 @@ func TestPprofIndexPreservesStandardHTMLLayout(t *testing.T) {
 
 func TestPprofNamedReportsUnknownProfileAndDebugFormat(t *testing.T) {
 	unknownResponse := httptest.NewRecorder()
-	pprofNamed("does-not-exist").ServeHTTP(unknownResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/does-not-exist", nil))
+	pprofNamedWithWaiter("does-not-exist", waitPprofDuration).ServeHTTP(unknownResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/does-not-exist", nil))
 	if unknownResponse.Code != http.StatusNotFound || unknownResponse.Header().Get("X-Go-Pprof") != "1" ||
 		!strings.Contains(unknownResponse.Body.String(), "Unknown profile") {
 		t.Fatalf("unknown profile = (%d, %q, headers=%v), want pprof 404", unknownResponse.Code, unknownResponse.Body.String(), unknownResponse.Header())
 	}
 
 	debugResponse := httptest.NewRecorder()
-	pprofNamed("heap").ServeHTTP(debugResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/heap?debug=1&gc=1", nil))
+	pprofNamedWithWaiter("heap", waitPprofDuration).ServeHTTP(debugResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/heap?debug=1&gc=1", nil))
 	if debugResponse.Code != http.StatusOK || debugResponse.Body.Len() == 0 {
 		t.Fatalf("debug heap = (%d, %d bytes), want non-empty 200 response", debugResponse.Code, debugResponse.Body.Len())
 	}
@@ -83,7 +109,7 @@ func TestPprofDeltaReportsInvalidUnsupportedAndDebugQueries(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap?"+test.query, nil)
 			response := httptest.NewRecorder()
-			servePprofDeltaProfile(response, request, test.profileName, profile, request.URL.Query().Get("seconds"))
+			servePprofDeltaProfileWithWaiter(response, request, test.profileName, profile, request.URL.Query().Get("seconds"), waitPprofDuration)
 			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), test.wantBody) {
 				t.Fatalf("delta response = (%d, %q), want %d containing %q", response.Code, response.Body.String(), test.wantStatus, test.wantBody)
 			}
@@ -99,21 +125,30 @@ func TestPprofDeltaReportsDeadlineAndCancellation(t *testing.T) {
 	if profile == nil {
 		t.Fatal("runtime heap profile is unavailable")
 	}
+	waiter := func(ctx context.Context, _ time.Duration) error {
+		if ctx == nil {
+			return errors.New("waiter context is nil")
+		}
+		return ctx.Err()
+	}
 
 	deadlineContext, cancelDeadline := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancelDeadline()
 	deadlineRequest := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap", nil).WithContext(deadlineContext)
 	deadlineResponse := httptest.NewRecorder()
-	servePprofDeltaProfile(deadlineResponse, deadlineRequest, "heap", profile, "1")
+	servePprofDeltaProfileWithWaiter(deadlineResponse, deadlineRequest, "heap", profile, "1", waiter)
 	if deadlineResponse.Code != http.StatusRequestTimeout || !strings.Contains(deadlineResponse.Body.String(), context.DeadlineExceeded.Error()) {
 		t.Fatalf("deadline delta = (%d, %q), want 408 deadline error", deadlineResponse.Code, deadlineResponse.Body.String())
+	}
+	if err := waitPprofDuration(nil, time.Second); err == nil || err.Error() != "pprof duration wait: context is required" {
+		t.Fatalf("nil pprof wait context error = %v, want explicit context-required error", err)
 	}
 
 	canceledContext, cancel := context.WithCancel(context.Background())
 	cancel()
 	canceledRequest := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap", nil).WithContext(canceledContext)
 	canceledResponse := httptest.NewRecorder()
-	servePprofDeltaProfile(canceledResponse, canceledRequest, "heap", profile, "1")
+	servePprofDeltaProfileWithWaiter(canceledResponse, canceledRequest, "heap", profile, "1", waiter)
 	if canceledResponse.Code != http.StatusInternalServerError || !strings.Contains(canceledResponse.Body.String(), context.Canceled.Error()) {
 		t.Fatalf("canceled delta = (%d, %q), want 500 cancellation error", canceledResponse.Code, canceledResponse.Body.String())
 	}
@@ -126,7 +161,9 @@ func TestPprofDeltaStopsOnWriterFailure(t *testing.T) {
 	}
 	response := &failingRuntimeResponseWriter{header: make(http.Header)}
 	request := httptest.NewRequest(http.MethodGet, "/debug/pprof/heap", nil)
-	servePprofDeltaProfile(response, request, "heap", profile, "1")
+	servePprofDeltaProfileWithWaiter(response, request, "heap", profile, "1", func(context.Context, time.Duration) error {
+		return nil
+	})
 	if response.writes != 1 {
 		t.Fatalf("delta response writes = %d, want one failed write", response.writes)
 	}
@@ -143,7 +180,7 @@ func TestPprofCommandLineAndIndexHandleInjectedWriterOutcomes(t *testing.T) {
 	}
 
 	indexResponse := &failingRuntimeResponseWriter{header: make(http.Header)}
-	pprofIndex(indexResponse, httptest.NewRequest(http.MethodGet, pprofPath, nil))
+	pprofIndexWithWaiter(waitPprofDuration)(indexResponse, httptest.NewRequest(http.MethodGet, pprofPath, nil))
 	if indexResponse.writes != 1 {
 		t.Fatalf("index response writes = %d, want one failed write", indexResponse.writes)
 	}
@@ -152,37 +189,80 @@ func TestPprofCommandLineAndIndexHandleInjectedWriterOutcomes(t *testing.T) {
 func TestPprofCPUAndTraceApplyDefaultsAndReportActiveRuntimeEffects(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	waitDurations := make([]time.Duration, 0, 2)
+	waiter := recordingPprofWaiter(&waitDurations)
 
-	cpuResponse := httptest.NewRecorder()
-	pprofCPU(cpuResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/profile?seconds=invalid", nil).WithContext(ctx))
-	if cpuResponse.Code != http.StatusOK || cpuResponse.Body.Len() == 0 {
-		t.Fatalf("default CPU profile = (%d, %d bytes), want non-empty 200 response", cpuResponse.Code, cpuResponse.Body.Len())
+	assertControlledPprofCPU(t, ctx, waiter)
+	assertActivePprofCPU(t, waiter)
+	assertControlledPprofTrace(t, ctx, waiter)
+	assertActivePprofTrace(t, waiter)
+	if got, want := fmt.Sprint(waitDurations), "[30s 1s]"; fmt.Sprint(waitDurations) != want {
+		t.Fatalf("controlled pprof wait durations = %s, want %s", got, want)
 	}
+}
 
+func recordingPprofWaiter(waitDurations *[]time.Duration) pprofDurationWaiter {
+	return func(ctx context.Context, duration time.Duration) error {
+		if ctx == nil {
+			return errors.New("waiter context is nil")
+		}
+		*waitDurations = append(*waitDurations, duration)
+		return ctx.Err()
+	}
+}
+
+func assertControlledPprofCPU(t *testing.T, ctx context.Context, waiter pprofDurationWaiter) {
+	t.Helper()
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/debug/pprof/profile?seconds=invalid", nil).WithContext(ctx)
+	pprofCPUWithWaiter(waiter)(response, request)
+	if response.Code != http.StatusOK || response.Body.Len() == 0 {
+		t.Fatalf("default CPU profile = (%d, %d bytes), want non-empty 200 response", response.Code, response.Body.Len())
+	}
+	parsed, err := profile.Parse(bytes.NewReader(response.Body.Bytes()))
+	if err != nil || parsed == nil || len(parsed.SampleType) == 0 {
+		t.Fatalf("controlled CPU profile = (%v, %+v), want parseable profile with sample types", err, parsed)
+	}
+}
+
+func assertActivePprofCPU(t *testing.T, waiter pprofDurationWaiter) {
+	t.Helper()
 	if err := runtimepprof.StartCPUProfile(io.Discard); err != nil {
 		t.Fatalf("start active CPU profile: %v", err)
 	}
-	activeCPUResponse := httptest.NewRecorder()
-	pprofCPU(activeCPUResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/profile", nil))
-	runtimepprof.StopCPUProfile()
-	if activeCPUResponse.Code != http.StatusInternalServerError || !strings.Contains(activeCPUResponse.Body.String(), "CPU profiling") {
-		t.Fatalf("active CPU profile = (%d, %q), want pprof 500 error", activeCPUResponse.Code, activeCPUResponse.Body.String())
-	}
+	defer runtimepprof.StopCPUProfile()
 
-	traceResponse := httptest.NewRecorder()
-	pprofTrace(traceResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/trace?seconds=invalid", nil).WithContext(ctx))
-	if traceResponse.Code != http.StatusOK || traceResponse.Body.Len() == 0 {
-		t.Fatalf("default trace = (%d, %d bytes), want non-empty 200 response", traceResponse.Code, traceResponse.Body.Len())
+	response := httptest.NewRecorder()
+	pprofCPUWithWaiter(waiter)(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/profile", nil))
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "CPU profiling") {
+		t.Fatalf("active CPU profile = (%d, %q), want pprof 500 error", response.Code, response.Body.String())
 	}
+}
 
+func assertControlledPprofTrace(t *testing.T, ctx context.Context, waiter pprofDurationWaiter) {
+	t.Helper()
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/debug/pprof/trace?seconds=invalid", nil).WithContext(ctx)
+	pprofTraceWithWaiter(waiter)(response, request)
+	if response.Code != http.StatusOK || response.Body.Len() == 0 {
+		t.Fatalf("default trace = (%d, %d bytes), want non-empty 200 response", response.Code, response.Body.Len())
+	}
+	if !bytes.HasPrefix(response.Body.Bytes(), []byte("go ")) {
+		t.Fatalf("controlled trace prefix = %q, want Go trace framing", response.Body.Bytes()[:min(3, response.Body.Len())])
+	}
+}
+
+func assertActivePprofTrace(t *testing.T, waiter pprofDurationWaiter) {
+	t.Helper()
 	if err := runtimetrace.Start(io.Discard); err != nil {
 		t.Fatalf("start active trace: %v", err)
 	}
-	activeTraceResponse := httptest.NewRecorder()
-	pprofTrace(activeTraceResponse, httptest.NewRequest(http.MethodGet, "/debug/pprof/trace", nil))
-	runtimetrace.Stop()
-	if activeTraceResponse.Code != http.StatusInternalServerError || !strings.Contains(activeTraceResponse.Body.String(), "tracing") {
-		t.Fatalf("active trace = (%d, %q), want pprof 500 error", activeTraceResponse.Code, activeTraceResponse.Body.String())
+	defer runtimetrace.Stop()
+
+	response := httptest.NewRecorder()
+	pprofTraceWithWaiter(waiter)(response, httptest.NewRequest(http.MethodGet, "/debug/pprof/trace", nil))
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "tracing") {
+		t.Fatalf("active trace = (%d, %q), want pprof 500 error", response.Code, response.Body.String())
 	}
 }
 

@@ -120,7 +120,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
 	case "cli/you.session.resource.set":
-		markCovered(scenario, LaneShort, "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch", InterfaceCLI)
+		markCovered(scenario, LaneShort, "tests/functional/workers/mock/shared_process_test.go::TestSharedProcessWorkersMock", InterfaceCLI)
 	case "cli/you.server.acp":
 		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":

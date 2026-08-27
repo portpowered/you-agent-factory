@@ -92,6 +92,9 @@ endif
 
 FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
+UNIT_TIMING_OUTPUT ?=
+UNIT_LATENCY_BUDGET ?= docs/internal/baselines/go-unit-lane-latency-budget.v1.json
+UNIT_LATENCY_SAMPLES ?= .artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
@@ -231,7 +234,7 @@ endef
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
-.PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
+.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
@@ -499,7 +502,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-latency-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -508,7 +511,10 @@ test-unit:
 	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
 
 test-unit-fresh:
-	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT) $(if $(UNIT_TIMING_OUTPUT),-timing-output "$(UNIT_TIMING_OUTPUT)" -timing-command "make test-unit-fresh UNIT_DEFAULT_JOBS=$(UNIT_DEFAULT_JOBS) UNIT_TIMING_OUTPUT=$(UNIT_TIMING_OUTPUT)" -computed-lane-budget $(GO_LANE_BUDGET),)
+
+test-unit-latency-budget:
+	$(GO) run ./cmd/unitlanebudget -budget "$(UNIT_LATENCY_BUDGET)" -samples "$(UNIT_LATENCY_SAMPLES)"
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
 # pull-request base ref/SHA; the command resolves its merge-base with head,

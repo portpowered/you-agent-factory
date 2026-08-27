@@ -19,47 +19,61 @@ const customizedPackagedGoalFactoryName = "@test/goal"
 // TestPackagedGoalInterpolationFailureStopsBeforeProviderExecution proves an
 // omitted definition variable fails in Factory Definitions before provider
 // selection for both named and explicit-file packaged goal invocation.
+// Isolation is intentional: each selection gets its own customer home,
+// working directory, materialized definition, and provider selector so named
+// and file resolution cannot share durable state. Dependency fidelity is
+// local-real root.BuildProcess/Process.Execute and Factory Definitions, with
+// only ProviderCommandRunner controlled at the external provider edge.
 func TestPackagedGoalInterpolationFailureStopsBeforeProviderExecution(t *testing.T) {
 	provider := testutil.NewProviderCommandRunner()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: provider,
 	})
 	support.CleanupProcess(t, process)
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	factoryDir := support.InstallPackagedFactoryWithProcess(
-		t, process, environment, workingDirectory, packagedGoalFactoryName,
-	)
-	factoryPath := filepath.Join(factoryDir, "factory.json")
-	configureMissingInterpolationFactory(t, factoryPath)
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedPackagedGoalFactoryName)
-	factoryPath = filepath.Join(factoryDir, "factory.json")
 
 	for _, selection := range []string{"named", "file"} {
-		var stdout, stderr bytes.Buffer
-		stdinIsTTY := true
-		stdoutIsTTY := false
-		err := process.Execute(root.Input{
-			Args:             packagedGoalInterpolationFailureArguments(selection, factoryPath, customizedPackagedGoalFactoryName),
-			Env:              environment,
-			Stdin:            strings.NewReader(""),
-			Stdout:           &stdout,
-			Stderr:           &stderr,
-			Context:          t.Context(),
-			WorkingDirectory: workingDirectory,
-			StdinIsTTY:       &stdinIsTTY,
-			StdoutIsTTY:      &stdoutIsTTY,
+		selection := selection
+		t.Run(selection, func(t *testing.T) {
+			homeDir := t.TempDir()
+			workingDirectory := t.TempDir()
+			environment := packagedGoalEnvironment(homeDir)
+			factoryDir := support.InstallPackagedFactoryWithProcess(
+				t, process, environment, workingDirectory, packagedGoalFactoryName,
+			)
+			factoryPath := filepath.Join(factoryDir, "factory.json")
+			configureMissingInterpolationFactory(t, factoryPath)
+			if selection == "named" {
+				factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedPackagedGoalFactoryName)
+				factoryPath = filepath.Join(factoryDir, "factory.json")
+			}
+
+			model := nextPackagedGoalSelector("interpolation-" + selection)
+			var stdout, stderr bytes.Buffer
+			stdinIsTTY := true
+			stdoutIsTTY := false
+			err := process.Execute(root.Input{
+				Args: packagedGoalInterpolationFailureArguments(
+					selection, factoryPath, customizedPackagedGoalFactoryName, model,
+				),
+				Env:              environment,
+				Stdin:            strings.NewReader(""),
+				Stdout:           &stdout,
+				Stderr:           &stderr,
+				Context:          t.Context(),
+				WorkingDirectory: workingDirectory,
+				StdinIsTTY:       &stdinIsTTY,
+				StdoutIsTTY:      &stdoutIsTTY,
+			})
+			if err == nil {
+				t.Fatalf("%s interpolation failure returned nil; stdout=%q stderr=%q", selection, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(err.Error(), "resolve invocation-effective execution definition") {
+				t.Fatalf("%s interpolation error = %v, want Factory Definitions resolution context", selection, err)
+			}
+			if !strings.Contains(err.Error(), `references omitted invocation parameter "missing"`) {
+				t.Fatalf("%s interpolation error = %v, want omitted parameter context", selection, err)
+			}
 		})
-		if err == nil {
-			t.Fatalf("%s interpolation failure returned nil; stdout=%q stderr=%q", selection, stdout.String(), stderr.String())
-		}
-		if !strings.Contains(err.Error(), "resolve invocation-effective execution definition") {
-			t.Fatalf("%s interpolation error = %v, want Factory Definitions resolution context", selection, err)
-		}
-		if !strings.Contains(err.Error(), `references omitted invocation parameter "missing"`) {
-			t.Fatalf("%s interpolation error = %v, want omitted parameter context", selection, err)
-		}
 	}
 	if calls := provider.CallCount(); calls != 0 {
 		t.Fatalf("provider command calls = %d, want zero after interpolation failure", calls)
@@ -102,15 +116,17 @@ func configureMissingInterpolationFactory(t *testing.T, factoryPath string) {
 	support.ReplaceGoalWorkerInstructions(t, factoryPath, "input=${input}|missing=${missing}")
 }
 
-func packagedGoalInterpolationFailureArguments(selection, factoryPath, factoryName string) []string {
+func packagedGoalInterpolationFailureArguments(selection, factoryPath, factoryName, model string) []string {
 	if selection == "named" {
 		return []string{
 			"you", "run", "--named", factoryName,
-			"--no-record", "provided interpolation input",
+			"--no-record", "--provider", "CODEX", "--model", model,
+			"provided interpolation input",
 		}
 	}
 	return []string{
 		"you", "run", "--factory", factoryPath,
-		"--no-record", "provided interpolation input",
+		"--no-record", "--provider", "CODEX", "--model", model,
+		"provided interpolation input",
 	}
 }

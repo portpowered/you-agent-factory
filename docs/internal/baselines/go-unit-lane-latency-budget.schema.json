@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://portpowered.dev/schemas/go-unit-lane-latency-budget.v1.json",
+  "title": "Go unit-lane latency budget",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "owner", "entrypoint", "reference", "policy"],
+  "properties": {
+    "version": { "const": 1 },
+    "owner": { "const": "backend-unit-lane" },
+    "entrypoint": { "const": "make test-unit-fresh" },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseCommit", "runnerImage", "goVersion", "unitDefaultJobs", "computedLaneBudget", "samples", "medianWallSeconds", "packageInventory", "testInventory"],
+      "properties": {
+        "baseCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runnerImage": { "const": "ubuntu-24.04" },
+        "goVersion": { "type": "string", "pattern": "^go[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "unitDefaultJobs": { "const": 2 },
+        "computedLaneBudget": { "const": 2 },
+        "samples": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "medianWallSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "packageInventory": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "testInventory": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredConsecutiveSamples", "minimumImprovementPercent", "maximumRunAboveMedianPercent", "requiredCachedPackages", "requiredUnknownPackages", "inventoryPolicy", "invalidSamplePolicy"],
+      "properties": {
+        "requiredConsecutiveSamples": { "const": 3 },
+        "minimumImprovementPercent": { "const": 25 },
+        "maximumRunAboveMedianPercent": { "const": 10 },
+        "requiredCachedPackages": { "const": 0 },
+        "requiredUnknownPackages": { "const": 0 },
+        "inventoryPolicy": { "const": "exact-with-reviewed-diff" },
+        "invalidSamplePolicy": { "const": "retain-and-fail-unless-predeclared-invalidation-matches" }
+      }
+    }
+  }
+}

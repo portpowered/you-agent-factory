@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -48,6 +49,153 @@ func TestReplayInputLoaderClassifiesPortableRecording(t *testing.T) {
 		t.Fatalf("Portable.Session.ID = %q, want session-js-001", got)
 	}
 }
+
+func TestReplayInputLoaderMetadataModeDoesNotMaterializePortableHistory(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-metadata-only-001"
+	var payload strings.Builder
+	fmt.Fprintf(
+		&payload,
+		`{"recordingKind":%q,"schemaVersion":"2","replayCompatibilityVersion":"1","session":{"id":%q},"events":[`,
+		recordings.KindJavaScriptFactorySession,
+		sessionID,
+	)
+	for index := range 256 {
+		if index > 0 {
+			payload.WriteByte(',')
+		}
+		fmt.Fprintf(&payload, `{"id":"event-%d","payload":%q}`, index, strings.Repeat("x", 4096))
+	}
+	payload.WriteString(`]}`)
+
+	readCalls := 0
+	openCalls := 0
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			readCalls++
+			return nil, errors.New("metadata mode must not use the full replay reader")
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			return nil, errors.New("metadata mode must not use the full legacy loader")
+		},
+		logging.NoopLogger{},
+		func(string) (io.ReadCloser, error) {
+			openCalls++
+			return io.NopCloser(strings.NewReader(payload.String())), nil
+		},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{
+		Path: "recording.json", MetadataOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayInput(metadata) error = %v", err)
+	}
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("result = %#v, want metadata without replay values", result)
+	}
+	if result.Metadata == nil || result.Metadata.FactorySessionID != sessionID {
+		t.Fatalf("metadata = %#v, want session %q", result.Metadata, sessionID)
+	}
+	if readCalls != 0 {
+		t.Fatalf("full replay reader calls = %d, want zero", readCalls)
+	}
+	if openCalls != 2 {
+		t.Fatalf("streaming opener calls = %d, want classification and metadata reads", openCalls)
+	}
+}
+
+func TestReplayInputLoaderMetadataModeReadsOnlyV2Header(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "00000000-0000-4000-8000-000000000099"
+	header := []byte(`{"recordType":"header","schemaVersion":"agent-factory.replay.v2","recordedAt":"2026-08-24T00:00:00Z","sessionId":"` + sessionID + `","factoryIdentity":{"id":"factory","name":"factory","factoryDirectory":"factory","sourceDirectory":"factory"},"hashes":{"factory_hash":"sha256:factory","workers_hash":"sha256:workers","workstations_hash":"sha256:workstations","runtime_config_hash":"sha256:runtime"}}` + "\n")
+	openCalls := 0
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			return nil, errors.New("metadata mode must not use the full replay reader")
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			return nil, errors.New("metadata mode must not use the full legacy loader")
+		},
+		logging.NoopLogger{},
+		func(string) (io.ReadCloser, error) {
+			openCalls++
+			return &headerOnlyReadCloser{data: header}, nil
+		},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{
+		Path: "2026/08/24/" + sessionID + ".jsonl", MetadataOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayInput(metadata) error = %v", err)
+	}
+	if result.Metadata == nil || result.Metadata.FactorySessionID != sessionID {
+		t.Fatalf("metadata = %#v, want session %q", result.Metadata, sessionID)
+	}
+	if openCalls != 2 {
+		t.Fatalf("streaming opener calls = %d, want classification and metadata reads", openCalls)
+	}
+}
+
+func TestReplayInputLoaderMetadataModeReadsLegacySessionIdentityWithoutEvents(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-legacy-metadata-001"
+	payload := `{"schemaVersion":"replay.v1","events":[{"context":{"sessionId":"` + sessionID + `"},"id":"event-1","payload":{"private":"history"}},{"context":{"sessionId":"` + sessionID + `"},"id":"event-2","payload":{"private":"history"}}]}`
+	readCalls := 0
+	openCalls := 0
+	loader := recordingswire.NewReplayInputLoader(
+		func(string) ([]byte, error) {
+			readCalls++
+			return nil, errors.New("metadata mode must not use the full replay reader")
+		},
+		func(string) (*recordings.ReplayArtifact, error) {
+			return nil, errors.New("metadata mode must not use the full legacy loader")
+		},
+		logging.NoopLogger{},
+		func(string) (io.ReadCloser, error) {
+			openCalls++
+			return io.NopCloser(strings.NewReader(payload)), nil
+		},
+	)
+
+	result, err := loader.LoadReplayInput(recordings.LoadReplayInputRequest{
+		Path: "2026/08/24/legacy.json", MetadataOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("LoadReplayInput(metadata) error = %v", err)
+	}
+	if result.Portable != nil || result.Legacy != nil {
+		t.Fatalf("result = %#v, want metadata without replay values", result)
+	}
+	if result.Metadata == nil || result.Metadata.FactorySessionID != sessionID {
+		t.Fatalf("metadata = %#v, want session %q", result.Metadata, sessionID)
+	}
+	if readCalls != 0 {
+		t.Fatalf("full replay reader calls = %d, want zero", readCalls)
+	}
+	if openCalls != 3 {
+		t.Fatalf("streaming opener calls = %d, want classification and two legacy metadata reads", openCalls)
+	}
+}
+
+type headerOnlyReadCloser struct {
+	data []byte
+	read bool
+}
+
+func (reader *headerOnlyReadCloser) Read(buffer []byte) (int, error) {
+	if reader.read {
+		return 0, errors.New("metadata reader consumed bytes after the v2 header")
+	}
+	reader.read = true
+	return copy(buffer, reader.data), nil
+}
+
+func (reader *headerOnlyReadCloser) Close() error { return nil }
 
 func TestReplayInputLoaderReturnsPortableDecodeDiagnostics(t *testing.T) {
 	t.Parallel()

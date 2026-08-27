@@ -175,7 +175,7 @@
       ]
     },
     {
-      "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
+      "test": "tests/functional/workers/mock/shared_process_test.go::TestSharedProcessWorkersMock",
       "stableIds": [
         "cli/you.session.resource.set"
       ]

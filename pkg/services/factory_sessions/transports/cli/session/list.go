@@ -24,6 +24,8 @@ type ListConfig struct {
 	Server        string
 	Port          int
 	Scope         string
+	LiveOnly      bool
+	HistoryOnly   bool
 	JSON          bool
 	Verbose       bool
 	Debug         bool
@@ -54,6 +56,13 @@ func List(cfg ListConfig) (err error) {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
 	}
+	if cfg.LiveOnly && cfg.HistoryOnly {
+		return &clidiag.LocalFailure{
+			Code:    clidiag.FlagConflictFailureCode,
+			Message: "--live-only and --history-only are mutually exclusive",
+			Cause:   fmt.Errorf("--live-only and --history-only are mutually exclusive"),
+		}
+	}
 	if cfg.DurableCloser != nil {
 		defer func() {
 			if closeErr := cfg.DurableCloser.Close(); closeErr != nil {
@@ -68,34 +77,47 @@ func List(cfg ListConfig) (err error) {
 	if cfg.Preparation == nil {
 		return fmt.Errorf("Factory Session request preparation is required")
 	}
+	scope := fse.SessionListScope(strings.TrimSpace(cfg.Scope))
+	if cfg.LiveOnly {
+		scope = fse.SessionListScopeLive
+	}
+	if cfg.HistoryOnly {
+		scope = fse.SessionListScopeHistory
+	}
 	normalized, err := cfg.Preparation.PrepareListSessions(fse.ListSessionsRequest{
-		Scope: fse.SessionListScope(strings.TrimSpace(cfg.Scope)),
+		Scope: scope,
 	})
 	if err != nil {
 		return err
 	}
 
 	needsLive := normalized.Scope == fse.SessionListScopeLive || normalized.Scope == fse.SessionListScopeAll
+	needsHistory := normalized.Scope == fse.SessionListScopeHistory || normalized.Scope == fse.SessionListScopeAll
 	needsDurable := normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll
 
 	if needsDurable && !needsLive {
-		scoped, err := mergeScopedListResult(cfg.Context, cfg, normalized, nil)
+		scoped, err := mergeScopedListResult(cfg.Context, cfg, normalized, nil, nil)
 		if err != nil {
 			return err
 		}
-		return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions))
+		return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions), len(scoped.RecordedSessions))
 	}
 
-	if !needsLive {
+	if !needsLive && !needsHistory {
 		return fmt.Errorf("unsupported session list scope %q", normalized.Scope)
 	}
 	if cfg.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
-	liveSessions, httpResult, err := fetchLiveSessions(cfg)
+	liveSessions, httpResult, err := fetchLiveSessions(cfg, normalized.Scope)
 	if err != nil {
 		return err
+	}
+	recordedSessions := recordedSessionsFromAPI(httpResult)
+	if normalized.Scope == fse.SessionListScopeHistory {
+		scoped := fse.ScopedSessionListResult{Scope: normalized.Scope, RecordedSessions: recordedSessions}
+		return emitListResult(cfg, listResponseFromScopedResult(scoped), 0, 0, len(recordedSessions))
 	}
 	if !needsDurable {
 		if cfg.JSON {
@@ -105,21 +127,22 @@ func List(cfg ListConfig) (err error) {
 		return renderListResult(cfg.Output, httpResult)
 	}
 
-	scoped, err := mergeScopedListResult(cfg.Context, cfg, normalized, liveSessions)
+	scoped, err := mergeScopedListResult(cfg.Context, cfg, normalized, liveSessions, recordedSessions)
 	if err != nil {
 		return err
 	}
-	return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions))
+	return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions), len(scoped.RecordedSessions))
 }
 
-func emitListResult(cfg ListConfig, result factoryapi.ListFactorySessionsResponse, liveCount, durableCount int) error {
+func emitListResult(cfg ListConfig, result factoryapi.ListFactorySessionsResponse, liveCount, durableCount, recordedCount int) error {
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"session list response scope=%s liveSessionCount=%d durableSessionCount=%d",
+		"session list response scope=%s liveSessionCount=%d durableSessionCount=%d recordedSessionCount=%d",
 		scopeLabel(result.Scope),
 		liveCount,
 		durableCount,
+		recordedCount,
 	)
 	if cfg.JSON {
 		encoder := json.NewEncoder(cfg.Output)
@@ -135,18 +158,19 @@ func scopeLabel(scope *factoryapi.FactorySessionListScope) string {
 	return string(*scope)
 }
 
-func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.ListFactorySessionsResponse, error) {
-	endpoint, err := listEndpoint(cfg)
+func fetchLiveSessions(cfg ListConfig, scope fse.SessionListScope) ([]fse.LiveSessionSummary, factoryapi.ListFactorySessionsResponse, error) {
+	endpoint, err := listEndpoint(cfg, scope)
 	if err != nil {
 		return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("resolve factory sessions endpoint: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"session list request endpointPath=%s endpoint=%s port=%d scope=live",
+		"session list request endpointPath=%s endpoint=%s port=%d scope=%s",
 		endpoint.Path,
 		endpoint.String(),
 		cfg.Port,
+		scope,
 	)
 
 	var result factoryapi.ListFactorySessionsResponse
@@ -200,13 +224,18 @@ func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.Lis
 	return liveSessions, result, nil
 }
 
-func listEndpoint(cfg ListConfig) (url.URL, error) {
+func listEndpoint(cfg ListConfig, scope fse.SessionListScope) (url.URL, error) {
+	pathScope := strings.TrimSpace(string(scope))
 	if strings.TrimSpace(cfg.Server) == "" {
-		return url.URL{
+		endpoint := url.URL{
 			Scheme: "http",
 			Host:   fmt.Sprintf("localhost:%d", cfg.Port),
 			Path:   "/factory-sessions",
-		}, nil
+		}
+		if pathScope != "" {
+			endpoint.RawQuery = "scope=" + url.QueryEscape(pathScope)
+		}
+		return endpoint, nil
 	}
 
 	endpointURL, err := cliserver.RequestURL(cfg.Server, "/factory-sessions")
@@ -217,7 +246,28 @@ func listEndpoint(cfg ListConfig) (url.URL, error) {
 	if err != nil {
 		return url.URL{}, fmt.Errorf("parse session list endpoint: %w", err)
 	}
+	if pathScope != "" {
+		query := parsed.Query()
+		query.Set("scope", pathScope)
+		parsed.RawQuery = query.Encode()
+	}
 	return *parsed, nil
+}
+
+func recordedSessionsFromAPI(response factoryapi.ListFactorySessionsResponse) []fse.RecordedSessionListSummary {
+	if response.RecordedSessions == nil || len(*response.RecordedSessions) == 0 {
+		return nil
+	}
+	result := make([]fse.RecordedSessionListSummary, 0, len(*response.RecordedSessions))
+	for _, session := range *response.RecordedSessions {
+		result = append(result, fse.RecordedSessionListSummary{
+			SessionID:         session.SessionId,
+			Source:            fse.RecordedSessionListSource(session.Source),
+			ArtifactReference: session.ArtifactReference,
+			Format:            string(session.Format),
+		})
+	}
+	return result
 }
 
 func defaultMarker(isDefault bool) string {

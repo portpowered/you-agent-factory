@@ -14,7 +14,7 @@ import (
 
 func TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	createNamedFactoryFixture(
 		t,
 		rootDir,
@@ -22,35 +22,35 @@ func TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMater
 		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
 	)
 
-	server := startFactoryTransformationServer(t, rootDir)
-	betaSessionID := openNamedFactorySession(t, server.URL(), rootDir, "beta")
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	betaServer := startDocumentTransformationServer(t, rootDir, "beta")
 
-	defaultBefore := getCurrentFactory(t, server.URL())
+	defaultBefore := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	alphaConfigPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
 	alphaConfigBefore, err := os.ReadFile(alphaConfigPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", alphaConfigPath, err)
 	}
 
-	sessionCurrent := getCurrentFactoryForSession(t, server.URL(), betaSessionID)
+	sessionCurrent := getCurrentFactoryForSession(t, betaServer.URL(), betaServer.SessionID())
 	if sessionCurrent.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("session current factory name = %q, want beta", sessionCurrent.Name)
 	}
 	importBody := nonDefaultSessionImportBodyWithBundledFiles(t, sessionCurrent, "imported-task")
 
-	saved := saveCurrentFactoryForSession(t, server.URL(), betaSessionID, importBody)
+	saved := saveCurrentFactoryForSession(t, betaServer.URL(), betaServer.SessionID(), importBody)
 	if saved.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("saved session import factory name = %q, want beta", saved.Name)
 	}
 	assertFactoryWorkType(t, saved, "imported-task", "saved non-default session import")
 
-	reloaded := getCurrentFactoryForSession(t, server.URL(), betaSessionID)
+	reloaded := getCurrentFactoryForSession(t, betaServer.URL(), betaServer.SessionID())
 	if reloaded.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("reloaded session factory name = %q, want beta", reloaded.Name)
 	}
 	assertFactoryWorkType(t, reloaded, "imported-task", "session GET after non-default import")
 
-	defaultAfter := getCurrentFactory(t, server.URL())
+	defaultAfter := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if defaultAfter.Name != defaultBefore.Name {
 		t.Fatalf("default current factory name = %q, want %q", defaultAfter.Name, defaultBefore.Name)
 	}
@@ -89,8 +89,8 @@ func TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMater
 		t.Fatalf("Stat(%s): %v", alphaMakefile, err)
 	}
 
-	submitWorkForSessionAndExpectStatus(t, server.URL(), betaSessionID, "imported-task", "session-import-submit", http.StatusCreated)
-	submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "default-still-alpha-after-import", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, betaServer.URL(), betaServer.SessionID(), "imported-task", "session-import-submit", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "alpha-task", "default-still-alpha-after-import", http.StatusCreated)
 }
 
 func nonDefaultSessionImportBodyWithBundledFiles(

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -75,7 +74,7 @@ func TestInvalidLocalOverrideDoesNotFallBackSilently(t *testing.T) {
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := sharedCatalogProcess(t).process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -234,7 +233,7 @@ func executeFactoryList(t *testing.T, home, workingDirectory string) []listEntry
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := sharedCatalogProcess(t).process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -258,7 +257,7 @@ func executeNamedFactoryCompletion(t *testing.T, home, workingDirectory, name st
 	)
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := sharedCatalogProcess(t).process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(named completion) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,

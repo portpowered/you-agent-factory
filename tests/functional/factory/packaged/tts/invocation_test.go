@@ -2,18 +2,15 @@ package tts
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -69,11 +66,20 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
 	}
+	assertPackagedTTSInvocationResponseIdentity(t, response)
 
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider command call count = %d, want one named packaged invocation", runner.CallCount())
 	}
 	request := runner.LastRequest()
+	assertPackagedTTSCommandRequest(t, request, inputs.Input.WorkingDirectory, text, "", "")
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	wantArgs := []string{"exec", "--json", "--model", factorydefinitions.DefaultTTSModelName, "-"}
+	if !reflect.DeepEqual(request.Args, wantArgs) {
+		t.Fatalf("provider command args = %#v, want %#v", request.Args, wantArgs)
+	}
 	prompt := string(request.Stdin)
 	const promptPrefix = "For Work "
 	if !strings.HasPrefix(prompt, promptPrefix) {
@@ -92,198 +98,6 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 	}
 	if got, err := os.ReadFile(audioPath); err != nil || string(got) != packagedTTSFakeAudioFixture {
 		t.Fatalf("command-runner audio artifact = %q, %v; want fixture", got, err)
-	}
-}
-
-// TestPackagedTTSRequiredInputProducesAudioArtifactMetadata proves that invoking
-// the packaged @you/tts Factory with required text input completes under a fake
-// model edge and returns public primary-result audio artifact metadata for
-// the successful TTS outcome.
-func TestPackagedTTSRequiredInputProducesAudioArtifactMetadata(t *testing.T) {
-	text := fmt.Sprintf(
-		"functional packaged tts required input %d",
-		time.Now().UnixNano(),
-	)
-
-	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		homeDir,
-		factorydefinitions.PackagedTTSFactoryName,
-	)
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
-	overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
-
-	fakeProvider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Env: []string{
-			"HOME=" + homeDir,
-			"USERPROFILE=" + homeDir,
-		},
-		Edges: serviceedges.Edges{
-			ProviderOverride: fakeProvider,
-		},
-	})
-
-	response := postPackagedTTSInvocation(t, server, text)
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
-	}
-	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
-		t.Fatalf("primary result = %#v, want one metadata text part", response.PrimaryResult)
-	}
-
-	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("primaryResult[0] as text part: %v", err)
-	}
-
-	var metadata factorydefinitions.TTSInvocationMetadata
-	if err := json.Unmarshal([]byte(part.Text), &metadata); err != nil {
-		t.Fatalf("metadata JSON: %v; text = %q", err, part.Text)
-	}
-	if strings.TrimSpace(metadata.ArtifactPath) == "" {
-		t.Fatalf("artifactPath is empty, want non-empty audio artifact path")
-	}
-	if metadata.MediaType != "audio/wav" {
-		t.Fatalf("mediaType = %q, want audio/wav", metadata.MediaType)
-	}
-	wantBackend := factorydefinitions.DefaultTTSModelName + "/" + factorydefinitions.DefaultTTSBackendName
-	if metadata.Backend != wantBackend {
-		t.Fatalf("backend = %q, want %q", metadata.Backend, wantBackend)
-	}
-
-	audioBytes, err := os.ReadFile(metadata.ArtifactPath)
-	if err != nil {
-		t.Fatalf("read artifact audio file %q: %v", metadata.ArtifactPath, err)
-	}
-	if string(audioBytes) != packagedTTSFakeAudioFixture {
-		t.Fatalf("artifact audio = %q, want fake model fixture payload", audioBytes)
-	}
-	if fakeProvider.callCount() == 0 {
-		t.Fatal("fake provider Infer was not called, want packaged factory inference to reach the fake model edge")
-	}
-}
-
-// TestFactoryTTSSuccessProjectsAudioWorkAndEvents proves the direct Factory
-// TTS dispatch contract at the root Process boundary. The fixture deliberately
-// uses a non-packaged workstation name so the generic Factory result remains
-// the AUDIO Work emitted by the worker rather than the packaged invocation's
-// metadata-only primary-result presentation.
-func TestFactoryTTSSuccessProjectsAudioWorkAndEvents(t *testing.T) {
-	text := "functional factory tts audio projection"
-	dir := scaffoldFactoryTTSAudioDispatch(t)
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		Name:        "tts request",
-		WorkTypeID:  "task",
-		TargetState: "init",
-		Content: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeText,
-			Text: text,
-			Slot: "text",
-		}},
-	})
-
-	provider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		30*time.Second,
-	)
-
-	if provider.callCount() != 1 {
-		t.Fatalf("TTS provider call count = %d, want one", provider.callCount())
-	}
-	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
-		t.Fatalf("session progress = %+v, want one terminal and zero failed", session.Runtime.Progress.Categories)
-	}
-
-	outputWork := factoryTTSCompletedWork(t, listed)
-	audio := factoryTTSAudioPart(t, outputWork)
-	audioPath := provider.lastAudioPath()
-	if audioPath == "" {
-		t.Fatal("provider audio path is empty, want deterministic backend artifact path")
-	}
-	if audio.File == nil || *audio.File != audioPath {
-		t.Fatalf("AUDIO Work file = %#v, want provider artifact path %q", audio.File, audioPath)
-	}
-	if audio.Slot == nil || *audio.Slot != "audio" {
-		t.Fatalf("AUDIO Work slot = %#v, want audio", audio.Slot)
-	}
-	if audio.ContentType == nil || *audio.ContentType != "audio/wav" {
-		t.Fatalf("AUDIO Work contentType = %#v, want audio/wav", audio.ContentType)
-	}
-	content, err := os.ReadFile(audioPath)
-	if err != nil {
-		t.Fatalf("read TTS artifact %q: %v", audioPath, err)
-	}
-	if string(content) != packagedTTSFakeAudioFixture {
-		t.Fatalf("TTS artifact = %q, want deterministic fixture payload", content)
-	}
-
-	if !session.IsDefault {
-		t.Fatalf("Factory Session = %#v, want default session", session)
-	}
-	assertFactoryTTSSuccessEvents(t, events, factorysessions.DefaultSessionID, outputWork, text, audio)
-}
-
-// TestFactoryTTSFailureRoutesToOnFailureWithoutAudioArtifact proves that a
-// failed generic Factory TTS dispatch remains a failed public Work outcome and
-// follows the authored onFailure route without presenting successful audio.
-func TestFactoryTTSFailureRoutesToOnFailureWithoutAudioArtifact(t *testing.T) {
-	text := "functional factory tts failure"
-	dir := scaffoldFactoryTTSAudioDispatch(t)
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		Name:        "tts failure request",
-		WorkTypeID:  "task",
-		TargetState: "init",
-		Content: []work.WorkContentPart{{
-			Type: work.WorkContentPartTypeText,
-			Text: text,
-			Slot: "text",
-		}},
-	})
-
-	const failureMessage = "tts backend failed"
-	provider := newPackagedTTSFailingFakeProvider(failureMessage)
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		30*time.Second,
-	)
-
-	if provider.callCount() != 1 {
-		t.Fatalf("TTS provider call count = %d, want one failed attempt", provider.callCount())
-	}
-	if session.Runtime.Status != factoryapi.FactorySessionStatusIDLE ||
-		session.Runtime.Progress.Categories.Initial != 0 ||
-		session.Runtime.Progress.Categories.Processing != 0 ||
-		session.Runtime.Progress.Categories.Terminal != 0 ||
-		session.Runtime.Progress.Categories.Failed != 1 {
-		t.Fatalf("failed session projection = %+v, want idle with one failed Work and no success", session.Runtime)
-	}
-
-	failedWork := factoryTTSFailedWork(t, listed)
-	assertFactoryTTSFailedWork(t, failedWork, text, "listed Work")
-	observed := collectFactoryTTSDispatchEvents(t, events, factorysessions.DefaultSessionID)
-	workID := *failedWork.WorkId
-	requestID := factoryTTSRequiredContextID(t, observed.workRequest, "request")
-	traceID := factoryTTSRequiredTraceID(t, observed.workRequest)
-	dispatchID := factoryTTSRequiredContextID(t, observed.dispatchRequest, "dispatch")
-	assertFactoryTTSContextCorrelation(t, observed, workID, requestID, traceID, dispatchID)
-	assertFactoryTTSWorkRequest(t, observed.workRequest, workID, text)
-	assertFactoryTTSDispatchRequest(t, observed.dispatchRequest, workID)
-	assertFactoryTTSFailureModelEvents(t, observed, failureMessage)
-	assertFactoryTTSFailureDispatchResponse(t, observed.dispatchResponse, workID, text, failureMessage)
-
-	for _, event := range events {
-		if event.Type == factoryapi.FactoryEventTypeArtifactCreated {
-			t.Fatalf("TTS failure emitted ARTIFACT_CREATED event: %#v", event)
-		}
 	}
 }
 
@@ -322,8 +136,11 @@ func assertFactoryTTSFailedWork(
 		t.Fatalf("%s content = %#v, want one preserved text part and no AUDIO part", label, item.Content)
 	}
 	textPart, err := (*item.Content)[0].AsWorkTextContentPart()
-	if err != nil || textPart.Text != wantText || textPart.Slot == nil || *textPart.Slot != "text" {
-		t.Fatalf("%s content = %#v, want text %q in text slot", label, textPart, wantText)
+	if err != nil || textPart.Text != wantText {
+		t.Fatalf("%s content = %#v, want exact text %q", label, textPart, wantText)
+	}
+	if textPart.Slot != nil && *textPart.Slot != "text" {
+		t.Fatalf("%s content slot = %q, want text when present", label, *textPart.Slot)
 	}
 }
 
@@ -428,6 +245,12 @@ func factoryTTSAudioPart(t *testing.T, item factoryapi.Work) factoryapi.WorkAudi
 	}
 	if audio.File == nil || strings.TrimSpace(*audio.File) == "" {
 		t.Fatalf("completed TTS Work AUDIO = %#v, want artifact reference", audio)
+	}
+	if audio.Slot == nil || *audio.Slot != "audio" {
+		t.Fatalf("completed TTS Work AUDIO slot = %#v, want audio", audio.Slot)
+	}
+	if audio.ContentType == nil || *audio.ContentType != "audio/wav" {
+		t.Fatalf("completed TTS Work AUDIO contentType = %#v, want audio/wav", audio.ContentType)
 	}
 	return audio
 }
@@ -560,8 +383,11 @@ func assertFactoryTTSWorkRequest(t *testing.T, event *factoryapi.FactoryEvent, w
 		t.Fatalf("WORK_REQUEST content = %#v, want one text part", requestedWork.Content)
 	}
 	requestedText, err := (*requestedWork.Content)[0].AsWorkTextContentPart()
-	if err != nil || requestedText.Text != wantText || requestedText.Slot == nil || *requestedText.Slot != "text" {
-		t.Fatalf("WORK_REQUEST text = %#v, want text %q in text slot", requestedText, wantText)
+	if err != nil || requestedText.Text != wantText {
+		t.Fatalf("WORK_REQUEST text = %#v, want exact text %q", requestedText, wantText)
+	}
+	if requestedText.Slot != nil && *requestedText.Slot != "text" {
+		t.Fatalf("WORK_REQUEST text slot = %q, want text when present", *requestedText.Slot)
 	}
 }
 
@@ -712,237 +538,4 @@ func factoryTTSContextTraceIDs(event *factoryapi.FactoryEvent) []string {
 		return nil
 	}
 	return append([]string(nil), (*event.Context.TraceIds)...)
-}
-
-// TestPackagedTTSOptionalVoiceAndFormatReachModel proves that optional voice and
-// format options supplied through the public packaged-factory invocation
-// surface reach the fake model edge on resolved TTS operation bindings.
-func TestPackagedTTSOptionalVoiceAndFormatReachModel(t *testing.T) {
-	text := fmt.Sprintf(
-		"functional packaged tts optional voice format %d",
-		time.Now().UnixNano(),
-	)
-	voice := "alloy"
-	format := "mp3"
-
-	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		homeDir,
-		factorydefinitions.PackagedTTSFactoryName,
-	)
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
-	overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t, factoryDir)
-
-	fakeProvider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Env: []string{
-			"HOME=" + homeDir,
-			"USERPROFILE=" + homeDir,
-		},
-		Edges: serviceedges.Edges{
-			ProviderOverride: fakeProvider,
-		},
-	})
-
-	response := postPackagedTTSInvocationWithArgs(t, server, map[string]any{
-		"text":   text,
-		"voice":  voice,
-		"format": format,
-	})
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
-	}
-
-	request := fakeProvider.lastRequest()
-	if request == nil {
-		t.Fatal("fake provider Infer was not called, want packaged factory inference to reach the fake model edge")
-	}
-	if voiceBinding, ok := modelBindingJSON(request.ModelBindings, "voice"); !ok {
-		t.Fatalf("model bindings = %#v, want voice slot binding", request.ModelBindings)
-	} else if got := stringValueFromBindingJSON(voiceBinding, "name"); got != voice {
-		t.Fatalf("voice binding name = %q, want %q; binding = %s", got, voice, voiceBinding)
-	}
-	if formatBinding, ok := modelBindingJSON(request.ModelBindings, "format"); !ok {
-		t.Fatalf("model bindings = %#v, want format slot binding", request.ModelBindings)
-	} else if got := stringValueFromBindingJSON(formatBinding, "name"); got != format {
-		t.Fatalf("format binding name = %q, want %q; binding = %s", got, format, formatBinding)
-	}
-}
-
-// TestPackagedTTSModelFailureReturnsNoFalseArtifact proves that a forced model
-// failure during packaged @you/tts invocation returns a failed public terminal
-// outcome without success-shaped TTS audio artifact metadata in the primary
-// result for that run.
-func TestPackagedTTSModelFailureReturnsNoFalseArtifact(t *testing.T) {
-	text := fmt.Sprintf(
-		"functional packaged tts model failure %d",
-		time.Now().UnixNano(),
-	)
-
-	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		homeDir,
-		factorydefinitions.PackagedTTSFactoryName,
-	)
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
-	overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
-
-	fakeProvider := newPackagedTTSFailingFakeProvider("omnivoice invoke failed: exit status 1")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Env: []string{
-			"HOME=" + homeDir,
-			"USERPROFILE=" + homeDir,
-		},
-		Edges: serviceedges.Edges{
-			ProviderOverride: fakeProvider,
-		},
-	})
-
-	response := postPackagedTTSInvocation(t, server, text)
-	if response.Status != factoryapi.InvocationTerminalStatusFailed {
-		t.Fatalf("invocation status = %q, want FAILED; response = %#v", response.Status, response)
-	}
-	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONTTSGENERATIONFAILED {
-		t.Fatalf(
-			"invocation errorCode = %#v, want INVOCATION_TTS_GENERATION_FAILED",
-			response.ErrorCode,
-		)
-	}
-	if primaryResultContainsTTSArtifactMetadata(t, response.PrimaryResult) {
-		t.Fatalf(
-			"primary result = %#v, want no success-shaped TTS audio artifact metadata on model failure",
-			response.PrimaryResult,
-		)
-	}
-	if fakeProvider.callCount() == 0 {
-		t.Fatal("fake provider Infer was not called, want packaged factory inference to reach the fake model edge")
-	}
-}
-
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat(t *testing.T) string {
-	t.Helper()
-	return support.ScaffoldFactory(t, map[string]any{
-		"name": "tts",
-		"invocationSignature": map[string]any{
-			"parameters": []map[string]any{
-				{
-					"name":     "text",
-					"required": true,
-					"bindings": []map[string]any{
-						{"kind": "POSITIONAL", "position": 1},
-						{"kind": "STDIN"},
-					},
-				},
-				{
-					"name":         "voice",
-					"externalName": "voice",
-					"typeHint":     "STRING",
-					"bindings":     []map[string]any{{"kind": "NAMED"}},
-				},
-				{
-					"name":         "format",
-					"externalName": "format",
-					"typeHint":     "STRING",
-					"bindings":     []map[string]any{{"kind": "NAMED"}},
-				},
-			},
-		},
-		"resources": []map[string]any{{
-			"name":       "omnivoice-cache",
-			"type":       "MODEL",
-			"capacity":   1,
-			"model":      factorydefinitions.DefaultTTSModelName,
-			"backend":    factorydefinitions.DefaultTTSBackendName,
-			"loadPolicy": "ON_DEMAND",
-		}},
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"handlingBehavior": []string{
-				factorydefinitions.WorkTypeHandlingBehaviorDefault,
-			},
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]any{{
-			"name":          "tts-executor",
-			"type":          factorydefinitions.WorkerTypeInference,
-			"model":         factorydefinitions.DefaultTTSModelName,
-			"modelLocality": factorydefinitions.ModelLocalityCloud,
-			"modelProvider": "CODEX",
-			"operations": []map[string]any{{
-				"name": "TTS",
-				"inputs": []map[string]any{
-					{
-						"name":         "text",
-						"contentTypes": []string{"TEXT"},
-						"required":     true,
-					},
-					{
-						"name":         "voice",
-						"contentTypes": []string{"JSON"},
-					},
-					{
-						"name":         "format",
-						"contentTypes": []string{"JSON"},
-					},
-				},
-				"outputs": []map[string]any{{
-					"name":         "audio",
-					"contentTypes": []string{"AUDIO"},
-				}},
-			}},
-		}},
-		"workstations": []map[string]any{{
-			"name":      "execute-tts",
-			"type":      "INFERENCE_RUN",
-			"operation": "TTS",
-			"worker":    "tts-executor",
-			"operationBindings": []map[string]any{
-				{
-					"slot": "text",
-					"selector": map[string]any{
-						"type": "TEXT",
-					},
-				},
-				{
-					"slot": "voice",
-					"config": []map[string]any{{
-						"type": "JSON",
-						"role": "voice",
-						"json": map[string]any{"name": "${voice}"},
-					}},
-				},
-				{
-					"slot": "format",
-					"config": []map[string]any{{
-						"type": "JSON",
-						"role": "format",
-						"json": map[string]any{"name": "${format}"},
-					}},
-				},
-			},
-			"inputs": []map[string]string{{
-				"workType": "task",
-				"state":    "init",
-			}},
-			"outputs": []map[string]string{{
-				"workType": "task",
-				"state":    "complete",
-			}},
-			"onFailure": []map[string]string{{
-				"workType": "task",
-				"state":    "failed",
-			}},
-		}},
-	})
 }

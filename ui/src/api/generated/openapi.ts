@@ -893,7 +893,7 @@ export interface paths {
     };
     /**
      * List factory sessions
-     * @description Lists factory sessions for the requested scope. live returns workspace sessions kept open by the runtime host, including the reserved default session. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
+     * @description Lists factory sessions for the requested scope. live returns workspace sessions kept open by the runtime host, including the reserved default session. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
      */
     get: operations["listFactorySessions"];
     put?: never;
@@ -3610,9 +3610,11 @@ export interface components {
       sessions: components["schemas"]["FactorySessionSummary"][];
       /** @description Persisted durable session summaries when scope is PERSISTED or ALL. */
       durableSessions?: components["schemas"]["FactorySessionDurableSummary"][];
+      /** @description Read-only recorded Factory Session summaries when scope is HISTORY or ALL. */
+      recordedSessions?: components["schemas"]["FactorySessionRecordedSummary"][];
     };
     /**
-     * @description Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
+     * @description Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
      * @default live
      * @enum {string}
      */
@@ -3648,6 +3650,24 @@ export interface components {
       /** @description Polling and inspection links for durable session clients. */
       links?: components["schemas"]["FactorySessionExecutionLinks"];
     };
+    FactorySessionRecordedSummary: {
+      /** @description Canonical Factory Session UUID recovered from the recorded artifact. */
+      sessionId: string;
+      source: components["schemas"]["FactorySessionRecordedSource"];
+      /** @description Root-relative recorded artifact reference; never a host filesystem authority. */
+      artifactReference: string;
+      format: components["schemas"]["FactorySessionRecordedFormat"];
+    };
+    /**
+     * @description Explicit provenance for a read-only recorded Factory Session row.
+     * @enum {string}
+     */
+    FactorySessionRecordedSource: FactorySessionRecordedSource;
+    /**
+     * @description Recording artifact format interpreted by the shared replay reader.
+     * @enum {string}
+     */
+    FactorySessionRecordedFormat: FactorySessionRecordedFormat;
     /** @description Durable factory-session inspection read model. Exposes public source refs and hashes without raw workflow source, unrestricted host paths, or diagnostic artifacts. */
     FactorySessionDurableReadModel: {
       /** @description Stable durable factory-session identifier. */
@@ -11042,10 +11062,22 @@ export type DispatchReconciliationSource =
 export const FactorySessionListScope = {
   FactorySessionListScopeLive: "live",
   FactorySessionListScopePersisted: "persisted",
+  FactorySessionListScopeHistory: "history",
   FactorySessionListScopeAll: "all",
 } as const;
 export type FactorySessionListScope =
   (typeof FactorySessionListScope)[keyof typeof FactorySessionListScope];
+export const FactorySessionRecordedSource = {
+  FactorySessionRecordedSourceHistory: "recorded-history",
+} as const;
+export type FactorySessionRecordedSource =
+  (typeof FactorySessionRecordedSource)[keyof typeof FactorySessionRecordedSource];
+export const FactorySessionRecordedFormat = {
+  FactorySessionRecordedFormatV1JSON: "V1_JSON",
+  FactorySessionRecordedFormatV2JSONL: "V2_JSONL",
+} as const;
+export type FactorySessionRecordedFormat =
+  (typeof FactorySessionRecordedFormat)[keyof typeof FactorySessionRecordedFormat];
 export const FactorySessionResultStatus = {
   FactorySessionResultStatusNotReady: "NOT_READY",
   FactorySessionResultStatusPartial: "PARTIAL",

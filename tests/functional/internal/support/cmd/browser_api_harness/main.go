@@ -25,6 +25,7 @@ import (
 const (
 	startupTimeout           = 10 * time.Second
 	projectWorkflowDirectory = ".claude/workflows"
+	startupDiagnosticPrefix  = "[browser-api-harness] phase="
 )
 
 type readyPayload struct {
@@ -45,9 +46,11 @@ type harnessConfig struct {
 
 func main() {
 	cfg := parseHarnessConfig()
+	startupPhase("process-started")
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	startupPhase("workflow-project-preparation-started")
 	projectRoot, cleanupProjectRoot, err := prepareWorkflowProjectRoot(
 		cfg.executionBaseDir,
 		cfg.workflowFixture,
@@ -57,6 +60,7 @@ func main() {
 		fatalf("prepare workflow project root: %v", err)
 	}
 	defer cleanupProjectRoot()
+	startupPhase("workflow-project-preparation-complete")
 
 	ready := make(chan struct{})
 	edges := serviceedges.Edges{
@@ -67,12 +71,15 @@ func main() {
 			return serveInjectedHTTP(serverCtx, cfg.apiPort, request.Handler, ready)
 		},
 	}
+	startupPhase("root-process-build-started")
 	process, err := support.BuildProcessWithContext(ctx, edges)
 	if err != nil {
 		fatalf("build root process: %v", err)
 	}
+	startupPhase("root-process-build-complete")
 	processDone := make(chan error, 1)
 	go func() {
+		startupPhase("root-process-execution-started")
 		processDone <- process.Execute(root.Input{
 			Args: []string{
 				"you", "run",
@@ -100,7 +107,9 @@ func main() {
 		fatalf("timed out waiting for root process API")
 	}
 
+	startupPhase("api-bound")
 	waitForHTTPReady(cfg.apiPort)
+	startupPhase("api-ready")
 
 	startRequest := factoryapi.FactorySessionExecutionRequest{
 		RequestId: cfg.requestID,
@@ -113,6 +122,7 @@ func main() {
 	if err != nil {
 		fatalf("start durable factory session (%s): %v", cfg.startMode, err)
 	}
+	startupPhase("durable-session-started")
 
 	if err := json.NewEncoder(os.Stdout).Encode(readyPayload{
 		APIPort:   cfg.apiPort,
@@ -121,6 +131,7 @@ func main() {
 	}); err != nil {
 		fatalf("encode ready payload: %v", err)
 	}
+	startupPhase("ready-payload-written")
 
 	<-ctx.Done()
 	waitForExit(processDone)
@@ -141,6 +152,10 @@ func parseHarnessConfig() harnessConfig {
 	flag.Parse()
 	validateHarnessConfig(cfg)
 	return cfg
+}
+
+func startupPhase(phase string) {
+	_, _ = fmt.Fprintf(os.Stderr, "%s%s\n", startupDiagnosticPrefix, phase)
 }
 
 func validateHarnessConfig(cfg harnessConfig) {

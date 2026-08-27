@@ -702,8 +702,14 @@ func stateFromPlaceID(placeID string) string {
 func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
 	for _, workID := range sortedStrings(workIDs) {
 		item, ok := r.stateValue.WorkItemsByID[workID]
+		if !ok {
+			continue
+		}
+		if isCompletedAutomationWork(item, outcome) {
+			return &interfaces.FactoryTerminalWork{WorkItem: item, Status: completedAutomationWorkStatus}
+		}
 		placeID := r.workPlaces[workID]
-		if !ok || placeID == "" {
+		if placeID == "" {
 			continue
 		}
 		category := r.placeCats[placeID]
@@ -713,6 +719,15 @@ func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.
 		}
 	}
 	return nil
+}
+
+const completedAutomationWorkStatus = "COMPLETED"
+
+func isCompletedAutomationWork(item work.FactoryWorkItem, outcome workerexecution.WorkOutcome) bool {
+	return outcome == workerexecution.OutcomeAccepted &&
+		interfaces.IsSystemTimeWorkType(item.WorkTypeID) &&
+		item.Tags[interfaces.TimeWorkTagKeySource] == interfaces.TimeWorkSourceCron &&
+		strings.TrimSpace(item.Tags[interfaces.TimeWorkTagKeyCronWorkstation]) != ""
 }
 
 func (r *factoryWorldReducer) rebuildOccupancy() {

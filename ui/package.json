@@ -32,6 +32,7 @@
     "check:biome-output-exclusions": "node --test scripts/biome-output-exclusions.test.mjs",
     "lint": "bun run check:biome-output-exclusions && biome lint . && bun run check:localized-copy && bun run check:semantic-colors && node scripts/check-tailwind-spacing-tokens.mjs && node scripts/check-feature-root-files.mjs && node scripts/check-feature-folder-file-count.mjs && node scripts/check-feature-boundary.mjs && bun run check:factory-graph-renderer-path && bun run check:factory-graph-host-parity && node scripts/check-shared-ui-boundary.mjs && bun run check:test-lanes && bun run check:public-package-boundaries && bun run check:packaged-factories-boundary && node scripts/check-button-usage.mjs && node scripts/check-feature-form-control-usage.mjs && node scripts/check-dashboard-expand-disclosure.mjs && bun run check:inline-component-class-usage",
     "link:public-package-dependencies": "node scripts/link-public-package-dependencies.mjs",
+    "measure:real-backend-browser-harness": "node scripts/measure-real-backend-browser-harness.mjs",
     "loadtest:agent-fails-memory": "bun scripts/loadtest-agent-fails-memory.ts",
     "profile:recording-browser": "node scripts/profile-recording-browser.mjs",
     "publish:public-packages": "node scripts/public-package-publish.mjs --action publish",

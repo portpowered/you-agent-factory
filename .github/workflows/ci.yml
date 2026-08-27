@@ -529,6 +529,62 @@ jobs:
           CHANGED_TEST_STABILITY_BUDGET: 15m
         run: make test-changed-test-stability
 
+  backend-unit-latency:
+    name: Backend Unit Latency
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      YOU_LOGICAL_CPUS: "4"
+      YOU_EXPECTED_CONCURRENT_LANES: "4"
+      UNIT_DEFAULT_JOBS: "2"
+      UNIT_TIMING_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      UNIT_RUNNER_PROVIDER: github-actions
+      UNIT_RUNNER_IMAGE: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Prewarm Go dependencies and unit-lane compile cache
+        shell: bash
+        run: |
+          go mod download
+          go build ./cmd/unitlane ./cmd/unitlanebudget
+          go test -short -vet=off -run '^$' -p=2 ./pkg/...
+      - name: Run three consecutive uncached unit samples
+        shell: bash
+        run: |
+          mkdir -p .artifacts/unit-latency
+          sample_failure=0
+          run_sample() {
+            ordinal="$1"
+            if node scripts/ci/run-unit-latency-sample.mjs "$ordinal" ".artifacts/unit-latency" \
+              make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=".artifacts/unit-latency/run-${ordinal}.v2.json"; then
+              :
+            else
+              sample_failure=1
+            fi
+          }
+          run_sample 1
+          run_sample 2
+          run_sample 3
+          exit "$sample_failure"
+      - name: Enforce unit-lane latency budget
+        run: make test-unit-latency-budget
+      - name: Retain unit-latency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-latency-evidence
+          path: .artifacts/unit-latency
+          if-no-files-found: error
+          retention-days: 14
+
   backend-lint:
     name: Backend Lint
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -748,7 +804,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-test-stability, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-test-stability, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -793,6 +849,9 @@ jobs:
           RUN_BACKEND_STABILITY: ${{ github.event_name == 'pull_request' && needs.classify.outputs.run_backend != 'false' }}
           BACKEND_STABILITY_REASON: ${{ needs.classify.outputs.backend_reason }}
           BACKEND_STABILITY_RESULT: ${{ needs.backend-test-stability.result }}
+          RUN_BACKEND_UNIT_LATENCY: "true"
+          BACKEND_UNIT_LATENCY_REASON: "The canonical three-sample uncached unit-lane latency budget is required on every pull request and push to main."
+          BACKEND_UNIT_LATENCY_RESULT: ${{ needs.backend-unit-latency.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}

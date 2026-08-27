@@ -2,6 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import { existsSync, readdirSync } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -13,6 +14,7 @@ import {
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import process from "node:process";
 import readline from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
@@ -25,6 +27,25 @@ import { runSharedBrowserBuild } from "./browser-build-lock.mjs";
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
 const replayFixtureDirectory = path.join(dirname, "fixtures");
+
+const realBackendHarnessDiagnosticPrefix = "[real-backend-browser-harness]";
+const realBackendHarnessProcessStartedMarker =
+  "[browser-api-harness] phase=process-started";
+const realBackendHarnessDiagnosticLimit = 8_192;
+const realBackendHarnessDiagnosticTruncationMarker =
+  "[earlier diagnostics truncated]";
+const realBackendHarnessSource =
+  "./tests/functional/internal/support/cmd/browser_api_harness";
+const realBackendHarnessArtifactDirectoryPrefix = "you-browser-api-harness-";
+const realBackendHarnessCleanupOptions = {
+  force: true,
+  maxRetries: 8,
+  recursive: true,
+  retryDelay: 100,
+};
+
+export const realBackendHarnessArtifactEnvironmentVariable =
+  "AGENT_FACTORY_REAL_BACKEND_HARNESS_PATH";
 
 export const previewHost = "127.0.0.1";
 export const buildTimeoutMs = 600_000;
@@ -1051,6 +1072,8 @@ const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
 const browserProcessStateKey = "__agentFactoryBrowserIntegrationBrowserState";
 const browserPreviewStateKey = "__agentFactoryBrowserIntegrationPreviewState";
 const repoProcessGroupKey = Symbol("repoProcessGroup");
+const repoProcessSpawnedKey = Symbol("repoProcessSpawned");
+const repoProcessErrorKey = Symbol("repoProcessError");
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;
 export const exportCoverImagePath = path.resolve(
@@ -1341,6 +1364,7 @@ function spawnRuntime(args, extraEnv = {}, options = {}) {
     shell: false,
     stdio: "pipe",
   });
+  trackRepoProcess(child);
   child[repoProcessGroupKey] = process.platform !== "win32";
   return child;
 }
@@ -1353,27 +1377,463 @@ function spawnRepoProcess(command, args, options = {}) {
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  trackRepoProcess(child);
   child[repoProcessGroupKey] = process.platform !== "win32";
   return child;
 }
 
-function resolveGoCacheEnvironment() {
+function trackRepoProcess(child) {
+  child.once("spawn", () => {
+    child[repoProcessSpawnedKey] = true;
+  });
+  child.once("error", (error) => {
+    child[repoProcessErrorKey] = error;
+  });
+  return child;
+}
+
+function writeRealBackendHarnessDiagnostic(writer, message) {
+  const line = message.startsWith(realBackendHarnessDiagnosticPrefix)
+    ? `${message}\n`
+    : `${realBackendHarnessDiagnosticPrefix} ${message}\n`;
+  if (typeof writer === "function") {
+    writer(line);
+    return;
+  }
+  writer?.write?.(line);
+}
+
+function formatRealBackendHarnessDuration(elapsedMs) {
+  return Number.isFinite(elapsedMs)
+    ? `${elapsedMs.toFixed(1)}ms`
+    : "unavailable";
+}
+
+function cacheDirectoryReuseState(cachePath, name) {
+  if (typeof cachePath !== "string" || cachePath.length === 0) {
+    return "not-overridden";
+  }
+
+  try {
+    if (!existsSync(cachePath)) {
+      return "missing";
+    }
+
+    const entries = readdirSync(cachePath);
+    if (name === "GOPATH") {
+      return "available";
+    }
+    if (name === "GOMODCACHE") {
+      const moduleEntries = entries.filter((entry) => entry !== "cache");
+      if (moduleEntries.length === 0) {
+        return "empty";
+      }
+      if (moduleEntries.length === 1 && moduleEntries[0] === "golang.org") {
+        const goModuleEntries = readdirSync(path.join(cachePath, "golang.org"));
+        if (
+          goModuleEntries.length === 1 &&
+          goModuleEntries[0].startsWith("toolchain@")
+        ) {
+          return "toolchain-only";
+        }
+      }
+      return "populated";
+    }
+    return entries.length > 0 ? "populated" : "empty";
+  } catch {
+    return "unreadable";
+  }
+}
+
+function formatGoCacheReuse(cacheReuse) {
+  return ["GOCACHE", "GOMODCACHE", "GOPATH"]
+    .map((name) => `${name}:${cacheReuse?.[name] ?? "unavailable"}`)
+    .join(",");
+}
+
+export function createRealBackendHarnessStartupTiming(
+  startedAt = performance.now(),
+) {
+  return {
+    applicationStartupMs: null,
+    cacheResolutionMs: null,
+    cacheReuse: null,
+    cacheReuseBeforeResolution: null,
+    firstReadyPayloadMs: null,
+    harnessCompilationSetupMs: null,
+    executionMode: null,
+    processLaunchMs: null,
+    processSpawnedAt: null,
+    processStartedAt: null,
+    startedAt,
+    totalStartupMs: null,
+  };
+}
+
+function publicRealBackendHarnessStartupTiming(timing) {
+  return {
+    applicationStartupMs: timing.applicationStartupMs,
+    cacheResolutionMs: timing.cacheResolutionMs,
+    cacheReuse: timing.cacheReuse,
+    cacheReuseBeforeResolution: timing.cacheReuseBeforeResolution,
+    firstReadyPayloadMs: timing.firstReadyPayloadMs,
+    harnessCompilationSetupMs: timing.harnessCompilationSetupMs,
+    executionMode: timing.executionMode,
+    processLaunchMs: timing.processLaunchMs,
+    totalStartupMs: timing.totalStartupMs,
+  };
+}
+
+export function formatRealBackendHarnessStartupTiming(timing) {
+  return [
+    `${realBackendHarnessDiagnosticPrefix} timing`,
+    `execution-mode=${timing?.executionMode ?? "unavailable"}`,
+    `cache-resolution=${formatRealBackendHarnessDuration(timing?.cacheResolutionMs)}`,
+    `harness-compilation-setup=${formatRealBackendHarnessDuration(timing?.harnessCompilationSetupMs)}`,
+    `process-launch=${formatRealBackendHarnessDuration(timing?.processLaunchMs)}`,
+    `application-startup=${formatRealBackendHarnessDuration(timing?.applicationStartupMs)}`,
+    `first-ready-payload=${formatRealBackendHarnessDuration(timing?.firstReadyPayloadMs)}`,
+    `total=${formatRealBackendHarnessDuration(timing?.totalStartupMs)}`,
+    `cache-reuse-before=${formatGoCacheReuse(timing?.cacheReuseBeforeResolution)}`,
+    `cache-reuse-after=${formatGoCacheReuse(timing?.cacheReuse)}`,
+  ].join(" ");
+}
+
+function sanitizeRealBackendHarnessDiagnostic(text, secrets = []) {
+  let safeText = String(text ?? "");
+  for (const secret of secrets) {
+    if (typeof secret === "string" && secret.length > 0) {
+      safeText = safeText.split(secret).join("<redacted>");
+    }
+  }
+
+  safeText = safeText
+    .replace(
+      /(?:[A-Za-z]:[\\/]|\/(?:Users|home|runner|tmp|private|var|workspace|workspaces)\/)[^\s"'`]+/g,
+      "<path>",
+    )
+    .replace(
+      /\b(authorization|api[-_]?key|password|secret|token)\s*[:=]\s*\S+/gi,
+      "$1=<redacted>",
+    )
+    .replace(
+      /\b(payload|body|request|response|content|prompt|output)\s*[:=]\s*.+$/gi,
+      "$1=<redacted>",
+    );
+
+  if (safeText.length <= realBackendHarnessDiagnosticLimit) {
+    return safeText;
+  }
+
+  const suffixLimit =
+    realBackendHarnessDiagnosticLimit -
+    realBackendHarnessDiagnosticTruncationMarker.length -
+    1;
+  return `${realBackendHarnessDiagnosticTruncationMarker}\n${safeText.slice(-suffixLimit)}`;
+}
+
+function appendBoundedRealBackendHarnessDiagnostic(previous, next) {
+  const combined = `${previous}${next}`;
+  if (combined.length <= realBackendHarnessDiagnosticLimit) {
+    return combined;
+  }
+
+  const suffixLimit =
+    realBackendHarnessDiagnosticLimit -
+    realBackendHarnessDiagnosticTruncationMarker.length -
+    1;
+  return `${realBackendHarnessDiagnosticTruncationMarker}\n${combined.slice(-suffixLimit)}`;
+}
+
+function startupPhaseFromDiagnosticLine(line) {
+  const normalizedLine = line.trim();
+  if (normalizedLine === realBackendHarnessProcessStartedMarker) {
+    return "process-started";
+  }
+
+  const match = /^\[browser-api-harness\] phase=([a-z-]+)$/.exec(
+    normalizedLine,
+  );
+  return match?.[1] ?? null;
+}
+
+function currentRealBackendHarnessStartupPhase(timing) {
+  if (timing?.firstReadyPayloadMs !== null) {
+    return "ready-payload";
+  }
+  if (timing?.processStartedAt === null) {
+    return "harness-compilation/setup";
+  }
+  return "application-startup";
+}
+
+function recordRealBackendHarnessStartupPhase(timing, phase, now, writer) {
+  if (phase !== "process-started" || timing.processStartedAt !== null) {
+    return;
+  }
+
+  timing.processStartedAt = now;
+  timing.harnessCompilationSetupMs =
+    timing.executionMode === "prebuilt-artifact"
+      ? 0
+      : Math.max(0, now - (timing.processSpawnedAt ?? timing.startedAt));
+  writeRealBackendHarnessDiagnostic(
+    writer,
+    `phase=harness-process-started elapsed=${formatRealBackendHarnessDuration(timing.harnessCompilationSetupMs)}`,
+  );
+}
+
+function observeRealBackendHarnessStderr({
+  child,
+  diagnosticWriter,
+  now,
+  secrets,
+  timing,
+}) {
+  let captured = "";
+  let pendingLine = "";
+
+  const observeLine = (line) => {
+    captured = appendBoundedRealBackendHarnessDiagnostic(captured, `${line}\n`);
+    const safeLine = sanitizeRealBackendHarnessDiagnostic(line, secrets).trim();
+    if (safeLine.length > 0) {
+      writeRealBackendHarnessDiagnostic(
+        diagnosticWriter,
+        `child-stderr ${safeLine}`,
+      );
+    }
+
+    const phase = startupPhaseFromDiagnosticLine(line);
+    if (phase) {
+      recordRealBackendHarnessStartupPhase(
+        timing,
+        phase,
+        now(),
+        diagnosticWriter,
+      );
+    }
+  };
+
+  const observeChunk = (chunk) => {
+    const text = chunk.toString();
+    pendingLine += text;
+    const lines = pendingLine.split(/\r?\n/);
+    pendingLine = lines.pop() ?? "";
+    for (const line of lines) {
+      observeLine(line);
+    }
+  };
+
+  child.stderr?.on("data", observeChunk);
+  child.stderr?.on("end", () => {
+    if (pendingLine.length > 0) {
+      observeLine(pendingLine);
+      pendingLine = "";
+    }
+  });
+
+  return () => {
+    if (pendingLine.length > 0) {
+      observeLine(pendingLine);
+      pendingLine = "";
+    }
+    return captured;
+  };
+}
+
+function annotateRealBackendHarnessReadinessError(
+  error,
+  timing,
+  getCapturedStderr,
+  secrets,
+) {
+  const safeErrorMessage = sanitizeRealBackendHarnessDiagnostic(
+    error.message,
+    secrets,
+  ).trim();
+  const capturedStderr = sanitizeRealBackendHarnessDiagnostic(
+    getCapturedStderr(),
+    secrets,
+  ).trim();
+  return new Error(
+    [
+      safeErrorMessage,
+      `phase=${currentRealBackendHarnessStartupPhase(timing)}`,
+      formatRealBackendHarnessStartupTiming(timing),
+      capturedStderr.length > 0 ? `captured-stderr=${capturedStderr}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
+
+export function waitForRealBackendHarnessReadiness({
+  child,
+  diagnosticWriter = process.stderr,
+  getCapturedStderr = () => "",
+  lineReader,
+  now = () => performance.now(),
+  secrets = [],
+  timeoutMs = readyTimeoutMs,
+  timing,
+} = {}) {
+  if (!child || !lineReader || !timing) {
+    throw new TypeError(
+      "waitForRealBackendHarnessReadiness requires child, lineReader, and timing.",
+    );
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      settleFailure(
+        new Error(
+          "Timed out waiting for real backend browser harness readiness.",
+        ),
+      );
+    }, timeoutMs);
+
+    function cleanupListeners() {
+      clearTimeout(timeout);
+      child.off("exit", rejectWithProcessExit);
+      child.off("error", rejectWithProcessError);
+      lineReader.off("line", resolveReadyLine);
+    }
+
+    function settleFailure(error) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanupListeners();
+      reject(
+        annotateRealBackendHarnessReadinessError(
+          error,
+          timing,
+          getCapturedStderr,
+          secrets,
+        ),
+      );
+    }
+
+    function rejectWithProcessExit(code, signal) {
+      settleFailure(
+        new Error(
+          `Real backend browser harness exited before readiness: code=${code ?? "null"} signal=${signal ?? "null"}`,
+        ),
+      );
+    }
+
+    function rejectWithProcessError(error) {
+      child[repoProcessErrorKey] = error;
+      settleFailure(
+        new Error(`Real backend browser harness process error: ${error}`),
+      );
+    }
+
+    function resolveReadyLine(line) {
+      let payload;
+      try {
+        payload = JSON.parse(line);
+      } catch (error) {
+        settleFailure(
+          new Error(
+            `Failed to parse real backend browser harness ready payload (${error.message}); received stdout line length=${line.length}`,
+          ),
+        );
+        return;
+      }
+
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        typeof payload.apiOrigin !== "string" ||
+        typeof payload.sessionId !== "string"
+      ) {
+        settleFailure(
+          new Error(
+            "Real backend browser harness ready payload did not contain apiOrigin and sessionId strings.",
+          ),
+        );
+        return;
+      }
+
+      const readyAt = now();
+      timing.firstReadyPayloadMs = Math.max(
+        0,
+        readyAt - (timing.processSpawnedAt ?? timing.startedAt),
+      );
+      timing.applicationStartupMs =
+        timing.processStartedAt === null
+          ? null
+          : Math.max(0, readyAt - timing.processStartedAt);
+      timing.totalStartupMs = Math.max(0, readyAt - timing.startedAt);
+      writeRealBackendHarnessDiagnostic(
+        diagnosticWriter,
+        formatRealBackendHarnessStartupTiming(timing),
+      );
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanupListeners();
+      resolve(payload);
+    }
+
+    child.once("exit", rejectWithProcessExit);
+    child.once("error", rejectWithProcessError);
+    lineReader.once("line", resolveReadyLine);
+  });
+}
+
+function resolveGoCacheEnvironment({
+  diagnosticWriter = process.stderr,
+  now = () => performance.now(),
+} = {}) {
+  const startedAt = now();
+  writeRealBackendHarnessDiagnostic(
+    diagnosticWriter,
+    "phase=cache-resolution started",
+  );
   const names = ["GOCACHE", "GOMODCACHE", "GOPATH"];
+  const cacheReuseBeforeResolution = Object.fromEntries(
+    names.map((name) => [
+      name,
+      cacheDirectoryReuseState(process.env[name], name),
+    ]),
+  );
   const result = spawnSync("go", ["env", "-json", ...names], {
     encoding: "utf8",
     shell: false,
   });
   if (result.status !== 0) {
     throw new Error(
-      `Failed to resolve Go cache paths for real backend browser harness: ${result.stderr.trim()}`,
+      `Failed to resolve Go cache paths for real backend browser harness: ${sanitizeRealBackendHarnessDiagnostic(result.stderr)}`,
     );
   }
   const values = JSON.parse(result.stdout);
-  return Object.fromEntries(
+  const environment = Object.fromEntries(
     names
       .filter((name) => typeof values[name] === "string" && values[name] !== "")
       .map((name) => [name, values[name]]),
   );
+  const cacheReuse = Object.fromEntries(
+    names.map((name) => [
+      name,
+      cacheDirectoryReuseState(environment[name], name),
+    ]),
+  );
+  const elapsedMs = Math.max(0, now() - startedAt);
+  writeRealBackendHarnessDiagnostic(
+    diagnosticWriter,
+    `phase=cache-resolution complete elapsed=${formatRealBackendHarnessDuration(elapsedMs)} cache-reuse-before=${formatGoCacheReuse(cacheReuseBeforeResolution)} cache-reuse-after=${formatGoCacheReuse(cacheReuse)}`,
+  );
+  return {
+    cacheReuse,
+    cacheReuseBeforeResolution,
+    elapsedMs,
+    environment,
+  };
 }
 
 async function runRuntime(
@@ -1416,21 +1876,64 @@ async function runRuntime(
   }
 }
 
+function waitForProcessTermination(child) {
+  if (
+    !child ||
+    child.exitCode !== null ||
+    child.signalCode !== null ||
+    (child[repoProcessErrorKey] && !child[repoProcessSpawnedKey])
+  ) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child.off("exit", settle);
+      child.off("error", settle);
+      child.off("close", settle);
+      resolve();
+    };
+
+    child.once("exit", settle);
+    child.once("error", settle);
+    child.once("close", settle);
+
+    if (
+      child.exitCode !== null ||
+      child.signalCode !== null ||
+      (child[repoProcessErrorKey] && !child[repoProcessSpawnedKey])
+    ) {
+      settle();
+    }
+  });
+}
+
 async function stopProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
+  if (
+    !child ||
+    child.exitCode !== null ||
+    child.signalCode !== null ||
+    (child[repoProcessErrorKey] && !child[repoProcessSpawnedKey])
+  ) {
     return;
   }
 
+  const exited = waitForProcessTermination(child);
   if (process.platform === "win32") {
     const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
       shell: false,
       stdio: "ignore",
     });
-    await once(killer, "exit");
+    await waitForProcessTermination(killer);
+    await exited;
     return;
   }
 
-  const exited = once(child, "exit");
   if (child[repoProcessGroupKey]) {
     // Commands such as `go run` launch the compiled program as a child process.
     // Terminate the process group so that child cannot retain the shared API
@@ -1446,6 +1949,296 @@ async function stopProcess(child) {
     child.kill("SIGTERM");
   }
   await exited;
+}
+
+function observeRealBackendHarnessCommandOutput({
+  child,
+  diagnosticWriter,
+  secrets,
+  phase,
+}) {
+  let captured = "";
+  const flushers = [];
+
+  function attachStream(stream, label) {
+    if (!stream) {
+      return;
+    }
+
+    let pendingLine = "";
+    const observeLine = (line) => {
+      const safeLine = sanitizeRealBackendHarnessDiagnostic(line, secrets);
+      captured = appendBoundedRealBackendHarnessDiagnostic(
+        captured,
+        `${label} ${safeLine}\n`,
+      );
+      if (safeLine.trim().length > 0) {
+        writeRealBackendHarnessDiagnostic(
+          diagnosticWriter,
+          `${phase} ${label} ${safeLine.trim()}`,
+        );
+      }
+    };
+    const observeChunk = (chunk) => {
+      pendingLine += chunk.toString();
+      const lines = pendingLine.split(/\r?\n/);
+      pendingLine = lines.pop() ?? "";
+      for (const line of lines) {
+        observeLine(line);
+      }
+    };
+
+    stream.on("data", observeChunk);
+    flushers.push(() => {
+      if (pendingLine.length > 0) {
+        observeLine(pendingLine);
+        pendingLine = "";
+      }
+    });
+  }
+
+  attachStream(child.stdout, "child-stdout");
+  attachStream(child.stderr, "child-stderr");
+
+  return () => {
+    for (const flush of flushers) {
+      flush();
+    }
+    return captured;
+  };
+}
+
+async function runRealBackendHarnessCommand({
+  args,
+  command,
+  diagnosticWriter,
+  extraEnv,
+  secrets,
+  spawnProcess = spawnRepoProcess,
+  timeoutMs,
+}) {
+  let child;
+  try {
+    child = spawnProcess(command, args, { extraEnv });
+  } catch (error) {
+    return { error };
+  }
+
+  const readCapturedOutput = observeRealBackendHarnessCommandOutput({
+    child,
+    diagnosticWriter,
+    phase: "phase=harness-build",
+    secrets,
+  });
+  const exited = new Promise((resolve) => {
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+    child.once("error", (error) => resolve({ error }));
+  });
+  let timeoutHandle;
+  const timedOut = new Promise((resolve) => {
+    timeoutHandle = setTimeout(() => resolve({ timedOut: true }), timeoutMs);
+  });
+
+  let result;
+  try {
+    result = await Promise.race([exited, timedOut]);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+
+  if (result.timedOut) {
+    let stopError = null;
+    try {
+      await stopProcess(child);
+    } catch (error) {
+      stopError = error;
+    }
+    return {
+      ...result,
+      capturedOutput: readCapturedOutput(),
+      stopError,
+    };
+  }
+
+  return {
+    ...result,
+    capturedOutput: readCapturedOutput(),
+  };
+}
+
+function resolveRealBackendHarnessArtifactPath(harnessPath) {
+  const configuredPath =
+    harnessPath ?? process.env[realBackendHarnessArtifactEnvironmentVariable];
+  if (typeof configuredPath !== "string" || configuredPath.trim() === "") {
+    return null;
+  }
+
+  const resolvedPath = path.resolve(configuredPath);
+  if (!existsSync(resolvedPath)) {
+    throw new Error(
+      `Configured real backend browser harness artifact is missing; expected a built file at ${resolvedPath}.`,
+    );
+  }
+  return resolvedPath;
+}
+
+export async function buildRealBackendBrowserHarness({
+  artifactDirectory: configuredArtifactDirectory = null,
+  diagnosticWriter = process.stderr,
+  now = () => performance.now(),
+  resolveGoCache = resolveGoCacheEnvironment,
+  spawnProcess = spawnRepoProcess,
+} = {}) {
+  let artifactDirectory = configuredArtifactDirectory;
+  let ownsArtifactDirectory = false;
+  let artifactPath = null;
+  let cleaned = false;
+
+  const cleanup = async () => {
+    if (cleaned || !artifactDirectory) {
+      return;
+    }
+    cleaned = true;
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      "phase=harness-artifact-cleanup started",
+    );
+    if (ownsArtifactDirectory) {
+      await rm(artifactDirectory, realBackendHarnessCleanupOptions);
+    } else if (artifactPath) {
+      await rm(artifactPath, realBackendHarnessCleanupOptions);
+    }
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      "phase=harness-artifact-cleanup complete",
+    );
+  };
+
+  try {
+    if (artifactDirectory === null) {
+      artifactDirectory = await mkdtemp(
+        path.join(tmpdir(), realBackendHarnessArtifactDirectoryPrefix),
+      );
+      ownsArtifactDirectory = true;
+    } else {
+      artifactDirectory = path.resolve(artifactDirectory);
+      await mkdir(artifactDirectory, { recursive: true });
+    }
+    artifactPath = path.join(
+      artifactDirectory,
+      process.platform === "win32"
+        ? "browser_api_harness.exe"
+        : "browser_api_harness",
+    );
+
+    const buildStartedAt = now();
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      "phase=harness-build started command=go build browser-api-harness",
+    );
+    const goCache = resolveGoCache({ diagnosticWriter, now });
+    const result = await runRealBackendHarnessCommand({
+      args: [
+        "build",
+        "-buildvcs=false",
+        "-o",
+        artifactPath,
+        realBackendHarnessSource,
+      ],
+      command: "go",
+      diagnosticWriter,
+      extraEnv: {
+        CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
+        ...goCache.environment,
+      },
+      secrets: [artifactPath, ...Object.values(goCache.environment)],
+      spawnProcess,
+      timeoutMs: buildTimeoutMs,
+    });
+    const buildElapsedMs = Math.max(0, now() - buildStartedAt);
+
+    if (result.timedOut) {
+      throw new Error(
+        [
+          "Real backend browser harness build timed out.",
+          "phase=harness-build",
+          `command=go build browser-api-harness elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+          result.stopError
+            ? `stop-error=${sanitizeRealBackendHarnessDiagnostic(result.stopError.message)}`
+            : null,
+          result.capturedOutput?.trim()
+            ? `captured-output=${result.capturedOutput.trim()}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+
+    if (result.error) {
+      throw new Error(
+        [
+          "Real backend browser harness build could not start.",
+          "phase=harness-build",
+          `command=go build browser-api-harness elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+          `error=${sanitizeRealBackendHarnessDiagnostic(result.error.message ?? result.error)}`,
+          result.capturedOutput?.trim()
+            ? `captured-output=${result.capturedOutput.trim()}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+
+    if (result.code !== 0) {
+      throw new Error(
+        [
+          "Real backend browser harness build failed.",
+          "phase=harness-build",
+          `command=go build browser-api-harness code=${result.code ?? "null"} signal=${result.signal ?? "null"} elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+          result.capturedOutput?.trim()
+            ? `captured-output=${result.capturedOutput.trim()}`
+            : "captured-output=<none>",
+        ].join("\n"),
+      );
+    }
+
+    const artifactStats = await stat(artifactPath).catch(() => null);
+    if (!artifactStats?.isFile()) {
+      throw new Error(
+        [
+          "Real backend browser harness build completed without producing an executable artifact.",
+          "phase=harness-build",
+          `command=go build browser-api-harness elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+        ].join("\n"),
+      );
+    }
+
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      `phase=harness-build complete elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)} cache-reuse=${formatGoCacheReuse(goCache.cacheReuse)}`,
+    );
+    return {
+      artifactPath,
+      buildTimings: {
+        cacheResolutionMs: goCache.elapsedMs,
+        cacheReuse: goCache.cacheReuse,
+        cacheReuseBeforeResolution: goCache.cacheReuseBeforeResolution,
+        harnessBuildMs: buildElapsedMs,
+      },
+      cleanup,
+    };
+  } catch (error) {
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\nphase=harness-artifact-cleanup error=${sanitizeRealBackendHarnessDiagnostic(cleanupError.message ?? cleanupError)}`,
+      );
+    }
+    throw error;
+  }
 }
 
 async function waitForURL(url, timeoutMs = readyTimeoutMs) {
@@ -2072,9 +2865,16 @@ export async function openBrowserPage(options = {}) {
 
 export async function startRealBackendBrowserHarness({
   apiPort,
+  diagnosticWriter = process.stderr,
   factoryDir = path.resolve(packageRoot, "..", "factory"),
+  harnessPath = null,
+  now = () => performance.now(),
   requestID = "req-browser-runtime-001",
+  resolveGoCache = resolveGoCacheEnvironment,
+  spawnProcess = spawnRepoProcess,
   startMode = "sync",
+  createTemporaryHome = () =>
+    mkdtemp(path.join(tmpdir(), "you-browser-backend-")),
   workflowFixture,
   workflowName,
 } = {}) {
@@ -2084,17 +2884,35 @@ export async function startRealBackendBrowserHarness({
     );
   }
 
-  const goCacheEnvironment = resolveGoCacheEnvironment();
-  const customerHome = await mkdtemp(
-    path.join(tmpdir(), "you-browser-backend-"),
+  const artifactPath = resolveRealBackendHarnessArtifactPath(harnessPath);
+  const executionMode = artifactPath ? "prebuilt-artifact" : "go-run-fallback";
+  const timing = createRealBackendHarnessStartupTiming(now());
+  timing.executionMode = executionMode;
+  const goCache = resolveGoCache({ diagnosticWriter, now });
+  timing.cacheResolutionMs = goCache.elapsedMs;
+  timing.cacheReuse = goCache.cacheReuse;
+  timing.cacheReuseBeforeResolution = goCache.cacheReuseBeforeResolution;
+  writeRealBackendHarnessDiagnostic(
+    diagnosticWriter,
+    "phase=temporary-home-setup started",
+  );
+  const temporaryHomeStartedAt = now();
+  const customerHome = await createTemporaryHome();
+  writeRealBackendHarnessDiagnostic(
+    diagnosticWriter,
+    `phase=temporary-home-setup complete elapsed=${formatRealBackendHarnessDuration(Math.max(0, now() - temporaryHomeStartedAt))}`,
   );
   let child;
   try {
-    child = spawnRepoProcess(
-      "go",
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      `phase=process-launch started mode=${executionMode}`,
+    );
+    const processLaunchStartedAt = now();
+    child = spawnProcess(
+      artifactPath ?? "go",
       [
-        "run",
-        "./tests/functional/internal/support/cmd/browser_api_harness",
+        ...(artifactPath ? [] : ["run", realBackendHarnessSource]),
         "--api-port",
         String(apiPort),
         "--factory-dir",
@@ -2111,20 +2929,42 @@ export async function startRealBackendBrowserHarness({
       {
         extraEnv: {
           CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
-          ...goCacheEnvironment,
+          ...goCache.environment,
           HOME: customerHome,
           USERPROFILE: customerHome,
         },
       },
     );
+    child.once("spawn", () => {
+      timing.processSpawnedAt = now();
+      timing.processLaunchMs = Math.max(
+        0,
+        timing.processSpawnedAt - processLaunchStartedAt,
+      );
+      writeRealBackendHarnessDiagnostic(
+        diagnosticWriter,
+        `phase=process-launch complete elapsed=${formatRealBackendHarnessDuration(timing.processLaunchMs)}`,
+      );
+    });
   } catch (error) {
-    await rm(customerHome, { force: true, recursive: true });
+    await rm(customerHome, realBackendHarnessCleanupOptions);
     throw error;
   }
 
-  let stderr = "";
-  child.stderr?.on("data", (chunk) => {
-    stderr += chunk.toString();
+  const readCapturedStderr = observeRealBackendHarnessStderr({
+    child,
+    diagnosticWriter,
+    now,
+    secrets: [
+      customerHome,
+      artifactPath ?? "",
+      factoryDir,
+      requestID,
+      workflowFixture,
+      workflowName,
+      ...Object.values(goCache.environment),
+    ],
+    timing,
   });
 
   const lineReader = readline.createInterface({
@@ -2135,41 +2975,26 @@ export async function startRealBackendBrowserHarness({
     try {
       await stopProcess(child);
     } finally {
-      await rm(customerHome, { force: true, recursive: true });
+      await rm(customerHome, realBackendHarnessCleanupOptions);
     }
   }
-  const ready = new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(
-        new Error(
-          `Timed out waiting for real backend browser harness readiness.\n${stderr.trim()}`,
-        ),
-      );
-    }, readyTimeoutMs);
-
-    function rejectWithProcessExit(code, signal) {
-      clearTimeout(timeout);
-      reject(
-        new Error(
-          `Real backend browser harness exited before readiness: code=${code ?? "null"} signal=${signal ?? "null"}\n${stderr.trim()}`,
-        ),
-      );
-    }
-
-    child.once("exit", rejectWithProcessExit);
-    lineReader.once("line", (line) => {
-      clearTimeout(timeout);
-      child.off("exit", rejectWithProcessExit);
-      try {
-        resolve(JSON.parse(line));
-      } catch (error) {
-        reject(
-          new Error(
-            `Failed to parse real backend browser harness ready payload: ${line}\n${error.message}\n${stderr.trim()}`,
-          ),
-        );
-      }
-    });
+  const ready = waitForRealBackendHarnessReadiness({
+    child,
+    diagnosticWriter,
+    getCapturedStderr: readCapturedStderr,
+    lineReader,
+    now,
+    secrets: [
+      customerHome,
+      artifactPath ?? "",
+      factoryDir,
+      requestID,
+      workflowFixture,
+      workflowName,
+      ...Object.values(goCache.environment),
+    ],
+    timeoutMs: readyTimeoutMs,
+    timing,
   });
 
   try {
@@ -2177,6 +3002,7 @@ export async function startRealBackendBrowserHarness({
     return {
       apiOrigin: payload.apiOrigin,
       sessionID: payload.sessionId,
+      startupTimings: publicRealBackendHarnessStartupTiming(timing),
       stop: stopHarness,
     };
   } catch (error) {

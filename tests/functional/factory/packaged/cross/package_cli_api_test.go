@@ -19,7 +19,6 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -37,12 +36,8 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		t.Skip("slow packaged factory CLI/API cross-surface inspectability")
 	}
 
-	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		homeDir,
-		factorydefinitions.PackagedGoalFactoryName,
-	)
+	fixture := sharedCrossProcess(t)
+	homeDir, factoryDir := installSharedPackagedGoal(t)
 	factoryPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
 	mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
 	goalText := fmt.Sprintf(
@@ -57,7 +52,8 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	requestedURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	server := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: server.Start})
+	fixture.router.set(server)
+	process := fixture.process
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -127,6 +123,8 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 // TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable proves
 // a signature-bearing packaged Factory can enter continuous service mode with
 // no invocation input, bind its API, and remain idle without creating Work.
+// This scenario intentionally remains isolated because its material witness
+// is a local-real process and TCP listener that must stay reachable while idle.
 func TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow packaged Factory continuous-service readiness")
@@ -243,9 +241,12 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 
 	t.Run("named factory success", func(t *testing.T) {
 		homeDir := t.TempDir()
-		factoryDir := support.InstallPackagedFactory(
+		fixture := sharedCrossProcess(t)
+		factoryDir := support.InstallPackagedFactoryWithProcess(
 			t,
-			homeDir,
+			fixture.process,
+			isolatedHomeEnvironment(homeDir),
+			t.TempDir(),
 			factorydefinitions.PackagedGoalFactoryName,
 		)
 		mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
@@ -1169,20 +1170,31 @@ func postPackagedGoalInvocation(
 	t.Helper()
 
 	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
+	sessionID := openPackagedGoalParitySession(t, server, factoryDir)
+	sessionClosed := false
+	closeSession := func() {
+		if sessionClosed {
+			return
+		}
+		support.CloseFactorySessionAt(t, server.URL(), sessionID)
+		sessionClosed = true
+	}
+	t.Cleanup(closeSession)
 	response, err := http.Post(
 		strings.TrimSuffix(server.URL(), "/")+
-			"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+			"/factory-sessions/"+sessionID+"/invocations",
 		"application/json",
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+		t.Fatalf("POST /factory-sessions/%s/invocations: %v", sessionID, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		payload, _ := io.ReadAll(response.Body)
 		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d, want 200: %s",
+			"POST /factory-sessions/%s/invocations status = %d, want 200: %s",
+			sessionID,
 			response.StatusCode,
 			string(payload),
 		)
@@ -1192,6 +1204,8 @@ func postPackagedGoalInvocation(
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode invocation response: %v", err)
 	}
+	closeSession()
+	server.command.stop(t)
 	return decoded
 }
 
@@ -1205,20 +1219,31 @@ func postPackagedGoalInvocationExpectError(
 
 	body := textInvocationRequestBody(goalText)
 	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
+	sessionID := openPackagedGoalParitySession(t, server, factoryDir)
+	sessionClosed := false
+	closeSession := func() {
+		if sessionClosed {
+			return
+		}
+		support.CloseFactorySessionAt(t, server.URL(), sessionID)
+		sessionClosed = true
+	}
+	t.Cleanup(closeSession)
 	response, err := http.Post(
 		strings.TrimSuffix(server.URL(), "/")+
-			"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+			"/factory-sessions/"+sessionID+"/invocations",
 		"application/json",
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+		t.Fatalf("POST /factory-sessions/%s/invocations: %v", sessionID, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusBadRequest {
 		payload, _ := io.ReadAll(response.Body)
 		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d, want 400: %s",
+			"POST /factory-sessions/%s/invocations status = %d, want 400: %s",
+			sessionID,
 			response.StatusCode,
 			string(payload),
 		)
@@ -1228,30 +1253,66 @@ func postPackagedGoalInvocationExpectError(
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode invocation error response: %v", err)
 	}
+	closeSession()
+	server.command.stop(t)
 	return decoded
+}
+
+type packagedGoalParityAPIServer struct {
+	command *crossHostedCommand
+	url     string
+}
+
+func (server *packagedGoalParityAPIServer) URL() string {
+	if server == nil {
+		return ""
+	}
+	return server.url
+}
+
+func openPackagedGoalParitySession(
+	t *testing.T,
+	server *packagedGoalParityAPIServer,
+	factoryDir string,
+) string {
+	t.Helper()
+	opened := support.OpenFactorySessionAt(t, server.URL(), factoryDir)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("opened packaged goal session = %#v, want explicit session identity", opened)
+	}
+	return opened.Session.Id
 }
 
 func startPackagedGoalParityAPIServer(
 	t *testing.T,
 	factoryDir string,
 	mockWorkersPath string,
-) *support.FunctionalAPIServer {
+) *packagedGoalParityAPIServer {
 	t.Helper()
 
-	payload, err := os.ReadFile(mockWorkersPath)
-	if err != nil {
-		t.Fatalf("read customer mock-workers config: %v", err)
-	}
-	var mockWorkersConfig workers.MockWorkersConfig
-	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
-		t.Fatalf("decode customer mock-workers config: %v", err)
-	}
-
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		MockWorkersConfig:         &mockWorkersConfig,
+	fixture := sharedCrossProcess(t)
+	server := support.NewProcessAPIServer()
+	fixture.router.set(server)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run",
+		"--continuously",
+		"--with-server",
+		"--quiet",
+		"--dir", factoryDir,
+		"--no-record",
+		"--with-mock-workers=" + mockWorkersPath,
 	})
+	inputs.Input.Env = isolatedHomeEnvironment(t.TempDir())
+	inputs.Input.WorkingDirectory = factoryDir
+	command := startCrossHostedCommand(t, fixture.process, inputs)
+	baseURL, err := server.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		t.Fatalf("wait for packaged goal parity API server: %v", err)
+	}
+	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return strings.TrimSpace(status.RuntimeStatus) != ""
+	})
+	return &packagedGoalParityAPIServer{command: command, url: baseURL}
 }
 
 func textInvocationRequestBody(goalText string) []byte {
@@ -1388,7 +1449,7 @@ func runPackagedGoalInvocationCLIWithMode(
 		inputs.Input.StdinIsTTY = &stdinIsTTY
 	}
 
-	runErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	runErr := sharedCrossProcess(t).process.Execute(inputs.Input)
 
 	var response factoryapi.InvocationResponse
 	if jsonMode && strings.TrimSpace(inputs.Stdout()) != "" {

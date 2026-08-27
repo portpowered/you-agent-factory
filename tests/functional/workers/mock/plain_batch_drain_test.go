@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/google/uuid"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -19,26 +18,63 @@ import (
 const plainBatchDrainTestTimeout = 15 * time.Second
 const plainBatchContinuousIdleObservation = 500 * time.Millisecond
 
-// TestPlainBatchDrainReportsStrandedWork proves the no-server customer path
+// plainBatchScenario is the isolation scope for one no-server invocation.
+// These rows intentionally retain the local CLI's invocation-scoped default
+// Factory Session because the public no-server command has no session selector.
+// The scope still gives every row a unique Factory, selector, request/trace,
+// cancellation gate, runtime identity, HOME, and input/config path.
+type plainBatchScenario struct {
+	factoryDir      string
+	homeDir         string
+	factoryName     string
+	workerName      string
+	workstationName string
+	requestID       string
+	traceID         string
+	workName        string
+	gateID          string
+	runtimeID       string
+}
+
+func newPlainBatchScenario(t *testing.T) *plainBatchScenario {
+	t.Helper()
+	identity := uuid.NewString()
+	scenario := &plainBatchScenario{
+		homeDir:         t.TempDir(),
+		factoryName:     "plain-batch-factory-" + identity,
+		workerName:      "plain-batch-worker-" + identity,
+		workstationName: "plain-batch-process-" + identity,
+		requestID:       "plain-batch-request-" + identity,
+		traceID:         "plain-batch-trace-" + identity,
+		workName:        "plain-batch-work-" + identity,
+		gateID:          "plain-batch-gate-" + identity,
+		runtimeID:       "plain-batch-runtime-" + identity,
+	}
+	scenario.factoryDir = scaffoldPlainBatchDrainFactory(t, scenario)
+	return scenario
+}
+
+// testPlainBatchDrainReportsStrandedWork proves the no-server customer path
 // returns the canonical incomplete-drain diagnostic after a deterministic mock
-// worker completes its dispatch but leaves Work in PROCESSING.
-func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
-	t.Parallel()
-	factoryDir := scaffoldPlainBatchDrainFactory(t)
-	workFile := writePlainBatchDrainWork(t)
-	mockWorkersFile := writePlainBatchDrainMockWorkers(t)
+// worker completes its dispatch but leaves Work in PROCESSING. It runs after
+// the shared host has been stopped so this one-shot activation reuses the same
+// root without overlapping the host runtime.
+func testPlainBatchDrainReportsStrandedWork(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
+	scenario := newPlainBatchScenario(t)
+	workFile := writePlainBatchDrainWork(t, scenario)
+	mockWorkersFile := writePlainBatchDrainMockWorkers(t, scenario)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", factoryDir, "--no-record", "--quiet",
-		"--work", workFile, "--with-mock-workers", mockWorkersFile,
-	})
-	inputs.WorkingDirectory = factoryDir
-	homeDir := t.TempDir()
-	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs := plainBatchInputs(t, scenario, workFile, false)
+	inputs.Input.Args = append(inputs.Input.Args, "--with-mock-workers", mockWorkersFile)
 
-	command := support.StartProcessCommand(t, process, inputs.Input)
+	command := support.StartProcessCommand(t, &sharedWorkersMockLocalProcess{
+		fixture: fixture,
+		tb:      t,
+	}, inputs.Input)
 	// ProcessCommand.Done is the deterministic completion signal. This bounded
 	// guard exists only to turn the original plain-batch hang into a test
 	// failure rather than leaving the suite blocked indefinitely.
@@ -61,34 +97,33 @@ func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
 	}
 }
 
-func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T) {
-	t.Parallel()
-	factoryDir := scaffoldPlainBatchDrainFactory(t)
+func testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
 
 	for _, scenario := range []struct {
-		name     string
-		workFile func(*testing.T) string
+		name    string
+		hasWork bool
 	}{
 		{name: "empty"},
-		{name: "terminal work", workFile: func(t *testing.T) string {
-			return writePlainBatchDrainWorkState(t, "complete")
-		}},
+		{name: "terminal work", hasWork: true},
 	} {
 		scenario := scenario
 		t.Run(scenario.name, func(t *testing.T) {
+			invocation := newPlainBatchScenario(t)
 			var workFile string
-			if scenario.workFile != nil {
-				workFile = scenario.workFile(t)
+			if scenario.hasWork {
+				workFile = writePlainBatchDrainWorkState(t, invocation, "complete")
 			}
-			inputs := plainBatchInputs(t, factoryDir, workFile, false)
-			process := support.BuildProcess(t, serviceedges.Edges{})
-			support.CleanupProcess(t, process)
+			inputs := plainBatchInputs(t, invocation, workFile, false)
 
-			if err := process.Execute(inputs.Input); err != nil {
+			if err := fixture.executeLocal(t, inputs.Input); err != nil {
 				t.Fatalf("finite plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 			}
 			wantStdout := ""
-			if scenario.workFile != nil {
+			if scenario.hasWork {
 				wantStdout = "Batch completed successfully.\n"
 			}
 			if inputs.Stdout() != wantStdout || inputs.Stderr() != "" {
@@ -98,10 +133,12 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 	}
 
 	t.Run("continuous idle", func(t *testing.T) {
-		inputs := plainBatchInputs(t, factoryDir, "", true)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
-		command := support.StartProcessCommand(t, process, inputs.Input)
+		invocation := newPlainBatchScenario(t)
+		inputs := plainBatchInputs(t, invocation, "", true)
+		command := support.StartProcessCommand(t, &sharedWorkersMockLocalProcess{
+			fixture: fixture,
+			tb:      t,
+		}, inputs.Input)
 
 		// Process.Execute exposes no public idle event for a continuous plain
 		// run, and this empty scenario has no edge callback that can certify
@@ -129,61 +166,63 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 	})
 }
 
-func TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(t *testing.T) {
-	t.Parallel()
-	factoryDir := scaffoldPlainBatchDrainFactory(t)
+func testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
+	scenario := newPlainBatchScenario(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	inputs := plainBatchInputs(t, factoryDir, "", true)
+	inputs := plainBatchInputs(t, scenario, "", true)
 	inputs.Input.Context = ctx
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		FactorySessionIDGenerator: func() string {
-			cancel()
-			return "preactivation-canceled-session"
-		},
-	})
-	support.CleanupProcess(t, process)
+	fixture.sessionIDGenerator.armCancellation(cancel, scenario.runtimeID)
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.executeLocal(t, inputs.Input); err != nil {
 		t.Fatalf("canceled continuous plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if got := fixture.sessionIDGenerator.lastGeneratedID(); got != scenario.runtimeID {
+		t.Fatalf("local runtime identity = %q, want unique scenario identity %q", got, scenario.runtimeID)
 	}
 	if inputs.Stdout() != "" || inputs.Stderr() != "" {
 		t.Fatalf("canceled pre-activation output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
 	}
 }
 
-func TestPlainBatchDrainStopsAfterWorkerActivationCancellation(t *testing.T) {
-	t.Parallel()
-	factoryDir := scaffoldPlainBatchDrainFactory(t)
+func testPlainBatchDrainStopsAfterWorkerActivationCancellation(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
+	scenario := newPlainBatchScenario(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	inputs := support.FakeInputs(ctx, []string{
-		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--no-record", "--quiet",
-	})
-	inputs.WorkingDirectory = factoryDir
-	homeDir := t.TempDir()
-	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs := plainBatchInputs(t, scenario, "", true)
+	inputs.Input.Context = ctx
+	inputs.Input.Args = append(inputs.Input.Args, "--with-server")
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		FactoryRuntimeInputDirectoryWalker: func(string, fs.WalkDirFunc) error {
-			cancel()
-			return nil
-		},
-	})
-	support.CleanupProcess(t, process)
+	fixture.inputDirectoryWalker.armCancellation(cancel, scenario.gateID)
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.executeLocal(t, inputs.Input); err != nil {
 		t.Fatalf("canceled service-mode plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if got := fixture.inputDirectoryWalker.lastCancellationID(); got != scenario.gateID {
+		t.Fatalf("worker-activation cancellation gate = %q, want unique scenario gate %q", got, scenario.gateID)
 	}
 	if inputs.Stdout() != "" || inputs.Stderr() != "" {
 		t.Fatalf("canceled post-activation output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
 	}
 }
 
-func plainBatchInputs(t *testing.T, factoryDir, workFile string, continuous bool) *support.CapturedInputs {
+func plainBatchInputs(
+	t *testing.T,
+	scenario *plainBatchScenario,
+	workFile string,
+	continuous bool,
+) *support.CapturedInputs {
 	t.Helper()
-	args := []string{"you", "run", "--dir", factoryDir, "--no-record", "--quiet"}
+	args := []string{"you", "run", "--dir", scenario.factoryDir, "--no-record", "--quiet"}
 	if continuous {
 		args = append(args, "--continuously")
 	}
@@ -191,16 +230,16 @@ func plainBatchInputs(t *testing.T, factoryDir, workFile string, continuous bool
 		args = append(args, "--work", workFile)
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.WorkingDirectory = factoryDir
-	homeDir := t.TempDir()
-	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.WorkingDirectory = scenario.factoryDir
+	inputs.Env = append(os.Environ(), "HOME="+scenario.homeDir, "USERPROFILE="+scenario.homeDir)
 	return inputs
 }
 
-func scaffoldPlainBatchDrainFactory(t *testing.T) string {
+func scaffoldPlainBatchDrainFactory(t *testing.T, scenario *plainBatchScenario) string {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": scenario.factoryName,
 		"workTypes": []map[string]any{{
 			"name": "task",
 			"states": []map[string]string{
@@ -210,33 +249,34 @@ func scaffoldPlainBatchDrainFactory(t *testing.T) string {
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
+		"workers": []map[string]string{{"name": scenario.workerName}},
 		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "worker-a",
+			"name":      scenario.workstationName,
+			"worker":    scenario.workerName,
 			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "processing"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
 	})
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, scenario.workerName, support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	return dir
 }
 
-func writePlainBatchDrainWork(t *testing.T) string {
-	return writePlainBatchDrainWorkState(t, "init")
+func writePlainBatchDrainWork(t *testing.T, scenario *plainBatchScenario) string {
+	return writePlainBatchDrainWorkState(t, scenario, "init")
 }
 
-func writePlainBatchDrainWorkState(t *testing.T, state string) string {
+func writePlainBatchDrainWorkState(t *testing.T, scenario *plainBatchScenario, state string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "plain-batch-drain-work.json")
 	payload := map[string]any{
-		"requestId": "plain-batch-drain",
+		"requestId": scenario.requestID,
 		"type":      "FACTORY_REQUEST_BATCH",
 		"works": []map[string]any{{
-			"name":         "stranded-work",
+			"name":         scenario.workName,
 			"workTypeName": "task",
 			"state":        state,
+			"traceId":      scenario.traceID,
 			"payload":      map[string]string{"purpose": "plain drain regression"},
 		}},
 	}
@@ -250,13 +290,13 @@ func writePlainBatchDrainWorkState(t *testing.T, state string) string {
 	return path
 }
 
-func writePlainBatchDrainMockWorkers(t *testing.T) string {
+func writePlainBatchDrainMockWorkers(t *testing.T, scenario *plainBatchScenario) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "plain-batch-drain-mock-workers.json")
 	payload := workers.MockWorkersConfig{
 		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "worker-a",
-			WorkstationName: "process",
+			WorkerName:      scenario.workerName,
+			WorkstationName: scenario.workstationName,
 			RunType:         workers.MockWorkerRunTypeAccept,
 		}},
 	}

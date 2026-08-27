@@ -12,9 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -30,36 +28,40 @@ const (
 	artifactRegistryDetails     = "details"
 )
 
-// TestExpectedArtifactsEnforceThroughRootBuildProcess proves the customer
+// testExpectedArtifactsEnforceThroughSharedProcess proves the customer
 // process turns a successful mock-worker completion into a typed failure when
 // declared files are absent, while a runner that materializes the same literal
 // and templated glob reaches the normal terminal state.
-func TestExpectedArtifactsEnforceThroughRootBuildProcess(t *testing.T) {
-	t.Parallel()
+func testExpectedArtifactsEnforceThroughSharedProcess(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	t.Run("under-production routes to failure", func(t *testing.T) {
-		scenario := runArtifactRegistryScenario(t, false)
+		scenario := runArtifactRegistryScenario(t, fixture, false)
+		defer scenario.sessionHandle.closeAndAssertGone(t)
 		assertArtifactRegistryFailure(t, scenario)
 	})
 
 	t.Run("complete production routes to success", func(t *testing.T) {
-		scenario := runArtifactRegistryScenario(t, true)
+		scenario := runArtifactRegistryScenario(t, fixture, true)
+		defer scenario.sessionHandle.closeAndAssertGone(t)
 		assertArtifactRegistrySuccess(t, scenario)
 	})
 }
 
 type artifactRegistryScenario struct {
-	listed  factoryapi.ListWorkResponse
-	events  []factoryapi.FactoryEvent
-	session factoryapi.FactorySession
-	runner  *artifactRegistryCommandRunner
+	listed        factoryapi.ListWorkResponse
+	events        []factoryapi.FactoryEvent
+	session       factoryapi.FactorySession
+	sessionHandle *sharedWorkersMockSession
+	runner        *artifactRegistryCommandRunner
 }
 
-type artifactRegistryProjectionObservation struct {
-	listed  factoryapi.ListWorkResponse
-	session factoryapi.FactorySession
-}
-
-func runArtifactRegistryScenario(t *testing.T, produceArtifacts bool) artifactRegistryScenario {
+func runArtifactRegistryScenario(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+	produceArtifacts bool,
+) artifactRegistryScenario {
 	t.Helper()
 
 	dir := scaffoldArtifactRegistryFactory(t)
@@ -67,113 +69,17 @@ func runArtifactRegistryScenario(t *testing.T, produceArtifacts bool) artifactRe
 		produceArtifacts: produceArtifacts,
 		workName:         artifactRegistryWorkName,
 	}
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      artifactRegistryWorker,
-			WorkstationName: artifactRegistryWorkstation,
-			RunType:         workers.MockWorkerRunTypeScript,
-			ScriptConfig: &workers.MockWorkerScriptConfig{
-				Command: artifactRegistryScript,
-			},
-		}},
-	})
-
-	api := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:    api.Start,
-		ScriptCommandRunner: runner,
-	})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", dir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
-	})
-	home := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = dir
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := api.WaitForURL(t)
-	stream := support.OpenFactoryEventStreamAt(t, support.DefaultSessionEventsURL(baseURL))
-	if !waitForArtifactRegistryCompletion(stream) {
-		command.Stop(t)
-		events := support.GetFactoryEventsAt(t, baseURL)
-		t.Fatalf(
-			"timed out waiting for terminal Factory Event; event types=%v stdout=%q stderr=%q processErr=%v",
-			artifactRegistryEventTypes(events),
-			inputs.Stdout(),
-			inputs.Stderr(),
-			command.Err(),
-		)
-	}
-
-	listed, session := waitForArtifactRegistryProjection(t, baseURL, produceArtifacts)
+	fixture.useCommandRunners(nil, runner)
+	session := fixture.openSession(t, dir)
+	listed, events := session.terminalObservations(t, 20*time.Second)
 	scenario := artifactRegistryScenario{
-		listed:  listed,
-		events:  support.GetFactoryEventsAt(t, baseURL),
-		session: session,
-		runner:  runner,
+		listed:        listed,
+		events:        events,
+		session:       session.current(t),
+		sessionHandle: session,
+		runner:        runner,
 	}
-	command.Stop(t)
 	return scenario
-}
-
-func waitForArtifactRegistryProjection(
-	t *testing.T,
-	baseURL string,
-	produceArtifacts bool,
-) (factoryapi.ListWorkResponse, factoryapi.FactorySession) {
-	t.Helper()
-	wantState := "failed"
-	if produceArtifacts {
-		wantState = "complete"
-	}
-	observation, err := support.WaitForObservation(
-		15*time.Second,
-		func() (artifactRegistryProjectionObservation, error) {
-			return artifactRegistryProjectionObservation{
-				listed:  support.ListDefaultSessionWork(t, baseURL),
-				session: support.GetDefaultSession(t, baseURL),
-			}, nil
-		},
-		func(observation artifactRegistryProjectionObservation) bool {
-			item, ok := findArtifactRegistryWork(observation.listed)
-			if !ok || item.State == nil || item.State.Name != wantState {
-				return false
-			}
-			if produceArtifacts {
-				return observation.session.Runtime.Progress.Categories.Terminal == 1 &&
-					observation.session.Runtime.Progress.Categories.Failed == 0
-			}
-			return observation.session.Runtime.Progress.Categories.Terminal == 0 &&
-				observation.session.Runtime.Progress.Categories.Failed == 1
-		},
-	)
-	if err != nil {
-		t.Fatalf("timed out waiting for %q Work projection: %v", wantState, err)
-	}
-	return observation.listed, observation.session
-}
-
-func waitForArtifactRegistryCompletion(stream *support.FactoryEventStream) bool {
-	for {
-		event, ok := stream.TryNextEvent(15 * time.Second)
-		if !ok {
-			return false
-		}
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err == nil && payload.TransitionId == artifactRegistryWorkstation {
-			return true
-		}
-	}
 }
 
 func artifactRegistryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {

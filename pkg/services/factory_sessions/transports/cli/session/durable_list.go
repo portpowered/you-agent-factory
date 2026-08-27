@@ -45,6 +45,7 @@ func mergeScopedListResult(
 	cfg ListConfig,
 	normalized fse.ListSessionsRequest,
 	liveSessions []fse.LiveSessionSummary,
+	recordedSessions []fse.RecordedSessionListSummary,
 ) (fse.ScopedSessionListResult, error) {
 	var liveReader scopedlisting.LiveReader
 	if normalized.Scope == fse.SessionListScopeLive || normalized.Scope == fse.SessionListScopeAll {
@@ -59,13 +60,14 @@ func mergeScopedListResult(
 	}
 
 	var durableReader scopedlisting.DurableReader
-	if normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll {
+	if cfg.DurableLister != nil && (normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll) {
 		durableReader = cfg.DurableLister
 	}
 	result, err := scopedlisting.List(ctx, normalized, liveReader, durableReader)
 	if err != nil {
 		return fse.ScopedSessionListResult{}, fmt.Errorf("list durable factory sessions failed: %w", err)
 	}
+	result.RecordedSessions = append([]fse.RecordedSessionListSummary(nil), recordedSessions...)
 	return result, nil
 }
 

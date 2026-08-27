@@ -32,6 +32,11 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
+	emptyFleet := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions")
+	if emptyFleet.Sessions == nil || len(emptyFleet.Sessions) != 0 {
+		t.Fatalf("empty fleet Worker Session list = %#v, want non-nil empty collection", emptyFleet)
+	}
+
 	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
 	if opened.Session == nil || opened.Session.Id == "" {
 		t.Fatalf("opened Factory Session = %#v, want resolved session identity", opened)
@@ -54,6 +59,10 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	if len(inFlight.Sessions) != 1 {
 		t.Fatalf("in-flight Worker Session list = %#v, want one scoped observation", inFlight)
 	}
+	fleet := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions")
+	if len(fleet.Sessions) != 1 || fleet.Sessions[0].WorkerSessionId != inFlight.Sessions[0].WorkerSessionId {
+		t.Fatalf("in-flight fleet Worker Session list = %#v, want the scoped observation", fleet)
+	}
 	if inFlight.Sessions[0].WorkerSessionId == "" || len(inFlight.Sessions[0].WorkIds) != 1 || inFlight.Sessions[0].WorkIds[0] != workID {
 		t.Fatalf("in-flight Worker Session observation = %#v, want requested Work correlation", inFlight.Sessions[0])
 	}
@@ -67,6 +76,10 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	completed := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, workerSessionsListURL(server.URL(), sessionID, workID))
 	if len(completed.Sessions) != 1 || completed.Sessions[0].WorkerSessionId != inFlight.Sessions[0].WorkerSessionId {
 		t.Fatalf("completed Worker Session list = %#v, want the same single attempt", completed)
+	}
+	completedFleet := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, server.URL()+"/worker-sessions")
+	if len(completedFleet.Sessions) != 1 || completedFleet.Sessions[0].WorkerSessionId != inFlight.Sessions[0].WorkerSessionId {
+		t.Fatalf("completed fleet Worker Session list = %#v, want the same single attempt", completedFleet)
 	}
 	if completed.Sessions[0].State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("completed Worker Session state = %q, want COMPLETED", completed.Sessions[0].State)

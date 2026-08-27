@@ -30,6 +30,14 @@ func DecodePortableRecordingWithDiagnostics(
 	return CurrentPortableRecordingCodec().DecodeWithDiagnostics(reader)
 }
 
+// DecodePortableRecordingMetadata reads only the portable recording header and
+// Factory Session identity. Unknown fields, including the complete event
+// summary, are streamed past by encoding/json and never retained in a
+// PortableRecording value.
+func DecodePortableRecordingMetadata(reader io.Reader) (string, error) {
+	return CurrentPortableRecordingCodec().DecodeMetadata(reader)
+}
+
 // PortableRecordingCompatibilityPolicy defines the versions understood by a
 // reader. Keeping the policy as a value makes an older-reader compatibility
 // harness deterministic without changing the current Recordings policy.
@@ -117,6 +125,52 @@ func (codec PortableRecordingCodec) DecodeWithDiagnostics(
 		)
 	}
 	return recording, PortableRecordingDecodeDiagnostics{IgnoredJSONPaths: paths}, nil
+}
+
+// DecodeMetadata reads the identity-bearing fields of one portable recording
+// without materializing its event, artifact, result, or Worker-history arrays.
+func (codec PortableRecordingCodec) DecodeMetadata(reader io.Reader) (string, error) {
+	if reader == nil {
+		return "", portableRecordingDiagnostic(
+			PortableRecordingCodeMalformedContract, "document", "", "decode recording: reader is required",
+		)
+	}
+	var value struct {
+		RecordingKind              string `json:"recordingKind"`
+		SchemaVersion              string `json:"schemaVersion"`
+		ReplayCompatibilityVersion string `json:"replayCompatibilityVersion"`
+		Session                    struct {
+			ID string `json:"id"`
+		} `json:"session"`
+	}
+	decoder := json.NewDecoder(reader)
+	if err := decoder.Decode(&value); err != nil {
+		return "", portableRecordingDiagnostic(
+			PortableRecordingCodeMalformedContract, "document", "", "decode recording metadata: "+err.Error(),
+		)
+	}
+	trailing, err := decoder.Token()
+	if err != io.EOF {
+		if err == nil {
+			return "", portableRecordingDiagnostic(
+				PortableRecordingCodeMalformedContract, "document", "", fmt.Sprintf("recording must contain exactly one JSON document; found trailing token %v", trailing),
+			)
+		}
+		return "", portableRecordingDiagnostic(
+			PortableRecordingCodeMalformedContract, "document", "", "decode trailing recording metadata: "+err.Error(),
+		)
+	}
+	if err := validatePortableRecordingCompatibilityWithPolicy(
+		codec.effectivePolicy(), value.RecordingKind, value.SchemaVersion, value.ReplayCompatibilityVersion,
+	); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(value.Session.ID) == "" {
+		return "", portableRecordingDiagnostic(
+			PortableRecordingCodeInvalidIdentity, "session", "session.id", "is required",
+		)
+	}
+	return strings.TrimSpace(value.Session.ID), nil
 }
 
 // Validate validates one detached recording against the codec's pinned policy.

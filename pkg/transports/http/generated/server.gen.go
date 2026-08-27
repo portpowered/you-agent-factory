@@ -581,6 +581,7 @@ const (
 // Defines values for FactorySessionListScope.
 const (
 	FactorySessionListScopeAll       FactorySessionListScope = "all"
+	FactorySessionListScopeHistory   FactorySessionListScope = "history"
 	FactorySessionListScopeLive      FactorySessionListScope = "live"
 	FactorySessionListScopePersisted FactorySessionListScope = "persisted"
 )
@@ -590,6 +591,17 @@ const (
 	FactorySessionLogicalTargetKindDefault  FactorySessionLogicalTargetKind = "default"
 	FactorySessionLogicalTargetKindNamed    FactorySessionLogicalTargetKind = "named"
 	FactorySessionLogicalTargetKindProvider FactorySessionLogicalTargetKind = "provider"
+)
+
+// Defines values for FactorySessionRecordedFormat.
+const (
+	FactorySessionRecordedFormatV1JSON  FactorySessionRecordedFormat = "V1_JSON"
+	FactorySessionRecordedFormatV2JSONL FactorySessionRecordedFormat = "V2_JSONL"
+)
+
+// Defines values for FactorySessionRecordedSource.
+const (
+	FactorySessionRecordedSourceHistory FactorySessionRecordedSource = "recorded-history"
 )
 
 // Defines values for FactorySessionResourceCapacityOutcome.
@@ -4437,7 +4449,7 @@ type FactorySessionLifecycleControlResponse struct {
 	Status FactorySessionDurableLifecycleStatus `json:"status"`
 }
 
-// FactorySessionListScope Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
+// FactorySessionListScope Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
 type FactorySessionListScope string
 
 // FactorySessionLiveResult defines model for FactorySessionLiveResult.
@@ -4528,6 +4540,27 @@ type FactorySessionProgress struct {
 
 	// TotalTokens Number of customer-visible work tokens in the current marking.
 	TotalTokens int `json:"totalTokens"`
+}
+
+// FactorySessionRecordedFormat Recording artifact format interpreted by the shared replay reader.
+type FactorySessionRecordedFormat string
+
+// FactorySessionRecordedSource Explicit provenance for a read-only recorded Factory Session row.
+type FactorySessionRecordedSource string
+
+// FactorySessionRecordedSummary defines model for FactorySessionRecordedSummary.
+type FactorySessionRecordedSummary struct {
+	// ArtifactReference Root-relative recorded artifact reference; never a host filesystem authority.
+	ArtifactReference string `json:"artifactReference"`
+
+	// Format Recording artifact format interpreted by the shared replay reader.
+	Format FactorySessionRecordedFormat `json:"format"`
+
+	// SessionId Canonical Factory Session UUID recovered from the recorded artifact.
+	SessionId string `json:"sessionId"`
+
+	// Source Explicit provenance for a read-only recorded Factory Session row.
+	Source FactorySessionRecordedSource `json:"source"`
 }
 
 // FactorySessionRequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
@@ -5946,7 +5979,10 @@ type ListFactorySessionsResponse struct {
 	// DurableSessions Persisted durable session summaries when scope is PERSISTED or ALL.
 	DurableSessions *[]FactorySessionDurableSummary `json:"durableSessions,omitempty"`
 
-	// Scope Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
+	// RecordedSessions Read-only recorded Factory Session summaries when scope is HISTORY or ALL.
+	RecordedSessions *[]FactorySessionRecordedSummary `json:"recordedSessions,omitempty"`
+
+	// Scope Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. history returns read-only recorded Factory Session artifacts. all returns live, persisted, and recorded-history summaries.
 	Scope *FactorySessionListScope `json:"scope,omitempty"`
 
 	// Sessions Live workspace session summaries when scope is LIVE or ALL.

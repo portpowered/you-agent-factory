@@ -802,7 +802,7 @@ func assertChangedResolvedCreate(t *testing.T, cfg sessioncli.CreateConfig) {
 
 func assertDefaultResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
 	t.Helper()
-	if cfg.Scope != "live" || cfg.Port != 7437 || cfg.Server != "" {
+	if cfg.Scope != "all" || cfg.Port != 7437 || cfg.Server != "" {
 		t.Fatalf("default list config = %#v", cfg)
 	}
 }

@@ -266,11 +266,15 @@ func validateRestoredWorkState(
 	items map[string]work.FactoryWorkItem,
 	placements map[string]string,
 	resourcePlaceIDs map[string]struct{},
+	toleratedWorkIDs map[string]struct{},
 ) error {
 	if restored == nil || net == nil {
 		return nil
 	}
 	if err := validateRestoredWorkSourceIdentities(restored, items); err != nil {
+		return err
+	}
+	if err := validateRestoredDispatchWorkReferences(restored, items); err != nil {
 		return err
 	}
 	occupiedWorkIDs, err := validateRestoredOccupancy(restored, net, items, resourcePlaceIDs)
@@ -283,7 +287,7 @@ func validateRestoredWorkState(
 	if err := validateRestoredDispatchInputs(restored, placements, occupiedWorkIDs, items); err != nil {
 		return err
 	}
-	return validateRestoredLiveWork(restored, placements)
+	return validateRestoredLiveWork(restored, placements, toleratedWorkIDs)
 }
 
 func validateRestoredOccupancy(
@@ -387,18 +391,19 @@ func validateRestoredPlacementMap(
 func validateRestoredLiveWork(
 	restored *interfaces.FactoryWorldState,
 	placements map[string]string,
+	toleratedWorkIDs map[string]struct{},
 ) error {
-	if err := requireRestoredWorkPlacements("active", restored.ActiveWorkItemsByID, placements); err != nil {
+	if err := requireRestoredWorkPlacements("active", restored.ActiveWorkItemsByID, placements, toleratedWorkIDs); err != nil {
 		return err
 	}
 	terminalItems := make(map[string]work.FactoryWorkItem, len(restored.TerminalWorkByID))
 	for workID, terminal := range restored.TerminalWorkByID {
 		terminalItems[workID] = terminal.WorkItem
 	}
-	if err := requireRestoredWorkPlacements("terminal", terminalItems, placements); err != nil {
+	if err := requireRestoredWorkPlacements("terminal", terminalItems, placements, toleratedWorkIDs); err != nil {
 		return err
 	}
-	return requireRestoredWorkPlacements("failed", restored.FailedWorkItemsByID, placements)
+	return requireRestoredWorkPlacements("failed", restored.FailedWorkItemsByID, placements, toleratedWorkIDs)
 }
 
 func validateRestoredDispatchInputs(
@@ -560,6 +565,7 @@ func requireRestoredWorkPlacements(
 	category string,
 	items map[string]work.FactoryWorkItem,
 	placements map[string]string,
+	toleratedWorkIDs map[string]struct{},
 ) error {
 	for workID, item := range items {
 		if workID == "" {
@@ -567,6 +573,9 @@ func requireRestoredWorkPlacements(
 		}
 		if workID == "" {
 			return fmt.Errorf("restore Work board: %s Work entry has no Work identity", category)
+		}
+		if _, tolerated := toleratedWorkIDs[workID]; tolerated {
+			continue
 		}
 		if _, exists := placements[workID]; !exists {
 			return fmt.Errorf(
@@ -642,66 +651,39 @@ func hasRestoredWorkItem(items map[string]work.FactoryWorkItem, workID string) b
 func restoredWorkPlacements(
 	restored *interfaces.FactoryWorldState,
 	items map[string]work.FactoryWorkItem,
-) map[string]string {
+) (map[string]string, error) {
 	placements := make(map[string]string)
 	if restored == nil {
-		return placements
+		return placements, nil
 	}
-	addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID)
-	addRestoredDispatchPlacements(placements, restored.ActiveDispatches)
+	if err := addRestoredOccupancyPlacements(placements, restored.PlaceOccupancyByID); err != nil {
+		return nil, err
+	}
+	if err := addRestoredDispatchPlacements(placements, restored.ActiveDispatches); err != nil {
+		return nil, err
+	}
+	if err := addRestoredWorkStateChangePlacements(placements, restored.WorkStateChangesByWorkID); err != nil {
+		return nil, err
+	}
+	completedDispatchPlacements, err := restoredCompletedDispatchPlacements(restored.CompletedDispatches, items)
+	if err != nil {
+		return nil, err
+	}
+	for _, workID := range sortedRestoredKeys(completedDispatchPlacements) {
+		placeID := completedDispatchPlacements[workID]
+		// Completed dispatch output is a historical snapshot. A later canonical
+		// Work state change or current occupancy is the authoritative placement
+		// when the output describes an intermediate state.
+		if _, exists := placements[workID]; !exists {
+			placements[workID] = placeID
+		}
+	}
 	if restored.PlaceOccupancyByID == nil {
-		addRestoredItemPlacements(placements, items)
-	}
-	return placements
-}
-
-func addRestoredOccupancyPlacements(
-	placements map[string]string,
-	occupancy map[string]interfaces.FactoryPlaceOccupancy,
-) {
-	placeIDs := make([]string, 0, len(occupancy))
-	for placeID := range occupancy {
-		placeIDs = append(placeIDs, placeID)
-	}
-	sort.Strings(placeIDs)
-	for _, placeID := range placeIDs {
-		workIDs := append([]string(nil), occupancy[placeID].WorkItemIDs...)
-		sort.Strings(workIDs)
-		for _, workID := range workIDs {
-			addRestoredPlacement(placements, workID, placeID)
+		if err := addRestoredItemPlacements(placements, items); err != nil {
+			return nil, err
 		}
 	}
-}
-
-func addRestoredDispatchPlacements(
-	placements map[string]string,
-	dispatches map[string]interfaces.FactoryWorldDispatch,
-) {
-	for _, dispatch := range dispatches {
-		for _, input := range dispatch.Inputs {
-			workID, ok := restoredDispatchWorkID(input)
-			if !ok || input.PlaceID == "" {
-				continue
-			}
-			addRestoredPlacement(placements, workID, input.PlaceID)
-		}
-	}
-}
-
-func addRestoredItemPlacements(placements map[string]string, items map[string]work.FactoryWorkItem) {
-	for workID, item := range items {
-		placeID := state.PlaceID(item.WorkTypeID, item.State)
-		addRestoredPlacement(placements, workID, placeID)
-	}
-}
-
-func addRestoredPlacement(placements map[string]string, workID, placeID string) {
-	if workID == "" || placeID == "" {
-		return
-	}
-	if _, exists := placements[workID]; !exists {
-		placements[workID] = placeID
-	}
+	return placements, nil
 }
 
 func restoredDispatchWorkID(input interfaces.WorkstationInput) (string, bool) {
