@@ -17,8 +17,10 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -70,8 +72,10 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	inputs.Input.WorkingDirectory = factoryDir
 	inputs.Input.Env = isolatedHomeEnvironment(homeDir)
 
+	crossCharacterization.recordRootStart("inspect")
 	execDone := make(chan error, 1)
 	go func() {
+		defer crossCharacterization.recordRootClose("inspect")
 		execDone <- process.Execute(inputs.Input)
 	}()
 
@@ -118,6 +122,19 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		events,
 		wantPackagedGoalPrimaryResult,
 	)
+	assertPackagedGoalInvocationWorkAndEvents(
+		t,
+		cliResponse,
+		packagedGoalInvocationObservation{
+			sessionID: factorysessions.DefaultSessionID,
+			listed:    inspection.listed,
+			events:    events,
+		},
+		"complete",
+	)
+	assertCrossListenerClosed(t, baseURL)
+	removeCrossOwnedPath(t, "inspect home", homeDir)
+	crossCharacterization.recordScenarioComplete("cli-api inspect")
 }
 
 // TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable proves
@@ -134,7 +151,16 @@ func TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable(t *tes
 	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedGoalFactoryName)
 
 	server := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: server.Start})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			crossCharacterization.recordServerStart()
+			err := server.Start(ctx, request)
+			if err == nil {
+				crossCharacterization.recordServerClose()
+			}
+			return err
+		},
+	})
 	support.CleanupProcess(t, process)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
@@ -154,6 +180,7 @@ func TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable(t *tes
 	stdinIsTTY := false
 	inputs.Input.StdinIsTTY = &stdinIsTTY
 
+	crossCharacterization.recordRootStart("idle")
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
 	support.GetDefaultSession(t, baseURL)
@@ -168,6 +195,11 @@ func TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable(t *tes
 		t.Fatalf("continuous service command exited before a later API request: %v", command.Err())
 	default:
 	}
+	command.Stop(t)
+	crossCharacterization.recordRootClose("idle")
+	assertCrossListenerClosed(t, baseURL)
+	removeCrossOwnedPath(t, "idle home", homeDir)
+	crossCharacterization.recordScenarioComplete("continuous idle")
 }
 
 // TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree proves packaged @you/goal
@@ -189,7 +221,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			time.Now().UnixNano(),
 		)
 
-		apiResponse := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
 		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
 			t,
 			dir,
@@ -208,6 +240,8 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			cliResponse,
 			wantPackagedGoalPrimaryResult,
 		)
+		assertPackagedGoalInvocationWorkAndEvents(t, apiResponse, apiObservation, "complete")
+		crossCharacterization.recordScenarioComplete("positional success")
 	})
 
 	t.Run("stdin success", func(t *testing.T) {
@@ -219,7 +253,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			time.Now().UnixNano(),
 		)
 
-		apiResponse := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
 		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
 			t,
 			dir,
@@ -237,6 +271,8 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			cliResponse,
 			wantPackagedGoalPrimaryResult,
 		)
+		assertPackagedGoalInvocationWorkAndEvents(t, apiResponse, apiObservation, "complete")
+		crossCharacterization.recordScenarioComplete("stdin success")
 	})
 
 	t.Run("named factory success", func(t *testing.T) {
@@ -255,7 +291,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			time.Now().UnixNano(),
 		)
 
-		apiResponse := invokePackagedGoalViaAPI(t, factoryDir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, factoryDir, mockWorkersPath, goalText)
 		cliResponse, _, stderr, err := runPackagedGoalNamedInvocationCLIJSON(
 			t,
 			homeDir,
@@ -271,6 +307,9 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			cliResponse,
 			wantPackagedGoalPrimaryResult,
 		)
+		assertPackagedGoalInvocationWorkAndEvents(t, apiResponse, apiObservation, "complete")
+		removeCrossOwnedPath(t, "named factory home", homeDir)
+		crossCharacterization.recordScenarioComplete("named factory success")
 	})
 
 	t.Run("empty input rejected", func(t *testing.T) {
@@ -278,10 +317,11 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
 		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 
-		apiErr := postPackagedGoalInvocationExpectError(t, dir, mockWorkersPath, "   ")
+		apiErr, apiObservation := postPackagedGoalInvocationExpectError(t, dir, mockWorkersPath, "   ")
 		if string(apiErr.Code) != "INVOCATION_INPUT_EMPTY" {
 			t.Fatalf("API error code = %q, want INVOCATION_INPUT_EMPTY", apiErr.Code)
 		}
+		assertPackagedGoalNoAdmission(t, apiObservation)
 
 		_, _, stderr, err := runPackagedGoalInvocationCLIJSON(
 			t,
@@ -299,6 +339,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			!strings.Contains(stderr, "INVOCATION_INPUT_EMPTY") {
 			t.Fatalf("CLI failure = %v\nstderr = %q, want INVOCATION_INPUT_EMPTY", err, stderr)
 		}
+		crossCharacterization.recordScenarioComplete("empty input rejected")
 	})
 
 	t.Run("source conflict rejected before invocation", func(t *testing.T) {
@@ -328,6 +369,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		if !strings.Contains(stderr, conflictMessage) {
 			t.Fatalf("stderr = %q, want conflict detail %q", stderr, conflictMessage)
 		}
+		crossCharacterization.recordScenarioComplete("source conflict rejected")
 	})
 
 	t.Run("unresolved primary result reports stable failure", func(t *testing.T) {
@@ -339,7 +381,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		)
 		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 
-		apiResponse := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
 		if apiResponse.Status != factoryapi.InvocationTerminalStatusFailed {
 			t.Fatalf("API status = %q, want FAILED", apiResponse.Status)
 		}
@@ -353,6 +395,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		if apiResponse.PrimaryResult != nil {
 			t.Fatalf("API primaryResult = %#v, want nil on unresolved output", apiResponse.PrimaryResult)
 		}
+		assertPackagedGoalInvocationWorkAndEvents(t, apiResponse, apiObservation, "")
 
 		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
 			t,
@@ -387,6 +430,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		if cliResponse.PrimaryResult != nil {
 			t.Fatalf("CLI primaryResult = %#v, want nil on unresolved output", cliResponse.PrimaryResult)
 		}
+		crossCharacterization.recordScenarioComplete("unresolved primary result")
 	})
 }
 
@@ -1156,7 +1200,7 @@ func invokePackagedGoalViaAPI(
 	factoryDir string,
 	mockWorkersPath string,
 	goalText string,
-) factoryapi.InvocationResponse {
+) (factoryapi.InvocationResponse, packagedGoalInvocationObservation) {
 	t.Helper()
 	return postPackagedGoalInvocation(t, factoryDir, mockWorkersPath, textInvocationRequestBody(goalText))
 }
@@ -1166,7 +1210,7 @@ func postPackagedGoalInvocation(
 	factoryDir string,
 	mockWorkersPath string,
 	body []byte,
-) factoryapi.InvocationResponse {
+) (factoryapi.InvocationResponse, packagedGoalInvocationObservation) {
 	t.Helper()
 
 	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
@@ -1177,6 +1221,13 @@ func postPackagedGoalInvocation(
 			return
 		}
 		support.CloseFactorySessionAt(t, server.URL(), sessionID)
+		assertPackagedGoalFactorySessionAbsent(t, server.URL(), sessionID)
+		if err := crossCharacterization.recordSessionClosed(sessionID); err != nil {
+			t.Errorf("record closed packaged goal session %q: %v", sessionID, err)
+		}
+		if err := crossCharacterization.recordSessionDeleted(sessionID); err != nil {
+			t.Errorf("record deleted packaged goal session %q: %v", sessionID, err)
+		}
 		sessionClosed = true
 	}
 	t.Cleanup(closeSession)
@@ -1204,9 +1255,13 @@ func postPackagedGoalInvocation(
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode invocation response: %v", err)
 	}
+	observation := observePackagedGoalInvocation(t, server.URL(), sessionID)
 	closeSession()
 	server.command.stop(t)
-	return decoded
+	crossCharacterization.recordRootClose("parity-api")
+	assertCrossListenerClosed(t, server.URL())
+	removeCrossOwnedPath(t, "parity API home", server.homeDir)
+	return decoded, observation
 }
 
 func postPackagedGoalInvocationExpectError(
@@ -1214,7 +1269,7 @@ func postPackagedGoalInvocationExpectError(
 	factoryDir string,
 	mockWorkersPath string,
 	goalText string,
-) factoryapi.ErrorResponse {
+) (factoryapi.ErrorResponse, packagedGoalInvocationObservation) {
 	t.Helper()
 
 	body := textInvocationRequestBody(goalText)
@@ -1226,6 +1281,13 @@ func postPackagedGoalInvocationExpectError(
 			return
 		}
 		support.CloseFactorySessionAt(t, server.URL(), sessionID)
+		assertPackagedGoalFactorySessionAbsent(t, server.URL(), sessionID)
+		if err := crossCharacterization.recordSessionClosed(sessionID); err != nil {
+			t.Errorf("record closed packaged goal session %q: %v", sessionID, err)
+		}
+		if err := crossCharacterization.recordSessionDeleted(sessionID); err != nil {
+			t.Errorf("record deleted packaged goal session %q: %v", sessionID, err)
+		}
 		sessionClosed = true
 	}
 	t.Cleanup(closeSession)
@@ -1253,14 +1315,19 @@ func postPackagedGoalInvocationExpectError(
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode invocation error response: %v", err)
 	}
+	observation := observePackagedGoalInvocation(t, server.URL(), sessionID)
 	closeSession()
 	server.command.stop(t)
-	return decoded
+	crossCharacterization.recordRootClose("parity-api")
+	assertCrossListenerClosed(t, server.URL())
+	removeCrossOwnedPath(t, "parity API error home", server.homeDir)
+	return decoded, observation
 }
 
 type packagedGoalParityAPIServer struct {
 	command *crossHostedCommand
 	url     string
+	homeDir string
 }
 
 func (server *packagedGoalParityAPIServer) URL() string {
@@ -1280,6 +1347,12 @@ func openPackagedGoalParitySession(
 	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
 		t.Fatalf("opened packaged goal session = %#v, want explicit session identity", opened)
 	}
+	if opened.Session.Id == factorysessions.DefaultSessionID {
+		t.Fatalf("opened packaged goal session = %q, want non-default explicit session", opened.Session.Id)
+	}
+	if err := crossCharacterization.recordSessionOpened(opened.Session.Id); err != nil {
+		t.Fatalf("record packaged goal session %q: %v", opened.Session.Id, err)
+	}
 	return opened.Session.Id
 }
 
@@ -1293,6 +1366,7 @@ func startPackagedGoalParityAPIServer(
 	fixture := sharedCrossProcess(t)
 	server := support.NewProcessAPIServer()
 	fixture.router.set(server)
+	homeDir := t.TempDir()
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
 		"--continuously",
@@ -1302,8 +1376,9 @@ func startPackagedGoalParityAPIServer(
 		"--no-record",
 		"--with-mock-workers=" + mockWorkersPath,
 	})
-	inputs.Input.Env = isolatedHomeEnvironment(t.TempDir())
+	inputs.Input.Env = isolatedHomeEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
+	crossCharacterization.recordRootStart("parity-api")
 	command := startCrossHostedCommand(t, fixture.process, inputs)
 	baseURL, err := server.WaitForBaseURL(15 * time.Second)
 	if err != nil {
@@ -1312,7 +1387,7 @@ func startPackagedGoalParityAPIServer(
 	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
-	return &packagedGoalParityAPIServer{command: command, url: baseURL}
+	return &packagedGoalParityAPIServer{command: command, url: baseURL, homeDir: homeDir}
 }
 
 func textInvocationRequestBody(goalText string) []byte {
@@ -1449,12 +1524,16 @@ func runPackagedGoalInvocationCLIWithMode(
 		inputs.Input.StdinIsTTY = &stdinIsTTY
 	}
 
+	crossCharacterization.recordRootStart("parity-cli")
 	runErr := sharedCrossProcess(t).process.Execute(inputs.Input)
+	crossCharacterization.recordRootClose("parity-cli")
 
 	var response factoryapi.InvocationResponse
 	if jsonMode && strings.TrimSpace(inputs.Stdout()) != "" {
 		response = support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	}
+	removeCrossOwnedPath(t, "parity CLI working directory", workingDirectory)
+	removeCrossOwnedPath(t, "parity CLI home", crossHomeFromEnvironment(env))
 	return response, inputs.Stdout(), inputs.Stderr(), runErr
 }
 
