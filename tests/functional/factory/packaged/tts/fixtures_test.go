@@ -75,6 +75,13 @@ func (provider *packagedTTSFakeProvider) lastRequest() *workerexecution.Provider
 	return &cloned
 }
 
+func (provider *packagedTTSFakeProvider) ownedArtifactRoot() string {
+	if provider == nil {
+		return ""
+	}
+	return provider.artifactRoot
+}
+
 func (provider *packagedTTSFakeProvider) Infer(
 	_ context.Context,
 	request workerexecution.ProviderInferenceRequest,
@@ -121,14 +128,19 @@ func (provider *packagedTTSFakeProvider) Infer(
 
 type packagedTTSFailingFakeProvider struct {
 	testutil.ProviderServiceAdapter
-	mu          sync.Mutex
-	calls       int
-	last        *workerexecution.ProviderInferenceRequest
-	failMessage string
+	mu           sync.Mutex
+	calls        int
+	last         *workerexecution.ProviderInferenceRequest
+	failMessage  string
+	artifactRoot string
 }
 
-func newPackagedTTSFailingFakeProvider(message string) *packagedTTSFailingFakeProvider {
-	provider := &packagedTTSFailingFakeProvider{failMessage: message}
+func newPackagedTTSFailingFakeProvider(t testing.TB, message string) *packagedTTSFailingFakeProvider {
+	t.Helper()
+	provider := &packagedTTSFailingFakeProvider{
+		failMessage:  message,
+		artifactRoot: t.TempDir(),
+	}
 	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	return provider
 }
@@ -153,6 +165,17 @@ func (provider *packagedTTSFailingFakeProvider) lastRequest() *workerexecution.P
 	}
 	cloned := workerexecution.CloneProviderInferenceRequest(*provider.last)
 	return &cloned
+}
+
+func (provider *packagedTTSFailingFakeProvider) lastAudioPath() string {
+	return ""
+}
+
+func (provider *packagedTTSFailingFakeProvider) ownedArtifactRoot() string {
+	if provider == nil {
+		return ""
+	}
+	return provider.artifactRoot
 }
 
 func (provider *packagedTTSFailingFakeProvider) Infer(
@@ -491,6 +514,53 @@ func postPackagedTTSInvocationWithArgsAt(
 		t.Fatalf("decode invocation response: %v", err)
 	}
 	return decoded
+}
+
+func postPackagedTTSInvocationWithArgsContext(
+	ctx context.Context,
+	baseURL, sessionID, requestID string,
+	args map[string]any,
+) (factoryapi.InvocationResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request := factoryapi.InvocationRequest{Args: &args}
+	if strings.TrimSpace(requestID) != "" {
+		request.RequestId = &requestID
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("marshal invocation request: %w", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) + "/invocations"
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("build POST %s: %w", endpoint, err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, err
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("read POST %s response: %w", endpoint, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		return factoryapi.InvocationResponse{}, fmt.Errorf(
+			"POST %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(responseBody)),
+		)
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("decode POST %s response: %w", endpoint, err)
+	}
+	return decoded, nil
 }
 
 func modelBindingJSON(
