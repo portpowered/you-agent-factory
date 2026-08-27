@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -33,8 +36,11 @@ const (
 )
 
 // TestSharedProcessWorkersMock keeps the Workers mock selection/routing
-// scenarios on one root-built customer host. Each scenario gets a distinct
-// public Factory Session and a fresh command-edge delegate.
+// scenarios on one root-built customer host. Each server-backed scenario gets
+// a distinct public Factory Session and a fresh command-edge delegate. The
+// plain-batch drain rows run last, after the hosted invocation is stopped, so
+// they can reuse the same root without concurrently activating another
+// default runtime.
 func TestSharedProcessWorkersMock(t *testing.T) {
 	fixture := newSharedWorkersMockFixture(t)
 
@@ -57,6 +63,10 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "LiveCapacitySafeReduction", run: testLiveResourceCapacityReductionPreservesActiveWork},
 		{name: "LiveCapacityUnsafeReduction", run: testLiveResourceCapacityRejectsReductionBelowActiveUse},
 		{name: "LiveCapacityRecording", run: testLiveResourceCapacityRecordingReplayAndCursor},
+		{name: "PlainBatchDrainReportsStrandedWork", run: testPlainBatchDrainReportsStrandedWork},
+		{name: "PlainBatchDrainCounterexamples", run: testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples},
+		{name: "PlainBatchDrainRejectsPreActivationCancellation", run: testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation},
+		{name: "PlainBatchDrainStopsAfterWorkerActivationCancellation", run: testPlainBatchDrainStopsAfterWorkerActivationCancellation},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -66,10 +76,14 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 }
 
 type sharedWorkersMockFixture struct {
-	server        *support.FunctionalAPIServer
-	providerEdge  *sharedWorkersMockCommandRunner
-	scriptEdge    *sharedWorkersMockCommandRunner
-	runtimeLogDir string
+	server               *support.FunctionalAPIServer
+	providerEdge         *sharedWorkersMockCommandRunner
+	scriptEdge           *sharedWorkersMockCommandRunner
+	runtimeLogDir        string
+	sessionIDGenerator   *sharedWorkersMockSessionIDGenerator
+	inputDirectoryWalker *sharedWorkersMockInputDirectoryWalker
+	activationMu         sync.Mutex
+	localReady           bool
 }
 
 type sharedWorkersMockCommandRunner struct {
@@ -98,6 +112,64 @@ func (runner *sharedWorkersMockCommandRunner) Run(
 		return platformprocess.CommandResult{}, errors.New("shared workers mock command runner delegate is not configured")
 	}
 	return delegate.Run(ctx, req)
+}
+
+type sharedWorkersMockSessionIDGenerator struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	id     string
+}
+
+func (generator *sharedWorkersMockSessionIDGenerator) armCancellation(
+	cancel context.CancelFunc,
+	id string,
+) {
+	generator.mu.Lock()
+	generator.cancel = cancel
+	generator.id = id
+	generator.mu.Unlock()
+}
+
+func (generator *sharedWorkersMockSessionIDGenerator) Generate() string {
+	generator.mu.Lock()
+	cancel := generator.cancel
+	id := generator.id
+	generator.cancel = nil
+	generator.id = ""
+	generator.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if id != "" {
+		return id
+	}
+	return uuid.NewString()
+}
+
+type sharedWorkersMockInputDirectoryWalker struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
+}
+
+func (walker *sharedWorkersMockInputDirectoryWalker) armCancellation(cancel context.CancelFunc) {
+	walker.mu.Lock()
+	walker.cancel = cancel
+	walker.mu.Unlock()
+}
+
+func (walker *sharedWorkersMockInputDirectoryWalker) Walk(
+	directory string,
+	walk fs.WalkDirFunc,
+) error {
+	walker.mu.Lock()
+	cancel := walker.cancel
+	walker.cancel = nil
+	walker.mu.Unlock()
+	if cancel != nil {
+		cancel()
+		return nil
+	}
+	return filepath.WalkDir(directory, walk)
 }
 
 func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
@@ -133,6 +205,8 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 
 	providerEdge := newSharedWorkersMockCommandRunner()
 	scriptEdge := newSharedWorkersMockCommandRunner()
+	sessionIDGenerator := &sharedWorkersMockSessionIDGenerator{}
+	inputDirectoryWalker := &sharedWorkersMockInputDirectoryWalker{}
 	runtimeLogDir := t.TempDir()
 	mockWorkersPath := writeSharedMockWorkersConfig(t)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -144,16 +218,20 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 			"--runtime-log-dir", runtimeLogDir,
 		},
 		Edges: serviceedges.Edges{
-			ProviderCommandRunner: providerEdge,
-			ScriptCommandRunner:   scriptEdge,
+			ProviderCommandRunner:              providerEdge,
+			ScriptCommandRunner:                scriptEdge,
+			FactorySessionIDGenerator:          sessionIDGenerator.Generate,
+			FactoryRuntimeInputDirectoryWalker: inputDirectoryWalker.Walk,
 		},
 	})
 
 	return &sharedWorkersMockFixture{
-		server:        server,
-		providerEdge:  providerEdge,
-		scriptEdge:    scriptEdge,
-		runtimeLogDir: runtimeLogDir,
+		server:               server,
+		providerEdge:         providerEdge,
+		scriptEdge:           scriptEdge,
+		runtimeLogDir:        runtimeLogDir,
+		sessionIDGenerator:   sessionIDGenerator,
+		inputDirectoryWalker: inputDirectoryWalker,
 	}
 }
 
@@ -163,6 +241,52 @@ func (fixture *sharedWorkersMockFixture) useCommandRunners(
 ) {
 	fixture.providerEdge.set(provider)
 	fixture.scriptEdge.set(script)
+}
+
+// prepareLocalActivation closes the one continuous host before a plain local
+// run is admitted. The root process itself remains alive and reusable; only
+// its active default runtime is stopped. Keeping this transition serialized
+// prevents a second invocation from racing the host teardown and fails closed
+// if a future caller forgets to prepare the local lane.
+func (fixture *sharedWorkersMockFixture) prepareLocalActivation(t *testing.T) {
+	t.Helper()
+	fixture.activationMu.Lock()
+	defer fixture.activationMu.Unlock()
+	if fixture.localReady {
+		return
+	}
+	fixture.server.Stop(t)
+	select {
+	case <-fixture.server.Done():
+		fixture.localReady = true
+	default:
+		t.Errorf("shared workers mock host did not stop before local activation")
+	}
+}
+
+func (fixture *sharedWorkersMockFixture) executeLocal(
+	t testing.TB,
+	input root.Input,
+) error {
+	t.Helper()
+	return (&sharedWorkersMockLocalProcess{fixture: fixture, tb: t}).Execute(input)
+}
+
+type sharedWorkersMockLocalProcess struct {
+	fixture *sharedWorkersMockFixture
+	tb      testing.TB
+}
+
+func (process *sharedWorkersMockLocalProcess) Execute(input root.Input) error {
+	if process == nil || process.fixture == nil || process.fixture.server == nil {
+		return errors.New("shared workers mock local process is unavailable")
+	}
+	process.fixture.activationMu.Lock()
+	defer process.fixture.activationMu.Unlock()
+	if !process.fixture.localReady {
+		return errors.New("shared workers mock local activation was not prepared")
+	}
+	return process.fixture.server.Execute(process.tb, input)
 }
 
 type sharedWorkersMockSession struct {

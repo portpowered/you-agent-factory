@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -19,17 +17,20 @@ import (
 const plainBatchDrainTestTimeout = 15 * time.Second
 const plainBatchContinuousIdleObservation = 500 * time.Millisecond
 
-// TestPlainBatchDrainReportsStrandedWork proves the no-server customer path
+// testPlainBatchDrainReportsStrandedWork proves the no-server customer path
 // returns the canonical incomplete-drain diagnostic after a deterministic mock
-// worker completes its dispatch but leaves Work in PROCESSING.
-func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
-	t.Parallel()
+// worker completes its dispatch but leaves Work in PROCESSING. It runs after
+// the shared host has been stopped so this one-shot activation reuses the same
+// root without overlapping the host runtime.
+func testPlainBatchDrainReportsStrandedWork(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 	workFile := writePlainBatchDrainWork(t)
 	mockWorkersFile := writePlainBatchDrainMockWorkers(t)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", factoryDir, "--no-record", "--quiet",
 		"--work", workFile, "--with-mock-workers", mockWorkersFile,
@@ -38,7 +39,10 @@ func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
 	homeDir := t.TempDir()
 	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
-	command := support.StartProcessCommand(t, process, inputs.Input)
+	command := support.StartProcessCommand(t, &sharedWorkersMockLocalProcess{
+		fixture: fixture,
+		tb:      t,
+	}, inputs.Input)
 	// ProcessCommand.Done is the deterministic completion signal. This bounded
 	// guard exists only to turn the original plain-batch hang into a test
 	// failure rather than leaving the suite blocked indefinitely.
@@ -61,8 +65,11 @@ func TestPlainBatchDrainReportsStrandedWork(t *testing.T) {
 	}
 }
 
-func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T) {
-	t.Parallel()
+func testPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 
 	for _, scenario := range []struct {
@@ -81,10 +88,8 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 				workFile = scenario.workFile(t)
 			}
 			inputs := plainBatchInputs(t, factoryDir, workFile, false)
-			process := support.BuildProcess(t, serviceedges.Edges{})
-			support.CleanupProcess(t, process)
 
-			if err := process.Execute(inputs.Input); err != nil {
+			if err := fixture.executeLocal(t, inputs.Input); err != nil {
 				t.Fatalf("finite plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 			}
 			wantStdout := ""
@@ -99,9 +104,10 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 
 	t.Run("continuous idle", func(t *testing.T) {
 		inputs := plainBatchInputs(t, factoryDir, "", true)
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
-		command := support.StartProcessCommand(t, process, inputs.Input)
+		command := support.StartProcessCommand(t, &sharedWorkersMockLocalProcess{
+			fixture: fixture,
+			tb:      t,
+		}, inputs.Input)
 
 		// Process.Execute exposes no public idle event for a continuous plain
 		// run, and this empty scenario has no edge callback that can certify
@@ -129,23 +135,20 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 	})
 }
 
-func TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(t *testing.T) {
-	t.Parallel()
+func testPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	inputs := plainBatchInputs(t, factoryDir, "", true)
 	inputs.Input.Context = ctx
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		FactorySessionIDGenerator: func() string {
-			cancel()
-			return "preactivation-canceled-session"
-		},
-	})
-	support.CleanupProcess(t, process)
+	fixture.sessionIDGenerator.armCancellation(cancel, "preactivation-canceled-session")
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.executeLocal(t, inputs.Input); err != nil {
 		t.Fatalf("canceled continuous plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
 	if inputs.Stdout() != "" || inputs.Stderr() != "" {
@@ -153,8 +156,11 @@ func TestPlainBatchDrainRejectsCancellationBeforeRuntimeActivation(t *testing.T)
 	}
 }
 
-func TestPlainBatchDrainStopsAfterWorkerActivationCancellation(t *testing.T) {
-	t.Parallel()
+func testPlainBatchDrainStopsAfterWorkerActivationCancellation(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	fixture.prepareLocalActivation(t)
 	factoryDir := scaffoldPlainBatchDrainFactory(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -165,15 +171,9 @@ func TestPlainBatchDrainStopsAfterWorkerActivationCancellation(t *testing.T) {
 	homeDir := t.TempDir()
 	inputs.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		FactoryRuntimeInputDirectoryWalker: func(string, fs.WalkDirFunc) error {
-			cancel()
-			return nil
-		},
-	})
-	support.CleanupProcess(t, process)
+	fixture.inputDirectoryWalker.armCancellation(cancel)
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := fixture.executeLocal(t, inputs.Input); err != nil {
 		t.Fatalf("canceled service-mode plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
 	if inputs.Stdout() != "" || inputs.Stderr() != "" {
