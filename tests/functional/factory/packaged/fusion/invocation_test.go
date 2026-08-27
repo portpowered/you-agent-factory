@@ -8,43 +8,49 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestPackagedFusionRequiredInputCompletes proves that invoking the packaged
-// @you/fusion Factory with only the required input completes under mock
-// workers, runs the drafter then refiner dispatch sequence, and returns a
-// primary result reflecting the refined fusion outcome for the submitted request.
-func TestPackagedFusionRequiredInputCompletes(t *testing.T) {
+func TestPackagedFusion(t *testing.T) {
+	fixture := newFusionSharedFixture(t)
+	t.Run("TestPackagedFusionRequiredInputCompletes", func(t *testing.T) {
+		testPackagedFusionRequiredInputCompletes(t, fixture)
+	})
+	t.Run("TestPackagedFusionOptionalInputsReachWorkers", func(t *testing.T) {
+		testPackagedFusionOptionalInputsReachWorkers(t, fixture)
+	})
+	t.Run("TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome", func(t *testing.T) {
+		testPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t, fixture)
+	})
+}
+
+// testPackagedFusionRequiredInputCompletes proves that invoking the packaged
+// @you/fusion Factory with only the required input completes through the
+// controlled provider command boundary, runs the drafter then refiner dispatch
+// sequence, and returns a primary result reflecting the refined fusion outcome.
+func testPackagedFusionRequiredInputCompletes(
+	t *testing.T,
+	fixture *fusionSharedFixture,
+) {
 	input := fmt.Sprintf(
 		"functional packaged fusion required input %d",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedFusionFactoryName,
-	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
+	scenario := fixture.newScenario(t, support.NewRecordingCommandRunner("mock worker accepted"))
+	scenario.open(t)
 
 	response := startPackagedFusionInvocation(
 		t,
-		server,
-		"packaged-fusion-required-input",
+		scenario,
+		"fusion-required-input",
 		map[string]any{"input": input},
 	)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
@@ -61,7 +67,7 @@ func TestPackagedFusionRequiredInputCompletes(t *testing.T) {
 		t.Fatalf("primary result = %q, want refined output rather than raw submitted input echo", primaryText)
 	}
 
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID))
 	if len(dispatches) != 2 {
 		t.Fatalf(
 			"dispatch count = %d, want drafter and refiner dispatches",
@@ -91,25 +97,18 @@ func TestPackagedFusionRequiredInputCompletes(t *testing.T) {
 // provider, model, and effort overrides reach the drafter and refiner workers
 // and are observable on public dispatch execution selection and agent-run
 // diagnostics when invoking @you/fusion through the packaged invocation API.
-func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
+func testPackagedFusionOptionalInputsReachWorkers(
+	t *testing.T,
+	fixture *fusionSharedFixture,
+) {
 	input := fmt.Sprintf(
 		"functional packaged fusion optional overrides %d",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedFusionFactoryName,
-	)
 	runner := support.NewRecordingCommandRunner("mock worker accepted")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
 	args := map[string]any{
 		"input":          input,
@@ -123,8 +122,8 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 	}
 	response := startPackagedFusionInvocation(
 		t,
-		server,
-		"packaged-fusion-optional-inputs",
+		scenario,
+		"fusion-optional-inputs",
 		args,
 	)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
@@ -134,7 +133,8 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 		t.Fatalf("primary result = %#v, want one refined result part", response.PrimaryResult)
 	}
 
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want drafter and refiner dispatches", len(dispatches))
 	}
@@ -150,7 +150,6 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 		}
 	}
 
-	events := server.GetFactoryEvents(t)
 	modelRequests := modelRequestsByWorker(t, events)
 	assertFusionModelRequest(
 		t,
@@ -186,30 +185,23 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 // provider-command failure during one fusion stage returns a failed
 // public terminal invocation outcome without a completed success primary
 // result attributable to the failing run.
-func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
+func testPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(
+	t *testing.T,
+	fixture *fusionSharedFixture,
+) {
 	input := fmt.Sprintf(
 		"functional packaged fusion partial worker failure %d",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedFusionFactoryName,
-	)
 	runner := packagedFusionFailingCommandRunner{}
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
 	response := startPackagedFusionInvocation(
 		t,
-		server,
-		"packaged-fusion-partial-worker-failure",
+		scenario,
+		"fusion-partial-worker-failure",
 		map[string]any{"input": input},
 	)
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
@@ -229,9 +221,9 @@ func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
 	// necessarily includes the worker's terminal dispatch response. Wait for the
 	// public runtime status to become stably terminal before asserting that
 	// customer-visible event history.
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, 10*time.Second)
 
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID))
 	if len(dispatches) == 0 {
 		t.Fatal("dispatch observations missing, want at least one draft-fusion failure")
 	}
@@ -380,7 +372,7 @@ func assertFusionProviderCommand(
 
 func startPackagedFusionInvocation(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	scenario *fusionScenario,
 	requestID string,
 	args map[string]any,
 ) factoryapi.InvocationResponse {
@@ -388,7 +380,8 @@ func startPackagedFusionInvocation(
 
 	return postJSON[factoryapi.InvocationResponse](
 		t,
-		server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		strings.TrimSuffix(scenario.fixture.baseURL, "/")+
+			"/factory-sessions/"+url.PathEscape(scenario.sessionID)+"/invocations",
 		factoryapi.InvocationRequest{
 			RequestId: &requestID,
 			Args:      &args,

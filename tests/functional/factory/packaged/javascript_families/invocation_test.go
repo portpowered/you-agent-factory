@@ -4,24 +4,40 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t *testing.T) {
+func TestPackagedJavaScriptFamilies(t *testing.T) {
+	fixture := newJavascriptFamiliesSharedFixture(t)
+	t.Run("TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner", func(t *testing.T) {
+		testPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t, fixture)
+	})
+	t.Run("TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner", func(t *testing.T) {
+		testPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner(t, fixture)
+	})
+	t.Run("TestPackagedSpawnRunsAntigravityChildrenWithExactModel", func(t *testing.T) {
+		testPackagedSpawnRunsAntigravityChildrenWithExactModel(t, fixture)
+	})
+}
+
+func testPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(
+	t *testing.T,
+	fixture *javascriptFamiliesSharedFixture,
+) {
 	runner := testutil.NewProviderCommandRunner(
 		providerResult(support.CodexSuccessStdout("candidate A")),
 		providerResult(support.CodexSuccessStdout("candidate B")),
 		providerResult(support.CodexSuccessStdout(`{"winner":"B","rationale":"more complete"}`)),
 	)
-	response := invokeJavaScriptFactory(t, javascriptInvocation{
+	response := invokeJavaScriptFactory(t, fixture, javascriptInvocation{
 		factoryName: factorydefinitions.PackagedTournamentFactoryName,
 		requestID:   "packaged-tournament-codex-1v1",
 		args: map[string]any{
@@ -58,14 +74,17 @@ func TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t *testi
 	}
 }
 
-func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner(t *testing.T) {
+func testPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner(
+	t *testing.T,
+	fixture *javascriptFamiliesSharedFixture,
+) {
 	runner := testutil.NewProviderCommandRunner(
 		providerResult(support.CodexSuccessStdout(`{"tasks":["research climate","research cost"]}`)),
 		providerResult(support.CodexSuccessStdout(`{"result":"climate findings"}`)),
 		providerResult(support.CodexSuccessStdout(`{"result":"cost findings"}`)),
 		providerResult(support.CodexSuccessStdout(`{"answer":"merged travel answer"}`)),
 	)
-	response := invokeJavaScriptFactory(t, javascriptInvocation{
+	response := invokeJavaScriptFactory(t, fixture, javascriptInvocation{
 		factoryName: factorydefinitions.PackagedSpawnFactoryName,
 		requestID:   "packaged-spawn-codex-exact-count",
 		args: map[string]any{
@@ -98,7 +117,10 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 }
 
 // TestPackagedSpawnRunsAntigravityChildrenWithExactModel proves packaged spawning preserves the exact Antigravity child model.
-func TestPackagedSpawnRunsAntigravityChildrenWithExactModel(t *testing.T) {
+func testPackagedSpawnRunsAntigravityChildrenWithExactModel(
+	t *testing.T,
+	fixture *javascriptFamiliesSharedFixture,
+) {
 	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
 		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
 			const model = "gemini-3.6-flash-medium"
@@ -107,7 +129,7 @@ func TestPackagedSpawnRunsAntigravityChildrenWithExactModel(t *testing.T) {
 				providerResult(antigravityStructuredResult("agy-spawn-task", map[string]any{"result": "one task result"}, antigravityTaskResultSchema)),
 				providerResult(antigravityStructuredResult("agy-spawn-merge", map[string]any{"answer": "merged Antigravity spawn answer"}, antigravityMergerResultSchema)),
 			)
-			response := invokeJavaScriptFactory(t, javascriptInvocation{
+			response := invokeJavaScriptFactory(t, fixture, javascriptInvocation{
 				factoryName: factorydefinitions.PackagedSpawnFactoryName,
 				requestID:   "packaged-spawn-antigravity-" + strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")),
 				args: map[string]any{
@@ -140,26 +162,26 @@ type javascriptInvocation struct {
 	runner      *testutil.ProviderCommandRunner
 }
 
-func invokeJavaScriptFactory(t *testing.T, invocation javascriptInvocation) factoryapi.FactorySessionSyncExecutionResponse {
+func invokeJavaScriptFactory(
+	t *testing.T,
+	fixture *javascriptFamiliesSharedFixture,
+	invocation javascriptInvocation,
+) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	homeDir := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(t, homeDir, invocation.factoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: invocation.runner,
-		},
-		Args: []string{"--provider", "CODEX", "--model", "operator-js-model"},
-	})
-	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
+	scenario := fixture.newScenario(t, invocation.factoryName, invocation.runner)
+	scenario.open(t)
+	factory := support.GetJSON[factoryapi.Factory](
+		t,
+		strings.TrimSuffix(fixture.baseURL, "/")+
+			"/factory-sessions/"+url.PathEscape(scenario.sessionID)+"/factory",
+	)
 	if factory.Orchestrator == nil || factory.Orchestrator.Javascript == nil || factory.Orchestrator.Javascript.InlineSource == nil {
-		t.Fatalf("installed JavaScript factory %q does not carry inline source", invocation.factoryName)
+		t.Fatalf("opened JavaScript factory %q does not carry inline source", invocation.factoryName)
 	}
 	javascript := factory.Orchestrator.Javascript
 	response := postJSON[factoryapi.FactorySessionSyncExecutionResponse](
 		t,
-		server.URL()+"/factory-sessions/sync",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/sync",
 		factoryapi.FactorySessionExecutionRequest{
 			RequestId: invocation.requestID,
 			Source: factoryapi.FactorySessionExecutionSource{
@@ -175,15 +197,6 @@ func invokeJavaScriptFactory(t *testing.T, invocation javascriptInvocation) fact
 			Orchestrator: factory.Orchestrator,
 		},
 	)
-	if response.Status == factoryapi.FactorySessionDurableLifecycleStatusFailed {
-		eventsResponse, err := http.Get(server.URL() + "/factory-sessions/" + response.SessionId + "/events")
-		if err == nil {
-			defer eventsResponse.Body.Close()
-			var body bytes.Buffer
-			_, _ = body.ReadFrom(eventsResponse.Body)
-			t.Logf("failed JavaScript session events: %s", body.String())
-		}
-	}
 	return response
 }
 
