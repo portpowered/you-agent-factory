@@ -43,12 +43,23 @@ func provideCostsCLI() costscli.Operation {
 }
 
 func provideMetricsCLI() visualizationcli.Operation {
+	return provideMetricsCLIWithHTTPTransport(nil)
+}
+
+// provideMetricsCLIWithHTTPTransport keeps the metrics request policy in Wire
+// while allowing package-owned tests to observe or control the external HTTP
+// boundary without changing the generated client or public CLI contracts.
+func provideMetricsCLIWithHTTPTransport(transport http.RoundTripper) visualizationcli.Operation {
 	return visualizationcli.NewOperation(func(server string) (visualizationcli.Client, error) {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: metricsCLIHTTPTimeout}),
+			generatedhttpclient.WithHTTPClient(newMetricsCLIHTTPClient(transport)),
 		)
 	})
+}
+
+func newMetricsCLIHTTPClient(transport http.RoundTripper) *http.Client {
+	return &http.Client{Transport: transport, Timeout: metricsCLIHTTPTimeout}
 }
 
 // httpRuntimeBinding is the Wire-owned operation that builds the owner HTTP
