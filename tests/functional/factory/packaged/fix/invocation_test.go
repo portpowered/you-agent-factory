@@ -157,6 +157,10 @@ func TestPackagedFixSharedProcess(t *testing.T) {
 	t.Run("ReviewLoopExhaustionIsStable", testPackagedFixReviewLoopExhaustion)
 
 	t.Run("CLIResponseMatchesExplicitSession", testPackagedFixCLIResponseParity)
+	t.Run("CleanupPathCensus", testPackagedFixCleanupPathCensus)
+	t.Cleanup(func() {
+		assertPackagedFixResourceCensus(t, sharedPackagedFixFixture(t))
+	})
 }
 
 func testPackagedFixOperatorDefaults(t *testing.T) {
@@ -184,6 +188,7 @@ func testPackagedFixRejectionFeedback(t *testing.T) {
 	runner := &packagedFixCommandRunner{rejectFirstReview: true}
 	worktreeName := "shared-reviewed-fix"
 	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	scenario.fixture.census.recordPath(packagedFixCleanupRejection)
 	response := invokePackagedFixSession(t, scenario, map[string]any{
 		"request":      "revise the requested fix",
 		"worktreeName": worktreeName,
@@ -338,6 +343,7 @@ func testPackagedFixCLIResponseParity(t *testing.T) {
 	if apiResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("explicit-session response status = %q, want COMPLETED: %#v", apiResponse.Status, apiResponse)
 	}
+	assertPackagedFixSharedEvidence(t, apiScenario, apiRunner, "approved")
 
 	cliRunner := &packagedFixCommandRunner{}
 	cliWorkspace := initPackagedFixGitRepository(t)
@@ -381,9 +387,8 @@ func invokePackagedFixSession(
 	// TestPackagedFixSharedProcess/CLIResponseMatchesExplicitSession still
 	// executes the same invocation through the root-built customer CLI and
 	// compares its terminal response with this explicit-session API path.
-	requestID := "packaged-fix-" + scenario.worktreeName
 	payload, err := json.Marshal(factoryapi.InvocationRequest{
-		RequestId: &requestID,
+		RequestId: &scenario.requestID,
 		Args:      &args,
 	})
 	if err != nil {
@@ -492,6 +497,17 @@ func assertPackagedFixSharedEvidence(
 		t.Fatalf("extra dispatches = %d, want one review loop breaker", len(dispatches)-len(roles))
 	}
 
+	assertPackagedFixReplayAndRecord(t, scenario, runner, wantWorkStateName, *work.WorkId, events)
+}
+
+func assertPackagedFixReplayAndRecord(
+	t *testing.T,
+	scenario *packagedFixScenario,
+	runner *packagedFixCommandRunner,
+	wantWorkStateName, workID string,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
 	sequence := support.ReconnectSequenceForFactoryEvent(events[0])
 	replayed := support.GetFactoryEventsAfterForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID, support.FactoryEventReadCursor{
 		AfterEventID:  events[0].Id,
@@ -504,6 +520,25 @@ func assertPackagedFixSharedEvidence(
 		if replayed[index].Id != events[index+1].Id {
 			t.Fatalf("retained replay event %d = %q, want %q", index, replayed[index].Id, events[index+1].Id)
 		}
+	}
+	eventIDs := make([]string, 0, len(events))
+	for _, event := range events {
+		eventIDs = append(eventIDs, event.Id)
+	}
+	scenario.fixture.census.recordEvidence(
+		scenario.requestID,
+		scenario.worktreeName,
+		workID,
+		runner.PlanPath(),
+		eventIDs,
+	)
+	if wantWorkStateName == "fix:failed" {
+		scenario.fixture.census.recordPath(packagedFixCleanupFailure)
+	} else {
+		scenario.fixture.census.recordPath(packagedFixCleanupSuccess)
+	}
+	if runner.rejectFirstReview || runner.alwaysRejectReview {
+		scenario.fixture.census.recordPath(packagedFixCleanupRejection)
 	}
 }
 

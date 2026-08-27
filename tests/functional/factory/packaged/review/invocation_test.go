@@ -56,6 +56,10 @@ func TestPackagedReviewSharedProcess(t *testing.T) {
 	t.Run("DecisionEnvelopeValidatesRecordedOutputWork", testPackagedReviewRecordedOutputWork)
 	t.Run("RejectionHonorsMaterializedAndFlaggedProviderSettings", testPackagedReviewProviderSettings)
 	t.Run("CLIResponseMatchesExplicitSession", testPackagedReviewCLIResponseParity)
+	t.Run("CleanupPathCensus", testPackagedReviewCleanupPathCensus)
+	t.Cleanup(func() {
+		assertPackagedReviewResourceCensus(t, sharedPackagedReviewFixture(t))
+	})
 }
 
 func testPackagedReviewApprovalCompletes(t *testing.T) {
@@ -224,6 +228,7 @@ func testPackagedReviewCLIResponseParity(t *testing.T) {
 	if apiResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("explicit-session response status = %q, want COMPLETED: %#v", apiResponse.Status, apiResponse)
 	}
+	assertPackagedReviewSharedEvidence(t, apiScenario, apiRunner, "approved")
 
 	cliRunner := &packagedReviewCommandRunner{acceptedOutput: "approved candidate work"}
 	cliResponse, stderr, err := runPackagedReviewCLIInvocation(
