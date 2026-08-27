@@ -1,11 +1,16 @@
 // @vitest-environment node
 
+import { EventEmitter } from "node:events";
+
 import { describe, expect, it } from "vitest";
 
 import {
+  createRealBackendHarnessStartupTiming,
   findAvailablePort,
+  formatRealBackendHarnessStartupTiming,
   startRealBackendBrowserHarness,
   waitForPortAvailable,
+  waitForRealBackendHarnessReadiness,
 } from "./browser-test-harness.mjs";
 
 async function fetchJSON(url) {
@@ -17,6 +22,83 @@ async function fetchJSON(url) {
 }
 
 describe("real backend durable session setup", () => {
+  it("reports phase timing when a valid readiness payload arrives", async () => {
+    const child = new EventEmitter();
+    const lineReader = new EventEmitter();
+    const diagnostics = [];
+    const timing = createRealBackendHarnessStartupTiming();
+    timing.processSpawnedAt = timing.startedAt;
+    timing.processStartedAt = timing.startedAt;
+
+    const ready = waitForRealBackendHarnessReadiness({
+      child,
+      diagnosticWriter: (line) => diagnostics.push(line),
+      lineReader,
+      timing,
+      timeoutMs: 100,
+    });
+    lineReader.emit(
+      "line",
+      JSON.stringify({
+        apiOrigin: "http://127.0.0.1:43123",
+        sessionId: "dur-sess-test",
+      }),
+    );
+
+    await expect(ready).resolves.toMatchObject({
+      apiOrigin: "http://127.0.0.1:43123",
+      sessionId: "dur-sess-test",
+    });
+    expect(timing.firstReadyPayloadMs).toEqual(expect.any(Number));
+    expect(timing.applicationStartupMs).toEqual(expect.any(Number));
+    expect(diagnostics.join(" ")).toContain("first-ready-payload=");
+    expect(formatRealBackendHarnessStartupTiming(timing)).toContain(
+      "cache-resolution=unavailable",
+    );
+  });
+
+  it("reports phase timing when the harness exits before readiness", async () => {
+    const child = new EventEmitter();
+    const lineReader = new EventEmitter();
+    const timing = createRealBackendHarnessStartupTiming();
+    timing.processSpawnedAt = timing.startedAt;
+
+    const ready = waitForRealBackendHarnessReadiness({
+      child,
+      getCapturedStderr: () => "customer-home=C:\\Users\\andre\\secret",
+      lineReader,
+      timing,
+      timeoutMs: 100,
+    });
+    child.emit("exit", 1, null);
+
+    const failure = await ready.catch((error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toMatch(
+      /exited before readiness:[\s\S]*phase=harness-compilation\/setup[\s\S]*cache-resolution=unavailable/,
+    );
+    expect(failure.message).not.toContain("C:\\Users\\andre\\secret");
+  });
+
+  it("reports phase timing when readiness reaches its deadline", async () => {
+    const child = new EventEmitter();
+    const lineReader = new EventEmitter();
+    const timing = createRealBackendHarnessStartupTiming();
+    timing.processSpawnedAt = timing.startedAt;
+
+    await expect(
+      waitForRealBackendHarnessReadiness({
+        child,
+        getCapturedStderr: () => "startup diagnostic",
+        lineReader,
+        timing,
+        timeoutMs: 5,
+      }),
+    ).rejects.toThrow(
+      /Timed out waiting for real backend browser harness readiness[\s\S]*phase=harness-compilation\/setup[\s\S]*captured-stderr=startup diagnostic/,
+    );
+  });
+
   it("starts a real backend and seeds one inspectable dur-sess-* JavaScript factory session", async () => {
     const apiPort = await findAvailablePort();
     const backend = await startRealBackendBrowserHarness({
