@@ -535,12 +535,13 @@ jobs:
     name: Backend Unit Latency
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       YOU_LOGICAL_CPUS: "4"
       YOU_EXPECTED_CONCURRENT_LANES: "4"
       UNIT_DEFAULT_JOBS: "2"
-      UNIT_TIMING_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      UNIT_REFERENCE_COMMIT: ba8ef900ee29347295ac7657742fd1aab42f064c
+      UNIT_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       UNIT_RUNNER_PROVIDER: github-actions
       UNIT_RUNNER_IMAGE: ubuntu-24.04
     steps:
@@ -552,33 +553,141 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Prewarm Go dependencies and unit-lane compile cache
+      - name: Initialize unit-latency evidence directories
+        if: always()
         shell: bash
         run: |
-          go mod download
-          go build ./cmd/unitlane ./cmd/unitlanebudget
-          go test -short -vet=off -run '^$' -p=2 ./pkg/...
-      - name: Run three consecutive uncached unit samples
+          set -euo pipefail
+          mkdir -p .artifacts/unit-latency/reference .artifacts/unit-latency/candidate .artifacts/unit-latency/setup
+      - name: Capture exact hosted runner identity
+        if: always()
         shell: bash
         run: |
-          mkdir -p .artifacts/unit-latency
+          set -euo pipefail
+          artifact_root="$GITHUB_WORKSPACE/.artifacts/unit-latency"
+          image_version="${ImageVersion:-${RUNNER_IMAGE_VERSION:-}}"
+          cpu_model="$(awk -F: '/^model name[[:space:]]*:/ {gsub(/^[[:space:]]+/, "", $2); print $2; exit}' /proc/cpuinfo)"
+          if [[ -z "$image_version" || -z "$cpu_model" || "$cpu_model" == "unknown" ]]; then
+            printf 'image_version=%s\ncpu_model=%s\nstatus=unavailable\n' "$image_version" "$cpu_model" > "$artifact_root/setup/runner-identity.status.txt"
+            echo 'UNIT_TIMING_INVALIDATIONS=hosted runner identity unavailable' >> "$GITHUB_ENV"
+            echo "hosted runner identity is incomplete: image_version=${image_version:-unknown}, cpu_model=${cpu_model:-unknown}" >&2
+            exit 1
+          fi
+          {
+            echo "UNIT_RUNNER_IMAGE_VERSION=$image_version"
+            echo "UNIT_RUNNER_CPU_MODEL=$cpu_model"
+          } >> "$GITHUB_ENV"
+          {
+            printf 'provider=%s\n' "$UNIT_RUNNER_PROVIDER"
+            printf 'image=%s\n' "$UNIT_RUNNER_IMAGE"
+            printf 'image_version=%s\n' "$image_version"
+            printf 'os=%s\n' "$(go env GOOS)"
+            printf 'architecture=%s\n' "$(go env GOARCH)"
+            printf 'cpu_model=%s\n' "$cpu_model"
+            printf 'status=available\n'
+          } > "$artifact_root/setup/runner-identity.status.txt"
+      - name: Create detached reference checkout and capture ordered cohorts
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          artifact_root="$GITHUB_WORKSPACE/.artifacts/unit-latency"
+          setup_root="$artifact_root/setup"
+          reference_root="$artifact_root/reference"
+          candidate_root="$artifact_root/candidate"
+          reference_checkout="$RUNNER_TEMP/unit-latency-reference"
+          sample_runner="$GITHUB_WORKSPACE/scripts/ci/run-unit-latency-sample.mjs"
+          failure_log="$artifact_root/orchestration-failures.log"
           sample_failure=0
-          run_sample() {
-            ordinal="$1"
-            if node scripts/ci/run-unit-latency-sample.mjs "$ordinal" ".artifacts/unit-latency" \
-              make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=".artifacts/unit-latency/run-${ordinal}.v2.json"; then
+          : > "$failure_log"
+
+          record_failure() {
+            printf '%s\n' "$1" | tee -a "$failure_log" >&2
+            export UNIT_TIMING_INVALIDATIONS="${UNIT_TIMING_INVALIDATIONS:+$UNIT_TIMING_INVALIDATIONS,}workflow orchestration failure"
+            sample_failure=1
+          }
+
+          run_setup_command() {
+            local label="$1"
+            local checkout="$2"
+            shift 2
+            local stdout_path="$setup_root/${label}.stdout.log"
+            local stderr_path="$setup_root/${label}.stderr.log"
+            local status_path="$setup_root/${label}.status.txt"
+            local status=0
+            if (cd "$checkout" && "$@") > "$stdout_path" 2> "$stderr_path"; then
               :
             else
-              sample_failure=1
+              status=$?
+            fi
+            printf 'exit_status=%s\n' "$status" > "$status_path"
+            if [ "$status" -ne 0 ]; then
+              record_failure "$label: exit_status=$status"
+              return 1
             fi
           }
-          run_sample 1
-          run_sample 2
-          run_sample 3
+
+          prewarm_checkout() {
+            local cohort="$1"
+            local checkout="$2"
+            local failed=0
+            run_setup_command "${cohort}-go-mod-download" "$checkout" go mod download || failed=1
+            run_setup_command "${cohort}-go-build" "$checkout" go build ./cmd/unitlane ./cmd/unitlanebudget || failed=1
+            run_setup_command "${cohort}-go-test-compile" "$checkout" go test -short -vet=off -run '^$' -p=2 ./pkg/... || failed=1
+            return "$failed"
+          }
+
+          run_sample() {
+            local cohort="$1"
+            local checkout="$2"
+            local commit="$3"
+            local ordinal="$4"
+            local output_directory="$5"
+            local timing_output="$output_directory/run-${ordinal}.v2.json"
+            if UNIT_TIMING_COMMIT="$commit" UNIT_LATENCY_SAMPLE_CWD="$checkout" \
+              node "$sample_runner" "$ordinal" "$output_directory" \
+                make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT="$timing_output"; then
+              :
+            else
+              local status=$?
+              record_failure "$cohort sample $ordinal: exit_status=$status"
+            fi
+          }
+
+          run_reference_sample() {
+            run_sample reference "$reference_checkout" "$UNIT_REFERENCE_COMMIT" "$1" "$reference_root"
+          }
+
+          run_candidate_sample() {
+            run_sample candidate "$GITHUB_WORKSPACE" "$UNIT_CANDIDATE_COMMIT" "$1" "$candidate_root"
+          }
+
+          if git worktree add --detach "$reference_checkout" "$UNIT_REFERENCE_COMMIT" \
+            > "$setup_root/reference-worktree-add.stdout.log" \
+            2> "$setup_root/reference-worktree-add.stderr.log"; then
+            printf 'exit_status=0\n' > "$setup_root/reference-worktree-add.status.txt"
+          else
+            status=$?
+            printf 'exit_status=%s\n' "$status" > "$setup_root/reference-worktree-add.status.txt"
+            record_failure "reference checkout: exit_status=$status"
+          fi
+
+          prewarm_checkout reference "$reference_checkout" || :
+          run_reference_sample 1
+          run_reference_sample 2
+          run_reference_sample 3
+
+          prewarm_checkout candidate "$GITHUB_WORKSPACE" || :
+          run_candidate_sample 1
+          run_candidate_sample 2
+          run_candidate_sample 3
+
+          printf 'exit_status=%s\n' "$sample_failure" > "$artifact_root/orchestration.status.txt"
           exit "$sample_failure"
       - name: Enforce unit-lane latency budget
+        if: always()
         run: make test-unit-latency-budget
-      - name: Retain unit-latency evidence
+      - name: Retain complete unit-latency evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -871,7 +980,7 @@ jobs:
           BACKEND_STABILITY_REASON: ${{ needs.classify.outputs.backend_reason }}
           BACKEND_STABILITY_RESULT: ${{ needs.backend-test-stability.result }}
           RUN_BACKEND_UNIT_LATENCY: "true"
-          BACKEND_UNIT_LATENCY_REASON: "The canonical three-sample uncached unit-lane latency budget is required on every pull request and push to main."
+          BACKEND_UNIT_LATENCY_REASON: "The canonical three-reference/three-candidate uncached unit-lane latency budget is required on every pull request and push to main."
           BACKEND_UNIT_LATENCY_RESULT: ${{ needs.backend-unit-latency.result }}
           BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"

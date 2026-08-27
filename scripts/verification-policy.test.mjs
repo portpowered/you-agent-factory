@@ -100,7 +100,7 @@ test("required Backend Unit Latency fails closed for every incomplete hosted res
 				lanes: [
 					...laneNames.filter((name) => name !== "Backend Unit Latency").map((name) => lane(name)),
 					lane("Backend Unit Latency", true, result, {
-						reason: "The canonical three-sample unit-lane latency budget is required on every pull request and push to main.",
+						reason: "The canonical three-reference/three-candidate uncached unit-lane latency budget is required on every pull request and push to main.",
 					}),
 				],
 			}),

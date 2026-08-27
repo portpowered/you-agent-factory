@@ -16,13 +16,18 @@ objects and test names are sorted before JSON serialization. The output is
 written through a same-directory temporary file and renamed into place so a
 failed write cannot leave a partial evidence document.
 
-The hosted Backend Unit Latency job warms the Go module, command, dependency,
-and test compilation caches before measuring samples. It runs `go mod download`,
-builds the unit-lane and checker commands, and compiles `pkg/...` with
-`go test -run '^$'`; these warm-up commands are outside the three measured
+The hosted Backend Unit Latency job uses one runner allocation for both live
+cohorts. It adds a detached worktree at the pinned reference commit, prewarms
+that checkout, captures reference ordinals 1–3, then prewarms the PR-head
+checkout and captures candidate ordinals 1–3. The prewarm commands run
+`go mod download`, build the unit-lane and checker commands, and compile
+`pkg/...` with `go test -run '^$'`; they are outside the six measured
 `make test-unit-fresh` calls. Each measured call still uses `-count=1`, so test
-results remain uncached while dependency and compilation setup cannot make the
-first sample incomparable with the next two.
+results remain uncached. Reference and candidate evidence are retained in
+separate `reference/` and `candidate/` directories, along with setup logs and
+per-ordinal status files. The job records the hosted image version and CPU
+model alongside the Go OS/architecture identity; a failed ordinal never causes
+a retry or replacement.
 
 Use the final checker for the retained historical audit and two live,
 same-runner cohorts:

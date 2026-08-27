@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { closeSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
 
 const [ordinal, outputDirectory, command, ...args] = process.argv.slice(2);
@@ -17,10 +17,12 @@ if (!ordinal || !outputDirectory || !command) {
 
 	const stdoutFile = openSync(stdoutPath, "w");
 	const stderrFile = openSync(stderrPath, "w");
+	const workingDirectory = process.env.UNIT_LATENCY_SAMPLE_CWD?.trim() || undefined;
 	let status = 1;
 	let launchError;
 	try {
 		const child = spawn(command, args, {
+			cwd: workingDirectory,
 			stdio: ["ignore", stdoutFile, stderrFile],
 		});
 		status = await new Promise((resolve) => {
@@ -34,6 +36,11 @@ if (!ordinal || !outputDirectory || !command) {
 			};
 			child.once("error", (error) => {
 				launchError = error;
+				try {
+					writeSync(stderrFile, `failed to launch ${command}: ${error.message}\n`);
+				} catch {
+					// Preserve the exit status even if the diagnostic file cannot be updated.
+				}
 				finish(127);
 			});
 			child.once("close", (code) => finish(code ?? 1));
