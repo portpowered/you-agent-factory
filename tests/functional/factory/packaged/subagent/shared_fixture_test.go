@@ -3,6 +3,9 @@ package subagent
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,17 +17,21 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const subagentSharedFixtureTimeout = 15 * time.Second
 
+const subagentExpectedSessions = 7
+
 // subagentSharedFixture owns one root-built process and one continuous API
 // host for the package's compatible child-result scenarios. Each child copies
 // the packaged Factory into a private home and opens a non-default session.
 type subagentSharedFixture struct {
 	owner        testing.TB
+	rootDir      string
 	process      support.ApplicationProcess
 	provider     *subagentProviderCommandRouter
 	apiStarter   *subagentAPIServerStarter
@@ -33,11 +40,134 @@ type subagentSharedFixture struct {
 	baseURL      string
 	factoryDir   string
 	scenarioRoot string
+	lifecycle    *subagentLifecycleLedger
 
 	mu        sync.Mutex
-	opened    int
-	closed    int
 	scenarios []*subagentScenario
+}
+
+type subagentLifecycleResource struct {
+	sessionID     string
+	rootDir       string
+	factoryDir    string
+	closed        bool
+	sessionAbsent bool
+	rootRemoved   bool
+}
+
+type subagentLifecycleLedger struct {
+	mu            sync.Mutex
+	expected      int
+	processStarts int
+	resources     []subagentLifecycleResource
+}
+
+func newSubagentLifecycleLedger(expected int) *subagentLifecycleLedger {
+	return &subagentLifecycleLedger{expected: expected}
+}
+
+func (ledger *subagentLifecycleLedger) recordProcessStart() {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	ledger.processStarts++
+}
+
+func (ledger *subagentLifecycleLedger) register(sessionID, rootDir, factoryDir string) error {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("Factory Session ID is empty")
+	}
+	if sessionID == factorysessions.DefaultSessionID {
+		return fmt.Errorf("Factory Session ID is the default session %q", sessionID)
+	}
+	for _, resource := range ledger.resources {
+		if resource.sessionID == sessionID {
+			return fmt.Errorf("Factory Session ID %q is not unique", sessionID)
+		}
+	}
+	for label, path := range map[string]string{"scenario root": rootDir, "Factory": factoryDir} {
+		if !filepath.IsAbs(path) {
+			return fmt.Errorf("%s path %q is not absolute", label, path)
+		}
+	}
+	ledger.resources = append(ledger.resources, subagentLifecycleResource{
+		sessionID:  sessionID,
+		rootDir:    rootDir,
+		factoryDir: factoryDir,
+	})
+	return nil
+}
+
+func (ledger *subagentLifecycleLedger) close(sessionID string, sessionAbsent, rootRemoved bool) error {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	for index := range ledger.resources {
+		resource := &ledger.resources[index]
+		if resource.sessionID != sessionID {
+			continue
+		}
+		if resource.closed {
+			return fmt.Errorf("Factory Session %q was closed more than once", sessionID)
+		}
+		resource.closed = true
+		resource.sessionAbsent = sessionAbsent
+		resource.rootRemoved = rootRemoved
+		return nil
+	}
+	return fmt.Errorf("Factory Session %q was not registered", sessionID)
+}
+
+func (ledger *subagentLifecycleLedger) assertClean(t testing.TB) {
+	t.Helper()
+	ledger.mu.Lock()
+	processStarts := ledger.processStarts
+	resources := append([]subagentLifecycleResource(nil), ledger.resources...)
+	expected := ledger.expected
+	ledger.mu.Unlock()
+
+	if processStarts != 1 {
+		t.Errorf("SUBAGENT-SPINE-001 process starts = %d, want 1 observed API host start", processStarts)
+	}
+	if len(resources) != expected {
+		t.Errorf("SUBAGENT-SPINE-001 explicit sessions opened = %d, want %d", len(resources), expected)
+	}
+	sessions := make(map[string]struct{}, len(resources))
+	roots := make(map[string]struct{}, len(resources))
+	factories := make(map[string]struct{}, len(resources))
+	closed := 0
+	for _, resource := range resources {
+		if _, exists := sessions[resource.sessionID]; exists {
+			t.Errorf("Factory Session %q is not unique", resource.sessionID)
+		}
+		sessions[resource.sessionID] = struct{}{}
+		if _, exists := roots[resource.rootDir]; exists {
+			t.Errorf("scenario root %q is not unique", resource.rootDir)
+		}
+		roots[resource.rootDir] = struct{}{}
+		if _, exists := factories[resource.factoryDir]; exists {
+			t.Errorf("Factory definition %q is not unique", resource.factoryDir)
+		}
+		factories[resource.factoryDir] = struct{}{}
+		if resource.closed {
+			closed++
+		} else {
+			t.Errorf("Factory Session %q remains open", resource.sessionID)
+		}
+		if !resource.sessionAbsent {
+			t.Errorf("Factory Session %q remained publicly readable after close", resource.sessionID)
+		}
+		if !resource.rootRemoved {
+			t.Errorf("scenario root %q remains after cleanup", resource.rootDir)
+		}
+	}
+	if closed != len(resources) {
+		t.Errorf("explicit sessions closed = %d, want %d", closed, len(resources))
+	}
+	t.Logf(
+		"subagent lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=0",
+		processStarts, len(resources), closed, len(sessions), len(roots),
+	)
 }
 
 // subagentAPIServerStarter records listener requests so the no-server CLI
@@ -127,6 +257,7 @@ func subagentPathContains(root, candidate string) bool {
 
 type subagentScenario struct {
 	fixture          *subagentSharedFixture
+	rootDir          string
 	factoryDir       string
 	environment      []string
 	workingDirectory string
@@ -153,40 +284,65 @@ func newSubagentSharedFixture(t *testing.T) *subagentSharedFixture {
 	api := support.NewProcessAPIServer()
 	apiStarter := &subagentAPIServerStarter{api: api}
 	provider := newSubagentProviderCommandRouter()
+	lifecycle := newSubagentLifecycleLedger(subagentExpectedSessions)
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      apiStarter.Start,
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			lifecycle.recordProcessStart()
+			return apiStarter.Start(ctx, request)
+		},
 		ProviderCommandRunner: provider,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess(subagent): %v", err)
 	}
+
+	fixture := &subagentSharedFixture{
+		owner:        t,
+		rootDir:      rootDir,
+		process:      process,
+		provider:     provider,
+		apiStarter:   apiStarter,
+		environment:  subagentCustomerEnvironment(homeDir),
+		scenarioRoot: scenarioRoot,
+		lifecycle:    lifecycle,
+	}
+	// Register the post-process probe before CleanupProcess so Go's LIFO cleanup
+	// order stops the hosted command, closes the reusable process, and only then
+	// verifies the listener and test-owned roots are gone.
+	t.Cleanup(func() { fixture.cleanup(t) })
 	support.CleanupProcess(t, process)
 
-	environment := subagentCustomerEnvironment(homeDir)
 	factoryDir := support.InstallPackagedFactoryWithProcess(
 		t,
 		process,
-		environment,
+		fixture.environment,
 		workingDirectory,
 		"@you/subagent",
 	)
 
-	fixture := &subagentSharedFixture{
-		owner:        t,
-		process:      process,
-		provider:     provider,
-		apiStarter:   apiStarter,
-		environment:  environment,
-		factoryDir:   factoryDir,
-		scenarioRoot: scenarioRoot,
-	}
-	t.Cleanup(func() {
-		fixture.mu.Lock()
-		opened, closed := fixture.opened, fixture.closed
-		fixture.mu.Unlock()
-		t.Logf("subagent shared fixture: process_starts=1 explicit_sessions_opened=%d explicit_sessions_closed=%d behavior_rows=5 isolated_rows=0", opened, closed)
-	})
+	fixture.factoryDir = factoryDir
 	return fixture
+}
+
+func (fixture *subagentSharedFixture) cleanup(t testing.TB) {
+	t.Helper()
+	fixture.lifecycle.assertClean(t)
+	if fixture.baseURL != "" {
+		// This is a single bounded shutdown probe, not synchronization: after the
+		// reusable process closes, its injected listener must reject /status.
+		client := http.Client{Timeout: time.Second}
+		response, err := client.Get(strings.TrimSuffix(fixture.baseURL, "/") + "/status")
+		if err == nil {
+			body, _ := io.ReadAll(response.Body)
+			response.Body.Close()
+			t.Errorf("SUBAGENT-CLEANUP-001 listener still served /status after process close: %s", strings.TrimSpace(string(body)))
+		}
+	}
+	if err := os.RemoveAll(fixture.rootDir); err != nil {
+		t.Errorf("SUBAGENT-CLEANUP-001 remove shared root %q: %v", fixture.rootDir, err)
+	} else if _, err := os.Stat(fixture.rootDir); !os.IsNotExist(err) {
+		t.Errorf("SUBAGENT-CLEANUP-001 shared root %q remains after process close: %v", fixture.rootDir, err)
+	}
 }
 
 func (fixture *subagentSharedFixture) startHost(t testing.TB) {
@@ -257,6 +413,7 @@ func (fixture *subagentSharedFixture) newScenario(
 	})
 	scenario := &subagentScenario{
 		fixture:          fixture,
+		rootDir:          scenarioDir,
 		factoryDir:       factoryDir,
 		environment:      environment,
 		workingDirectory: workingDirectory,
@@ -290,15 +447,55 @@ func (scenario *subagentScenario) open(t *testing.T) {
 	scenario.fixture.startHost(t)
 	opened := support.OpenFactorySessionAt(t, scenario.fixture.baseURL, scenario.factoryDir)
 	scenario.sessionID = opened.Session.Id
-	scenario.fixture.mu.Lock()
-	scenario.fixture.opened++
-	scenario.fixture.mu.Unlock()
+	if scenario.sessionID == factorysessions.DefaultSessionID {
+		t.Fatalf("opened subagent Factory Session returned default session %q", scenario.sessionID)
+	}
 	t.Cleanup(func() {
-		support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
-		scenario.fixture.mu.Lock()
-		scenario.fixture.closed++
-		scenario.fixture.mu.Unlock()
+		scenario.close(t)
 	})
+	if err := scenario.fixture.lifecycle.register(
+		scenario.sessionID, scenario.rootDir, scenario.factoryDir,
+	); err != nil {
+		t.Fatalf("register subagent scenario lifecycle: %v", err)
+	}
+}
+
+func (scenario *subagentScenario) close(t testing.TB) {
+	t.Helper()
+	if scenario == nil || scenario.sessionID == "" {
+		return
+	}
+	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+	assertSubagentSessionAbsent(t, scenario.fixture.baseURL, scenario.sessionID)
+	sessionAbsent := true
+	rootRemoved := false
+	if err := os.RemoveAll(scenario.rootDir); err != nil {
+		t.Errorf("SUBAGENT-CLEANUP-001 remove scenario root %q: %v", scenario.rootDir, err)
+	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
+		t.Errorf("SUBAGENT-CLEANUP-001 scenario root %q remains: %v", scenario.rootDir, err)
+	} else {
+		rootRemoved = true
+	}
+	if err := scenario.fixture.lifecycle.close(scenario.sessionID, sessionAbsent, rootRemoved); err != nil {
+		t.Errorf("record subagent scenario cleanup: %v", err)
+	}
+}
+
+func assertSubagentSessionAbsent(t testing.TB, baseURL, sessionID string) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET deleted subagent Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"GET deleted subagent Factory Session %q status = %d, want 404: %s",
+			sessionID, response.StatusCode, strings.TrimSpace(string(payload)),
+		)
+	}
 }
 
 var _ platformprocess.CommandRunner = (*subagentProviderCommandRouter)(nil)
