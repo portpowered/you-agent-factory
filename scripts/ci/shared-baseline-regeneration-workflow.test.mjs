@@ -21,6 +21,7 @@ const workflow = readFileSync(
 	join(repositoryRoot, ".github", "workflows", "regenerate-shared-ci-baselines.yml"),
 	"utf8",
 );
+const ciWorkflow = readFileSync(join(repositoryRoot, ".github", "workflows", "ci.yml"), "utf8");
 
 test("the delivered workflow follows successful main CI and owns only the bot PR path", () => {
 	assert.match(workflow, /workflow_run:\s+workflows: \[CI\]/);
@@ -32,6 +33,9 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /SHARED_BASELINE_PR_TITLE: [\"]?chore\(ci\): reconcile shared CI baselines[\"]?/);
 	assert.match(workflow, /gh run download \"\$SOURCE_RUN_ID\"/);
 	assert.match(workflow, /backend-unit-latency-evidence/);
+	assert.match(workflow, /backend-deadcode-evidence/);
+	assert.match(workflow, /DEADCODE_REPORT_PATH/);
+	assert.match(workflow, /BASELINE_REGEN_DEADCODE_REPORT=\"\$DEADCODE_REPORT_PATH\"/);
 	assert.match(workflow, /SOURCE_EVENT: \$\{\{ github\.event\.workflow_run\.event \}\}/);
 	assert.match(workflow, /SOURCE_REPOSITORY: \$\{\{ github\.event\.workflow_run\.head_repository\.full_name \}\}/);
 	assert.match(workflow, /SOURCE_EVENT\" != \"push\"/);
@@ -40,9 +44,16 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /gh pr list/);
 	assert.match(workflow, /gh pr create/);
 	assert.match(workflow, /gh pr edit/);
+	assert.match(workflow, /git push origin --delete \"\$BOT_BRANCH\"/);
 	assert.match(workflow, /gh pr merge .*--auto .*--match-head-commit/);
 	assert.match(workflow, /automation\/shared-ci-baselines/);
 	assert.doesNotMatch(workflow, /7438/);
+});
+
+test("Backend Lint publishes the normalized deadcode report consumed by reconciliation", () => {
+	assert.match(ciWorkflow, /name: backend-deadcode-evidence/);
+	assert.match(ciWorkflow, /path: bin\/deadcode-current\.txt/);
+	assert.match(ciWorkflow, /if-no-files-found: error/);
 });
 
 test("selects completed CI runs for the default branch and lets artifacts judge drift", () => {

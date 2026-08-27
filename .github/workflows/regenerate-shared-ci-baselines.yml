@@ -107,6 +107,24 @@ jobs:
             fi
           done
 
+      - name: Download the delivered normalized deadcode evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- .artifacts/deadcode
+          mkdir -p .artifacts/deadcode
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$REPOSITORY" \
+            --name backend-deadcode-evidence \
+            --dir .artifacts/deadcode
+          mapfile -t deadcode_reports < <(find .artifacts/deadcode -type f -name deadcode-current.txt -print)
+          if [[ "${#deadcode_reports[@]}" -ne 1 || ! -s "${deadcode_reports[0]:-}" ]]; then
+            echo "::error title=Invalid deadcode evidence::Expected exactly one non-empty deadcode-current.txt from source CI run $SOURCE_RUN_ID; found ${#deadcode_reports[@]} file(s)." >&2
+            exit 1
+          fi
+          printf 'DEADCODE_REPORT_PATH=%s\n' "${deadcode_reports[0]}" >> "$GITHUB_ENV"
+          echo "Using delivered normalized deadcode report ${deadcode_reports[0]}."
+
       - name: Prepare the serialized automation branch
         id: prepare
         shell: bash
@@ -144,7 +162,8 @@ jobs:
           make regenerate-shared-ci-baselines \
             BASELINE_REGEN_ROOT=. \
             UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" \
-            UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json"
+            UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json" \
+            BASELINE_REGEN_DEADCODE_REPORT="$DEADCODE_REPORT_PATH"
 
       - name: Validate generated working-tree scope
         id: candidate
@@ -154,6 +173,8 @@ jobs:
 
       - name: Close an obsolete PR after a no-diff regeneration
         if: steps.prepare.outputs.reconcile == 'true' && steps.candidate.outputs.changed != 'true'
+        env:
+          BOT_BRANCH_EXISTS: ${{ steps.prepare.outputs.bot_branch_exists }}
         shell: bash
         run: |
           set -euo pipefail
@@ -170,6 +191,15 @@ jobs:
             echo "Closed obsolete shared-baseline PR #$pr_number."
           else
             echo "Shared CI baselines already match main; no commit or pull request is needed."
+          fi
+          if [[ "$BOT_BRANCH_EXISTS" == "true" ]]; then
+            gh auth setup-git --hostname github.com
+            if git ls-remote --exit-code --heads origin "$BOT_BRANCH" >/dev/null 2>&1; then
+              git push origin --delete "$BOT_BRANCH"
+              echo "Deleted obsolete shared-baseline automation branch $BOT_BRANCH."
+            else
+              echo "Shared-baseline automation branch $BOT_BRANCH was already absent."
+            fi
           fi
 
       - name: Publish or reuse the bot branch and pull request
