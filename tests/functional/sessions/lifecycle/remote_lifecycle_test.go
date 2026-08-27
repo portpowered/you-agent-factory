@@ -26,6 +26,8 @@ const (
 	placementFailureFactoryName      = "session-parity-domain-failure"
 	placementCancellationFactoryName = "session-parity-cancel"
 	placementTransportFactoryName    = "session-parity-transport-failure"
+	lifecycleNamedFactoryStateDir    = ".you-agent-factory"
+	lifecycleNamedFactoriesDir       = "factories"
 )
 
 // TestCLIRemoteRunStartsDurableSessionOnSelectedServer proves the public
@@ -469,7 +471,10 @@ func writeSharedRemoteLifecycleFactory(homeDir, serverFactoryDir string) error {
 }
 
 func writeSharedNamedPlacementFactory(homeDir, name, source string) error {
-	namedFactoryDir := filepath.Join(interfaces.NamedFactoriesRoot(homeDir), name)
+	// This fixture writes the named Factory into the injected home rather than
+	// calling the Factory Definitions policy helper from this package. The
+	// resulting file is still consumed through the public CLI named-source path.
+	namedFactoryDir := filepath.Join(homeDir, lifecycleNamedFactoryStateDir, lifecycleNamedFactoriesDir, name)
 	if err := os.MkdirAll(namedFactoryDir, 0o755); err != nil {
 		return fmt.Errorf("create named Factory %q directory: %w", name, err)
 	}
