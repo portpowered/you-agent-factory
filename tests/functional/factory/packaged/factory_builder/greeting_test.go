@@ -1,14 +1,17 @@
 package factory_builder
 
 import (
+	"bytes"
 	"context"
-	"os"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -52,28 +55,28 @@ func (runner *greetingCommandRunner) snapshot() (routing int, help, build []stri
 		append([]string(nil), runner.buildPrompts...)
 }
 
+func TestFactoryBuilder(t *testing.T) {
+	fixture := newFactoryBuilderSharedFixture(t)
+	t.Run("TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding", func(t *testing.T) {
+		testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t, fixture)
+	})
+	t.Run("TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing", func(t *testing.T) {
+		testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t, fixture)
+	})
+}
+
 // TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding proves problems.md
 // 4.1: a customer's first vague message reaches Factory Builder's usage
 // guidance instead of immediately attempting to author and install a Factory.
-func TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t *testing.T) {
-	homeDir := t.TempDir()
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+func testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t *testing.T, fixture *factoryBuilderSharedFixture) {
 	runner := &greetingCommandRunner{}
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--named", factoryBuilderName, "--no-record",
-		"--builder-provider", "CODEX", "--builder-model", "gpt-5",
-		"what can you do?",
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := invokeFactoryBuilder(t, scenario, map[string]any{
+		"request":         "what can you do?",
+		"builderProvider": "CODEX",
+		"builderModel":    "gpt-5",
 	})
-	inputs.Input.Env = environment
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED", response.Status)
 	}
@@ -107,28 +110,46 @@ func TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t *testing.T) {
 // TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing proves a bare
 // invocation is admitted and answered rather than rejected for a missing
 // required input, which is the CLI analogue of an ACP client's first turn.
-func TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t *testing.T) {
-	homeDir := t.TempDir()
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+func testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t *testing.T, fixture *factoryBuilderSharedFixture) {
 	runner := &greetingCommandRunner{}
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--named", factoryBuilderName, "--no-record",
-		"--builder-provider", "CODEX", "--builder-model", "gpt-5",
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := invokeFactoryBuilder(t, scenario, map[string]any{
+		"builderProvider": "CODEX",
+		"builderModel":    "gpt-5",
 	})
-	inputs.Input.Env = environment
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED for a bare invocation", response.Status)
 	}
 	if _, _, buildPrompts := runner.snapshot(); len(buildPrompts) != 0 {
 		t.Fatalf("build workstation ran %d times with no request, want 0", len(buildPrompts))
 	}
+}
+
+func invokeFactoryBuilder(
+	t *testing.T,
+	scenario *factoryBuilderScenario,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	requestID := fmt.Sprintf("factory-builder-greeting-%d", scenario.fixture.nextRequestID())
+	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
+	if err != nil {
+		t.Fatalf("marshal Factory Builder invocation: %v", err)
+	}
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST Factory Builder invocation: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST Factory Builder invocation status = %d", response.StatusCode)
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode Factory Builder invocation: %v", err)
+	}
+	return decoded
 }
