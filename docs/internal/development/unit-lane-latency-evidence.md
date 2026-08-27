@@ -16,6 +16,14 @@ objects and test names are sorted before JSON serialization. The output is
 written through a same-directory temporary file and renamed into place so a
 failed write cannot leave a partial evidence document.
 
+The hosted Backend Unit Latency job warms the Go module, command, dependency,
+and test compilation caches before measuring samples. It runs `go mod download`,
+builds the unit-lane and checker commands, and compiles `pkg/...` with
+`go test -run '^$'`; these warm-up commands are outside the three measured
+`make test-unit-fresh` calls. Each measured call still uses `-count=1`, so test
+results remain uncached while dependency and compilation setup cannot make the
+first sample incomparable with the next two.
+
 Use the pure checker for a three-sample comparison:
 
 ```text

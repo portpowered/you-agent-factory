@@ -550,6 +550,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Prewarm Go dependencies and unit-lane compile cache
+        shell: bash
+        run: |
+          go mod download
+          go build ./cmd/unitlane ./cmd/unitlanebudget
+          go test -short -vet=off -run '^$' -p=2 ./pkg/...
       - name: Run three consecutive uncached unit samples
         shell: bash
         run: |
@@ -557,14 +563,10 @@ jobs:
           sample_failure=0
           run_sample() {
             ordinal="$1"
-            set +e
-            make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=".artifacts/unit-latency/run-${ordinal}.v2.json" \
-              >".artifacts/unit-latency/run-${ordinal}.stdout.log" \
-              2>".artifacts/unit-latency/run-${ordinal}.stderr.log"
-            status="$?"
-            set -e
-            printf 'exit_status=%s\n' "$status" >".artifacts/unit-latency/run-${ordinal}.status.txt"
-            if [ "$status" -ne 0 ]; then
+            if node scripts/ci/run-unit-latency-sample.mjs "$ordinal" ".artifacts/unit-latency" \
+              make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=".artifacts/unit-latency/run-${ordinal}.v2.json"; then
+              :
+            else
               sample_failure=1
             fi
           }

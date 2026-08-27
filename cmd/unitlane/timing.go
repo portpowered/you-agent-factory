@@ -130,10 +130,6 @@ func (accumulator *unitTimingAccumulator) add(capture unitTimingCapture) {
 	}
 }
 
-func (accumulator *unitTimingAccumulator) summary(wallSeconds float64) unitTimingSummary {
-	return accumulator.summaryWithRun(wallSeconds, unitTimingRun{})
-}
-
 func (accumulator *unitTimingAccumulator) summaryWithRun(wallSeconds float64, run unitTimingRun) unitTimingSummary {
 	packages := make([]unitPackageTiming, 0, len(accumulator.packages))
 	packageSum := 0.0

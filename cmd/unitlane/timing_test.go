@@ -168,7 +168,7 @@ func TestUnitTimingAccumulatorRanksMultiBatchPackagesDeterministically(t *testin
 		},
 	})
 
-	summary := accumulator.summary(1.75)
+	summary := accumulator.summaryWithRun(1.75, unitTimingRun{})
 	if !summary.Complete || summary.PackageCount != 3 || summary.ExpectedPackageCount != 3 {
 		t.Fatalf("summary = %+v, want complete three-package capture", summary)
 	}

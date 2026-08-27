@@ -1,10 +1,19 @@
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const sampleRunner = join(repositoryRoot, "scripts", "ci", "run-unit-latency-sample.mjs");
 
 function readWorkflow() {
 	return readFileSync(join(repositoryRoot, ".github", "workflows", "ci.yml"), "utf8");
@@ -12,6 +21,10 @@ function readWorkflow() {
 
 function readMakefile() {
 	return readFileSync(join(repositoryRoot, "Makefile"), "utf8");
+}
+
+function readSampleRunner() {
+	return readFileSync(sampleRunner, "utf8");
 }
 
 function unitLatencyJob(workflow) {
@@ -35,6 +48,9 @@ test("the unit-latency job runs exactly three pinned fresh samples and enforces 
 	assert.match(job, /fetch-depth: 0/);
 	assert.match(job, /go-version-file: go\.mod/);
 	assert.match(job, /cache: true/);
+	assert.match(job, /go mod download/);
+	assert.match(job, /go build \.\/cmd\/unitlane \.\/cmd\/unitlanebudget/);
+	assert.match(job, /go test -short -vet=off -run '\^\$' -p=2 \.\/pkg\/\.\.\./);
 	assert.match(job, /shell: bash/);
 	assert.match(job, /sample_failure=0/);
 	assert.match(job, /exit "\$sample_failure"/);
@@ -46,10 +62,11 @@ test("the unit-latency job runs exactly three pinned fresh samples and enforces 
 		[1, 2, 3],
 		"the helper must be called once per ordinal in order",
 	);
-	assert.equal((job.match(/set \+e/g) ?? []).length, 1, "sample execution must not retry");
-	assert.match(job, /status="\$\?"/);
+	assert.match(job, /run-unit-latency-sample\.mjs/);
+	assert.match(job, /sample_failure=1/);
+	const runner = readSampleRunner();
 	for (const evidenceFile of ["stdout.log", "stderr.log", "status.txt"]) {
-		assert.match(job, new RegExp(`run-\\$\\{ordinal\\}\\.${evidenceFile.replace(".", "\\.")}`));
+		assert.match(runner, new RegExp(`run-\\$\\{ordinal\\}\\.${evidenceFile.replace(".", "\\.")}`));
 	}
 	assert.match(job, /run-\$\{ordinal\}\.v2\.json/);
 	assert.match(job, /run: make test-unit-latency-budget/);
@@ -80,4 +97,47 @@ test("the Make entrypoint keeps ordinary flags and exposes additive evidence con
 	assert.match(makefile, /test-unit-latency-budget:/);
 	assert.match(makefile, /unitlanebudget -budget/);
 	assert.match(makefile, /unit-latency-workflow\.test\.mjs/);
+});
+
+test("the sample runner retains all evidence and fails on a failed command", () => {
+	const temporaryDirectory = mkdtempSync(join(tmpdir(), "unit-latency-sample-"));
+	try {
+		const artifactDirectory = join(temporaryDirectory, "evidence");
+		const timingPath = join(artifactDirectory, "run-1.v2.json");
+		const fixturePath = join(temporaryDirectory, "failed-sample.mjs");
+		writeFileSync(
+			fixturePath,
+			[
+				'import { writeFileSync } from "node:fs";',
+				'process.stdout.write("sample stdout\\n");',
+				'process.stderr.write("sample stderr\\n");',
+				'writeFileSync(process.argv[2], JSON.stringify({ version: 2, complete: false }) + "\\n");',
+				"process.exitCode = 23;",
+			].join("\n"),
+			"utf8",
+		);
+
+		const result = spawnSync(
+			process.execPath,
+			[sampleRunner, "1", artifactDirectory, process.execPath, fixturePath, timingPath],
+			{ cwd: repositoryRoot, encoding: "utf8" },
+		);
+
+		assert.equal(result.status, 1, `runner stderr: ${result.stderr}`);
+		const evidencePaths = [
+			join(artifactDirectory, "run-1.stdout.log"),
+			join(artifactDirectory, "run-1.stderr.log"),
+			timingPath,
+			join(artifactDirectory, "run-1.status.txt"),
+		];
+		for (const evidencePath of evidencePaths) {
+			assert.equal(existsSync(evidencePath), true, `missing evidence: ${evidencePath}`);
+		}
+		assert.equal(readFileSync(evidencePaths[0], "utf8"), "sample stdout\n");
+		assert.equal(readFileSync(evidencePaths[1], "utf8"), "sample stderr\n");
+		assert.deepEqual(JSON.parse(readFileSync(timingPath, "utf8")), { version: 2, complete: false });
+		assert.equal(readFileSync(evidencePaths[3], "utf8"), "exit_status=23\n");
+	} finally {
+		rmSync(temporaryDirectory, { recursive: true, force: true });
+	}
 });
