@@ -197,11 +197,10 @@ func addRestoredDispatchPlacements(
 	return nil
 }
 
-func addRestoredCompletedDispatchPlacements(
-	placements map[string]string,
+func restoredCompletedDispatchPlacements(
 	completions []interfaces.FactoryWorldDispatchCompletion,
 	items map[string]work.FactoryWorkItem,
-) error {
+) (map[string]string, error) {
 	latest := make(map[string]map[string]struct{})
 	for _, completion := range completions {
 		current := make(map[string]map[string]struct{})
@@ -230,15 +229,19 @@ func addRestoredCompletedDispatchPlacements(
 	for _, workID := range sortedRestoredKeys(latest) {
 		placeIDs := sortedStringKeys(latest[workID])
 		if len(placeIDs) > 1 {
-			return fmt.Errorf("restore Work board: Work %q has conflicting completed-dispatch places %q", workID, placeIDs)
+			return nil, fmt.Errorf("restore Work board: Work %q has conflicting completed-dispatch places %q", workID, placeIDs)
 		}
 		if len(placeIDs) == 1 {
-			if err := addRestoredPlacement(placements, workID, placeIDs[0]); err != nil {
-				return err
-			}
+			latest[workID] = map[string]struct{}{placeIDs[0]: {}}
 		}
 	}
-	return nil
+	placements := make(map[string]string, len(latest))
+	for workID, placeIDs := range latest {
+		for placeID := range placeIDs {
+			placements[workID] = placeID
+		}
+	}
+	return placements, nil
 }
 
 func addRestoredWorkStateChangePlacements(
@@ -392,38 +395,6 @@ func logRestoredWorkRecovery(cfg *runtimeConfig, recovery restoredWorkRecovery) 
 			"disposition", restoredLegacyAutomationDisposition,
 		)
 	}
-}
-
-func validateRestoredWorkConsistency(
-	restored *interfaces.FactoryWorldState,
-) error {
-	if restored == nil {
-		return nil
-	}
-	workIDs := make([]string, 0, len(restored.ActiveWorkItemsByID))
-	for workID := range restored.ActiveWorkItemsByID {
-		workIDs = append(workIDs, workID)
-	}
-	sort.Strings(workIDs)
-	for _, workID := range workIDs {
-		if _, terminal := restored.TerminalWorkByID[workID]; terminal {
-			return fmt.Errorf("restore Work board: Work %q is both active and terminal", workID)
-		}
-		if _, failed := restored.FailedWorkItemsByID[workID]; failed {
-			return fmt.Errorf("restore Work board: Work %q is both active and failed", workID)
-		}
-	}
-	terminalIDs := make([]string, 0, len(restored.TerminalWorkByID))
-	for workID := range restored.TerminalWorkByID {
-		terminalIDs = append(terminalIDs, workID)
-	}
-	sort.Strings(terminalIDs)
-	for _, workID := range terminalIDs {
-		if _, failed := restored.FailedWorkItemsByID[workID]; failed {
-			return fmt.Errorf("restore Work board: Work %q is both terminal and failed", workID)
-		}
-	}
-	return nil
 }
 
 func validateRestoredDispatchWorkReferences(

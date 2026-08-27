@@ -178,6 +178,42 @@ func TestNew_RestoresCompletedWorkFromCanonicalDispatchOutputWhenOccupancyIsMiss
 	}
 }
 
+func TestNew_RestoredWorkStateChangeSupersedesCompletedDispatchOutputPlacement(t *testing.T) {
+	completed := work.FactoryWorkItem{ID: "work-state-change-current", WorkTypeID: "task", State: "done", TraceID: "trace-state-change-current"}
+	intermediate := completed
+	intermediate.State = "init"
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID:      map[string]work.FactoryWorkItem{completed.ID: completed},
+		TerminalWorkByID:   map[string]interfaces.FactoryTerminalWork{completed.ID: {WorkItem: completed, Status: "TERMINAL"}},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID: "dispatch-intermediate-output", TransitionID: "process-task", WorkItemIDs: []string{completed.ID},
+			OutputWorkItems: []work.FactoryWorkItem{intermediate}, Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+		}},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			completed.ID: {{
+				WorkID: completed.ID, WorkTypeName: "task", FromState: "init", ToState: "done",
+				FromPlaceID: "task:init", ToPlaceID: "task:done", Source: work.WorkStateChangeSourceAPI,
+				Sequence: 2,
+			}},
+		},
+	}
+	f, err := newTestFactory(withNet(buildSimpleNet()), withClock(platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second)), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, completed.ID, "task:done") {
+		t.Fatalf("restored Work marking = %#v, want task:done from the later canonical state change", snapshot.Marking.PlaceTokens)
+	}
+	if markingContainsWorkAtPlace(&snapshot.Marking, completed.ID, "task:init") {
+		t.Fatalf("restored Work retained intermediate dispatch-output place: %#v", snapshot.Marking.PlaceTokens)
+	}
+}
+
 func TestNew_DoesNotRedispatchCompletedAutomationWithCanonicalCompletionPlacement(t *testing.T) {
 	cronWork := work.FactoryWorkItem{
 		ID: "completed-cron-with-recovered-place", WorkTypeID: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState,
@@ -240,6 +276,26 @@ func TestNew_RejectsConflictingCompletedDispatchPlaces(t *testing.T) {
 	_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
 	if err == nil || !strings.Contains(err.Error(), "conflicting completed-dispatch places") {
 		t.Fatalf("New error = %v, want fail-closed conflicting completed-dispatch places error", err)
+	}
+}
+
+func TestNew_RejectsConflictingCurrentWorkPlacements(t *testing.T) {
+	workItem := work.FactoryWorkItem{ID: "work-conflicting-current-places", WorkTypeID: "task"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{workItem.ID: workItem},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:init": {PlaceID: "task:init", WorkItemIDs: []string{workItem.ID}},
+		},
+		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+			workItem.ID: {{
+				WorkID: workItem.ID, WorkTypeName: "task", ToState: "done",
+				FromPlaceID: "task:init", ToPlaceID: "task:done", Source: work.WorkStateChangeSourceAPI,
+			}},
+		},
+	}
+	_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+	if err == nil || !strings.Contains(err.Error(), "conflicting current places") {
+		t.Fatalf("New error = %v, want fail-closed conflicting-current-places error", err)
 	}
 }
 
