@@ -14,63 +14,66 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
-	liveCapacityResourceID         = "reviewers"
-	liveCapacityResourceName       = "Reviewers"
-	liveCapacityWorkType           = "review-task"
-	liveCapacityWorker             = "capacity-worker"
-	liveCapacityWorkstation        = "review"
-	liveCapacityInitialWorkName    = "held-review"
-	liveCapacityQueuedWorkName     = "queued-review"
-	liveCapacitySecondQueuedName   = "second-queued-review"
-	liveCapacityRaiseRequestID     = "capacity-raise-functional"
-	liveCapacityBarrierCommand     = "functional-capacity-barrier"
-	liveCapacityBarrierOutput      = "capacity barrier completed"
-	liveCapacityTestTimeout        = 20 * time.Second
-	liveCapacityJavaScriptWorkflow = `return (async function () {
+	liveCapacityResourceID            = "reviewers"
+	liveCapacityResourceName          = "Reviewers"
+	liveCapacityWorkType              = "review-task"
+	liveCapacityWorker                = "capacity-worker"
+	liveCapacityWorkstation           = "review"
+	liveCapacityInitialWorkName       = "held-review"
+	liveCapacityQueuedWorkName        = "queued-review"
+	liveCapacitySecondQueuedName      = "second-queued-review"
+	liveCapacityRaiseRequestID        = "capacity-raise-functional"
+	liveCapacityBarrierCommand        = "functional-capacity-barrier"
+	liveCapacityBarrierOutput         = "capacity barrier completed"
+	liveCapacityJavaScriptWorker      = "javascript-capacity-worker"
+	liveCapacityJavaScriptWorkstation = "javascript-capacity-review"
+	liveCapacityTestTimeout           = 20 * time.Second
+	liveCapacityJavaScriptWorkflow    = `return (async function () {
   const results = await parallel([
-        { prompt: "javascript capacity child one", label: "javascript-child-one", preset: "capacity-worker", resourceId: "reviewers" },
-        { prompt: "javascript capacity child two", label: "javascript-child-two", preset: "capacity-worker", resourceId: "reviewers" },
+        { prompt: "javascript capacity child one", label: "javascript-child-one", preset: "javascript-capacity-worker", resourceId: "reviewers" },
+        { prompt: "javascript capacity child two", label: "javascript-child-two", preset: "javascript-capacity-worker", resourceId: "reviewers" },
   ]);
   return { results };
 })();`
 )
 
-// TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch proves the public
+// testLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch proves the public
 // live-capacity operation changes an already-running mock-worker Factory
 // Session. One admitted dispatch stays active at the injected command edge;
 // queued Work remains pending at capacity one, then a CLI capacity increase
 // wakes another dispatch without replacing the session or interrupting the
 // first one.
-func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
-	t.Parallel()
+func testLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	runner := newLiveCapacityBarrierRunner(1)
 	dir := scaffoldLiveCapacityFactory(t, 1)
-	server := startLiveCapacityServer(t, dir, runner)
+	fixture.useCommandRunners(nil, runner)
+	session := fixture.openSession(t, dir)
+	defer session.closeAndAssertGone(t)
 
-	first := submitLiveCapacityWork(t, dir, server.URL(), liveCapacityInitialWorkName)
+	first := submitLiveCapacityWork(t, fixture, dir, session.id, liveCapacityInitialWorkName)
 	if first.WorkId == nil || *first.WorkId == "" {
 		t.Fatalf("first submit response = %#v, want work id", first)
 	}
 	runner.waitForCall(t, 1)
 
-	before := support.GetDefaultSession(t, server.URL())
+	before := session.current(t)
 	if before.Id == "" {
 		t.Fatal("default Factory Session has no durable identity")
 	}
-	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityQueuedWorkName)
-	submitLiveCapacityWork(t, dir, server.URL(), liveCapacitySecondQueuedName)
+	submitLiveCapacityWork(t, fixture, dir, session.id, liveCapacityQueuedWorkName)
+	submitLiveCapacityWork(t, fixture, dir, session.id, liveCapacitySecondQueuedName)
 
-	capacity := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 2, 0, liveCapacityRaiseRequestID, "raise functional throughput")
+	capacity := runLiveCapacityCLI(t, fixture, dir, session.id, liveCapacityResourceID, 2, 0, liveCapacityRaiseRequestID, "raise functional throughput")
 	if capacity.ResourceId != liveCapacityResourceID || capacity.EffectiveCapacity != 2 ||
 		capacity.PreviousCapacity != 1 || capacity.RequestedCapacity != 2 ||
 		capacity.InUseCount != 1 || capacity.AvailableCount != 1 ||
@@ -83,15 +86,16 @@ func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
 	// the first command is still held, proving the live mutation reached the
 	// shared admission gate instead of restarting or draining the session.
 	runner.waitForCall(t, 2)
-	afterRaise := support.GetDefaultSession(t, server.URL())
+	afterRaise := session.current(t)
 	if afterRaise.Id != before.Id {
 		t.Fatalf("Factory Session id changed from %q to %q after live capacity raise", before.Id, afterRaise.Id)
 	}
 
 	close(runner.releaseBlocked)
-	support.WaitForTerminalStatus(t, server.URL(), liveCapacityTestTimeout)
+	support.WaitForSessionTerminalStatus(t, fixture.server.URL(), session.id, liveCapacityTestTimeout)
 
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	events := session.events(t)
+	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want one admitted dispatch plus two queued dispatches; dispatches=%#v", len(dispatches), dispatches)
 	}
@@ -100,30 +104,33 @@ func TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch(t *testing.T) {
 			t.Fatalf("dispatch %q response = %#v, want accepted terminal response", dispatch.DispatchID, dispatch.Response)
 		}
 	}
-	for _, event := range server.GetFactoryEvents(t) {
+	for _, event := range events {
 		if event.Type == factoryapi.FactoryEventTypeDispatchInterrupted {
 			t.Fatalf("live capacity raise interrupted a dispatch: %#v", event)
 		}
 	}
 
-	functionalevidence.Covers(t, "cli/you.session.resource.set")
 }
 
-// TestLiveResourceCapacityReductionPreservesActiveWork proves a safe live
+// testLiveResourceCapacityReductionPreservesActiveWork proves a safe live
 // reduction updates the durable resource projection while an admitted mock
 // dispatch remains in flight. The effective capacity may equal in-use work,
 // but the active dispatch is neither interrupted nor restarted.
-func TestLiveResourceCapacityReductionPreservesActiveWork(t *testing.T) {
-	t.Parallel()
+func testLiveResourceCapacityReductionPreservesActiveWork(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	runner := newLiveCapacityBarrierRunner(1)
 	dir := scaffoldLiveCapacityFactory(t, 3)
-	server := startLiveCapacityServer(t, dir, runner)
+	fixture.useCommandRunners(nil, runner)
+	session := fixture.openSession(t, dir)
+	defer session.closeAndAssertGone(t)
 
-	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityInitialWorkName)
+	submitLiveCapacityWork(t, fixture, dir, session.id, liveCapacityInitialWorkName)
 	runner.waitForCall(t, 1)
-	before := support.GetDefaultSession(t, server.URL())
+	before := session.current(t)
 
-	capacity := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 1, 0, "capacity-lower-safe", "lower capacity safely")
+	capacity := runLiveCapacityCLI(t, fixture, dir, session.id, liveCapacityResourceID, 1, 0, "capacity-lower-safe", "lower capacity safely")
 	if capacity.ResourceId != liveCapacityResourceID || capacity.PreviousCapacity != 3 ||
 		capacity.RequestedCapacity != 1 || capacity.EffectiveCapacity != 1 ||
 		capacity.InUseCount != 1 || capacity.AvailableCount != 0 || capacity.MinimumCapacity != 1 ||
@@ -133,36 +140,40 @@ func TestLiveResourceCapacityReductionPreservesActiveWork(t *testing.T) {
 	}
 
 	close(runner.releaseBlocked)
-	support.WaitForTerminalStatus(t, server.URL(), liveCapacityTestTimeout)
-	after := support.GetDefaultSession(t, server.URL())
+	support.WaitForSessionTerminalStatus(t, fixture.server.URL(), session.id, liveCapacityTestTimeout)
+	after := session.current(t)
 	if after.Id != before.Id {
 		t.Fatalf("Factory Session id changed from %q to %q after safe live capacity reduction", before.Id, after.Id)
 	}
 	assertLiveCapacityUsage(t, after, liveCapacityResourceID, 1, 1)
-	assertNoLiveCapacityInterruptions(t, server.GetFactoryEvents(t))
+	assertNoLiveCapacityInterruptions(t, session.events(t))
 }
 
-// TestLiveResourceCapacityRejectsReductionBelowActiveUse proves an unsafe
+// testLiveResourceCapacityRejectsReductionBelowActiveUse proves an unsafe
 // reduction is rejected before admission. The rejection emits no live-change
 // events, leaves the revision and usage unchanged, and allows the already
 // admitted mock dispatches to complete normally.
-func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
-	t.Parallel()
+func testLiveResourceCapacityRejectsReductionBelowActiveUse(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	runner := newLiveCapacityBarrierRunner(2)
 	dir := scaffoldLiveCapacityFactory(t, 2)
-	server := startLiveCapacityServer(t, dir, runner)
+	fixture.useCommandRunners(nil, runner)
+	session := fixture.openSession(t, dir)
+	defer session.closeAndAssertGone(t)
 
-	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityInitialWorkName)
-	submitLiveCapacityWork(t, dir, server.URL(), liveCapacityQueuedWorkName)
+	submitLiveCapacityWork(t, fixture, dir, session.id, liveCapacityInitialWorkName)
+	submitLiveCapacityWork(t, fixture, dir, session.id, liveCapacityQueuedWorkName)
 	runner.waitForCall(t, 2)
 
-	beforeEvents := server.GetFactoryEvents(t)
-	before := support.GetDefaultSession(t, server.URL())
+	beforeEvents := session.events(t)
+	before := session.current(t)
 	if before.Runtime.Usage.Resources == nil {
 		t.Fatal("active session has no resource usage projection")
 	}
 
-	errResponse := rejectLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 1, 0, "capacity-lower-rejected", "reject unsafe capacity reduction")
+	errResponse := rejectLiveCapacityCLI(t, fixture, dir, session.id, liveCapacityResourceID, 1, 0, "capacity-lower-rejected", "reject unsafe capacity reduction")
 	if errResponse.Code != factoryapi.ErrorResponseCodeRESOURCECAPACITYINUSE || errResponse.ResourceCapacity == nil {
 		t.Fatalf("reduction rejection = %#v, want RESOURCE_CAPACITY_IN_USE details", errResponse)
 	}
@@ -173,7 +184,7 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 		t.Fatalf("reduction rejection details = %#v, want current/requested/in-use/available/minimum 2/1/2/0/2", details)
 	}
 
-	afterRejectEvents := server.GetFactoryEvents(t)
+	afterRejectEvents := session.events(t)
 	if len(afterRejectEvents) != len(beforeEvents) {
 		t.Fatalf("event count changed from %d to %d for pre-admission rejection", len(beforeEvents), len(afterRejectEvents))
 	}
@@ -182,15 +193,16 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 			t.Fatalf("event %d changed across pre-admission rejection: before=%q after=%q", index, beforeEvents[index].Id, afterRejectEvents[index].Id)
 		}
 	}
-	after := support.GetDefaultSession(t, server.URL())
+	after := session.current(t)
 	if after.Id != before.Id {
 		t.Fatalf("Factory Session id changed from %q to %q after rejected live capacity reduction", before.Id, after.Id)
 	}
 	assertLiveCapacityUsage(t, after, liveCapacityResourceID, 2, 0)
 
 	close(runner.releaseBlocked)
-	support.WaitForTerminalStatus(t, server.URL(), liveCapacityTestTimeout)
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	support.WaitForSessionTerminalStatus(t, fixture.server.URL(), session.id, liveCapacityTestTimeout)
+	events := session.events(t)
+	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want two admitted dispatches", len(dispatches))
 	}
@@ -199,30 +211,34 @@ func TestLiveResourceCapacityRejectsReductionBelowActiveUse(t *testing.T) {
 			t.Fatalf("dispatch %q response = %#v, want accepted terminal response", dispatch.DispatchID, dispatch.Response)
 		}
 	}
-	assertNoLiveCapacityInterruptions(t, server.GetFactoryEvents(t))
+	assertNoLiveCapacityInterruptions(t, events)
 }
 
-// TestLiveResourceCapacityRecordingReplayAndCursor proves the public
+// testLiveResourceCapacityRecordingReplayAndCursor proves the public
 // recording contract for an admitted capacity change: the request and success
 // events are ordered and revision-correlated, an identical retry is replayed
 // without appending history, different-body reuse is rejected, exact no-op and
 // stale pre-admission requests append nothing, and retained history resumes
 // after an acknowledged event cursor.
-func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
-	t.Parallel()
+func testLiveResourceCapacityRecordingReplayAndCursor(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	runner := newLiveCapacityBarrierRunner(0)
 	dir := scaffoldLiveCapacityFactory(t, 1)
-	server := startLiveCapacityServer(t, dir, runner)
+	fixture.useCommandRunners(nil, runner)
+	session := fixture.openSession(t, dir)
+	defer session.closeAndAssertGone(t)
 
-	initialEvents := server.GetFactoryEvents(t)
-	applied := runLiveCapacityCLI(t, dir, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
+	initialEvents := session.events(t)
+	applied := runLiveCapacityCLI(t, fixture, dir, session.id, liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
 	if applied.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("APPLIED") ||
 		applied.PreviousCapacity != 1 || applied.RequestedCapacity != 2 || applied.EffectiveCapacity != 2 ||
 		applied.Revision != 1 {
 		t.Fatalf("applied capacity response = %#v, want APPLIED revision 1", applied)
 	}
 
-	events := server.GetFactoryEvents(t)
+	events := session.events(t)
 	requestIndex, requestEvent := findLiveCapacityEvent(t, events, factoryapi.FactoryEventTypeFactoryChangeRequest, "recorded-capacity-raise")
 	changeIndex, changeEvent := findLiveCapacityEvent(t, events, factoryapi.FactoryEventTypeFactoryChange, "recorded-capacity-raise")
 	if changeIndex <= requestIndex {
@@ -258,13 +274,13 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 	}
 
 	stableEvents := append([]factoryapi.FactoryEvent(nil), events...)
-	assertLiveCapacityReplayAndRejections(t, server, dir, stableEvents, applied.ChangeId)
+	assertLiveCapacityReplayAndRejections(t, fixture, dir, session.id, stableEvents, applied.ChangeId)
 
 	if len(events) <= len(initialEvents) {
 		t.Fatalf("recorded event count = %d, want request and success beyond initial %d", len(events), len(initialEvents))
 	}
 	cursorSequence := support.ReconnectSequenceForFactoryEvent(requestEvent)
-	afterCursor := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+	afterCursor := session.eventsAfter(t, support.FactoryEventReadCursor{
 		AfterEventID:  requestEvent.Id,
 		AfterSequence: &cursorSequence,
 	})
@@ -281,46 +297,52 @@ func TestLiveResourceCapacityRecordingReplayAndCursor(t *testing.T) {
 
 func assertLiveCapacityReplayAndRejections(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	fixture *sharedWorkersMockFixture,
 	factoryDir string,
+	sessionID string,
 	stableEvents []factoryapi.FactoryEvent,
 	changeID string,
 ) {
 	t.Helper()
-	replayed := runLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
+	replayed := runLiveCapacityCLI(t, fixture, factoryDir, sessionID, liveCapacityResourceID, 2, 0, "recorded-capacity-raise", "raise capacity for recording")
 	if replayed.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("REPLAYED") ||
 		replayed.ChangeId != changeID || replayed.Revision != 1 || replayed.EffectiveCapacity != 2 {
 		t.Fatalf("replayed capacity response = %#v, want REPLAYED original outcome", replayed)
 	}
-	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "same-body replay")
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, fixtureSessionEvents(t, fixture, sessionID), "same-body replay")
 
-	conflict := rejectLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-raise", "reuse request id with different body")
+	conflict := rejectLiveCapacityCLI(t, fixture, factoryDir, sessionID, liveCapacityResourceID, 3, 0, "recorded-capacity-raise", "reuse request id with different body")
 	if conflict.Code != factoryapi.ErrorResponseCodeREQUESTCONFLICT ||
 		conflict.Family != factoryapi.ErrorFamilyConflict ||
 		!strings.Contains(conflict.Message, "different normalized body") {
 		t.Fatalf("different-body conflict = %#v, want typed request conflict", conflict)
 	}
-	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "different-body conflict")
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, fixtureSessionEvents(t, fixture, sessionID), "different-body conflict")
 
-	noOp := runLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 2, 1, "recorded-capacity-noop", "repeat current capacity for recording")
+	noOp := runLiveCapacityCLI(t, fixture, factoryDir, sessionID, liveCapacityResourceID, 2, 1, "recorded-capacity-noop", "repeat current capacity for recording")
 	if noOp.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("NO_OP") ||
 		noOp.PreviousCapacity != 2 || noOp.RequestedCapacity != 2 ||
 		noOp.EffectiveCapacity != 2 || noOp.Revision != 1 {
 		t.Fatalf("exact no-op response = %#v, want typed NO_OP at revision 1", noOp)
 	}
-	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "exact no-op")
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, fixtureSessionEvents(t, fixture, sessionID), "exact no-op")
 
-	stale := rejectLiveCapacityCLI(t, factoryDir, server.URL(), "~default", liveCapacityResourceID, 3, 0, "recorded-capacity-stale", "submit stale capacity revision")
+	stale := rejectLiveCapacityCLI(t, fixture, factoryDir, sessionID, liveCapacityResourceID, 3, 0, "recorded-capacity-stale", "submit stale capacity revision")
 	if stale.Code != factoryapi.ErrorResponseCodeREVISIONCONFLICT {
 		t.Fatalf("stale revision response = %#v, want REVISION_CONFLICT", stale)
 	}
-	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "stale revision")
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, fixtureSessionEvents(t, fixture, sessionID), "stale revision")
 
-	notFound := rejectLiveCapacityCLI(t, factoryDir, server.URL(), "~default", "missing-resource", 2, 1, "recorded-capacity-not-found", "submit capacity for an unknown resource")
+	notFound := rejectLiveCapacityCLI(t, fixture, factoryDir, sessionID, "missing-resource", 2, 1, "recorded-capacity-not-found", "submit capacity for an unknown resource")
 	if notFound.Code != factoryapi.ErrorResponseCodeNOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
 		t.Fatalf("unknown resource response = %#v, want typed NOT_FOUND", notFound)
 	}
-	assertLiveCapacityEventIDsUnchanged(t, stableEvents, server.GetFactoryEvents(t), "unknown resource")
+	assertLiveCapacityEventIDsUnchanged(t, stableEvents, fixtureSessionEvents(t, fixture, sessionID), "unknown resource")
+}
+
+func fixtureSessionEvents(t testing.TB, fixture *sharedWorkersMockFixture, sessionID string) []factoryapi.FactoryEvent {
+	t.Helper()
+	return support.GetFactoryEventsForSessionAt(t, fixture.server.URL(), sessionID)
 }
 
 func findLiveCapacityEvent(
@@ -355,29 +377,6 @@ func assertLiveCapacityEventIDsUnchanged(
 	}
 }
 
-func startLiveCapacityServer(t *testing.T, dir string, runner *liveCapacityBarrierRunner) *support.FunctionalAPIServer {
-	t.Helper()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		MockWorkersConfig: &workers.MockWorkersConfig{
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      liveCapacityWorker,
-				WorkstationName: liveCapacityWorkstation,
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: liveCapacityBarrierCommand,
-				},
-			}},
-		},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: support.NewStaticSuccessCommandRunner(liveCapacityBarrierOutput),
-			ScriptCommandRunner:   runner,
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-	return server
-}
-
 func assertLiveCapacityUsage(t *testing.T, session factoryapi.FactorySession, name string, total, available int) {
 	t.Helper()
 	for _, usage := range session.Runtime.Usage.Resources {
@@ -402,11 +401,10 @@ func assertNoLiveCapacityInterruptions(t *testing.T, events []factoryapi.Factory
 
 func submitLiveCapacityWork(
 	t *testing.T,
-	factoryDir, serverURL, name string,
+	fixture *sharedWorkersMockFixture,
+	factoryDir, sessionID, name string,
 ) factoryapi.SubmitWorkResponse {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 
 	payloadPath := filepath.Join(t.TempDir(), "live-capacity-work.json")
 	payload, err := json.Marshal(map[string]string{"name": name})
@@ -417,18 +415,16 @@ func submitLiveCapacityWork(
 		t.Fatalf("write live capacity Work payload: %v", err)
 	}
 
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you",
+	inputs, err := fixture.executeCLI(t, factoryDir,
 		"--json",
-		"--server", serverURL,
+		"--server", fixture.server.URL(),
 		"submit",
-		"--session", "~default",
+		"--session", sessionID,
 		"--name", name,
 		"--work-type-name", liveCapacityWorkType,
 		"--payload", payloadPath,
-	})
-	inputs.WorkingDirectory = factoryDir
-	if err := process.Execute(inputs.Input); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("you submit live capacity Work: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var confirmation submitcli.SubmitSuccessResult
@@ -447,31 +443,22 @@ func submitLiveCapacityWork(
 
 func runLiveCapacityCLI(
 	t *testing.T,
-	factoryDir, serverURL, sessionID, resourceID string,
+	fixture *sharedWorkersMockFixture,
+	factoryDir, sessionID, resourceID string,
 	capacity, expectedRevision int,
 	requestID, reason string,
 ) factoryapi.FactorySessionResourceCapacityResponse {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
-		t.Cleanup(func() {
-			if err := closer.Close(context.Background()); err != nil {
-				t.Errorf("close capacity CLI process: %v", err)
-			}
-		})
-	}
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you",
+	inputs, err := fixture.executeCLI(t, factoryDir,
 		"--json",
-		"--server", serverURL,
+		"--server", fixture.server.URL(),
 		"session", "resource", "set",
 		resourceID, fmt.Sprintf("%d", capacity), sessionID,
 		"--request-id", requestID,
 		"--expected-revision", fmt.Sprintf("%d", expectedRevision),
 		"--reason", reason,
-	})
-	inputs.WorkingDirectory = factoryDir
-	if err := process.Execute(inputs.Input); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("you session resource set: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var response factoryapi.FactorySessionResourceCapacityResponse
@@ -483,25 +470,21 @@ func runLiveCapacityCLI(
 
 func rejectLiveCapacityCLI(
 	t *testing.T,
-	factoryDir, serverURL, sessionID, resourceID string,
+	fixture *sharedWorkersMockFixture,
+	factoryDir, sessionID, resourceID string,
 	capacity, expectedRevision int,
 	requestID, reason string,
 ) factoryapi.ErrorResponse {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you",
+	inputs, err := fixture.executeCLI(t, factoryDir,
 		"--json",
-		"--server", serverURL,
+		"--server", fixture.server.URL(),
 		"session", "resource", "set",
 		resourceID, fmt.Sprintf("%d", capacity), sessionID,
 		"--request-id", requestID,
 		"--expected-revision", fmt.Sprintf("%d", expectedRevision),
 		"--reason", reason,
-	})
-	inputs.WorkingDirectory = factoryDir
-	err := process.Execute(inputs.Input)
+	)
 	if err == nil {
 		t.Fatalf("you session resource set %s unexpectedly succeeded\nstdout:\n%s", requestID, inputs.Stdout())
 	}
@@ -513,6 +496,39 @@ func rejectLiveCapacityCLI(
 }
 
 func scaffoldLiveCapacityFactory(t *testing.T, capacity int) string {
+	t.Helper()
+	return scaffoldLiveCapacityFactoryWithWorker(
+		t,
+		capacity,
+		liveCapacityWorker,
+		liveCapacityWorkstation,
+		"---\n"+
+			"type: SCRIPT_WORKER\n"+
+			"command: authored-capacity-command\n"+
+			"---\n"+
+			"Run the capacity test work.\n",
+	)
+}
+
+func scaffoldLiveCapacityJavaScriptFactory(t *testing.T) string {
+	t.Helper()
+	return scaffoldLiveCapacityFactoryWithWorker(
+		t,
+		1,
+		liveCapacityJavaScriptWorker,
+		liveCapacityJavaScriptWorkstation,
+		"---\n"+
+			"type: MODEL_WORKER\n"+
+			"---\n"+
+			"Use the capacity worker for JavaScript children.\n",
+	)
+}
+
+func scaffoldLiveCapacityFactoryWithWorker(
+	t *testing.T,
+	capacity int,
+	workerName, workstationName, agentConfig string,
+) string {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "live-capacity-functional",
@@ -530,23 +546,19 @@ func scaffoldLiveCapacityFactory(t *testing.T, capacity int) string {
 			},
 		}},
 		"workers": []map[string]any{{
-			"name": liveCapacityWorker,
+			"name": workerName,
 		}},
 		"workstations": []map[string]any{{
-			"name":      liveCapacityWorkstation,
+			"name":      workstationName,
 			"type":      "MODEL_WORKSTATION",
-			"worker":    liveCapacityWorker,
+			"worker":    workerName,
 			"inputs":    []map[string]string{{"workType": liveCapacityWorkType, "state": "init"}},
 			"outputs":   []map[string]string{{"workType": liveCapacityWorkType, "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": liveCapacityWorkType, "state": "failed"}},
 			"resources": []map[string]any{{"name": liveCapacityResourceName, "capacity": 1}},
 		}},
 	})
-	support.WriteAgentConfig(t, dir, liveCapacityWorker, "---\n"+
-		"type: SCRIPT_WORKER\n"+
-		"command: authored-capacity-command\n"+
-		"---\n"+
-		"Run the capacity test work.\n")
+	support.WriteAgentConfig(t, dir, workerName, agentConfig)
 	return dir
 }
 

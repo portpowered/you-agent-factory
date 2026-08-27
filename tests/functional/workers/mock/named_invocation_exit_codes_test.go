@@ -16,8 +16,10 @@ const characterizedNamedFactory = "@you/goal"
 
 // TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot pins the existing
 // one-shot process contract before batch reporting changes. The test uses the
-// compiled executable and serialized mock workers because injected edges cannot
-// cross that OS process boundary.
+// executable built from ./cmd/factory and invokes it with exec.CommandContext;
+// serialized mock workers are required because injected edges cannot cross the
+// OS process boundary. Keep this row process-isolated because its witness is
+// the subprocess stdout/stderr and OS exit status.
 func TestBuiltCLINamedInvocationExitCodesCharacterizeOneShot(t *testing.T) {
 	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))

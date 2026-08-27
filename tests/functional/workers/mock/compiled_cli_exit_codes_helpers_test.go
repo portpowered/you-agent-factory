@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -30,12 +31,38 @@ var compiledCLIBinary struct {
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if compiledCLIBinary.tempDir != "" {
-		if err := os.RemoveAll(compiledCLIBinary.tempDir); err != nil && exitCode == 0 {
+		if err := removeCompiledCLIBinaryDirectory(compiledCLIBinary.tempDir); err != nil && exitCode == 0 {
 			fmt.Fprintf(os.Stderr, "remove compiled CLI binary directory %s: %v\n", compiledCLIBinary.tempDir, err)
 			exitCode = 1
 		}
 	}
 	os.Exit(exitCode)
+}
+
+const (
+	compiledCLICleanupTimeout = 2 * time.Second
+	compiledCLICleanupRetry   = 10 * time.Millisecond
+)
+
+func removeCompiledCLIBinaryDirectory(dir string) error {
+	var lastErr error
+	deadline := time.Now().Add(compiledCLICleanupTimeout)
+	for {
+		lastErr = os.RemoveAll(dir)
+		if lastErr == nil {
+			if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+				return nil
+			}
+			lastErr = fmt.Errorf("compiled CLI binary directory still exists")
+		}
+		if runtime.GOOS != "windows" || time.Now().After(deadline) {
+			return lastErr
+		}
+		// Windows can release the executable handle shortly after the child
+		// process has exited. A bounded retry keeps CLEAN-001 deterministic
+		// without masking a persistent cleanup failure.
+		time.Sleep(compiledCLICleanupRetry)
+	}
 }
 
 func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {

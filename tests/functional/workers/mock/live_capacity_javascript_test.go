@@ -7,56 +7,41 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren proves the
+// testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren proves the
 // shared resource gate at the public JavaScript Factory Session boundary. One
 // child is held at the injected mock-worker command edge, the second child
 // waits on reviewers capacity one, and a live increase admits it in the same
 // durable session with exactly two completed child dispatches.
-func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T) {
-	t.Parallel()
+func testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	provider := newLiveCapacityJavaScriptProviderRunner()
-	dir := scaffoldLiveCapacityFactory(t, 1)
-	support.WriteAgentConfig(t, dir, liveCapacityWorker, "---\n"+
-		"type: MODEL_WORKER\n"+
-		"---\n"+
-		"Use the capacity worker for JavaScript children.\n")
-	homeDir := writeLiveCapacityJavaScriptGlobalConfig(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-		),
-		Edges: serviceedges.Edges{ProviderCommandRunner: provider},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	dir := scaffoldLiveCapacityJavaScriptFactory(t)
+	fixture.useCommandRunners(provider, nil)
 
-	started := startLiveCapacityJavaScriptWorkflow(t, server.URL(), liveCapacityJavaScriptWorkflow)
+	started := startLiveCapacityJavaScriptWorkflow(t, fixture.server.URL(), liveCapacityJavaScriptWorkflow)
 	if started.SessionId == "" {
 		t.Fatal("JavaScript capacity workflow has no durable session ID")
 	}
 	responseStream := support.OpenFactoryResponseEventStreamAt(
 		t,
-		support.SessionResponseEventsURL(server.URL(), started.SessionId),
+		support.SessionResponseEventsURL(fixture.server.URL(), started.SessionId),
 	)
 	provider.waitForCall(t, 1)
-	before := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
+	before := readLiveCapacityDurableSession(t, fixture.server.URL(), started.SessionId)
 
-	capacity := runLiveCapacityCLI(t, dir, server.URL(), started.SessionId, liveCapacityResourceID, 2, 0, "javascript-capacity-raise", "raise JavaScript capacity")
+	capacity := runLiveCapacityCLI(t, fixture, dir, started.SessionId, liveCapacityResourceID, 2, 0, "javascript-capacity-raise", "raise JavaScript capacity")
 	if capacity.Outcome != factoryapi.FactorySessionResourceCapacityOutcome("APPLIED") ||
 		capacity.SessionId != started.SessionId || capacity.PreviousCapacity != 1 ||
 		capacity.EffectiveCapacity != 2 || capacity.InUseCount != 1 || capacity.AvailableCount != 1 ||
@@ -64,7 +49,7 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 		t.Fatalf("JavaScript capacity response = %#v, want applied reviewers 1->2 in same session", capacity)
 	}
 	provider.waitForCall(t, 2)
-	afterRaise := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
+	afterRaise := readLiveCapacityDurableSession(t, fixture.server.URL(), started.SessionId)
 	if afterRaise.SessionId != before.SessionId {
 		t.Fatalf("JavaScript Factory Session id changed from %q to %q after live raise", before.SessionId, afterRaise.SessionId)
 	}
@@ -73,7 +58,7 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	terminalEvent := waitForLiveCapacityJavaScriptTerminal(
 		t,
 		responseStream,
-		server.URL(),
+		fixture.server.URL(),
 		started.SessionId,
 		provider,
 		2,
@@ -85,7 +70,7 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 			started.SessionId,
 		)
 	}
-	terminal := readLiveCapacityDurableSession(t, server.URL(), started.SessionId)
+	terminal := readLiveCapacityDurableSession(t, fixture.server.URL(), started.SessionId)
 	if terminal.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("JavaScript durable session status = %q, want SUCCEEDED", terminal.Status)
 	}
@@ -98,7 +83,7 @@ func TestJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren(t *testing.T
 	}
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		strings.TrimSuffix(fixture.server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 2 {
 		t.Fatalf("JavaScript dispatch count = %d, want two resource-bound children", len(dispatches.Dispatches))
@@ -337,23 +322,6 @@ func readLiveCapacityLifecycleJSON[T any](serverURL, path string) (T, error) {
 		return value, err
 	}
 	return value, nil
-}
-
-func writeLiveCapacityJavaScriptGlobalConfig(t *testing.T) string {
-	t.Helper()
-	homeDir := t.TempDir()
-	configDir := filepath.Join(homeDir, ".you-agent-factory")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		t.Fatalf("create JavaScript capacity global config directory: %v", err)
-	}
-	config := []byte(`{
-  "defaults": {"workerModelProvider": "codex", "workerModel": "mock-capacity-model"},
-  "workerPresets": [{"id": "capacity-worker", "modelProvider": "codex", "model": "mock-capacity-model"}]
-}`)
-	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
-		t.Fatalf("write JavaScript capacity global config: %v", err)
-	}
-	return homeDir
 }
 
 type liveCapacityJavaScriptProviderRunner struct {

@@ -2,17 +2,20 @@ package mock
 
 import (
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCommandRunner
+// testServiceConfigOverrideAlignmentCustomerProcess
 // proves customer-process script and provider dispatches route through one shared
 // replaced command-runner edge with correct per-workstation env and work dirs.
-func TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCommandRunner(t *testing.T) {
+func testServiceConfigOverrideAlignmentCustomerProcess(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := scaffoldSharedCommandRunnerFactory(t)
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("script-output")},
@@ -22,24 +25,10 @@ func TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCo
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_mixed_command"}`),
 		},
 	)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run", "--dir", dir, "--no-record",
-	})
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		ScriptCommandRunner:   runner,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute() error = %v; stdout=%q stderr=%q",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
+	fixture.useCommandRunners(runner, runner)
+	session := fixture.openSession(t, dir)
+	_, _ = session.terminalObservations(t, 20*time.Second)
+	defer session.closeAndAssertGone(t)
 
 	requests := runner.Requests()
 	if len(requests) != 2 {

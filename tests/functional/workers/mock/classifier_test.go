@@ -6,9 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,11 +20,13 @@ const (
 	scriptClassifierDiagnosticLine = "checking payload"
 )
 
-// TestScriptWorkerClassifierRoutesWithoutModelCalls proves the workers/mock
+// testScriptWorkerClassifierRoutesWithoutModelCalls proves the workers/mock
 // ownership cell can route a script-backed classifier through the canonical
 // process and Factory Event flow without invoking a model provider.
-func TestScriptWorkerClassifierRoutesWithoutModelCalls(t *testing.T) {
-	t.Parallel()
+func testScriptWorkerClassifierRoutesWithoutModelCalls(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := scaffoldScriptClassifierFactory(t)
 
 	scriptRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
@@ -35,27 +35,10 @@ func TestScriptWorkerClassifierRoutesWithoutModelCalls(t *testing.T) {
 	})
 	providerRunner := testutil.NewProviderCommandRunner()
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		MockWorkersConfig: &workers.MockWorkersConfig{
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      scriptClassifierWorker,
-				WorkstationName: scriptClassifierWorkstation,
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: "mock-classifier-script",
-				},
-			}},
-		},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: providerRunner,
-			ScriptCommandRunner:   scriptRunner,
-		},
-	})
-	defer server.Stop(t)
-
-	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	fixture.useCommandRunners(providerRunner, scriptRunner)
+	session := fixture.openSession(t, dir)
+	listed, events := session.terminalObservations(t, 20*time.Second)
+	defer session.closeAndAssertGone(t)
 	for placeID, want := range map[string]int{
 		support.WorkCustomerLocation(scriptClassifierWorkType, "done"):   1,
 		support.WorkCustomerLocation(scriptClassifierWorkType, "init"):   0,
@@ -72,7 +55,7 @@ func TestScriptWorkerClassifierRoutesWithoutModelCalls(t *testing.T) {
 		t.Fatalf("provider command runner calls = %d, want zero model-provider invocations", providerRunner.CallCount())
 	}
 
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	dispatches := support.ObserveDispatchEvents(t, events)
 	classifierDispatches := make([]support.DispatchEventObservation, 0, 1)
 	for _, dispatch := range dispatches {
 		if dispatch.Request.TransitionId == scriptClassifierWorkstation {
@@ -107,7 +90,6 @@ func TestScriptWorkerClassifierRoutesWithoutModelCalls(t *testing.T) {
 		t.Fatalf("classifier response = %#v, want no failure or circuit-breaker sequence", response)
 	}
 
-	events := server.GetFactoryEvents(t)
 	for _, event := range events {
 		if event.Type == factoryapi.FactoryEventTypeInferenceRequest ||
 			event.Type == factoryapi.FactoryEventTypeInferenceResponse {

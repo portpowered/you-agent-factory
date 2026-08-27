@@ -29,7 +29,10 @@ type batchProcessFailure struct {
 
 // TestBuiltCLIBatchExitCodesReportSingleWorkOutcome proves the ordinary
 // --work path, which is distinct from the characterized one-shot --named
-// path, returns process status and stdout from the submitted Work outcome.
+// path, returns process status and stdout from the submitted Work outcome. It
+// intentionally builds ./cmd/factory to a test-owned executable and invokes
+// that subprocess with exec.CommandContext so captured output and the OS exit
+// status remain real process witnesses rather than injected-edge observations.
 func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
 	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
@@ -67,7 +70,11 @@ func TestBuiltCLIBatchExitCodesReportSingleWorkOutcome(t *testing.T) {
 	})
 }
 
-// TestBuiltCLIBatchExitCodesAggregateFailureCauses proves batch CLI exit codes aggregate every failure cause.
+// TestBuiltCLIBatchExitCodesAggregateFailureCauses proves batch CLI exit codes
+// aggregate every failure cause. Like the companion batch row, it remains
+// process-isolated: ./cmd/factory is built as a test-owned executable and
+// invoked with exec.CommandContext so subprocess output and OS exit status are
+// part of the retained witness.
 func TestBuiltCLIBatchExitCodesAggregateFailureCauses(t *testing.T) {
 	t.Parallel()
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
