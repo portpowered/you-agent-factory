@@ -73,6 +73,22 @@ type codexGoldenScenario struct {
 	wantDispatches    int
 }
 
+type codexGoldenScenarioDefinition struct {
+	name              string
+	model             string
+	requestID         string
+	workID            string
+	traceID           string
+	providerSessionID string
+	loaded            support.ProviderSessionCase
+	results           []platformprocess.CommandResult
+	wantWorkState     string
+	wantOutcome       factoryapi.WorkOutcome
+	wantFailure       string
+	wantProviderCalls int
+	wantDispatches    int
+}
+
 type codexGoldenScenarioObservation struct {
 	sessionID         string
 	workID            string
@@ -121,6 +137,17 @@ func newCodexGoldenFixture(t *testing.T) *codexGoldenFixture {
 func newCodexGoldenScenariosAt(t *testing.T, rootDir string) []codexGoldenScenario {
 	t.Helper()
 
+	definitions := codexGoldenScenarioDefinitions(t)
+	scenarios := make([]codexGoldenScenario, 0, len(definitions))
+	for _, definition := range definitions {
+		scenarios = append(scenarios, materializeCodexGoldenScenario(t, rootDir, definition))
+	}
+	return scenarios
+}
+
+func codexGoldenScenarioDefinitions(t *testing.T) []codexGoldenScenarioDefinition {
+	t.Helper()
+
 	success := loadCodexGoldenCase(t, "success")
 	assertCodexGoldenManifest(t, success, "codex-message-tool-success")
 	structuredFailure := loadCodexGoldenCase(t, codexGoldenStructuredFailureCase)
@@ -134,21 +161,7 @@ func newCodexGoldenScenariosAt(t *testing.T, rootDir string) []codexGoldenScenar
 		timeoutResults[index] = timeoutResult
 	}
 
-	fixtures := []struct {
-		name              string
-		model             string
-		requestID         string
-		workID            string
-		traceID           string
-		providerSessionID string
-		loaded            support.ProviderSessionCase
-		results           []platformprocess.CommandResult
-		wantWorkState     string
-		wantOutcome       factoryapi.WorkOutcome
-		wantFailure       string
-		wantProviderCalls int
-		wantDispatches    int
-	}{
+	return []codexGoldenScenarioDefinition{
 		{
 			name:              "Success",
 			model:             success.Process.Model,
@@ -192,47 +205,50 @@ func newCodexGoldenScenariosAt(t *testing.T, rootDir string) []codexGoldenScenar
 			wantFailure:       "provider invocation timed out",
 		},
 	}
+}
 
-	scenarios := make([]codexGoldenScenario, 0, len(fixtures))
-	for _, fixture := range fixtures {
-		dir := copyCodexFixtureDir(
-			t,
-			support.LegacyFixtureDir(t, "executor_success"),
-			rootDir,
-			"golden-"+fixture.name,
-		)
-		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-			modelprovider.ProviderCodex,
-			fixture.model,
-		))
-		testutil.WriteSeedRequest(t, dir, workservice.SubmitRequest{
-			RequestID:  fixture.requestID,
-			WorkID:     fixture.workID,
-			Name:       fixture.workID,
-			WorkTypeID: "task",
-			TraceID:    fixture.traceID,
-			Payload:    []byte(`{"title":"codex golden shared process"}`),
-		})
+func materializeCodexGoldenScenario(
+	t *testing.T,
+	rootDir string,
+	definition codexGoldenScenarioDefinition,
+) codexGoldenScenario {
+	t.Helper()
 
-		runner := newCodexScenarioCommandRunner(fixture.results, nil)
-		scenarios = append(scenarios, codexGoldenScenario{
-			name:              fixture.name,
-			factoryDir:        dir,
-			model:             fixture.model,
-			workID:            fixture.workID,
-			requestID:         fixture.requestID,
-			traceID:           fixture.traceID,
-			providerSessionID: fixture.providerSessionID,
-			loaded:            fixture.loaded,
-			runner:            runner,
-			wantWorkState:     fixture.wantWorkState,
-			wantOutcome:       fixture.wantOutcome,
-			wantFailure:       fixture.wantFailure,
-			wantProviderCalls: fixture.wantProviderCalls,
-			wantDispatches:    fixture.wantDispatches,
-		})
+	dir := copyCodexFixtureDir(
+		t,
+		support.LegacyFixtureDir(t, "executor_success"),
+		rootDir,
+		"golden-"+definition.name,
+	)
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		definition.model,
+	))
+	testutil.WriteSeedRequest(t, dir, workservice.SubmitRequest{
+		RequestID:  definition.requestID,
+		WorkID:     definition.workID,
+		Name:       definition.workID,
+		WorkTypeID: "task",
+		TraceID:    definition.traceID,
+		Payload:    []byte(`{"title":"codex golden shared process"}`),
+	})
+
+	return codexGoldenScenario{
+		name:              definition.name,
+		factoryDir:        dir,
+		model:             definition.model,
+		workID:            definition.workID,
+		requestID:         definition.requestID,
+		traceID:           definition.traceID,
+		providerSessionID: definition.providerSessionID,
+		loaded:            definition.loaded,
+		runner:            newCodexScenarioCommandRunner(definition.results, nil),
+		wantWorkState:     definition.wantWorkState,
+		wantOutcome:       definition.wantOutcome,
+		wantFailure:       definition.wantFailure,
+		wantProviderCalls: definition.wantProviderCalls,
+		wantDispatches:    definition.wantDispatches,
 	}
-	return scenarios
 }
 
 func resetCodexGoldenScenario(t *testing.T, scenario codexGoldenScenario) {
