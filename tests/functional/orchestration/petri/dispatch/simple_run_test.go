@@ -937,7 +937,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"model mapping probe"}`))
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
@@ -956,7 +956,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 		testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
@@ -990,7 +990,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 			Payload:    []byte(`review the design document`),
 		})
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
@@ -1015,7 +1015,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 			Payload:    []byte(`{"title":"search bar on docs"}`),
 		})
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -1068,7 +1068,7 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
 			),
 		}
-		_, listed := runSharedPetriFactoryToCompletionWithRouteAndWork(
+		listed := runSharedPetriFactoryToCompletionWithRouteAndListedWork(
 			t,
 			dir,
 			route,

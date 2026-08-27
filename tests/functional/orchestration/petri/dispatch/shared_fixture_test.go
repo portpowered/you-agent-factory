@@ -665,6 +665,21 @@ func runSharedPetriFactoryToCompletionWithEdgesAndWork(
 	return session, listed
 }
 
+func runSharedPetriFactoryToCompletionWithEdgesAndListedWork(
+	t *testing.T,
+	dir string,
+	_ serviceedges.Edges,
+	timeout time.Duration,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	selection := openSharedPetriSession(t, dir)
+	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
+	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
+	selection.close(t)
+	assertSharedPetriRouteRequests(t, dir)
+	return listed
+}
+
 func runSharedPetriFactoryToCompletionWithEdgesAndObservations(
 	t *testing.T,
 	dir string,
@@ -710,6 +725,21 @@ func runSharedPetriFactoryToCompletionWithRouteAndWork(
 	selection.close(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return session, listed
+}
+
+func runSharedPetriFactoryToCompletionWithRouteAndListedWork(
+	t *testing.T,
+	dir string,
+	config sharedPetriRouteConfig,
+	timeout time.Duration,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	selection := openSharedPetriSessionWithRoute(t, dir, config)
+	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
+	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
+	selection.close(t)
+	assertSharedPetriRouteRequests(t, dir)
+	return listed
 }
 
 func assertSharedPetriRouteRequests(t testing.TB, dir string) {

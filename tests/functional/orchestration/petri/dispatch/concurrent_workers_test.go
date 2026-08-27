@@ -92,7 +92,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 		traceID := "trace-single-seed"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
@@ -108,7 +108,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 			{traceID: "trace-beta", title: "feature-beta"},
 		})
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
@@ -130,7 +130,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 		}
 		traceIDs := seedIdeas(t, dir, ideas)
 
-		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 15*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: n})
