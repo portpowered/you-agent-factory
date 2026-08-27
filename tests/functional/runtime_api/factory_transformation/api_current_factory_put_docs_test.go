@@ -260,11 +260,11 @@ func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
+		t.Fatalf("PUT %s: %v", server.FactoryURL(), err)
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 400", resp.StatusCode)
+		t.Fatalf("PUT %s status = %d, want 400", server.FactoryURL(), resp.StatusCode)
 	}
 
 	var errResp factoryapi.ErrorResponse

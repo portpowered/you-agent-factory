@@ -24,9 +24,9 @@ import (
 )
 
 // sharedFactoryTransformationFixture owns the one package-scoped application
-// process used by the migrated document scenarios. Scenario roots and session
-// identities remain per-test; only immutable process wiring and the HTTP
-// transport are shared.
+// process used by the runtime-transformation scenarios. Scenario roots and
+// session identities remain per-test; only immutable process wiring and the
+// HTTP transport are shared.
 type sharedFactoryTransformationFixture struct {
 	baseURL    string
 	factoryDir string
@@ -35,8 +35,9 @@ type sharedFactoryTransformationFixture struct {
 	done       chan error
 	process    support.ApplicationProcess
 
-	mu             sync.Mutex
-	seenSessionIDs map[string]struct{}
+	mu              sync.Mutex
+	seenSessionIDs  map[string]struct{}
+	processStartLog sync.Once
 }
 
 var factoryTransformationFixture *sharedFactoryTransformationFixture
@@ -157,7 +158,6 @@ func (fixture *sharedFactoryTransformationFixture) stop() {
 }
 
 type documentTransformationServer struct {
-	fixture   *sharedFactoryTransformationFixture
 	baseURL   string
 	rootDir   string
 	sessionID string
@@ -181,7 +181,10 @@ func startDocumentTransformationServer(
 	}
 	fixture.seenSessionIDs[sessionID] = struct{}{}
 	fixture.mu.Unlock()
-	t.Logf("DOC-001: package process start count=1; explicit Factory Session ID=%s target=%q", sessionID, targetName)
+	fixture.processStartLog.Do(func() {
+		t.Log("FULL-003: package process start count=1")
+	})
+	t.Logf("DOC-001: explicit Factory Session ID=%s target=%q", sessionID, targetName)
 
 	server := &documentTransformationServer{
 		baseURL:   fixture.baseURL,
@@ -301,13 +304,13 @@ func openFactoryTransformationSession(t *testing.T, serverURL, folderPath, targe
 
 func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 	initialEvents := server.GetFactoryEvents(t)
 
-	current := getCurrentFactory(t, server.URL())
-	saved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
 	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
 		t.Fatalf("saved current factory work types = %#v, want story", saved.WorkTypes)
 	}
@@ -330,12 +333,12 @@ func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFac
 
 func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 
-	current := getCurrentFactory(t, server.URL())
-	firstSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	firstSaved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
 	firstChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
 	firstPayload, err := firstChange.Payload.AsFactoryChangeEventPayload()
 	if err != nil {
@@ -346,7 +349,7 @@ func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T)
 		t.Fatalf("first factory-change logical version = %d, want %d", firstPayload.Factory.Version.Logical, current.Version.Logical+1)
 	}
 
-	secondSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "article", advancedFactoryVersion(t, firstSaved.Version)))
+	secondSaved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), functionalNamedFactoryBody("alpha", "article", advancedFactoryVersion(t, firstSaved.Version)))
 	secondChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
 	secondPayload, err := secondChange.Payload.AsFactoryChangeEventPayload()
 	if err != nil {
@@ -368,9 +371,9 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "")
 
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Name != "UNDEFINED" {
 		t.Fatalf("default current factory name = %q, want UNDEFINED", current.Name)
 	}
@@ -381,9 +384,10 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 		t.Fatal("default current factory version = nil, want version metadata for save")
 	}
 
-	saved := saveCurrentFactoryDefinition(
+	saved := saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		functionalDefaultFactorySaveBody("root-runtime", "story", advancedFactoryVersion(t, current.Version)),
 	)
 	if saved.Name != "UNDEFINED" {
@@ -393,20 +397,20 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 		t.Fatalf("saved default factory work types = %#v, want story", saved.WorkTypes)
 	}
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if reloaded.Name != "UNDEFINED" {
 		t.Fatalf("reloaded default factory name = %q, want UNDEFINED", reloaded.Name)
 	}
 	if reloaded.WorkTypes == nil || len(*reloaded.WorkTypes) != 1 || (*reloaded.WorkTypes)[0].Name != "story" {
 		t.Fatalf("reloaded default factory work types = %#v, want story", reloaded.WorkTypes)
 	}
-	storyResp := submitWorkAndExpectStatus(t, server.URL(), "story", "saved-default", http.StatusCreated)
+	storyResp := submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "story", "saved-default", http.StatusCreated)
 	var storySubmit factoryapi.SubmitWorkResponse
 	decodeJSONResponse(t, storyResp, &storySubmit, "decode story submit response")
 	if storySubmit.TraceId == "" {
 		t.Fatal("expected non-empty trace ID for saved default factory submission")
 	}
-	submitWorkAndExpectStatus(t, server.URL(), "root-task", "old-default", http.StatusBadRequest)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "root-task", "old-default", http.StatusBadRequest)
 
 	assertFunctionalSplitLayoutAtRoot(t, rootDir, "root-runtime")
 }
@@ -421,9 +425,9 @@ func TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocume
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
-	assertRawCurrentFactoryLogicalVersionIsString(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	assertRawCurrentFactoryLogicalVersionIsString(t, server.URL(), server.SessionID())
 	body, err := json.Marshal(current)
 	if err != nil {
 		t.Fatalf("marshal full current factory document: %v", err)
@@ -463,12 +467,12 @@ func TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocume
 		t.Fatalf("marshal edited full current factory document: %v", err)
 	}
 
-	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), string(body))
 	assertFactoryWorkType(t, saved, "story", "saved full readback document")
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	assertFactoryWorkType(t, reloaded, "story", "reloaded full readback document")
-	submitWorkAndExpectStatus(t, server.URL(), "story", "full-readback-save", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "story", "full-readback-save", http.StatusCreated)
 }
 
 func TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns(t *testing.T) {
@@ -481,8 +485,8 @@ func TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns(t *t
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	body, err := json.Marshal(current)
 	if err != nil {
 		t.Fatalf("marshal full current factory document: %v", err)
@@ -543,20 +547,20 @@ func TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns(t *t
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
-	saved := saveCurrentFactoryDefinitionWithClient(t, client, server.URL(), string(body))
+	saved := saveCurrentFactoryForSessionWithClient(t, client, server.URL(), server.SessionID(), string(body))
 	assertFactoryWorkType(t, saved, "story", "saved bundled default factory")
 	assertPortableFile(t, filepath.Join(rootDir, "Makefile"), "test:\n\tgo test ./...\n")
 	assertPortableFile(t, filepath.Join(rootDir, "scripts", "setup-workspace.py"), "print('portable script')\n")
 	assertPersistedFactoryJSONStripsInlineBundledContent(t, filepath.Join(rootDir, interfaces.FactoryConfigFile))
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	assertFactoryWorkType(t, reloaded, "story", "reloaded bundled default factory")
-	submitWorkAndExpectStatus(t, server.URL(), "story", "bundled-default-save", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "story", "bundled-default-save", http.StatusCreated)
 }
 
 func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 	createNamedFactoryFixture(
 		t,
 		rootDir,
@@ -564,48 +568,48 @@ func TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsol
 		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
 	)
 
-	server := startFactoryTransformationServer(t, rootDir)
-	betaSessionID := openNamedFactorySession(t, server.URL(), rootDir, "beta")
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	betaServer := startDocumentTransformationServer(t, rootDir, "beta")
 
-	sessionCurrent := getCurrentFactoryForSession(t, server.URL(), betaSessionID)
+	sessionCurrent := getCurrentFactoryForSession(t, betaServer.URL(), betaServer.SessionID())
 	if sessionCurrent.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("session current factory name = %q, want beta", sessionCurrent.Name)
 	}
 	assertFactoryWorkType(t, sessionCurrent, "beta-task", "session current factory before save")
 
-	saved := saveCurrentFactoryForSession(t, server.URL(), betaSessionID, functionalNamedFactoryBody("beta", "story", advancedFactoryVersion(t, sessionCurrent.Version)))
+	saved := saveCurrentFactoryForSession(t, betaServer.URL(), betaServer.SessionID(), functionalNamedFactoryBody("beta", "story", advancedFactoryVersion(t, sessionCurrent.Version)))
 	if saved.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("saved session factory name = %q, want beta", saved.Name)
 	}
 	assertFactoryWorkType(t, saved, "story", "saved session factory")
 
-	reloaded := getCurrentFactoryForSession(t, server.URL(), betaSessionID)
+	reloaded := getCurrentFactoryForSession(t, betaServer.URL(), betaServer.SessionID())
 	if reloaded.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("reloaded session factory name = %q, want beta", reloaded.Name)
 	}
 	assertFactoryWorkType(t, reloaded, "story", "reloaded session factory")
 
-	defaultCurrent := getCurrentFactory(t, server.URL())
+	defaultCurrent := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if defaultCurrent.Name != factoryapi.FactoryName("alpha") {
 		t.Fatalf("default current factory name = %q, want alpha", defaultCurrent.Name)
 	}
 	assertFactoryWorkType(t, defaultCurrent, "alpha-task", "default current factory after session save")
-	storyResp := submitWorkForSessionAndExpectStatus(t, server.URL(), betaSessionID, "story", "session-story", http.StatusCreated)
+	storyResp := submitWorkForSessionAndExpectStatus(t, betaServer.URL(), betaServer.SessionID(), "story", "session-story", http.StatusCreated)
 	var storySubmit factoryapi.SubmitWorkResponse
 	decodeJSONResponse(t, storyResp, &storySubmit, "decode session story submit response")
 	if storySubmit.TraceId == "" {
 		t.Fatal("expected non-empty trace ID for session-scoped transformed factory submission")
 	}
-	submitWorkForSessionAndExpectStatus(t, server.URL(), betaSessionID, "beta-task", "old-session-work", http.StatusBadRequest)
-	submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "default-still-alpha", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, betaServer.URL(), betaServer.SessionID(), "beta-task", "old-session-work", http.StatusBadRequest)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "alpha-task", "default-still-alpha", http.StatusCreated)
 }
 
 func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata for save")
 	}
@@ -631,7 +635,7 @@ func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T
 		}]
 	}`
 
-	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	resp := saveCurrentFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
@@ -652,11 +656,11 @@ func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T
 
 func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata for save")
 	}
@@ -669,7 +673,7 @@ func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.
 		"workstations":[{"name":"process","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"worker-a","inputs":[{"workType":"story","state":"queued"}],"outputs":[{"workType":"story","state":"missing-state"}]}]
 	}`
 
-	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	resp := saveCurrentFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
@@ -699,8 +703,8 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata for save")
 	}
@@ -743,7 +747,7 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 		t.Fatalf("marshal type-count collision save document: %v", err)
 	}
 
-	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), string(body), http.StatusBadRequest)
+	resp := saveCurrentFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), string(body), http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode type-count collision save response")
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
@@ -759,7 +763,7 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 		t.Fatalf("error targets = %#v, want conflicting output workstation target", errResp.Targets)
 	}
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if reloaded.Version == nil || *reloaded.Version != *current.Version {
 		t.Fatalf("reloaded version = %#v, want unchanged %#v", reloaded.Version, current.Version)
 	}
@@ -767,12 +771,12 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 }
 
 func TestCurrentFactoryPUT_RequiresAdvancedSaveVersion(t *testing.T) {
-	// One FunctionalAPIServer for the whole advanced-version matrix. Each row
+	// One explicit Factory Session for the whole advanced-version matrix. Each row
 	// restores a deterministic "alpha"/"task" baseline before asserting so a
 	// successful save (or rejected stale write) cannot contaminate later rows.
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "task")
-	server := startFactoryTransformationServer(t, rootDir)
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "task")
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 
 	for _, tc := range advancedSaveVersionCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -788,44 +792,45 @@ type advancedSaveVersionCase struct {
 	wantState string
 }
 
-func runAdvancedSaveVersionCase(t *testing.T, server *support.FunctionalAPIServer, tc advancedSaveVersionCase) {
+func runAdvancedSaveVersionCase(t *testing.T, server *documentTransformationServer, tc advancedSaveVersionCase) {
 	t.Helper()
-	current := ensureAdvancedSaveVersionBaseline(t, server.URL())
+	current := ensureAdvancedSaveVersionBaseline(t, server)
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata")
 	}
 
 	body := currentFactorySaveDocument(t, "alpha", "story", tc.version(t, *current.Version))
 	if tc.wantCode != "" {
-		resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusConflict)
+		resp := saveCurrentFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), body, http.StatusConflict)
 		var errResp factoryapi.ErrorResponse
 		decodeJSONResponse(t, resp, &errResp, "decode stale current factory save response")
 		if errResp.Code != tc.wantCode {
 			t.Fatalf("error code = %q, want %q", errResp.Code, tc.wantCode)
 		}
 	} else {
-		saved := saveCurrentFactoryDefinition(t, server.URL(), body)
+		saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), body)
 		assertFactoryWorkType(t, saved, "story", "saved current factory")
 	}
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	assertFactoryWorkType(t, reloaded, tc.wantState, "reloaded current factory after version save")
 }
 
 // ensureAdvancedSaveVersionBaseline returns the current Factory after guaranteeing
 // work type "task" so matrix rows remain independently isolatable on one server.
-func ensureAdvancedSaveVersionBaseline(t *testing.T, serverURL string) factoryapi.Factory {
+func ensureAdvancedSaveVersionBaseline(t *testing.T, server *documentTransformationServer) factoryapi.Factory {
 	t.Helper()
-	current := getCurrentFactory(t, serverURL)
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata")
 	}
 	if current.WorkTypes != nil && len(*current.WorkTypes) == 1 && (*current.WorkTypes)[0].Name == "task" {
 		return current
 	}
-	return saveCurrentFactoryDefinition(
+	return saveCurrentFactoryForSession(
 		t,
-		serverURL,
+		server.URL(),
+		server.SessionID(),
 		currentFactorySaveDocument(t, "alpha", "task", versionDocument(advancedFactoryVersion(t, current.Version))),
 	)
 }
@@ -900,26 +905,6 @@ func advancedVersionPassCase() advancedSaveVersionCase {
 	}
 }
 
-func startFactoryTransformationServer(t *testing.T, rootDir string) *support.FunctionalAPIServer {
-	t.Helper()
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                rootDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-}
-
-func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
-	t.Helper()
-
-	sourceDir := t.TempDir()
-	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithWorkType(t, name, workType), 0o600); err != nil {
-		t.Fatalf("write customer Factory source %s: %v", name, err)
-	}
-	support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
-}
-
 func createNamedFactoryFixture(
 	t *testing.T,
 	rootDir string,
@@ -927,14 +912,20 @@ func createNamedFactoryFixture(
 	payload []byte,
 ) string {
 	t.Helper()
+	fixture := factoryTransformationFixture
+	if fixture == nil {
+		t.Fatal("shared factory transformation fixture is unavailable")
+	}
 
 	sourceDir := t.TempDir()
 	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
 	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
 		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	return support.CreateNamedFactoryAtRoot(
+	return support.CreateNamedFactoryAtRootWithProcess(
 		t,
+		fixture.process,
+		[]string{"HOME=" + fixture.homeDir, "USERPROFILE=" + fixture.homeDir},
 		sourceDir,
 		rootDir,
 		name,
@@ -942,30 +933,15 @@ func createNamedFactoryFixture(
 	)
 }
 
-func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
+func assertRawCurrentFactoryLogicalVersionIsString(t *testing.T, serverURL, sessionID string) {
 	t.Helper()
-	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
+	resp, err := http.Get(sessionFactoryURL(serverURL, sessionID))
 	if err != nil {
-		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
+		t.Fatalf("GET %s: %v", sessionFactoryURL(serverURL, sessionID), err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
-	}
-	var current factoryapi.Factory
-	decodeJSONResponse(t, resp, &current, "decode current factory response")
-	return current
-}
-
-func assertRawCurrentFactoryLogicalVersionIsString(t *testing.T, serverURL string) {
-	t.Helper()
-	resp, err := http.Get(serverURL + "/factory-sessions/~default/factory")
-	if err != nil {
-		t.Fatalf("GET /factory-sessions/~default/factory: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("GET /factory-sessions/~default/factory status = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET %s status = %d, want 200", sessionFactoryURL(serverURL, sessionID), resp.StatusCode)
 	}
 	var document map[string]any
 	decodeJSONResponse(t, resp, &document, "decode raw current factory response")
@@ -976,29 +952,6 @@ func assertRawCurrentFactoryLogicalVersionIsString(t *testing.T, serverURL strin
 	if _, ok := version["logical"].(string); !ok {
 		t.Fatalf("raw current factory version.logical = %#v, want string", version["logical"])
 	}
-}
-
-func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factoryapi.Factory {
-	t.Helper()
-
-	resp := saveCurrentFactoryDefinitionExpectStatus(t, serverURL, body, http.StatusOK)
-	var saved factoryapi.Factory
-	decodeJSONResponse(t, resp, &saved, "decode current factory save response")
-	return saved
-}
-
-func saveCurrentFactoryDefinitionWithClient(t *testing.T, client *http.Client, serverURL, body string) factoryapi.Factory {
-	t.Helper()
-
-	resp := saveCurrentFactoryDefinitionExpectStatusWithClient(t, client, serverURL, body, http.StatusOK)
-	var saved factoryapi.Factory
-	decodeJSONResponse(t, resp, &saved, "decode current factory save response")
-	return saved
-}
-
-func saveCurrentFactoryDefinitionExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
-	t.Helper()
-	return saveCurrentFactoryDefinitionExpectStatusWithClient(t, http.DefaultClient, serverURL, body, wantStatus)
 }
 
 func saveFactoryForSessionRequestBody(factoryJSON string) string {
@@ -1033,53 +986,6 @@ func putFactoryForSessionRequestExpectStatusWithClient(
 	return resp
 }
 
-func saveCurrentFactoryDefinitionExpectStatusWithClient(
-	t *testing.T,
-	client *http.Client,
-	serverURL,
-	body string,
-	wantStatus int,
-) *http.Response {
-	t.Helper()
-
-	return putFactoryForSessionRequestExpectStatusWithClient(
-		t,
-		client,
-		serverURL,
-		"/factory-sessions/~default/factory",
-		saveFactoryForSessionRequestBody(body),
-		wantStatus,
-	)
-}
-
-func openNamedFactorySession(t *testing.T, serverURL, folderPath, name string) string {
-	t.Helper()
-	body, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
-		FolderPath: folderPath,
-		Target: &factoryapi.FactorySessionTargetRef{
-			Kind: factoryapi.FactorySessionTargetRefKindNamed,
-			Name: &name,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal open factory session request: %v", err)
-	}
-	resp, err := http.Post(serverURL+"/factory-sessions", "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST /factory-sessions: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		t.Fatalf("POST /factory-sessions status = %d, want 200", resp.StatusCode)
-	}
-	var opened factoryapi.OpenFactorySessionResponse
-	decodeJSONResponse(t, resp, &opened, "decode open factory session response")
-	if opened.Session == nil || opened.Session.Id == "" {
-		t.Fatalf("open factory session response = %#v, want session id", opened)
-	}
-	return opened.Session.Id
-}
-
 func getCurrentFactoryForSession(t *testing.T, serverURL, sessionID string) factoryapi.Factory {
 	t.Helper()
 	resp, err := http.Get(sessionFactoryURL(serverURL, sessionID))
@@ -1101,7 +1007,7 @@ func saveCurrentFactoryForSession(t *testing.T, serverURL, sessionID, body strin
 		t,
 		http.DefaultClient,
 		serverURL,
-		"/factory-sessions/"+sessionID+"/factory",
+		factorySessionPath(sessionID),
 		saveFactoryForSessionRequestBody(body),
 		http.StatusOK,
 	)
@@ -1155,19 +1061,6 @@ func sessionFactoryURL(serverURL, sessionID string) string {
 
 func factorySessionPath(sessionID string) string {
 	return "/factory-sessions/" + url.PathEscape(sessionID) + "/factory"
-}
-
-func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
-	t.Helper()
-	resp, err := http.Post(support.DefaultSessionWorkURL(serverURL, "/work"), "application/json", bytes.NewBufferString(`{"name":"factory-transformation-submit","workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
-	if err != nil {
-		t.Fatalf("POST /work %s: %v", workType, err)
-	}
-	if resp.StatusCode != wantStatus {
-		resp.Body.Close()
-		t.Fatalf("POST /work %s status = %d, want %d", workType, resp.StatusCode, wantStatus)
-	}
-	return resp
 }
 
 func submitWorkForSessionAndExpectStatus(t *testing.T, serverURL, sessionID, workType, title string, wantStatus int) *http.Response {
