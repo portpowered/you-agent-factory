@@ -159,6 +159,7 @@ func (fixture *sharedFactoryTransformationFixture) stop() {
 type documentTransformationServer struct {
 	fixture   *sharedFactoryTransformationFixture
 	baseURL   string
+	rootDir   string
 	sessionID string
 }
 
@@ -184,8 +185,10 @@ func startDocumentTransformationServer(
 
 	server := &documentTransformationServer{
 		baseURL:   fixture.baseURL,
+		rootDir:   rootDir,
 		sessionID: sessionID,
 	}
+	t.Logf("LAYOUT-002: Factory root=%s session=%s", rootDir, sessionID)
 	t.Cleanup(func() {
 		support.CloseFactorySessionAt(t, server.baseURL, server.sessionID)
 		t.Logf("DOC-001: closed explicit Factory Session ID=%s", server.sessionID)
@@ -205,6 +208,13 @@ func (server *documentTransformationServer) SessionID() string {
 		return ""
 	}
 	return server.sessionID
+}
+
+func (server *documentTransformationServer) RootDir() string {
+	if server == nil {
+		return ""
+	}
+	return server.rootDir
 }
 
 func (server *documentTransformationServer) FactoryURL() string {
@@ -1140,7 +1150,11 @@ func saveCurrentFactoryForSessionExpectStatus(
 }
 
 func sessionFactoryURL(serverURL, sessionID string) string {
-	return serverURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/factory"
+	return serverURL + factorySessionPath(sessionID)
+}
+
+func factorySessionPath(sessionID string) string {
+	return "/factory-sessions/" + url.PathEscape(sessionID) + "/factory"
 }
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {

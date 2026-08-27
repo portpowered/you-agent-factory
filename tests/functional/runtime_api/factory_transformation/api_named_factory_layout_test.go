@@ -15,18 +15,19 @@ import (
 
 func TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughActivationAndReadback(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 
-	created := createNamedFactoryFromBody(
+	created := createNamedFactoryFromBodyForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		functionalNamedFactoryBodyWithPortableLayout("beta", "beta-task"),
 	)
 	assertNamedFactoryPortableLayoutResponse(t, created.Layout, "workstation:plan-task", "beta-task")
 
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
@@ -42,17 +43,18 @@ func TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughA
 	}
 	assertPortableLayoutPayload(t, persisted["layout"])
 
-	submitWorkAndExpectStatus(t, server.URL(), "beta-task", "layout-named-factory", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "beta-task", "layout-named-factory", http.StatusCreated)
 }
 
 func TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	created := createNamedFactoryFromBody(
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	created := createNamedFactoryFromBodyForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		functionalNamedFactoryBodyWithPortableLayout("beta", "beta-task"),
 	)
 	if created.Version == nil {
@@ -63,14 +65,15 @@ func TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout(
 		Logical:  created.Version.Logical + 1,
 		Physical: created.Version.Physical.Add(time.Second),
 	}
-	replaced := upsertNamedFactoryFromBody(
+	replaced := upsertNamedFactoryFromBodyForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactorySaveDocumentWithPortableLayout(t, "beta", "beta-task", versionDocument(freshVersion)),
 	)
 	assertNamedFactoryPortableLayoutResponse(t, replaced.Layout, "workstation:plan-task", "beta-task")
 
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	assertNamedFactoryPortableLayoutResponse(t, current.Layout, "workstation:plan-task", "beta-task")
 }
 

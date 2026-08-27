@@ -3,6 +3,7 @@ package factory_transformation
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -98,6 +99,27 @@ func upsertNamedFactoryFromBody(t *testing.T, serverURL, factoryBody string) fac
 	)
 	var created factoryapi.Factory
 	decodeJSONResponse(t, resp, &created, "decode upsert named factory response")
+	return created
+}
+
+func upsertNamedFactoryFromBodyForSession(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	factoryBody string,
+) factoryapi.Factory {
+	t.Helper()
+	requestBody := upsertNamedFactoryRequestBody(factoryBody)
+	resp := putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
+		requestBody,
+		http.StatusOK,
+	)
+	var created factoryapi.Factory
+	decodeJSONResponse(t, resp, &created, "decode session upsert named factory response")
 	return created
 }
 

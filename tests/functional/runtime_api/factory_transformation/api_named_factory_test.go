@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -186,6 +187,38 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, body string) factoryapi
 	var created factoryapi.Factory
 	decodeJSONResponse(t, resp, &created, "decode upsert named factory response")
 	return created
+}
+
+func createNamedFactoryFromBodyForSession(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	body string,
+) factoryapi.Factory {
+	t.Helper()
+	resp := createNamedFactoryForSessionExpectStatus(t, serverURL, sessionID, body, http.StatusOK)
+	var created factoryapi.Factory
+	decodeJSONResponse(t, resp, &created, "decode session upsert named factory response")
+	return created
+}
+
+func createNamedFactoryForSessionExpectStatus(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	body string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+	requestBody := fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, body)
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
+		requestBody,
+		wantStatus,
+	)
 }
 
 func createNamedFactoryExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
