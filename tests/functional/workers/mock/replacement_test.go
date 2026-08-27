@@ -1,7 +1,6 @@
 package mock
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -9,10 +8,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -41,28 +38,22 @@ const (
 	stableProviderRefusalErr = "provider error: permanent_bad_request: provider rejected the execution request"
 )
 
-// TestMockWorkersReplaceOnlyNamedChildren proves a partial --with-mock-workers
+// testMockWorkersReplaceOnlyNamedChildren proves a partial --with-mock-workers
 // config replaces only the named workers while unmatched workers execute through
 // the real or injected provider path when unmatchedDispatchPolicy is passthrough.
-func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
-	t.Parallel()
+func testMockWorkersReplaceOnlyNamedChildren(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := scaffoldNamedReplacementFactory(t)
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte(injectedProviderOutput)},
 	)
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:        dir,
-		MockWorkersConfig: partialNamedMockWorkersConfig(),
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-	defer server.Stop(t)
-
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	fixture.useCommandRunners(runner, nil)
+	session := fixture.openSession(t, dir)
+	listed, events := session.terminalObservations(t, 20*time.Second)
+	defer session.closeAndAssertGone(t)
 	for placeID, want := range map[string]int{
 		support.WorkCustomerLocation(mockedWorkType, "done"):   1,
 		support.WorkCustomerLocation(realWorkType, "done"):     1,
@@ -80,7 +71,7 @@ func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 		t.Fatalf("provider command runner calls = %d, want 1 passthrough dispatch for unnamed worker", runner.CallCount())
 	}
 
-	observations := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	observations := support.ObserveDispatchEvents(t, events)
 	mockObservation := dispatchObservationByTransition(t, observations, mockedWorkstationName)
 	realObservation := dispatchObservationByTransition(t, observations, realWorkstationName)
 
@@ -88,12 +79,15 @@ func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 	assertInjectedProviderDispatch(t, realObservation)
 }
 
-// TestUnknownWorkerOverrideFailsActionably proves an invalid
+// testUnknownWorkerOverrideFailsActionably proves an invalid
 // --with-mock-workers override fails before dispatch with a stable,
 // customer-visible diagnostic instead of silently accepting the bad override.
-func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
-	t.Parallel()
+func testUnknownWorkerOverrideFailsActionably(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := scaffoldNamedReplacementFactory(t)
+	support.ClearSeedInputs(t, dir)
 
 	tests := []struct {
 		name          string
@@ -121,12 +115,13 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 			runner := testutil.NewProviderCommandRunner(
 				platformprocess.CommandResult{Stdout: []byte(injectedProviderOutput)},
 			)
+			fixture.useCommandRunners(runner, nil)
 			mockWorkersPath := writeRawMockWorkersConfig(t, tc.payload)
 			diagnostic := executeRunWithMockWorkersExpectingFailure(
 				t,
+				fixture,
 				dir,
 				mockWorkersPath,
-				serviceedges.Edges{ProviderCommandRunner: runner},
 			)
 
 			lowDiagnostic := strings.ToLower(diagnostic)
@@ -150,66 +145,47 @@ func TestUnknownWorkerOverrideFailsActionably(t *testing.T) {
 	}
 }
 
-// TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved proves compatible future fields do not alter mock dispatch behavior.
-func TestFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(t *testing.T) {
-	t.Parallel()
-	dir := scaffoldNamedReplacementFactory(t)
-	mockWorkersPath := writeRawMockWorkersConfig(t, `{
-		"mockWorkers": [{
-			"workerName": "`+mockedWorkerName+`",
-			"workstationName": "`+mockedWorkstationName+`",
-			"runType": "accept",
-			"futureNested": {"secret": "must not affect matching"}
-		}],
-		"futureTopLevel": true
-	}`)
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Args:       []string{"--with-mock-workers", mockWorkersPath},
-	})
-	defer server.Stop(t)
-
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation(mockedWorkType, "done")); got != 1 {
+// testFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved proves compatible future fields do not alter mock dispatch behavior.
+func testFutureMockWorkerFieldsAreIgnoredAndDispatchBehaviorIsPreserved(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
+	dir := scaffoldFutureReplacementFactory(t)
+	fixture.useCommandRunners(nil, nil)
+	session := fixture.openSession(t, dir)
+	listed, events := session.terminalObservations(t, 20*time.Second)
+	defer session.closeAndAssertGone(t)
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation(futureMockWorkType, "done")); got != 1 {
 		t.Fatalf("mocked work done count = %d, want 1", got)
 	}
-	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation(mockedWorkType, "failed")); got != 0 {
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation(futureMockWorkType, "failed")); got != 0 {
 		t.Fatalf("mocked work failed count = %d, want 0", got)
 	}
 
 	observation := dispatchObservationByTransition(
 		t,
-		support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),
-		mockedWorkstationName,
+		support.ObserveDispatchEvents(t, events),
+		futureMockWorkstationName,
 	)
 	assertMockAcceptedDispatch(t, observation)
 }
 
-// TestMockWorkerFailureReturnsStablePublicFailure proves configured mock
+// testMockWorkerFailureReturnsStablePublicFailure proves configured mock
 // rejection yields a stable public failed Work / Factory Event outcome without
 // live provider credentials.
-func TestMockWorkerFailureReturnsStablePublicFailure(t *testing.T) {
-	t.Parallel()
+func testMockWorkerFailureReturnsStablePublicFailure(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := scaffoldMockRejectFactory(t)
-	exitCode := 7
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
 	)
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:        dir,
-		MockWorkersConfig: rejectingMockWorkersConfig(exitCode),
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-	defer server.Stop(t)
-
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	fixture.useCommandRunners(runner, nil)
+	session := fixture.openSession(t, dir)
+	listed, events := session.terminalObservations(t, 20*time.Second)
+	defer session.closeAndAssertGone(t)
 	for placeID, want := range map[string]int{
 		support.WorkCustomerLocation(rejectWorkType, "failed"): 1,
 		support.WorkCustomerLocation(rejectWorkType, "init"):   0,
@@ -229,7 +205,7 @@ func TestMockWorkerFailureReturnsStablePublicFailure(t *testing.T) {
 
 	observation := dispatchObservationByTransition(
 		t,
-		support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),
+		support.ObserveDispatchEvents(t, events),
 		rejectWorkstationName,
 	)
 	assertStableMockRejectDispatch(t, observation)
@@ -237,26 +213,25 @@ func TestMockWorkerFailureReturnsStablePublicFailure(t *testing.T) {
 
 func executeRunWithMockWorkersExpectingFailure(
 	t *testing.T,
+	fixture *sharedWorkersMockFixture,
 	factoryDir string,
 	mockWorkersPath string,
-	edges serviceedges.Edges,
 ) string {
 	t.Helper()
 
-	process := support.BuildProcess(t, edges)
-	inputs := support.FakeInputs(context.Background(), []string{
+	session := fixture.openSession(t, factoryDir)
+	defer session.closeAndAssertGone(t)
+	inputs := support.FakeInputs(t.Context(), []string{
 		"you",
 		"run",
 		"--dir", factoryDir,
-		"--continuously",
-		"--with-server",
 		"--quiet",
 		"--no-record",
 		"--with-mock-workers", mockWorkersPath,
 	})
-	inputs.WorkingDirectory = factoryDir
+	inputs.Input.WorkingDirectory = factoryDir
 
-	err := process.Execute(inputs.Input)
+	err := fixture.server.Execute(t, inputs.Input)
 	if err == nil {
 		t.Fatalf(
 			"expected invalid mock-worker override to fail before dispatch; stdout=%q stderr=%q",
@@ -288,50 +263,95 @@ func writeRawMockWorkersConfig(t *testing.T, payload string) string {
 
 func scaffoldNamedReplacementFactory(t *testing.T) string {
 	t.Helper()
+	return scaffoldReplacementFactory(t, replacementFactorySpec{
+		mockedWorker:      mockedWorkerName,
+		realWorker:        realWorkerName,
+		mockedWorkstation: mockedWorkstationName,
+		realWorkstation:   realWorkstationName,
+		mockedWorkType:    mockedWorkType,
+		realWorkType:      realWorkType,
+		mockedWorkID:      mockedWorkID,
+		realWorkID:        realWorkID,
+	}, true)
+}
+
+func scaffoldFutureReplacementFactory(t *testing.T) string {
+	t.Helper()
+	return scaffoldReplacementFactory(t, replacementFactorySpec{
+		mockedWorker:      futureMockWorkerName,
+		realWorker:        "future-real-worker",
+		mockedWorkstation: futureMockWorkstationName,
+		realWorkstation:   "future-real-process",
+		mockedWorkType:    futureMockWorkType,
+		realWorkType:      "future-real-task",
+		mockedWorkID:      futureMockWorkID,
+		realWorkID:        "future-real-work",
+	}, false)
+}
+
+type replacementFactorySpec struct {
+	mockedWorker      string
+	realWorker        string
+	mockedWorkstation string
+	realWorkstation   string
+	mockedWorkType    string
+	realWorkType      string
+	mockedWorkID      string
+	realWorkID        string
+}
+
+func scaffoldReplacementFactory(
+	t *testing.T,
+	spec replacementFactorySpec,
+	seedReal bool,
+) string {
+	t.Helper()
 
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{
-			namedReplacementWorkType(mockedWorkType),
-			namedReplacementWorkType(realWorkType),
+			namedReplacementWorkType(spec.mockedWorkType),
+			namedReplacementWorkType(spec.realWorkType),
 		},
 		"workers": []map[string]string{
-			{"name": mockedWorkerName},
-			{"name": realWorkerName},
+			{"name": spec.mockedWorker},
+			{"name": spec.realWorker},
 		},
 		"workstations": []map[string]any{
 			{
-				"name":      mockedWorkstationName,
-				"worker":    mockedWorkerName,
-				"inputs":    []map[string]string{{"workType": mockedWorkType, "state": "init"}},
-				"outputs":   []map[string]string{{"workType": mockedWorkType, "state": "done"}},
-				"onFailure": []map[string]string{{"workType": mockedWorkType, "state": "failed"}},
+				"name":      spec.mockedWorkstation,
+				"worker":    spec.mockedWorker,
+				"inputs":    []map[string]string{{"workType": spec.mockedWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": spec.mockedWorkType, "state": "done"}},
+				"onFailure": []map[string]string{{"workType": spec.mockedWorkType, "state": "failed"}},
 			},
 			{
-				"name":      realWorkstationName,
-				"worker":    realWorkerName,
-				"inputs":    []map[string]string{{"workType": realWorkType, "state": "init"}},
-				"outputs":   []map[string]string{{"workType": realWorkType, "state": "done"}},
-				"onFailure": []map[string]string{{"workType": realWorkType, "state": "failed"}},
+				"name":      spec.realWorkstation,
+				"worker":    spec.realWorker,
+				"inputs":    []map[string]string{{"workType": spec.realWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": spec.realWorkType, "state": "done"}},
+				"onFailure": []map[string]string{{"workType": spec.realWorkType, "state": "failed"}},
 			},
 		},
 	})
 
 	modelWorker := support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex")
-	support.WriteAgentConfig(t, dir, mockedWorkerName, modelWorker)
-	support.WriteAgentConfig(t, dir, realWorkerName, modelWorker)
+	support.WriteAgentConfig(t, dir, spec.mockedWorker, modelWorker)
+	support.WriteAgentConfig(t, dir, spec.realWorker, modelWorker)
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     mockedWorkID,
-		WorkTypeID: mockedWorkType,
-		TraceID:    "named-mock-replacement-mocked-trace",
+		WorkID:     spec.mockedWorkID,
+		WorkTypeID: spec.mockedWorkType,
+		TraceID:    spec.mockedWorkID + "-trace",
 		Payload:    []byte(`{"title":"named mock replacement mocked"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     realWorkID,
-		WorkTypeID: realWorkType,
-		TraceID:    "named-mock-replacement-real-trace",
-		Payload:    []byte(`{"title":"named mock replacement real"}`),
-	})
+	if seedReal {
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkID:     spec.realWorkID,
+			WorkTypeID: spec.realWorkType,
+			TraceID:    spec.realWorkID + "-trace",
+			Payload:    []byte(`{"title":"named mock replacement real"}`),
+		})
+	}
 	return dir
 }
 
@@ -377,33 +397,6 @@ func scaffoldMockRejectFactory(t *testing.T) string {
 		Payload:    []byte(`{"title":"configured mock reject"}`),
 	})
 	return dir
-}
-
-func rejectingMockWorkersConfig(exitCode int) *workers.MockWorkersConfig {
-	code := exitCode
-	return &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      rejectWorkerName,
-			WorkstationName: rejectWorkstationName,
-			RunType:         workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stdout:   configuredRejectStdout,
-				Stderr:   configuredRejectStderr,
-				ExitCode: &code,
-			},
-		}},
-	}
-}
-
-func partialNamedMockWorkersConfig() *workers.MockWorkersConfig {
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      mockedWorkerName,
-			WorkstationName: mockedWorkstationName,
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	}
 }
 
 func dispatchObservationByTransition(

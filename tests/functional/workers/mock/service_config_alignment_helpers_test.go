@@ -61,7 +61,6 @@ func scaffoldSharedCommandRunnerFactory(t *testing.T) string {
 	workstations[1]["env"] = map[string]any{"PROVIDER_ENV": "provider-value"}
 
 	dir := support.ScaffoldFactory(t, cfg)
-	support.SetWorkingDirectory(t, dir)
 	support.WriteWorkstationConfig(t, dir, "step-two", `---
 type: MODEL_WORKSTATION
 ---

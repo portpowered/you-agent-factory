@@ -6,7 +6,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -19,11 +18,13 @@ const (
 	rootMockAcceptedOutput = "mock worker accepted"
 )
 
-// TestMockWorkerSelectedThroughCustomerProcess proves explicit mock
+// testMockWorkerSelectedThroughCustomerProcess proves explicit mock
 // composition is selected by the customer --with-mock-workers input and still
 // publishes the correlated terminal dispatch through the public process.
-func TestMockWorkerSelectedThroughCustomerProcess(t *testing.T) {
-	t.Parallel()
+func testMockWorkerSelectedThroughCustomerProcess(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{{
 			"name": rootMockWorkType,
@@ -53,20 +54,10 @@ func TestMockWorkerSelectedThroughCustomerProcess(t *testing.T) {
 		Payload:    []byte("root mock payload"),
 	})
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		MockWorkersConfig: &workers.MockWorkersConfig{
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      rootMockWorker,
-				WorkstationName: rootMockWorkstation,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
-		},
-	})
-	defer server.Stop(t)
-
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	fixture.useCommandRunners(nil, nil)
+	session := fixture.openSession(t, dir)
+	listed, events := session.terminalObservations(t, 20*time.Second)
+	defer session.closeAndAssertGone(t)
 	if got := support.CountWorkAtCustomerState(listed, rootMockWorkType+":done"); got != 1 {
 		t.Fatalf("completed mock Work = %d, want one; listed=%#v", got, listed)
 	}
@@ -77,7 +68,7 @@ func TestMockWorkerSelectedThroughCustomerProcess(t *testing.T) {
 		t.Fatalf("failed mock Work = %d, want zero; listed=%#v", got, listed)
 	}
 
-	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) != 1 {
 		t.Fatalf("mock dispatch count = %d, want one; dispatches=%#v", len(dispatches), dispatches)
 	}
