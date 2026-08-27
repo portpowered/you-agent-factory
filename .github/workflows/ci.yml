@@ -596,6 +596,7 @@ jobs:
           reference_root="$artifact_root/reference"
           candidate_root="$artifact_root/candidate"
           reference_checkout="$RUNNER_TEMP/unit-latency-reference"
+          reference_runner="$RUNNER_TEMP/unit-latency-unitlane"
           sample_runner="$GITHUB_WORKSPACE/scripts/ci/run-unit-latency-sample.mjs"
           failure_log="$artifact_root/orchestration-failures.log"
           sample_failure=0
@@ -630,9 +631,10 @@ jobs:
           prewarm_checkout() {
             local cohort="$1"
             local checkout="$2"
+            shift 2
             local failed=0
             run_setup_command "${cohort}-go-mod-download" "$checkout" go mod download || failed=1
-            run_setup_command "${cohort}-go-build" "$checkout" go build ./cmd/unitlane ./cmd/unitlanebudget || failed=1
+            run_setup_command "${cohort}-go-build" "$checkout" go build "$@" || failed=1
             run_setup_command "${cohort}-go-test-compile" "$checkout" go test -short -vet=off -run '^$' -p=2 ./pkg/... || failed=1
             return "$failed"
           }
@@ -643,23 +645,17 @@ jobs:
             local commit="$3"
             local ordinal="$4"
             local output_directory="$5"
+            local command="$6"
+            shift 6
             local timing_output="$output_directory/run-${ordinal}.v2.json"
             if UNIT_TIMING_COMMIT="$commit" UNIT_LATENCY_SAMPLE_CWD="$checkout" \
               node "$sample_runner" "$ordinal" "$output_directory" \
-                make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT="$timing_output"; then
+                "$command" "$@"; then
               :
             else
               local status=$?
               record_failure "$cohort sample $ordinal: exit_status=$status"
             fi
-          }
-
-          run_reference_sample() {
-            run_sample reference "$reference_checkout" "$UNIT_REFERENCE_COMMIT" "$1" "$reference_root"
-          }
-
-          run_candidate_sample() {
-            run_sample candidate "$GITHUB_WORKSPACE" "$UNIT_CANDIDATE_COMMIT" "$1" "$candidate_root"
           }
 
           reference_ready=0
@@ -699,12 +695,33 @@ jobs:
             record_failure "reference checkout: unavailable after pinned commit fetch/verification"
           fi
 
-          prewarm_checkout reference "$reference_checkout" || :
+          prewarm_checkout reference "$reference_checkout" ./cmd/unitlane || :
+          prewarm_checkout candidate "$GITHUB_WORKSPACE" ./cmd/unitlane ./cmd/unitlanebudget || :
+          run_setup_command candidate-measurement-runner-build "$GITHUB_WORKSPACE" \
+            go build -o "$reference_runner" ./cmd/unitlane || :
+
+          run_reference_sample() {
+            local ordinal="$1"
+            local timing_output="$reference_root/run-${ordinal}.v2.json"
+            run_sample reference "$reference_checkout" "$UNIT_REFERENCE_COMMIT" "$ordinal" "$reference_root" \
+              "$reference_runner" \
+              -jobs=2 -count=1 -timeout=300s \
+              "-timing-output=$timing_output" \
+              "-timing-command=make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=$timing_output" \
+              -computed-lane-budget=2
+          }
+
+          run_candidate_sample() {
+            local ordinal="$1"
+            local timing_output="$candidate_root/run-${ordinal}.v2.json"
+            run_sample candidate "$GITHUB_WORKSPACE" "$UNIT_CANDIDATE_COMMIT" "$ordinal" "$candidate_root" \
+              make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT="$timing_output"
+          }
+
           run_reference_sample 1
           run_reference_sample 2
           run_reference_sample 3
 
-          prewarm_checkout candidate "$GITHUB_WORKSPACE" || :
           run_candidate_sample 1
           run_candidate_sample 2
           run_candidate_sample 3

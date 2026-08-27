@@ -18,16 +18,22 @@ failed write cannot leave a partial evidence document.
 
 The hosted Backend Unit Latency job uses one runner allocation for both live
 cohorts. It adds a detached worktree at the pinned reference commit, prewarms
-that checkout, captures reference ordinals 1–3, then prewarms the PR-head
-checkout and captures candidate ordinals 1–3. The prewarm commands run
-`go mod download`, build the unit-lane and checker commands, and compile
-`pkg/...` with `go test -run '^$'`; they are outside the six measured
-`make test-unit-fresh` calls. Each measured call still uses `-count=1`, so test
-results remain uncached. Reference and candidate evidence are retained in
-separate `reference/` and `candidate/` directories, along with setup logs and
-per-ordinal status files. The job records the hosted image version and CPU
-model alongside the Go OS/architecture identity; a failed ordinal never causes
-a retry or replacement.
+both checkouts, then captures reference ordinals 1–3 followed by candidate
+ordinals 1–3. The prewarm commands run
+`go mod download`, build the commands available in each checkout, and compile
+`pkg/...` with `go test -run '^$'`; they are outside the six measured calls.
+The accepted reference base predates the v2 timing flags and checker command,
+so the job builds the current candidate `cmd/unitlane` as a measurement
+harness and runs it with the reference checkout as its working directory and
+the reference commit as its recorded source identity. This keeps the measured
+test source at the exact reference commit while producing the same v2 evidence
+shape and normalized command identity as the candidate's canonical Make
+invocation. Candidate samples still use `make test-unit-fresh`. Each measured
+call uses `-count=1`, so test results remain uncached. Reference and candidate
+evidence are retained in separate `reference/` and `candidate/` directories,
+along with setup logs and per-ordinal status files. The job records the hosted
+image version and CPU model alongside the Go OS/architecture identity; a
+failed ordinal never causes a retry or replacement.
 
 Use the final checker for the retained historical audit and two live,
 same-runner cohorts:

@@ -54,13 +54,19 @@ test("the unit-latency job captures ordered reference and candidate cohorts", ()
 	assert.match(job, /UNIT_RUNNER_IMAGE_VERSION=\$image_version/);
 	assert.match(job, /UNIT_RUNNER_CPU_MODEL=\$cpu_model/);
 	assert.match(job, /git worktree add --detach/);
-	assert.match(job, /prewarm_checkout reference/);
-	assert.match(job, /prewarm_checkout candidate/);
+	assert.match(job, /reference_runner="\$RUNNER_TEMP\/unit-latency-unitlane"/);
+	assert.match(job, /prewarm_checkout reference "\$reference_checkout" \.\/cmd\/unitlane/);
+	assert.match(job, /prewarm_checkout candidate "\$GITHUB_WORKSPACE" \.\/cmd\/unitlane \.\/cmd\/unitlanebudget/);
+	assert.match(job, /run_setup_command candidate-measurement-runner-build "\$GITHUB_WORKSPACE"/);
+	assert.match(job, /go build -o "\$reference_runner" \.\/cmd\/unitlane/);
 	assert.match(job, /shell: bash/);
 	assert.match(job, /sample_failure=0/);
 	assert.match(job, /exit "\$sample_failure"/);
 
 	assert.match(job, /make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT="\$timing_output"/);
+	assert.match(job, /-timing-command=make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=\$timing_output/);
+	assert.match(job, /-computed-lane-budget=2/);
+	assert.match(job, /run_sample reference "\$reference_checkout" "\$UNIT_REFERENCE_COMMIT"/);
 	assert.deepEqual(
 		[...job.matchAll(/run_reference_sample ([123])/g)].map((match) => Number(match[1])),
 		[1, 2, 3],
