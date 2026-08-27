@@ -313,7 +313,11 @@ type CLIError struct {
 	// Phase carries the typed interrupt boundary for interrupt-specific JSON
 	// diagnostics. Other Worker Sessions operations leave it empty.
 	Phase string
-	Cause error
+	// Family and Response preserve a server-owned list failure when one crossed
+	// the HTTP boundary. Local command failures leave Response nil.
+	Family   factoryapi.ErrorFamily
+	Response *factoryapi.ErrorResponse
+	Cause    error
 }
 
 func (err *CLIError) Error() string {
@@ -347,6 +351,30 @@ func (err *CLIError) CLIErrorMessage() string {
 	return err.Message
 }
 
+func (err *CLIError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if err == nil {
+		return ""
+	}
+	if err.Response != nil {
+		return err.Response.Family
+	}
+	return err.Family
+}
+
+func (err *CLIError) CLIErrorResponse() factoryapi.ErrorResponse {
+	if err == nil {
+		return factoryapi.ErrorResponse{}
+	}
+	if err.Response != nil {
+		return *err.Response
+	}
+	return factoryapi.ErrorResponse{
+		Code:    factoryapi.ErrorResponseCode(err.Code),
+		Family:  err.Family,
+		Message: err.Message,
+	}
+}
+
 func newCLIError(code, message string, cause error) *CLIError {
 	return &CLIError{Code: code, Message: message, Cause: cause}
 }
@@ -361,6 +389,9 @@ func emitCLIError(config ListConfig, jsonOutput bool, err error) error {
 		output = config.Diagnostics
 	}
 	if output == nil {
+		return err
+	}
+	if clidiag.WriteFailure(output, err) {
 		return err
 	}
 	payload := struct {
@@ -393,20 +424,32 @@ func cliErrorMessage(err error) string {
 }
 
 func workerSessionsHTTPError(response *http.Response, status int, topLevel bool) error {
-	if apiError, ok := clihttp.DecodeAPIError(response); ok {
-		code := strings.TrimSpace(string(apiError.Code))
-		if status == http.StatusNotFound {
-			if topLevel {
-				code = "WORKER_SESSION_NOT_FOUND"
-			} else {
-				code = "WORK_NOT_FOUND"
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+		if apiError, ok := clihttp.DecodeAPIError(response); ok || apiError.Code != "" || apiError.Family != "" {
+			code := strings.TrimSpace(string(apiError.Code))
+			if code == "" {
+				code = listHTTPFallbackCode(status, topLevel)
+			}
+			message := strings.TrimSpace(apiError.Message)
+			if message == "" {
+				message = fmt.Sprintf("worker session list failed (%d)", status)
+			}
+			apiError.Code = factoryapi.ErrorResponseCode(code)
+			apiError.Message = message
+			return &CLIError{
+				Code:     code,
+				Message:  message,
+				Family:   apiError.Family,
+				Response: &apiError,
 			}
 		}
-		if code == "" {
-			code = "WORKER_SESSION_LIST_FAILED"
-		}
-		return newCLIError(code, apiError.Message, nil)
 	}
+	code := listHTTPFallbackCode(status, topLevel)
+	return newCLIError(code, fmt.Sprintf("worker session list failed (%d)", status), nil)
+}
+
+func listHTTPFallbackCode(status int, topLevel bool) string {
 	code := "WORKER_SESSION_LIST_FAILED"
 	if status == http.StatusNotFound {
 		if topLevel {
@@ -415,7 +458,7 @@ func workerSessionsHTTPError(response *http.Response, status int, topLevel bool)
 			code = "WORK_NOT_FOUND"
 		}
 	}
-	return newCLIError(code, fmt.Sprintf("worker session list failed (%d)", status), nil)
+	return code
 }
 
 func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) error {

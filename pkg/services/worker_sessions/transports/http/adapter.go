@@ -696,8 +696,8 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 	maxResults *int,
 	nextToken *string,
 ) (factoryapi.ListWorkerSessionsResponse, error) {
-	if a == nil || a.observations == nil {
-		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
+	if a == nil || a.observations == nil || a.work == nil {
+		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions and Work services are required")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -730,14 +730,17 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 }
 
 // resolveWorkAttribution enriches a Worker Session list without making Work
-// state part of the Worker Sessions service contract. A missing Work read is
-// an unavailable optional fact: the stable Work ID remains visible and the
-// list continues. Context cancellation remains authoritative.
+// state part of the Worker Sessions service contract. Work is listed once per
+// distinct Factory Session in the bounded observation page, rather than once
+// per observation. A missing Work read is an unavailable optional fact: the
+// stable Work ID remains visible and the list continues. Context cancellation
+// remains authoritative.
 func (a *Adapter) resolveWorkAttribution(
 	ctx context.Context,
 	observations []workersessions.Observation,
 ) (map[string]workerSessionWorkAttribution, error) {
 	attribution := make(map[string]workerSessionWorkAttribution, len(observations))
+	batches := make(map[string]*workAttributionBatch)
 	for _, observation := range observations {
 		if len(observation.WorkIDs) == 0 || strings.TrimSpace(observation.WorkIDs[0]) == "" {
 			continue
@@ -747,20 +750,65 @@ func (a *Adapter) resolveWorkAttribution(
 		if sessionID == "" {
 			sessionID = workers.DefaultSessionID
 		}
-		workModel, err := a.work.GetWork(ctx, sessionID, workID)
+		batch := batches[sessionID]
+		if batch == nil {
+			batch = &workAttributionBatch{
+				workIDs:              make(map[string]struct{}),
+				workerSessionIDsByID: make(map[string][]string),
+			}
+			batches[sessionID] = batch
+		}
+		batch.workIDs[workID] = struct{}{}
+		batch.workerSessionIDsByID[workID] = append(batch.workerSessionIDsByID[workID], observation.WorkerSessionID)
+		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID}
+	}
+
+	sessionIDs := make([]string, 0, len(batches))
+	for sessionID := range batches {
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	sort.Strings(sessionIDs)
+	for _, sessionID := range sessionIDs {
+		batch := batches[sessionID]
+		workModelResult, err := a.work.ListWork(ctx, sessionID, work.ListOptions{
+			MaxResults: maxWorkAttributionResults(len(batch.workIDs)),
+		})
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{WorkID: workID}
 			continue
 		}
-		attribution[observation.WorkerSessionID] = workerSessionWorkAttribution{
-			WorkID:   workID,
-			WorkName: workModel.Name,
+		for _, workModel := range workModelResult.Results {
+			setWorkAttributionName(attribution, batch.workerSessionIDsByID[workModel.WorkID], workModel.Name)
+			setWorkAttributionName(attribution, batch.workerSessionIDsByID[workModel.CursorID], workModel.Name)
 		}
 	}
 	return attribution, nil
+}
+
+type workAttributionBatch struct {
+	workIDs              map[string]struct{}
+	workerSessionIDsByID map[string][]string
+}
+
+func maxWorkAttributionResults(workIDCount int) int {
+	if workIDCount < work.DefaultListMaxResults {
+		return work.DefaultListMaxResults
+	}
+	return workIDCount
+}
+
+func setWorkAttributionName(
+	attribution map[string]workerSessionWorkAttribution,
+	workerSessionIDs []string,
+	workName string,
+) {
+	for _, workerSessionID := range workerSessionIDs {
+		entry := attribution[workerSessionID]
+		entry.WorkName = workName
+		attribution[workerSessionID] = entry
+	}
 }
 
 // GetTopLevelWorkerSessionObservation resolves one Worker Session using only

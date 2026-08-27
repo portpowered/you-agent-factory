@@ -257,15 +257,59 @@ func TestListJSONMissingWorkReturnsStableMachineReadableError(t *testing.T) {
 		t.Fatal("List() error = nil, want missing Work error")
 	}
 	var typed *CLIError
-	if !errors.As(err, &typed) || typed.Code != "WORK_NOT_FOUND" {
-		t.Fatalf("error = %v, want CLIError code WORK_NOT_FOUND", err)
+	if !errors.As(err, &typed) || typed.Code != "NOT_FOUND" {
+		t.Fatalf("error = %v, want CLIError code NOT_FOUND", err)
 	}
 	var payload map[string]string
 	if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
 		t.Fatalf("decode error JSON: %v; output=%q", decodeErr, output.String())
 	}
-	if payload["code"] != "WORK_NOT_FOUND" || payload["message"] != "work not found" {
-		t.Fatalf("error payload = %#v, want stable code/message", payload)
+	if payload["code"] != "NOT_FOUND" || payload["family"] != "NOT_FOUND" || payload["message"] != "work not found" {
+		t.Fatalf("error payload = %#v, want server code/family/message", payload)
+	}
+}
+
+func TestListPreservesTopLevelServerFailureDetails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/worker-sessions" {
+			t.Fatalf("request path = %q, want /worker-sessions", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Code:    factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE,
+			Family:  factoryapi.ErrorFamilyInternalServerError,
+			Message: "safe Worker Session list diagnostic",
+		})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL, OutputFormat: "json", Output: &output,
+	})
+	if err == nil {
+		t.Fatal("List() error = nil, want typed server failure")
+	}
+	var typed *CLIError
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T %v, want Worker Sessions CLIError", err, err)
+	}
+	if typed.Code != string(factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE) ||
+		typed.CLIErrorFamily() != factoryapi.ErrorFamilyInternalServerError ||
+		typed.CLIErrorMessage() != "safe Worker Session list diagnostic" {
+		t.Fatalf("typed server details = code %q family %q message %q", typed.Code, typed.CLIErrorFamily(), typed.CLIErrorMessage())
+	}
+	if strings.Contains(output.String(), "FACTORY_UNREACHABLE") {
+		t.Fatalf("output incorrectly substituted unreachable error: %q", output.String())
+	}
+	var response factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal(output.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("decode error response: %v; output=%q", decodeErr, output.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCodeWORKERSESSIONRECORDINGUNAVAILABLE ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError ||
+		response.Message != "safe Worker Session list diagnostic" {
+		t.Fatalf("server error response = %#v, want preserved details", response)
 	}
 }
 

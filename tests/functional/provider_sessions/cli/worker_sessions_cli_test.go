@@ -678,14 +678,18 @@ func assertFailedWorkerSession(t *testing.T, ctx context.Context, process suppor
 func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string) {
 	t.Helper()
 	cases := []struct {
-		name string
-		args []string
-		code string
+		name    string
+		args    []string
+		code    string
+		family  string
+		message string
 	}{
 		{
-			name: "list missing Work",
-			args: []string{"worker-sessions", "list", "--work-id", "work-missing-from-cli", "--output", "json"},
-			code: "WORK_NOT_FOUND",
+			name:    "list missing Work",
+			args:    []string{"worker-sessions", "list", "--work-id", "work-missing-from-cli", "--output", "json"},
+			code:    "NOT_FOUND",
+			family:  "NOT_FOUND",
+			message: "work not found",
 		},
 		{
 			name: "show missing session",
@@ -707,6 +711,12 @@ func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, proce
 			output := inputs.Stdout() + inputs.Stderr() + err.Error()
 			if !strings.Contains(output, test.code) {
 				t.Fatalf("missing Worker Session operation omitted %s: %s", test.code, output)
+			}
+			if test.family != "" && !strings.Contains(output, test.family) {
+				t.Fatalf("missing Worker Session operation omitted family %s: %s", test.family, output)
+			}
+			if test.message != "" && !strings.Contains(output, test.message) {
+				t.Fatalf("missing Worker Session operation omitted message %q: %s", test.message, output)
 			}
 		})
 	}
