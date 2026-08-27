@@ -223,8 +223,8 @@ const (
 )
 
 // TestCLIParameterReusableProcessSpine establishes the shared process shape
-// for the parameter package. The two root-built processes are immutable and
-// their customer invocations run in lexical order with fresh inputs.
+// for the parameter package. The reusable root-built processes are immutable
+// and their customer invocations run in lexical order with fresh inputs.
 func TestCLIParameterReusableProcessSpine(t *testing.T) {
 	if parameterProcesses == nil {
 		t.Fatal("parameter process fixture is not initialized")
