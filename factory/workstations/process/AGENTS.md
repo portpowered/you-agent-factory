@@ -59,6 +59,14 @@ scope growth, and hand work to review.
 - Sync with origin/main ONLY immediately before your final push, when GitHub
   reports a real conflict, or when the reviewer asks. New commits on main are
   not by themselves a reason for another sync pass.
+- When review feedback says to "rebase onto origin/main" or identifies a
+  "stale head," treat that as an explicit reviewer-requested rebase. In the
+  same iteration, run `git fetch origin && git rebase origin/main`, resolve
+  every conflict and continue the rebase, then push the resulting new commit
+  SHA. Rerunning CI, posting a comment, waiting, or pushing an unchanged head
+  does not address this feedback. This is a concrete application of the
+  reviewer-request exception above and does not broaden routine synchronization
+  beyond the final-push, real-conflict, or reviewer-request cases.
 - prd.json and progress.txt are untracked worktree scaffolding and must NEVER
   appear in your PR diff. Never `git add -f` them. If your branch already
   tracks them from an old base, `git rm` them during your next rebase.
