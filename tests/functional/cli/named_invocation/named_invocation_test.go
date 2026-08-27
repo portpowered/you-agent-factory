@@ -22,7 +22,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,6 +32,7 @@ const (
 	packagedSubagentWorkerName          = "subagent-worker"
 	packagedSubagentRunWorkstationName  = "run-subagent"
 	packagedFactoryBuilderName          = "@you/factory-builder"
+	packagedTournamentFactoryName       = "@you/tournament"
 	customizedNamedGoalFactoryName      = "@test/goal"
 	wantHermeticInvocationPrimaryResult = "mock worker accepted"
 )
@@ -47,264 +47,6 @@ func (observation *listenerStartObservation) Start(
 ) error {
 	observation.calls.Add(1)
 	return errors.New("one-shot named invocation attempted to start an HTTP listener")
-}
-
-func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for hermetic named goal no-server invocation")
-	}
-
-	goalText := "hermetic no-server named goal prompt"
-	stdout, listenerStarts := runHermeticNamedInvocation(
-		t,
-		packagedGoalFactoryName,
-		goalText,
-		workers.MockWorkersConfig{
-			UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      "goal-executor",
-				WorkstationName: packagedGoalExecuteWorkstationName,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
-		},
-	)
-
-	if stdout != wantHermeticInvocationPrimaryResult {
-		t.Fatalf("stdout = %q, want primary result %s", stdout, wantHermeticInvocationPrimaryResult)
-	}
-	if listenerStarts != 0 {
-		t.Fatalf("HTTP listener start calls = %d, want 0", listenerStarts)
-	}
-}
-
-func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for hermetic named subagent no-server invocation")
-	}
-
-	requestText := "hermetic no-server named subagent prompt"
-	stdout, listenerStarts := runHermeticNamedInvocation(
-		t,
-		packagedSubagentFactoryName,
-		requestText,
-		workers.MockWorkersConfig{
-			UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      packagedSubagentWorkerName,
-				WorkstationName: packagedSubagentRunWorkstationName,
-				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
-		},
-	)
-
-	if stdout != wantHermeticInvocationPrimaryResult {
-		t.Fatalf("stdout = %q, want agent response %s", stdout, wantHermeticInvocationPrimaryResult)
-	}
-	if stdout == requestText {
-		t.Fatalf("stdout echoed submitted request text instead of agent response")
-	}
-	if listenerStarts != 0 {
-		t.Fatalf("HTTP listener start calls = %d, want 0", listenerStarts)
-	}
-}
-
-func TestFactoryBuilderIsListedAndNamedHelpResolvesWithoutExecution(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for packaged Factory Builder discovery")
-	}
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-	listOutput, listStderr := executeCustomerCommand(
-		t, process, environment, workingDirectory, []string{"you", "factory", "list"},
-	)
-	if listStderr != "" {
-		t.Fatalf("factory list stderr = %q", listStderr)
-	}
-	if !strings.Contains(listOutput, packagedFactoryBuilderName) {
-		t.Fatalf("factory list output missing %q:\n%s", packagedFactoryBuilderName, listOutput)
-	}
-
-	helpOutput, helpStderr := executeCustomerCommand(
-		t, process, environment, workingDirectory,
-		[]string{"you", "run", "--named", packagedFactoryBuilderName, "--help"},
-	)
-	if helpStderr != "" {
-		t.Fatalf("Factory Builder help stderr = %q", helpStderr)
-	}
-	for _, fragment := range []string{
-		"Creates and installs one validated graph or JavaScript Factory from a customer request.",
-		"--factory-name",
-		"--orchestrator",
-		"--builder-provider",
-		"--builder-model",
-	} {
-		if !strings.Contains(helpOutput, fragment) {
-			t.Fatalf("Factory Builder help missing %q:\n%s", fragment, helpOutput)
-		}
-	}
-	factoryDir := filepath.Join(
-		append([]string{homeDir, ".you-agent-factory", "factories"}, strings.Split(packagedFactoryBuilderName, "/")...)...,
-	)
-	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
-		t.Fatalf("Factory Builder was not materialized for named help: %v", err)
-	}
-}
-
-// TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs proves both selection paths retain compatibility inputs.
-func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for no-signature Factory invocation compatibility")
-	}
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	factoryDir := initializePackagedFactory(
-		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
-	)
-	factoryPath := filepath.Join(factoryDir, "factory.json")
-	support.RemoveInvocationSignatureFixture(t, factoryPath)
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
-	factoryPath = filepath.Join(factoryDir, "factory.json")
-	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: packagedGoalExecuteWorkstationName,
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
-	base := []string{
-		"--with-mock-workers", "--no-record", "--quiet", mockWorkersPath,
-	}
-	tests := []struct {
-		name  string
-		input []string
-		stdin string
-	}{
-		{name: "positional compatibility", input: []string{"legacy positional input"}},
-		{name: "stdin compatibility", input: []string{"-"}, stdin: "legacy stdin input\n"},
-		{name: "signature-only syntax remains literal text", input: []string{"--mode", "fast"}},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			namedStdout, namedStderr := executeCustomerCommandWithStdin(
-				t, process, environment, workingDirectory,
-				append(append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, base...), test.input...),
-				test.stdin,
-			)
-			fileStdout, fileStderr := executeCustomerCommandWithStdin(
-				t, process, environment, workingDirectory,
-				append(append([]string{"you", "run", "--factory", factoryPath}, base...), test.input...),
-				test.stdin,
-			)
-			if namedStderr != "" || fileStderr != "" {
-				t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
-			}
-			if namedStdout != wantHermeticInvocationPrimaryResult || fileStdout != namedStdout {
-				t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
-			}
-		})
-	}
-}
-
-// TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput proves selection does not change effective input.
-func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatureInput(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for named and explicit Factory invocation parity")
-	}
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	provider := testutil.NewProviderCommandRunner(
-		support.CodexDecisionCommandResult("canonical provider result"),
-		support.CodexDecisionCommandResult("canonical provider result"),
-	)
-	submissions := &canonicalSubmissionObservation{}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderCommandRunner: provider,
-		SubmissionRecorder:    submissions.observe,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	factoryDir := initializePackagedFactory(
-		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
-	)
-	factoryPath := filepath.Join(factoryDir, "factory.json")
-	addEffectiveSignatureFixture(t, factoryPath)
-	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
-	factoryPath = filepath.Join(factoryDir, "factory.json")
-	documentPath := filepath.Join(workingDirectory, "story.md")
-	if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
-		t.Fatalf("write FILE_CONTENTS fixture: %v", err)
-	}
-	common := []string{
-		"--no-record", "--quiet",
-		"equivalent canonical prompt", "one.md", "two.md",
-		"--t", "alpha", "--tag", "beta",
-		"--count", "2",
-		"--file", documentPath,
-		"-",
-	}
-	namedStdout, namedStderr := executeCustomerCommandWithStdin(
-		t, process, environment, workingDirectory,
-		append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, common...),
-		"canonical stdin body",
-	)
-	fileStdout, fileStderr := executeCustomerCommandWithStdin(
-		t, process, environment, workingDirectory,
-		append([]string{"you", "run", "--factory", factoryPath}, common...),
-		"canonical stdin body",
-	)
-	if namedStderr != "" || fileStderr != "" {
-		t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
-	}
-	if namedStdout == "" || fileStdout != namedStdout {
-		t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
-	}
-	records := submissions.snapshot()
-	if len(records) != 2 {
-		t.Fatalf("canonical submissions = %d, want named and explicit-file records", len(records))
-	}
-	namedArguments := records[0].Request.InvocationArguments
-	fileArguments := records[1].Request.InvocationArguments
-	if !reflect.DeepEqual(namedArguments, fileArguments) {
-		t.Fatalf("selection canonical arguments differ: named=%#v file=%#v", namedArguments, fileArguments)
-	}
-	assertEffectiveSignatureSubmission(t, namedArguments, documentPath)
-
-	calls := provider.Requests()
-	if len(calls) != 2 {
-		t.Fatalf("provider calls = %d, want named and explicit-file calls", len(calls))
-	}
-	wantPrompt := "input=equivalent canonical prompt|format=json|count=2|document=factory invocation document|stdin=canonical stdin body"
-	placeholders := []string{"${executorProvider}", "${executorModel}", "${input}", "${format}", "${count}", "${document}", "${body}", "${mode}"}
-	for index, call := range calls {
-		if call.Command != "codex" {
-			t.Fatalf("provider call %d command = %q, want codex", index, call.Command)
-		}
-		if support.RequestContainsInterpolation(call, placeholders...) {
-			t.Fatalf("provider call %d contains unresolved interpolation: %#v", index, call)
-		}
-		if got := string(call.Stdin); !strings.Contains(got, wantPrompt) {
-			t.Fatalf("provider call %d prompt = %q, want resolved prompt fragment %q", index, got, wantPrompt)
-		}
-	}
 }
 
 type canonicalSubmissionObservation struct {
@@ -376,7 +118,9 @@ func assertEffectiveSignatureSubmission(t *testing.T, arguments *work.Invocation
 	}
 }
 
-// TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution proves schema preparation precedes execution.
+// TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution retains the
+// preparation-failure anchors until the shared failure fixture story migrates
+// them.
 func TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for empty selected-Factory invocation preparation")
@@ -384,9 +128,6 @@ func TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution(t *testing.T)
 
 	for _, selection := range []string{"named", "file"} {
 		selection := selection
-		t.Run(selection+" default-only", func(t *testing.T) {
-			runEmptyDefaultInvocationCase(t, selection)
-		})
 		for _, failure := range []struct {
 			name      string
 			signature map[string]any
@@ -414,70 +155,6 @@ func TestRun_EmptyEffectiveSignatureInputUsesSchemaBeforeExecution(t *testing.T)
 				runEmptyPreparationFailureCase(t, selection, failure.signature, failure.wantCode)
 			})
 		}
-	}
-}
-
-func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
-	t.Helper()
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	submissions := &canonicalSubmissionObservation{}
-	provider := testutil.NewProviderCommandRunner(support.CodexDecisionCommandResult("default applied"))
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderCommandRunner: provider,
-		SubmissionRecorder:    submissions.observe,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	factoryDir := initializePackagedFactory(
-		t, process, environment, workingDirectory, homeDir, packagedGoalFactoryName,
-	)
-	factoryPath := filepath.Join(factoryDir, "factory.json")
-	replaceInvocationSignatureFixture(t, factoryPath, map[string]any{
-		"parameters": []any{map[string]any{
-			"name": "mode", "defaultValue": "safe",
-			"bindings": []any{map[string]any{"kind": "NAMED"}},
-		}},
-	})
-	support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
-	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
-	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
-	factoryPath = filepath.Join(factoryDir, "factory.json")
-
-	stdout, stderr := executeCustomerCommand(
-		t,
-		process,
-		environment,
-		workingDirectory,
-		emptyInvocationArguments(selection, factoryPath, customizedNamedGoalFactoryName),
-	)
-	if stdout == "" {
-		t.Fatalf("default-only invocation output: stdout=%q stderr=%q", stdout, stderr)
-	}
-	records := submissions.snapshot()
-	if len(records) != 1 || records[0].Request.InvocationArguments == nil {
-		t.Fatalf("default-only submissions = %#v, want one canonical request", records)
-	}
-	want := work.InvocationArgument{
-		Values:    []string{"safe"},
-		ValueMode: work.InvocationParameterValueModeExact,
-		Sources:   []work.InvocationArgumentSource{{Kind: string(work.ArgumentSourceKindDefault), Name: "default"}},
-	}
-	if got := records[0].Request.InvocationArguments.Arguments["mode"]; !reflect.DeepEqual(got, want) {
-		t.Fatalf("default-only argument = %#v, want %#v", got, want)
-	}
-	calls := provider.Requests()
-	if len(calls) != 1 || calls[0].Command != "codex" {
-		t.Fatalf("default-only provider calls = %#v, want one codex request", calls)
-	}
-	if support.RequestContainsInterpolation(calls[0], "${mode}") {
-		t.Fatalf("default-only provider request contains unresolved interpolation: %#v", calls[0])
-	}
-	if got := string(calls[0].Stdin); !strings.Contains(got, "mode=safe") {
-		t.Fatalf("default-only provider prompt = %q, want resolved default", got)
 	}
 }
 
@@ -534,9 +211,9 @@ func runEmptyPreparationFailureCase(
 
 func emptyInvocationArguments(selection, factoryPath, factoryName string) []string {
 	if selection == "named" {
-		return []string{"you", "run", "--named", factoryName, "--no-record"}
+		return []string{"you", "run", "--named", factoryName, "--no-record", "--quiet"}
 	}
-	return []string{"you", "run", "--factory", factoryPath, "--no-record"}
+	return []string{"you", "run", "--factory", factoryPath, "--no-record", "--quiet"}
 }
 
 const preparationFailureSensitiveValue = "credential-that-must-not-leak"
@@ -857,44 +534,6 @@ func replaceInvocationSignatureFixture(t *testing.T, factoryPath string, signatu
 	}
 }
 
-func runHermeticNamedInvocation(
-	t *testing.T,
-	factoryName string,
-	requestText string,
-	mockWorkers workers.MockWorkersConfig,
-) (string, int) {
-	t.Helper()
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	listenerStarts := &listenerStartObservation{}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: listenerStarts.Start,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	mockWorkersPath := writeMockWorkersConfig(t, mockWorkers)
-	args := []string{
-		"you", "run", "--named", factoryName,
-		"--with-mock-workers", "--no-record", "--quiet",
-		mockWorkersPath, requestText,
-	}
-	stdout, stderr := executeCustomerCommand(
-		t,
-		process,
-		environment,
-		workingDirectory,
-		args,
-	)
-	if stderr != "" {
-		t.Fatalf("named invocation stderr = %q, want empty; stdout=%s", stderr, stdout)
-	}
-	return stdout, int(listenerStarts.calls.Load())
-}
-
 type customerProcess interface {
 	Execute(root.Input) error
 }
@@ -976,17 +615,4 @@ func initializePackagedFactory(
 		t.Fatalf("installed packaged Factory %q: %v", name, err)
 	}
 	return factoryDir
-}
-
-func writeMockWorkersConfig(t *testing.T, config workers.MockWorkersConfig) string {
-	t.Helper()
-	payload, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal mock workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers.json")
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
-		t.Fatalf("write mock workers config: %v", err)
-	}
-	return path
 }
