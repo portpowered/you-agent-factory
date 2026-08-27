@@ -1,13 +1,12 @@
 package workers_test
 
 import (
-	"os"
-	"path/filepath"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,20 +21,32 @@ const disallowedPermissionWorkflow = `return (async function () {
   });
 })();`
 
-// TestJavaScriptAgentRunCodexCommandCharacterization characterizes the public Codex command emitted by JavaScript agent execution.
-func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
+func runJavaScriptPermissionMatrixCharacterization(t *testing.T, fixture *javascriptSharedProcessFixture) {
 	tests := []struct {
 		name        string
+		factoryName string
+		prompt      string
 		permissions string
 		wantArgs    []string
 	}{
 		{
 			name:        "permissions-omitted",
+			factoryName: sharedJavaScriptPermissionOmittedFactory,
+			prompt:      "shared permissions omitted",
 			permissions: "omitted",
 			wantArgs:    []string{"exec", "--json", "-"},
 		},
 		{
+			name:        "permissions-default",
+			factoryName: sharedJavaScriptPermissionDefaultFactory,
+			prompt:      "shared permissions default",
+			permissions: "DEFAULT",
+			wantArgs:    []string{"exec", "--json", "-"},
+		},
+		{
 			name:        "permissions-skip",
+			factoryName: sharedJavaScriptPermissionSkipFactory,
+			prompt:      "shared permissions skip",
 			permissions: "SKIP_PERMISSIONS",
 			wantArgs:    []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-"},
 		},
@@ -44,80 +55,76 @@ func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			dir := support.ScaffoldFactory(t, permissionMatrixFactoryConfig(permissionMatrixWorkflow(test.permissions)))
 			runner := support.NewRecordingCommandRunner("permission matrix child output")
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "--json", "run",
-				"--factory", filepath.Join(dir, "factory.json"),
-				"--output", "primary",
-				"--no-record",
-				"permission matrix prompt",
+			if err := fixture.router.register(test.prompt, runner); err != nil {
+				t.Fatalf("register permission route: %v", err)
+			}
+			t.Cleanup(func() {
+				if err := fixture.router.unregister(test.prompt); err != nil {
+					t.Errorf("unregister permission route: %v", err)
+				}
 			})
-			inputs.Input.WorkingDirectory = dir
-			homeDir := t.TempDir()
-			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-			if err := support.BuildProcess(t, serviceedges.Edges{
-				ProviderCommandRunner: runner,
-			}).Execute(inputs.Input); err != nil {
+			beforeSessions := fixture.persistentSessionIDs(t)
+			inputs, err := fixture.executeRemote(t, test.factoryName, "shared "+test.name)
+			if err != nil {
 				t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 			}
-
-			requests := runner.Requests()
-			if len(requests) != 1 {
-				t.Fatalf("provider command requests = %d, want one request; requests=%#v", len(requests), requests)
+			assertSharedRemoteCommandPlacement(t, inputs.Input.Args, fixture.baseURL)
+			if !strings.Contains(inputs.Stdout(), "permission matrix child output") {
+				t.Fatalf("permission matrix output = %q, want provider output", inputs.Stdout())
 			}
-			got := requests[0]
+			requests := fixture.router.requestRecords()
+			if len(requests) == 0 {
+				t.Fatal("permission matrix provider request count = 0, want one")
+			}
+			got := requests[len(requests)-1]
 			if got.Command != "codex" || !reflect.DeepEqual(got.Args, test.wantArgs) {
 				t.Fatalf("provider command = %q %#v, want codex %#v", got.Command, got.Args, test.wantArgs)
 			}
+			afterSessions := fixture.persistentSessionIDs(t)
+			newSessions := differenceJavaScriptSessionIDs(beforeSessions, afterSessions)
+			if len(newSessions) != 1 {
+				t.Fatalf("permission matrix sessions before=%v after=%v new=%v, want one owning session", beforeSessions, afterSessions, newSessions)
+			}
+			assertJavaScriptSharedCompletedDispatch(t, fixture, newSessions[0], "codex", "", "permission-matrix-child")
+			fixture.trackSession(t, newSessions[0])
 		})
 	}
 }
 
-// TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI proves disallowed agent permissions fail through the public CLI.
-func TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, disallowedPermissionFactoryConfig())
-	workflowDir := filepath.Join(dir, "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("create workflow directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, "review.js"), []byte(disallowedPermissionWorkflow), 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	runner := support.NewRecordingCommandRunner("unexpected provider execution")
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run",
-		"--factory", filepath.Join(dir, "factory.json"),
-		"--output", "primary",
-		"--no-record",
-		"permission denial prompt",
-	})
-	inputs.Input.WorkingDirectory = dir
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
-
-	err = process.Execute(inputs.Input)
+func runJavaScriptDisallowedPermission(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	beforeCalls := fixture.router.callCount()
+	beforeSessions := fixture.persistentSessionIDs(t)
+	inputs, err := fixture.executeRemote(t, fixture.disallowedFactory, "shared permission denial")
 	if err == nil {
 		t.Fatalf("Process.Execute() error = nil; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
 	}
-	output := strings.Join([]string{inputs.Stdout(), inputs.Stderr(), err.Error()}, "\n")
+	assertSharedRemoteCommandPlacement(t, inputs.Input.Args, fixture.baseURL)
+	var response factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
+		t.Fatalf("decode disallowed permission invocation response: %v; stdout=%q", decodeErr, inputs.Stdout())
+	}
+	if response.SessionId == nil || strings.TrimSpace(*response.SessionId) == "" {
+		t.Fatalf("disallowed permission response = %#v, want failed session identity", response)
+	}
+	session := readJavaScriptSharedDurableSession(t, fixture.baseURL, *response.SessionId)
+	if session.FailureDetail == nil {
+		t.Fatalf("disallowed permission durable session = %#v, want failure detail", session)
+	}
+	output := strings.Join([]string{inputs.Stdout(), inputs.Stderr(), err.Error(), session.FailureDetail.Message}, "\n")
 	if !strings.Contains(output, stableDisallowedPermissionDiagnostic) {
 		t.Fatalf("public denial diagnostic = %q, want %q", output, stableDisallowedPermissionDiagnostic)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 before denied child dispatch", runner.CallCount())
+	if fixture.router.callCount() != beforeCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged %d before denied child dispatch", fixture.router.callCount(), beforeCalls)
 	}
+	afterSessions := fixture.persistentSessionIDs(t)
+	newSessions := differenceJavaScriptSessionIDs(beforeSessions, afterSessions)
+	if len(newSessions) != 1 || newSessions[0] != *response.SessionId {
+		t.Fatalf("disallowed permission sessions before=%v after=%v new=%v, want one owning failed session", beforeSessions, afterSessions, newSessions)
+	}
+	assertJavaScriptSharedNoDispatch(t, fixture, *response.SessionId)
+	fixture.trackSession(t, *response.SessionId)
 }
 
 func permissionMatrixFactoryConfig(source string) map[string]any {

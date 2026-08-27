@@ -4,16 +4,16 @@ package workers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -84,35 +84,36 @@ const (
 	livePassthroughChildText = "passthrough child provider output"
 )
 
-// TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess proves child execution preserves model-embedded effort.
-func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *testing.T) {
+func runJavaScriptAntigravitySuccess(t *testing.T, fixture *javascriptSharedProcessFixture) {
 	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
 		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
-			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			prompt := "shared Antigravity answer " + strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-"))
 			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 				Stdout: []byte(`{"event":"result","result":{"conversation_id":"js-agy-child","status":"SUCCESS","response":"` + agyJavaScriptChildOutput + `","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n"),
 			})
-			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-				FactoryDir:                dir,
-				WaitForServiceModeRuntime: true,
-				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			if err := fixture.router.register(prompt, runner); err != nil {
+				t.Fatalf("register Antigravity success route: %v", err)
+			}
+			t.Cleanup(func() {
+				if err := fixture.router.unregister(prompt); err != nil {
+					t.Errorf("unregister Antigravity success route: %v", err)
+				}
 			})
-			t.Cleanup(func() { server.Stop(t) })
 
 			workflow := `return (async function () {
 			return await agent.run({
-  prompt: "return a real Antigravity answer",
-  label: "javascript-antigravity-child",
+				prompt: "` + prompt + `",
+				label: "javascript-antigravity-child",
   executorProvider: "` + executorProvider + `",
   modelProvider: "ANTIGRAVITY",
   model: "` + agyJavaScriptChildModel + `",
   reasoningEffort: "high",
   permissions: "SKIP_PERMISSIONS"
-});
-})();`
-			started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-"+strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")), workflow)
+			});
+		})();`
+			started := fixture.executeInline(t, "antigravity-success-"+executorProvider, workflow)
 			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-				session := readOverridesDurableSession(t, server.URL(), started.SessionId)
+				session := readOverridesDurableSession(t, fixture.baseURL, started.SessionId)
 				t.Fatalf("session status = %q, want SUCCEEDED; result=%#v failure=%#v", started.Status, started.Result, session.FailureDetail)
 			}
 			if runner.CallCount() != 1 {
@@ -129,29 +130,31 @@ func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *
 				t.Fatalf("provider argv = %#v, want no separate Antigravity effort", request.Args)
 			}
 			assertSucceededPrimaryContains(t, started, agyJavaScriptChildOutput)
+			assertJavaScriptSharedCompletedDispatch(t, fixture, started.SessionId, "antigravity", agyJavaScriptChildModel, "javascript-antigravity-child")
 		})
 	}
 }
 
-// TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess proves child command rejection remains typed across the root process.
-func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *testing.T) {
+func runJavaScriptAntigravityRejection(t *testing.T, fixture *javascriptSharedProcessFixture) {
 	const rejection = "Agy does not support a separate reasoning effort."
 
-	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stderr:   []byte(rejection),
 		ExitCode: 1,
 	})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	prompt := "shared force the provider rejection"
+	if err := fixture.router.register(prompt, runner); err != nil {
+		t.Fatalf("register Antigravity rejection route: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.router.unregister(prompt); err != nil {
+			t.Errorf("unregister Antigravity rejection route: %v", err)
+		}
 	})
-	t.Cleanup(func() { server.Stop(t) })
 
-	started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-rejection", `return (async function () {
+	started := fixture.executeInline(t, "antigravity-rejection", `return (async function () {
   return await agent.run({
-    prompt: "force the provider rejection",
+    prompt: "`+prompt+`",
     label: "javascript-antigravity-rejection",
     modelProvider: "ANTIGRAVITY",
     model: "gemini-3.6-flash-medium",
@@ -171,12 +174,12 @@ func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *
 	assertUnavailableFactoryResult(t, started.Result)
 	durableResult := support.GetJSON[factoryapi.FactorySessionResult](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/results?mode=final",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/results?mode=final",
 	)
 	assertUnavailableFactoryResult(t, &durableResult)
-	assertReadableAntigravityEvent(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId), rejection)
+	assertReadableAntigravityEvent(t, support.GetFactoryEventsForSessionAt(t, fixture.baseURL, started.SessionId), rejection)
 
-	session := readOverridesDurableSession(t, server.URL(), started.SessionId)
+	session := readOverridesDurableSession(t, fixture.baseURL, started.SessionId)
 	if session.FailureDetail == nil || !strings.Contains(session.FailureDetail.Message, rejection) {
 		t.Fatalf("session failure detail = %#v, want typed provider rejection", session.FailureDetail)
 	}
@@ -184,7 +187,7 @@ func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 1 {
 		t.Fatalf("dispatch count = %d, want one failed provider event", len(dispatches.Dispatches))
@@ -231,26 +234,24 @@ func assertNoGoMapFailure(t *testing.T, message string) {
 	}
 }
 
-// TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess proves the
-// live provider-invocation route is assembled from the Providers root and
-// reaches the injected command edge when no mock-worker or provider override
-// is present.
-func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+func runJavaScriptLiveProvider(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	prompt := "shared use the live provider command edge"
 	runner := support.NewRecordingCommandRunner("live provider output")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	if err := fixture.router.register(prompt, runner); err != nil {
+		t.Fatalf("register live provider route: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.router.unregister(prompt); err != nil {
+			t.Errorf("unregister live provider route: %v", err)
+		}
 	})
-	t.Cleanup(func() { server.Stop(t) })
 
-	started := startOverridesWorkflow(t, server.URL(), "javascript-live-provider-root", liveProviderChildWorkflow)
+	workflow := strings.ReplaceAll(liveProviderChildWorkflow, "use the live provider command edge", prompt)
+	started := fixture.executeInline(t, "live-provider", workflow)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
+	assertSucceededPrimaryContains(t, started, "live provider output")
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider command runner call count = %d, want one live child invocation", runner.CallCount())
 	}
@@ -261,7 +262,7 @@ func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) 
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 1 {
 		t.Fatalf("dispatch count = %d, want one live provider child", len(dispatches.Dispatches))
@@ -272,12 +273,9 @@ func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) 
 		dispatch.Model == nil || *dispatch.Model != "live-child-model" {
 		t.Fatalf("live provider dispatch = %#v, want completed codex/live-child-model dispatch", dispatch)
 	}
-
-	exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t)
-	exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t)
 }
 
-func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *testing.T) {
+func runJavaScriptProviderPermissionFlags(t *testing.T, fixture *javascriptSharedProcessFixture) {
 	tests := []struct {
 		name       string
 		fields     string
@@ -292,25 +290,22 @@ func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *t
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			workflow := permissionsOverrideWorkflow(test.fields, test.dynamic)
-			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(workflow))
+			prompt := "shared permissions mapping " + strings.ReplaceAll(test.name, " ", "-")
+			workflow := permissionsOverrideWorkflowWithPrompt(test.fields, test.dynamic, prompt)
 			runner := support.NewRecordingCommandRunner("permissions provider output")
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "--json", "run",
-				"--factory", filepath.Join(dir, "factory.json"),
-				"--output", "primary",
-				"--no-record",
-				"permissions matrix prompt",
-			})
-			inputs.Input.WorkingDirectory = dir
-			homeDir := t.TempDir()
-			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-			if err := support.BuildProcess(t, serviceedges.Edges{
-				ProviderCommandRunner: runner,
-			}).Execute(inputs.Input); err != nil {
-				t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+			if err := fixture.router.register(prompt, runner); err != nil {
+				t.Fatalf("register permission flag route: %v", err)
 			}
+			t.Cleanup(func() {
+				if err := fixture.router.unregister(prompt); err != nil {
+					t.Errorf("unregister permission flag route: %v", err)
+				}
+			})
+			started := fixture.executeInline(t, test.name, workflow)
+			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+				t.Fatalf("permission mapping status = %q, want SUCCEEDED; result=%#v", started.Status, started.Result)
+			}
+			assertSucceededPrimaryContains(t, started, "permissions provider output")
 			if runner.CallCount() != 1 {
 				t.Fatalf("provider command calls = %d, want one child invocation", runner.CallCount())
 			}
@@ -322,116 +317,106 @@ func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *t
 			if gotBypass != test.wantBypass {
 				t.Fatalf("provider argv = %#v, want bypass flag present=%v", request.Args, test.wantBypass)
 			}
+			assertJavaScriptSharedCompletedDispatch(t, fixture, started.SessionId, "codex", "permissions-child-model", "permissions-child")
 		})
 	}
 }
 
-func exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t *testing.T) {
-	for _, source := range []string{
-		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = "READ_ONLY"; return await agent.run(child); })();`,
+func runJavaScriptInvalidPermissions(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	for _, test := range []struct {
+		name  string
+		value string
+	}{
+		{name: "invalid-enum", value: `"READ_ONLY"`},
+		{name: "invalid-type", value: "true"},
 	} {
-		t.Run(source, func(t *testing.T) {
-			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(source))
-			runner := support.NewRecordingCommandRunner("unexpected provider execution")
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "--json", "run",
-				"--factory", filepath.Join(dir, "factory.json"),
-				"--output", "primary",
-				"--no-record",
-				"invalid permissions prompt",
-			})
-			inputs.Input.WorkingDirectory = dir
-			homeDir := t.TempDir()
-			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-			err := support.BuildProcess(t, serviceedges.Edges{
-				ProviderCommandRunner: runner,
-			}).Execute(inputs.Input)
-			if err == nil {
-				t.Fatal("Process.Execute() error = nil, want invalid permissions failure")
+		t.Run(test.name, func(t *testing.T) {
+			prompt := "shared invalid permissions " + test.name
+			workflow := invalidPermissionsOverrideWorkflowWithValue(test.value, prompt)
+			beforeCalls := fixture.router.callCount()
+			started := fixture.executeInline(t, test.name, workflow)
+			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+				t.Fatalf("invalid permissions status = %q, want FAILED; result=%#v", started.Status, started.Result)
 			}
-			diagnostic := strings.ToLower(err.Error() + "\n" + inputs.Stderr())
+			assertUnavailableFactoryResult(t, started.Result)
+			if started.Result.PrimaryResult != nil {
+				t.Fatalf("invalid permissions primary result = %#v, want nil", started.Result.PrimaryResult)
+			}
+			if fixture.router.callCount() != beforeCalls {
+				t.Fatalf("provider command calls after invalid permissions = %d, want unchanged %d", fixture.router.callCount(), beforeCalls)
+			}
+			assertJavaScriptSharedNoDispatch(t, fixture, started.SessionId)
+			session := readOverridesDurableSession(t, fixture.baseURL, started.SessionId)
+			if session.FailureDetail == nil {
+				t.Fatalf("invalid permissions session = %#v, want failure detail", session)
+			}
+			diagnostic := strings.ToLower(session.FailureDetail.Message)
 			if !strings.Contains(diagnostic, "permissions") {
 				t.Fatalf("invalid permissions diagnostic = %q, want field-specific permissions detail", diagnostic)
-			}
-			if runner.CallCount() != 0 {
-				t.Fatalf("provider command calls = %d, want zero for invalid permissions", runner.CallCount())
 			}
 		})
 	}
 }
 
 func invalidPermissionsOverrideWorkflow() string {
-	return `return (async function () { const child = { prompt: "shared invalid permissions", modelProvider: "codex" }; child.permissions = true; return await agent.run(child); })();`
+	return invalidPermissionsOverrideWorkflowWithValue("true", "shared invalid permissions")
 }
 
-// TestJavaScriptChildrenSelectDifferentProvidersAndModels proves a JavaScript
-// Factory with multiple child dispatches can select distinct per-child provider
-// and model overrides so each child completes with public dispatch and provider
-// evidence matching its configured worker selection rather than a shared default.
-func TestJavaScriptChildrenSelectDifferentProvidersAndModels(t *testing.T) {
-	t.Parallel()
+func invalidPermissionsOverrideWorkflowWithValue(value, prompt string) string {
+	return `return (async function () { const child = { prompt: "` + prompt + `", modelProvider: "codex" }; child.permissions = ` + value + `; return await agent.run(child); })();`
+}
 
-	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
-
-	provider := testutil.NewMockProvider(
-		workers.InferenceResponse{Content: `{"text":"codex child complete"}`},
-		workers.InferenceResponse{Content: `{"text":"claude child complete"}`},
-	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderOverride: provider},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startOverridesWorkflow(t, server.URL(), "javascript-per-child-provider-model", perChildProviderModelWorkflow)
-	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+func runJavaScriptDistinctProviderModels(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	codexPrompt := "shared codex provider and model"
+	claudePrompt := "shared claude provider and model"
+	codexRunner := support.NewRecordingCommandRunner("codex child complete")
+	claudeRunner := support.NewRecordingCommandRunner("claude child complete")
+	for selector, runner := range map[string]platformprocess.CommandRunner{
+		codexPrompt:  codexRunner,
+		claudePrompt: claudeRunner,
+	} {
+		if err := fixture.router.register(selector, runner); err != nil {
+			t.Fatalf("register provider/model route %q: %v", selector, err)
+		}
+		selector := selector
+		t.Cleanup(func() {
+			if err := fixture.router.unregister(selector); err != nil {
+				t.Errorf("unregister provider/model route %q: %v", selector, err)
+			}
+		})
 	}
+	workflow := strings.ReplaceAll(perChildProviderModelWorkflow, "use codex provider and model", codexPrompt)
+	workflow = strings.ReplaceAll(workflow, "use claude provider and model", claudePrompt)
+	beforeRequests := fixture.router.requestRecords()
+	started := fixture.executeInline(t, "distinct-provider-model", workflow)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("provider/model session status = %q, want SUCCEEDED", started.Status)
+	}
+	assertSucceededPrimaryContains(t, started, "codex child complete", "claude child complete")
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
 	)
 	assertPerChildProviderModelDispatches(t, dispatches.Dispatches)
-	assertPerChildProviderModelRequests(t, provider.Calls())
+	afterRequests := fixture.router.requestRecords()
+	if len(afterRequests) != len(beforeRequests)+2 {
+		t.Fatalf("provider/model command request count = %d, want 2 new requests", len(afterRequests)-len(beforeRequests))
+	}
+	assertJavaScriptProviderModelCommandRequests(t, afterRequests[len(beforeRequests):], codexPrompt, claudePrompt)
 }
 
-// TestJavaScriptMockWorkersReplaceOnlyNamedChildren proves a partial
-// --with-mock-workers configuration serves a named preset worker through the
-// mock-worker accept path while an unmatched JavaScript child without that
-// preset keeps the live-provider passthrough path when
-// unmatchedDispatchPolicy is passthrough and a provider command edge is
-// injected at the public process boundary.
-func TestJavaScriptMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
-	support.WriteAgentConfig(t, dir, mockedWorkerPresetName, "---\ntype: MODEL_WORKER\n---\n")
-	homeDir := writePartialMockWorkersGlobalConfig(t)
-
+func runJavaScriptPartialMockWorkers(t *testing.T, fixture *javascriptSharedProcessFixture) {
 	runner := support.NewRecordingCommandRunner(livePassthroughChildText)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		MockWorkersConfig:         partialNamedJavaScriptMockWorkersConfig(),
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-		),
+	if err := fixture.router.register(passthroughChildPrompt, runner); err != nil {
+		t.Fatalf("register partial mock passthrough route: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.router.unregister(passthroughChildPrompt); err != nil {
+			t.Errorf("unregister partial mock passthrough route: %v", err)
+		}
 	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startOverridesWorkflow(
-		t,
-		server.URL(),
-		"javascript-partial-mock-workers-mixed",
-		partialMockWorkersWorkflow,
-	)
+	started := fixture.executeInline(t, "partial-mock-workers", partialMockWorkersWorkflow)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
@@ -441,54 +426,153 @@ func TestJavaScriptMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
 	)
 	assertPartialMockMixedChildDispatches(t, dispatches.Dispatches)
 	assertPartialMockMixedPrimaryResult(t, started.Result)
 }
 
-// TestJavaScriptUnknownWorkerOverrideFailsActionably proves configuring an
-// invalid per-child worker override on agent.run fails at the public JavaScript
-// boundary with a customer-readable diagnostic that identifies the bad override,
-// does not emit a successful child dispatch, and does not leak private runtime
-// internals as the primary failure signal.
-func TestJavaScriptUnknownWorkerOverrideFailsActionably(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
-
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startOverridesWorkflow(
-		t,
-		server.URL(),
-		"javascript-unknown-worker-override",
-		unknownWorkerOverrideWorkflow,
-	)
+func runJavaScriptUnknownProviderOverride(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	beforeCalls := fixture.router.callCount()
+	started := fixture.executeInline(t, "unknown-provider-override", unknownWorkerOverrideWorkflow)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("session status = %q, want FAILED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 before override validation", runner.CallCount())
+	if fixture.router.callCount() != beforeCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged %d before override validation", fixture.router.callCount(), beforeCalls)
 	}
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 0 {
 		t.Fatalf("dispatch count = %d, want 0 for invalid worker override", len(dispatches.Dispatches))
 	}
 
-	assertUnknownWorkerOverrideFailureRecord(t, server.URL(), started.SessionId, started.Result)
+	assertJavaScriptSharedNoDispatch(t, fixture, started.SessionId)
+	assertUnknownWorkerOverrideFailureRecord(t, fixture.baseURL, started.SessionId, started.Result)
+}
+
+func runJavaScriptConcurrentIsolation(t *testing.T, fixture *javascriptSharedProcessFixture) {
+	successPrompt := "shared concurrent success"
+	successGate := make(chan struct{})
+	successRunner := support.NewGatedSuccessCommandRunner("concurrent success output", successGate)
+	if err := fixture.router.register(successPrompt, successRunner); err != nil {
+		t.Fatalf("register concurrent success route: %v", err)
+	}
+	t.Cleanup(func() {
+		select {
+		case <-successGate:
+		default:
+			close(successGate)
+		}
+		if err := fixture.router.unregister(successPrompt); err != nil {
+			t.Errorf("unregister concurrent success route: %v", err)
+		}
+	})
+
+	successWorkflow := strings.ReplaceAll(liveProviderChildWorkflow, "use the live provider command edge", successPrompt)
+	failureWorkflow := invalidPermissionsOverrideWorkflowWithValue("true", "shared concurrent failure")
+	requestBase := fixture.requestSequence.Load() + 1
+	successRequestID := fmt.Sprintf("shared-javascript-concurrent-success-%d", requestBase)
+	failureRequestID := fmt.Sprintf("shared-javascript-concurrent-failure-%d", requestBase+1)
+	beforeCalls := fixture.router.callCount()
+
+	type result struct {
+		response factoryapi.FactorySessionSyncExecutionResponse
+		err      error
+	}
+	successCh := make(chan result, 1)
+	go func() {
+		response, err := postOverridesWorkflow(context.Background(), fixture.baseURL, successRequestID, successWorkflow)
+		successCh <- result{response: response, err: err}
+	}()
+
+	waitContext, cancelWait := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelWait()
+	if err := fixture.router.waitForCall(waitContext, beforeCalls+1); err != nil {
+		t.Fatalf("wait for concurrent success provider request: %v", err)
+	}
+
+	failureCh := make(chan result, 1)
+	go func() {
+		response, err := postOverridesWorkflow(context.Background(), fixture.baseURL, failureRequestID, failureWorkflow)
+		failureCh <- result{response: response, err: err}
+	}()
+
+	var failure result
+	select {
+	case failure = <-failureCh:
+	case <-time.After(15 * time.Second):
+		t.Fatal("timed out waiting for concurrent failure workflow")
+	}
+	if failure.err != nil {
+		t.Fatalf("concurrent failure workflow: %v", failure.err)
+	}
+	if failure.response.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("concurrent failure status = %q, want FAILED", failure.response.Status)
+	}
+
+	close(successGate)
+	var success result
+	select {
+	case success = <-successCh:
+	case <-time.After(15 * time.Second):
+		t.Fatal("timed out waiting for concurrent success workflow")
+	}
+	if success.err != nil {
+		t.Fatalf("concurrent success workflow: %v", success.err)
+	}
+	if success.response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("concurrent success status = %q, want SUCCEEDED", success.response.Status)
+	}
+	if success.response.SessionId == failure.response.SessionId {
+		t.Fatalf("concurrent workflows reused Factory Session ID %q", success.response.SessionId)
+	}
+	fixture.trackSession(t, failure.response.SessionId)
+	fixture.trackSession(t, success.response.SessionId)
+	assertSucceededPrimaryContains(t, success.response, "concurrent success output")
+	assertUnavailableFactoryResult(t, failure.response.Result)
+
+	failureSession := readOverridesDurableSession(t, fixture.baseURL, failure.response.SessionId)
+	if failureSession.FailureDetail == nil || !strings.Contains(strings.ToLower(failureSession.FailureDetail.Message), "permissions") {
+		t.Fatalf("concurrent failure detail = %#v, want permissions diagnostic", failureSession.FailureDetail)
+	}
+	successEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, success.response.SessionId)
+	failureEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, failure.response.SessionId)
+	assertJavaScriptEventsDoNotContain(t, successEvents, "shared concurrent failure")
+	assertJavaScriptEventsDoNotContain(t, failureEvents, "concurrent success output")
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+success.response.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("concurrent success dispatches = %#v, want one completed dispatch", dispatches.Dispatches)
+	}
+	failureDispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+failure.response.SessionId+"/dispatches",
+	)
+	if len(failureDispatches.Dispatches) != 0 {
+		t.Fatalf("concurrent failure dispatches = %#v, want no provider dispatch", failureDispatches.Dispatches)
+	}
+	requests := fixture.router.requestRecords()
+	if len(requests) == 0 || !bytes.Contains(requests[len(requests)-1].Stdin, []byte(successPrompt)) || bytes.Contains(requests[len(requests)-1].Stdin, []byte("shared concurrent failure")) {
+		t.Fatalf("concurrent command requests = %#v, want only success request content", requests)
+	}
+}
+
+func assertJavaScriptEventsDoNotContain(t *testing.T, events []factoryapi.FactoryEvent, forbidden string) {
+	t.Helper()
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("marshal Factory Events: %v", err)
+	}
+	if strings.Contains(string(encoded), forbidden) {
+		t.Fatalf("Factory Events contain foreign content %q: %s", forbidden, encoded)
+	}
 }
 
 func partialNamedJavaScriptMockWorkersConfig() *workers.MockWorkersConfig {
@@ -499,28 +583,6 @@ func partialNamedJavaScriptMockWorkersConfig() *workers.MockWorkersConfig {
 			RunType:    workers.MockWorkerRunTypeAccept,
 		}},
 	}
-}
-
-func writePartialMockWorkersGlobalConfig(t *testing.T) string {
-	t.Helper()
-
-	homeDir := t.TempDir()
-	configDir := filepath.Join(homeDir, ".you-agent-factory")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
-		t.Fatalf("mkdir global config directory: %v", err)
-	}
-	config := []byte(`{
-  "defaults": {"workerModelProvider": "codex", "workerModel": "default-model"},
-  "workerPresets": [{
-    "id": "` + mockedWorkerPresetName + `",
-    "modelProvider": "codex",
-    "model": "mocked-child-model"
-  }]
-}`)
-	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
-		t.Fatalf("write global config: %v", err)
-	}
-	return homeDir
 }
 
 func assertPartialMockMixedChildDispatches(
@@ -794,8 +856,12 @@ func permissionsOverrideFactoryConfig(source string) map[string]any {
 }
 
 func permissionsOverrideWorkflow(fields string, dynamic bool) string {
+	return permissionsOverrideWorkflowWithPrompt(fields, dynamic, "prove the provider permission mapping")
+}
+
+func permissionsOverrideWorkflowWithPrompt(fields string, dynamic bool, prompt string) string {
 	child := `{
-    prompt: "prove the provider permission mapping",
+    prompt: "` + prompt + `",
     label: "permissions-child",
     modelProvider: "codex",
     model: "permissions-child-model"`
@@ -819,7 +885,17 @@ func startOverridesWorkflow(
 	serverURL, requestID, workflowSource string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
+	started, err := postOverridesWorkflow(t.Context(), serverURL, requestID, workflowSource)
+	if err != nil {
+		t.Fatalf("start overrides workflow: %v", err)
+	}
+	return started
+}
 
+func postOverridesWorkflow(
+	ctx context.Context,
+	serverURL, requestID, workflowSource string,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
 	dialect := "you-workflow-v1"
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
 		RequestId: requestID,
@@ -835,29 +911,29 @@ func startOverridesWorkflow(
 		},
 	})
 	if err != nil {
-		t.Fatalf("marshal overrides workflow request: %v", err)
+		return factoryapi.FactorySessionSyncExecutionResponse{}, fmt.Errorf("marshal overrides workflow request: %w", err)
 	}
 	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		t.Fatalf("build overrides workflow request: %v", err)
+		return factoryapi.FactorySessionSyncExecutionResponse{}, fmt.Errorf("build overrides workflow request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		t.Fatalf("start overrides workflow: %v", err)
+		return factoryapi.FactorySessionSyncExecutionResponse{}, fmt.Errorf("POST overrides workflow: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		var body bytes.Buffer
 		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start overrides workflow status = %d: %s", response.StatusCode, body.String())
+		return factoryapi.FactorySessionSyncExecutionResponse{}, fmt.Errorf("overrides workflow status = %d: %s", response.StatusCode, body.String())
 	}
 	var started factoryapi.FactorySessionSyncExecutionResponse
 	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode overrides workflow response: %v", err)
+		return factoryapi.FactorySessionSyncExecutionResponse{}, fmt.Errorf("decode overrides workflow response: %w", err)
 	}
-	return started
+	return started, nil
 }
 
 func containsArg(args []string, want string) bool {
@@ -956,29 +1032,36 @@ func assertOverridesDispatchSelection(
 	}
 }
 
-func assertPerChildProviderModelRequests(
+func assertJavaScriptProviderModelCommandRequests(
 	t *testing.T,
-	calls []workers.ProviderInferenceRequest,
+	requests []platformprocess.CommandRequest,
+	codexPrompt, claudePrompt string,
 ) {
 	t.Helper()
 
-	if len(calls) != 2 {
-		t.Fatalf("provider call count = %d, want 2", len(calls))
+	if len(requests) != 2 {
+		t.Fatalf("provider command request count = %d, want 2", len(requests))
 	}
-	if calls[0].ModelProvider != "codex" || calls[0].Model != "codex-child-model" {
+	if requests[0].Command != "codex" || !javaScriptCommandRequestContains(requests[0], codexPrompt) ||
+		!containsArgPair(requests[0].Args, "--model", "codex-child-model") {
 		t.Fatalf(
-			"first provider request = provider %q model %q, want codex/codex-child-model",
-			calls[0].ModelProvider,
-			calls[0].Model,
+			"first provider command request = %#v, want codex/%q with codex-child-model",
+			requests[0],
+			codexPrompt,
 		)
 	}
-	if calls[1].ModelProvider != "claude" || calls[1].Model != "claude-child-model" {
+	if requests[1].Command != "claude" || !javaScriptCommandRequestContains(requests[1], claudePrompt) ||
+		!containsArgPair(requests[1].Args, "--model", "claude-child-model") {
 		t.Fatalf(
-			"second provider request = provider %q model %q, want claude/claude-child-model",
-			calls[1].ModelProvider,
-			calls[1].Model,
+			"second provider command request = %#v, want claude/%q with claude-child-model",
+			requests[1],
+			claudePrompt,
 		)
 	}
+}
+
+func javaScriptCommandRequestContains(request platformprocess.CommandRequest, want string) bool {
+	return bytes.Contains(request.Stdin, []byte(want)) || strings.Contains(strings.Join(request.Args, "\n"), want)
 }
 
 func dereferenceOverridesValue(value *string) string {
