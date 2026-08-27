@@ -1,8 +1,8 @@
 # C01 executable eligibility inventory
 
 - Source clean commit: `b6ba77b177af0fa2589b25eb99ee6b58b6385b03`
-- Last artifact update UTC: `2026-08-27T04:57:29.9214908Z`
-- Status: stories 001–004 complete; story 005 remains explicitly pending.
+- Last artifact update UTC: `2026-08-27T06:12:03.8076735Z`
+- Status: stories 001–004 complete; VAL-001 clean-room artifact loopback passed.
 - Scope: additive inventory only. No tests, support APIs, production behavior, contracts, generated outputs, or remote/paid calls were changed.
 
 This artifact freezes the eight Go package patterns used by TASK-002 at exactly 39 resolved package identities. It records every top-level test emitted by Go tooling (342 rows), four explicit zero-test package facts, twelve named relationship subtests, final story-001–003 classifications for all 354 rows, and the complete TIME-001 uncached timing baseline of 117 retained samples.
@@ -1058,12 +1058,21 @@ The Windows run explicitly skips `TestProcessGoneReleasesSameRouteAdmissionThrou
 
 - AUDIT-001: **PASS** — `make test-lane-audit` exited 0; observed output: `Go test lane ownership: contract=8 functional=139 integration=10 maintenance=103 release=1 stress=1 unit=445`. This proves existing lane classification rules only.
 - LINT-001: **PASS** — `go run ./cmd/markdown-linter docs/internal/development/plans/backlog/shared-functional-process-sessions.md docs/internal/development/functional-test-optimization/c01-eligibility-inventory.md` exited 0 with no diagnostics; this proves Markdown conformance for the two named files.
+
+## VAL-001 clean-room artifact loopback
+
+- Status: **PASS** — the loopback used a detached clean checkout at delivered head `9a12eb9ff481928b5d81cdedeb1168cece650c90`; the checkout had no untracked or modified files.
+- Procedure: parse the JSON, reconcile the ordered Markdown sample and statistics tables, independently recompute all 39 package medians, variances, and flags, inspect recovered history and the two-file scope, run `make test-lane-audit`, and run `go run ./cmd/markdown-linter docs/internal/development/plans/backlog/shared-functional-process-sessions.md docs/internal/development/functional-test-optimization/c01-eligibility-inventory.md`.
+- Observed: 39 packages, 354 rows, 117 ordered samples, all 117 samples with 21 required fields and diagnostic references, 39/39 statistics matches, all three recovered commits present as ancestors, and exact two-file scope; audit and Markdown lint both exited 0.
+- Proves: clean-checkout artifact parsing, retained-sample and statistics reproducibility, Markdown/JSON agreement, recovered-history/scope preservation, current lane-audit policy, and Markdown conformance.
+- Does not prove: functional package reruns, remote provider behavior, reference-CI timing, migration behavior, or platform/environment edges. No functional package was executed.
+
 ## Deferred evidence and decisions
 
 - EDGE-003: process/protocol/AGY classifications are complete for 128 rows across 11 packages. The exact package commands, row outcomes, isolation reasons, and platform/environment gates are recorded above and in JSON.
 - TIME-001: complete; exactly 117 sequential uncached samples and all 39 per-package statistics are recorded above. Failure, skip, zero-test, timeout, interruption, and diagnostic-loss retention rules remain explicit.
 - MIGRATION-001: migration groups are inventory boundaries only; no test migration or production behavior change is included in C01.
-- CLEAN-001: independent clean-room reproduction remains pending story 005.
+- VAL-001: **PASS** — clean-room artifact parsing, reconciliation, independent recomputation, recovered-history/scope inspection, lane audit, and Markdown conformance completed. Functional package reruns remain intentionally outside this artifact-only loopback.
 
 ## Delivery responsibilities
 
@@ -1071,9 +1080,8 @@ The Windows run explicitly skips `TestProcessGoneReleasesSameRouteAdmissionThrou
 | --- | --- | --- |
 | DISC-001 | story 001 | PASS: 39 packages and 342 top-level identities recorded |
 | REF-001 | story 001 | PASS: relationship package race and 12 named subtests |
-| functional-test-optimization-c01-eligibility-inventory-002 | story 002 | PASS: 226 application-owned rows finalized; no characterization required |
+| functional-test-optimization-c01-eligibility-inventory-002 | story 002 | PASS: 226 application-owned rows finalized; no characterization required; VAL-001 artifact loopback passed |
 | functional-test-optimization-c01-eligibility-inventory-003 | story 003 | PASS: EDGE-003 classifies 128 process/protocol/AGY rows, records exact package evidence, and retains platform/environment gates |
 | functional-test-optimization-c01-eligibility-inventory-004 | story 004 | PASS: TIME-001 complete; AUDIT-001 and LINT-001 are recorded after the final gates |
-| functional-test-optimization-c01-eligibility-inventory-005 | story 005 | Pending clean-room loopback |
 
 The JSON file is the machine-readable source for the same package, test-row, relationship, environment, APP-002 classification, deferred-evidence, and delivery-responsibility facts shown here.

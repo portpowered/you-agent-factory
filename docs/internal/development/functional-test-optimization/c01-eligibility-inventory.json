@@ -2,8 +2,8 @@
   "formatVersion": 1,
   "inventoryId": "functional-test-optimization-c01-eligibility-inventory",
   "title": "C01 executable eligibility inventory",
-  "status": "stories-001-004-complete-story-005-pending",
-  "recordedAtUtc": "2026-08-27T04:57:29.9214908Z",
+  "status": "stories-001-004-complete",
+  "recordedAtUtc": "2026-08-27T06:12:03.8076735Z",
   "recordedCommit": "716d0b683a5335edbe07255b6a7af35a6e1b9d46",
   "sourcePlan": "docs/internal/development/plans/backlog/shared-functional-process-sessions.md",
   "sourcePlanTask": "TASK-002 — Package eligibility and characterization inventory",
@@ -32,7 +32,7 @@
       "TIME-001 sequential uncached package samples and per-package statistics"
     ],
     "deferred": [
-      "independent clean-room reproduction -> functional-test-optimization-c01-eligibility-inventory-005",
+      "clean-room functional package execution is not part of VAL-001; the artifact loopback is recorded below",
       "remote/paid provider validation and unavailable platform/environment edges"
     ],
     "excluded": [
@@ -404,7 +404,7 @@
     "failurePolicy": "Failed, skipped, timed-out, interrupted, zero-test, or diagnostically incomplete samples remain recorded and are never replaced.",
     "propertyProved": "The current recovered head produced exactly 117 sequential uncached local package outcomes with retained diagnostics, package/test timing where emitted, reproducible per-package statistics, and process-count availability.",
     "propertyNotProved": "Reference-CI performance, remote provider behavior, future migration parity or savings, timing enforcement, and statistical stability beyond three samples.",
-    "unprovenEdge": "Independent clean-room artifact reproduction -> functional-test-optimization-c01-eligibility-inventory-005",
+    "unprovenEdge": "Clean-room functional package execution is not part of VAL-001; the artifact loopback is recorded below.",
     "relationshipRaceEvidence": {
       "gateId": "REF-001",
       "status": "pass",
@@ -448,9 +448,25 @@
     "propertyNotProved": "This audit does not prove functional behavior, inventory completeness, timing correctness, or migration safety."
   },
   "cleanRoom": {
-    "status": "pending-story-005",
+    "status": "pass",
     "gateId": "VAL-001",
-    "procedure": "Independent clean-checkout loopback using factory/docs/standards/validation-loopback-template.md"
+    "procedure": "Independent clean-checkout loopback using factory/docs/standards/validation-loopback-template.md; no functional package probes.",
+    "recordedAtUtc": "2026-08-27T06:12:03.8076735Z",
+    "validatedHead": "9a12eb9ff481928b5d81cdedeb1168cece650c90",
+    "worktree": "Detached clean checkout with no untracked or modified files.",
+    "checks": {
+      "jsonParse": "pass",
+      "counts": "39 packages, 354 rows, 117 ordered samples",
+      "requiredSampleFields": "117/117 samples contain all 21 required fields and a diagnostic reference",
+      "statistics": "39/39 medians, variances, and flags independently recomputed",
+      "artifactReconciliation": "117 samples and 39 statistics rows matched between Markdown and JSON",
+      "recoveredHistory": "All three recovered commits are ancestors",
+      "scope": "Exactly the two owned inventory files changed after 716d0b683",
+      "testLaneAudit": "make test-lane-audit exited 0",
+      "markdownLint": "The named Markdown linter exited 0"
+    },
+    "propertyProved": "The delivered inventory artifacts parse, reconcile, independently recompute, preserve recovered history and scope, and pass the named repository gates in a clean checkout.",
+    "propertyNotProved": "No functional package was rerun; remote provider behavior, reference-CI timing, migration behavior, and platform/environment edges remain unproven."
   },
   "packages": [
     {
@@ -43987,9 +44003,9 @@
       "status": "pending"
     },
     {
-      "edge": "independent clean-room reproduction",
-      "owner": "functional-test-optimization-c01-eligibility-inventory-005",
-      "status": "pending"
+      "edge": "clean-room functional package execution",
+      "owner": "not part of VAL-001; future runtime or CI gate",
+      "status": "not-run-by-design"
     },
     {
       "edge": "remote/paid provider behavior and unavailable platform/environment edges",
