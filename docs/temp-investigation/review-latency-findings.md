@@ -6,8 +6,8 @@ This investigation uses read-only observations from the live Factory and GitHub.
 The Factory endpoint was `http://localhost:7437`.
 No command contacted port 7438 or changed Work, Worker Sessions, pull requests, or CI.
 
-This iteration measures ten recent reviewer Worker Sessions for one completed review lane.
-The next iteration will expand the interpretation against policy and rank the measured contributors.
+This investigation measures ten recent reviewer Worker Sessions for one completed review lane
+and interprets them against the checked-in review, CI-wait, and visit-budget policy.
 
 ## Method
 
@@ -72,6 +72,62 @@ The session ended at 02:38:58, after the merge result was observed.
 No merge-conflict or rebase cycle is supported by the sampled PR evidence.
 The measured head change was a direct blocking-feedback fix, not a rebase.
 Human thinking time is not separately measurable because Worker Session timestamps combine reasoning and tool execution.
+
+## Policy interpretation
+
+The checked-in review policy requires correctness-first review, applicable quality checks,
+criterion-by-criterion evaluation, and independent runtime proof when a change affects observable
+CLI, API, UI, event, or lifecycle behavior. It explicitly rejects substituting the implementer's
+evidence or a green test suite for that proof. For a documentation-only lane, the reviewer instead
+records why runtime proof is not applicable. These requirements explain why the final review visit
+can legitimately contain substantial repository inspection, builds, tests, and behavioral exercise;
+removing them would reduce review rigor.
+
+The configured flow sends a completed process visit to `task:awaiting-ci`, then through the
+agentless `ci-wait` script before `task:in-review`. The script polls required checks every 120
+seconds and releases the task only when checks are terminal, regardless of verdict. A reviewer
+hold returns to `awaiting-ci`, so CI waiting should consume script time rather than reviewer-agent
+time or another logical review cycle. The nine observed reviewer sessions during pending CI show
+that the measured lane did not realize that intended behavior; the timestamps alone cannot say
+whether the cause was a gate race, stale deployed configuration, or another routing defect.
+
+Both process and review are `REPEATER` workstations. Their `VISIT_COUNT` guards allow 12 logical
+round trips with a 24-raw-visit backstop across the two workstations. This permits legitimate
+feedback/fix cycles, while making needless pending-CI redispatch expensive before the guard stops
+the lane. In this sample, the nine pending-CI review visits consumed nine raw review visits but
+only one PR feedback/fix cycle is evidenced.
+
+Policy sources:
+
+- `factory/workstations/review/AGENTS.md`, especially Steps 2, 2.1, and 2.2, defines independent
+  checks, the CI hold route, and conditional runtime proof.
+- `factory/scripts/ci-wait.py` defines terminal-check gating, the 120-second poll interval, and the
+  bounded requeue behavior.
+- `factory/factory.json` defines the `REPEATER` routes and the paired `VISIT_COUNT` limits
+  (`maxVisits: 12`, `maxRawVisits: 24`).
+- `factory/docs/standards/review-standards.md` requires independent evidence, convergence, and
+  review ownership of terminal CI and merge.
+
+## Ranked contributors and recommendations
+
+The ranks use elapsed wall time where an interval can be bounded. Worker time is reported
+separately because overlapping Worker Sessions and CI must not be added together. Percentages use
+the 1,205.406 seconds of sampled Worker Session time, not the full PR lifetime. This is one PR and
+ten visits, so savings are hypotheses to validate across more lanes, not fleet forecasts.
+
+| Rank | Contributor | Measured evidence | Concrete optimization | Estimated saving and validation |
+| ---: | --- | --- | --- | --- |
+| 1 | Post-initial-CI delay before blocking feedback | Initial CI ended at 01:37:15; the blocking review comment arrived at 02:08:11: 1,856 s (30 m 56 s), affecting 1/1 PR. No matching session boundary is retained, so queue delay versus reviewer execution is unmeasurable. | Emit durable review-ready, dispatch-start, and first-review-action timestamps, then alert when review-ready Work remains undispatched beyond a chosen service objective. | Bound: 0-1,856 s per affected lane; the full 1,856 s is recoverable only if later telemetry proves the interval was idle. Validate over at least 20 lanes by comparing review-ready-to-dispatch p50/p90 before and after alerting. No rigor reduction. |
+| 2 | Final independent review and merge visit | Session 10 lasted 826.593 s (13 m 46.593 s), 68.6% of all sampled Worker Session time; it produced the final review comment and merge. Its transcript is unavailable, so thinking, tool execution, required rebuilds, and runtime proof cannot be separated. | Provide the reviewer a generated evidence index containing changed surfaces, exact acceptance criteria, current-head CI links, and implementer commands, while preserving the reviewer's independent source inspection and reruns. | Hypothesis: save 120-240 s (15-29% of this visit) in evidence discovery, leaving 586.593-706.593 s. Validate with session transcripts and median final-review time across at least 20 comparable PRs. **Human tradeoff:** skipping independent builds, behavioral exercise, or review coverage could save more, but requires explicit operator approval because it reduces mandated rigor. |
+| 3 | Fresh-head CI critical path and pending-CI redispatch | Run 33032728213 lasted 563 s (9 m 23 s); Backend Functional Coverage was the longest required job at 515 s. From the first sampled reviewer start to CI completion was 394.557 s. During that overlap, nine reviewer visits consumed 378.813 s (31.4% of sampled Worker time), with a 42.346 s median; these are compute costs, not an additional 378.813 s of wall time. | First enforce and instrument the existing `ci-wait` invariant so pending checks cannot dispatch review. Separately profile and shard/cache Backend Functional Coverage without dropping required checks. | Gate enforcement can save up to 378.813 s of reviewer Worker time and nine raw visits on a lane with this failure mode, but little wall time because CI remains mandatory. A 25% reduction in the 515 s critical job would save at most about 129 s of CI wall time if it remains critical. Validate via zero pending-CI reviewer dispatches and hosted job p50/p90 over 20 runs. **Human tradeoff:** removing required checks could save up to the 563 s run, but reduces verification rigor and requires operator approval. |
+| 4 | Blocking-feedback correction cycle | Blocking comment to fix commit was 419 s (6 m 59 s); comment to author resolution was 462 s (7 m 42 s), affecting 1/1 PR and one evidenced feedback/fix cycle. | Make blocking comments machine-readable with criterion, reproduction, exact requested correction, and focused verification command so the executor can begin without rediscovery. | Hypothesis: save 60-120 s (13-26% of the 462 s cycle). Validate against comment-to-fix-commit medians for at least 20 single-fix cycles. No rigor reduction. |
+
+Inter-invocation REPEATER idle is not a top contributor in this sample: the nine gaps inside the
+sample total only 22.228 seconds (2.470 seconds per gap on average), and the final review began
+6.432 seconds after CI completed. Rebase or merge-conflict cost is measured as zero supported
+cycles, not as proof that such cycles never occur: GitHub shows one direct feedback-fix commit and
+no rebase/conflict event. Cross-lane conflict prevalence and savings are therefore unmeasurable
+from this sample.
 
 ## Reproducible evidence commands
 
