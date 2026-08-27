@@ -63,7 +63,7 @@
       ]
     },
     {
-	  "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+	  "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLISharedRemoteScenarios/TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
 	  "stableIds": [
 	    "cli/you.work.approval.list",
 	    "cli/you.work.approval.show"
@@ -76,13 +76,13 @@
       ]
     },
     {
-      "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile",
+      "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISharedRemoteScenarios/TestCLISubmitBatchFile",
       "stableIds": [
         "cli/you.submit.batch"
       ]
     },
     {
-      "test": "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState",
+      "test": "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLISharedRemoteScenarios/TestCLIWorkMoveChangesState",
       "stableIds": [
         "cli/you.work.move"
       ]

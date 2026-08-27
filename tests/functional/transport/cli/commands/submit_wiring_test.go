@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -42,19 +40,9 @@ const (
 // TestCLISubmitBatchInlineJSON proves you submit batch accepts inline canonical
 // FACTORY_REQUEST_BATCH JSON against a running Factory Session server and prints
 // transport acknowledgment markers without staging a file.
-func TestCLISubmitBatchInlineJSON(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI submit wiring")
-	}
-
+func testCLISubmitBatchInlineJSON(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, submitWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	processHarness := newRootProcessHarness(t)
+	sessionID := remote.openSession(t, factoryDir)
 	inlineBatch := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Inline submit wiring"}}]}`,
 		submitWiringInlineRequestID,
@@ -65,14 +53,9 @@ func TestCLISubmitBatchInlineJSON(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := processHarness.CommandContext(ctx,
-		"--server", server.URL(),
-		"submit", "batch",
-		inlineBatch,
+	submitOut, err := remote.run(ctx, factoryDir, sessionID,
+		"submit", "batch", inlineBatch,
 	)
-	submitCmd.Dir = factoryDir
-
-	submitOut, err := submitCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("you submit batch: %v\noutput:\n%s", err, submitOut)
 	}
@@ -93,17 +76,9 @@ func TestCLISubmitBatchInlineJSON(t *testing.T) {
 // TestCLISubmitBatchFile proves you submit batch accepts a filesystem path to
 // canonical FACTORY_REQUEST_BATCH JSON against a running Factory Session server
 // and prints transport acknowledgment markers for the staged batch.
-func TestCLISubmitBatchFile(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI submit wiring")
-	}
-
+func testCLISubmitBatchFile(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, submitWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
+	sessionID := remote.openSession(t, factoryDir)
 
 	batchPath := filepath.Join(t.TempDir(), "submit-wiring-batch.json")
 	batchJSON := fmt.Sprintf(
@@ -116,19 +91,12 @@ func TestCLISubmitBatchFile(t *testing.T) {
 		t.Fatalf("write batch file: %v", err)
 	}
 
-	processHarness := newRootProcessHarness(t)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := processHarness.CommandContext(ctx,
-		"--server", server.URL(),
-		"submit", "batch",
-		batchPath,
+	submitOut, err := remote.run(ctx, factoryDir, sessionID,
+		"submit", "batch", batchPath,
 	)
-	submitCmd.Dir = factoryDir
-
-	submitOut, err := submitCmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("you submit batch: %v\noutput:\n%s", err, submitOut)
 	}
@@ -151,12 +119,7 @@ func TestCLISubmitBatchFile(t *testing.T) {
 // TestCLISubmitUnavailableServer proves you submit batch exits with the documented
 // failure code and an actionable unreachable Factory diagnostic when the server
 // address cannot be reached, without printing a success acknowledgment payload.
-func TestCLISubmitUnavailableServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI submit wiring")
-	}
-
-	processHarness := newRootProcessHarness(t)
+func testCLISubmitUnavailableServer(t *testing.T, remote *sharedRemoteCLI) {
 	inlineBatch := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Unavailable server wiring"}}]}`,
 		submitWiringUnavailableRequestID,
@@ -167,14 +130,9 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := processHarness.CommandContext(ctx,
-		"--server", submitWiringUnavailableServer,
-		"submit", "batch",
-		inlineBatch,
+	submitOut, err := remote.runAt(ctx, t.TempDir(), submitWiringUnavailableServer, "",
+		"submit", "batch", inlineBatch,
 	)
-	submitCmd.Dir = t.TempDir()
-
-	submitOut, err := submitCmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("you submit batch unexpectedly succeeded against unavailable server:\n%s", submitOut)
 	}
@@ -191,16 +149,13 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 			t.Fatalf("submit batch output must not contain success acknowledgment marker %q:\n%s", marker, output)
 		}
 	}
+	remote.assertHealthy(t, remote.hostFactoryDir)
 }
 
 // TestCLISubmitBackendErrorPreservesPublicMessage proves you submit batch exits
 // non-success and preserves the public backend error's safe typed fields when
 // the Factory Session server rejects the batch request.
-func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI submit wiring")
-	}
-
+func testCLISubmitBackendErrorPreservesPublicMessage(t *testing.T, remote *sharedRemoteCLI) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut {
 			t.Errorf("request method = %s, want PUT", r.Method)
@@ -217,7 +172,6 @@ func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	processHarness := newRootProcessHarness(t)
 	inlineBatch := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Backend error wiring"}}]}`,
 		submitWiringBackendErrorRequestID,
@@ -228,14 +182,9 @@ func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := processHarness.CommandContext(ctx,
-		"--server", server.URL,
-		"submit", "batch",
-		inlineBatch,
+	submitOut, err := remote.runAt(ctx, t.TempDir(), server.URL, "",
+		"submit", "batch", inlineBatch,
 	)
-	submitCmd.Dir = t.TempDir()
-
-	submitOut, err := submitCmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("you submit batch unexpectedly succeeded against backend error:\n%s", submitOut)
 	}
@@ -263,6 +212,7 @@ func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
 			t.Fatalf("submit batch output must not contain %q:\n%s", leaked, output)
 		}
 	}
+	remote.assertHealthy(t, remote.hostFactoryDir)
 }
 
 func submitWiringFactoryConfig() map[string]any {
@@ -291,9 +241,4 @@ func submitWiringFactoryConfig() map[string]any {
 			},
 		},
 	}
-}
-
-func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
-	t.Helper()
-	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }

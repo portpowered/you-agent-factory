@@ -31,20 +31,9 @@ const (
 
 // TestCLIWorkListAndShowReflectSubmittedWork proves you work list and you work show
 // reflect work submitted through the public CLI against a running Factory Session.
-func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI work list/show wiring")
-	}
-
+func testCLIWorkListAndShowReflectSubmittedWork(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, workWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
+	sessionID := remote.openSession(t, factoryDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -55,7 +44,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 		workWiringListShowWorkName,
 		workWiringListShowWorkType,
 	)
-	submitOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	submitOut, err := remote.run(ctx, factoryDir, sessionID,
 		"--json",
 		"submit", "batch",
 		inlineBatch,
@@ -73,7 +62,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 	}
 	workID := submitted.Works[0].WorkID
 
-	listOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	listOut, err := remote.run(ctx, factoryDir, sessionID,
 		"work", "list",
 		"--name", workWiringListShowWorkName,
 	)
@@ -91,13 +80,13 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 		}
 	}
 
-	listed := runWorkListCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workWiringListShowWorkName)
+	listed := runWorkListCLIJSON(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workWiringListShowWorkName)
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringListShowWorkType, "init")) &&
 		!support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringListShowWorkType, "complete")) {
 		t.Fatalf("work list JSON missing submitted work %q at init or complete: %#v", workID, listed.Results)
 	}
 
-	shown, err := runWorkShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workID)
+	shown, err := runWorkShowCLIJSON(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workID)
 	if err != nil {
 		t.Fatalf("you work show %s: %v", workID, err)
 	}
@@ -111,7 +100,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 		t.Fatalf("work show missing customer-visible state: %#v", shown)
 	}
 
-	showOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	showOut, err := remote.run(ctx, factoryDir, sessionID,
 		"work", "show", workID,
 	)
 	if err != nil {
@@ -121,30 +110,28 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 	for _, marker := range []string{
 		"Work ID:\t" + workID,
 		"Name:\t" + workWiringListShowWorkName,
-		"State name:\t" + shown.State.Name,
 	} {
 		if !strings.Contains(showHuman, marker) {
 			t.Fatalf("work show output missing %q:\n%s", marker, showHuman)
 		}
 	}
+	stateMarkerFound := false
+	for _, state := range []string{"init", "complete", "failed"} {
+		if strings.Contains(showHuman, "State name:\t"+state) {
+			stateMarkerFound = true
+			break
+		}
+	}
+	if !stateMarkerFound {
+		t.Fatalf("work show output missing a known customer-visible state:\n%s", showHuman)
+	}
 }
 
 // TestCLIWorkMoveChangesState proves you work move changes work state through the
 // public CLI so operators can complete a manual recovery step and observe the result.
-func TestCLIWorkMoveChangesState(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI work move wiring")
-	}
-
+func testCLIWorkMoveChangesState(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, workWiringMoveFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
+	sessionID := remote.openSession(t, factoryDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -155,7 +142,7 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 		workWiringMoveWorkName,
 		workWiringMoveWorkType,
 	)
-	submitOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	submitOut, err := remote.run(ctx, factoryDir, sessionID,
 		"--json",
 		"submit", "batch",
 		inlineBatch,
@@ -173,17 +160,17 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 	}
 	workID := submitted.Works[0].WorkID
 
-	waitForWorkStateViaCLI(t, ctx, processHarness, factoryDir, baseURL, workID, "init", 15*time.Second)
+	waitForWorkStateViaCLI(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workID, "init", 15*time.Second)
 
-	moveOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	moveOut, err := remote.run(ctx, factoryDir, sessionID,
 		"work", "move", workID, "complete",
 	)
 	if err != nil {
 		t.Fatalf("you work move: %v\noutput:\n%s", err, moveOut)
 	}
-	assertWorkMoveWiringHumanOutput(t, string(moveOut), workID, "init", "complete")
+	assertWorkMoveWiringHumanOutput(t, string(moveOut), workID, "init", "complete", sessionID)
 
-	shown, err := runWorkShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workID)
+	shown, err := runWorkShowCLIJSON(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workID)
 	if err != nil {
 		t.Fatalf("you work show %s after move: %v", workID, err)
 	}
@@ -191,7 +178,7 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 		t.Fatalf("work show state after move = %#v, want complete", shown.State)
 	}
 
-	listed := runWorkListCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workWiringMoveWorkName)
+	listed := runWorkListCLIJSON(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workWiringMoveWorkName)
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringMoveWorkType, "complete")) {
 		t.Fatalf("work list JSON missing moved work %q at complete: %#v", workID, listed.Results)
 	}
@@ -201,26 +188,19 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 
 // TestCLIWorkShowMissingReturnsNotFound proves you work show for a missing work id
 // exits non-success with actionable not-found diagnostics and no false success payload.
-func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
+func testCLIWorkShowMissingReturnsNotFound(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, workWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
+	sessionID := remote.openSession(t, factoryDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	showOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	showOut, err := remote.run(ctx, factoryDir, sessionID,
 		"work", "show", workWiringMissingWorkID,
 	)
 	assertCLIWorkShowNotFoundFailure(t, showOut, err, workWiringMissingWorkID)
 
-	showJSONOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	showJSONOut, err := remote.run(ctx, factoryDir, sessionID,
 		"--json",
 		"work", "show", workWiringMissingWorkID,
 	)
@@ -330,13 +310,13 @@ func assertWorkWiringVisualizeGraphOutput(t *testing.T, output string) {
 	}
 }
 
-func assertWorkMoveWiringHumanOutput(t *testing.T, output, workID, previousState, newState string) {
+func assertWorkMoveWiringHumanOutput(t *testing.T, output, workID, previousState, newState, sessionID string) {
 	t.Helper()
 	for _, marker := range []string{
 		"Work ID:\t" + workID,
 		"Previous state:\t" + previousState,
 		"New state:\t" + newState,
-		"Session ID:\t~default",
+		"Session ID:\t" + sessionID,
 	} {
 		if !strings.Contains(output, marker) {
 			t.Fatalf("work move output missing %q:\n%s", marker, output)

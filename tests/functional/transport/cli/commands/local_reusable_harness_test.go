@@ -7,9 +7,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
-// newLocalReusableProcessHarness gives local and self-hosted command groups a
-// single production root process while leaving the remote command helper
-// owned by the later shared-session story.
+// newLocalReusableProcessHarness gives a command group one reusable
+// production root process for serialized functional CLI invocations.
 func newLocalReusableProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
 	return builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
