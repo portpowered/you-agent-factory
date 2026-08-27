@@ -662,14 +662,41 @@ jobs:
             run_sample candidate "$GITHUB_WORKSPACE" "$UNIT_CANDIDATE_COMMIT" "$1" "$candidate_root"
           }
 
-          if git worktree add --detach "$reference_checkout" "$UNIT_REFERENCE_COMMIT" \
-            > "$setup_root/reference-worktree-add.stdout.log" \
-            2> "$setup_root/reference-worktree-add.stderr.log"; then
-            printf 'exit_status=0\n' > "$setup_root/reference-worktree-add.status.txt"
+          reference_ready=0
+          if git fetch --no-tags origin "$UNIT_REFERENCE_COMMIT" \
+            > "$setup_root/reference-fetch.stdout.log" \
+            2> "$setup_root/reference-fetch.stderr.log"; then
+            if git cat-file -e "${UNIT_REFERENCE_COMMIT}^{commit}" \
+              >> "$setup_root/reference-fetch.stdout.log" \
+              2>> "$setup_root/reference-fetch.stderr.log"; then
+              reference_ready=1
+              printf 'exit_status=0\ncommit=%s\n' "$UNIT_REFERENCE_COMMIT" > "$setup_root/reference-fetch.status.txt"
+            else
+              status=$?
+              printf 'exit_status=%s\ncommit=%s\n' "$status" "$UNIT_REFERENCE_COMMIT" > "$setup_root/reference-fetch.status.txt"
+              record_failure "reference commit verification: exit_status=$status commit=$UNIT_REFERENCE_COMMIT"
+            fi
           else
             status=$?
-            printf 'exit_status=%s\n' "$status" > "$setup_root/reference-worktree-add.status.txt"
-            record_failure "reference checkout: exit_status=$status"
+            printf 'exit_status=%s\ncommit=%s\n' "$status" "$UNIT_REFERENCE_COMMIT" > "$setup_root/reference-fetch.status.txt"
+            record_failure "reference commit fetch/verification: exit_status=$status commit=$UNIT_REFERENCE_COMMIT"
+          fi
+
+          if [ "$reference_ready" -eq 1 ]; then
+            if git worktree add --detach "$reference_checkout" "$UNIT_REFERENCE_COMMIT" \
+              > "$setup_root/reference-worktree-add.stdout.log" \
+              2> "$setup_root/reference-worktree-add.stderr.log"; then
+              printf 'exit_status=0\n' > "$setup_root/reference-worktree-add.status.txt"
+            else
+              status=$?
+              printf 'exit_status=%s\n' "$status" > "$setup_root/reference-worktree-add.status.txt"
+              record_failure "reference checkout: exit_status=$status"
+            fi
+          else
+            printf 'reference worktree creation skipped because the pinned commit was not verified\n' > "$setup_root/reference-worktree-add.stdout.log"
+            printf 'pinned reference commit %s was unavailable after fetch/verification\n' "$UNIT_REFERENCE_COMMIT" > "$setup_root/reference-worktree-add.stderr.log"
+            printf 'exit_status=128\n' > "$setup_root/reference-worktree-add.status.txt"
+            record_failure "reference checkout: unavailable after pinned commit fetch/verification"
           fi
 
           prewarm_checkout reference "$reference_checkout" || :

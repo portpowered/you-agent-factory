@@ -227,16 +227,6 @@ func validateSamplePathSequence(problems *validationProblems, cohort string, pat
 	}
 }
 
-func validateReferenceCI(budget latencyBudget, historical, reference, candidate []timingSummary) (budgetReport, error) {
-	report, problems := evaluateReferenceCI(budget, historical, reference, candidate, "")
-	return report, problems.err()
-}
-
-func validateReferenceCIWithCandidateCommit(budget latencyBudget, historical, reference, candidate []timingSummary, expectedCandidateCommit string) (budgetReport, error) {
-	report, problems := evaluateReferenceCI(budget, historical, reference, candidate, expectedCandidateCommit)
-	return report, problems.err()
-}
-
 func runFinal(cfg budgetConfig) error {
 	historicalPaths, err := splitSamplePaths(cfg.historicalSamples)
 	if err != nil {

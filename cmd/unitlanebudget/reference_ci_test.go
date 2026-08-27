@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+func validateReferenceCI(budget latencyBudget, historical, reference, candidate []timingSummary) (budgetReport, error) {
+	report, problems := evaluateReferenceCI(budget, historical, reference, candidate, "")
+	return report, problems.err()
+}
+
+func validateReferenceCIWithCandidateCommit(budget latencyBudget, historical, reference, candidate []timingSummary, expectedCandidateCommit string) (budgetReport, error) {
+	report, problems := evaluateReferenceCI(budget, historical, reference, candidate, expectedCandidateCommit)
+	return report, problems.err()
+}
+
 func TestCommittedBudgetV2SchemaAndInstancePassDraft202012Compiler(t *testing.T) {
 	budgetPath := filepath.Join("..", "..", "docs", "internal", "baselines", "go-unit-lane-latency-budget.v2.json")
 	data, err := os.ReadFile(budgetPath)

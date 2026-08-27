@@ -510,115 +510,6 @@ func normalizedTimingCommand(command string) string {
 	return strings.TrimSpace(timingOutputPattern.ReplaceAllString(command, "$1$2<timing-output>"))
 }
 
-func validateFinal(budget latencyBudget, samples []timingSummary) (budgetReport, error) {
-	problems, details := validateSampleSet(samples)
-	validateBudgetShape(&problems, budget)
-	if len(samples) > 0 {
-		validateReferenceIdentity(&problems, budget.Reference, samples[0])
-		compareReferenceInventory(&problems, budget.Reference, samples[0])
-	}
-	if len(budget.Reference.Samples) == requiredSamples && allPositiveFinite(budget.Reference.Samples) {
-		referenceMedian := median(budget.Reference.Samples)
-		if !nearlyEqual(referenceMedian, budget.Reference.MedianWallSeconds) {
-			problems.add("reference medianWallSeconds: expected recomputed %.3f, actual %.3f", referenceMedian, budget.Reference.MedianWallSeconds)
-		}
-		if details.median > 0 {
-			improvement := improvementPercent(referenceMedian, details.median)
-			if improvement+0.000000001 < budget.Policy.MinimumImprovementPercent {
-				problems.add("median improvement: expected >= %.2f%%, actual %.2f%%", budget.Policy.MinimumImprovementPercent, improvement)
-			}
-			maximum := maximumRunAboveMedian(details.walls, details.median)
-			if maximum > budget.Policy.MaximumRunAboveMedianPercent+0.000000001 {
-				problems.add("maximum run above median: expected <= %.2f%%, actual %.2f%%", budget.Policy.MaximumRunAboveMedianPercent, maximum)
-			}
-			return budgetReport{Mode: "final", SampleWalls: details.walls, MedianWallSeconds: details.median, ReferenceMedianSeconds: referenceMedian, ImprovementPercent: improvement, MaximumRunAboveMedianPct: maximum, PackageCount: details.packageCount, TestCount: details.testCount, CachedPackages: details.cached, UnknownPackages: details.unknown}, problems.err()
-		}
-	}
-	return budgetReport{}, problems.err()
-}
-
-func validateBudgetShape(problems *validationProblems, budget latencyBudget) {
-	if budget.Version == 2 {
-		validateV2BudgetShape(problems, budget)
-		return
-	}
-	if budget.Version != 1 {
-		problems.add("budget version: expected 1, actual %d", budget.Version)
-	}
-	if budget.Owner != "backend-unit-lane" {
-		problems.add("budget owner: expected %q, actual %q", "backend-unit-lane", budget.Owner)
-	}
-	if budget.Entrypoint != "make test-unit-fresh" {
-		problems.add("budget entrypoint: expected %q, actual %q", "make test-unit-fresh", budget.Entrypoint)
-	}
-	policy := budget.Policy
-	if policy.RequiredConsecutiveSamples != requiredSamples {
-		problems.add("policy requiredConsecutiveSamples: expected %d, actual %d", requiredSamples, policy.RequiredConsecutiveSamples)
-	}
-	if policy.MinimumImprovementPercent != minimumImprovementPercent {
-		problems.add("policy minimumImprovementPercent: expected %.2f, actual %.2f", minimumImprovementPercent, policy.MinimumImprovementPercent)
-	}
-	if policy.MaximumRunAboveMedianPercent != maximumRunAboveMedianPercent {
-		problems.add("policy maximumRunAboveMedianPercent: expected %.2f, actual %.2f", maximumRunAboveMedianPercent, policy.MaximumRunAboveMedianPercent)
-	}
-	if policy.RequiredCachedPackages != requiredCachedPackages || policy.RequiredUnknownPackages != requiredUnknownPackages {
-		problems.add("policy cache allowances: expected cached=%d unknown=%d, actual cached=%d unknown=%d", requiredCachedPackages, requiredUnknownPackages, policy.RequiredCachedPackages, policy.RequiredUnknownPackages)
-	}
-	if policy.InventoryPolicy != "exact-with-reviewed-diff" {
-		problems.add("policy inventoryPolicy: expected %q, actual %q", "exact-with-reviewed-diff", policy.InventoryPolicy)
-	}
-	if policy.InvalidSamplePolicy != "retain-and-fail-unless-predeclared-invalidation-matches" {
-		problems.add("policy invalidSamplePolicy: expected declared retention policy, actual %q", policy.InvalidSamplePolicy)
-	}
-	validateReferenceShape(problems, budget.Reference)
-}
-
-func validateReferenceShape(problems *validationProblems, reference budgetReference) {
-	if !commitPattern.MatchString(reference.BaseCommit) {
-		problems.add("reference baseCommit: expected 40 lowercase hexadecimal characters, actual %q", reference.BaseCommit)
-	}
-	if strings.TrimSpace(reference.RunnerImage) == "" || !goVersionPattern.MatchString(reference.GoVersion) {
-		problems.add("reference runner/go identity: expected nonempty runnerImage and goX.Y.Z, actual runnerImage=%q goVersion=%q", reference.RunnerImage, reference.GoVersion)
-	}
-	if reference.UnitDefaultJobs < 1 || reference.ComputedLaneBudget < 1 {
-		problems.add("reference jobs/budget: expected positive values, actual jobs=%d budget=%d", reference.UnitDefaultJobs, reference.ComputedLaneBudget)
-	}
-	if len(reference.Samples) != requiredSamples || !allPositiveFinite(reference.Samples) {
-		problems.add("reference samples: expected exactly three finite values > 0, actual %s", compactJSON(reference.Samples))
-	}
-	if !isFinitePositive(reference.MedianWallSeconds) {
-		problems.add("reference medianWallSeconds: expected finite value > 0, actual %v", reference.MedianWallSeconds)
-	}
-	if len(reference.PackageInventory) == 0 || hasBlankStrings(reference.PackageInventory) || hasDuplicates(reference.PackageInventory) || !slices.IsSorted(reference.PackageInventory) {
-		problems.add("reference packageInventory: expected nonempty unique sorted values, actual %s", compactJSON(reference.PackageInventory))
-	}
-	if len(reference.TestInventory) == 0 || hasBlankStrings(reference.TestInventory) || hasDuplicates(reference.TestInventory) || !slices.IsSorted(reference.TestInventory) {
-		problems.add("reference testInventory: expected nonempty unique sorted values, actual %s", compactJSON(reference.TestInventory))
-	}
-}
-
-func validateReferenceIdentity(problems *validationProblems, reference budgetReference, sample timingSummary) {
-	if sample.Run.Runner.Image != reference.RunnerImage {
-		problems.add("reference runner image: expected %q, actual %q", reference.RunnerImage, sample.Run.Runner.Image)
-	}
-	if sample.Run.GoVersion != reference.GoVersion {
-		problems.add("reference Go version: expected %q, actual %q", reference.GoVersion, sample.Run.GoVersion)
-	}
-	if sample.Run.UnitDefaultJobs != reference.UnitDefaultJobs || sample.Run.ComputedLaneBudget != reference.ComputedLaneBudget {
-		problems.add("reference jobs/budget: expected jobs=%d budget=%d, actual jobs=%d budget=%d", reference.UnitDefaultJobs, reference.ComputedLaneBudget, sample.Run.UnitDefaultJobs, sample.Run.ComputedLaneBudget)
-	}
-}
-
-func compareReferenceInventory(problems *validationProblems, reference budgetReference, sample timingSummary) {
-	packages, tests := inventories(sample)
-	if !slices.Equal(reference.PackageInventory, packages) {
-		problems.add("reference package inventory: expected %s, actual %s", compactJSON(reference.PackageInventory), compactJSON(packages))
-	}
-	if !slices.Equal(reference.TestInventory, tests) {
-		problems.add("reference test inventory: expected %s, actual %s", compactJSON(reference.TestInventory), compactJSON(tests))
-	}
-}
-
 func inventories(sample timingSummary) ([]string, []string) {
 	packages := make([]string, 0, len(sample.Packages))
 	tests := make([]string, 0, sample.TestCount)
@@ -709,15 +600,6 @@ func hasDuplicates(values []string) bool {
 			return true
 		}
 		seen[value] = struct{}{}
-	}
-	return false
-}
-
-func hasBlankStrings(values []string) bool {
-	for _, value := range values {
-		if strings.TrimSpace(value) == "" {
-			return true
-		}
 	}
 	return false
 }

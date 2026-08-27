@@ -102,6 +102,24 @@ test("the unit-latency job retains all evidence and feeds Verification Policy", 
 	assert.match(policy, /BACKEND_UNIT_LATENCY_RESULT: \$\{\{ needs\.backend-unit-latency\.result \}\}/);
 });
 
+test("the unit-latency job verifies the pinned reference before creating its worktree", () => {
+	const job = unitLatencyJob(readWorkflow());
+
+	assert.match(job, /reference_ready=0/);
+	assert.match(job, /git fetch --no-tags origin "\$UNIT_REFERENCE_COMMIT"/);
+	assert.match(job, /git cat-file -e "\$\{UNIT_REFERENCE_COMMIT\}\^\{commit\}"/);
+	assert.match(job, /reference-fetch\.status\.txt/);
+	assert.match(job, /reference commit fetch\/verification/);
+	assert.match(job, /reference checkout: unavailable after pinned commit fetch\/verification/);
+	const fetchIndex = job.indexOf("git fetch --no-tags origin");
+	const worktreeIndex = job.indexOf("git worktree add --detach");
+	assert.ok(fetchIndex >= 0 && fetchIndex < worktreeIndex, "reference fetch must precede worktree creation");
+	assert.ok(
+		job.indexOf('if [ "$reference_ready" -eq 1 ]; then', fetchIndex) < worktreeIndex,
+		"worktree creation must be guarded by successful reference verification",
+	);
+});
+
 test("the Make entrypoint keeps ordinary flags and exposes additive evidence controls", () => {
 	const makefile = readMakefile();
 

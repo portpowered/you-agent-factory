@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func TestCommittedBudgetSchemaAndInstancePassDraft202012Compiler(t *testing.T) {
+func TestRetainedV1BudgetRemainsSchemaValidAndHistoricallyPopulated(t *testing.T) {
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("repository root: %v", err)
@@ -25,21 +25,20 @@ func TestCommittedBudgetSchemaAndInstancePassDraft202012Compiler(t *testing.T) {
 	if err := validateLatencyBudgetDocument(schemaPath, data); err != nil {
 		t.Fatalf("validate populated budget against Draft 2020-12 schema: %v", err)
 	}
-	budget, err := loadLatencyBudget(budgetPath)
-	if err != nil {
-		t.Fatalf("load populated budget: %v", err)
+	var document struct {
+		Version   int `json:"version"`
+		Reference struct {
+			MedianWallSeconds float64  `json:"medianWallSeconds"`
+			PackageInventory  []string `json:"packageInventory"`
+			TestInventory     []string `json:"testInventory"`
+		} `json:"reference"`
 	}
-	var problems validationProblems
-	validateBudgetShape(&problems, budget)
-	if err := problems.err(); err != nil {
-		t.Fatalf("populated budget semantic validation: %v", err)
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode retained v1 budget: %v", err)
 	}
-	// The retained timing samples remain the historical 18,122-test baseline.
-	// Final mode uses the reviewed current-head inventory from the latest
-	// complete Ubuntu unit-lane capture.
 	const reviewedCurrentHeadTestCount = 18156
-	if budget.Reference.MedianWallSeconds != 239.612 || len(budget.Reference.PackageInventory) != 444 || len(budget.Reference.TestInventory) != reviewedCurrentHeadTestCount {
-		t.Fatalf("loaded budget reference = median %.3f, packages %d, tests %d; want 239.612/444/%d", budget.Reference.MedianWallSeconds, len(budget.Reference.PackageInventory), len(budget.Reference.TestInventory), reviewedCurrentHeadTestCount)
+	if document.Version != 1 || document.Reference.MedianWallSeconds != 239.612 || len(document.Reference.PackageInventory) != 444 || len(document.Reference.TestInventory) != reviewedCurrentHeadTestCount {
+		t.Fatalf("retained v1 budget reference = version %d, median %.3f, packages %d, tests %d; want 1/239.612/444/%d", document.Version, document.Reference.MedianWallSeconds, len(document.Reference.PackageInventory), len(document.Reference.TestInventory), reviewedCurrentHeadTestCount)
 	}
 }
 
@@ -51,141 +50,6 @@ func TestValidateBaselineAcceptsThreeComparableSamples(t *testing.T) {
 	}
 	if report.Mode != "baseline" || report.MedianWallSeconds != 10 || report.PackageCount != 2 || report.TestCount != 3 {
 		t.Fatalf("baseline report = %+v, want median/inventory summary", report)
-	}
-}
-
-func TestValidateFinalRecomputesMedianAndImprovement(t *testing.T) {
-	budget := comparableBudget([]float64{10, 11, 12}, 11)
-	samples := comparableSamples(7, 7, 7)
-	for index := range samples {
-		samples[index].Run.Commit = strings.Repeat("b", 40)
-	}
-	report, err := validateFinal(budget, samples)
-	if err != nil {
-		t.Fatalf("validateFinal() error = %v", err)
-	}
-	if report.ReferenceMedianSeconds != 11 || report.MedianWallSeconds != 7 {
-		t.Fatalf("report medians = %+v, want reference 11 and candidate 7", report)
-	}
-	if report.ImprovementPercent != improvementPercent(11, 7) || report.MaximumRunAboveMedianPct != 0 {
-		t.Fatalf("report percentages = %+v, want recomputed values", report)
-	}
-}
-
-func TestValidateFinalAcceptsInclusiveThresholds(t *testing.T) {
-	budget := comparableBudget([]float64{100, 100, 100}, 100)
-	samples := comparableSamples(75, 75, 82.5)
-	for index := range samples {
-		samples[index].Run.Commit = strings.Repeat("b", 40)
-	}
-	report, err := validateFinal(budget, samples)
-	if err != nil {
-		t.Fatalf("validateFinal() error = %v, want inclusive boundaries to pass", err)
-	}
-	if !nearlyEqual(report.ImprovementPercent, 25) || !nearlyEqual(report.MaximumRunAboveMedianPct, 10) {
-		t.Fatalf("threshold report = %+v, want exactly 25%% improvement and 10%% spread", report)
-	}
-}
-
-func TestValidateFinalAcceptsReviewedInventoryUpdate(t *testing.T) {
-	samples := comparableSamples(70, 70, 70)
-	for index := range samples {
-		samples[index].Run.Commit = strings.Repeat("b", 40)
-		samples[index].Packages[0].Package = "example.test/pkg/gamma"
-		samples[index].Packages[0].Tests = []string{"TestGamma"}
-		samples[index].Packages[0], samples[index].Packages[1] = samples[index].Packages[1], samples[index].Packages[0]
-	}
-	budget := comparableBudget([]float64{100, 100, 100}, 100)
-	budget.Reference.PackageInventory, budget.Reference.TestInventory = inventories(samples[0])
-	if _, err := validateFinal(budget, samples); err != nil {
-		t.Fatalf("validateFinal() error = %v, want reviewed inventory update to be accepted", err)
-	}
-}
-
-func TestValidateFinalRejectsEveryMaterialInvalidState(t *testing.T) {
-	baseBudget := comparableBudget([]float64{10, 10, 10}, 10)
-	cases := []struct {
-		name   string
-		mutate func([]timingSummary)
-		want   string
-	}{
-		{name: "incomplete", mutate: func(samples []timingSummary) { samples[0].Complete = false }, want: "complete: expected true, actual false"},
-		{name: "cached", mutate: func(samples []timingSummary) { samples[0].Packages[0].Cache = unitTimingCacheCached }, want: "cache: expected \"executed\", actual \"cached\""},
-		{name: "unknown cache", mutate: func(samples []timingSummary) { samples[0].Packages[0].Cache = unitTimingCacheUnknown }, want: "cache: expected \"executed\", actual \"unknown\""},
-		{name: "failed outcome", mutate: func(samples []timingSummary) { samples[0].Packages[0].Outcome = "fail" }, want: "outcome: expected \"pass\", actual \"fail\""},
-		{name: "identity drift", mutate: func(samples []timingSummary) { samples[1].Run.Commit = strings.Repeat("c", 40) }, want: "identity: expected"},
-		{name: "runner drift", mutate: func(samples []timingSummary) { samples[1].Run.Runner.ImageVersion = "different-runner" }, want: "identity: expected"},
-		{name: "runner provider drift", mutate: func(samples []timingSummary) { samples[1].Run.Runner.Provider = "different-provider" }, want: "identity: expected"},
-		{name: "runner OS drift", mutate: func(samples []timingSummary) { samples[1].Run.Runner.OS = "windows" }, want: "identity: expected"},
-		{name: "runner architecture drift", mutate: func(samples []timingSummary) { samples[1].Run.Runner.Architecture = "arm64" }, want: "identity: expected"},
-		{name: "runner CPU drift", mutate: func(samples []timingSummary) { samples[1].Run.Runner.CPUModel = "different-cpu" }, want: "identity: expected"},
-		{name: "toolchain drift", mutate: func(samples []timingSummary) { samples[1].Run.GoVersion = "go1.26.0" }, want: "identity: expected"},
-		{name: "jobs drift", mutate: func(samples []timingSummary) { samples[1].Run.UnitDefaultJobs = 3 }, want: "identity: expected"},
-		{name: "computed budget drift", mutate: func(samples []timingSummary) { samples[1].Run.ComputedLaneBudget = 3 }, want: "identity: expected"},
-		{name: "invalidation", mutate: func(samples []timingSummary) {
-			samples[0].Run.EnvironmentInvalidations = []string{"host capability unavailable"}
-		}, want: "environmentInvalidations: expected []"},
-		{name: "inventory drift", mutate: func(samples []timingSummary) { samples[1].Packages[0].Tests[0] = "TestDifferent" }, want: "test inventory: expected"},
-		{name: "missing package inventory", mutate: func(samples []timingSummary) { samples[0].Packages = samples[0].Packages[:1] }, want: "packageCount: expected 1, actual 2"},
-		{name: "duplicate package inventory", mutate: func(samples []timingSummary) { samples[0].Packages[1].Package = samples[0].Packages[0].Package }, want: "package inventory: expected unique names"},
-		{name: "duplicate test inventory", mutate: func(samples []timingSummary) { samples[0].Packages[1].Tests[1] = samples[0].Packages[1].Tests[0] }, want: "tests: expected unique sorted"},
-		{name: "reordered package inventory", mutate: func(samples []timingSummary) {
-			samples[0].Packages[0], samples[0].Packages[1] = samples[0].Packages[1], samples[0].Packages[0]
-		}, want: "package inventory order: expected unique sorted"},
-		{name: "reordered test inventory", mutate: func(samples []timingSummary) {
-			samples[0].Packages[1].Tests[0], samples[0].Packages[1].Tests[1] = samples[0].Packages[1].Tests[1], samples[0].Packages[1].Tests[0]
-		}, want: "tests: expected unique sorted"},
-		{name: "direct unitlane command", mutate: func(samples []timingSummary) { samples[0].Run.Command = "go run ./cmd/unitlane -jobs 2 -count=1" }, want: "run.command: expected canonical"},
-		{name: "package sum drift", mutate: func(samples []timingSummary) { samples[0].PackageElapsedSecondsSum = 999 }, want: "packageElapsedSecondsSum: expected recomputed"},
-		{name: "below improvement", mutate: func(samples []timingSummary) {
-			for i := range samples {
-				samples[i].WallSeconds = 8
-			}
-		}, want: "median improvement: expected >= 25.00%, actual 20.00%"},
-		{name: "above spread", mutate: func(samples []timingSummary) {
-			samples[0].WallSeconds = 7
-			samples[1].WallSeconds = 7
-			samples[2].WallSeconds = 9
-		}, want: "maximum run above median: expected <= 10.00%"},
-	}
-
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			samples := comparableSamples(7, 7, 7)
-			for index := range samples {
-				samples[index].Run.Commit = strings.Repeat("b", 40)
-			}
-			testCase.mutate(samples)
-			_, err := validateFinal(baseBudget, samples)
-			if err == nil || !strings.Contains(err.Error(), testCase.want) {
-				t.Fatalf("validateFinal() error = %v, want substring %q", err, testCase.want)
-			}
-			if !strings.Contains(err.Error(), "expected") || !strings.Contains(err.Error(), "actual") || !strings.Contains(err.Error(), "Rerun: make test-unit-latency-budget") {
-				t.Fatalf("validation diagnostics = %v, want expected/actual and rerun command", err)
-			}
-		})
-	}
-}
-
-func TestValidateFinalRejectsReferenceIdentityDrift(t *testing.T) {
-	for name, mutate := range map[string]func(*latencyBudget){
-		"runner image": func(budget *latencyBudget) { budget.Reference.RunnerImage = "different-image" },
-		"Go version":   func(budget *latencyBudget) { budget.Reference.GoVersion = "go1.26.0" },
-		"jobs":         func(budget *latencyBudget) { budget.Reference.UnitDefaultJobs = 3 },
-		"lane budget":  func(budget *latencyBudget) { budget.Reference.ComputedLaneBudget = 3 },
-	} {
-		t.Run(name, func(t *testing.T) {
-			budget := comparableBudget([]float64{100, 100, 100}, 100)
-			mutate(&budget)
-			samples := comparableSamples(70, 70, 70)
-			for index := range samples {
-				samples[index].Run.Commit = strings.Repeat("b", 40)
-			}
-			_, err := validateFinal(budget, samples)
-			if err == nil || !strings.Contains(err.Error(), "reference") {
-				t.Fatalf("validateFinal() error = %v, want reference identity failure", err)
-			}
-		})
 	}
 }
 
@@ -241,24 +105,69 @@ func TestLoadTimingSamplesRetainsMissingInputAndFailsClosed(t *testing.T) {
 }
 
 func TestReferenceScaleCheckerOverhead(t *testing.T) {
-	base := syntheticReferenceScaleSample(70)
-	budget := comparableBudget([]float64{100, 100, 100}, 100)
-	budget.Reference.PackageInventory, budget.Reference.TestInventory = inventories(base)
-	start := time.Now()
-	samples := make([]timingSummary, 0, requiredSamples)
-	for index := 0; index < requiredSamples; index++ {
-		payload, err := json.Marshal(base)
-		if err != nil {
-			t.Fatalf("marshal reference-scale sample %d: %v", index+1, err)
-		}
-		var sample timingSummary
-		if err := decodeJSONBytes(payload, &sample); err != nil {
-			t.Fatalf("decode synthetic sample %d: %v", index+1, err)
-		}
-		samples = append(samples, sample)
+	base := syntheticReferenceScaleSample(100)
+	referenceCommit := strings.Repeat("a", 40)
+	candidateCommit := strings.Repeat("b", 40)
+	historical := make([]timingSummary, requiredSamples)
+	reference := make([]timingSummary, requiredSamples)
+	candidate := make([]timingSummary, requiredSamples)
+	for index := range historical {
+		historical[index] = cloneTimingSummary(t, base)
+		historical[index].Run.Commit = referenceCommit
+		reference[index] = cloneTimingSummary(t, base)
+		reference[index].Run.Commit = referenceCommit
+		candidate[index] = cloneTimingSummary(t, base)
+		candidate[index].Run.Commit = candidateCommit
+		candidate[index].WallSeconds = 70
 	}
-	if _, err := validateFinal(budget, samples); err != nil {
-		t.Fatalf("validate synthetic reference-scale samples: %v", err)
+	inventoryHash := inventorySHA256(reference[0])
+	budget := latencyBudget{
+		Version:    latencyBudgetVersionV2,
+		Owner:      "backend-unit-lane",
+		Entrypoint: canonicalTimingEntrypoint,
+		HistoricalReference: historicalReference{
+			BaseCommit:         strings.Repeat("c", 40),
+			MeasurementCommit:  referenceCommit,
+			Runner:             reference[0].Run.Runner,
+			GoVersion:          reference[0].Run.GoVersion,
+			UnitDefaultJobs:    reference[0].Run.UnitDefaultJobs,
+			ComputedLaneBudget: reference[0].Run.ComputedLaneBudget,
+			Samples:            []float64{100, 100, 100},
+			MedianWallSeconds:  100,
+			PackageCount:       base.PackageCount,
+			TestCount:          base.TestCount,
+			InventorySHA256:    inventoryHash,
+		},
+		ReferenceCI: cohortExpectation{
+			Commit:          referenceCommit,
+			PackageCount:    base.PackageCount,
+			TestCount:       base.TestCount,
+			InventorySHA256: inventoryHash,
+		},
+		Candidate: candidateExpectation{
+			InventorySource: "fixture-reconciliation.v1.json",
+			PackageCount:    base.PackageCount,
+			TestCount:       base.TestCount,
+			InventorySHA256: inventoryHash,
+		},
+		Policy: budgetPolicy{
+			RequiredConsecutiveSamples:   requiredSamples,
+			MinimumImprovementPercent:    minimumImprovementPercent,
+			MaximumRunAboveMedianPercent: maximumRunAboveMedianPercent,
+			RequiredCachedPackages:       requiredCachedPackages,
+			RequiredUnknownPackages:      requiredUnknownPackages,
+			RequiredRunnerIdentityFields: append([]string(nil), identityFieldNames...),
+			InventoryPolicy:              "exact-with-reviewed-diff",
+			InvalidSamplePolicy:          "retain-and-fail-unless-predeclared-invalidation-matches",
+		},
+	}
+	start := time.Now()
+	report, problems := evaluateReferenceCI(budget, historical, reference, candidate, candidateCommit)
+	if err := problems.err(); err != nil {
+		t.Fatalf("validate synthetic reference-scale cohorts: %v", err)
+	}
+	if report.ReferenceMedianSeconds != 100 || report.MedianWallSeconds != 70 {
+		t.Fatalf("reference-scale report = %+v, want live medians 100/70", report)
 	}
 	if report := renderBudgetReport(budgetReport{Mode: "baseline", SampleWalls: []float64{70, 70, 70}, MedianWallSeconds: 70, PackageCount: 444, TestCount: 18122}); report == "" {
 		t.Fatal("render synthetic reference-scale report returned empty output")
@@ -302,6 +211,19 @@ func comparableSamples(walls ...float64) []timingSummary {
 	return result
 }
 
+func cloneTimingSummary(t *testing.T, source timingSummary) timingSummary {
+	t.Helper()
+	payload, err := json.Marshal(source)
+	if err != nil {
+		t.Fatalf("marshal timing fixture: %v", err)
+	}
+	var clone timingSummary
+	if err := decodeJSONBytes(payload, &clone); err != nil {
+		t.Fatalf("decode timing fixture: %v", err)
+	}
+	return clone
+}
+
 func comparableRun() timingRun {
 	return timingRun{
 		Commit:             strings.Repeat("a", 40),
@@ -313,34 +235,6 @@ func comparableRun() timingRun {
 			Provider: "github-actions", Image: "ubuntu-24.04", ImageVersion: "20260824.1", OS: "linux", Architecture: "amd64", CPUModel: "test-cpu",
 		},
 		EnvironmentInvalidations: []string{},
-	}
-}
-
-func comparableBudget(samples []float64, medianWall float64) latencyBudget {
-	return latencyBudget{
-		Version:    1,
-		Owner:      "backend-unit-lane",
-		Entrypoint: "make test-unit-fresh",
-		Reference: budgetReference{
-			BaseCommit:         strings.Repeat("a", 40),
-			RunnerImage:        "ubuntu-24.04",
-			GoVersion:          "go1.25.0",
-			UnitDefaultJobs:    2,
-			ComputedLaneBudget: 2,
-			Samples:            samples,
-			MedianWallSeconds:  medianWall,
-			PackageInventory:   []string{"example.test/pkg/alpha", "example.test/pkg/beta"},
-			TestInventory:      []string{"example.test/pkg/alpha::TestAlpha", "example.test/pkg/beta::TestBeta", "example.test/pkg/beta::TestBeta/sub"},
-		},
-		Policy: budgetPolicy{
-			RequiredConsecutiveSamples:   3,
-			MinimumImprovementPercent:    25,
-			MaximumRunAboveMedianPercent: 10,
-			RequiredCachedPackages:       0,
-			RequiredUnknownPackages:      0,
-			InventoryPolicy:              "exact-with-reviewed-diff",
-			InvalidSamplePolicy:          "retain-and-fail-unless-predeclared-invalidation-matches",
-		},
 	}
 }
 
