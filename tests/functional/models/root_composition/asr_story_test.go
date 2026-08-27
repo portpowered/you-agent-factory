@@ -33,20 +33,22 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 }
 
 type asrStory struct {
-	process          support.Process
-	fixture          *localai.Fixture
-	home             string
-	dir              string
-	inputPath        string
-	inputBytes       []byte
-	transcriptPath   string
-	segmentsPath     string
-	wantSegments     string
-	received         *models.ASRBackendRequest
-	rejectingNetwork *rejectingModelAssetHTTP
-	hostLauncher     *recordingModelHostLauncher
-	protocol         *joinedProtocolNegotiator
-	compatibility    *joinedCompatibilityChecker
+	process           support.Process
+	modelDefinition   models.ModelDefinition
+	fixture           *localai.Fixture
+	home              string
+	dir               string
+	inputPath         string
+	inputBytes        []byte
+	transcriptPath    string
+	segmentsPath      string
+	wantSegments      string
+	received          *models.ASRBackendRequest
+	rejectingNetwork  *rejectingModelAssetHTTP
+	hostLauncher      *recordingModelHostLauncher
+	protocol          *joinedProtocolNegotiator
+	compatibility     *joinedCompatibilityChecker
+	backendSelections *[]serviceedges.ModelBackendArtifactSelectionRequest
 }
 
 func setupASRStory(t *testing.T) asrStory {
@@ -61,10 +63,14 @@ func setupASRStory(t *testing.T) asrStory {
 	}))
 	t.Cleanup(modelServer.Close)
 
+	modelDefinition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	if !ok {
+		t.Fatal("built-in catalog did not publish the ASR model definition")
+	}
 	home := t.TempDir()
-	writeGenericBuiltinModelCache(t, home, "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1")
-	selection := pinnedASRBackendSelection()
-	writeGenericBackendCache(t, home, "localai-whisper", selection, []byte("pinned-asr-backend-fixture"))
+	writeGenericBuiltinModelCache(t, home, modelDefinition.Source)
+	selection, backendBody := fixtureBackendSelection(modelDefinition.Backend)
+	writeGenericBackendCache(t, home, modelDefinition.Backend, selection, backendBody)
 
 	inputBytes := []byte{0x00, 0xff, 0x10, 0x80, 0x7f, 0x01}
 	inputPath := filepath.Join(t.TempDir(), "meeting.wav")
@@ -99,7 +105,8 @@ func setupASRStory(t *testing.T) asrStory {
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
-	dir := support.ScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL))
+	var backendSelections []serviceedges.ModelBackendArtifactSelectionRequest
+	dir := support.ScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -117,7 +124,11 @@ func setupASRStory(t *testing.T) asrStory {
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+		ModelResolveBackendArtifact: func(ctx context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			if err := ctx.Err(); err != nil {
+				return serviceedges.ModelBackendArtifactSelection{}, err
+			}
+			backendSelections = append(backendSelections, request)
 			return selection, nil
 		},
 		ModelASRBackend:        asrBackend,
@@ -126,10 +137,10 @@ func setupASRStory(t *testing.T) asrStory {
 	})
 	t.Cleanup(func() { closeRootProcess(t, process, "close ASR root process") })
 	return asrStory{
-		process: process, fixture: fixture, home: home, dir: dir, inputPath: inputPath, inputBytes: inputBytes,
+		process: process, modelDefinition: modelDefinition, fixture: fixture, home: home, dir: dir, inputPath: inputPath, inputBytes: inputBytes,
 		transcriptPath: transcriptPath, segmentsPath: segmentsPath, wantSegments: wantSegments,
 		received: received, rejectingNetwork: rejectingNetwork, hostLauncher: hostLauncher,
-		protocol: protocol, compatibility: compatibility,
+		protocol: protocol, compatibility: compatibility, backendSelections: &backendSelections,
 	}
 }
 
@@ -138,7 +149,7 @@ func runASRMappedInvocation(t *testing.T, story asrStory) {
 
 	var output, invokeStderr bytes.Buffer
 	invoke := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + story.inputPath,
+		"you", "models", "invoke", story.modelDefinition.Name, "--operation", "ASR", "--input", "audio=@" + story.inputPath,
 		"--output", "transcript=" + story.transcriptPath, "--output", "segments=" + story.segmentsPath,
 	})
 	invoke.Input.Env = functionalHomeEnvironment(story.home)
@@ -181,7 +192,7 @@ func runASRJSONInvocation(t *testing.T, story asrStory) {
 	var output bytes.Buffer
 	var jsonStderr bytes.Buffer
 	jsonInvoke := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + story.inputPath,
+		"you", "--json", "models", "invoke", story.modelDefinition.Name, "--operation", "ASR", "--input", "audio=@" + story.inputPath,
 	})
 	jsonInvoke.Input.Env = functionalHomeEnvironment(story.home)
 	jsonInvoke.Input.WorkingDirectory = story.dir
@@ -214,17 +225,26 @@ func assertASRCacheEffects(t *testing.T, story asrStory) {
 	if story.rejectingNetwork.Calls() != 0 || story.hostLauncher.Calls() == 0 || story.protocol.Calls() == 0 || story.compatibility.Calls() == 0 {
 		t.Fatalf("ASR effects = asset network %d, host starts %d, protocol %d, compatibility %d; want cache-backed joined execution", story.rejectingNetwork.Calls(), story.hostLauncher.Calls(), story.protocol.Calls(), story.compatibility.Calls())
 	}
+	if len(*story.backendSelections) == 0 {
+		t.Fatal("built-in ASR invocation did not resolve a backend artifact")
+	}
+	for _, request := range *story.backendSelections {
+		if request.Backend != story.modelDefinition.Backend {
+			t.Fatalf("resolved backend request = %#v, want production catalog backend %q", request, story.modelDefinition.Backend)
+		}
+	}
+	t.Logf("production catalog backend resolution: model=%s backend=%s requests=%d", story.modelDefinition.Name, story.modelDefinition.Backend, len(*story.backendSelections))
 }
 
-func asrModelFactoryConfig(endpoint string) map[string]any {
+func asrModelFactoryConfig(endpoint, modelName, backend string) map[string]any {
 	config := localModelReadinessAssetsHostFactoryConfig(endpoint)
 	resources := config["resources"].([]map[string]any)
 	resources[0]["name"] = "asr-cache"
-	resources[0]["model"] = "asr"
-	resources[0]["backend"] = "localai-whisper"
+	resources[0]["model"] = modelName
+	resources[0]["backend"] = backend
 	workers := config["workers"].([]map[string]any)
 	workers[0]["name"] = "asr-worker"
-	workers[0]["model"] = "asr"
+	workers[0]["model"] = modelName
 	workers[0]["command"] = "whisper"
 	workers[0]["args"] = []string{"--grpc-endpoint", endpoint}
 	workerResources := workers[0]["resources"].([]map[string]any)
