@@ -1592,6 +1592,7 @@ func TestPrepareDetachedModelRecordingRecordsDetachedRequestAndResponse(t *testi
 		t.Fatal("previous terminal hook was not called")
 	}
 	assertDetachedModelResponseEvent(t, ledger.events)
+	assertDetachedModelResponseContentDecodesStructuredWorkerText(t)
 	request.Input.ModelBindings[0].Content[0].Text = "mutated"
 	if (*ledger.events[1].Response.Bindings)[0].Content[0].Text != "binding" {
 		t.Fatal("recorded response bindings alias the Execute request")
@@ -1681,9 +1682,8 @@ func assertDetachedModelResponseContent(t *testing.T, response *workers.ModelRes
 	}
 }
 
-func TestDetachedModelResponseContentDecodesStructuredWorkerText(t *testing.T) {
-	t.Parallel()
-
+func assertDetachedModelResponseContentDecodesStructuredWorkerText(t *testing.T) {
+	t.Helper()
 	raw, err := json.Marshal([]work.WorkContentPart{{
 		Type:        work.WorkContentPartTypeAudio,
 		File:        "C:/tmp/factory-work.wav",
