@@ -24,18 +24,20 @@ const subagentSharedFixtureTimeout = 15 * time.Second
 // host for the package's compatible child-result scenarios. Each child copies
 // the packaged Factory into a private home and opens a non-default session.
 type subagentSharedFixture struct {
-	owner       testing.TB
-	process     support.ApplicationProcess
-	provider    *subagentProviderCommandRouter
-	apiStarter  *subagentAPIServerStarter
-	environment []string
-	host        *support.ProcessCommand
-	baseURL     string
-	factoryDir  string
+	owner        testing.TB
+	process      support.ApplicationProcess
+	provider     *subagentProviderCommandRouter
+	apiStarter   *subagentAPIServerStarter
+	environment  []string
+	host         *support.ProcessCommand
+	baseURL      string
+	factoryDir   string
+	scenarioRoot string
 
-	mu     sync.Mutex
-	opened int
-	closed int
+	mu        sync.Mutex
+	opened    int
+	closed    int
+	scenarios []*subagentScenario
 }
 
 // subagentAPIServerStarter records listener requests so the no-server CLI
@@ -143,6 +145,10 @@ func newSubagentSharedFixture(t *testing.T) *subagentSharedFixture {
 	if err := os.MkdirAll(workingDirectory, 0o755); err != nil {
 		t.Fatalf("create shared subagent working directory: %v", err)
 	}
+	scenarioRoot := filepath.Join(rootDir, "scenarios")
+	if err := os.MkdirAll(scenarioRoot, 0o755); err != nil {
+		t.Fatalf("create shared subagent scenario root: %v", err)
+	}
 
 	api := support.NewProcessAPIServer()
 	apiStarter := &subagentAPIServerStarter{api: api}
@@ -166,12 +172,13 @@ func newSubagentSharedFixture(t *testing.T) *subagentSharedFixture {
 	)
 
 	fixture := &subagentSharedFixture{
-		owner:       t,
-		process:     process,
-		provider:    provider,
-		apiStarter:  apiStarter,
-		environment: environment,
-		factoryDir:  factoryDir,
+		owner:        t,
+		process:      process,
+		provider:     provider,
+		apiStarter:   apiStarter,
+		environment:  environment,
+		factoryDir:   factoryDir,
+		scenarioRoot: scenarioRoot,
 	}
 	t.Cleanup(func() {
 		fixture.mu.Lock()
@@ -229,8 +236,18 @@ func (fixture *subagentSharedFixture) newScenario(
 	runner platformprocess.CommandRunner,
 ) *subagentScenario {
 	t.Helper()
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
+	scenarioDir, err := os.MkdirTemp(fixture.scenarioRoot, "scenario-")
+	if err != nil {
+		t.Fatalf("create subagent scenario directory: %v", err)
+	}
+	homeDir := filepath.Join(scenarioDir, "home")
+	workingDirectory := filepath.Join(scenarioDir, "work")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("create subagent scenario home: %v", err)
+	}
+	if err := os.MkdirAll(workingDirectory, 0o755); err != nil {
+		t.Fatalf("create subagent scenario working directory: %v", err)
+	}
 	factoryDir := support.CopyFactoryAsNamed(t, fixture.factoryDir, homeDir, "@you/subagent")
 	environment := subagentCustomerEnvironment(homeDir)
 	selectorPaths := []string{factoryDir, workingDirectory, fixture.factoryDir}
@@ -238,12 +255,33 @@ func (fixture *subagentSharedFixture) newScenario(
 	t.Cleanup(func() {
 		fixture.provider.unregister(selectorPaths)
 	})
-	return &subagentScenario{
+	scenario := &subagentScenario{
 		fixture:          fixture,
 		factoryDir:       factoryDir,
 		environment:      environment,
 		workingDirectory: workingDirectory,
 		selectorPaths:    selectorPaths,
+	}
+	fixture.mu.Lock()
+	fixture.scenarios = append(fixture.scenarios, scenario)
+	fixture.mu.Unlock()
+	return scenario
+}
+
+// openPendingScenarioSessions accounts for local CLI rows that deliberately
+// run before the shared HTTP host. Their customer-owned Factory copies remain
+// alive under the parent fixture until these explicit session lifecycles are
+// observed and cleaned up.
+func (fixture *subagentSharedFixture) openPendingScenarioSessions(t *testing.T) {
+	t.Helper()
+	fixture.startHost(t)
+	fixture.mu.Lock()
+	scenarios := append([]*subagentScenario(nil), fixture.scenarios...)
+	fixture.mu.Unlock()
+	for _, scenario := range scenarios {
+		if scenario.sessionID == "" {
+			scenario.open(t)
+		}
 	}
 }
 

@@ -178,6 +178,7 @@ func testPackagedSubagentChildFailureReturnsStableFailure(t *testing.T, fixture 
 			t.Fatalf("failed invocation JSON echoed submitted request text %q", requestText)
 		}
 	})
+	fixture.openPendingScenarioSessions(t)
 
 	t.Run("API returns stable failed terminal outcome", func(t *testing.T) {
 		requestText := fmt.Sprintf("functional-packaged-subagent-api-failure-%d", time.Now().UnixNano())
