@@ -40,6 +40,12 @@ var (
 // would close the shared wiring before the next top-level test runs.
 func TestMain(m *testing.M) {
 	code := m.Run()
+	if err := closeSharedDefinitionsServiceHosts(); err != nil {
+		fmt.Fprintf(os.Stderr, "close shared Factory Definitions service hosts: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	if sharedDefinitionsFixture != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), sharedDefinitionsProcessShutdownTimeout)
 		err := sharedDefinitionsFixture.process.Close(ctx)

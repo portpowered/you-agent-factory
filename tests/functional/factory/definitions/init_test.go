@@ -20,22 +20,18 @@ const initFactoryWorkType = "task"
 
 // TestFactoryInitCreatesRunnablePortableScaffold proves public Factory init
 // materializes the default portable scaffold and runs seeded starter Work to
-// task:complete through mock workers using public Work and session observations.
+// task:complete through a controlled provider edge using public Work and
+// session observations.
 func TestFactoryInitCreatesRunnablePortableScaffold(t *testing.T) {
-	hostFactoryDir := support.ScaffoldFactory(t, initHostFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                hostFactoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	server := sharedDefinitionsInitServer(t)
 
 	workspaceDir := filepath.Join(t.TempDir(), "init-workspace")
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("create init workspace: %v", err)
 	}
 
-	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+	sessionID := initFactoryViaSessionCreate(t, server.baseURL, workspaceDir)
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, sessionID) })
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	assertPortableInitScaffoldLayout(t, factoryRoot)
@@ -65,22 +61,16 @@ func TestFactoryInitCreatesRunnablePortableScaffold(t *testing.T) {
 // same workspace preserves customer-edited scaffold files instead of rewriting
 // generated starter content.
 func TestFactoryInitIsIdempotent(t *testing.T) {
-	hostFactoryDir := support.ScaffoldFactory(t, initHostFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                hostFactoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	server := sharedDefinitionsInitServer(t)
 
 	workspaceDir := filepath.Join(t.TempDir(), "init-idempotent-workspace")
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("create init workspace: %v", err)
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	initFactoryViaSessionCreateWithProcess(t, process, server.URL(), workspaceDir)
+	process := sharedDefinitionsInitProcess(t)
+	firstSessionID := initFactoryViaSessionCreateWithProcess(t, process, server.baseURL, workspaceDir)
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, firstSessionID) })
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	customPath := filepath.Join(factoryRoot, "workers", "processor", "AGENTS.md")
@@ -94,7 +84,8 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 		t.Fatalf("write customer-edited processor AGENTS.md: %v", err)
 	}
 
-	initFactoryViaSessionCreateWithProcess(t, process, server.URL(), workspaceDir)
+	secondSessionID := initFactoryViaSessionCreateWithProcess(t, process, server.baseURL, workspaceDir)
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, secondSessionID) })
 
 	got, err := os.ReadFile(customPath)
 	if err != nil {
@@ -111,20 +102,15 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 // failure on the default initialized portable scaffold routes seeded Work to
 // task:failed through public Work and session observations instead of complete.
 func TestFactoryInitFailureRoutingProducesFailedWork(t *testing.T) {
-	hostFactoryDir := support.ScaffoldFactory(t, initHostFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                hostFactoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	server := sharedDefinitionsInitServer(t)
 
 	workspaceDir := filepath.Join(t.TempDir(), "init-failure-workspace")
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("create init workspace: %v", err)
 	}
 
-	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+	sessionID := initFactoryViaSessionCreate(t, server.baseURL, workspaceDir)
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, sessionID) })
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	assertPortableInitScaffoldLayout(t, factoryRoot)
@@ -178,11 +164,9 @@ func initHostFactoryConfig() map[string]any {
 	}
 }
 
-func initFactoryViaSessionCreate(t *testing.T, serverURL, workspaceDir string) {
+func initFactoryViaSessionCreate(t *testing.T, serverURL, workspaceDir string) string {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	initFactoryViaSessionCreateWithProcess(t, process, serverURL, workspaceDir)
+	return initFactoryViaSessionCreateWithProcess(t, sharedDefinitionsInitProcess(t), serverURL, workspaceDir)
 }
 
 func initFactoryViaSessionCreateWithProcess(
@@ -190,7 +174,7 @@ func initFactoryViaSessionCreateWithProcess(
 	process support.Process,
 	serverURL string,
 	workspaceDir string,
-) {
+) string {
 	t.Helper()
 
 	homeDir := t.TempDir()
@@ -219,6 +203,7 @@ func initFactoryViaSessionCreateWithProcess(
 	if created.Session.FolderPath != workspaceDir {
 		t.Fatalf("session folder path = %q, want %q", created.Session.FolderPath, workspaceDir)
 	}
+	return created.Session.Id
 }
 
 func assertPortableInitScaffoldLayout(t *testing.T, factoryRoot string) {

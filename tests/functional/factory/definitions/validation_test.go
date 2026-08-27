@@ -13,7 +13,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -184,30 +183,17 @@ func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
 // list and returns actionable validation targets for invalid definitions without
 // persisting or activating runtime work.
 func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-
-	hostDir := support.ScaffoldFactory(t, validAPIValidationFactoryConfig())
-	var validFactory factoryapi.Factory
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                hostDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
-			var err error
-			validFactory, err = support.LoadedFactoryWithProcessAndEnv(
-				tb,
-				process,
-				inputs.Env,
-				filepath.Join(hostDir, "factory.json"),
-			)
-			if err != nil {
-				tb.Fatalf("load valid factory definition: %v", err)
-			}
-		},
-	})
-	defer server.Stop(t)
+	server := sharedDefinitionsValidationServer(t)
+	validFactory, err := support.LoadedFactoryWithProcessAndEnv(
+		t,
+		buildDefinitionsProcess(t),
+		server.env,
+		filepath.Join(server.factoryDir, "factory.json"),
+	)
+	if err != nil {
+		t.Fatalf("load valid factory definition: %v", err)
+	}
+	providerCallsBefore := server.provider.CallCount()
 
 	currentBefore := getDefaultSessionFactory(t, server.URL())
 	sessionsBefore := support.GetJSON[factoryapi.ListFactorySessionsResponse](
@@ -263,8 +249,11 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 			len(sessionsBefore.Sessions),
 		)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 during validate-only API calls", runner.CallCount())
+	if server.provider.CallCount() != providerCallsBefore {
+		t.Fatalf(
+			"provider command runner calls = %d, want unchanged %d during validate-only API calls",
+			server.provider.CallCount(), providerCallsBefore,
+		)
 	}
 }
 
@@ -272,18 +261,10 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 // customer-facing preview projection for a valid orchestrator source: resolved workflow
 // reference, effective policy bounds, and result constraints without Petri-net vocabulary.
 func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-
+	server := sharedDefinitionsValidationServer(t)
 	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
 	writeDefinitionsPreviewWorkflow(t, hostDir)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                hostDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
-	defer server.Stop(t)
+	providerCallsBefore := server.provider.CallCount()
 
 	previewResult, previewStatus := postPreviewFactory(t, server.URL(), hostDir, definitionsPreviewWorkflowName)
 	if previewStatus != http.StatusOK {
@@ -291,8 +272,11 @@ func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 	}
 	assertPublicPreviewProjection(t, previewResult, definitionsPreviewWorkflowName)
 
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 during preview inspection", runner.CallCount())
+	if server.provider.CallCount() != providerCallsBefore {
+		t.Fatalf(
+			"provider command runner calls = %d, want unchanged %d during preview inspection",
+			server.provider.CallCount(), providerCallsBefore,
+		)
 	}
 }
 
@@ -300,18 +284,10 @@ func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 // Factory definitions without starting workers, dispatch activation, or new Factory
 // Sessions beyond the already-running service session.
 func TestAPIPreviewDoesNotStartWorkersOrSessions(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-
+	server := sharedDefinitionsValidationServer(t)
 	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
 	writeDefinitionsPreviewWorkflow(t, hostDir)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                hostDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
-	defer server.Stop(t)
+	providerCallsBefore := server.provider.CallCount()
 
 	sessionsBefore := support.GetJSON[factoryapi.ListFactorySessionsResponse](
 		t,
@@ -359,8 +335,11 @@ func TestAPIPreviewDoesNotStartWorkersOrSessions(t *testing.T) {
 			statusBefore.RuntimeStatus,
 		)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 during preview-only inspection", runner.CallCount())
+	if server.provider.CallCount() != providerCallsBefore {
+		t.Fatalf(
+			"provider command runner calls = %d, want unchanged %d during preview-only inspection",
+			server.provider.CallCount(), providerCallsBefore,
+		)
 	}
 }
 
