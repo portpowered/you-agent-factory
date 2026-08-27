@@ -148,167 +148,178 @@ func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 // share one root-built process while retaining explicit Factory Session and
 // selector isolation for each invocation.
 func TestPackagedFixSharedProcess(t *testing.T) {
-	t.Run("UsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted", func(t *testing.T) {
-		t.Parallel()
-		runner := &packagedFixCommandRunner{}
-		worktreeName := "shared-operator-default-fix"
-		scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
-		response := invokePackagedFixSession(t, scenario, map[string]any{
-			"request":      "complete Fix with operator defaults",
-			"worktreeName": worktreeName,
-		})
-		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-			t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
-		}
-		for index, request := range runner.Requests() {
-			if request.Command != "codex" || !packagedFixRequestIncludesModel(request, "operator-configured-model") {
-				t.Fatalf("request[%d] = command %q args %#v, want operator CODEX/operator-configured-model", index, request.Command, request.Args)
-			}
-		}
-		assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
-	})
+	t.Run("UsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted", testPackagedFixOperatorDefaults)
 
-	t.Run("CarriesIndependentRejectionFeedback", func(t *testing.T) {
-		t.Parallel()
-		runner := &packagedFixCommandRunner{rejectFirstReview: true}
-		worktreeName := "shared-reviewed-fix"
-		scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
-		response := invokePackagedFixSession(t, scenario, map[string]any{
-			"request":      "revise the requested fix",
-			"worktreeName": worktreeName,
-		})
-		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-			t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
-		}
-		if got := strings.Join(runner.Roles(), ","); got != "planner,iterator,reviewer,iterator,reviewer" {
-			t.Fatalf("stage order = %q, want rejection revision cycle", got)
-		}
-		requests := runner.Requests()
-		if len(requests) != 5 {
-			t.Fatalf("provider request count = %d, want five stage calls", len(requests))
-		}
-		revisionPrompt := packagedFixProviderPrompt(requests[3])
-		if !strings.Contains(revisionPrompt, "reviewer requires the missing verification evidence") {
-			t.Fatalf("revision iterator prompt = %q, want reviewer feedback", revisionPrompt)
-		}
-		if !strings.Contains(revisionPrompt, "first Fix candidate") {
-			t.Fatalf("revision iterator prompt = %q, want prior candidate", revisionPrompt)
-		}
-		assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
-	})
+	t.Run("CarriesIndependentRejectionFeedback", testPackagedFixRejectionFeedback)
 
-	t.Run("UsesConfiguredAndExplicitRoleModels", func(t *testing.T) {
-		t.Parallel()
-		tests := []struct {
-			name             string
-			configure        func(*testing.T, string)
-			args             []string
-			plannerModel     string
-			iteratorModel    string
-			reviewerModel    string
-			plannerProvider  string
-			iteratorProvider string
-			reviewerProvider string
-		}{
-			{
-				name: "installed worker configuration",
-				configure: func(t *testing.T, factoryDir string) {
-					configurePackagedFixWorkerModels(t, factoryDir, map[string]string{
-						"fix-planner":  "configured-planner-model",
-						"fix-iterator": "configured-iterator-model",
-						"fix-reviewer": "configured-reviewer-model",
-					})
-				},
-				plannerModel:     "configured-planner-model",
-				iteratorModel:    "configured-iterator-model",
-				reviewerModel:    "configured-reviewer-model",
-				plannerProvider:  "codex",
-				iteratorProvider: "codex",
-				reviewerProvider: "codex",
+	t.Run("UsesConfiguredAndExplicitRoleModels", testPackagedFixConfiguredAndExplicitRoleModels)
+
+	t.Run("ReviewLoopExhaustionIsStable", testPackagedFixReviewLoopExhaustion)
+}
+
+func testPackagedFixOperatorDefaults(t *testing.T) {
+	t.Parallel()
+	runner := &packagedFixCommandRunner{}
+	worktreeName := "shared-operator-default-fix"
+	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request":      "complete Fix with operator defaults",
+		"worktreeName": worktreeName,
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
+	}
+	for index, request := range runner.Requests() {
+		if request.Command != "codex" || !packagedFixRequestIncludesModel(request, "operator-configured-model") {
+			t.Fatalf("request[%d] = command %q args %#v, want operator CODEX/operator-configured-model", index, request.Command, request.Args)
+		}
+	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
+}
+
+func testPackagedFixRejectionFeedback(t *testing.T) {
+	t.Parallel()
+	runner := &packagedFixCommandRunner{rejectFirstReview: true}
+	worktreeName := "shared-reviewed-fix"
+	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request":      "revise the requested fix",
+		"worktreeName": worktreeName,
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
+	}
+	if got := strings.Join(runner.Roles(), ","); got != "planner,iterator,reviewer,iterator,reviewer" {
+		t.Fatalf("stage order = %q, want rejection revision cycle", got)
+	}
+	requests := runner.Requests()
+	if len(requests) != 5 {
+		t.Fatalf("provider request count = %d, want five stage calls", len(requests))
+	}
+	revisionPrompt := packagedFixProviderPrompt(requests[3])
+	if !strings.Contains(revisionPrompt, "reviewer requires the missing verification evidence") {
+		t.Fatalf("revision iterator prompt = %q, want reviewer feedback", revisionPrompt)
+	}
+	if !strings.Contains(revisionPrompt, "first Fix candidate") {
+		t.Fatalf("revision iterator prompt = %q, want prior candidate", revisionPrompt)
+	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
+}
+
+type packagedFixRoleModelScenario struct {
+	name             string
+	configure        func(*testing.T, string)
+	args             []string
+	plannerModel     string
+	iteratorModel    string
+	reviewerModel    string
+	plannerProvider  string
+	iteratorProvider string
+	reviewerProvider string
+}
+
+func testPackagedFixConfiguredAndExplicitRoleModels(t *testing.T) {
+	t.Parallel()
+	tests := []packagedFixRoleModelScenario{
+		{
+			name: "installed worker configuration",
+			configure: func(t *testing.T, factoryDir string) {
+				configurePackagedFixWorkerModels(t, factoryDir, map[string]string{
+					"fix-planner":  "configured-planner-model",
+					"fix-iterator": "configured-iterator-model",
+					"fix-reviewer": "configured-reviewer-model",
+				})
 			},
-			{
-				name: "explicit role flags",
-				args: []string{
-					"--planner-provider", "CODEX",
-					"--planner-model", "flag-planner-model",
-					"--iterator-provider", "CODEX",
-					"--iterator-model", "flag-iterator-model",
-					"--reviewer-provider", "CODEX",
-					"--reviewer-model", "flag-reviewer-model",
-				},
-				plannerModel:     "flag-planner-model",
-				iteratorModel:    "flag-iterator-model",
-				reviewerModel:    "flag-reviewer-model",
-				plannerProvider:  "codex",
-				iteratorProvider: "codex",
-				reviewerProvider: "codex",
+			plannerModel:     "configured-planner-model",
+			iteratorModel:    "configured-iterator-model",
+			reviewerModel:    "configured-reviewer-model",
+			plannerProvider:  "codex",
+			iteratorProvider: "codex",
+			reviewerProvider: "codex",
+		},
+		{
+			name: "explicit role flags",
+			args: []string{
+				"--planner-provider", "CODEX",
+				"--planner-model", "flag-planner-model",
+				"--iterator-provider", "CODEX",
+				"--iterator-model", "flag-iterator-model",
+				"--reviewer-provider", "CODEX",
+				"--reviewer-model", "flag-reviewer-model",
 			},
-		}
+			plannerModel:     "flag-planner-model",
+			iteratorModel:    "flag-iterator-model",
+			reviewerModel:    "flag-reviewer-model",
+			plannerProvider:  "codex",
+			iteratorProvider: "codex",
+			reviewerProvider: "codex",
+		},
+	}
 
-		for _, test := range tests {
-			t.Run(test.name, func(t *testing.T) {
-				worktreeName := "shared-configured-fix-" + strings.ReplaceAll(test.name, " ", "-")
-				runner := &packagedFixCommandRunner{firstIteratorContinue: true}
-				scenario := openPackagedFixScenario(t, runner, worktreeName, test.configure)
-				invocationArgs := map[string]any{
-					"request":      "complete a configured Fix request",
-					"worktreeName": worktreeName,
-				}
-				for index := 0; index+1 < len(test.args); index += 2 {
-					invocationArgs[strings.TrimPrefix(test.args[index], "--")] = test.args[index+1]
-				}
-				response := invokePackagedFixSession(t, scenario, invocationArgs)
-				if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-					t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
-				}
-				requests := runner.Requests()
-				if len(requests) != 4 {
-					t.Fatalf("provider request count = %d, want planner, iterator, reviewer with one final iterator", len(requests))
-				}
-				for index, request := range requests {
-					wantModel := test.plannerModel
-					wantProvider := test.plannerProvider
-					if index == 1 {
-						wantModel, wantProvider = test.iteratorModel, test.iteratorProvider
-					}
-					if index == 3 {
-						wantModel, wantProvider = test.reviewerModel, test.reviewerProvider
-					}
-					if index == 2 {
-						wantModel, wantProvider = test.iteratorModel, test.iteratorProvider
-					}
-					if request.Command != wantProvider || !packagedFixRequestIncludesModel(request, wantModel) {
-						t.Fatalf("request[%d] = command %q args %#v, want %s/%s", index, request.Command, request.Args, wantProvider, wantModel)
-					}
-				}
-				assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
-			})
-		}
-	})
-
-	t.Run("ReviewLoopExhaustionIsStable", func(t *testing.T) {
-		t.Parallel()
-		runner := &packagedFixCommandRunner{alwaysRejectReview: true}
-		worktreeName := "shared-bounded-review"
-		scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
-		response := invokePackagedFixSession(t, scenario, map[string]any{
-			"request":      "keep rejecting this Fix request",
-			"worktreeName": worktreeName,
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			testPackagedFixRoleModelScenario(t, test)
 		})
-		if response.Status != factoryapi.InvocationTerminalStatusFailed {
-			t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
+	}
+}
+
+func testPackagedFixRoleModelScenario(t *testing.T, test packagedFixRoleModelScenario) {
+	worktreeName := "shared-configured-fix-" + strings.ReplaceAll(test.name, " ", "-")
+	runner := &packagedFixCommandRunner{firstIteratorContinue: true}
+	scenario := openPackagedFixScenario(t, runner, worktreeName, test.configure)
+	invocationArgs := map[string]any{
+		"request":      "complete a configured Fix request",
+		"worktreeName": worktreeName,
+	}
+	for index := 0; index+1 < len(test.args); index += 2 {
+		invocationArgs[strings.TrimPrefix(test.args[index], "--")] = test.args[index+1]
+	}
+	response := invokePackagedFixSession(t, scenario, invocationArgs)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
+	}
+	requests := runner.Requests()
+	if len(requests) != 4 {
+		t.Fatalf("provider request count = %d, want planner, iterator, reviewer with one final iterator", len(requests))
+	}
+	for index, request := range requests {
+		wantModel, wantProvider := test.plannerModel, test.plannerProvider
+		if index == 1 || index == 2 {
+			wantModel, wantProvider = test.iteratorModel, test.iteratorProvider
 		}
-		if response.WorkState == nil || *response.WorkState != "fix:failed" {
-			t.Fatalf("response workState = %#v, want fix:failed", response.WorkState)
+		if index == 3 {
+			wantModel, wantProvider = test.reviewerModel, test.reviewerProvider
 		}
-		if got := runner.ReviewerCalls(); got != 8 {
-			t.Fatalf("reviewer calls = %d, want eight bounded review visits", got)
+		if request.Command != wantProvider || !packagedFixRequestIncludesModel(request, wantModel) {
+			t.Fatalf("request[%d] = command %q args %#v, want %s/%s", index, request.Command, request.Args, wantProvider, wantModel)
 		}
-		if got := len(runner.Requests()); got != 18 {
-			t.Fatalf("provider request count = %d, want planner, nine iterators, and eight reviewers", got)
-		}
-		assertPackagedFixSharedEvidence(t, scenario, runner, "failed")
+	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
+}
+
+func testPackagedFixReviewLoopExhaustion(t *testing.T) {
+	t.Parallel()
+	runner := &packagedFixCommandRunner{alwaysRejectReview: true}
+	worktreeName := "shared-bounded-review"
+	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request":      "keep rejecting this Fix request",
+		"worktreeName": worktreeName,
 	})
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
+	}
+	if response.WorkState == nil || *response.WorkState != "fix:failed" {
+		t.Fatalf("response workState = %#v, want fix:failed", response.WorkState)
+	}
+	if got := runner.ReviewerCalls(); got != 8 {
+		t.Fatalf("reviewer calls = %d, want eight bounded review visits", got)
+	}
+	if got := len(runner.Requests()); got != 18 {
+		t.Fatalf("provider request count = %d, want planner, nine iterators, and eight reviewers", got)
+	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "failed")
 }
 
 func invokePackagedFixSession(
