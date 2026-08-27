@@ -25,6 +25,7 @@ import (
 // completion, single- and two-stage pipelines, and ideation happy-path coverage
 // without inspecting internal Petri markings.
 func TestPetriSharedDispatchSuccess(t *testing.T) {
+	enterSharedPetriTopLevelGroup(t)
 	t.Run("simple_single_worker_pipeline_completes", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
@@ -413,6 +414,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 // public failed location with a failed dispatch outcome on Factory Events,
 // without routing the same Work to success terminals.
 func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
+	enterSharedPetriTopLevelGroup(t)
 	t.Run("mock_provider_error_routes_to_failed_terminal", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
@@ -765,6 +767,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 // routing for Petri workstations with and without authored failure arcs using
 // root.BuildProcess and the shared ProviderCommandRunner edge.
 func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
+	enterSharedPetriTopLevelGroup(t)
 	t.Run("provider_process_failure_without_failure_arcs_routes_to_failed", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
@@ -1048,6 +1051,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 // TestPetriInvocationInputAndOutputMapping retains the failed-lineage witness
 // while the shared command edge supplies deterministic provider outcomes.
 func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
+	enterSharedPetriTopLevelGroup(t)
 	t.Run("failed_terminal_preserves_origin_trace_lineage", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
