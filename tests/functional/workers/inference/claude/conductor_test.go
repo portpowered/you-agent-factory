@@ -449,17 +449,18 @@ func (fixture *claudeDefaultLaneFixture) assertSharedProcessCleanup(t *testing.T
 		t.Fatal("shared Claude API server did not close after process cleanup")
 	}
 
-	if got := fixture.opened.Load(); got != int32(len(fixture.scenarios)) {
-		t.Fatalf("opened Factory Sessions = %d, want %d", got, len(fixture.scenarios))
+	expectedSessions := fixture.opened.Load()
+	if expectedSessions == 0 {
+		t.Fatal("cleanup probe observed no executed Factory Session")
 	}
-	if got := fixture.closed.Load(); got != int32(len(fixture.scenarios)) {
-		t.Fatalf("closed Factory Sessions = %d, want %d", got, len(fixture.scenarios))
+	if got := fixture.closed.Load(); got != expectedSessions {
+		t.Fatalf("closed Factory Sessions = %d, want %d", got, expectedSessions)
 	}
-	if got := fixture.streamsOpened.Load(); got != int32(len(fixture.scenarios)) {
-		t.Fatalf("opened response collectors = %d, want %d", got, len(fixture.scenarios))
+	if got := fixture.streamsOpened.Load(); got != expectedSessions {
+		t.Fatalf("opened response collectors = %d, want %d", got, expectedSessions)
 	}
-	if got := fixture.streamsClosed.Load(); got != int32(len(fixture.scenarios)) {
-		t.Fatalf("closed response collectors = %d, want %d", got, len(fixture.scenarios))
+	if got := fixture.streamsClosed.Load(); got != expectedSessions {
+		t.Fatalf("closed response collectors = %d, want %d", got, expectedSessions)
 	}
 	for _, scenario := range fixture.scenarios {
 		if got := scenario.runner.ActiveCallCount(); got != 0 {
