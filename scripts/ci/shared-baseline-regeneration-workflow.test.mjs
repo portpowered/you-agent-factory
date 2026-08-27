@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -14,7 +16,11 @@ import {
 } from "./shared-baseline-regeneration-workflow.mjs";
 
 const SHA = (character) => character.repeat(40);
-const workflow = readFileSync(".github/workflows/regenerate-shared-ci-baselines.yml", "utf8");
+const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const workflow = readFileSync(
+	join(repositoryRoot, ".github", "workflows", "regenerate-shared-ci-baselines.yml"),
+	"utf8",
+);
 
 test("the delivered workflow follows successful main CI and owns only the bot PR path", () => {
 	assert.match(workflow, /workflow_run:\s+workflows: \[CI\]/);
