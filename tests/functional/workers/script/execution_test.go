@@ -8,158 +8,94 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const scriptPrimaryResultOutput = "script-primary-result-output"
-
-// TestScriptWorkerCompletesWithPublicPrimaryResult proves a root-built script
-// worker that exits successfully completes Work on the customer-visible surface
-// and exposes the script stdout as the public dispatch primary result.
-func TestScriptWorkerCompletesWithPublicPrimaryResult(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("success-input-payload"))
-
-	runner := support.NewRecordingCommandRunner(scriptPrimaryResultOutput)
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ScriptCommandRunner: runner},
-		10*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work tokens = %d, want 1 successful script dispatch", got)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work tokens = %d, want 0", got)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
-		t.Fatalf("pending work tokens = %d, want 0 after successful completion", got)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("script command calls = %d, want exactly one external command effect", runner.CallCount())
-	}
-	request := runner.LastRequest()
-	if request.Command != "echo" {
-		t.Fatalf("script command = %q, want authored command %q", request.Command, "echo")
-	}
-	assertCommandArgs(t, request, []string{"default-output"})
-	if request.WorkDir == "" {
-		t.Fatal("script command work directory is empty, want the runtime workspace")
-	}
-
-	assertDispatchOutput(t, events, scriptPrimaryResultOutput)
-}
-
 const scriptNonZeroExitMessage = "script-non-zero-exit-output"
 
-// TestScriptWorkerNonZeroExitMapsToFailedOutcome proves a root-built script
-// worker whose command exits non-zero routes Work to the failed customer state
-// and reports a customer-readable dispatch failure instead of success.
-func TestScriptWorkerNonZeroExitMapsToFailedOutcome(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("failure-input-payload"))
-
-	runner := nonZeroExitCommandRunner{stderr: scriptNonZeroExitMessage, exitCode: 1}
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ScriptCommandRunner: runner},
-		10*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed work tokens = %d, want 1 non-zero-exit script dispatch", got)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
-		t.Fatalf("completed work tokens = %d, want 0 after script failure", got)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
-		t.Fatalf("pending work tokens = %d, want 0 after script failure", got)
-	}
-
-	assertScriptNonZeroExitDispatchFailure(t, events, scriptNonZeroExitMessage)
-}
-
-// TestScriptWorkerFailureReachesWorkShowThroughRootProcess proves the complete
-// customer path for an actionable setup-workspace failure: the script result
-// is recorded on the dispatch, projected onto failed Work, returned by the
-// session-scoped HTTP read, and rendered by both root-built CLI output modes.
-func TestScriptWorkerFailureReachesWorkShowThroughRootProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("setup-workspace failure payload"))
-	const diagnostic = "repository root is dirty: 2 tracked changes, 1 untracked file; inspect and commit or back up changes"
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ScriptCommandRunner: nonZeroExitCommandRunner{stderr: diagnostic, exitCode: 1},
-		},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	failedWorkID := failedScriptWorkID(t, listed)
-	listItem := workByID(t, listed, failedWorkID)
-	assertWorkFailureDetail(t, listItem.FailureDetail, diagnostic)
-
-	got := support.GetDefaultSessionWorkByID(t, server.URL(), failedWorkID)
-	assertWorkFailureDetail(t, got.FailureDetail, diagnostic)
-
-	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsAt(t, server.URL()))
-	if len(dispatches) != 1 || dispatches[0].Response == nil {
-		t.Fatalf("dispatch observations = %#v, want one failed response", dispatches)
-	}
-	assertWorkFailureDetail(t, dispatches[0].Response.FailureDetail, diagnostic)
-
-	cliProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, cliProcess)
-
-	humanInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--server", server.URL(), "work", "show", failedWorkID,
-	})
-	if err := cliProcess.Execute(humanInputs.Input); err != nil {
-		t.Fatalf("root work show human error = %v\nstdout=%s\nstderr=%s", err, humanInputs.Stdout(), humanInputs.Stderr())
-	}
-	if !strings.Contains(humanInputs.Stdout(), "Failure reason:\tinternal_server_error") ||
-		!strings.Contains(humanInputs.Stdout(), "Failure message:\t"+diagnostic) {
-		t.Fatalf("root work show human output = %q, want typed actionable failure", humanInputs.Stdout())
-	}
-
-	jsonInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--server", server.URL(), "--json", "work", "show", failedWorkID,
-	})
-	if err := cliProcess.Execute(jsonInputs.Input); err != nil {
-		t.Fatalf("root work show JSON error = %v\nstdout=%s\nstderr=%s", err, jsonInputs.Stdout(), jsonInputs.Stderr())
-	}
-	var jsonWork factoryapi.Work
-	if err := json.Unmarshal([]byte(jsonInputs.Stdout()), &jsonWork); err != nil {
-		t.Fatalf("decode root work show JSON: %v\nstdout=%s", err, jsonInputs.Stdout())
-	}
-	assertWorkFailureDetail(t, jsonWork.FailureDetail, diagnostic)
-}
-
-func failedScriptWorkID(t *testing.T, listed factoryapi.ListWorkResponse) string {
+func newScriptSharedExecutionScenarios(t *testing.T) []scriptSharedScenario {
 	t.Helper()
-	for _, item := range listed.Results {
-		if item.State == nil || item.State.Name != "failed" {
-			continue
-		}
-		if id := support.StringPointerValue(item.WorkId); id != "" {
-			return id
-		}
+
+	nonZeroDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+
+	const actionableDiagnostic = "repository root is dirty: 2 tracked changes, 1 untracked file; inspect and commit or back up changes"
+	failureDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+
+	cancellationDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	workstationAgentsPath := filepath.Join(cancellationDir, "workstations", "run-script", "AGENTS.md")
+	agentsMD := "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n"
+	if err := os.WriteFile(workstationAgentsPath, []byte(agentsMD), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
 	}
-	t.Fatalf("failed script Work missing from listing: %#v", listed.Results)
-	return ""
+	updateScriptFixtureFactory(t, cancellationDir, func(cfg map[string]any) {
+		cfg["workstations"] = append(cfg["workstations"].([]any), map[string]any{
+			"name":     "cancellation-loop-breaker",
+			"behavior": "STANDARD",
+			"type":     "LOGICAL_MOVE",
+			"inputs":   []map[string]any{{"workType": "task", "state": "init"}},
+			"outputs":  []map[string]any{{"workType": "task", "state": "failed"}},
+			"guards": []map[string]any{{
+				"type":        "VISIT_COUNT",
+				"workstation": "run-script",
+				"maxVisits":   float64(1),
+			}},
+		})
+	})
+
+	return []scriptSharedScenario{
+		{
+			name:                   "NonZeroExit",
+			factoryDir:             nonZeroDir,
+			workName:               "shared-script-non-zero",
+			traceID:                "shared-script-non-zero-trace",
+			workTypeName:           "task",
+			terminalState:          "failed",
+			expectedOutcome:        factoryapi.WorkOutcomeFailed,
+			expectedCommand:        "echo",
+			expectedArgs:           []string{"default-output"},
+			expectedFailureMessage: scriptNonZeroExitMessage,
+			runner: newScriptSharedCommandRunner(nonZeroExitCommandRunner{
+				stderr:   scriptNonZeroExitMessage,
+				exitCode: 1,
+			}),
+			assertResult: assertScriptSharedNonZeroExit,
+		},
+		{
+			name:                   "FailureReachesWorkShow",
+			factoryDir:             failureDir,
+			workName:               "shared-script-failure-work-show",
+			traceID:                "shared-script-failure-work-show-trace",
+			workTypeName:           "task",
+			terminalState:          "failed",
+			expectedOutcome:        factoryapi.WorkOutcomeFailed,
+			expectedCommand:        "echo",
+			expectedArgs:           []string{"default-output"},
+			expectedFailureMessage: actionableDiagnostic,
+			runner: newScriptSharedCommandRunner(nonZeroExitCommandRunner{
+				stderr:   actionableDiagnostic,
+				exitCode: 1,
+			}),
+			assertResult: assertScriptSharedFailureReachesWorkShow,
+		},
+		{
+			name:                    "Cancellation",
+			factoryDir:              cancellationDir,
+			workName:                "shared-script-cancellation",
+			traceID:                 "shared-script-cancellation-trace",
+			workTypeName:            "task",
+			terminalState:           "failed",
+			expectedOutcome:         factoryapi.WorkOutcomeFailed,
+			expectedCommand:         "echo",
+			expectedArgs:            []string{"default-output"},
+			allowMultipleDispatches: true,
+			runner:                  newScriptSharedCommandRunner(&blockingCancellationCommandRunner{}),
+			assertResult:            assertScriptSharedCancellation,
+		},
+	}
 }
 
 func workByID(t *testing.T, listed factoryapi.ListWorkResponse, workID string) factoryapi.Work {
@@ -180,165 +116,89 @@ func assertWorkFailureDetail(t *testing.T, detail *factoryapi.FailureDetail, dia
 	}
 }
 
-// TestScriptWorkerCancellationTerminatesChildProcess proves cancelling a
-// long-running root-built script worker terminates the external command edge
-// and reports a non-success outcome on the public Work / Factory Event surface.
-func TestScriptWorkerCancellationTerminatesChildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("cancellation-input-payload"))
-
-	workstationAgentsPath := filepath.Join(dir, "workstations", "run-script", "AGENTS.md")
-	agentsMD := "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n"
-	if err := os.WriteFile(workstationAgentsPath, []byte(agentsMD), 0o644); err != nil {
-		t.Fatalf("write workstation AGENTS.md: %v", err)
-	}
-	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
-		cfg["workstations"] = append(cfg["workstations"].([]any), map[string]any{
-			"name":     "cancellation-loop-breaker",
-			"behavior": "STANDARD",
-			"type":     "LOGICAL_MOVE",
-			"inputs":   []map[string]any{{"workType": "task", "state": "init"}},
-			"outputs":  []map[string]any{{"workType": "task", "state": "failed"}},
-			"guards": []map[string]any{{
-				"type":        "VISIT_COUNT",
-				"workstation": "run-script",
-				"maxVisits":   float64(1),
-			}},
-		})
-	})
-
-	runner := &blockingCancellationCommandRunner{}
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ScriptCommandRunner: runner},
-		10*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed work tokens = %d, want 1 cancelled script dispatch", got)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
-		t.Fatalf("completed work tokens = %d, want 0 after cancellation", got)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
-		t.Fatalf("pending work tokens = %d, want 0 after cancellation", got)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("script command calls = %d, want exactly one external command effect", runner.CallCount())
-	}
-	if !runner.Started() {
-		t.Fatal("script command edge never entered a cancellable long-running execution")
-	}
-	if !runner.ContextCanceled() {
-		t.Fatal("script command edge context was not canceled before termination")
-	}
-	if !runner.Terminated() {
-		t.Fatal("script command edge did not terminate after cancellation")
-	}
-	assertScriptCancellationDispatchFailure(t, events)
+func assertScriptSharedNonZeroExit(
+	t *testing.T,
+	_ *scriptSharedSpineFixture,
+	scenario scriptSharedScenario,
+	_ string,
+	_ factoryapi.SubmitWorkResponse,
+	_ factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	assertScriptNonZeroExitDispatchFailure(t, events, scenario.expectedFailureMessage)
 }
 
-// TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents proves a root-built
-// script worker completes through dispatch lifecycle Factory Events without
-// emitting inference request or response events.
-func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     "work-script-no-inference",
-		WorkTypeID: "task",
-		TraceID:    "trace-script-no-inference",
-		Payload:    []byte("script input"),
-	})
+func assertScriptSharedFailureReachesWorkShow(
+	t *testing.T,
+	fixture *scriptSharedSpineFixture,
+	scenario scriptSharedScenario,
+	sessionID string,
+	submitted factoryapi.SubmitWorkResponse,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	workID := support.StringPointerValue(submitted.WorkId)
+	if workID == "" {
+		t.Fatal("shared failure Work id is empty")
+	}
+	assertWorkFailureDetail(t, workByID(t, listed, workID).FailureDetail, scenario.expectedFailureMessage)
+	got := getScriptSharedWorkByID(t, fixture.baseURL, sessionID, workID)
+	assertWorkFailureDetail(t, got.FailureDetail, scenario.expectedFailureMessage)
 
-	runner := support.NewStaticSuccessCommandRunner("script-output-ok")
-	_, _, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ScriptCommandRunner: runner},
-		10*time.Second,
-	)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 || dispatches[0].Response == nil {
+		t.Fatalf("shared failure dispatch observations = %#v, want one failed response", dispatches)
+	}
+	assertWorkFailureDetail(t, dispatches[0].Response.FailureDetail, scenario.expectedFailureMessage)
 
-	if !hasFactoryEventType(events, factoryapi.FactoryEventTypeDispatchRequest) ||
-		!hasFactoryEventType(events, factoryapi.FactoryEventTypeDispatchResponse) {
+	if strings.TrimSpace(sessionID) == "" {
+		t.Fatal("shared failure session id is empty")
+	}
+	human, stderr, err := executeScriptSharedWorkShow(t, fixture, sessionID, workID, false)
+	if err != nil {
+		t.Fatalf("shared root work show human error = %v\nstdout=%s\nstderr=%s", err, human, stderr)
+	}
+	if !strings.Contains(human, "Failure reason:\tinternal_server_error") ||
+		!strings.Contains(human, "Failure message:\t"+scenario.expectedFailureMessage) {
+		t.Fatalf("shared root work show human output = %q, want typed actionable failure", human)
+	}
+	assertScriptSharedNoUndeclaredValue(t, scenario.name+" human work show", human, stderr)
+
+	jsonOutput, stderr, err := executeScriptSharedWorkShow(t, fixture, sessionID, workID, true)
+	if err != nil {
+		t.Fatalf("shared root work show JSON error = %v\nstdout=%s\nstderr=%s", err, jsonOutput, stderr)
+	}
+	var jsonWork factoryapi.Work
+	if err := json.Unmarshal([]byte(jsonOutput), &jsonWork); err != nil {
+		t.Fatalf("decode shared root work show JSON: %v\nstdout=%s", err, jsonOutput)
+	}
+	assertWorkFailureDetail(t, jsonWork.FailureDetail, scenario.expectedFailureMessage)
+	assertScriptSharedNoUndeclaredValue(t, scenario.name+" JSON work show", jsonOutput, stderr)
+}
+
+func assertScriptSharedCancellation(
+	t *testing.T,
+	_ *scriptSharedSpineFixture,
+	scenario scriptSharedScenario,
+	_ string,
+	_ factoryapi.SubmitWorkResponse,
+	_ factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	runner, ok := scenario.runner.Delegate().(*blockingCancellationCommandRunner)
+	if !ok {
+		t.Fatalf("%s command delegate = %T, want blocking cancellation runner", scenario.name, scenario.runner.Delegate())
+	}
+	if runner.CallCount() != 1 || !runner.Started() || !runner.ContextCanceled() || !runner.Terminated() {
 		t.Fatalf(
-			"script worker canonical events = %v, want dispatch lifecycle events",
-			factoryEventTypes(events),
+			"%s cancellation edge state = calls:%d started:%t canceled:%t terminated:%t, want 1/true/true/true",
+			scenario.name, runner.CallCount(), runner.Started(), runner.ContextCanceled(), runner.Terminated(),
 		)
 	}
-	if hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceRequest) ||
-		hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceResponse) {
-		t.Fatalf("script worker emitted inference events: %v", factoryEventTypes(events))
-	}
-}
-
-// TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner
-// proves a root-built script worker routes through the replaced
-// ScriptCommandRunner edge and completes one terminal dispatch.
-func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("script server alignment"))
-
-	runner := support.NewRecordingCommandRunner("script alignment output")
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ScriptCommandRunner: runner},
-		10*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("terminal token count = %d, want 1", got)
-	}
-	if got := runner.CallCount(); got != 1 {
-		t.Fatalf("script command runner calls = %d, want 1", got)
-	}
-}
-
-func detachedScriptExecuteRequest() workerexecution.ExecuteRequest {
-	return workerexecution.ExecuteRequest{
-		Correlation: workerexecution.ExecutionCorrelation{
-			FactorySessionID: "detached-session",
-			RuntimeID:        "detached-runtime",
-			GenerationID:     "detached-generation",
-			DispatchID:       "detached-dispatch",
-			AttemptID:        "detached-attempt",
-			RequestID:        "detached-request",
-			TraceID:          "detached-trace",
-		},
-		Target: workerexecution.ExecutionTarget{
-			WorkerName:      "detached-script-worker",
-			WorkerType:      "SCRIPT_WORKER",
-			WorkstationName: "detached-workstation",
-			RunnerID:        "script",
-			Command:         "echo",
-			Args:            []string{"detached-output"},
-			Environment: workerexecution.EnvironmentPolicy{
-				Vars: map[string]string{"DETACHED_MODE": "functional"},
-			},
-		},
-		Input: workerexecution.ExecutionInput{
-			Dispatch: work.WorkDispatch{
-				DispatchID:  "detached-dispatch",
-				WorkerType:  "SCRIPT_WORKER",
-				ProjectID:   "detached-project",
-				InputTokens: []any{"detached-token"},
-				Execution: work.ExecutionMetadata{
-					RequestID: "detached-request",
-					TraceID:   "detached-trace",
-				},
-			},
-		},
-		Attempt: workerexecution.AttemptContext{Number: 1},
-	}
-}
-
-func executeOutputText(output workerexecution.ProposedOutput) string {
-	var builder strings.Builder
-	for _, part := range output.Primary {
-		builder.WriteString(part.Text)
-	}
-	return builder.String()
+	assertScriptCancellationDispatchFailure(t, events)
 }
 
 type blockingCancellationCommandRunner struct {
