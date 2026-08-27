@@ -1,19 +1,213 @@
 package parameters_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const parameterProcessCloseTimeout = 5 * time.Second
+
+type parameterProcessFixture struct {
+	observerProcess     support.ApplicationProcess
+	fullHandlerProcess  support.ApplicationProcess
+	missingAssetProcess support.ApplicationProcess
+	observations        *cliObservationLog
+	submissions         *invocationSubmissionObservation
+	providerRunner      *support.ShapedProviderCommandRunner
+	missingProvider     *testutil.ProviderCommandRunner
+	lifecycleEffects    *atomic.Int32
+	operatorMutations   *atomic.Int32
+}
+
+var parameterProcesses *parameterProcessFixture
+
+// TestMain constructs the three immutable process variants once for the
+// package. Every normal leaf executes sequentially through one of these roots;
+// only the missing-asset witness receives lifecycle-observation edges.
+func TestMain(m *testing.M) {
+	fixture, err := buildParameterProcessFixture()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build parameter functional process fixture: %v\n", err)
+		os.Exit(1)
+	}
+	parameterProcesses = fixture
+
+	exitCode := m.Run()
+	if closeErr := fixture.close(); closeErr != nil {
+		fmt.Fprintf(os.Stderr, "close parameter functional process fixture: %v\n", closeErr)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
+	os.Exit(exitCode)
+}
+
+func buildParameterProcessFixture() (*parameterProcessFixture, error) {
+	observations := &cliObservationLog{}
+	submissions := &invocationSubmissionObservation{}
+	providerRunner := support.NewShapedProviderCommandRunner(
+		successfulProviderResults(64)...,
+	)
+	operatorMutations := &atomic.Int32{}
+
+	observerProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		CLIObserver: observations.observe,
+		OperatorSettingsFileSystem: mutationTrackingOperatorSettingsFileSystem{
+			mutations: operatorMutations,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build observer process: %w", err)
+	}
+
+	fullHandlerProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+		SubmissionRecorder:    submissions.observe,
+	})
+	if err != nil {
+		_ = observerProcess.Close(context.Background())
+		return nil, fmt.Errorf("build full-handler process: %w", err)
+	}
+
+	lifecycleEffects := &atomic.Int32{}
+	missingProvider := testutil.NewProviderCommandRunner()
+	missingAssetProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: missingProvider,
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			lifecycleEffects.Add(1)
+			return nil
+		},
+		BrowserOpener: func(context.Context, string) error {
+			lifecycleEffects.Add(1)
+			return nil
+		},
+		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
+			lifecycleEffects.Add(1)
+		},
+		FactorySessionIDGenerator: func() string {
+			lifecycleEffects.Add(1)
+			return "unexpected-session"
+		},
+	})
+	if err != nil {
+		_ = observerProcess.Close(context.Background())
+		_ = fullHandlerProcess.Close(context.Background())
+		return nil, fmt.Errorf("build missing-asset process: %w", err)
+	}
+
+	return &parameterProcessFixture{
+		observerProcess:     observerProcess,
+		fullHandlerProcess:  fullHandlerProcess,
+		missingAssetProcess: missingAssetProcess,
+		observations:        observations,
+		submissions:         submissions,
+		providerRunner:      providerRunner,
+		missingProvider:     missingProvider,
+		lifecycleEffects:    lifecycleEffects,
+		operatorMutations:   operatorMutations,
+	}, nil
+}
+
+func successfulProviderResults(count int) []platformprocess.CommandResult {
+	results := make([]platformprocess.CommandResult, count)
+	for index := range results {
+		results[index] = platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")}
+	}
+	return results
+}
+
+func (fixture *parameterProcessFixture) close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), parameterProcessCloseTimeout)
+	defer cancel()
+
+	var closeErr error
+	processes := []struct {
+		name    string
+		process support.ApplicationProcess
+	}{
+		{name: "observer", process: fixture.observerProcess},
+		{name: "full-handler", process: fixture.fullHandlerProcess},
+		{name: "missing-asset", process: fixture.missingAssetProcess},
+	}
+	for _, entry := range processes {
+		name, process := entry.name, entry.process
+		if err := process.Close(ctx); err != nil {
+			closeErr = fmt.Errorf("%s process: %w", name, err)
+		}
+	}
+	return closeErr
+}
+
+type cliObservationLog struct {
+	mu      sync.Mutex
+	results []cliobservation.Result
+}
+
+func (log *cliObservationLog) observe(observed platformprocess.CLIObservation) error {
+	result, err := cliobservation.Decode(observed)
+	if err != nil {
+		return err
+	}
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	log.results = append(log.results, result)
+	return nil
+}
+
+func (log *cliObservationLog) snapshot() []cliobservation.Result {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	return append([]cliobservation.Result(nil), log.results...)
+}
+
+func parameterInputs(t *testing.T, args []string) *support.CapturedInputs {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = spineEnvironment(inputs.Input.Env, t.TempDir())
+	return inputs
+}
+
+func executeParameterObservation(t *testing.T, args []string) cliobservation.Result {
+	t.Helper()
+	if parameterProcesses == nil {
+		t.Fatal("parameter process fixture is not initialized")
+	}
+	before := len(parameterProcesses.observations.snapshot())
+	inputs := parameterInputs(t, args)
+	if err := parameterProcesses.observerProcess.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(parser observation) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	results := parameterProcesses.observations.snapshot()
+	if got := len(results) - before; got != 1 {
+		t.Fatalf("detached CLI observation delta = %d, want 1", got)
+	}
+	return results[before]
+}
 
 const (
 	spinePositionalValue = "Ship the café résumé plan"
@@ -32,24 +226,12 @@ const (
 // for the parameter package. The two root-built processes are immutable and
 // their customer invocations run in lexical order with fresh inputs.
 func TestCLIParameterReusableProcessSpine(t *testing.T) {
-	var observations []cliobservation.Result
-	observerProcess := support.BuildProcess(t, serviceedges.Edges{
-		CLIObserver: cliobservation.CaptureAppend(&observations),
-	})
-	support.CleanupProcess(t, observerProcess)
-
-	submissions := &invocationSubmissionObservation{}
-	providerRunner := support.NewShapedProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
-	)
-	fullHandlerProcess := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-		SubmissionRecorder:    submissions.observe,
-	})
-	support.CleanupProcess(t, fullHandlerProcess)
+	if parameterProcesses == nil {
+		t.Fatal("parameter process fixture is not initialized")
+	}
 
 	t.Run("observer root parses generic flags", func(t *testing.T) {
-		first := executeSpineObservation(t, observerProcess, &observations, []string{
+		first := executeSpineObservation(t, []string{
 			"you",
 			"--server", "https://factory.example",
 			"-v",
@@ -70,7 +252,7 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 		assertSpineParsedFlag(t, first, "json", true, "true")
 		assertSpineParsedFlag(t, first, "state", true, "[RESERVED,RUNNING]")
 
-		second := executeSpineObservation(t, observerProcess, &observations, []string{
+		second := executeSpineObservation(t, []string{
 			"you",
 			"--server", "https://second.example",
 			"worker-sessions", "list",
@@ -86,16 +268,15 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 			t.Fatalf("second observed --verbose parse = %#v found=%v, want unchanged", verbose, found)
 		}
 
-		if len(observations) != 2 {
-			t.Fatalf("detached CLI observations = %d, want 2", len(observations))
-		}
-		firstState, found := cliobservation.Flag(observations[0].Parse, "state")
+		firstState, found := cliobservation.Flag(first.Parse, "state")
 		if !found || firstState.Value != "[RESERVED,RUNNING]" {
 			t.Fatalf("first detached state observation = %#v found=%v, want [RESERVED,RUNNING]", firstState, found)
 		}
 	})
 
 	t.Run("full handler submits combined signature once", func(t *testing.T) {
+		beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+		beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
 		factoryDir := scaffoldCombinedInvocationFactory(t)
 		support.WriteAgentConfig(
 			t,
@@ -105,7 +286,6 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 		)
 		factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-		before := len(submissions.snapshot())
 		inputs := spineInputs(t, []string{
 			"you", "run",
 			"--factory", factoryPath,
@@ -122,7 +302,7 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 			"--emptyArray=" + spineEmptyArray,
 		})
 
-		if err := fullHandlerProcess.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(combined parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,
@@ -131,11 +311,11 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 			)
 		}
 
-		records := submissions.snapshot()
-		if got := len(records) - before; got != 1 {
+		records := parameterProcesses.submissions.snapshot()
+		if got := len(records) - beforeSubmissions; got != 1 {
 			t.Fatalf("canonical submission delta = %d, want 1; records=%#v", got, records)
 		}
-		arguments := records[before].Request.InvocationArguments
+		arguments := records[beforeSubmissions].Request.InvocationArguments
 		if arguments == nil {
 			t.Fatal("submitted invocation arguments = nil")
 		}
@@ -163,33 +343,15 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 				}
 			}
 		}
-		if got := providerRunner.CallCount(); got != 1 {
-			t.Fatalf("controlled provider command calls = %d, want 1", got)
+		if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 1 {
+			t.Fatalf("controlled provider command call delta = %d, want 1", got)
 		}
 	})
 }
 
-func executeSpineObservation(
-	t *testing.T,
-	process support.Process,
-	observations *[]cliobservation.Result,
-	args []string,
-) cliobservation.Result {
+func executeSpineObservation(t *testing.T, args []string) cliobservation.Result {
 	t.Helper()
-	before := len(*observations)
-	inputs := spineInputs(t, args)
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(parser observation) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	if got := len(*observations) - before; got != 1 {
-		t.Fatalf("detached CLI observation delta = %d, want 1", got)
-	}
-	return (*observations)[before]
+	return executeParameterObservation(t, args)
 }
 
 func assertSpineParsedFlag(
@@ -265,10 +427,7 @@ func assertSpineJSONArgument(
 
 func spineInputs(t *testing.T, args []string) *support.CapturedInputs {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	inputs.Input.Env = spineEnvironment(inputs.Input.Env, t.TempDir())
-	return inputs
+	return parameterInputs(t, args)
 }
 
 func spineEnvironment(environment []string, home string) []string {

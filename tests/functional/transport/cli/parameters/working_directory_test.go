@@ -2,21 +2,15 @@ package parameters_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestCLIRelativeFactoryPathResolvesFromInvocationDirectory proves the public CLI
@@ -37,18 +31,12 @@ func TestCLIRelativeFactoryPathResolvesFromInvocationDirectory(t *testing.T) {
 		t.Fatalf("write Current Factory: %v", err)
 	}
 
-	homeDirectory := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{
+	inputs := parameterInputs(t, []string{
 		"you", "run", "--no-record",
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
-	inputs.Input.Env = append(
-		os.Environ(),
-		"HOME="+homeDirectory,
-		"USERPROFILE="+homeDirectory,
-	)
 
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(Current Factory from invocation directory) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -74,18 +62,12 @@ func TestCLIWorkingDirectoryDoesNotLeakIntoOutput(t *testing.T) {
 	invocationDirectory := t.TempDir()
 	factoryDirectory := seedFlattenableFactoryUnderInvocation(t, invocationDirectory)
 
-	homeDirectory := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{
+	inputs := parameterInputs(t, []string{
 		"you", "factory", "config", "flatten", factoryDirectory,
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
-	inputs.Input.Env = append(
-		os.Environ(),
-		"HOME="+homeDirectory,
-		"USERPROFILE="+homeDirectory,
-	)
 
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config flatten) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -114,40 +96,14 @@ func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
 	invocationDirectory := t.TempDir()
 	missingFactoryJSON := filepath.Join(invocationDirectory, "factory", "factory.json")
 
-	homeDirectory := t.TempDir()
-	var lifecycleEffects atomic.Int32
-	providerRunner := testutil.NewProviderCommandRunner()
-
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeLifecycleEffects := parameterProcesses.lifecycleEffects.Load()
+	beforeProviderCalls := parameterProcesses.missingProvider.CallCount()
+	inputs := parameterInputs(t, []string{
 		"you", "run", "--no-record",
 	})
 	inputs.Input.WorkingDirectory = invocationDirectory
-	inputs.Input.Env = append(
-		os.Environ(),
-		"HOME="+homeDirectory,
-		"USERPROFILE="+homeDirectory,
-	)
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			lifecycleEffects.Add(1)
-			return nil
-		},
-		BrowserOpener: func(context.Context, string) error {
-			lifecycleEffects.Add(1)
-			return nil
-		},
-		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
-			lifecycleEffects.Add(1)
-		},
-		FactorySessionIDGenerator: func() string {
-			lifecycleEffects.Add(1)
-			return "unexpected-session"
-		},
-	})
-
-	if err := process.Execute(inputs.Input); err == nil {
+	if err := parameterProcesses.missingAssetProcess.Execute(inputs.Input); err == nil {
 		t.Fatalf(
 			"missing Current Factory succeeded; stdout:\n%s\nstderr:\n%s",
 			inputs.Stdout(),
@@ -178,11 +134,11 @@ func TestCLIMissingWorkingDirectoryAssetFailsActionably(t *testing.T) {
 	if inputs.Stdout() != "" {
 		t.Fatalf("missing Current Factory stdout = %q, want empty", inputs.Stdout())
 	}
-	if providerRunner.CallCount() != 0 {
-		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+	if got := parameterProcesses.missingProvider.CallCount() - beforeProviderCalls; got != 0 {
+		t.Fatalf("provider dispatch call delta = %d, want 0", got)
 	}
-	if lifecycleEffects.Load() != 0 {
-		t.Fatalf("lifecycle activation effects = %d, want 0", lifecycleEffects.Load())
+	if got := parameterProcesses.lifecycleEffects.Load() - beforeLifecycleEffects; got != 0 {
+		t.Fatalf("lifecycle activation effect delta = %d, want 0", got)
 	}
 }
 

@@ -6,11 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -25,31 +22,18 @@ func TestCLIJSONParameterPreservesNestedObjectAndArray(t *testing.T) {
 
 	factoryDir := scaffoldJSONInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
-	submissions := &invocationSubmissionObservation{}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		SubmissionRecorder: submissions.observe,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"invoke marker",
 		"--metadata=" + metadataValue,
 		"--items=" + itemsValue,
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(JSON parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -58,11 +42,11 @@ func TestCLIJSONParameterPreservesNestedObjectAndArray(t *testing.T) {
 		)
 	}
 
-	records := submissions.snapshot()
-	if len(records) != 1 {
+	records := parameterProcesses.submissions.snapshot()
+	if got := len(records) - beforeSubmissions; got != 1 {
 		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
 	}
-	arguments := records[0].Request.InvocationArguments
+	arguments := records[beforeSubmissions].Request.InvocationArguments
 	if arguments == nil {
 		t.Fatal("submitted invocation arguments = nil")
 	}
@@ -101,13 +85,9 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 		}
 	})
 
-	submissions := &invocationSubmissionObservation{}
-	providerRunner := testutil.NewProviderCommandRunner()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		SubmissionRecorder:    submissions.observe,
-		ProviderCommandRunner: providerRunner,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
@@ -115,9 +95,8 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 		"--metadata=" + invalidMetadataValue,
 		"--items=" + validItemsValue,
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	executeErr := process.Execute(inputs.Input)
+	executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
 	if executeErr == nil {
 		t.Fatalf(
 			"Process.Execute(invalid JSON parameter) succeeded; stdout:\n%s\nstderr:\n%s",
@@ -144,11 +123,11 @@ func TestCLIInvalidJSONParameterNamesTheParameter(t *testing.T) {
 		response.Family != factoryapi.ErrorFamilyBadRequest {
 		t.Fatalf("ErrorResponse = %#v, want string-validation code and BAD_REQUEST", response)
 	}
-	if records := submissions.snapshot(); len(records) != 0 {
-		t.Fatalf("canonical submissions = %d, want 0; records=%#v", len(records), records)
+	if records := parameterProcesses.submissions.snapshot(); len(records)-beforeSubmissions != 0 {
+		t.Fatalf("canonical submission delta = %d, want 0; records=%#v", len(records)-beforeSubmissions, records)
 	}
-	if providerRunner.CallCount() != 0 {
-		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
+		t.Fatalf("provider dispatch call delta = %d, want 0", got)
 	}
 }
 
@@ -164,33 +143,20 @@ func TestCLIJSONNullAndEmptyValuesRemainDistinct(t *testing.T) {
 
 	factoryDir := scaffoldJSONNullAndEmptyInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
-	submissions := &invocationSubmissionObservation{}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		SubmissionRecorder: submissions.observe,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"invoke marker",
 		"--nullable=" + nullValue,
 		"--emptyString=" + emptyStringValue,
 		"--emptyObject=" + emptyObjectValue,
 		"--emptyArray=" + emptyArrayValue,
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(null and empty JSON parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -199,11 +165,11 @@ func TestCLIJSONNullAndEmptyValuesRemainDistinct(t *testing.T) {
 		)
 	}
 
-	records := submissions.snapshot()
-	if len(records) != 1 {
+	records := parameterProcesses.submissions.snapshot()
+	if got := len(records) - beforeSubmissions; got != 1 {
 		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
 	}
-	arguments := records[0].Request.InvocationArguments
+	arguments := records[beforeSubmissions].Request.InvocationArguments
 	if arguments == nil {
 		t.Fatal("submitted invocation arguments = nil")
 	}
