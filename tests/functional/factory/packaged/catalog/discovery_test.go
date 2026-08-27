@@ -11,12 +11,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -211,12 +212,13 @@ func TestFactoryListProjectsEffectiveCatalogWithoutInitialization(t *testing.T) 
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		FactoryDefinitionAuthoredReaderFileSystem: failingDefinitionReader{
-			Local:       platformfilesystem.Local{},
-			failingPath: filepath.Join(globalRoot, "unreadable", "factory.json"),
-		},
-	}).Execute(inputs.Input); err != nil {
+	fixture := sharedCatalogProcess(t)
+	fixture.authored.setDelegate(failingDefinitionReader{
+		Local:       platformfilesystem.Local{},
+		failingPath: filepath.Join(globalRoot, "unreadable", "factory.json"),
+	})
+	t.Cleanup(func() { fixture.authored.setDelegate(platformfilesystem.Local{}) })
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 
@@ -306,11 +308,12 @@ func TestFactoryListReportsCatalogDiscoveryFailuresAtomically(t *testing.T) {
 			inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = workingDirectory
-			err := support.BuildProcess(t, serviceedges.Edges{
-				FactoryDefinitionNamedFactoryCatalogFileSystem: failingCatalogFileSystem{
-					Local: platformfilesystem.Local{}, failingRoot: failingRoot, err: sourceErr,
-				},
-			}).Execute(inputs.Input)
+			fixture := sharedCatalogProcess(t)
+			fixture.namedCatalog.setDelegate(failingCatalogFileSystem{
+				Local: platformfilesystem.Local{}, failingRoot: failingRoot, err: sourceErr,
+			})
+			t.Cleanup(func() { fixture.namedCatalog.setDelegate(platformfilesystem.Local{}) })
+			err := fixture.process.Execute(inputs.Input)
 			if err == nil || !strings.Contains(err.Error(), test.want) || !errors.Is(err, sourceErr) {
 				t.Fatalf("Process.Execute(factory list) error = %v, want %q wrapping source failure", err, test.want)
 			}
@@ -331,7 +334,7 @@ func TestFactoryListHonorsPreCanceledContextAtomically(t *testing.T) {
 	inputs := support.FakeInputs(ctx, []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = t.TempDir()
-	err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	err := sharedCatalogProcess(t).process.Execute(inputs.Input)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Process.Execute(factory list) error = %v, want context canceled", err)
 	}
@@ -431,17 +434,55 @@ func discoveredPackagedFactoryNamesViaHTTP(t *testing.T) ([]string, error) {
 	return names, nil
 }
 
+// sharedPackagedFactoryCatalog caches one local service-mode HTTP catalog
+// response for all compatible API-owned catalog observations in this package.
+// The server, root process, and temporary directories live entirely inside a
+// single fetch; only the immutable decoded response is reused across tests.
+var (
+	sharedPackagedFactoryCatalogOnce sync.Once
+	sharedPackagedFactoryCatalog     factoryapi.PackagedFactoryCatalogResponse
+	sharedPackagedFactoryCatalogErr  error
+)
+
 func discoveredPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactoryCatalogResponse, error) {
 	t.Helper()
 
+	sharedPackagedFactoryCatalogOnce.Do(func() {
+		sharedPackagedFactoryCatalog, sharedPackagedFactoryCatalogErr = fetchPackagedFactoryCatalogViaHTTP(t)
+	})
+	if sharedPackagedFactoryCatalogErr != nil {
+		return factoryapi.PackagedFactoryCatalogResponse{}, sharedPackagedFactoryCatalogErr
+	}
+	return sharedPackagedFactoryCatalog, nil
+}
+
+func fetchPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactoryCatalogResponse, error) {
+	t.Helper()
+
 	dir := support.ScaffoldFactory(t, packagedFactoryCatalogTestConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
+	fixture := sharedCatalogProcess(t)
+	server := support.NewProcessAPIServer()
+	fixture.apiRouter.set(server)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run",
+		"--continuously",
+		"--with-server",
+		"--quiet",
+		"--dir", dir,
+		"--no-record",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
+	inputs.Input.WorkingDirectory = dir
+	command := support.StartProcessCommand(t, fixture.process, inputs.Input)
+	baseURL, err := server.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		return factoryapi.PackagedFactoryCatalogResponse{}, err
+	}
+	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 
-	response, err := http.Get(server.URL() + "/packaged-factories")
+	response, err := http.Get(baseURL + "/packaged-factories")
 	if err != nil {
 		return factoryapi.PackagedFactoryCatalogResponse{}, err
 	}
@@ -463,6 +504,7 @@ func discoveredPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedF
 			return factoryapi.PackagedFactoryCatalogResponse{}, fmt.Errorf("catalog entry missing name: %#v", factory)
 		}
 	}
+	command.Stop(t)
 	return catalog, nil
 }
 

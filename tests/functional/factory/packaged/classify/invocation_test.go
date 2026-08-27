@@ -9,9 +9,6 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,8 +21,8 @@ func TestPackagedClassifyRoutesSmallMediumAndLarge(t *testing.T) {
 				platformprocess.CommandResult{Stdout: []byte(lane)},
 				platformprocess.CommandResult{Stdout: []byte(lane + " lane completed")},
 			)
-			server := startClassifyServer(t, runner)
-			response := invokeClassify(t, server, map[string]any{"request": "route this " + lane + " request"})
+			scenario := openClassifyScenario(t, runner)
+			response := invokeClassify(t, scenario, map[string]any{"request": "route this " + lane + " request"})
 
 			if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 				t.Fatalf("status = %q, want COMPLETED; response = %#v", response.Status, response)
@@ -33,7 +30,10 @@ func TestPackagedClassifyRoutesSmallMediumAndLarge(t *testing.T) {
 			if got := primaryText(t, response); !strings.Contains(got, lane+" lane completed") {
 				t.Fatalf("primary result = %q, want selected %s lane result", got, lane)
 			}
-			dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+			dispatches := support.ObserveDispatchEvents(
+				t,
+				support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID),
+			)
 			if len(dispatches) != 2 || dispatches[0].Request.TransitionId != "classify-request" ||
 				dispatches[1].Request.TransitionId != "execute-"+lane {
 				t.Fatalf("dispatches = %#v, want classifier then %s executor", dispatches, lane)
@@ -44,8 +44,8 @@ func TestPackagedClassifyRoutesSmallMediumAndLarge(t *testing.T) {
 
 func TestPackagedClassifyInvalidLabelFailsWithoutExecutingLane(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("extra-large")})
-	server := startClassifyServer(t, runner)
-	response := invokeClassify(t, server, map[string]any{"request": "route an invalid classification"})
+	scenario := openClassifyScenario(t, runner)
+	response := invokeClassify(t, scenario, map[string]any{"request": "route an invalid classification"})
 
 	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
 		t.Fatalf("response = %#v, want failed invocation without primary result", response)
@@ -60,8 +60,8 @@ func TestPackagedClassifyRoleProviderAndModelSelections(t *testing.T) {
 		platformprocess.CommandResult{Stdout: []byte("small")},
 		platformprocess.CommandResult{Stdout: []byte("selected lane completed")},
 	)
-	server := startClassifyServer(t, runner)
-	response := invokeClassify(t, server, map[string]any{
+	scenario := openClassifyScenario(t, runner)
+	response := invokeClassify(t, scenario, map[string]any{
 		"request":            "route with role overrides",
 		"classifierProvider": "CLAUDE", "classifierModel": "classifier-model",
 		"smallProvider": "CODEX", "smallModel": "small-model",
@@ -78,17 +78,7 @@ func TestPackagedClassifyRoleProviderAndModelSelections(t *testing.T) {
 	assertProviderSelection(t, requests[1], "codex", "small-model")
 }
 
-func startClassifyServer(t *testing.T, runner *support.ShapedProviderCommandRunner) *support.FunctionalAPIServer {
-	t.Helper()
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedClassifyFactoryName)
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
-		Args:  []string{"--provider", "CODEX", "--model", "operator-model"},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-}
-
-func invokeClassify(t *testing.T, server *support.FunctionalAPIServer, args map[string]any) factoryapi.InvocationResponse {
+func invokeClassify(t *testing.T, scenario *classifyScenario, args map[string]any) factoryapi.InvocationResponse {
 	t.Helper()
 	requestID := fmt.Sprintf("classify-%s", strings.ReplaceAll(fmt.Sprint(args["request"]), " ", "-"))
 	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
@@ -96,7 +86,7 @@ func invokeClassify(t *testing.T, server *support.FunctionalAPIServer, args map[
 		t.Fatalf("marshal invocation: %v", err)
 	}
 	response, err := http.Post(
-		server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		scenario.fixture.baseURL+"/factory-sessions/"+scenario.sessionID+"/invocations",
 		"application/json",
 		bytes.NewReader(payload),
 	)
