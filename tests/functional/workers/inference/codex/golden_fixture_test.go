@@ -1,8 +1,6 @@
 package codex
 
 import (
-	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +39,7 @@ func loadCodexGoldenCase(t *testing.T, caseName string) support.ProviderSessionC
 
 type codexGoldenFixture struct {
 	process       support.ApplicationProcess
-	command       *support.ProcessCommand
+	command       *codexPackageProcessCommand
 	baseURL       string
 	hostDir       string
 	apiStopped    <-chan struct{}
@@ -104,43 +102,23 @@ func newCodexGoldenFixture(t *testing.T) *codexGoldenFixture {
 		)
 	}
 
-	identities := &codexIdentityGenerator{}
-	scenarios := newCodexGoldenScenarios(t)
-	routes := make([]codexCommandRoute, 0, len(scenarios))
-	for _, scenario := range scenarios {
-		routes = append(routes, codexCommandRoute{
-			selector: scenario.factoryDir,
-			label:    scenario.name,
-			runner:   scenario.runner,
-		})
-	}
-	router, err := newCodexCommandRouter(routes)
-	if err != nil {
-		t.Fatalf("newCodexCommandRouter: %v", err)
-	}
-
-	hostDir := newCodexHostDir(t)
-	process, command, apiStopped, apiStarts, baseURL := newCodexProcess(
-		t,
-		hostDir,
-		router,
-		identities,
-	)
+	packageFixture := ensureCodexPackageFixture(t)
+	packageFixture.beginGroup(t, "golden")
 	return &codexGoldenFixture{
-		process:    process,
-		command:    command,
-		baseURL:    baseURL,
-		hostDir:    hostDir,
-		apiStopped: apiStopped,
-		router:     router,
-		identities: identities,
-		apiStarts:  apiStarts,
-		scenarios:  scenarios,
-		ledger:     make(map[string]codexGoldenScenarioObservation, len(scenarios)),
+		process:    packageFixture.process,
+		command:    packageFixture.command,
+		baseURL:    packageFixture.baseURL,
+		hostDir:    packageFixture.hostDir,
+		apiStopped: packageFixture.apiStopped,
+		router:     packageFixture.router,
+		identities: packageFixture.identities,
+		apiStarts:  packageFixture.apiStarts,
+		scenarios:  packageFixture.goldenScenarios,
+		ledger:     make(map[string]codexGoldenScenarioObservation, len(packageFixture.goldenScenarios)),
 	}
 }
 
-func newCodexGoldenScenarios(t *testing.T) []codexGoldenScenario {
+func newCodexGoldenScenariosAt(t *testing.T, rootDir string) []codexGoldenScenario {
 	t.Helper()
 
 	success := loadCodexGoldenCase(t, "success")
@@ -217,7 +195,12 @@ func newCodexGoldenScenarios(t *testing.T) []codexGoldenScenario {
 
 	scenarios := make([]codexGoldenScenario, 0, len(fixtures))
 	for _, fixture := range fixtures {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+		dir := copyCodexFixtureDir(
+			t,
+			support.LegacyFixtureDir(t, "executor_success"),
+			rootDir,
+			"golden-"+fixture.name,
+		)
 		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 			modelprovider.ProviderCodex,
 			fixture.model,
@@ -250,6 +233,27 @@ func newCodexGoldenScenarios(t *testing.T) []codexGoldenScenario {
 		})
 	}
 	return scenarios
+}
+
+func resetCodexGoldenScenario(t *testing.T, scenario codexGoldenScenario) {
+	t.Helper()
+	overwriteCodexFixtureDir(
+		t,
+		support.LegacyFixtureDir(t, "executor_success"),
+		scenario.factoryDir,
+	)
+	support.WriteAgentConfig(t, scenario.factoryDir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		scenario.model,
+	))
+	testutil.WriteSeedRequest(t, scenario.factoryDir, workservice.SubmitRequest{
+		RequestID:  scenario.requestID,
+		WorkID:     scenario.workID,
+		Name:       scenario.workID,
+		WorkTypeID: "task",
+		TraceID:    scenario.traceID,
+		Payload:    []byte(`{"title":"codex golden shared process"}`),
+	})
 }
 
 func assertCodexGoldenManifest(
@@ -439,19 +443,6 @@ func (fixture *codexGoldenFixture) assertSharedIdentityLedger(t *testing.T) {
 
 func (fixture *codexGoldenFixture) assertSharedProcessCleanup(t *testing.T) {
 	t.Helper()
-
-	closeCtx, cancel := context.WithTimeout(context.Background(), codexConductorRunTimeout)
-	defer cancel()
-	fixture.command.Stop(t)
-	if err := fixture.process.Close(closeCtx); err != nil {
-		t.Fatalf("close shared Codex golden application process: %v", err)
-	}
-	select {
-	case <-fixture.apiStopped:
-	case <-time.After(codexConductorRunTimeout):
-		t.Fatal("shared Codex golden API server did not close after process cleanup")
-	}
-	fixture.removeOwnedDirectories(t)
 }
 
 func assertCodexGoldenWork(
@@ -696,22 +687,5 @@ func drainCodexGoldenResponseEvents(
 			t.Fatalf("%s response stream drain failed: %s", scenario.name, result.Diagnostic())
 		}
 		return extra
-	}
-}
-
-func (fixture *codexGoldenFixture) removeOwnedDirectories(t *testing.T) {
-	t.Helper()
-	ownedDirs := make([]string, 0, len(fixture.scenarios)+1)
-	ownedDirs = append(ownedDirs, fixture.hostDir)
-	for _, scenario := range fixture.scenarios {
-		ownedDirs = append(ownedDirs, scenario.factoryDir)
-	}
-	for _, path := range ownedDirs {
-		if err := os.RemoveAll(path); err != nil {
-			t.Fatalf("remove test-owned Factory directory %q: %v", path, err)
-		}
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("test-owned Factory directory %q still exists after cleanup: %v", path, err)
-		}
 	}
 }

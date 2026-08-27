@@ -1,12 +1,8 @@
 package codex
 
 import (
-	"context"
-	"errors"
-	"os"
 	"strings"
 	"testing"
-	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -79,18 +75,6 @@ func (fixture *codexConductorFixture) runScenario(
 func (fixture *codexConductorFixture) assertSharedProcessCleanup(t *testing.T) {
 	t.Helper()
 
-	closeCtx, cancel := context.WithTimeout(context.Background(), codexConductorRunTimeout)
-	defer cancel()
-	fixture.command.Stop(t)
-	if err := fixture.process.Close(closeCtx); err != nil {
-		t.Fatalf("close shared Codex application process: %v", err)
-	}
-	select {
-	case <-fixture.apiStopped:
-	case <-time.After(codexConductorRunTimeout):
-		t.Fatal("shared Codex API server did not close after process cleanup")
-	}
-
 	expectedSessions := fixture.opened.Load()
 	if expectedSessions == 0 {
 		t.Fatal("cleanup probe observed no executed Factory Session")
@@ -107,25 +91,6 @@ func (fixture *codexConductorFixture) assertSharedProcessCleanup(t *testing.T) {
 	for _, scenario := range fixture.scenarios {
 		if got := scenario.runner.ActiveCallCount(); got != 0 {
 			t.Fatalf("%s active Codex command calls after process cleanup = %d, want 0", scenario.name, got)
-		}
-	}
-	removeCodexOwnedDirectories(t, fixture)
-}
-
-func removeCodexOwnedDirectories(t *testing.T, fixture *codexConductorFixture) {
-	t.Helper()
-
-	ownedDirs := make([]string, 0, len(fixture.scenarios)+1)
-	ownedDirs = append(ownedDirs, fixture.hostDir)
-	for _, scenario := range fixture.scenarios {
-		ownedDirs = append(ownedDirs, scenario.factoryDir)
-	}
-	for _, path := range ownedDirs {
-		if err := os.RemoveAll(path); err != nil {
-			t.Fatalf("remove test-owned Factory directory %q: %v", path, err)
-		}
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("test-owned Factory directory %q still exists after cleanup: %v", path, err)
 		}
 	}
 }

@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -10,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -23,7 +21,7 @@ import (
 
 type codexWorktreeFixture struct {
 	process    support.ApplicationProcess
-	command    *support.ProcessCommand
+	command    *codexPackageProcessCommand
 	baseURL    string
 	hostDir    string
 	apiStopped <-chan struct{}
@@ -42,6 +40,7 @@ type codexWorktreeScenario struct {
 	name         string
 	repoRoot     string
 	factoryDir   string
+	parentRel    string
 	workName     string
 	workID       string
 	requestID    string
@@ -94,43 +93,23 @@ func TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktre
 func newCodexWorktreeFixture(t *testing.T) *codexWorktreeFixture {
 	t.Helper()
 
-	identities := &codexIdentityGenerator{}
-	scenarios := newCodexWorktreeScenarios(t)
-	routes := make([]codexCommandRoute, 0, len(scenarios))
-	for _, scenario := range scenarios {
-		routes = append(routes, codexCommandRoute{
-			selector: scenario.checkoutPath,
-			label:    scenario.name,
-			runner:   scenario.runner,
-		})
-	}
-	router, err := newCodexCommandRouter(routes)
-	if err != nil {
-		t.Fatalf("newCodexCommandRouter: %v", err)
-	}
-
-	hostDir := newCodexHostDir(t)
-	process, command, apiStopped, apiStarts, baseURL := newCodexProcess(
-		t,
-		hostDir,
-		router,
-		identities,
-	)
+	packageFixture := ensureCodexPackageFixture(t)
+	packageFixture.beginGroup(t, "worktree")
 	return &codexWorktreeFixture{
-		process:    process,
-		command:    command,
-		baseURL:    baseURL,
-		hostDir:    hostDir,
-		apiStopped: apiStopped,
-		router:     router,
-		identities: identities,
-		apiStarts:  apiStarts,
-		scenarios:  scenarios,
-		ledger:     make(map[string]codexWorktreeObservation, len(scenarios)),
+		process:    packageFixture.process,
+		command:    packageFixture.command,
+		baseURL:    packageFixture.baseURL,
+		hostDir:    packageFixture.hostDir,
+		apiStopped: packageFixture.apiStopped,
+		router:     packageFixture.router,
+		identities: packageFixture.identities,
+		apiStarts:  packageFixture.apiStarts,
+		scenarios:  packageFixture.worktreeScenarios,
+		ledger:     make(map[string]codexWorktreeObservation, len(packageFixture.worktreeScenarios)),
 	}
 }
 
-func newCodexWorktreeScenarios(t *testing.T) []codexWorktreeScenario {
+func newCodexWorktreeScenariosAt(t *testing.T, rootDir string) []codexWorktreeScenario {
 	t.Helper()
 
 	cases := []codexWorktreeCase{
@@ -155,15 +134,19 @@ func newCodexWorktreeScenarios(t *testing.T) []codexWorktreeScenario {
 
 	scenarios := make([]codexWorktreeScenario, 0, len(cases))
 	for _, fixture := range cases {
-		scenarios = append(scenarios, newCodexWorktreeScenario(t, fixture))
+		scenarios = append(scenarios, newCodexWorktreeScenarioAt(t, rootDir, fixture))
 	}
 	return scenarios
 }
 
-func newCodexWorktreeScenario(t *testing.T, fixture codexWorktreeCase) codexWorktreeScenario {
+func newCodexWorktreeScenarioAt(
+	t *testing.T,
+	rootDir string,
+	fixture codexWorktreeCase,
+) codexWorktreeScenario {
 	t.Helper()
 
-	repoRoot := initGitRepositoryForCodexWorktreeFunctionalTest(t)
+	repoRoot := initGitRepositoryForCodexWorktreeFunctionalTestAt(t, rootDir)
 	factoryDir := filepath.Join(repoRoot, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("create factory dir: %v", err)
@@ -203,6 +186,7 @@ Process the input task.
 		name:         fixture.name,
 		repoRoot:     repoRoot,
 		factoryDir:   factoryDir,
+		parentRel:    fixture.wantParentRel,
 		workName:     fixture.workName,
 		workID:       fixture.workID,
 		requestID:    fixture.requestID,
@@ -210,6 +194,40 @@ Process the input task.
 		checkoutPath: checkoutPath,
 		runner:       runner,
 	}
+}
+
+func resetCodexWorktreeScenario(t *testing.T, scenario codexWorktreeScenario) {
+	t.Helper()
+	if err := os.RemoveAll(scenario.repoRoot); err != nil {
+		t.Fatalf("remove Codex worktree repository %q for reset: %v", scenario.repoRoot, err)
+	}
+	initializeCodexGitRepository(t, scenario.repoRoot)
+
+	factoryDir := filepath.Join(scenario.repoRoot, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("recreate Codex worktree factory dir: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(factoryDir, filepath.FromSlash(scenario.parentRel)), 0o755); err != nil {
+		t.Fatalf("recreate Codex worktree parent: %v", err)
+	}
+	writeCodexWorktreeFactoryConfig(t, factoryDir)
+	support.WriteAgentConfig(t, factoryDir, "worker-a", `---
+type: MODEL_WORKER
+modelProvider: codex
+model: test-model
+stopToken: COMPLETE
+---
+Process the input task.
+`)
+	writeCodexWorktreeWorkstationAgents(t, factoryDir)
+	testutil.WriteSeedRequest(t, factoryDir, work.SubmitRequest{
+		RequestID:  scenario.requestID,
+		Name:       scenario.workName,
+		WorkID:     scenario.workID,
+		WorkTypeID: "task",
+		TraceID:    scenario.traceID,
+		Payload:    []byte("codex worktree workstation payload"),
+	})
 }
 
 func (fixture *codexWorktreeFixture) runScenario(
@@ -336,32 +354,23 @@ func (fixture *codexWorktreeFixture) assertSharedIdentityLedger(t *testing.T) {
 	if got := fixture.identities.sessionCount(); got < uint64(len(fixture.scenarios)) {
 		t.Fatalf("Factory Session IDs generated = %d, want at least %d explicit sessions", got, len(fixture.scenarios))
 	}
-	if got := fixture.router.callCount(); got != len(fixture.scenarios) {
-		t.Fatalf("shared process routed provider calls = %d, want %d", got, len(fixture.scenarios))
+	routedCalls := 0
+	for _, scenario := range fixture.scenarios {
+		routedCalls += scenario.runner.CallCount()
+	}
+	if routedCalls != len(fixture.scenarios) {
+		t.Fatalf("shared process routed worktree provider calls = %d, want %d", routedCalls, len(fixture.scenarios))
 	}
 }
 
 func (fixture *codexWorktreeFixture) assertSharedProcessCleanup(t *testing.T) {
 	t.Helper()
 
-	closeCtx, cancel := context.WithTimeout(context.Background(), codexConductorRunTimeout)
-	defer cancel()
-	fixture.command.Stop(t)
-	if err := fixture.process.Close(closeCtx); err != nil {
-		t.Fatalf("close shared Codex worktree application process: %v", err)
-	}
-	select {
-	case <-fixture.apiStopped:
-	case <-time.After(codexConductorRunTimeout):
-		t.Fatal("shared Codex worktree API server did not close after process cleanup")
-	}
 	for _, scenario := range fixture.scenarios {
 		if got := scenario.runner.ActiveCallCount(); got != 0 {
-			t.Fatalf("%s active Codex command calls after process cleanup = %d, want 0", scenario.name, got)
+			t.Fatalf("%s active Codex command calls after scenario cleanup = %d, want 0", scenario.name, got)
 		}
-		cleanupCodexWorktreeScenario(t, scenario)
 	}
-	removeCodexWorktreePath(t, fixture.hostDir)
 }
 
 func assertCodexWorktreeWorkCompleted(
@@ -570,18 +579,29 @@ func writeCodexWorktreeFactoryConfig(t *testing.T, factoryDir string) {
 	}
 }
 
-func initGitRepositoryForCodexWorktreeFunctionalTest(t *testing.T) string {
+func initGitRepositoryForCodexWorktreeFunctionalTestAt(t *testing.T, rootDir string) string {
+	t.Helper()
+
+	repoRoot, err := os.MkdirTemp(rootDir, "worktree-repo-")
+	if err != nil {
+		t.Fatalf("create Codex worktree repository: %v", err)
+	}
+	initializeCodexGitRepository(t, repoRoot)
+	return repoRoot
+}
+
+func initializeCodexGitRepository(t *testing.T, repoRoot string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available in PATH")
 	}
-
-	repoRoot := t.TempDir()
+	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
+		t.Fatalf("create Codex worktree repository root: %v", err)
+	}
 	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "init")
 	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "config", "user.email", "codex-worktree-functional@example.com")
 	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "config", "user.name", "codex worktree functional")
 	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "commit", "--allow-empty", "-m", "init")
-	return repoRoot
 }
 
 func runGitForCodexWorktreeFunctionalTest(t *testing.T, dir string, args ...string) {

@@ -9,9 +9,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	workservice "github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -20,7 +18,7 @@ import (
 
 type codexConductorFixture struct {
 	process       support.ApplicationProcess
-	command       *support.ProcessCommand
+	command       *codexPackageProcessCommand
 	baseURL       string
 	hostDir       string
 	apiStopped    <-chan struct{}
@@ -65,43 +63,23 @@ type codexScenarioObservation struct {
 func newCodexConductorFixture(t *testing.T) *codexConductorFixture {
 	t.Helper()
 
-	identities := &codexIdentityGenerator{}
-	hostDir := newCodexHostDir(t)
-	scenarios := newCodexScenarios(t)
-	routes := make([]codexCommandRoute, 0, len(scenarios))
-	for _, scenario := range scenarios {
-		routes = append(routes, codexCommandRoute{
-			selector: scenario.factoryDir,
-			label:    scenario.name,
-			runner:   scenario.runner,
-		})
-	}
-	router, err := newCodexCommandRouter(routes)
-	if err != nil {
-		t.Fatalf("newCodexCommandRouter: %v", err)
-	}
-
-	process, command, apiStopped, apiStarts, baseURL := newCodexProcess(
-		t,
-		hostDir,
-		router,
-		identities,
-	)
+	packageFixture := ensureCodexPackageFixture(t)
+	packageFixture.beginGroup(t, "conductor")
 	return &codexConductorFixture{
-		process:    process,
-		command:    command,
-		baseURL:    baseURL,
-		hostDir:    hostDir,
-		apiStopped: apiStopped,
-		router:     router,
-		identities: identities,
-		apiStarts:  apiStarts,
-		scenarios:  scenarios,
-		ledger:     make(map[string]codexScenarioObservation, len(scenarios)),
+		process:    packageFixture.process,
+		command:    packageFixture.command,
+		baseURL:    packageFixture.baseURL,
+		hostDir:    packageFixture.hostDir,
+		apiStopped: packageFixture.apiStopped,
+		router:     packageFixture.router,
+		identities: packageFixture.identities,
+		apiStarts:  packageFixture.apiStarts,
+		scenarios:  packageFixture.conductorScenarios,
+		ledger:     make(map[string]codexScenarioObservation, len(packageFixture.conductorScenarios)),
 	}
 }
 
-func newCodexScenarios(t *testing.T) []codexConductorScenario {
+func newCodexScenariosAt(t *testing.T, rootDir string) []codexConductorScenario {
 	t.Helper()
 
 	fixtures := []struct {
@@ -143,7 +121,12 @@ func newCodexScenarios(t *testing.T) []codexConductorScenario {
 
 	scenarios := make([]codexConductorScenario, 0, len(fixtures))
 	for _, fixture := range fixtures {
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+		dir := copyCodexFixtureDir(
+			t,
+			support.LegacyFixtureDir(t, "executor_success"),
+			rootDir,
+			"conductor-"+fixture.name,
+		)
 		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
 			modelprovider.ProviderCodex,
 			codexConductorModel,
@@ -180,10 +163,36 @@ func newCodexScenarios(t *testing.T) []codexConductorScenario {
 	return scenarios
 }
 
-func newCodexHostDir(t *testing.T) string {
+func resetCodexConductorScenario(t *testing.T, scenario codexConductorScenario) {
+	t.Helper()
+	overwriteCodexFixtureDir(
+		t,
+		support.LegacyFixtureDir(t, "executor_success"),
+		scenario.factoryDir,
+	)
+	support.WriteAgentConfig(t, scenario.factoryDir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderCodex,
+		codexConductorModel,
+	))
+	testutil.WriteSeedRequest(t, scenario.factoryDir, workservice.SubmitRequest{
+		RequestID:  scenario.requestID,
+		WorkID:     scenario.workID,
+		Name:       scenario.workID,
+		WorkTypeID: "task",
+		TraceID:    scenario.traceID,
+		Payload:    []byte(`{"title":"codex conductor shared process"}`),
+	})
+}
+
+func newCodexHostDirAt(t *testing.T, rootDir string) string {
 	t.Helper()
 
-	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	hostDir := copyCodexFixtureDir(
+		t,
+		support.LegacyFixtureDir(t, "executor_success"),
+		rootDir,
+		"host",
+	)
 	support.WriteAgentConfig(t, hostDir, "worker", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
 		codexConductorModel,
@@ -191,60 +200,17 @@ func newCodexHostDir(t *testing.T) string {
 	return hostDir
 }
 
-func newCodexProcess(
-	t *testing.T,
-	hostDir string,
-	router *codexCommandRouter,
-	identities *codexIdentityGenerator,
-) (
-	support.ApplicationProcess,
-	*support.ProcessCommand,
-	<-chan struct{},
-	*atomic.Int32,
-	string,
-) {
-	t.Helper()
-
-	api := support.NewProcessAPIServer()
-	apiStopped := make(chan struct{})
-	var apiStarts atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: router,
-		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			apiStarts.Add(1)
-			defer close(apiStopped)
-			return api.Start(ctx, request)
-		},
-		FactorySessionIDGenerator:                identities.nextSessionID,
-		FactorySessionRuntimeInstanceIDGenerator: identities.nextRuntimeID,
-		FactorySessionResponseEventIDGenerator:   identities.nextResponseEventID,
-	})
-	support.CleanupProcess(t, process)
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", hostDir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	})
-	configureCodexProcessInputs(t, inputs, hostDir)
-	command := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := api.WaitForURL(t)
-	assertCodexHostDefaultSession(t, baseURL)
-	return process, command, apiStopped, &apiStarts, baseURL
-}
-
 func configureCodexProcessInputs(
 	t *testing.T,
 	inputs *support.CapturedInputs,
 	hostDir string,
+	homeDir string,
 ) {
 	t.Helper()
 
-	homeDir := t.TempDir()
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("create shared Codex home: %v", err)
+	}
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = hostDir
 	t.Cleanup(func() {

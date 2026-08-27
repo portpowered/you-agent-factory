@@ -92,14 +92,21 @@ func (router *codexCommandRouter) callCount() int {
 	return len(router.calls)
 }
 
+func (router *codexCommandRouter) resetCalls() {
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	router.calls = nil
+}
+
 // codexScenarioCommandRunner holds each scenario's controlled result queue
 // behind a release gate. This makes parallel sessions order-independent while
 // retaining the exact ProviderCommandRunner edge used by the application.
 type codexScenarioCommandRunner struct {
-	results []platformprocess.CommandResult
-	err     error
-	release chan struct{}
-	once    sync.Once
+	results        []platformprocess.CommandResult
+	initialResults []platformprocess.CommandResult
+	err            error
+	release        chan struct{}
+	once           sync.Once
 
 	mu       sync.Mutex
 	requests []platformprocess.CommandRequest
@@ -115,10 +122,18 @@ func newCodexScenarioCommandRunner(
 		clonedResults[index] = cloneCodexCommandResult(result)
 	}
 	return &codexScenarioCommandRunner{
-		results: clonedResults,
-		err:     runErr,
-		release: make(chan struct{}),
+		results:        cloneCodexCommandResults(clonedResults),
+		initialResults: clonedResults,
+		err:            runErr,
+		release:        make(chan struct{}),
 	}
+}
+
+func (runner *codexScenarioCommandRunner) Reset() {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	runner.results = cloneCodexCommandResults(runner.initialResults)
+	runner.requests = nil
 }
 
 func (runner *codexScenarioCommandRunner) Run(
@@ -188,6 +203,14 @@ func cloneCodexCommandResult(result platformprocess.CommandResult) platformproce
 	result.Stdout = append([]byte(nil), result.Stdout...)
 	result.Stderr = append([]byte(nil), result.Stderr...)
 	return result
+}
+
+func cloneCodexCommandResults(results []platformprocess.CommandResult) []platformprocess.CommandResult {
+	cloned := make([]platformprocess.CommandResult, len(results))
+	for index, result := range results {
+		cloned[index] = cloneCodexCommandResult(result)
+	}
+	return cloned
 }
 
 type codexIdentityGenerator struct {
