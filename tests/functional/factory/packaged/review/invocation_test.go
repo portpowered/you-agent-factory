@@ -3,6 +3,8 @@ package review
 import (
 	"strings"
 	"testing"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Story 001 characterization map (reconciled against the recovered P022
@@ -28,17 +30,20 @@ import (
 //     Retained as isolated-with-reason in packaged-review-command-failure
 //     because the command-runner failure is the injected failure witness.
 //
-// Current baseline identity/resource ownership: each invocation creates its
-// own root.BuildProcess, uses the implicit default Factory Session route, and
-// supplies a t.TempDir home and working directory. No current default row
-// opens or closes an explicit session, selector, or durable runtime identity,
-// and no row directly asserts Factory Event or replay history. The eligible
-// migration must allocate unique Work/request/selector/home/workspace/
-// Factory/runtime identities; retained rows keep their failure fidelity. The
-// testing package owns every temporary path, and story 004 owns the direct
-// process/session/runtime census. Existing assertions are characterization and
-// must remain intact. The functionallong TestCodeReviewLoop is mapped in its
-// own file and is excluded from this seven-row default inventory.
+// Current migration identity/resource ownership: eligible rows share one
+// root-built continuous host, but each scenario owns a copied Factory,
+// explicit Factory Session, selector, request, and temporary home/workspace.
+// The eligible API invocation is a narrowly scoped CLI-plus-API parity
+// exception: the packaged Petri Factory must run in its already-open session
+// so the tests can inspect canonical Work/Event/dispatch/replay history, while
+// public run has no session-target flag and its remote durable source only
+// resolves JavaScript workflow factories. The shared-process
+// CLIResponseMatchesExplicitSession cell still executes the same success via
+// the root-built customer CLI and compares terminal response and primary
+// result. Retained command-failure and separate functionallong rows keep their
+// original isolated resource ownership. Existing assertions are
+// characterization and must remain intact. Story 004 owns the direct
+// process/session/runtime census.
 
 // TestPackagedReviewSharedProcess proves compatible public-outcome scenarios
 // share one root-built process while retaining explicit unique Factory Sessions,
@@ -50,6 +55,7 @@ func TestPackagedReviewSharedProcess(t *testing.T) {
 	t.Run("MalformedDecisionEnvelopeUsesCanonicalFailurePath", testPackagedReviewMalformedDecisionEnvelope)
 	t.Run("DecisionEnvelopeValidatesRecordedOutputWork", testPackagedReviewRecordedOutputWork)
 	t.Run("RejectionHonorsMaterializedAndFlaggedProviderSettings", testPackagedReviewProviderSettings)
+	t.Run("CLIResponseMatchesExplicitSession", testPackagedReviewCLIResponseParity)
 }
 
 func testPackagedReviewApprovalCompletes(t *testing.T) {
@@ -206,6 +212,46 @@ func testPackagedReviewProviderSettings(t *testing.T) {
 	}
 }
 
+func testPackagedReviewCLIResponseParity(t *testing.T) {
+	t.Parallel()
+	request := "prove the packaged Review CLI response"
+
+	apiRunner := &packagedReviewCommandRunner{acceptedOutput: "approved candidate work"}
+	apiScenario := openPackagedReviewScenario(t, apiRunner, "shared-cli-api-parity-review", nil)
+	apiResponse := invokePackagedReviewSession(t, apiScenario, map[string]any{
+		"input": request,
+	})
+	if apiResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("explicit-session response status = %q, want COMPLETED: %#v", apiResponse.Status, apiResponse)
+	}
+
+	cliRunner := &packagedReviewCommandRunner{acceptedOutput: "approved candidate work"}
+	cliResponse, stderr, err := runPackagedReviewCLIInvocation(
+		t,
+		cliRunner,
+		request,
+		"--writer-provider", "CODEX",
+		"--writer-model", "operator-configured-model",
+		"--reviewer-provider", "CODEX",
+		"--reviewer-model", "operator-configured-model",
+	)
+	if err != nil {
+		t.Fatalf("root-built customer CLI error = %v\nresponse = %#v\nstderr = %q", err, cliResponse, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("root-built customer CLI stderr = %q, want empty successful-run stderr", stderr)
+	}
+	if cliResponse.Status != apiResponse.Status {
+		t.Fatalf("customer CLI status = %q, explicit-session status = %q", cliResponse.Status, apiResponse.Status)
+	}
+	if got, want := invocationPrimaryResultText(t, cliResponse), invocationPrimaryResultText(t, apiResponse); got != want {
+		t.Fatalf("customer CLI primary result = %q, explicit-session primary result = %q", got, want)
+	}
+	if got := strings.Join(cliRunner.Roles(), ","); got != "writer,reviewer" {
+		t.Fatalf("customer CLI stage order = %q, want writer,reviewer", got)
+	}
+}
+
 // TestPackagedReviewRetryExhaustionFails proves packaged @you/review invocation
 // returns a failed public terminal outcome with no completed success primary
 // result when the edge-mocked provider cannot satisfy the packaged approval gate,
@@ -219,7 +265,7 @@ func TestPackagedReviewRetryExhaustionFails(t *testing.T) {
 	submitted := "customer request"
 	runner := packagedReviewFailingCommandRunner{}
 
-	response, _, execErr := runPackagedReviewCLIJSONFailureInvocation(t, runner, submitted)
+	response, _, execErr := runPackagedReviewCLIInvocation(t, runner, submitted)
 	if execErr == nil {
 		t.Fatal("Process.Execute error = nil, want terminal packaged-review provider failure")
 	}

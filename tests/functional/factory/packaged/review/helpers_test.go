@@ -107,7 +107,7 @@ func packagedReviewProviderRequestIncludesModel(
 	return false
 }
 
-func runPackagedReviewCLIJSONFailureInvocation(
+func runPackagedReviewCLIInvocation(
 	t *testing.T,
 	runner platformprocess.CommandRunner,
 	requestText string,

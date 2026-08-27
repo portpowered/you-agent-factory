@@ -244,6 +244,11 @@ func waitForPackagedReviewCommand(done <-chan error) {
 	select {
 	case <-done:
 	case <-time.After(packagedReviewFixtureShutdownTimeout):
+		// The done channel is the deterministic lifecycle observation. This
+		// timer is only a bounded startup-failure/teardown safety ceiling: a
+		// failed command must not leave fixture setup hanging forever while its
+		// context and injected API server unwind. It is never scenario
+		// synchronization.
 	}
 }
 
@@ -268,6 +273,10 @@ func (fixture *packagedReviewSharedFixture) close() error {
 			errs = append(errs, fmt.Errorf("continuous command: %w", err))
 		}
 	case <-time.After(packagedReviewFixtureShutdownTimeout):
+		// The done channel is the deterministic lifecycle observation. This
+		// timer is only a bounded teardown safety ceiling for a command that
+		// failed to honor cancellation; without it TestMain could hang while
+		// closing the injected API server. It is not normal scenario waiting.
 		errs = append(errs, errors.New("timed out waiting for continuous command shutdown"))
 	}
 	closeContext, cancel := context.WithTimeout(context.Background(), packagedReviewFixtureShutdownTimeout)
@@ -342,6 +351,14 @@ func invokePackagedReviewSession(
 	args map[string]any,
 ) factoryapi.InvocationResponse {
 	t.Helper()
+	// The packaged Petri Factory must run inside this already-open explicit
+	// session so the assertions below can observe its canonical Work, Event,
+	// dispatch, and replay history. The public run CLI has no session-target
+	// flag, and its remote durable source only resolves JavaScript workflow
+	// factories, so this is the narrowly scoped CLI-plus-API parity exception.
+	// TestPackagedReviewSharedProcess/CLIResponseMatchesExplicitSession still
+	// executes the same invocation through the root-built customer CLI and
+	// compares its terminal response with this explicit-session API path.
 	payload, err := json.Marshal(factoryapi.InvocationRequest{
 		RequestId: &scenario.requestID,
 		Args:      &args,
