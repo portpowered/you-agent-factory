@@ -299,6 +299,70 @@ func TestNew_RejectsConflictingCurrentWorkPlacements(t *testing.T) {
 	}
 }
 
+func TestNew_RestoresFailedDispatchReferencesWithoutDroppingFailedWork(t *testing.T) {
+	failed := work.FactoryWorkItem{ID: "work-failed-dispatch", WorkTypeID: "task", State: "failed"}
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID:       map[string]work.FactoryWorkItem{failed.ID: failed},
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{failed.ID: failed},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:failed": {PlaceID: "task:failed", WorkItemIDs: []string{failed.ID}},
+		},
+		FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID: "dispatch-failed-work", WorkItemIDs: []string{failed.ID},
+		}},
+	}
+	f, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, failed.ID, "task:failed") {
+		t.Fatalf("failed Work marking = %#v, want task:failed", snapshot.Marking.PlaceTokens)
+	}
+}
+
+func TestNew_RejectsMalformedFailedDispatchReferences(t *testing.T) {
+	failed := work.FactoryWorkItem{ID: "work-failed-dispatch-validation", WorkTypeID: "task", State: "failed"}
+	tests := []struct {
+		name     string
+		restored *interfaces.FactoryWorldState
+		want     string
+	}{
+		{
+			name: "unknown Work",
+			restored: &interfaces.FactoryWorldState{
+				FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: "dispatch-unknown-work", WorkItemIDs: []string{"work-not-recorded"},
+				}},
+			},
+			want: `failed dispatch "dispatch-unknown-work" references unknown Work "work-not-recorded"`,
+		},
+		{
+			name: "missing dispatch identity",
+			restored: &interfaces.FactoryWorldState{
+				WorkItemsByID:       map[string]work.FactoryWorkItem{failed.ID: failed},
+				FailedWorkItemsByID: map[string]work.FactoryWorkItem{failed.ID: failed},
+				PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+					"task:failed": {PlaceID: "task:failed", WorkItemIDs: []string{failed.ID}},
+				},
+				FailedDispatches: []interfaces.FactoryWorldDispatchCompletion{{WorkItemIDs: []string{failed.ID}}},
+			},
+			want: "failed dispatch at index 0 has no dispatch identity",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(test.restored))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("New error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestNew_RejectsCompletedAutomationWithIncompatibleTopology(t *testing.T) {
 	cronWork := work.FactoryWorkItem{
 		ID: "cron-incompatible-topology", WorkTypeID: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState,
@@ -348,6 +412,65 @@ func TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts(t *testi
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := newTestFactory(withNet(test.net), withClock(platformclock.NewDeterministic(base, time.Second)), withRestoredWorldState(test.restored))
+			if err == nil || !strings.Contains(err.Error(), "has no current place occupancy") {
+				t.Fatalf("New error = %v, want fail-closed missing occupancy error", err)
+			}
+		})
+	}
+}
+
+func TestNew_RestoredAutomationRequiresOneAcceptedCompletion(t *testing.T) {
+	cronWork := work.FactoryWorkItem{
+		ID: "cron-ambiguous-completion", WorkTypeID: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState,
+		Tags: map[string]string{interfaces.TimeWorkTagKeySource: interfaces.TimeWorkSourceCron, interfaces.TimeWorkTagKeyCronWorkstation: "cron-refresh"},
+	}
+	accepted := interfaces.FactoryWorldDispatchCompletion{
+		DispatchID: "dispatch-accepted", WorkItemIDs: []string{cronWork.ID},
+		Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*interfaces.FactoryWorldState)
+	}{
+		{
+			name: "failed dispatch also references Work",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.FailedDispatches = []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: "dispatch-failed", WorkItemIDs: []string{cronWork.ID},
+				}}
+			},
+		},
+		{
+			name: "active dispatch also references Work",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.ActiveDispatches = map[string]interfaces.FactoryWorldDispatch{
+					"dispatch-active": {DispatchID: "dispatch-active", WorkItemIDs: []string{cronWork.ID}},
+				}
+			},
+		},
+		{
+			name: "multiple accepted completions",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.CompletedDispatches = append(restored.CompletedDispatches, accepted)
+			},
+		},
+		{
+			name: "non-accepted completion",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.CompletedDispatches[0].Result.Outcome = string(workerexecution.OutcomeFailed)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			restored := &interfaces.FactoryWorldState{
+				WorkItemsByID:       map[string]work.FactoryWorkItem{cronWork.ID: cronWork},
+				ActiveWorkItemsByID: map[string]work.FactoryWorkItem{cronWork.ID: cronWork},
+				PlaceOccupancyByID:  map[string]interfaces.FactoryPlaceOccupancy{},
+				CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{accepted},
+			}
+			test.mutate(restored)
+			_, err := newTestFactory(withNet(buildCronRestoreNet()), withRestoredWorldState(restored))
 			if err == nil || !strings.Contains(err.Error(), "has no current place occupancy") {
 				t.Fatalf("New error = %v, want fail-closed missing occupancy error", err)
 			}
