@@ -224,6 +224,32 @@ If you believe that the PR is complete and the CI passes, please merge the PR.
 
 If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
 
+#### Required-check and stale-head routing
+
+Before deciding to merge, never run `gh pr merge --admin` or use an
+administrative/bypass flag to force a merge past a failing required status
+check. A required status check is enforced by the repository ruleset, so an
+administrator cannot make a failing head eligible by bypassing it; the PR
+needs a new head on which the required checks pass.
+
+Classify a required-check failure as **stale-head-only** only when every
+failing required check is explained by commits merged since the PR head and
+there is no unresolved content-level blocker. Verify that condition against
+`origin/main` before routing it, using a behind-main merge-base and/or a
+failure signature that is already fixed on the current `origin/main` checks.
+Do not call a check stale merely because the PR is old, main has advanced, or
+one check happens to be green on main while another failure remains
+unexplained.
+
+When, and only when, every failing required check meets that stale-head-only
+test, post a PR conversation comment with this exact instruction:
+
+> Rebase onto origin/main and push a new head -- git fetch origin && git rebase origin/main, resolve conflicts, then push. This is a stale-head issue, not a content defect.
+
+Then end through the **REJECTED** route so process receives concrete rebase
+and push work in the same iteration. Do not merely note staleness, hold,
+waive the check, or attempt the merge yourself.
+
 ### Step 7 - respond back
 
 End your final response with exactly one review routing marker, alone on the
