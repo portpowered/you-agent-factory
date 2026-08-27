@@ -231,122 +231,106 @@ func TestCLIParameterReusableProcessSpine(t *testing.T) {
 	}
 
 	t.Run("observer root parses generic flags", func(t *testing.T) {
-		first := executeSpineObservation(t, []string{
-			"you",
-			"--server", "https://factory.example",
-			"-v",
-			"worker-sessions", "list",
-			"--state", "RESERVED",
-			"--state", "RUNNING",
-			"--json",
-		})
-
-		if first.Parse.CommandPath != "you worker-sessions list" {
-			t.Fatalf("observed command path = %q, want you worker-sessions list", first.Parse.CommandPath)
-		}
-		if len(first.Parse.Positionals) != 0 {
-			t.Fatalf("observed positional parse = %#v, want none", first.Parse.Positionals)
-		}
-		assertSpineParsedFlag(t, first, "server", true, "https://factory.example")
-		assertSpineParsedFlag(t, first, "verbose", true, "true")
-		assertSpineParsedFlag(t, first, "json", true, "true")
-		assertSpineParsedFlag(t, first, "state", true, "[RESERVED,RUNNING]")
-
-		second := executeSpineObservation(t, []string{
-			"you",
-			"--server", "https://second.example",
-			"worker-sessions", "list",
-			"--state", "COMPLETED",
-		})
-		if second.Parse.CommandPath != "you worker-sessions list" {
-			t.Fatalf("second observed command path = %q, want you worker-sessions list", second.Parse.CommandPath)
-		}
-		assertSpineParsedFlag(t, second, "server", true, "https://second.example")
-		assertSpineParsedFlag(t, second, "state", true, "[COMPLETED]")
-		verbose, found := cliobservation.Flag(second.Parse, "verbose")
-		if !found || verbose.Changed {
-			t.Fatalf("second observed --verbose parse = %#v found=%v, want unchanged", verbose, found)
-		}
-
-		firstState, found := cliobservation.Flag(first.Parse, "state")
-		if !found || firstState.Value != "[RESERVED,RUNNING]" {
-			t.Fatalf("first detached state observation = %#v found=%v, want [RESERVED,RUNNING]", firstState, found)
-		}
+		testObserverRootParsesGenericFlags(t)
 	})
 
 	t.Run("full handler submits combined signature once", func(t *testing.T) {
-		beforeSubmissions := len(parameterProcesses.submissions.snapshot())
-		beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
-		factoryDir := scaffoldCombinedInvocationFactory(t)
-		support.WriteAgentConfig(
-			t,
-			factoryDir,
-			"processor",
-			support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-		)
-		factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+		testFullHandlerSubmitsCombinedSignature(t)
+	})
+}
 
-		inputs := spineInputs(t, []string{
-			"you", "run",
-			"--factory", factoryPath,
-			"--no-record",
-			spinePositionalValue,
-			"--priority=" + spinePriorityValue,
-			"--callback=" + spineCallbackValue,
-			"--tag=" + spineFirstTagValue,
-			"--tag=" + spineSecondTagValue,
-			"--metadata=" + spineMetadataValue,
-			"--nullable=" + spineNullableValue,
-			"--emptyString=" + spineEmptyString,
-			"--emptyObject=" + spineEmptyObject,
-			"--emptyArray=" + spineEmptyArray,
-		})
+func testObserverRootParsesGenericFlags(t *testing.T) {
+	t.Helper()
+	first := executeSpineObservation(t, []string{
+		"you", "--server", "https://factory.example", "-v",
+		"worker-sessions", "list", "--state", "RESERVED", "--state", "RUNNING", "--json",
+	})
+	if first.Parse.CommandPath != "you worker-sessions list" || len(first.Parse.Positionals) != 0 {
+		t.Fatalf("first observed parse = %#v, want worker-sessions list with no positionals", first.Parse)
+	}
+	assertSpineParsedFlag(t, first, "server", true, "https://factory.example")
+	assertSpineParsedFlag(t, first, "verbose", true, "true")
+	assertSpineParsedFlag(t, first, "json", true, "true")
+	assertSpineParsedFlag(t, first, "state", true, "[RESERVED,RUNNING]")
 
-		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
-			t.Fatalf(
-				"Process.Execute(combined parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
-				err,
-				inputs.Stdout(),
-				inputs.Stderr(),
-			)
-		}
+	second := executeSpineObservation(t, []string{
+		"you", "--server", "https://second.example", "worker-sessions", "list", "--state", "COMPLETED",
+	})
+	if second.Parse.CommandPath != "you worker-sessions list" {
+		t.Fatalf("second observed command path = %q, want you worker-sessions list", second.Parse.CommandPath)
+	}
+	assertSpineParsedFlag(t, second, "server", true, "https://second.example")
+	assertSpineParsedFlag(t, second, "state", true, "[COMPLETED]")
+	verbose, found := cliobservation.Flag(second.Parse, "verbose")
+	if !found || verbose.Changed {
+		t.Fatalf("second observed --verbose parse = %#v found=%v, want unchanged", verbose, found)
+	}
+	firstState, found := cliobservation.Flag(first.Parse, "state")
+	if !found || firstState.Value != "[RESERVED,RUNNING]" {
+		t.Fatalf("first detached state observation = %#v found=%v, want [RESERVED,RUNNING]", firstState, found)
+	}
+}
 
-		records := parameterProcesses.submissions.snapshot()
-		if got := len(records) - beforeSubmissions; got != 1 {
-			t.Fatalf("canonical submission delta = %d, want 1; records=%#v", got, records)
-		}
-		arguments := records[beforeSubmissions].Request.InvocationArguments
-		if arguments == nil {
-			t.Fatal("submitted invocation arguments = nil")
-		}
+func testFullHandlerSubmitsCombinedSignature(t *testing.T) {
+	t.Helper()
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
+	factoryDir := scaffoldCombinedInvocationFactory(t)
+	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	inputs := spineInputs(t, combinedSignatureArgs(factoryPath))
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(combined parameter invocation) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
 
-		assertSpineArgument(t, arguments, "input", []string{spinePositionalValue}, work.ArgumentSourceKindPositional)
-		assertSpineArgument(t, arguments, "priority", []string{spinePriorityValue}, work.ArgumentSourceKindNamed)
-		assertSpineArgument(t, arguments, "callback", []string{spineCallbackValue}, work.ArgumentSourceKindNamed)
-		assertSpineArgument(t, arguments, "tag", []string{spineFirstTagValue, spineSecondTagValue}, work.ArgumentSourceKindNamed)
-		assertSpineJSONArgument(t, arguments, "metadata", spineMetadataValue)
-		assertSpineJSONArgument(t, arguments, "nullable", spineNullableValue)
-		assertSpineJSONArgument(t, arguments, "emptyString", spineEmptyString)
-		assertSpineJSONArgument(t, arguments, "emptyObject", spineEmptyObject)
-		assertSpineJSONArgument(t, arguments, "emptyArray", spineEmptyArray)
+	records := parameterProcesses.submissions.snapshot()
+	if got := len(records) - beforeSubmissions; got != 1 {
+		t.Fatalf("canonical submission delta = %d, want 1; records=%#v", got, records)
+	}
+	arguments := records[beforeSubmissions].Request.InvocationArguments
+	if arguments == nil {
+		t.Fatal("submitted invocation arguments = nil")
+	}
+	assertCombinedSignatureArguments(t, arguments)
+	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 1 {
+		t.Fatalf("controlled provider command call delta = %d, want 1", got)
+	}
+}
 
-		values := []string{
-			arguments.Arguments["nullable"].Values[0],
-			arguments.Arguments["emptyString"].Values[0],
-			arguments.Arguments["emptyObject"].Values[0],
-			arguments.Arguments["emptyArray"].Values[0],
-		}
-		for left, value := range values {
-			for right := left + 1; right < len(values); right++ {
-				if value == values[right] {
-					t.Fatalf("JSON values at indexes %d and %d normalized to %q", left, right, value)
-				}
+func combinedSignatureArgs(factoryPath string) []string {
+	return []string{
+		"you", "run", "--factory", factoryPath, "--no-record", spinePositionalValue,
+		"--priority=" + spinePriorityValue, "--callback=" + spineCallbackValue,
+		"--tag=" + spineFirstTagValue, "--tag=" + spineSecondTagValue,
+		"--metadata=" + spineMetadataValue, "--nullable=" + spineNullableValue,
+		"--emptyString=" + spineEmptyString, "--emptyObject=" + spineEmptyObject,
+		"--emptyArray=" + spineEmptyArray,
+	}
+}
+
+func assertCombinedSignatureArguments(t *testing.T, arguments *work.InvocationArguments) {
+	t.Helper()
+	assertSpineArgument(t, arguments, "input", []string{spinePositionalValue}, work.ArgumentSourceKindPositional)
+	assertSpineArgument(t, arguments, "priority", []string{spinePriorityValue}, work.ArgumentSourceKindNamed)
+	assertSpineArgument(t, arguments, "callback", []string{spineCallbackValue}, work.ArgumentSourceKindNamed)
+	assertSpineArgument(t, arguments, "tag", []string{spineFirstTagValue, spineSecondTagValue}, work.ArgumentSourceKindNamed)
+	assertSpineJSONArgument(t, arguments, "metadata", spineMetadataValue)
+	assertSpineJSONArgument(t, arguments, "nullable", spineNullableValue)
+	assertSpineJSONArgument(t, arguments, "emptyString", spineEmptyString)
+	assertSpineJSONArgument(t, arguments, "emptyObject", spineEmptyObject)
+	assertSpineJSONArgument(t, arguments, "emptyArray", spineEmptyArray)
+
+	values := []string{
+		arguments.Arguments["nullable"].Values[0], arguments.Arguments["emptyString"].Values[0],
+		arguments.Arguments["emptyObject"].Values[0], arguments.Arguments["emptyArray"].Values[0],
+	}
+	for left, value := range values {
+		for right := left + 1; right < len(values); right++ {
+			if value == values[right] {
+				t.Fatalf("JSON values at indexes %d and %d normalized to %q", left, right, value)
 			}
 		}
-		if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 1 {
-			t.Fatalf("controlled provider command call delta = %d, want 1", got)
-		}
-	})
+	}
 }
 
 func executeSpineObservation(t *testing.T, args []string) cliobservation.Result {
