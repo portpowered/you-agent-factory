@@ -402,6 +402,7 @@ func TestScanRejectsNonLifecycleRuntimeAPITestMain(t *testing.T) {
 		{name: "testing test parameter", source: "func TestMain(t *testing.T) {}"},
 		{name: "wrong package", source: "func TestMain(m *other.M) {}"},
 		{name: "result", source: "func TestMain(m *testing.M) int { return 0 }"},
+		{name: "type parameter", source: "func TestMain[T any](m *testing.M) {}"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

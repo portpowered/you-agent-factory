@@ -445,7 +445,7 @@ func functionalTestNames(path string) ([]namedLine, error) {
 // before executing a package's tests. Only the exact hook signature is exempt;
 // a scenario or malformed declaration named TestMain must remain debt.
 func isGoTestMain(function *ast.FuncDecl, file *ast.File) bool {
-	if function.Name.Name != "TestMain" || function.Recv != nil || function.Type == nil || function.Type.Params == nil {
+	if function.Name.Name != "TestMain" || function.Recv != nil || function.Type == nil || function.Type.TypeParams != nil || function.Type.Params == nil {
 		return false
 	}
 	if function.Type.Params.NumFields() != 1 || (function.Type.Results != nil && function.Type.Results.NumFields() != 0) {
