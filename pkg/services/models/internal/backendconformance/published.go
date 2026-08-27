@@ -112,7 +112,7 @@ func verifyPublishedArtifact(ctx context.Context, client HTTPDoer, entry Publish
 	if err != nil {
 		// Keep the raw request-construction error out of diagnostics because it
 		// can echo an unsafe URL or userinfo supplied by a custom test adapter.
-		return publishedFailure(entry, "cannot create HEAD request for the manifest location"), true
+		return publishedFailure(entry, "cannot create GET request for the manifest location"), true
 	}
 
 	response, err := client.Do(request)
