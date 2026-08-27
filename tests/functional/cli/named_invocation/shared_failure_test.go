@@ -131,19 +131,22 @@ type sharedPreparationFailureCase struct {
 }
 
 type namedInvocationFailureFixture struct {
-	process       support.ApplicationProcess
-	provider      *testutil.ProviderCommandRunner
-	listener      *listenerStartObservation
-	observation   *preparationSideEffectObservation
-	processBuilds atomic.Int32
+	process                   support.ApplicationProcess
+	provider                  *testutil.ProviderCommandRunner
+	listener                  *listenerStartObservation
+	observation               *preparationSideEffectObservation
+	packagedFactorySource     string
+	packagedFactorySourceHome string
+	processBuilds             atomic.Int32
 }
 
 func newNamedInvocationFailureFixture(t *testing.T) *namedInvocationFailureFixture {
 	t.Helper()
 	fixture := &namedInvocationFailureFixture{
-		provider:    testutil.NewProviderCommandRunner(),
-		listener:    &listenerStartObservation{},
-		observation: &preparationSideEffectObservation{},
+		provider:                  testutil.NewProviderCommandRunner(),
+		listener:                  &listenerStartObservation{},
+		observation:               &preparationSideEffectObservation{},
+		packagedFactorySourceHome: t.TempDir(),
 	}
 	process, err := fixture.buildProcess(t.Context(), fixture.edges())
 	if err != nil {
@@ -211,14 +214,10 @@ func runSharedPreparationFailureCase(
 	scenario := newNamedInvocationFailureScenario(t)
 	factoryPath := filepath.Join(scenario.workingDirectory, "factory.json")
 	if test.packaged {
-		factoryDir := initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
-		factoryPath = filepath.Join(factoryDir, "factory.json")
-		replaceInvocationSignatureFixture(t, factoryPath, test.signature)
+		factoryDir := fixture.copyPackagedFactory(t, scenario)
 		factoryDir = support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
 		factoryPath = filepath.Join(factoryDir, "factory.json")
+		replaceInvocationSignatureFixture(t, factoryPath, test.signature)
 	} else if err := os.WriteFile(factoryPath, []byte(test.factory), 0o600); err != nil {
 		t.Fatalf("write Factory fixture: %v", err)
 	}
@@ -237,6 +236,25 @@ func runSharedPreparationFailureCase(
 		t.Fatalf("%s leaked sensitive input: %s", test.name, observable)
 	}
 	after.delta(before).assertZero(t)
+}
+
+func (fixture *namedInvocationFailureFixture) copyPackagedFactory(
+	t *testing.T,
+	scenario namedInvocationFailureScenario,
+) string {
+	t.Helper()
+	if fixture.packagedFactorySource == "" {
+		initializedDir := initializePackagedFactory(
+			t, fixture.process, scenario.environment, scenario.workingDirectory,
+			scenario.homeDir, packagedGoalFactoryName,
+		)
+		fixture.packagedFactorySource = support.CopyFactoryAsNamed(
+			t, initializedDir, fixture.packagedFactorySourceHome, packagedGoalFactoryName,
+		)
+	}
+	return support.CopyFactoryAsNamed(
+		t, fixture.packagedFactorySource, scenario.homeDir, packagedGoalFactoryName,
+	)
 }
 
 type namedInvocationFailureScenario struct {

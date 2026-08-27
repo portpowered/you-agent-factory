@@ -30,46 +30,12 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 	}
 
 	fixture := newNamedInvocationSuccessFixture(t)
-	t.Run("named goal", func(t *testing.T) {
-		scenario := fixture.newScenario(t, support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult))
-		initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
-		stdout, stderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "run", "--named", packagedGoalFactoryName, "--no-record", "--quiet", "hermetic no-server named goal prompt"},
-		)
-		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
-		if got := scenario.provider.CallCount(); got != 1 {
-			t.Fatalf("named goal provider calls = %d, want 1", got)
-		}
-	})
-
-	t.Run("named subagent", func(t *testing.T) {
-		requestText := "hermetic no-server named subagent prompt"
-		scenario := fixture.newScenario(t, platformprocess.CommandResult{
-			Stdout: support.CodexSuccessStdout(wantHermeticInvocationPrimaryResult),
-		})
-		initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedSubagentFactoryName,
-		)
-		stdout, stderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "run", "--named", packagedSubagentFactoryName, "--no-record", "--quiet", requestText},
-		)
-		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
-		if stdout == requestText {
-			t.Fatalf("stdout echoed submitted request text instead of agent response")
-		}
-		if got := scenario.provider.CallCount(); got != 1 {
-			t.Fatalf("named subagent provider calls = %d, want 1", got)
-		}
-	})
-
 	t.Run("factory builder list and help", func(t *testing.T) {
 		scenario := fixture.newScenario(t)
+		factoryDir := initializePackagedFactory(
+			t, fixture.process, scenario.environment, scenario.workingDirectory,
+			scenario.homeDir, packagedFactoryBuilderName,
+		)
 		listOutput, listStderr := executeCustomerCommand(
 			t, fixture.process, scenario.environment, scenario.workingDirectory,
 			[]string{"you", "factory", "list"},
@@ -99,11 +65,41 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 				t.Fatalf("Factory Builder help missing %q:\n%s", fragment, helpOutput)
 			}
 		}
-		factoryDir := filepath.Join(
-			append([]string{scenario.homeDir, ".you-agent-factory", "factories"}, strings.Split(packagedFactoryBuilderName, "/")...)...,
-		)
 		if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
 			t.Fatalf("Factory Builder was not materialized for named help: %v", err)
+		}
+		fixture.capturePackagedFactorySources(t, scenario.homeDir)
+	})
+
+	t.Run("named goal", func(t *testing.T) {
+		scenario := fixture.newScenario(t, support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult))
+		fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+		stdout, stderr := executeCustomerCommand(
+			t, fixture.process, scenario.environment, scenario.workingDirectory,
+			[]string{"you", "run", "--named", packagedGoalFactoryName, "--no-record", "--quiet", "hermetic no-server named goal prompt"},
+		)
+		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
+		if got := scenario.provider.CallCount(); got != 1 {
+			t.Fatalf("named goal provider calls = %d, want 1", got)
+		}
+	})
+
+	t.Run("named subagent", func(t *testing.T) {
+		requestText := "hermetic no-server named subagent prompt"
+		scenario := fixture.newScenario(t, platformprocess.CommandResult{
+			Stdout: support.CodexSuccessStdout(wantHermeticInvocationPrimaryResult),
+		})
+		fixture.copyPackagedFactory(t, scenario, packagedSubagentFactoryName)
+		stdout, stderr := executeCustomerCommand(
+			t, fixture.process, scenario.environment, scenario.workingDirectory,
+			[]string{"you", "run", "--named", packagedSubagentFactoryName, "--no-record", "--quiet", requestText},
+		)
+		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
+		if stdout == requestText {
+			t.Fatalf("stdout echoed submitted request text instead of agent response")
+		}
+		if got := scenario.provider.CallCount(); got != 1 {
+			t.Fatalf("named subagent provider calls = %d, want 1", got)
 		}
 	})
 
@@ -116,14 +112,10 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
 			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
 		)
-		factoryDir := initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
-		factoryPath := filepath.Join(factoryDir, "factory.json")
-		support.RemoveInvocationSignatureFixture(t, factoryPath)
+		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
 		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
 		namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
+		support.RemoveInvocationSignatureFixture(t, namedFactoryPath)
 		base := []string{"--no-record", "--quiet"}
 		cases := []struct {
 			name  string
@@ -166,15 +158,11 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 			support.CodexDecisionCommandResult("canonical provider result"),
 		)
 		submissionStart := len(fixture.submissions.snapshot())
-		factoryDir := initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
-		factoryPath := filepath.Join(factoryDir, "factory.json")
-		addEffectiveSignatureFixture(t, factoryPath)
-		support.ReplaceGoalWorkstationPrompt(t, factoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
+		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
 		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
 		namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
+		addEffectiveSignatureFixture(t, namedFactoryPath)
+		support.ReplaceGoalWorkstationPrompt(t, namedFactoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
 		documentPath := filepath.Join(scenario.workingDirectory, "story.md")
 		if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
 			t.Fatalf("write FILE_CONTENTS fixture: %v", err)
@@ -236,11 +224,9 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 			support.CodexDecisionCommandResult("default applied"),
 		)
 		submissionStart := len(fixture.submissions.snapshot())
-		factoryDir := initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
-		factoryPath := filepath.Join(factoryDir, "factory.json")
+		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
+		factoryPath := filepath.Join(namedFactoryDir, "factory.json")
 		replaceInvocationSignatureFixture(t, factoryPath, map[string]any{
 			"parameters": []any{map[string]any{
 				"name": "mode", "defaultValue": "safe",
@@ -249,16 +235,14 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 		})
 		support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
 		support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
-		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
-		namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
 
 		namedStdout, namedStderr := executeCustomerCommand(
 			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			emptyInvocationArguments("named", namedFactoryPath, customizedNamedGoalFactoryName),
+			emptyInvocationArguments("named", factoryPath, customizedNamedGoalFactoryName),
 		)
 		fileStdout, fileStderr := executeCustomerCommand(
 			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			emptyInvocationArguments("file", namedFactoryPath, customizedNamedGoalFactoryName),
+			emptyInvocationArguments("file", factoryPath, customizedNamedGoalFactoryName),
 		)
 		if namedStderr != "" || fileStderr != "" {
 			t.Fatalf("default-only invocation stderr: named=%q file=%q", namedStderr, fileStderr)
@@ -291,10 +275,7 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 		scenario := fixture.newScenario(t,
 			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
 		)
-		initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
+		fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
 		recordingPath := filepath.Join(scenario.rootDir, "named-invocation.recording.jsonl")
 		stdout, stderr := executeCustomerCommand(
 			t, fixture.process, scenario.environment, scenario.workingDirectory,
@@ -448,11 +429,13 @@ func workInvocationArgumentDefault(value string) work.InvocationArgument {
 }
 
 type namedInvocationSuccessFixture struct {
-	process       support.ApplicationProcess
-	provider      *namedInvocationProviderRouter
-	listener      *listenerStartObservation
-	submissions   *canonicalSubmissionObservation
-	processBuilds atomic.Int32
+	process                   support.ApplicationProcess
+	provider                  *namedInvocationProviderRouter
+	listener                  *listenerStartObservation
+	submissions               *canonicalSubmissionObservation
+	packagedFactorySources    map[string]string
+	packagedFactorySourceHome string
+	processBuilds             atomic.Int32
 }
 
 type namedInvocationScenario struct {
@@ -466,9 +449,11 @@ type namedInvocationScenario struct {
 func newNamedInvocationSuccessFixture(t *testing.T) *namedInvocationSuccessFixture {
 	t.Helper()
 	fixture := &namedInvocationSuccessFixture{
-		provider:    newNamedInvocationProviderRouter(),
-		listener:    &listenerStartObservation{},
-		submissions: &canonicalSubmissionObservation{},
+		provider:                  newNamedInvocationProviderRouter(),
+		listener:                  &listenerStartObservation{},
+		submissions:               &canonicalSubmissionObservation{},
+		packagedFactorySources:    make(map[string]string),
+		packagedFactorySourceHome: t.TempDir(),
 	}
 	process, err := fixture.buildProcess(context.Background(), serviceedges.Edges{
 		APIServerStarter:      fixture.listener.Start,
@@ -502,6 +487,45 @@ func (fixture *namedInvocationSuccessFixture) buildProcess(
 ) (support.ApplicationProcess, error) {
 	fixture.processBuilds.Add(1)
 	return support.BuildProcessWithContext(ctx, edges)
+}
+
+func (fixture *namedInvocationSuccessFixture) capturePackagedFactorySources(
+	t *testing.T,
+	homeDir string,
+) {
+	t.Helper()
+	for _, name := range []string{
+		packagedGoalFactoryName,
+		packagedSubagentFactoryName,
+		packagedFactoryBuilderName,
+	} {
+		sourceDir := packagedFactoryPath(homeDir, name)
+		if _, err := os.Stat(filepath.Join(sourceDir, "factory.json")); err != nil {
+			t.Fatalf("materialized packaged Factory %q missing from source home: %v", name, err)
+		}
+		fixture.packagedFactorySources[name] = support.CopyFactoryAsNamed(
+			t, sourceDir, fixture.packagedFactorySourceHome, name,
+		)
+	}
+}
+
+func (fixture *namedInvocationSuccessFixture) copyPackagedFactory(
+	t *testing.T,
+	scenario *namedInvocationScenario,
+	name string,
+) string {
+	t.Helper()
+	sourceDir := fixture.packagedFactorySources[name]
+	if sourceDir == "" {
+		t.Fatalf("packaged Factory %q has not been captured", name)
+	}
+	return support.CopyFactoryAsNamed(t, sourceDir, scenario.homeDir, name)
+}
+
+func packagedFactoryPath(homeDir, name string) string {
+	return filepath.Join(
+		append([]string{homeDir, ".you-agent-factory", "factories"}, strings.Split(name, "/")...)...,
+	)
 }
 
 func (fixture *namedInvocationSuccessFixture) newScenario(
