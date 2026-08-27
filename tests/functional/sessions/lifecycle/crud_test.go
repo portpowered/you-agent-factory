@@ -86,15 +86,15 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 			return nil, fmt.Errorf("create shared %s directory: %w", name, err)
 		}
 	}
-	for name, dir := range map[string]string{
-		"server": factoryDir,
-		"client": clientWorkingDir,
-	} {
-		if err := writeLifecycleFactory(dir); err != nil {
-			cleanupRoot()
-			cancel()
-			return nil, fmt.Errorf("write shared %s factory: %w", name, err)
-		}
+	if err := writeLifecycleHostFactory(factoryDir); err != nil {
+		cleanupRoot()
+		cancel()
+		return nil, fmt.Errorf("write shared server factory: %w", err)
+	}
+	if err := writeLifecycleFactory(clientWorkingDir); err != nil {
+		cleanupRoot()
+		cancel()
+		return nil, fmt.Errorf("write shared client factory: %w", err)
 	}
 	if err := writeSharedRemoteLifecycleFactory(homeDir, factoryDir); err != nil {
 		cleanupRoot()
@@ -1054,6 +1054,24 @@ func writeLifecycleFactory(dir string) error {
 		0o644,
 	); err != nil {
 		return fmt.Errorf("write workstation prompt: %w", err)
+	}
+	return nil
+}
+
+func writeLifecycleHostFactory(dir string) error {
+	// The shared host only exercises the Factory Session control plane and
+	// listener. Placement witnesses use their named JavaScript Factories, while
+	// CRUD cells open their own authored Factory directories, so no host worker
+	// or workstation is needed during the continuously-running idle command.
+	config := sessionLifecycleCRUDFactoryConfig()
+	config["workers"] = []map[string]string{}
+	config["workstations"] = []map[string]any{}
+	rawConfig, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), rawConfig, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", interfaces.FactoryConfigFile, err)
 	}
 	return nil
 }
