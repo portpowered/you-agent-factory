@@ -44,5 +44,7 @@ validated before final-mode checking; the checker never rewrites either file.
 The retained baseline ledger records all three complete uncached captures and
 the first incomplete attempt. The incomplete attempt remains separate from the
 accepted replacement and is documented rather than silently discarded. The
-accepted evidence is historical reference data; this implementation does not
-create a new baseline or run a final candidate comparison.
+accepted evidence is historical reference data. This implementation does
+not create a new baseline, run a manual final three-sample gate, make a local
+25% improvement claim, or run a final candidate comparison; hosted final
+enforcement remains review-owned.
