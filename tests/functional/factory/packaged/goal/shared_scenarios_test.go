@@ -35,7 +35,6 @@ var packagedGoalSelectorSequence uint64
 // child run; each child still owns a separate explicit Factory Session.
 func TestPackagedGoalSharedScenarios(t *testing.T) {
 	fixture := newPackagedGoalSharedFixture(t)
-	t.Cleanup(func() { fixture.ledger.assertClean(t) })
 
 	for _, test := range []struct {
 		name string
@@ -314,7 +313,7 @@ func newPackagedGoalSharedFixture(t *testing.T) *packagedGoalSharedFixture {
 		provider:   provider,
 		ledger:     newPackagedGoalResourceLedger(),
 	}
-	t.Cleanup(func() { fixture.close(t) })
+	t.Cleanup(func() { fixture.cleanup(t) })
 
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", factoryDir,
@@ -358,6 +357,33 @@ func (fixture *packagedGoalSharedFixture) close(t testing.TB) {
 	if err := fixture.process.Close(ctx); err != nil {
 		t.Errorf("close shared Goal root process: %v", err)
 	}
+}
+
+func (fixture *packagedGoalSharedFixture) cleanup(t testing.TB) {
+	t.Helper()
+	fixture.close(t)
+	fixture.ledger.assertClean(t)
+	if fixture.baseURL != "" {
+		// This is a single bounded shutdown probe, not synchronization: a closed
+		// listener must reject the request immediately after Process.Close.
+		client := http.Client{Timeout: time.Second}
+		response, err := client.Get(strings.TrimSuffix(fixture.baseURL, "/") + "/status")
+		if err == nil {
+			response.Body.Close()
+			t.Errorf("GOAL-CLEANUP-001 shared Goal listener still served /status after process close")
+		}
+	}
+	if fixture.rootDir == "" {
+		return
+	}
+	if err := os.RemoveAll(fixture.rootDir); err != nil {
+		t.Errorf("GOAL-CLEANUP-001 remove shared Goal root %q: %v", fixture.rootDir, err)
+		return
+	}
+	if _, err := os.Stat(fixture.rootDir); !os.IsNotExist(err) {
+		t.Errorf("GOAL-CLEANUP-001 shared Goal root %q remains after shutdown: %v", fixture.rootDir, err)
+	}
+	t.Log("GOAL-CLEANUP-001 process=closed listener=absent sessions=0 scenario-roots=0 definitions=0 durable-state=0 gates=0 worktrees=0")
 }
 
 type packagedGoalScenario struct {
@@ -418,24 +444,27 @@ func (scenario *packagedGoalScenario) close(t testing.TB) {
 		return
 	}
 	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.session)
-	scenario.fixture.ledger.closeSession(scenario.session)
+	assertPackagedGoalSessionAbsent(t, scenario.fixture.baseURL, scenario.session)
+	rootRemoved := false
 	if err := os.RemoveAll(scenario.rootDir); err != nil {
 		t.Errorf("remove %s Goal scenario root %q: %v", scenario.name, scenario.rootDir, err)
-		return
-	}
-	if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
+	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
 		t.Errorf("%s Goal scenario root %q remains after cleanup: %v", scenario.name, scenario.rootDir, err)
+	} else {
+		rootRemoved = true
 	}
+	scenario.fixture.ledger.closeScenario(scenario.session, rootRemoved)
 }
 
 type packagedGoalScenarioResources struct {
-	name       string
-	selector   string
-	session    string
-	workID     string
-	rootDir    string
-	factoryDir string
-	closed     bool
+	name        string
+	selector    string
+	session     string
+	workID      string
+	rootDir     string
+	factoryDir  string
+	closed      bool
+	rootRemoved bool
 }
 
 type packagedGoalResourceLedger struct {
@@ -471,12 +500,13 @@ func (ledger *packagedGoalResourceLedger) recordWork(session, workID string) {
 	}
 }
 
-func (ledger *packagedGoalResourceLedger) closeSession(session string) {
+func (ledger *packagedGoalResourceLedger) closeScenario(session string, rootRemoved bool) {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	for index := range ledger.scenarios {
 		if ledger.scenarios[index].session == session {
 			ledger.scenarios[index].closed = true
+			ledger.scenarios[index].rootRemoved = rootRemoved
 			return
 		}
 	}
@@ -496,6 +526,9 @@ func (ledger *packagedGoalResourceLedger) assertClean(t testing.TB) {
 	for _, resource := range ledger.scenarios {
 		if !resource.closed {
 			t.Errorf("GOAL-CLEANUP-001 session %q remains open", resource.session)
+		}
+		if !resource.rootRemoved {
+			t.Errorf("GOAL-CLEANUP-001 scenario %q root %q remains owned after cleanup", resource.name, resource.rootDir)
 		}
 		for label, value := range map[string]string{
 			"selector": resource.selector, "session": resource.session,
@@ -692,6 +725,20 @@ func findPackagedGoalWorkByID(
 	}
 	t.Fatalf("Goal Work %q is absent from explicit-session listing %#v", workID, listed.Results)
 	return factoryapi.Work{}
+}
+
+func assertPackagedGoalSessionAbsent(t testing.TB, baseURL, sessionID string) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET deleted Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET deleted Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, strings.TrimSpace(string(payload)))
+	}
 }
 
 func assertPackagedGoalSecondAttemptPreservesContext(
