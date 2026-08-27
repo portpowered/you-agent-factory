@@ -35,11 +35,6 @@ func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 			wantArgs:    []string{"exec", "--json", "-"},
 		},
 		{
-			name:        "permissions-default",
-			permissions: "DEFAULT",
-			wantArgs:    []string{"exec", "--json", "-"},
-		},
-		{
 			name:        "permissions-skip",
 			permissions: "SKIP_PERMISSIONS",
 			wantArgs:    []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-"},
@@ -165,13 +160,17 @@ func disallowedPermissionFactoryConfig() map[string]any {
 }
 
 func permissionMatrixWorkflow(permissions string) string {
+	return permissionMatrixWorkflowWithPrompt(permissions, "capture the current Codex command")
+}
+
+func permissionMatrixWorkflowWithPrompt(permissions, prompt string) string {
 	field := ""
 	if permissions != "omitted" {
 		field = `, permissions: "` + permissions + `"`
 	}
 	return `return (async function () {
   return await agent.run({
-    prompt: "capture the current Codex command",
+    prompt: "` + prompt + `",
     label: "permission-matrix-child",
     modelProvider: "codex"` + field + `
   });

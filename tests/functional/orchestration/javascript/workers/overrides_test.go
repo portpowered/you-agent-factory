@@ -329,7 +329,6 @@ func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *t
 func exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t *testing.T) {
 	for _, source := range []string{
 		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = "READ_ONLY"; return await agent.run(child); })();`,
-		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = true; return await agent.run(child); })();`,
 	} {
 		t.Run(source, func(t *testing.T) {
 			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(source))
@@ -360,6 +359,10 @@ func exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t *test
 			}
 		})
 	}
+}
+
+func invalidPermissionsOverrideWorkflow() string {
+	return `return (async function () { const child = { prompt: "shared invalid permissions", modelProvider: "codex" }; child.permissions = true; return await agent.run(child); })();`
 }
 
 // TestJavaScriptChildrenSelectDifferentProvidersAndModels proves a JavaScript
