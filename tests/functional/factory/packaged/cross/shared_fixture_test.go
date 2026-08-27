@@ -20,9 +20,9 @@ import (
 const crossSharedFixtureShutdownTimeout = 15 * time.Second
 
 // crossSharedProcessFixture owns the immutable root process used by the
-// shareable cross-package scenarios. Its API starter is routed to a fresh
-// local test server for each hosted command; no server or session state is
-// shared across scenarios.
+// shareable cross-package scenarios. The parity cases share one routed local
+// API server while the inspect and idle lifecycle cases retain isolated
+// servers; Factory Session state remains scoped to each explicit session.
 type crossSharedProcessFixture struct {
 	rootDir    string
 	factoryDir string

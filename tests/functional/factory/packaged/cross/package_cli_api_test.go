@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	fixture := sharedCrossProcess(t)
 	homeDir, factoryDir := installSharedPackagedGoal(t)
 	factoryPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
-	mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
+	mockWorkersPath := writePackagedGoalSharedMockWorkersConfig(t)
 	goalText := fmt.Sprintf(
 		"functional-packaged-cross-cli-api-inspect-%d",
 		time.Now().UnixNano(),
@@ -212,16 +213,29 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		t.Skip("slow packaged factory CLI/API primary-outcome parity")
 	}
 
+	fixture := sharedCrossProcess(t)
+	mockWorkersPath := writePackagedGoalSharedMockWorkersConfig(t)
+	namedHomeDir := t.TempDir()
+	namedFactoryDir := support.InstallPackagedFactoryWithProcess(
+		t,
+		fixture.process,
+		isolatedHomeEnvironment(namedHomeDir),
+		t.TempDir(),
+		factorydefinitions.PackagedGoalFactoryName,
+	)
+	apiServer := startPackagedGoalParityAPIServer(t, fixture.factoryDir, mockWorkersPath)
+	t.Cleanup(func() { assertPackagedGoalParityAPIServerHealthy(t, apiServer) })
+
 	t.Run("positional success", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldPackagedGoalInvocationFactory(t)
 		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
-		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 		goalText := fmt.Sprintf(
 			"functional-packaged-cross-cli-api-parity-positional-%d",
 			time.Now().UnixNano(),
 		)
 
-		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, apiServer, dir, goalText)
 		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
 			t,
 			dir,
@@ -245,15 +259,15 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 	})
 
 	t.Run("stdin success", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldPackagedGoalInvocationFactory(t)
 		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
-		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 		goalText := fmt.Sprintf(
 			"functional-packaged-cross-cli-api-parity-stdin-%d",
 			time.Now().UnixNano(),
 		)
 
-		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, apiServer, dir, goalText)
 		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
 			t,
 			dir,
@@ -276,22 +290,15 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 	})
 
 	t.Run("named factory success", func(t *testing.T) {
-		homeDir := t.TempDir()
-		fixture := sharedCrossProcess(t)
-		factoryDir := support.InstallPackagedFactoryWithProcess(
-			t,
-			fixture.process,
-			isolatedHomeEnvironment(homeDir),
-			t.TempDir(),
-			factorydefinitions.PackagedGoalFactoryName,
-		)
-		mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
+		t.Parallel()
+		homeDir := namedHomeDir
+		factoryDir := namedFactoryDir
 		goalText := fmt.Sprintf(
 			"functional-packaged-cross-cli-api-parity-named-%d",
 			time.Now().UnixNano(),
 		)
 
-		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, factoryDir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, apiServer, factoryDir, goalText)
 		cliResponse, _, stderr, err := runPackagedGoalNamedInvocationCLIJSON(
 			t,
 			homeDir,
@@ -313,11 +320,11 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 	})
 
 	t.Run("empty input rejected", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldPackagedGoalInvocationFactory(t)
 		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
-		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 
-		apiErr, apiObservation := postPackagedGoalInvocationExpectError(t, dir, mockWorkersPath, "   ")
+		apiErr, apiObservation := postPackagedGoalInvocationExpectError(t, apiServer, dir, "   ")
 		if string(apiErr.Code) != "INVOCATION_INPUT_EMPTY" {
 			t.Fatalf("API error code = %q, want INVOCATION_INPUT_EMPTY", apiErr.Code)
 		}
@@ -343,9 +350,9 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 	})
 
 	t.Run("source conflict rejected before invocation", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldPackagedGoalInvocationFactory(t)
 		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
-		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 		conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
 
 		_, stdout, stderr, err := runPackagedGoalInvocationCLI(
@@ -373,15 +380,15 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 	})
 
 	t.Run("unresolved primary result reports stable failure", func(t *testing.T) {
+		t.Parallel()
 		dir := scaffoldPackagedGoalInvocationFactoryWithUnresolvedPrimaryResult(t)
 		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
 		goalText := fmt.Sprintf(
 			"functional-packaged-cross-cli-api-parity-unresolved-%d",
 			time.Now().UnixNano(),
 		)
-		mockWorkersPath := writeDefaultMockWorkersConfig(t)
 
-		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		apiResponse, apiObservation := invokePackagedGoalViaAPI(t, apiServer, dir, goalText)
 		if apiResponse.Status != factoryapi.InvocationTerminalStatusFailed {
 			t.Fatalf("API status = %q, want FAILED", apiResponse.Status)
 		}
@@ -432,6 +439,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		}
 		crossCharacterization.recordScenarioComplete("unresolved primary result")
 	})
+
 }
 
 type packagedGoalAPIInspection struct {
@@ -978,7 +986,7 @@ func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationRes
 	return part.Text
 }
 
-func writePackagedGoalMockWorkersConfig(t *testing.T) string {
+func writePackagedGoalSharedMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
 	checkerCommand, checkerArgs := mockWorkerEchoCommand("plain")
@@ -1016,15 +1024,7 @@ func writePackagedGoalMockWorkersConfig(t *testing.T) string {
 			},
 		},
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal packaged goal mock-workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write packaged goal mock-workers config: %v", err)
-	}
-	return path
+	return support.WriteMockWorkersConfig(t, &cfg)
 }
 
 func mockWorkerEchoCommand(output string) (string, []string) {
@@ -1182,12 +1182,6 @@ func packagedGoalInvocationFactoryConfig() map[string]any {
 	}
 }
 
-func writeDefaultMockWorkersConfig(t *testing.T) string {
-	t.Helper()
-
-	return support.WriteMockWorkersConfig(t, workers.NewEmptyMockWorkersConfig())
-}
-
 func errorCodeString(code *factoryapi.InvocationResponseErrorCode) string {
 	if code == nil {
 		return "<nil>"
@@ -1197,23 +1191,22 @@ func errorCodeString(code *factoryapi.InvocationResponseErrorCode) string {
 
 func invokePackagedGoalViaAPI(
 	t *testing.T,
+	server *packagedGoalParityAPIServer,
 	factoryDir string,
-	mockWorkersPath string,
 	goalText string,
 ) (factoryapi.InvocationResponse, packagedGoalInvocationObservation) {
 	t.Helper()
-	return postPackagedGoalInvocation(t, factoryDir, mockWorkersPath, textInvocationRequestBody(goalText))
+	return postPackagedGoalInvocation(t, server, factoryDir, textInvocationRequestBody(goalText))
 }
 
 func postPackagedGoalInvocation(
 	t *testing.T,
+	server *packagedGoalParityAPIServer,
 	factoryDir string,
-	mockWorkersPath string,
 	body []byte,
 ) (factoryapi.InvocationResponse, packagedGoalInvocationObservation) {
 	t.Helper()
 
-	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
 	sessionID := openPackagedGoalParitySession(t, server, factoryDir)
 	sessionClosed := false
 	closeSession := func() {
@@ -1257,23 +1250,18 @@ func postPackagedGoalInvocation(
 	}
 	observation := observePackagedGoalInvocation(t, server.URL(), sessionID)
 	closeSession()
-	server.command.stop(t)
-	crossCharacterization.recordRootClose("parity-api")
-	assertCrossListenerClosed(t, server.URL())
-	removeCrossOwnedPath(t, "parity API home", server.homeDir)
 	return decoded, observation
 }
 
 func postPackagedGoalInvocationExpectError(
 	t *testing.T,
+	server *packagedGoalParityAPIServer,
 	factoryDir string,
-	mockWorkersPath string,
 	goalText string,
 ) (factoryapi.ErrorResponse, packagedGoalInvocationObservation) {
 	t.Helper()
 
 	body := textInvocationRequestBody(goalText)
-	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
 	sessionID := openPackagedGoalParitySession(t, server, factoryDir)
 	sessionClosed := false
 	closeSession := func() {
@@ -1317,10 +1305,6 @@ func postPackagedGoalInvocationExpectError(
 	}
 	observation := observePackagedGoalInvocation(t, server.URL(), sessionID)
 	closeSession()
-	server.command.stop(t)
-	crossCharacterization.recordRootClose("parity-api")
-	assertCrossListenerClosed(t, server.URL())
-	removeCrossOwnedPath(t, "parity API error home", server.homeDir)
 	return decoded, observation
 }
 
@@ -1328,6 +1312,7 @@ type packagedGoalParityAPIServer struct {
 	command *crossHostedCommand
 	url     string
 	homeDir string
+	close   sync.Once
 }
 
 func (server *packagedGoalParityAPIServer) URL() string {
@@ -1335,6 +1320,61 @@ func (server *packagedGoalParityAPIServer) URL() string {
 		return ""
 	}
 	return server.url
+}
+
+func (server *packagedGoalParityAPIServer) closeServer(t testing.TB) {
+	t.Helper()
+	if server == nil {
+		return
+	}
+	server.close.Do(func() {
+		if server.command != nil {
+			server.command.stop(t)
+		}
+		crossCharacterization.recordRootClose("parity-api")
+		if server.url != "" {
+			assertCrossListenerClosed(t, server.url)
+		}
+		removeCrossOwnedPath(t, "shared parity API home", server.homeDir)
+	})
+}
+
+func assertPackagedGoalParityAPIServerHealthy(
+	t testing.TB,
+	server *packagedGoalParityAPIServer,
+) {
+	t.Helper()
+	if server == nil || strings.TrimSpace(server.URL()) == "" {
+		t.Fatal("shared parity API server is unavailable")
+	}
+	status := support.GetJSON[factoryapi.StatusResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/status",
+	)
+	if strings.TrimSpace(status.RuntimeStatus) == "" {
+		t.Fatalf("shared parity API runtime status = %q, want non-empty", status.RuntimeStatus)
+	}
+	if listed := support.ListDefaultSessionWork(t, server.URL()); len(listed.Results) != 0 {
+		t.Fatalf("shared parity API default session retained Work = %#v, want empty", listed.Results)
+	}
+	live := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions?scope=live",
+	)
+	defaultSessions := 0
+	for _, session := range live.Sessions {
+		if session.IsDefault {
+			defaultSessions++
+			continue
+		}
+		if strings.TrimSpace(session.Id) == "" {
+			t.Fatalf("shared parity API live session has no identity: %#v", session)
+		}
+		assertPackagedGoalFactorySessionAbsent(t, server.URL(), session.Id)
+	}
+	if defaultSessions != 1 {
+		t.Fatalf("shared parity API live sessions = %#v, want one default session and no reachable explicit sessions", live.Sessions)
+	}
 }
 
 func openPackagedGoalParitySession(
@@ -1387,7 +1427,9 @@ func startPackagedGoalParityAPIServer(
 	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
-	return &packagedGoalParityAPIServer{command: command, url: baseURL, homeDir: homeDir}
+	parityServer := &packagedGoalParityAPIServer{command: command, url: baseURL, homeDir: homeDir}
+	t.Cleanup(func() { parityServer.closeServer(t) })
+	return parityServer
 }
 
 func textInvocationRequestBody(goalText string) []byte {
@@ -1524,8 +1566,10 @@ func runPackagedGoalInvocationCLIWithMode(
 		inputs.Input.StdinIsTTY = &stdinIsTTY
 	}
 
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 	crossCharacterization.recordRootStart("parity-cli")
-	runErr := sharedCrossProcess(t).process.Execute(inputs.Input)
+	runErr := process.Execute(inputs.Input)
 	crossCharacterization.recordRootClose("parity-cli")
 
 	var response factoryapi.InvocationResponse

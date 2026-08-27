@@ -19,8 +19,8 @@ import (
 
 const (
 	crossCharacterizationExpectedScenarios = 8
-	crossCharacterizationExpectedRoots     = 13
-	crossCharacterizationExpectedServers   = 7
+	crossCharacterizationExpectedRoots     = 9
+	crossCharacterizationExpectedServers   = 3
 	crossCharacterizationExpectedSessions  = 5
 )
 
