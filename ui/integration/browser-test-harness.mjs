@@ -37,6 +37,12 @@ const realBackendHarnessDiagnosticTruncationMarker =
 const realBackendHarnessSource =
   "./tests/functional/internal/support/cmd/browser_api_harness";
 const realBackendHarnessArtifactDirectoryPrefix = "you-browser-api-harness-";
+const realBackendHarnessCleanupOptions = {
+  force: true,
+  maxRetries: 8,
+  recursive: true,
+  retryDelay: 100,
+};
 
 export const realBackendHarnessArtifactEnvironmentVariable =
   "AGENT_FACTORY_REAL_BACKEND_HARNESS_PATH";
@@ -1860,16 +1866,17 @@ async function stopProcess(child) {
     return;
   }
 
+  const exited = once(child, "exit");
   if (process.platform === "win32") {
     const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
       shell: false,
       stdio: "ignore",
     });
     await once(killer, "exit");
+    await exited;
     return;
   }
 
-  const exited = once(child, "exit");
   if (child[repoProcessGroupKey]) {
     // Commands such as `go run` launch the compiled program as a child process.
     // Terminate the process group so that child cannot retain the shared API
@@ -2040,9 +2047,9 @@ export async function buildRealBackendBrowserHarness({
       "phase=harness-artifact-cleanup started",
     );
     if (ownsArtifactDirectory) {
-      await rm(artifactDirectory, { force: true, recursive: true });
+      await rm(artifactDirectory, realBackendHarnessCleanupOptions);
     } else if (artifactPath) {
-      await rm(artifactPath, { force: true });
+      await rm(artifactPath, realBackendHarnessCleanupOptions);
     }
     writeRealBackendHarnessDiagnostic(
       diagnosticWriter,
@@ -2883,7 +2890,7 @@ export async function startRealBackendBrowserHarness({
       );
     });
   } catch (error) {
-    await rm(customerHome, { force: true, recursive: true });
+    await rm(customerHome, realBackendHarnessCleanupOptions);
     throw error;
   }
 
@@ -2911,7 +2918,7 @@ export async function startRealBackendBrowserHarness({
     try {
       await stopProcess(child);
     } finally {
-      await rm(customerHome, { force: true, recursive: true });
+      await rm(customerHome, realBackendHarnessCleanupOptions);
     }
   }
   const ready = waitForRealBackendHarnessReadiness({
