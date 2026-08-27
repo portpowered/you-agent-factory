@@ -552,6 +552,44 @@ func TestRuntimeMetricsQueryDiscardsPartialAggregateAfterStreamFailure(t *testin
 	if !reflect.DeepEqual(result, factoryvisualization.RuntimeMetricsQueryResult{}) {
 		t.Fatalf("partial query result = %#v, want zero result on stream failure", result)
 	}
+
+	cancellationReader := &runtimeMetricsReaderStub{streamErr: context.Canceled}
+	cancellationQuery, err := factoryvisualizationwire.NewRuntimeMetricsQuery(cancellationReader, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery(cancellation) error = %v", err)
+	}
+	_, err = cancellationQuery.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("QueryRuntimeMetrics() error = %v, want context.Canceled", err)
+	}
+	var cancellationQueryErr *factoryvisualization.RuntimeMetricsQueryError
+	if errors.As(err, &cancellationQueryErr) {
+		t.Fatalf("QueryRuntimeMetrics() error = %v, want cancellation without a read-failure wrapper", err)
+	}
+}
+
+func assertRuntimeMetricsQueryPrefersIncrementalReaderCapability(t *testing.T) {
+	t.Helper()
+	reader := &runtimeMetricsReaderStub{records: []factoryvisualization.RuntimeMetricRecord{
+		metricRecord("provider.input_tokens", 7, "session-a", "runtime-a", "workstation-a", "worker-a", "provider-a", "", "tokens"),
+	}}
+	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+	}
+	result, err := query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+	if err != nil {
+		t.Fatalf("QueryRuntimeMetrics() error = %v", err)
+	}
+	if result.Totals.InputTokens != 7 {
+		t.Fatalf("query totals = %#v, want input tokens 7", result.Totals)
+	}
+	if reader.streamCalls != 1 || reader.readCalls != 0 {
+		t.Fatalf("reader calls = stream %d, read %d; want one streaming call and no collecting read", reader.streamCalls, reader.readCalls)
+	}
+	if reader.maxLiveRecords != 1 {
+		t.Fatalf("peak records crossing query boundary = %d, want one", reader.maxLiveRecords)
+	}
 }
 
 func TestRuntimeMetricsQueryValidatesReaderAndRoot(t *testing.T) {
@@ -597,6 +635,7 @@ func TestRuntimeMetricsQueryFallsBackToReadOnlyReader(t *testing.T) {
 	if result.Totals.InputTokens != 4 || len(result.Providers) != 1 || result.Providers[0].Key != "provider-a" {
 		t.Fatalf("legacy reader result = %#v, want session-a/provider-a only", result)
 	}
+	assertRuntimeMetricsQueryPrefersIncrementalReaderCapability(t)
 }
 
 func TestRuntimeMetricsQueryBuildsDeterministicCorrelatedUsageRows(t *testing.T) {
@@ -847,10 +886,15 @@ type runtimeMetricsReaderStub struct {
 	streamErr      error
 	streamErrAfter int
 	calls          int
+	readCalls      int
+	streamCalls    int
+	liveRecords    int
+	maxLiveRecords int
 }
 
 func (r *runtimeMetricsReaderStub) Read(ctx context.Context, _ string) ([]factoryvisualization.RuntimeMetricRecord, error) {
 	r.calls++
+	r.readCalls++
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -862,6 +906,7 @@ func (r *runtimeMetricsReaderStub) Read(ctx context.Context, _ string) ([]factor
 
 func (r *runtimeMetricsReaderStub) Stream(ctx context.Context, _ string, visit func(factoryvisualization.RuntimeMetricRecord) error) error {
 	r.calls++
+	r.streamCalls++
 	if r.err != nil {
 		return r.err
 	}
@@ -869,7 +914,13 @@ func (r *runtimeMetricsReaderStub) Stream(ctx context.Context, _ string, visit f
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := visit(record); err != nil {
+		r.liveRecords++
+		if r.liveRecords > r.maxLiveRecords {
+			r.maxLiveRecords = r.liveRecords
+		}
+		err := visit(record)
+		r.liveRecords--
+		if err != nil {
 			return err
 		}
 		if r.streamErr != nil && index+1 >= r.streamErrAfter {
