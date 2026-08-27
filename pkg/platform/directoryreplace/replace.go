@@ -37,6 +37,7 @@ func (local Local) Commit(
 	if err := os.Remove(backupDir); err != nil {
 		return "", fmt.Errorf("prepare replacement backup for directory %q: %w", segment, err)
 	}
+	rollbackDir := backupDir
 
 	if err := os.Rename(targetDir, backupDir); err != nil {
 		if local.operatingSystem == "windows" {
@@ -59,10 +60,10 @@ func (local Local) Commit(
 		if committed {
 			return
 		}
-		if restoreErr := os.Rename(backupDir, targetDir); restoreErr != nil {
+		if restoreErr := os.Rename(rollbackDir, targetDir); restoreErr != nil {
 			return
 		}
-		_ = os.RemoveAll(backupDir)
+		_ = os.RemoveAll(rollbackDir)
 	}()
 
 	if err := os.Rename(stagingDir, targetDir); err != nil {
