@@ -1,10 +1,16 @@
 // @vitest-environment node
 
 import { EventEmitter } from "node:events";
+import { existsSync, writeFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { PassThrough } from "node:stream";
 
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRealBackendBrowserHarness,
   createRealBackendHarnessStartupTiming,
   findAvailablePort,
   formatRealBackendHarnessStartupTiming,
@@ -12,6 +18,77 @@ import {
   waitForPortAvailable,
   waitForRealBackendHarnessReadiness,
 } from "./browser-test-harness.mjs";
+
+function fakeGoCache() {
+  return {
+    cacheReuse: {
+      GOCACHE: "populated",
+      GOMODCACHE: "populated",
+      GOPATH: "available",
+    },
+    cacheReuseBeforeResolution: {
+      GOCACHE: "populated",
+      GOMODCACHE: "populated",
+      GOPATH: "available",
+    },
+    elapsedMs: 2,
+    environment: {
+      GOCACHE: "C:\\cache\\go-build",
+      GOMODCACHE: "C:\\cache\\gomodcache",
+      GOPATH: "C:\\cache\\gopath",
+    },
+  };
+}
+
+function fakeProcess({ code = 0, stderr = "" } = {}) {
+  return (_command, args) => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.signalCode = null;
+    if (code === 0) {
+      const outputPath = args[args.indexOf("-o") + 1];
+      writeFileSync(outputPath, "prebuilt browser api harness");
+    }
+    queueMicrotask(() => {
+      if (stderr) {
+        child.stderr.end(stderr);
+      } else {
+        child.stderr.end();
+      }
+      child.stdout.end();
+      child.exitCode = code;
+      child.emit("exit", code, null);
+    });
+    return child;
+  };
+}
+
+function fakeHarnessProcess(spawnCalls) {
+  return (command, args) => {
+    spawnCalls.push({ args, command });
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.exitCode = null;
+    child.signalCode = null;
+    queueMicrotask(() => {
+      child.emit("spawn");
+      child.stderr.write("[browser-api-harness] phase=process-started\n");
+      child.stdout.write(
+        `${JSON.stringify({
+          apiOrigin: "http://127.0.0.1:43123",
+          sessionId: "dur-sess-prebuilt",
+        })}\n`,
+      );
+      child.stderr.end();
+      child.stdout.end();
+      child.exitCode = 0;
+    });
+    return child;
+  };
+}
 
 async function fetchJSON(url) {
   const response = await fetch(url);
@@ -21,7 +98,90 @@ async function fetchJSON(url) {
   return response.json();
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this focused suite owns all startup lifecycle paths and the one real setup proof.
 describe("real backend durable session setup", () => {
+  it("builds one prebuilt artifact and removes it through idempotent cleanup", async () => {
+    const diagnostics = [];
+    const artifact = await buildRealBackendBrowserHarness({
+      diagnosticWriter: (line) => diagnostics.push(line),
+      resolveGoCache: fakeGoCache,
+      spawnProcess: fakeProcess({ stderr: "compiler setup complete" }),
+    });
+
+    expect(existsSync(artifact.artifactPath)).toBe(true);
+    expect(artifact.buildTimings.harnessBuildMs).toEqual(expect.any(Number));
+    expect(diagnostics.join(" ")).toContain("phase=harness-build complete");
+    expect(diagnostics.join(" ")).toContain(
+      "child-stderr compiler setup complete",
+    );
+
+    await artifact.cleanup();
+    await artifact.cleanup();
+    expect(existsSync(artifact.artifactPath)).toBe(false);
+  });
+
+  it("reports a build failure as harness-build and cleans the partial artifact", async () => {
+    let artifactPath = null;
+    const diagnostics = [];
+    const spawnProcess = (command, args) => {
+      artifactPath = args[args.indexOf("-o") + 1];
+      return fakeProcess({
+        code: 1,
+        stderr: "compile failed at C:\\Users\\andre\\private\\token=secret",
+      })(command, args);
+    };
+
+    await expect(
+      buildRealBackendBrowserHarness({
+        diagnosticWriter: (line) => diagnostics.push(line),
+        resolveGoCache: fakeGoCache,
+        spawnProcess,
+      }),
+    ).rejects.toThrow(
+      /Real backend browser harness build failed[\s\S]*phase=harness-build[\s\S]*captured-output=child-stderr compile failed at <path>/,
+    );
+    expect(artifactPath).not.toBeNull();
+    expect(existsSync(artifactPath)).toBe(false);
+    expect(diagnostics.join(" ")).not.toContain("C:\\Users\\andre\\private");
+  });
+
+  it("launches a supplied prebuilt artifact without go run", async () => {
+    const artifactDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "you-browser-api-harness-test-"),
+    );
+    const artifactPath = path.join(artifactDirectory, "browser_api_harness");
+    await writeFile(artifactPath, "prebuilt browser api harness");
+    const spawnCalls = [];
+    const diagnostics = [];
+    const apiPort = 43123;
+
+    try {
+      const backend = await startRealBackendBrowserHarness({
+        apiPort,
+        diagnosticWriter: (line) => diagnostics.push(line),
+        harnessPath: artifactPath,
+        resolveGoCache: fakeGoCache,
+        spawnProcess: fakeHarnessProcess(spawnCalls),
+        workflowFixture: "agent-run-fake-child.workflow.js",
+        workflowName: "agent-run-fake-child",
+      });
+
+      expect(spawnCalls).toHaveLength(1);
+      expect(spawnCalls[0].command).toBe(path.resolve(artifactPath));
+      expect(spawnCalls[0].args).not.toContain("run");
+      expect(backend.startupTimings).toMatchObject({
+        executionMode: "prebuilt-artifact",
+        harnessCompilationSetupMs: 0,
+      });
+      expect(diagnostics.join(" ")).toContain(
+        "phase=process-launch started mode=prebuilt-artifact",
+      );
+      await backend.stop();
+    } finally {
+      await rm(artifactDirectory, { force: true, recursive: true });
+    }
+  });
+
   it("reports phase timing when a valid readiness payload arrives", async () => {
     const child = new EventEmitter();
     const lineReader = new EventEmitter();
@@ -96,6 +256,26 @@ describe("real backend durable session setup", () => {
       }),
     ).rejects.toThrow(
       /Timed out waiting for real backend browser harness readiness[\s\S]*phase=harness-compilation\/setup[\s\S]*captured-stderr=startup diagnostic/,
+    );
+  });
+
+  it("reports malformed readiness output with phase timing", async () => {
+    const child = new EventEmitter();
+    const lineReader = new EventEmitter();
+    const timing = createRealBackendHarnessStartupTiming();
+    timing.processSpawnedAt = timing.startedAt;
+    timing.processStartedAt = timing.startedAt;
+
+    const ready = waitForRealBackendHarnessReadiness({
+      child,
+      lineReader,
+      timing,
+      timeoutMs: 100,
+    });
+    lineReader.emit("line", "not-json");
+
+    await expect(ready).rejects.toThrow(
+      /Failed to parse real backend browser harness ready payload[\s\S]*phase=application-startup/,
     );
   });
 

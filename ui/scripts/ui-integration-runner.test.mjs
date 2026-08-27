@@ -118,3 +118,21 @@ test("runFocusedBrowserIntegration runs only the requested integration files", (
   log.mockRestore();
   exit.mockRestore();
 });
+
+test("runFocusedBrowserIntegration can throw failures for cleanup-safe callers", () => {
+  const spawn = vi.fn(() => ({
+    status: 1,
+    stdout: "failed integration output",
+  }));
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
+
+  expect(() =>
+    runFocusedBrowserIntegration(durableSessionRealBackendIntegrationFiles, {
+      exitOnFailure: false,
+      spawn,
+    }),
+  ).toThrow(/Focused browser integration Vitest pass \(2 files\) failed/);
+  expect(exit).not.toHaveBeenCalled();
+
+  exit.mockRestore();
+});

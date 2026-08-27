@@ -34,6 +34,12 @@ const realBackendHarnessProcessStartedMarker =
 const realBackendHarnessDiagnosticLimit = 8_192;
 const realBackendHarnessDiagnosticTruncationMarker =
   "[earlier diagnostics truncated]";
+const realBackendHarnessSource =
+  "./tests/functional/internal/support/cmd/browser_api_harness";
+const realBackendHarnessArtifactDirectoryPrefix = "you-browser-api-harness-";
+
+export const realBackendHarnessArtifactEnvironmentVariable =
+  "AGENT_FACTORY_REAL_BACKEND_HARNESS_PATH";
 
 export const previewHost = "127.0.0.1";
 export const buildTimeoutMs = 600_000;
@@ -1435,6 +1441,7 @@ export function createRealBackendHarnessStartupTiming(
     cacheReuseBeforeResolution: null,
     firstReadyPayloadMs: null,
     harnessCompilationSetupMs: null,
+    executionMode: null,
     processLaunchMs: null,
     processSpawnedAt: null,
     processStartedAt: null,
@@ -1451,6 +1458,7 @@ function publicRealBackendHarnessStartupTiming(timing) {
     cacheReuseBeforeResolution: timing.cacheReuseBeforeResolution,
     firstReadyPayloadMs: timing.firstReadyPayloadMs,
     harnessCompilationSetupMs: timing.harnessCompilationSetupMs,
+    executionMode: timing.executionMode,
     processLaunchMs: timing.processLaunchMs,
     totalStartupMs: timing.totalStartupMs,
   };
@@ -1459,6 +1467,7 @@ function publicRealBackendHarnessStartupTiming(timing) {
 export function formatRealBackendHarnessStartupTiming(timing) {
   return [
     `${realBackendHarnessDiagnosticPrefix} timing`,
+    `execution-mode=${timing?.executionMode ?? "unavailable"}`,
     `cache-resolution=${formatRealBackendHarnessDuration(timing?.cacheResolutionMs)}`,
     `harness-compilation-setup=${formatRealBackendHarnessDuration(timing?.harnessCompilationSetupMs)}`,
     `process-launch=${formatRealBackendHarnessDuration(timing?.processLaunchMs)}`,
@@ -1544,10 +1553,10 @@ function recordRealBackendHarnessStartupPhase(timing, phase, now, writer) {
   }
 
   timing.processStartedAt = now;
-  timing.harnessCompilationSetupMs = Math.max(
-    0,
-    now - (timing.processSpawnedAt ?? timing.startedAt),
-  );
+  timing.harnessCompilationSetupMs =
+    timing.executionMode === "prebuilt-artifact"
+      ? 0
+      : Math.max(0, now - (timing.processSpawnedAt ?? timing.startedAt));
   writeRealBackendHarnessDiagnostic(
     writer,
     `phase=harness-process-started elapsed=${formatRealBackendHarnessDuration(timing.harnessCompilationSetupMs)}`,
@@ -1876,6 +1885,296 @@ async function stopProcess(child) {
     child.kill("SIGTERM");
   }
   await exited;
+}
+
+function observeRealBackendHarnessCommandOutput({
+  child,
+  diagnosticWriter,
+  secrets,
+  phase,
+}) {
+  let captured = "";
+  const flushers = [];
+
+  function attachStream(stream, label) {
+    if (!stream) {
+      return;
+    }
+
+    let pendingLine = "";
+    const observeLine = (line) => {
+      const safeLine = sanitizeRealBackendHarnessDiagnostic(line, secrets);
+      captured = appendBoundedRealBackendHarnessDiagnostic(
+        captured,
+        `${label} ${safeLine}\n`,
+      );
+      if (safeLine.trim().length > 0) {
+        writeRealBackendHarnessDiagnostic(
+          diagnosticWriter,
+          `${phase} ${label} ${safeLine.trim()}`,
+        );
+      }
+    };
+    const observeChunk = (chunk) => {
+      pendingLine += chunk.toString();
+      const lines = pendingLine.split(/\r?\n/);
+      pendingLine = lines.pop() ?? "";
+      for (const line of lines) {
+        observeLine(line);
+      }
+    };
+
+    stream.on("data", observeChunk);
+    flushers.push(() => {
+      if (pendingLine.length > 0) {
+        observeLine(pendingLine);
+        pendingLine = "";
+      }
+    });
+  }
+
+  attachStream(child.stdout, "child-stdout");
+  attachStream(child.stderr, "child-stderr");
+
+  return () => {
+    for (const flush of flushers) {
+      flush();
+    }
+    return captured;
+  };
+}
+
+async function runRealBackendHarnessCommand({
+  args,
+  command,
+  diagnosticWriter,
+  extraEnv,
+  secrets,
+  spawnProcess = spawnRepoProcess,
+  timeoutMs,
+}) {
+  let child;
+  try {
+    child = spawnProcess(command, args, { extraEnv });
+  } catch (error) {
+    return { error };
+  }
+
+  const readCapturedOutput = observeRealBackendHarnessCommandOutput({
+    child,
+    diagnosticWriter,
+    phase: "phase=harness-build",
+    secrets,
+  });
+  const exited = new Promise((resolve) => {
+    child.once("exit", (code, signal) => resolve({ code, signal }));
+    child.once("error", (error) => resolve({ error }));
+  });
+  let timeoutHandle;
+  const timedOut = new Promise((resolve) => {
+    timeoutHandle = setTimeout(() => resolve({ timedOut: true }), timeoutMs);
+  });
+
+  let result;
+  try {
+    result = await Promise.race([exited, timedOut]);
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+
+  if (result.timedOut) {
+    let stopError = null;
+    try {
+      await stopProcess(child);
+    } catch (error) {
+      stopError = error;
+    }
+    return {
+      ...result,
+      capturedOutput: readCapturedOutput(),
+      stopError,
+    };
+  }
+
+  return {
+    ...result,
+    capturedOutput: readCapturedOutput(),
+  };
+}
+
+function resolveRealBackendHarnessArtifactPath(harnessPath) {
+  const configuredPath =
+    harnessPath ?? process.env[realBackendHarnessArtifactEnvironmentVariable];
+  if (typeof configuredPath !== "string" || configuredPath.trim() === "") {
+    return null;
+  }
+
+  const resolvedPath = path.resolve(configuredPath);
+  if (!existsSync(resolvedPath)) {
+    throw new Error(
+      `Configured real backend browser harness artifact is missing; expected a built file at ${resolvedPath}.`,
+    );
+  }
+  return resolvedPath;
+}
+
+export async function buildRealBackendBrowserHarness({
+  artifactDirectory: configuredArtifactDirectory = null,
+  diagnosticWriter = process.stderr,
+  now = () => performance.now(),
+  resolveGoCache = resolveGoCacheEnvironment,
+  spawnProcess = spawnRepoProcess,
+} = {}) {
+  let artifactDirectory = configuredArtifactDirectory;
+  let ownsArtifactDirectory = false;
+  let artifactPath = null;
+  let cleaned = false;
+
+  const cleanup = async () => {
+    if (cleaned || !artifactDirectory) {
+      return;
+    }
+    cleaned = true;
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      "phase=harness-artifact-cleanup started",
+    );
+    if (ownsArtifactDirectory) {
+      await rm(artifactDirectory, { force: true, recursive: true });
+    } else if (artifactPath) {
+      await rm(artifactPath, { force: true });
+    }
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      "phase=harness-artifact-cleanup complete",
+    );
+  };
+
+  try {
+    if (artifactDirectory === null) {
+      artifactDirectory = await mkdtemp(
+        path.join(tmpdir(), realBackendHarnessArtifactDirectoryPrefix),
+      );
+      ownsArtifactDirectory = true;
+    } else {
+      artifactDirectory = path.resolve(artifactDirectory);
+      await mkdir(artifactDirectory, { recursive: true });
+    }
+    artifactPath = path.join(
+      artifactDirectory,
+      process.platform === "win32"
+        ? "browser_api_harness.exe"
+        : "browser_api_harness",
+    );
+
+    const buildStartedAt = now();
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      "phase=harness-build started command=go build browser-api-harness",
+    );
+    const goCache = resolveGoCache({ diagnosticWriter, now });
+    const result = await runRealBackendHarnessCommand({
+      args: [
+        "build",
+        "-buildvcs=false",
+        "-o",
+        artifactPath,
+        realBackendHarnessSource,
+      ],
+      command: "go",
+      diagnosticWriter,
+      extraEnv: {
+        CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
+        ...goCache.environment,
+      },
+      secrets: [artifactPath, ...Object.values(goCache.environment)],
+      spawnProcess,
+      timeoutMs: buildTimeoutMs,
+    });
+    const buildElapsedMs = Math.max(0, now() - buildStartedAt);
+
+    if (result.timedOut) {
+      throw new Error(
+        [
+          "Real backend browser harness build timed out.",
+          "phase=harness-build",
+          `command=go build browser-api-harness elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+          result.stopError
+            ? `stop-error=${sanitizeRealBackendHarnessDiagnostic(result.stopError.message)}`
+            : null,
+          result.capturedOutput?.trim()
+            ? `captured-output=${result.capturedOutput.trim()}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+
+    if (result.error) {
+      throw new Error(
+        [
+          "Real backend browser harness build could not start.",
+          "phase=harness-build",
+          `command=go build browser-api-harness elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+          `error=${sanitizeRealBackendHarnessDiagnostic(result.error.message ?? result.error)}`,
+          result.capturedOutput?.trim()
+            ? `captured-output=${result.capturedOutput.trim()}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+
+    if (result.code !== 0) {
+      throw new Error(
+        [
+          "Real backend browser harness build failed.",
+          "phase=harness-build",
+          `command=go build browser-api-harness code=${result.code ?? "null"} signal=${result.signal ?? "null"} elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+          result.capturedOutput?.trim()
+            ? `captured-output=${result.capturedOutput.trim()}`
+            : "captured-output=<none>",
+        ].join("\n"),
+      );
+    }
+
+    const artifactStats = await stat(artifactPath).catch(() => null);
+    if (!artifactStats?.isFile()) {
+      throw new Error(
+        [
+          "Real backend browser harness build completed without producing an executable artifact.",
+          "phase=harness-build",
+          `command=go build browser-api-harness elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)}`,
+        ].join("\n"),
+      );
+    }
+
+    writeRealBackendHarnessDiagnostic(
+      diagnosticWriter,
+      `phase=harness-build complete elapsed=${formatRealBackendHarnessDuration(buildElapsedMs)} cache-reuse=${formatGoCacheReuse(goCache.cacheReuse)}`,
+    );
+    return {
+      artifactPath,
+      buildTimings: {
+        cacheResolutionMs: goCache.elapsedMs,
+        cacheReuse: goCache.cacheReuse,
+        cacheReuseBeforeResolution: goCache.cacheReuseBeforeResolution,
+        harnessBuildMs: buildElapsedMs,
+      },
+      cleanup,
+    };
+  } catch (error) {
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\nphase=harness-artifact-cleanup error=${sanitizeRealBackendHarnessDiagnostic(cleanupError.message ?? cleanupError)}`,
+      );
+    }
+    throw error;
+  }
 }
 
 async function waitForURL(url, timeoutMs = readyTimeoutMs) {
@@ -2504,8 +2803,11 @@ export async function startRealBackendBrowserHarness({
   apiPort,
   diagnosticWriter = process.stderr,
   factoryDir = path.resolve(packageRoot, "..", "factory"),
+  harnessPath = null,
   now = () => performance.now(),
   requestID = "req-browser-runtime-001",
+  resolveGoCache = resolveGoCacheEnvironment,
+  spawnProcess = spawnRepoProcess,
   startMode = "sync",
   workflowFixture,
   workflowName,
@@ -2516,8 +2818,11 @@ export async function startRealBackendBrowserHarness({
     );
   }
 
+  const artifactPath = resolveRealBackendHarnessArtifactPath(harnessPath);
+  const executionMode = artifactPath ? "prebuilt-artifact" : "go-run-fallback";
   const timing = createRealBackendHarnessStartupTiming(now());
-  const goCache = resolveGoCacheEnvironment({ diagnosticWriter, now });
+  timing.executionMode = executionMode;
+  const goCache = resolveGoCache({ diagnosticWriter, now });
   timing.cacheResolutionMs = goCache.elapsedMs;
   timing.cacheReuse = goCache.cacheReuse;
   timing.cacheReuseBeforeResolution = goCache.cacheReuseBeforeResolution;
@@ -2537,14 +2842,13 @@ export async function startRealBackendBrowserHarness({
   try {
     writeRealBackendHarnessDiagnostic(
       diagnosticWriter,
-      "phase=process-launch started",
+      `phase=process-launch started mode=${executionMode}`,
     );
     const processLaunchStartedAt = now();
-    child = spawnRepoProcess(
-      "go",
+    child = spawnProcess(
+      artifactPath ?? "go",
       [
-        "run",
-        "./tests/functional/internal/support/cmd/browser_api_harness",
+        ...(artifactPath ? [] : ["run", realBackendHarnessSource]),
         "--api-port",
         String(apiPort),
         "--factory-dir",
@@ -2589,6 +2893,7 @@ export async function startRealBackendBrowserHarness({
     now,
     secrets: [
       customerHome,
+      artifactPath ?? "",
       factoryDir,
       requestID,
       workflowFixture,
@@ -2617,6 +2922,7 @@ export async function startRealBackendBrowserHarness({
     now,
     secrets: [
       customerHome,
+      artifactPath ?? "",
       factoryDir,
       requestID,
       workflowFixture,

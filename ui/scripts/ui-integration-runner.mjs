@@ -54,6 +54,7 @@ export function formatPhaseElapsed(phaseName, elapsedMs) {
 }
 
 function runVitestIntegrationPass({
+  exitOnFailure = true,
   vitestArgs,
   phaseName,
   slowFileSummaryTitle,
@@ -89,7 +90,13 @@ function runVitestIntegrationPass({
 
   const status = result.status ?? 1;
   if (status !== 0) {
-    process.exit(status);
+    if (exitOnFailure) {
+      process.exit(status);
+      return;
+    }
+    throw new Error(
+      `${phaseName} failed with exit status ${status}; see the Vitest output above.`,
+    );
   }
 }
 
@@ -98,6 +105,7 @@ export function runBrowserIntegration(options = {}) {
     vitestArgs: buildBrowserIntegrationVitestArgs(),
     phaseName: browserIntegrationPhaseName,
     slowFileSummaryTitle: "Browser integration slowest test files",
+    exitOnFailure: options.exitOnFailure,
     spawn: options.spawn,
   });
 }
@@ -108,6 +116,7 @@ export function runFocusedBrowserIntegration(files, options = {}) {
     phaseName:
       options.phaseName ??
       `Focused browser integration Vitest pass (${files.length} files)`,
+    exitOnFailure: options.exitOnFailure,
     slowFileSummaryTitle: "Focused browser integration slowest test files",
     spawn: options.spawn,
   });
