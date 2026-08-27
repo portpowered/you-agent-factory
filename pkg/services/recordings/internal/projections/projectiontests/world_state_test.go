@@ -1134,3 +1134,102 @@ func TestReconstructFactoryWorldState_LogicalMoveCronDispatchOmitsWorkerMetadata
 		t.Fatalf("workstation = %#v, want scheduled-route", dispatch.Workstation)
 	}
 }
+
+func TestReconstructFactoryWorldState_CompletesCronWorkWithoutRetainingOccupancy(t *testing.T) {
+	t0 := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	workstationKind := factoryapi.WorkstationKindCron
+	workstationType := factoryapi.WorkstationTypeLogicalMove
+	cronWork := work.FactoryWorkItem{
+		ID:         "automation-completed-without-time-prefix",
+		WorkTypeID: interfaces.SystemTimeWorkTypeID,
+		State:      interfaces.SystemTimePendingState,
+		TraceID:    "trace-cron",
+		Tags: map[string]string{
+			interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
+			interfaces.TimeWorkTagKeyCronWorkstation: "scheduled-route",
+		},
+	}
+	otherWork := work.FactoryWorkItem{
+		ID: "recoverable-work", WorkTypeID: "task", State: "init", TraceID: "trace-work",
+	}
+	structure := generatedProjectionEvent(
+		factoryapi.FactoryEventTypeInitialStructureRequest,
+		"initial-cron-recovery",
+		0,
+		t0,
+		factoryapi.FactoryEventContext{},
+		factoryapi.InitialStructureRequestEventPayload{
+			Factory: factoryapi.Factory{
+				WorkTypes: &[]factoryapi.WorkType{
+					{
+						Name: "task",
+						States: []factoryapi.WorkState{
+							{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+							{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+						},
+					},
+					{
+						Name: interfaces.SystemTimeWorkTypeID,
+						States: []factoryapi.WorkState{{
+							Name: interfaces.SystemTimePendingState,
+							Type: factoryapi.WorkStateTypePROCESSING,
+						}},
+					},
+				},
+				Workstations: &[]factoryapi.Workstation{{
+					Id:       stringPtrForProjectionTest("scheduled-route"),
+					Name:     "scheduled-route",
+					Behavior: &workstationKind,
+					Type:     &workstationType,
+					Inputs:   []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
+					Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+				}},
+			},
+		},
+	)
+	events := []factoryapi.FactoryEvent{
+		structure,
+		workInputEvent(1, t0.Add(time.Second), cronWork),
+		workInputEvent(1, t0.Add(1500*time.Millisecond), otherWork),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-cron-recovery",
+			TransitionID: "scheduled-route",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "scheduled-route", Name: "scheduled-route"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID: "automation-completed-without-time-prefix", PlaceID: interfaces.SystemTimePendingPlaceID,
+				WorkItem: &work.FactoryWorkItem{
+					ID: cronWork.ID, WorkTypeID: cronWork.WorkTypeID, State: cronWork.State,
+					TraceID: cronWork.TraceID, Tags: cronWork.Tags,
+				},
+			}},
+		}),
+		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID:   "dispatch-cron-recovery",
+			TransitionID: "scheduled-route",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "scheduled-route", Name: "scheduled-route"},
+			Result:       interfaces.WorkstationResult{Outcome: "ACCEPTED"},
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if _, ok := state.ActiveWorkItemsByID[cronWork.ID]; ok {
+		t.Fatalf("cron Work = %#v, want removed from active Work after accepted dispatch", state.ActiveWorkItemsByID)
+	}
+	terminal, ok := state.TerminalWorkByID[cronWork.ID]
+	if !ok || terminal.Status != "COMPLETED" {
+		t.Fatalf("cron terminal Work = %#v, want explicit completed disposition", terminal)
+	}
+	if occupancy := state.PlaceOccupancyByID[interfaces.SystemTimePendingPlaceID]; occupancy.TokenCount != 0 {
+		t.Fatalf("cron pending occupancy = %#v, want no consumed time token", occupancy)
+	}
+	if got := state.PlaceOccupancyByID["task:init"].WorkItemIDs; len(got) != 1 || got[0] != otherWork.ID {
+		t.Fatalf("recoverable Work occupancy = %#v, want %q", got, otherWork.ID)
+	}
+	completion := state.CompletedDispatches[0]
+	if completion.TerminalWork == nil || completion.TerminalWork.WorkItem.ID != cronWork.ID {
+		t.Fatalf("cron completion = %#v, want terminal disposition for %q", completion, cronWork.ID)
+	}
+}

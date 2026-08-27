@@ -1,0 +1,306 @@
+{
+  "schemaVersion": "agent-factory.replay.v1",
+  "recordedAt": "2026-08-20T12:00:00Z",
+  "events": [
+    {
+      "id": "factory-event/run-started",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_REQUEST",
+      "context": {
+        "eventTime": "2026-08-20T12:00:00Z",
+        "sequence": 0,
+        "tick": 0
+      },
+      "payload": {
+        "factory": {
+          "name": "automation-occupancy-recovery",
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                {"name": "init", "type": "INITIAL"},
+                {"name": "to-complete", "type": "PROCESSING"},
+                {"name": "complete", "type": "TERMINAL"},
+                {"name": "failed", "type": "FAILED"}
+              ]
+            }
+          ],
+          "workers": [
+            {"name": "cron-worker"}
+          ],
+          "workstations": [
+            {
+              "name": "process-work",
+              "worker": "cron-worker",
+              "inputs": [
+                {"workType": "task", "state": "init"}
+              ],
+              "outputs": [
+                {"workType": "task", "state": "to-complete"}
+              ],
+              "onFailure": [
+                {"workType": "task", "state": "failed"}
+              ]
+            },
+            {
+              "name": "daily-refresh",
+              "behavior": "CRON",
+              "worker": "cron-worker",
+              "cron": {
+                "schedule": "0 0 1 1 *",
+                "triggerAtStart": false
+              },
+              "outputs": [
+                {"workType": "task", "state": "init"}
+              ]
+            }
+          ]
+        },
+        "recordedAt": "2026-08-20T12:00:00Z"
+      }
+    },
+    {
+      "id": "factory-event/initial-structure/0",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "INITIAL_STRUCTURE_REQUEST",
+      "context": {
+        "eventTime": "2026-08-20T12:00:00.001Z",
+        "sequence": 1,
+        "tick": 0
+      },
+      "payload": {
+        "factory": {
+          "name": "automation-occupancy-recovery",
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                {"name": "init", "type": "INITIAL"},
+                {"name": "to-complete", "type": "PROCESSING"},
+                {"name": "complete", "type": "TERMINAL"},
+                {"name": "failed", "type": "FAILED"}
+              ]
+            }
+          ],
+          "workers": [
+            {"name": "cron-worker"}
+          ],
+          "workstations": [
+            {
+              "name": "process-work",
+              "worker": "cron-worker",
+              "inputs": [
+                {"workType": "task", "state": "init"}
+              ],
+              "outputs": [
+                {"workType": "task", "state": "to-complete"}
+              ],
+              "onFailure": [
+                {"workType": "task", "state": "failed"}
+              ]
+            },
+            {
+              "name": "daily-refresh",
+              "behavior": "CRON",
+              "worker": "cron-worker",
+              "cron": {
+                "schedule": "0 0 1 1 *",
+                "triggerAtStart": false
+              },
+              "outputs": [
+                {"workType": "task", "state": "init"}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "factory-event/session-started",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "SESSION_STARTED",
+      "context": {
+        "eventTime": "2026-08-20T12:00:00.002Z",
+        "orchestratorKind": "PETRI",
+        "sequence": 2,
+        "sessionId": "~default",
+        "sessionSequence": 0,
+        "source": "runtime",
+        "tick": 0
+      },
+      "payload": {
+        "factoryId": "automation-occupancy-recovery",
+        "startedAt": "2026-08-20T12:00:00.002Z"
+      }
+    },
+    {
+      "id": "factory-event/factory-state-change/0/RUNNING",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "FACTORY_STATE_RESPONSE",
+      "context": {
+        "eventTime": "2026-08-20T12:00:00.003Z",
+        "sequence": 3,
+        "tick": 0
+      },
+      "payload": {
+        "previousState": "IDLE",
+        "state": "RUNNING"
+      }
+    },
+    {
+      "id": "factory-event/work-request/recovery",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_REQUEST",
+      "context": {
+        "eventTime": "2026-08-20T12:01:00Z",
+        "requestId": "request-automation-recovery",
+        "sequence": 4,
+        "source": "external-submit",
+        "tick": 1,
+        "traceIds": ["trace-automation-recovery", "trace-work-recovery"],
+        "workIds": [
+          "automation-time-daily-refresh-20260820",
+          "work-recovered-after-automation"
+        ]
+      },
+      "payload": {
+        "source": "external-submit",
+        "type": "FACTORY_REQUEST_BATCH",
+        "relations": [],
+        "works": [
+          {
+            "name": "cron:daily-refresh",
+            "workId": "automation-time-daily-refresh-20260820",
+            "requestId": "request-automation-recovery",
+            "workTypeName": "__system_time",
+            "traceId": "trace-automation-recovery",
+            "state": {"name": "pending", "type": "PROCESSING"},
+            "tags": {
+              "agent_factory.source": "cron",
+              "agent_factory.cron.workstation": "daily-refresh",
+              "agent_factory.time.nominal_at": "2026-08-20T12:00:00Z",
+              "agent_factory.time.due_at": "2026-08-20T12:00:00Z",
+              "agent_factory.time.expires_at": "2026-08-20T12:05:00Z"
+            }
+          },
+          {
+            "name": "recovered-work",
+            "workId": "work-recovered-after-automation",
+            "requestId": "request-automation-recovery",
+            "workTypeName": "task",
+            "traceId": "trace-work-recovery",
+            "state": {"name": "init", "type": "INITIAL"}
+          }
+        ]
+      }
+    },
+    {
+      "id": "factory-event/dispatch-created/dispatch-work-recovery",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_REQUEST",
+      "context": {
+        "dispatchId": "dispatch-work-recovery",
+        "eventTime": "2026-08-20T12:02:00Z",
+        "sequence": 5,
+        "tick": 2,
+        "traceIds": ["trace-work-recovery"],
+        "workIds": ["work-recovered-after-automation"]
+      },
+      "payload": {
+        "transitionId": "process-work",
+        "inputs": [
+          {"workId": "work-recovered-after-automation"}
+        ]
+      }
+    },
+    {
+      "id": "factory-event/dispatch-completed/dispatch-work-recovery",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_RESPONSE",
+      "context": {
+        "dispatchId": "dispatch-work-recovery",
+        "eventTime": "2026-08-20T12:03:00Z",
+        "sequence": 6,
+        "tick": 3,
+        "traceIds": ["trace-work-recovery"],
+        "workIds": ["work-recovered-after-automation"]
+      },
+      "payload": {
+        "durationMillis": 1000,
+        "outcome": "CONTINUE",
+        "transitionId": "process-work",
+        "output": "redacted",
+        "outputWork": [
+          {
+            "name": "recovered-work",
+            "workId": "work-recovered-after-automation",
+            "workTypeName": "task",
+            "traceId": "trace-work-recovery",
+            "state": {"name": "to-complete", "type": "PROCESSING"}
+          }
+        ]
+      }
+    },
+    {
+      "id": "factory-event/work-state-change/work-recovered-after-automation/complete",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_STATE_CHANGE",
+      "context": {
+        "eventTime": "2026-08-20T12:04:00Z",
+        "requestId": "request-work-complete",
+        "sequence": 7,
+        "source": "api",
+        "tick": 4,
+        "traceIds": ["trace-work-recovery"],
+        "workIds": ["work-recovered-after-automation"]
+      },
+      "payload": {
+        "fromPlaceId": "task:to-complete",
+        "fromState": "to-complete",
+        "source": "api",
+        "toPlaceId": "task:complete",
+        "toState": "complete",
+        "workId": "work-recovered-after-automation",
+        "workTypeName": "task"
+      }
+    },
+    {
+      "id": "factory-event/dispatch-created/dispatch-daily-refresh",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_REQUEST",
+      "context": {
+        "dispatchId": "dispatch-daily-refresh",
+        "eventTime": "2026-08-20T12:05:00Z",
+        "sequence": 8,
+        "tick": 5,
+        "traceIds": ["trace-automation-recovery"],
+        "workIds": ["automation-time-daily-refresh-20260820"]
+      },
+      "payload": {
+        "transitionId": "daily-refresh",
+        "inputs": [
+          {"workId": "automation-time-daily-refresh-20260820"}
+        ]
+      }
+    },
+    {
+      "id": "factory-event/dispatch-completed/dispatch-daily-refresh",
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_RESPONSE",
+      "context": {
+        "dispatchId": "dispatch-daily-refresh",
+        "eventTime": "2026-08-20T12:06:00Z",
+        "sequence": 9,
+        "tick": 6,
+        "traceIds": ["trace-automation-recovery"],
+        "workIds": ["automation-time-daily-refresh-20260820"]
+      },
+      "payload": {
+        "durationMillis": 1000,
+        "outcome": "ACCEPTED",
+        "transitionId": "daily-refresh",
+        "output": "redacted"
+      }
+    }
+  ]
+}

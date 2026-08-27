@@ -154,3 +154,58 @@ func waitForRunStop(t *testing.T, errCh <-chan error) {
 		t.Fatal("timed out waiting for service-mode runtime to stop after cancellation")
 	}
 }
+
+func TestServiceMode_WorkerResultWhilePaused_BuffersUntilResume(t *testing.T) {
+	executor := &blockingExecutor{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	h := startServiceModeRunHarness(t,
+		withNet(buildSimpleNet()),
+		withServiceMode(),
+		withWorkerExecutor("mock", executor),
+		withLogger(logging.NoopLogger{}),
+	)
+	defer h.stop()
+	buffered := observeNextBufferedResult(t, h.Factory)
+
+	if _, err := submitWorkRequests(context.Background(), h.Factory, []work.SubmitRequest{{
+		RequestID: "request-runtime-paused-result-001", WorkTypeID: "task", TraceID: "trace-runtime-paused-result",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	waitForBlockingWorkerStart(t, executor, h.errCh)
+	waitForAggregateSnapshot(t, h.Factory, func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return snapshot.InFlightCount > 0 && len(snapshot.Dispatches) > 0
+	})
+
+	h.pauseAndWait()
+	close(executor.release)
+	waitForBufferedResult(t, buffered)
+	assertPausedWorkerResultBuffered(t, h.Factory)
+
+	h.resumeAndWait()
+	waitForWorkAtPlace(t, h.Factory, "task:done", time.Second)
+	assertNoInFlightDispatches(t, h.Factory)
+	assertTaskDoneOnce(t, h.Factory)
+}
+
+func TestServiceMode_SubmissionWhilePaused_BuffersUntilResume(t *testing.T) {
+	h := startServiceModeRunHarness(t,
+		withNet(buildSimpleNet()),
+		withServiceMode(),
+		withInlineDispatch(),
+		withWorkerExecutor("mock", &passExecutor{}),
+		withLogger(logging.NoopLogger{}),
+	)
+	defer h.stop()
+
+	h.pauseAndWait()
+	submitPausedBufferTask(t, h.Factory, "request-runtime-paused-submit-001", "trace-runtime-paused-submit")
+	assertPausedSubmissionNotApplied(t, h.Factory)
+
+	h.resumeAndWait()
+	waitForWorkAtPlace(t, h.Factory, "task:done", time.Second)
+	assertTaskDoneOnce(t, h.Factory)
+}

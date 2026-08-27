@@ -443,6 +443,11 @@ func (r *factoryWorldReducer) recordDispatchCompletionState(
 	completion interfaces.FactoryWorldDispatchCompletion,
 ) {
 	r.stateValue.CompletedDispatches = append(r.stateValue.CompletedDispatches, completion)
+	if terminal := completion.TerminalWork; terminal != nil && terminal.Status == completedAutomationWorkStatus && terminal.WorkItem.ID != "" {
+		r.stateValue.TerminalWorkByID[terminal.WorkItem.ID] = *terminal
+		delete(r.stateValue.ActiveWorkItemsByID, terminal.WorkItem.ID)
+		r.addTraceTerminal(terminal.WorkItem.TraceID, terminal.WorkItem.ID)
+	}
 	if payload.Outcome == workerexecution.OutcomeFailed {
 		r.stateValue.FailedDispatches = append(r.stateValue.FailedDispatches, completion)
 		r.recordFailedCompletion(completion)

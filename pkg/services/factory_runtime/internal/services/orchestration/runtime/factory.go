@@ -393,17 +393,12 @@ func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{
 			constructionNow = cfg.clock.Now()
 		}
 		var err error
-		excludedWorkIDs := map[string]struct{}(nil)
-		if cfg.skipRestoredDispatchReconciliation {
-			excludedWorkIDs = seededReplayWorkIDsWithRecordedDispatch
-		}
-		seededRestoredWorkIDs, err = seedRestoredWork(
+		seededRestoredWorkIDs, err = restoreRestoredWorkMarking(
+			cfg,
 			marking,
-			cfg.net,
-			cfg.restoredWorldState,
 			constructionNow,
 			resourcePlaceIDs,
-			excludedWorkIDs,
+			seededReplayWorkIDsWithRecordedDispatch,
 		)
 		if err != nil {
 			return nil, nil, nil, err
