@@ -1,0 +1,5 @@
+go: downloading google.golang.org/grpc v1.65.0
+go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a
+run unit lane: exit status 1
+exit status 1
+make: *** [Makefile:514: test-unit-fresh] Error 1

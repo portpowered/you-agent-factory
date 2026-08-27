@@ -1,0 +1,12 @@
+started=2026-08-26T19:16:26.5965384-07:00
+commit=bb83727ff313077751465c1aefbecfd8136e1372
+command=make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=baseline-make-run-1.v2.json
+configured_jobs=UNIT_DEFAULT_JOBS=2
+runner=Ubuntu 24.04.1 WSL2 Linux/amd64
+make_exit_status=1
+wrapper_exit_status=0
+exit_status=1
+finished=2026-08-26T19:20:03.7082065-07:00
+elapsed_seconds=217.112
+validity=invalid
+reason=go test rejected pkg/platform/internal/filesystemreplace because all files were excluded by linux build constraints; capture is partial 320/446 with one fail and one skip
