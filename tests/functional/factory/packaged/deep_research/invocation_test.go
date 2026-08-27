@@ -70,6 +70,13 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	if provider.CallCount() != 2 {
 		t.Fatalf("provider calls = %d, want one lead synthesis for each named CLI invocation", provider.CallCount())
 	}
+	request := provider.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	if !strings.Contains(string(request.Stdin), "What is a Petri net?") {
+		t.Fatalf("provider prompt = %q, want the exact customer topic", string(request.Stdin))
+	}
 	t.Logf(
 		"customer command %q refreshed %s; backup=%s; invocation_error=%v; stdout=%q; stderr=%q; structured_command=%q; structured_status=%q; structured_provider_result=%t",
 		strings.Join(commandArgs, " "),
