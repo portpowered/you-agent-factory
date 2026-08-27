@@ -2,11 +2,13 @@ package inference_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -80,45 +82,93 @@ func runDetachedStructuredResult(
 ) detachedStructuredResultFixture {
 	t.Helper()
 
-	factoryDir := support.ScaffoldFactory(t, map[string]any{
-		"workTypes": []map[string]any{{
-			"name":             "task",
-			"handlingBehavior": []string{"DEFAULT"},
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":         "process",
-			"worker":       "worker-a",
-			"outputSchema": schema,
-			"inputs":       []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":      []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure":    []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	})
-	support.WriteAgentConfig(t, factoryDir, "worker-a", detachedStructuredWorkerConfig())
-	testutil.WriteSeedRequest(t, factoryDir, workSubmitRequest())
+	newFactory := func() string {
+		factoryDir := support.ScaffoldFactory(t, map[string]any{
+			"workTypes": []map[string]any{{
+				"name":             "task",
+				"handlingBehavior": []string{"DEFAULT"},
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			}},
+			"workers": []map[string]string{{"name": "worker-a"}},
+			"workstations": []map[string]any{{
+				"name":         "process",
+				"worker":       "worker-a",
+				"outputSchema": schema,
+				"inputs":       []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":      []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure":    []map[string]string{{"workType": "task", "state": "failed"}},
+			}},
+		})
+		support.WriteAgentConfig(t, factoryDir, "worker-a", detachedStructuredWorkerConfig())
+		testutil.WriteSeedRequest(t, factoryDir, workSubmitRequest())
+		return factoryDir
+	}
 
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+	commandResult := platformprocess.CommandResult{
 		Stdout: support.CodexSuccessStdout(output),
-	})
-	_, _, publicEvents := runSharedInferenceFactoryToCompletion(t, factoryDir, sharedInferenceScenario{
+	}
+	runner := testutil.NewProviderCommandRunner(commandResult, commandResult)
+	recordPath := filepath.Join(t.TempDir(), "structured-result.replay.json")
+	recordedDir := newFactory()
+	recordedArtifact := runDetachedStructuredResultRecording(t, recordedDir, recordPath, runner)
+	recordedPayload := recordedStructuredResultPayload(t, recordedArtifact)
+
+	liveDir := newFactory()
+	_, _, publicEvents := runSharedInferenceFactoryToCompletion(t, liveDir, sharedInferenceScenario{
 		commandRunner: runner,
 	}, sharedInferenceScenarioTimeout)
 	publicEvent := findDispatchResponseEvent(t, publicEvents)
+	return detachedStructuredResultFixture{payload: recordedPayload, publicEvent: publicEvent}
+}
+
+func runDetachedStructuredResultRecording(
+	t *testing.T,
+	dir string,
+	recordPath string,
+	runner platformprocess.CommandRunner,
+) *interfaces.ReplayArtifact {
+	t.Helper()
+	withSharedInferenceProcessAt(t, dir, sharedInferenceScenario{
+		commandRunner:        runner,
+		scenarioName:         "structured-result-recording",
+		stopDaemonForExecute: true,
+	}, func(process support.ApplicationProcess) {
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
+		})
+		inputs.Input.Env = sharedInferenceProcessEnvironment(sharedInferenceGroup.homeDir)
+		inputs.Input.WorkingDirectory = dir
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf("recorded structured-result Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+		}
+	})
+	return testutil.LoadReplayArtifact(t, recordPath)
+}
+
+func recordedStructuredResultPayload(
+	t *testing.T,
+	artifact *interfaces.ReplayArtifact,
+) workerexecution.DispatchResponseEventPayload {
+	t.Helper()
 	var payload workerexecution.DispatchResponseEventPayload
-	encoded, err := json.Marshal(publicEvent.Payload)
-	if err != nil {
-		t.Fatalf("marshal public dispatch response payload: %v", err)
+	count := 0
+	for _, event := range artifact.Events {
+		if event.Type != interfaces.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		count++
+		if err := event.DecodePayload(&payload); err != nil {
+			t.Fatalf("decode recorded dispatch response: %v", err)
+		}
 	}
-	if err := json.Unmarshal(encoded, &payload); err != nil {
-		t.Fatalf("decode public dispatch response payload for detached assertion: %v", err)
+	if count != 1 {
+		t.Fatalf("recorded dispatch response count = %d, want one", count)
 	}
-	return detachedStructuredResultFixture{payload: payload, publicEvent: publicEvent}
+	return payload
 }
 
 func findDispatchResponseEvent(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.FactoryEvent {

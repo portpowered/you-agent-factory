@@ -298,6 +298,56 @@ func runSharedInferenceFactory(
 	group.ensure(t)
 	group.mu.Lock()
 	defer group.mu.Unlock()
+	releaseResponse := prepareSharedInferenceScenario(t, group, dir, scenario)
+	defer func() {
+		group.commands.clear(dir)
+		group.scripts.clear(dir)
+		group.workerRecordings.set(nil)
+		group.setExternalRegistrations(nil)
+		releaseResponse()
+	}()
+
+	sessionID := openSharedInferenceSession(t, group, dir)
+	sessionClosed := false
+	defer func() {
+		if !sessionClosed {
+			support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+		}
+	}()
+	updateSharedInferenceRouteContext(t, group, dir, scenario, sessionID)
+	var responseStream *support.FactoryResponseEventStream
+	if scenario.captureResponse {
+		responseStream = support.OpenFactoryResponseEventStreamAt(
+			t,
+			support.SessionResponseEventsURL(group.baseURL, sessionID),
+		)
+		defer responseStream.Close()
+	}
+	releaseResponse()
+
+	// The terminal status is the public completion boundary for the whole
+	// session, including provider retry policy. Read the retained Factory
+	// Events only after that boundary, then request each finite Worker Session
+	// replay exactly once; no quiet-period or retry polling is needed.
+	support.WaitForSessionTerminalStatus(t, group.baseURL, sessionID, timeout)
+
+	result := collectSharedInferenceFactoryResult(t, group, sessionID, scenario, responseStream, timeout)
+	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+	sessionClosed = true
+	if responseStream != nil {
+		responseStream.WaitClosed(timeout)
+		result.responseEvents = append(result.responseEvents, drainSharedInferenceResponseEvents(t, responseStream)...)
+	}
+	return result
+}
+
+func prepareSharedInferenceScenario(
+	t *testing.T,
+	group *inferenceProcessGroup,
+	dir string,
+	scenario sharedInferenceScenario,
+) func() {
+	t.Helper()
 	var responseRelease chan struct{}
 	responseReleased := false
 	if scenario.captureResponse && scenario.commandRunner != nil {
@@ -307,18 +357,8 @@ func runSharedInferenceFactory(
 			release:  responseRelease,
 		}
 	}
-
 	group.workerRecordings.set(scenario.workerRecordingWriter)
 	group.setExternalRegistrations(scenario.providerRegistrations)
-	defer func() {
-		group.commands.clear(dir)
-		group.scripts.clear(dir)
-		group.workerRecordings.set(nil)
-		group.setExternalRegistrations(nil)
-		if responseRelease != nil && !responseReleased {
-			close(responseRelease)
-		}
-	}()
 
 	// Register the exact WorkDir selector before opening the session. Opening a
 	// session starts its hosted runtime, so the seed Work can reach the command
@@ -330,6 +370,20 @@ func runSharedInferenceFactory(
 	if err := group.scripts.set(dir, scenario.scriptRunner, nil, routeContext); err != nil {
 		t.Fatalf("register shared inference script route: %v", err)
 	}
+	return func() {
+		if responseRelease != nil && !responseReleased {
+			close(responseRelease)
+			responseReleased = true
+		}
+	}
+}
+
+func openSharedInferenceSession(
+	t *testing.T,
+	group *inferenceProcessGroup,
+	dir string,
+) string {
+	t.Helper()
 	opened := support.OpenFactorySessionAt(t, group.baseURL, dir)
 	sessionID := opened.Session.Id
 	if sessionID == factorysessions.DefaultSessionID {
@@ -339,38 +393,35 @@ func runSharedInferenceFactory(
 		t.Fatalf("Factory Session ID %q was reused by the shared process group", sessionID)
 	}
 	group.sessions[sessionID] = struct{}{}
-	sessionClosed := false
-	defer func() {
-		if !sessionClosed {
-			support.CloseFactorySessionAt(t, group.baseURL, sessionID)
-		}
-	}()
-	routeContext.sessionID = sessionID
+	return sessionID
+}
+
+func updateSharedInferenceRouteContext(
+	t *testing.T,
+	group *inferenceProcessGroup,
+	dir string,
+	scenario sharedInferenceScenario,
+	sessionID string,
+) {
+	t.Helper()
+	routeContext := sharedInferenceRouteContext(scenario, sessionID, dir)
 	if err := group.commands.updateContext(dir, routeContext); err != nil {
 		t.Fatalf("update shared inference command route context: %v", err)
 	}
 	if err := group.scripts.updateContext(dir, routeContext); err != nil {
 		t.Fatalf("update shared inference script route context: %v", err)
 	}
-	var responseStream *support.FactoryResponseEventStream
-	if scenario.captureResponse {
-		responseStream = support.OpenFactoryResponseEventStreamAt(
-			t,
-			support.SessionResponseEventsURL(group.baseURL, sessionID),
-		)
-		defer responseStream.Close()
-	}
-	if responseRelease != nil {
-		close(responseRelease)
-		responseReleased = true
-	}
+}
 
-	// The terminal status is the public completion boundary for the whole
-	// session, including provider retry policy. Read the retained Factory
-	// Events only after that boundary, then request each finite Worker Session
-	// replay exactly once; no quiet-period or retry polling is needed.
-	support.WaitForSessionTerminalStatus(t, group.baseURL, sessionID, timeout)
-
+func collectSharedInferenceFactoryResult(
+	t *testing.T,
+	group *inferenceProcessGroup,
+	sessionID string,
+	scenario sharedInferenceScenario,
+	responseStream *support.FactoryResponseEventStream,
+	timeout time.Duration,
+) sharedInferenceFactoryResult {
+	t.Helper()
 	result := sharedInferenceFactoryResult{}
 	if responseStream != nil {
 		result.responseEvents = readSharedInferenceResponseEvents(t, responseStream, timeout)
@@ -390,25 +441,29 @@ func runSharedInferenceFactory(
 	)
 	result.events = support.GetFactoryEventsForSessionAt(t, group.baseURL, sessionID)
 	if scenario.captureWorkerEvents {
-		var workerEvents []factoryapi.WorkerSessionEvent
-		for _, workerSessionID := range sharedInferenceWorkerSessionIDs(t, result.events) {
-			workerEvents = append(workerEvents, readSharedInferenceWorkerSessionReplay(
-				t, group.baseURL, sessionID, workerSessionID,
-			)...)
-		}
-		if len(workerEvents) > 0 {
-			result.workerEvents = workerEvents
-		} else {
-			result.workerEvents = readSharedInferenceWorkerEvents(t, group.baseURL, sessionID, result.work)
-		}
-	}
-	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
-	sessionClosed = true
-	if responseStream != nil {
-		responseStream.WaitClosed(timeout)
-		result.responseEvents = append(result.responseEvents, drainSharedInferenceResponseEvents(t, responseStream)...)
+		result.workerEvents = collectSharedInferenceWorkerEvents(t, group, sessionID, result.events, result.work)
 	}
 	return result
+}
+
+func collectSharedInferenceWorkerEvents(
+	t *testing.T,
+	group *inferenceProcessGroup,
+	sessionID string,
+	events []factoryapi.FactoryEvent,
+	work factoryapi.ListWorkResponse,
+) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	var workerEvents []factoryapi.WorkerSessionEvent
+	for _, workerSessionID := range sharedInferenceWorkerSessionIDs(t, events) {
+		workerEvents = append(workerEvents, readSharedInferenceWorkerSessionReplay(
+			t, group.baseURL, sessionID, workerSessionID,
+		)...)
+	}
+	if len(workerEvents) > 0 {
+		return workerEvents
+	}
+	return readSharedInferenceWorkerEvents(t, group.baseURL, sessionID, work)
 }
 
 func sharedInferenceWorkerSessionIDs(
