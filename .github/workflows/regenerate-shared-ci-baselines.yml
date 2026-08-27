@@ -36,6 +36,7 @@ jobs:
       REPOSITORY: ${{ github.repository }}
       DEFAULT_BRANCH: main
       BOT_BRANCH: automation/shared-ci-baselines
+      SHARED_BASELINE_PR_TITLE: "chore(ci): reconcile shared CI baselines"
       DEADCODE_BASELINE: docs/internal/baselines/deadcode-baseline.txt
       UNIT_BUDGET_BASELINE: docs/internal/baselines/go-unit-lane-latency-budget.v1.json
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -128,10 +129,12 @@ jobs:
           fi
           git switch --detach "$SOURCE_SHA"
           git switch -C "$BOT_BRANCH" "$SOURCE_SHA"
-          echo "main_sha=$current_main_sha" >> "$GITHUB_OUTPUT"
-          echo "bot_branch_exists=$bot_branch_exists" >> "$GITHUB_OUTPUT"
-          echo "bot_branch_sha=$bot_branch_sha" >> "$GITHUB_OUTPUT"
-          echo "reconcile=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "main_sha=$current_main_sha"
+            echo "bot_branch_exists=$bot_branch_exists"
+            echo "bot_branch_sha=$bot_branch_sha"
+            echo "reconcile=true"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Regenerate both shared baselines from delivered checks
         if: steps.prepare.outputs.reconcile == 'true'
