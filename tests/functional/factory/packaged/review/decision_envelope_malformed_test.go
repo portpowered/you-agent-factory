@@ -1,13 +1,8 @@
 package review
 
-import (
-	"testing"
+import "testing"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-)
-
-// TestPackagedReviewMalformedDecisionEnvelopeUsesCanonicalFailurePath proves the
+// exercisePackagedReviewMalformedDecisionEnvelope proves the
 // AGENT_RUN detached dispatch routes a malformed reviewer envelope through the
 // Factory Definitions owner of decision-envelope interpretation rather than a
 // Workers-local parser.
@@ -22,11 +17,12 @@ import (
 // TestExecuteKeepsCanonicalMalformedDecisionEnvelopeFailure in
 // pkg/services/workers/internal/services/runners/internal/services/agent/internal/service.
 //
-// Retained-edge fidelity: malformed and unsupported reviewer output is the
-// injected input edge, so these cells remain isolated and use the controlled
-// ProviderCommandRunner only to deliver the exact invalid bytes. Each cell's
-// t.TempDir home/working directory owns cleanup.
-func TestPackagedReviewMalformedDecisionEnvelopeUsesCanonicalFailurePath(t *testing.T) {
+// Retained-edge fidelity: malformed and unsupported reviewer output remains the
+// injected input edge. The shared host does not replace that edge: each cell
+// has its own selector, copied Factory, explicit Factory Session, and exact
+// controlled ProviderCommandRunner bytes.
+func exercisePackagedReviewMalformedDecisionEnvelope(t *testing.T) {
+	t.Helper()
 	tests := []struct {
 		name     string
 		envelope string
@@ -35,20 +31,10 @@ func TestPackagedReviewMalformedDecisionEnvelopeUsesCanonicalFailurePath(t *test
 		{name: "unsupported decision", envelope: `{"decision":"MAYBE","feedback":"reviewer note"}`},
 	}
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			runner := support.NewShapedProviderCommandRunner(
-				platformprocess.CommandResult{Stdout: []byte("candidate work")},
-				platformprocess.CommandResult{Stdout: []byte(test.envelope)},
-			)
-
-			response, _, execErr := runPackagedReviewCLIJSONFailureInvocation(t, runner, "customer request")
-			if execErr == nil {
-				t.Fatalf(
-					"Process.Execute error = nil, want failure for an unreadable decision envelope; status = %q",
-					response.Status,
-				)
-			}
-			assertPackagedReviewBoundedFailureFailed(t, response)
-		})
+		runner := &packagedReviewCommandRunner{reviewOutputs: []string{test.envelope}}
+		scenario := openPackagedReviewScenario(t, runner, "shared-malformed-review-"+test.name, nil)
+		response := invokePackagedReviewSession(t, scenario, map[string]any{"input": "customer request"})
+		assertPackagedReviewBoundedFailureFailed(t, response)
+		assertPackagedReviewSharedEvidence(t, scenario, runner, "failed")
 	}
 }
