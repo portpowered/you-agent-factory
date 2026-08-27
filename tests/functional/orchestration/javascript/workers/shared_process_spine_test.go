@@ -32,6 +32,9 @@ const (
 	sharedJavaScriptPermissionDefaultFactory = "shared-javascript-permissions-default"
 	sharedJavaScriptPermissionSkipFactory    = "shared-javascript-permissions-skip"
 	sharedJavaScriptDisallowedFactory        = "named-factory"
+
+	sharedJavaScriptSentinelCredentialName  = "SHARED_JAVASCRIPT_SENTINEL_CREDENTIAL"
+	sharedJavaScriptSentinelCredentialValue = "sentinel-not-for-customer-process"
 )
 
 // TestJavaScriptSharedWorkerBehavior is the lexical owner for the complete
@@ -39,7 +42,21 @@ const (
 // process and its one continuous API listener; only the external provider
 // command outcome is selected per request.
 func TestJavaScriptSharedWorkerBehavior(t *testing.T) {
+	t.Setenv(
+		sharedJavaScriptSentinelCredentialName,
+		sharedJavaScriptSentinelCredentialValue,
+	)
 	fixture := newJavaScriptSharedProcessFixture(t)
+	// API-owned cells do not carry an invocation environment and intentionally
+	// exercise the host default. Remove the planted credential before those
+	// cells run, after the shared customer environment has been constructed and
+	// verified as the CLI boundary under review.
+	if environmentContainsName(fixture.environment, sharedJavaScriptSentinelCredentialName) {
+		t.Fatalf("customer environment propagated sentinel credential %q", sharedJavaScriptSentinelCredentialName)
+	}
+	if err := os.Unsetenv(sharedJavaScriptSentinelCredentialName); err != nil {
+		t.Fatalf("remove shared JavaScript sentinel credential: %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -64,6 +81,7 @@ func TestJavaScriptSharedWorkerBehavior(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) { test.run(t, fixture) })
 	}
+	assertJavaScriptSharedCustomerEnvironmentSanitized(t, fixture)
 }
 
 func runJavaScriptSharedReverseOrder(t *testing.T, fixture *javascriptSharedProcessFixture) {
@@ -211,13 +229,13 @@ type javascriptSharedCommandRouter struct {
 	mu         sync.Mutex
 	routes     map[string]platformprocess.CommandRunner
 	requestLog []platformprocess.CommandRequest
-	calls      chan struct{}
+	calls      chan int
 }
 
 func newJavaScriptSharedCommandRouter() *javascriptSharedCommandRouter {
 	return &javascriptSharedCommandRouter{
 		routes: make(map[string]platformprocess.CommandRunner),
-		calls:  make(chan struct{}, 64),
+		calls:  make(chan int, 64),
 	}
 }
 
@@ -258,6 +276,7 @@ func (router *javascriptSharedCommandRouter) Run(
 ) (platformprocess.CommandResult, error) {
 	router.mu.Lock()
 	router.requestLog = append(router.requestLog, cloneJavaScriptCommandRequest(request))
+	requestCount := len(router.requestLog)
 	matched := make([]platformprocess.CommandRunner, 0, 1)
 	requestContent := append([]byte(nil), request.Stdin...)
 	requestContent = append(requestContent, []byte("\n")...)
@@ -269,7 +288,7 @@ func (router *javascriptSharedCommandRouter) Run(
 	}
 	router.mu.Unlock()
 	select {
-	case router.calls <- struct{}{}:
+	case router.calls <- requestCount:
 	default:
 	}
 
@@ -300,12 +319,21 @@ func (router *javascriptSharedCommandRouter) callCount() int {
 }
 
 func (router *javascriptSharedCommandRouter) waitForCall(ctx context.Context, want int) error {
+	// This is an event-driven barrier for the concurrent behavior test. The
+	// provider command edge is the only deterministic observation that proves
+	// the success Process.Execute call is in flight before the failure call is
+	// released; a sleep or mocked API response would skip the shared
+	// Process/HTTP/session path under test. The context is only a fail-fast bound
+	// for a missing request or a deadlocked server.
+	if router.callCount() >= want {
+		return nil
+	}
 	for {
-		if router.callCount() >= want {
-			return nil
-		}
 		select {
-		case <-router.calls:
+		case requestCount := <-router.calls:
+			if requestCount >= want {
+				return nil
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -530,18 +558,42 @@ func (fixture *javascriptSharedProcessFixture) assertCleanup(t testing.TB) {
 }
 
 func javascriptSharedCustomerEnvironment(homeDir string) []string {
-	environment := make([]string, 0, len(os.Environ())+2)
-	for _, entry := range os.Environ() {
-		name := strings.SplitN(entry, "=", 2)[0]
-		switch {
-		case strings.EqualFold(name, "HOME"), strings.EqualFold(name, "USERPROFILE"),
-			strings.EqualFold(name, "YOU_DEFAULT_WORKER_MODEL_PROVIDER"), strings.EqualFold(name, "YOU_DEFAULT_WORKER_MODEL"):
-			continue
-		default:
-			environment = append(environment, entry)
+	return []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+}
+
+func assertJavaScriptSharedCustomerEnvironmentSanitized(
+	t testing.TB,
+	fixture *javascriptSharedProcessFixture,
+) {
+	t.Helper()
+	if environmentContainsName(fixture.environment, sharedJavaScriptSentinelCredentialName) {
+		t.Fatalf(
+			"customer environment propagated sentinel credential %q",
+			sharedJavaScriptSentinelCredentialName,
+		)
+	}
+	requestLog, err := json.Marshal(fixture.router.requestRecords())
+	if err != nil {
+		t.Fatalf("marshal shared JavaScript request log: %v", err)
+	}
+	for _, forbidden := range []string{
+		sharedJavaScriptSentinelCredentialName,
+		sharedJavaScriptSentinelCredentialValue,
+	} {
+		if bytes.Contains(requestLog, []byte(forbidden)) {
+			t.Fatalf("shared JavaScript request log contains forbidden credential data %q", forbidden)
 		}
 	}
-	return append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
+}
+
+func environmentContainsName(environment []string, want string) bool {
+	for _, entry := range environment {
+		name := strings.SplitN(entry, "=", 2)[0]
+		if strings.EqualFold(name, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func readJavaScriptSharedDurableSession(

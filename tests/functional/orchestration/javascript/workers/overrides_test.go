@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -452,127 +451,6 @@ func runJavaScriptUnknownProviderOverride(t *testing.T, fixture *javascriptShare
 
 	assertJavaScriptSharedNoDispatch(t, fixture, started.SessionId)
 	assertUnknownWorkerOverrideFailureRecord(t, fixture.baseURL, started.SessionId, started.Result)
-}
-
-func runJavaScriptConcurrentIsolation(t *testing.T, fixture *javascriptSharedProcessFixture) {
-	successPrompt := "shared concurrent success"
-	successGate := make(chan struct{})
-	successRunner := support.NewGatedSuccessCommandRunner("concurrent success output", successGate)
-	if err := fixture.router.register(successPrompt, successRunner); err != nil {
-		t.Fatalf("register concurrent success route: %v", err)
-	}
-	t.Cleanup(func() {
-		select {
-		case <-successGate:
-		default:
-			close(successGate)
-		}
-		if err := fixture.router.unregister(successPrompt); err != nil {
-			t.Errorf("unregister concurrent success route: %v", err)
-		}
-	})
-
-	successWorkflow := strings.ReplaceAll(liveProviderChildWorkflow, "use the live provider command edge", successPrompt)
-	failureWorkflow := invalidPermissionsOverrideWorkflowWithValue("true", "shared concurrent failure")
-	requestBase := fixture.requestSequence.Load() + 1
-	successRequestID := fmt.Sprintf("shared-javascript-concurrent-success-%d", requestBase)
-	failureRequestID := fmt.Sprintf("shared-javascript-concurrent-failure-%d", requestBase+1)
-	beforeCalls := fixture.router.callCount()
-
-	type result struct {
-		response factoryapi.FactorySessionSyncExecutionResponse
-		err      error
-	}
-	successCh := make(chan result, 1)
-	go func() {
-		response, err := postOverridesWorkflow(context.Background(), fixture.baseURL, successRequestID, successWorkflow)
-		successCh <- result{response: response, err: err}
-	}()
-
-	waitContext, cancelWait := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancelWait()
-	if err := fixture.router.waitForCall(waitContext, beforeCalls+1); err != nil {
-		t.Fatalf("wait for concurrent success provider request: %v", err)
-	}
-
-	failureCh := make(chan result, 1)
-	go func() {
-		response, err := postOverridesWorkflow(context.Background(), fixture.baseURL, failureRequestID, failureWorkflow)
-		failureCh <- result{response: response, err: err}
-	}()
-
-	var failure result
-	select {
-	case failure = <-failureCh:
-	case <-time.After(15 * time.Second):
-		t.Fatal("timed out waiting for concurrent failure workflow")
-	}
-	if failure.err != nil {
-		t.Fatalf("concurrent failure workflow: %v", failure.err)
-	}
-	if failure.response.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
-		t.Fatalf("concurrent failure status = %q, want FAILED", failure.response.Status)
-	}
-
-	close(successGate)
-	var success result
-	select {
-	case success = <-successCh:
-	case <-time.After(15 * time.Second):
-		t.Fatal("timed out waiting for concurrent success workflow")
-	}
-	if success.err != nil {
-		t.Fatalf("concurrent success workflow: %v", success.err)
-	}
-	if success.response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("concurrent success status = %q, want SUCCEEDED", success.response.Status)
-	}
-	if success.response.SessionId == failure.response.SessionId {
-		t.Fatalf("concurrent workflows reused Factory Session ID %q", success.response.SessionId)
-	}
-	fixture.trackSession(t, failure.response.SessionId)
-	fixture.trackSession(t, success.response.SessionId)
-	assertSucceededPrimaryContains(t, success.response, "concurrent success output")
-	assertUnavailableFactoryResult(t, failure.response.Result)
-
-	failureSession := readOverridesDurableSession(t, fixture.baseURL, failure.response.SessionId)
-	if failureSession.FailureDetail == nil || !strings.Contains(strings.ToLower(failureSession.FailureDetail.Message), "permissions") {
-		t.Fatalf("concurrent failure detail = %#v, want permissions diagnostic", failureSession.FailureDetail)
-	}
-	successEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, success.response.SessionId)
-	failureEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, failure.response.SessionId)
-	assertJavaScriptEventsDoNotContain(t, successEvents, "shared concurrent failure")
-	assertJavaScriptEventsDoNotContain(t, failureEvents, "concurrent success output")
-
-	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+success.response.SessionId+"/dispatches",
-	)
-	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].Status != factoryapi.FactoryDispatchStatusCOMPLETED {
-		t.Fatalf("concurrent success dispatches = %#v, want one completed dispatch", dispatches.Dispatches)
-	}
-	failureDispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+failure.response.SessionId+"/dispatches",
-	)
-	if len(failureDispatches.Dispatches) != 0 {
-		t.Fatalf("concurrent failure dispatches = %#v, want no provider dispatch", failureDispatches.Dispatches)
-	}
-	requests := fixture.router.requestRecords()
-	if len(requests) == 0 || !bytes.Contains(requests[len(requests)-1].Stdin, []byte(successPrompt)) || bytes.Contains(requests[len(requests)-1].Stdin, []byte("shared concurrent failure")) {
-		t.Fatalf("concurrent command requests = %#v, want only success request content", requests)
-	}
-}
-
-func assertJavaScriptEventsDoNotContain(t *testing.T, events []factoryapi.FactoryEvent, forbidden string) {
-	t.Helper()
-	encoded, err := json.Marshal(events)
-	if err != nil {
-		t.Fatalf("marshal Factory Events: %v", err)
-	}
-	if strings.Contains(string(encoded), forbidden) {
-		t.Fatalf("Factory Events contain foreign content %q: %s", forbidden, encoded)
-	}
 }
 
 func partialNamedJavaScriptMockWorkersConfig() *workers.MockWorkersConfig {
