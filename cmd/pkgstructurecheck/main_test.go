@@ -371,6 +371,55 @@ func TestScanFindsShallowFunctionalSourcesAndRuntimeAPIDebt(t *testing.T) {
 	assertFindingKeys(t, findings, want)
 }
 
+func TestScanExemptsGenuineRuntimeAPITestMain(t *testing.T) {
+	t.Parallel()
+	repoRoot := t.TempDir()
+	writeTestFile(t, repoRoot, "tests/functional/runtime_api/shared_test.go", `package runtime_api
+
+import testpkg "testing"
+
+func TestMain(m *testpkg.M) {}
+func TestScenario() {}
+`)
+
+	findings, err := scan(repoRoot)
+	if err != nil {
+		t.Fatalf("scan() error = %v", err)
+	}
+	assertFindingKeys(t, findings, []string{
+		ruleRuntimeAPIFile + "|tests/functional/runtime_api/shared_test.go|tests/functional/runtime_api",
+		ruleRuntimeAPITest + "|tests/functional/runtime_api/shared_test.go|TestScenario",
+	})
+}
+
+func TestScanRejectsNonLifecycleRuntimeAPITestMain(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{name: "no parameter", source: "func TestMain() {}"},
+		{name: "testing test parameter", source: "func TestMain(t *testing.T) {}"},
+		{name: "wrong package", source: "func TestMain(m *other.M) {}"},
+		{name: "result", source: "func TestMain(m *testing.M) int { return 0 }"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repoRoot := t.TempDir()
+			writeTestFile(t, repoRoot, "tests/functional/runtime_api/scenario_test.go", "package runtime_api\n\nimport \"testing\"\n\n"+test.source+"\n")
+
+			findings, err := scan(repoRoot)
+			if err != nil {
+				t.Fatalf("scan() error = %v", err)
+			}
+			assertFindingKeys(t, findings, []string{
+				ruleRuntimeAPIFile + "|tests/functional/runtime_api/scenario_test.go|tests/functional/runtime_api",
+				ruleRuntimeAPITest + "|tests/functional/runtime_api/scenario_test.go|TestMain",
+			})
+		})
+	}
+}
+
 func TestScanPreservesInternalSupportExceptionOnly(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
