@@ -3,7 +3,6 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -21,6 +20,7 @@ import (
 
 const (
 	codexFunctionalSessionID            = "session-functional-root"
+	codexFunctionalDetachedSessionID    = "session-detached-shared"
 	codexFunctionalMissingSessionID     = "session-missing-root"
 	codexFunctionalMalformedSessionID   = "session-malformed-root"
 	codexFunctionalBoundedWalkSessionID = "session-bounded-root"
@@ -29,176 +29,13 @@ const (
 	codexFunctionalOversizedSessionID   = "session-oversized-root"
 )
 
-// TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess proves
-// repeated root-built inspections return detached equivalent detail.
-func TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), codexFunctionalSessionID, representativeCodexJSONL())
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	first := getCodexProviderSessionDetail(t, server.URL(), codexFunctionalSessionID)
-	second := getCodexProviderSessionDetail(t, server.URL(), codexFunctionalSessionID)
-	if first.Transcript[0].Text == nil || second.Transcript[0].Text == nil {
-		t.Fatal("expected transcript text in both inspections")
-	}
-	if *first.Transcript[0].Text != *second.Transcript[0].Text {
-		t.Fatalf("repeated inspections differ: %#v vs %#v", first.Transcript[0], second.Transcript[0])
-	}
-	mutated := "mutated transcript"
-	first.Transcript[0].Text = &mutated
-	if *second.Transcript[0].Text == mutated {
-		t.Fatal("mutating first inspection affected second inspection transcript")
-	}
-}
-
-// TestCodexHistoricalInspectionMissingSessionThroughRootBuildProcess proves a
-// missing Codex session returns the accepted not-found outcome without leaking
-// configured host storage paths.
-func TestCodexHistoricalInspectionMissingSessionThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	body := getCodexProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		codexFunctionalMissingSessionID,
-		http.StatusNotFound,
-	)
-	if !strings.Contains(body, "provider session not found") {
-		t.Fatalf("error body = %q, want not-found message", body)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "missing-session", body, homeDir)
-}
-
-// TestCodexHistoricalInspectionMalformedJSONLThroughRootBuildProcess proves
-// truncated JSONL returns bounded parse diagnostics without fabricating
-// transcript content or leaking host paths.
-func TestCodexHistoricalInspectionMalformedJSONLThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	content := `{"type":"turn_context"}` + "\n" +
-		`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"partial`
-	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), codexFunctionalMalformedSessionID, content)
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := getCodexProviderSessionDetail(t, server.URL(), codexFunctionalMalformedSessionID)
-	if detail.Parse.MalformedLineCount != 1 || len(detail.Parse.ParseErrors) != 1 {
-		t.Fatalf("parse summary = %#v, want one malformed-line diagnostic", detail.Parse)
-	}
-	if detail.Parse.ParseErrors[0].Message != "truncated JSON event record" {
-		t.Fatalf("parse error = %#v, want truncated JSON diagnostic", detail.Parse.ParseErrors[0])
-	}
-	if len(detail.Transcript) != 0 {
-		t.Fatalf("transcript = %#v, want no fabricated entries", detail.Transcript)
-	}
-	encoded, err := json.Marshal(detail)
-	if err != nil {
-		t.Fatalf("marshal detail: %v", err)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "malformed-jsonl", string(encoded), homeDir)
-}
-
-// TestCodexHistoricalInspectionOversizedRecordThroughRootBuildProcess proves
-// a physically oversized JSONL record stops inspection with a bounded public
-// failure instead of buffering or returning unbounded rollout content.
-func TestCodexHistoricalInspectionOversizedRecordThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalOversizedSessionID,
-		strings.Repeat("x", 1<<20+1)+"\n",
-	)
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	body := getCodexProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		codexFunctionalOversizedSessionID,
-		http.StatusInternalServerError,
-	)
-	if !strings.Contains(body, "failed to load provider session details") {
-		t.Fatalf("error body = %q, want safe oversized-record failure", body)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "oversized-record", body, homeDir)
-}
-
-// TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess proves
-// symlink escapes fail safely through the root-composed detail surface.
-func TestCodexHistoricalInspectionContainmentRejectionThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	root := codexSessionsRoot(homeDir)
-	outsideDir := t.TempDir()
-	outsidePath := filepath.Join(outsideDir, "rollout-"+codexFunctionalOutsideSessionID+".jsonl")
-	if err := os.WriteFile(outsidePath, []byte(`{"type":"session_meta"}`+"\n"), 0o600); err != nil {
-		t.Fatalf("write outside fixture: %v", err)
-	}
-	linkDir := filepath.Join(root, "2026", "07", "27")
-	if err := os.MkdirAll(linkDir, 0o755); err != nil {
-		t.Fatalf("mkdir link dir: %v", err)
-	}
-	if err := os.Symlink(outsidePath, filepath.Join(linkDir, "rollout-"+codexFunctionalOutsideSessionID+".jsonl")); err != nil {
-		if runtime.GOOS == "windows" {
-			t.Skipf("symlink capability unavailable: %v", err)
-		}
-		t.Fatalf("create symlink: %v", err)
-	}
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	body := getCodexProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		codexFunctionalOutsideSessionID,
-		http.StatusInternalServerError,
-	)
-	if !strings.Contains(body, "failed to load provider session details") {
-		t.Fatalf("error body = %q, want safe load failure", body)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "containment-rejection", body, homeDir)
-}
-
-// TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess proves
-// excessive discovery candidates terminate with a safe root outcome.
-func TestCodexHistoricalInspectionBoundedWalkThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	root := codexSessionsRoot(homeDir)
-	for i := 0; i < 65; i++ {
-		writeCodexRolloutFixtureAt(
-			t,
-			root,
-			fmt.Sprintf("2026/05/%02d", i),
-			codexFunctionalBoundedWalkSessionID,
-			`{"type":"session_meta"}`+"\n",
-		)
-	}
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	body := getCodexProviderSessionDetailErrorBody(
-		t,
-		server.URL(),
-		codexFunctionalBoundedWalkSessionID,
-		http.StatusInternalServerError,
-	)
-	if !strings.Contains(body, "failed to load provider session details") {
-		t.Fatalf("error body = %q, want safe load failure", body)
-	}
-	assertCodexProviderSessionErrorBodySafe(t, "bounded-walk", body, homeDir)
-}
-
 // TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess proves
 // injected discovery cancellation surfaces a safe root outcome without host-path
 // leakage when reached only through root.BuildProcess and public contracts.
 func TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess(t *testing.T) {
+	// The discovery override is process-wide during root construction. It
+	// cannot coexist with successful discovery in the shared process without a
+	// mutable route or a cancellation policy that would affect other scenarios.
 	homeDir := t.TempDir()
 	writeCodexRolloutFixture(
 		t,
@@ -224,6 +61,129 @@ func TestCodexHistoricalInspectionCancelledDiscoveryThroughRootBuildProcess(t *t
 		t.Fatalf("error body = %q, want safe load failure", body)
 	}
 	assertCodexProviderSessionErrorBodySafe(t, "canceled-discovery", body, homeDir)
+}
+
+type codexSharedContainmentFixture struct {
+	outsideDir string
+	available  bool
+	err        error
+}
+
+func prepareCodexSharedContainmentFixture(t *testing.T, homeDir, sessionID string) codexSharedContainmentFixture {
+	t.Helper()
+	outsideDir := t.TempDir()
+	outsidePath := filepath.Join(outsideDir, "rollout-"+sessionID+".jsonl")
+	if err := os.WriteFile(outsidePath, []byte(`{"type":"session_meta"}`+"\n"), 0o600); err != nil {
+		t.Fatalf("write outside fixture: %v", err)
+	}
+	linkDir := filepath.Join(codexSessionsRoot(homeDir), "2026", "07", "27")
+	if err := os.MkdirAll(linkDir, 0o755); err != nil {
+		t.Fatalf("mkdir link dir: %v", err)
+	}
+	linkPath := filepath.Join(linkDir, "rollout-"+sessionID+".jsonl")
+	if err := os.Symlink(outsidePath, linkPath); err != nil {
+		if runtime.GOOS == "windows" {
+			return codexSharedContainmentFixture{outsideDir: outsideDir, err: err}
+		}
+		t.Fatalf("create symlink: %v", err)
+	}
+	return codexSharedContainmentFixture{outsideDir: outsideDir, available: true}
+}
+
+func assertCodexSharedDetachedHistory(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	first := getCodexProviderSessionDetail(t, fixture.baseURL, codexFunctionalDetachedSessionID)
+	second := getCodexProviderSessionDetail(t, fixture.baseURL, codexFunctionalDetachedSessionID)
+	if len(first.Transcript) == 0 || len(second.Transcript) == 0 ||
+		first.Transcript[0].Text == nil || second.Transcript[0].Text == nil {
+		t.Fatal("expected transcript text in both shared inspections")
+	}
+	if *first.Transcript[0].Text != *second.Transcript[0].Text {
+		t.Fatalf("repeated shared inspections differ: %#v vs %#v", first.Transcript[0], second.Transcript[0])
+	}
+	mutated := "mutated transcript"
+	first.Transcript[0].Text = &mutated
+	if *second.Transcript[0].Text == mutated {
+		t.Fatal("mutating first shared inspection affected second inspection transcript")
+	}
+}
+
+func assertCodexSharedMissingHistory(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	body := getCodexProviderSessionDetailErrorBody(
+		t,
+		fixture.baseURL,
+		codexFunctionalMissingSessionID,
+		http.StatusNotFound,
+	)
+	if !strings.Contains(body, "provider session not found") {
+		t.Fatalf("shared missing-session error body = %q, want not-found message", body)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "missing-session", body, fixture.homeDir)
+}
+
+func assertCodexSharedMalformedHistory(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	detail := getCodexProviderSessionDetail(t, fixture.baseURL, codexFunctionalMalformedSessionID)
+	if detail.Parse.MalformedLineCount != 1 || len(detail.Parse.ParseErrors) != 1 {
+		t.Fatalf("shared parse summary = %#v, want one malformed-line diagnostic", detail.Parse)
+	}
+	if detail.Parse.ParseErrors[0].Message != "truncated JSON event record" {
+		t.Fatalf("shared parse error = %#v, want truncated JSON diagnostic", detail.Parse.ParseErrors[0])
+	}
+	if len(detail.Transcript) != 0 {
+		t.Fatalf("shared malformed transcript = %#v, want no fabricated entries", detail.Transcript)
+	}
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal shared malformed detail: %v", err)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "malformed-jsonl", string(encoded), fixture.homeDir)
+}
+
+func assertCodexSharedOversizedHistory(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	body := getCodexProviderSessionDetailErrorBody(
+		t,
+		fixture.baseURL,
+		codexFunctionalOversizedSessionID,
+		http.StatusInternalServerError,
+	)
+	if !strings.Contains(body, "failed to load provider session details") {
+		t.Fatalf("shared oversized-record error body = %q, want safe failure", body)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "oversized-record", body, fixture.homeDir)
+}
+
+func assertCodexSharedBoundedHistory(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	body := getCodexProviderSessionDetailErrorBody(
+		t,
+		fixture.baseURL,
+		codexFunctionalBoundedWalkSessionID,
+		http.StatusInternalServerError,
+	)
+	if !strings.Contains(body, "failed to load provider session details") {
+		t.Fatalf("shared bounded-walk error body = %q, want safe failure", body)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "bounded-walk", body, fixture.homeDir)
+}
+
+func assertCodexSharedContainmentHistory(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	if !fixture.containmentAvailable {
+		t.Skipf("symlink capability unavailable: %v", fixture.containmentCapabilityErr)
+	}
+	body := getCodexProviderSessionDetailErrorBody(
+		t,
+		fixture.baseURL,
+		codexFunctionalOutsideSessionID,
+		http.StatusInternalServerError,
+	)
+	if !strings.Contains(body, "failed to load provider session details") {
+		t.Fatalf("shared containment error body = %q, want safe load failure", body)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "containment-rejection", body, fixture.homeDir)
 }
 
 func startCodexHistoricalInspectionServer(

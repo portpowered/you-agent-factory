@@ -23,10 +23,14 @@ import (
 )
 
 const (
-	codexSharedFixtureTimeout       = 15 * time.Second
-	codexSharedTrustedRouteSelector = "codex-shared-trusted-work"
-	codexSharedDuplicateSelector    = "codex-shared-duplicate-work"
-	codexSharedTrustedWorkName      = "codex-shared-trusted-work"
+	codexSharedFixtureTimeout          = 15 * time.Second
+	codexSharedTrustedRouteSelector    = "codex-shared-trusted-work"
+	codexSharedActionableRouteSelector = "codex-shared-actionable-refusal"
+	codexSharedNeutralRouteSelector    = "codex-shared-neutral-refusal"
+	codexSharedDuplicateSelector       = "codex-shared-duplicate-work"
+	codexSharedTrustedWorkName         = "codex-shared-trusted-work"
+	codexSharedActionableWorkName      = "codex-shared-actionable-refusal"
+	codexSharedNeutralWorkName         = "codex-shared-neutral-refusal"
 )
 
 // codexSharedHTTPServer owns the one loopback server started by the shared
@@ -75,16 +79,25 @@ func (server *codexSharedHTTPServer) waitClosed(ctx context.Context) error {
 }
 
 type codexSharedProcessFixture struct {
-	rootDir    string
-	homeDir    string
-	factoryDir string
-	baseURL    string
+	rootDir                  string
+	homeDir                  string
+	trustedFactoryDir        string
+	actionableFactoryDir     string
+	neutralFactoryDir        string
+	containmentOutsideDir    string
+	containmentAvailable     bool
+	containmentCapabilityErr error
+	baseURL                  string
 
 	process       support.ApplicationProcess
 	command       *support.ProcessCommand
 	api           *codexSharedHTTPServer
 	commandRunner *codexSharedCommandRunner
 	processBuilds int
+
+	sessionMu         sync.Mutex
+	openedSessionIDs  []string
+	deletedSessionIDs []string
 
 	closeOnce    sync.Once
 	finalizeOnce sync.Once
@@ -98,24 +111,9 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 	if err := os.MkdirAll(homeDir, 0o755); err != nil {
 		t.Fatalf("create shared Codex home: %v", err)
 	}
-	factoryDir := scaffoldCodexSharedFactory(t)
-	writeCodexRolloutFixture(
-		t,
-		codexSessionsRoot(homeDir),
-		codexFunctionalSessionID,
-		representativeCodexJSONL(),
-	)
-
-	runner := newCodexSharedCommandRunner()
-	if err := runner.register(
-		codexSharedTrustedRouteSelector,
-		factoryDir,
-		platformprocess.CommandResult{Stdout: []byte("trusted Git invocation COMPLETE")},
-	); err != nil {
-		t.Fatalf("register trusted Codex route: %v", err)
-	}
-	assertCodexSharedDuplicateRouteRejected(t, runner, factoryDir)
-	assertCodexSharedUnknownRouteRejected(t, runner, rootDir)
+	paths := prepareCodexSharedFactoryPaths(t)
+	containment := prepareCodexSharedRolloutFixtures(t, homeDir)
+	runner := prepareCodexSharedRoutes(t, paths, rootDir)
 
 	api := newCodexSharedHTTPServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
@@ -124,15 +122,21 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
 	})
 	fixture := &codexSharedProcessFixture{
-		rootDir: rootDir, homeDir: homeDir, factoryDir: factoryDir,
-		process: process, api: api, commandRunner: runner, processBuilds: 1,
+		rootDir: rootDir, homeDir: homeDir,
+		trustedFactoryDir:        paths.trusted,
+		actionableFactoryDir:     paths.actionable,
+		neutralFactoryDir:        paths.neutral,
+		containmentOutsideDir:    containment.outsideDir,
+		containmentAvailable:     containment.available,
+		containmentCapabilityErr: containment.err,
+		process:                  process, api: api, commandRunner: runner, processBuilds: 1,
 	}
 
 	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet", "--no-record",
+		"you", "run", "--dir", paths.trusted, "--continuously", "--with-server", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
-	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.WorkingDirectory = paths.trusted
 	fixture.command = support.StartProcessCommand(t, process, inputs.Input)
 	t.Cleanup(func() { fixture.finalize(t) })
 
@@ -143,11 +147,109 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 	return fixture
 }
 
+type codexSharedFactoryPaths struct {
+	trusted    string
+	actionable string
+	neutral    string
+}
+
+func prepareCodexSharedFactoryPaths(t *testing.T) codexSharedFactoryPaths {
+	t.Helper()
+	return codexSharedFactoryPaths{
+		trusted:    scaffoldCodexSharedFactory(t),
+		actionable: scaffoldCodexSharedRefusalFactory(t),
+		neutral:    scaffoldCodexSharedRefusalFactory(t),
+	}
+}
+
+func prepareCodexSharedRolloutFixtures(
+	t *testing.T,
+	homeDir string,
+) codexSharedContainmentFixture {
+	t.Helper()
+	containment := prepareCodexSharedContainmentFixture(t, homeDir, codexFunctionalOutsideSessionID)
+	writeCodexRolloutFixture(
+		t,
+		codexSessionsRoot(homeDir),
+		codexFunctionalSessionID,
+		representativeCodexJSONL(),
+	)
+	writeCodexRolloutFixture(
+		t,
+		codexSessionsRoot(homeDir),
+		codexFunctionalDetachedSessionID,
+		representativeCodexJSONL(),
+	)
+	writeCodexRolloutFixture(
+		t,
+		codexSessionsRoot(homeDir),
+		codexFunctionalMalformedSessionID,
+		`{"type":"turn_context"}`+"\n"+
+			`{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"partial`,
+	)
+	writeCodexRolloutFixture(
+		t,
+		codexSessionsRoot(homeDir),
+		codexFunctionalOversizedSessionID,
+		strings.Repeat("x", 1<<20+1)+"\n",
+	)
+	for i := 0; i < 65; i++ {
+		writeCodexRolloutFixtureAt(
+			t,
+			codexSessionsRoot(homeDir),
+			fmt.Sprintf("2026/05/%02d", i),
+			codexFunctionalBoundedWalkSessionID,
+			`{"type":"session_meta"}`+"\n",
+		)
+	}
+	return containment
+}
+
+func prepareCodexSharedRoutes(
+	t *testing.T,
+	paths codexSharedFactoryPaths,
+	rootDir string,
+) *codexSharedCommandRunner {
+	t.Helper()
+	runner := newCodexSharedCommandRunner()
+	if err := runner.register(
+		codexSharedTrustedRouteSelector,
+		paths.trusted,
+		platformprocess.CommandResult{Stdout: []byte("trusted Git invocation COMPLETE")},
+	); err != nil {
+		t.Fatalf("register trusted Codex route: %v", err)
+	}
+	if err := runner.register(
+		codexSharedActionableRouteSelector,
+		paths.actionable,
+		codexUntrustedWorkingDirectoryCommandResult(),
+	); err != nil {
+		t.Fatalf("register actionable Codex route: %v", err)
+	}
+	if err := runner.register(
+		codexSharedNeutralRouteSelector,
+		paths.neutral,
+		codexNeutralRefusalCommandResult(),
+	); err != nil {
+		t.Fatalf("register neutral Codex route: %v", err)
+	}
+	assertCodexSharedDuplicateRouteRejected(t, runner, paths.trusted, 3)
+	assertCodexSharedUnknownRouteRejected(t, runner, rootDir)
+	return runner
+}
+
 func scaffoldCodexSharedFactory(t *testing.T) string {
 	t.Helper()
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	support.ClearSeedInputs(t, dir)
 	initTrustedGitRepository(t, dir)
+	return dir
+}
+
+func scaffoldCodexSharedRefusalFactory(t *testing.T) string {
+	t.Helper()
+	dir := scaffoldCodexWorkingDirectoryFactory(t)
+	support.ClearSeedInputs(t, dir)
 	return dir
 }
 
@@ -171,17 +273,78 @@ func (fixture *codexSharedProcessFixture) close(t testing.TB) {
 func (fixture *codexSharedProcessFixture) finalize(t testing.TB) {
 	t.Helper()
 	fixture.finalizeOnce.Do(func() {
+		fixture.closeUnclosedSessions(t)
 		fixture.close(t)
 		assertCodexSharedListenerClosed(t, fixture.baseURL)
-		if err := fixture.commandRunner.unregister(codexSharedTrustedRouteSelector); err != nil {
-			t.Errorf("unregister shared Codex route: %v", err)
+		for _, selector := range []string{
+			codexSharedTrustedRouteSelector,
+			codexSharedActionableRouteSelector,
+			codexSharedNeutralRouteSelector,
+		} {
+			if err := fixture.commandRunner.unregister(selector); err != nil {
+				t.Errorf("unregister shared Codex route %q: %v", selector, err)
+			}
 		}
 		if got := fixture.commandRunner.routeCount(); got != 0 {
 			t.Errorf("shared Codex route count after cleanup = %d, want zero", got)
 		}
-		removeCodexOwnedPath(t, fixture.factoryDir)
+		removeCodexOwnedPath(t, fixture.trustedFactoryDir)
+		removeCodexOwnedPath(t, fixture.actionableFactoryDir)
+		removeCodexOwnedPath(t, fixture.neutralFactoryDir)
+		removeCodexOwnedPath(t, fixture.containmentOutsideDir)
 		removeCodexOwnedPath(t, fixture.rootDir)
 	})
+}
+
+func (fixture *codexSharedProcessFixture) closeUnclosedSessions(t testing.TB) {
+	t.Helper()
+	fixture.sessionMu.Lock()
+	opened := append([]string(nil), fixture.openedSessionIDs...)
+	deleted := make(map[string]struct{}, len(fixture.deletedSessionIDs))
+	for _, sessionID := range fixture.deletedSessionIDs {
+		deleted[sessionID] = struct{}{}
+	}
+	fixture.sessionMu.Unlock()
+	for _, sessionID := range opened {
+		if _, ok := deleted[sessionID]; ok {
+			continue
+		}
+		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		assertCodexFactorySessionDeleted(t, fixture.baseURL, sessionID)
+		fixture.markSessionDeleted(sessionID)
+	}
+}
+
+func (fixture *codexSharedProcessFixture) openSession(t testing.TB, factoryDir string) string {
+	t.Helper()
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("shared Factory Session for %q = %#v, want identity", factoryDir, opened)
+	}
+	sessionID := opened.Session.Id
+	if sessionID == factorysessions.DefaultSessionID {
+		t.Fatalf("shared Factory Session for %q = %q, want explicit session", factoryDir, sessionID)
+	}
+	fixture.sessionMu.Lock()
+	fixture.openedSessionIDs = append(fixture.openedSessionIDs, sessionID)
+	fixture.sessionMu.Unlock()
+	t.Cleanup(func() {
+		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		assertCodexFactorySessionDeleted(t, fixture.baseURL, sessionID)
+		fixture.markSessionDeleted(sessionID)
+	})
+	return sessionID
+}
+
+func (fixture *codexSharedProcessFixture) markSessionDeleted(sessionID string) {
+	fixture.sessionMu.Lock()
+	defer fixture.sessionMu.Unlock()
+	for _, existing := range fixture.deletedSessionIDs {
+		if existing == sessionID {
+			return
+		}
+	}
+	fixture.deletedSessionIDs = append(fixture.deletedSessionIDs, sessionID)
 }
 
 func assertCodexSharedListenerClosed(t testing.TB, baseURL string) {
@@ -218,19 +381,58 @@ func removeCodexOwnedPath(t testing.TB, path string) {
 
 func TestCodexSharedTrustedWorkAndHistory(t *testing.T) {
 	fixture := newCodexSharedProcessFixture(t)
-	var trustedSessionID string
 
 	t.Run("trusted_work", func(t *testing.T) {
-		trustedSessionID = runCodexSharedTrustedWork(t, fixture)
+		runCodexSharedTrustedWork(t, fixture)
 	})
 	if t.Failed() {
 		return
 	}
-	assertCodexFactorySessionDeleted(t, fixture.baseURL, trustedSessionID)
+
+	t.Run("actionable_refusal", func(t *testing.T) {
+		assertCodexSharedActionableRefusal(t, fixture)
+	})
+	if t.Failed() {
+		return
+	}
+
+	t.Run("neutral_refusal", func(t *testing.T) {
+		assertCodexSharedNeutralRefusal(t, fixture)
+	})
+	if t.Failed() {
+		return
+	}
 
 	t.Run("successful_history", func(t *testing.T) {
 		assertCodexSharedSuccessfulHistory(t, fixture)
 	})
+	if t.Failed() {
+		return
+	}
+	t.Run("detached_repeated_history", func(t *testing.T) {
+		assertCodexSharedDetachedHistory(t, fixture)
+	})
+	t.Run("missing_history", func(t *testing.T) {
+		assertCodexSharedMissingHistory(t, fixture)
+	})
+	t.Run("malformed_history", func(t *testing.T) {
+		assertCodexSharedMalformedHistory(t, fixture)
+	})
+	t.Run("oversized_history", func(t *testing.T) {
+		assertCodexSharedOversizedHistory(t, fixture)
+	})
+	t.Run("bounded_history", func(t *testing.T) {
+		assertCodexSharedBoundedHistory(t, fixture)
+	})
+	t.Run("containment_history", func(t *testing.T) {
+		assertCodexSharedContainmentHistory(t, fixture)
+	})
+	if t.Failed() {
+		return
+	}
+	// Re-read a known-good rollout after every adverse history request. This
+	// proves the shared HTTP/process spine remains healthy after safe failures.
+	assertCodexSharedSuccessfulHistory(t, fixture)
 	if t.Failed() {
 		return
 	}
@@ -240,15 +442,7 @@ func TestCodexSharedTrustedWorkAndHistory(t *testing.T) {
 
 func runCodexSharedTrustedWork(t *testing.T, fixture *codexSharedProcessFixture) string {
 	t.Helper()
-	opened := support.OpenFactorySessionAt(t, fixture.baseURL, fixture.factoryDir)
-	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
-		t.Fatalf("shared trusted Factory Session = %#v, want identity", opened)
-	}
-	sessionID := opened.Session.Id
-	if sessionID == factorysessions.DefaultSessionID {
-		t.Fatalf("shared trusted Factory Session ID = %q, want explicit session", sessionID)
-	}
-	t.Cleanup(func() { support.CloseFactorySessionAt(t, fixture.baseURL, sessionID) })
+	sessionID := fixture.openSession(t, fixture.trustedFactoryDir)
 
 	name := codexSharedTrustedWorkName
 	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, sessionID, factoryapi.SubmitWorkRequest{
@@ -280,8 +474,8 @@ func runCodexSharedTrustedWork(t *testing.T, fixture *codexSharedProcessFixture)
 	if len(requests) != 1 {
 		t.Fatalf("shared Codex command requests = %d, want one", len(requests))
 	}
-	if requests[0].Command != string(modelprovider.ProviderCodex) || requests[0].WorkDir != fixture.factoryDir {
-		t.Fatalf("shared Codex command request = %#v, want codex route for %q", requests[0], fixture.factoryDir)
+	if requests[0].Command != string(modelprovider.ProviderCodex) || requests[0].WorkDir != fixture.trustedFactoryDir {
+		t.Fatalf("shared Codex command request = %#v, want codex route for %q", requests[0], fixture.trustedFactoryDir)
 	}
 
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
@@ -333,17 +527,41 @@ func assertCodexSharedSuccessfulHistory(t *testing.T, fixture *codexSharedProces
 	}
 }
 
+func (fixture *codexSharedProcessFixture) assertSessionTopology(t testing.TB) {
+	t.Helper()
+	fixture.sessionMu.Lock()
+	opened := append([]string(nil), fixture.openedSessionIDs...)
+	deleted := append([]string(nil), fixture.deletedSessionIDs...)
+	fixture.sessionMu.Unlock()
+	if len(opened) != 3 || len(deleted) != 3 {
+		t.Fatalf("shared Factory Session topology = opened:%d deleted:%d, want three each", len(opened), len(deleted))
+	}
+	seen := make(map[string]struct{}, len(opened))
+	for _, sessionID := range opened {
+		if _, exists := seen[sessionID]; exists {
+			t.Fatalf("shared Factory Session ID %q was reused", sessionID)
+		}
+		seen[sessionID] = struct{}{}
+	}
+	for _, sessionID := range deleted {
+		if _, exists := seen[sessionID]; !exists {
+			t.Fatalf("deleted shared Factory Session ID %q was not opened by this fixture", sessionID)
+		}
+	}
+}
+
 func (fixture *codexSharedProcessFixture) assertTopology(t testing.TB) {
 	t.Helper()
 	if fixture.processBuilds != 1 || fixture.api.startCount() != 1 {
 		t.Fatalf("shared Codex topology = root:%d http:%d, want one each", fixture.processBuilds, fixture.api.startCount())
 	}
-	if got := fixture.commandRunner.CallCount(); got != 1 {
-		t.Fatalf("shared Codex command calls = %d, want one trusted Work call", got)
+	if got := fixture.commandRunner.CallCount(); got != 3 {
+		t.Fatalf("shared Codex command calls = %d, want one call for each Work route", got)
 	}
-	if got := fixture.commandRunner.routeCount(); got != 1 {
-		t.Fatalf("shared Codex active route count = %d, want one immutable route", got)
+	if got := fixture.commandRunner.routeCount(); got != 3 {
+		t.Fatalf("shared Codex active route count = %d, want three immutable routes", got)
 	}
+	fixture.assertSessionTopology(t)
 }
 
 func assertCodexFactorySessionDeleted(t testing.TB, baseURL, sessionID string) {
@@ -446,6 +664,18 @@ func (runner *codexSharedCommandRunner) Requests() []platformprocess.CommandRequ
 	return requests
 }
 
+func (runner *codexSharedCommandRunner) RequestsForWorkDir(workDir string) []platformprocess.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, 0)
+	for _, request := range runner.requests {
+		if request.WorkDir == workDir {
+			requests = append(requests, cloneCodexCommandRequest(request))
+		}
+	}
+	return requests
+}
+
 func (runner *codexSharedCommandRunner) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -482,6 +712,7 @@ func assertCodexSharedDuplicateRouteRejected(
 	t testing.TB,
 	runner *codexSharedCommandRunner,
 	factoryDir string,
+	wantRouteCount int,
 ) {
 	t.Helper()
 	err := runner.register(
@@ -492,8 +723,8 @@ func assertCodexSharedDuplicateRouteRejected(
 	if err == nil {
 		t.Fatalf("duplicate Codex route for WorkDir %q was accepted", factoryDir)
 	}
-	if got := runner.routeCount(); got != 1 {
-		t.Fatalf("Codex route count after duplicate rejection = %d, want one", got)
+	if got := runner.routeCount(); got != wantRouteCount {
+		t.Fatalf("Codex route count after duplicate rejection = %d, want %d", got, wantRouteCount)
 	}
 }
 

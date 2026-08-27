@@ -4,11 +4,9 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,120 +19,131 @@ const (
 	codexUntrustedWorkingDirectoryExitCode = 1
 )
 
-// TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic proves an untrusted directory fails once with remediation guidance.
-func TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic(t *testing.T) {
-	dir := scaffoldCodexWorkingDirectoryFactory(t)
-	runner := support.NewShapedProviderCommandRunner(codexUntrustedWorkingDirectoryCommandResult())
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+func assertCodexSharedActionableRefusal(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	workID, _, events := runCodexSharedRefusal(
 		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
+		fixture,
+		fixture.actionableFactoryDir,
+		codexSharedActionableWorkName,
+		"shared actionable Codex refusal",
 	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed place tokens = %d, want one terminal failure; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
-		t.Fatalf("init place tokens = %d, want zero after terminal refusal; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 0 {
-		t.Fatalf("complete place tokens = %d, want zero after refusal; listed=%#v", got, listed)
-	}
-	if got := runner.CallCount(); got != 1 {
-		t.Fatalf("provider command calls = %d, want one terminal Codex refusal", got)
-	}
-	requests := runner.Requests()
-	if len(requests) != 1 || requests[0].Command != string(modelprovider.ProviderCodex) || requests[0].WorkDir != dir {
-		t.Fatalf("Codex command request = %#v, want one request in isolated directory %q", requests, dir)
-	}
-
-	dispatches := support.ObserveDispatchEvents(t, events)
-	processFailures := 0
-	for _, dispatch := range dispatches {
-		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
-			continue
-		}
-		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
-			t.Errorf("process response outcome = %q, want FAILED", dispatch.Response.Outcome)
-		}
-		if dispatch.Response.Error == nil {
-			t.Error("process response error = nil, want actionable Codex trust diagnostic")
-		} else {
-			for _, required := range []string{
-				dir,
-				"Codex requires a trusted working directory",
-				"suitable trusted Git repository",
-			} {
-				if !strings.Contains(*dispatch.Response.Error, required) {
-					t.Errorf("process response error = %q, want it to contain %q", *dispatch.Response.Error, required)
-				}
-			}
-		}
-		if dispatch.Response.FailureDetail == nil || dispatch.Response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
-			t.Errorf("process failure detail = %#v, want permanent bad request", dispatch.Response.FailureDetail)
-		}
-		processFailures++
-	}
-	if processFailures != 1 {
-		t.Fatalf("failed process dispatches = %d, want one without circuit-breaker retries", processFailures)
-	}
+	assertCodexSharedRefusalDispatch(
+		t,
+		events,
+		workID,
+		[]string{
+			fixture.actionableFactoryDir,
+			"Codex requires a trusted working directory",
+			"suitable trusted Git repository",
+		},
+		nil,
+	)
 }
 
-// TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic proves an unknown Codex refusal fails once without misclassification.
-func TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic(t *testing.T) {
-	dir := scaffoldCodexWorkingDirectoryFactory(t)
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		ExitCode: 77,
-		// A structured provider error is deliberately unknown to this adapter.
-		// The adapter marks it as a provider-declared refusal; raw command text
-		// remains an ordinary unknown failure and keeps the existing contract.
-		Stderr: []byte(`{"type":"error","message":"future refusal: credential=secret"}`),
-	})
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+func assertCodexSharedNeutralRefusal(t *testing.T, fixture *codexSharedProcessFixture) {
+	t.Helper()
+	workID, _, events := runCodexSharedRefusal(
 		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
+		fixture,
+		fixture.neutralFactoryDir,
+		codexSharedNeutralWorkName,
+		"shared neutral Codex refusal",
 	)
+	assertCodexSharedRefusalDispatch(
+		t,
+		events,
+		workID,
+		[]string{"provider rejected the execution request"},
+		[]string{
+			fixture.neutralFactoryDir,
+			"future refusal",
+			"credential=secret",
+			"codex exited",
+		},
+	)
+}
 
+func runCodexSharedRefusal(
+	t *testing.T,
+	fixture *codexSharedProcessFixture,
+	factoryDir, workName, title string,
+) (string, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	t.Helper()
+	sessionID := fixture.openSession(t, factoryDir)
+	name := workName
+	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, sessionID, factoryapi.SubmitWorkRequest{
+		Name:         &name,
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": title},
+	})
+	if submitted.SessionId == nil || *submitted.SessionId != sessionID {
+		t.Fatalf("refusal Work session ID = %#v, want %q", submitted.SessionId, sessionID)
+	}
+	workID := support.StringPointerValue(submitted.WorkId)
+	if workID == "" || strings.TrimSpace(submitted.RequestId) == "" {
+		t.Fatalf("refusal Work identity = work:%q request:%q, want both identities", workID, submitted.RequestId)
+	}
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, codexSharedFixtureTimeout)
+
+	listed := listCodexSessionWork(t, fixture.baseURL, sessionID)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed place tokens = %d, want one terminal failure; listed=%#v", got, listed)
+		t.Fatalf("shared refusal failed Work count = %d, want one; listed=%#v", got, listed)
 	}
 	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
-		t.Fatalf("init place tokens = %d, want zero after terminal refusal; listed=%#v", got, listed)
+		t.Fatalf("shared refusal init Work count = %d, want zero; listed=%#v", got, listed)
 	}
-	if got := runner.CallCount(); got != 1 {
-		t.Fatalf("provider command calls = %d, want one unrecognized refusal", got)
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 0 {
+		t.Fatalf("shared refusal complete Work count = %d, want zero; listed=%#v", got, listed)
 	}
+	requests := fixture.commandRunner.RequestsForWorkDir(factoryDir)
+	if len(requests) != 1 || requests[0].Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("shared refusal Codex requests for %q = %#v, want one Codex request", factoryDir, requests)
+	}
+	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
+	support.AssertSingleWorkRequestEvent(t, events, submitted.RequestId, workID, "task")
+	return workID, listed, events
+}
 
+func assertCodexSharedRefusalDispatch(
+	t testing.TB,
+	events []factoryapi.FactoryEvent,
+	workID string,
+	required, forbidden []string,
+) {
+	t.Helper()
 	processFailures := 0
 	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
-		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
+		if dispatch.Request.TransitionId != "process" ||
+			!support.DispatchObservationIncludesWork(dispatch, workID) ||
+			dispatch.Response == nil {
 			continue
 		}
 		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
-			t.Errorf("process response outcome = %q, want FAILED", dispatch.Response.Outcome)
+			t.Errorf("shared refusal process response outcome = %q, want FAILED", dispatch.Response.Outcome)
 		}
 		if dispatch.Response.Error == nil {
-			t.Error("process response error = nil, want neutral provider refusal diagnostic")
+			t.Error("shared refusal process response error = nil, want provider refusal diagnostic")
 		} else {
-			if !strings.Contains(*dispatch.Response.Error, "provider rejected the execution request") {
-				t.Errorf("process response error = %q, want neutral refusal diagnostic", *dispatch.Response.Error)
+			for _, needle := range required {
+				if !strings.Contains(*dispatch.Response.Error, needle) {
+					t.Errorf("shared refusal process error = %q, want it to contain %q", *dispatch.Response.Error, needle)
+				}
 			}
-			for _, forbidden := range []string{"future refusal", "credential=secret", "codex exited"} {
-				if strings.Contains(*dispatch.Response.Error, forbidden) {
-					t.Errorf("process response error = %q, must not expose %q", *dispatch.Response.Error, forbidden)
+			for _, needle := range forbidden {
+				if strings.Contains(*dispatch.Response.Error, needle) {
+					t.Errorf("shared refusal process error = %q, must not expose %q", *dispatch.Response.Error, needle)
 				}
 			}
 		}
-		if dispatch.Response.FailureDetail == nil || dispatch.Response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
-			t.Errorf("process failure detail = %#v, want permanent bad request", dispatch.Response.FailureDetail)
+		if dispatch.Response.FailureDetail == nil ||
+			dispatch.Response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
+			t.Errorf("shared refusal process failure detail = %#v, want permanent bad request", dispatch.Response.FailureDetail)
 		}
 		processFailures++
 	}
 	if processFailures != 1 {
-		t.Fatalf("failed process dispatches = %d, want one without authored retry or circuit-breaker retries", processFailures)
+		t.Fatalf("shared refusal failed process dispatches = %d, want one without retries", processFailures)
 	}
 }
 
@@ -186,5 +195,15 @@ func codexUntrustedWorkingDirectoryCommandResult() platformprocess.CommandResult
 	return platformprocess.CommandResult{
 		ExitCode: codexUntrustedWorkingDirectoryExitCode,
 		Stderr:   []byte(codexUntrustedWorkingDirectoryStderr),
+	}
+}
+
+func codexNeutralRefusalCommandResult() platformprocess.CommandResult {
+	// A structured provider error is deliberately unknown to this adapter. The
+	// adapter must retain the provider-declared refusal class while exposing a
+	// neutral public message instead of this raw credential-like fixture text.
+	return platformprocess.CommandResult{
+		ExitCode: 77,
+		Stderr:   []byte(`{"type":"error","message":"future refusal: credential=secret"}`),
 	}
 }
