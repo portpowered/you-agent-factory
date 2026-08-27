@@ -218,7 +218,15 @@ remains.
 Route a converged repeat review as a HOLD. If the head has not moved since
 your last pass and you have no NEW independent finding — including the case
 where you are only re-confirming a blocker set the executor was already told
-about — end with `<CONTINUE>` and post no new PR comment. The hold now
+about — end with `<CONTINUE>` and post no new PR comment.
+
+Exception — a hold is ONLY for waiting states. If the head is unchanged,
+every required check is terminal and green, and no unfixed previously-flagged
+blocker remains, do NOT hold: that is exactly the Step 4.2 merge bar, so
+proceed to Step 6 and merge. Holding a finished green head burns the lane's
+round-trip budget for nothing and will eventually kill a healthy lane
+(observed live 2026-08-28: six lanes died to silent review→ci-wait→review
+cycling on clean green PRs). The hold now
 re-enters through the `ci-wait` gate (task returns to `awaiting-ci`, not
 straight back to review), so the loop pauses on CI state instead of spinning.
 Re-sending an unchanged blocker set is a no-op that hands the processor
@@ -228,6 +236,13 @@ delivering concrete executor work the executor does not already have: the
 first time you raise a blocker set, or a new blocker on a head pushed since
 your last pass. Holds are bounded by the review visit cap, so a genuinely
 stuck lane still surfaces without you forcing a rejection.
+
+Exception: before treating a required-check failure as an unchanged,
+already-told-to blocker under this rule, first run the stale-head-only
+classification in Step 6 (Required-check and stale-head routing) below -- a
+stale-head-only failure is not covered by this convergence rule even on a
+repeat pass, because the explicit rebase instruction is concrete executor
+work the executor has not yet been given by review.
 
 ### Step 5 - handle feedback
 
@@ -246,14 +261,29 @@ If you believe that the PR is complete and the CI passes, please merge the PR.
 
 If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
 
-Never run `gh pr merge --admin` or any administrative/bypass flag past a failing
-required status check: required checks are enforced by the repository ruleset,
-so a bypass cannot make a failing head eligible — the PR needs a new head on
-which the required checks pass. When every failing required check is explained
-by commits merged to `origin/main` since the PR head (verify against
-`origin/main`; do not call a check stale merely because the PR is old), post
-this exact comment and end through the **REJECTED** route so process receives
-concrete work:
+#### Required-check and stale-head routing
+
+This classification runs regardless of, and before, the Step 4.2
+convergence/hold decision.
+
+Before deciding to merge, never run `gh pr merge --admin` or use an
+administrative/bypass flag to force a merge past a failing required status
+check. A required status check is enforced by the repository ruleset, so an
+administrator cannot make a failing head eligible by bypassing it; the PR
+needs a new head on which the required checks pass.
+
+Classify a required-check failure as **stale-head-only** only when every
+failing required check is explained by commits merged since the PR head and
+there is no unresolved content-level blocker. Verify that condition against
+`origin/main` before routing it, using a behind-main merge-base and/or a
+failure signature that is already fixed on the current `origin/main` checks.
+Do not call a check stale merely because the PR is old, main has advanced, or
+one check happens to be green on main while another failure remains
+unexplained.
+
+When, and only when, every failing required check meets that stale-head-only
+test, post a PR conversation comment with this exact instruction and end
+through the **REJECTED** route so process receives concrete work:
 
 > Rebase onto origin/main and push a new head -- git fetch origin && git rebase origin/main, resolve conflicts, then push. This is a stale-head issue, not a content defect.
 
