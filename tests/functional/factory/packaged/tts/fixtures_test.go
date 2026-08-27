@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -396,17 +397,35 @@ func postPackagedTTSInvocation(
 	text string,
 ) factoryapi.InvocationResponse {
 	t.Helper()
+	return postPackagedTTSInvocationAt(
+		t,
+		server.URL(),
+		factorysessions.DefaultSessionID,
+		"",
+		text,
+	)
+}
 
-	body, err := json.Marshal(factoryapi.InvocationRequest{
+func postPackagedTTSInvocationAt(
+	t testing.TB,
+	baseURL, sessionID, requestID, text string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	request := factoryapi.InvocationRequest{
 		SourceKind: invocationTextSourceKindPtr(),
 		Content:    invocationTextContentPtr(text),
-	})
+	}
+	if strings.TrimSpace(requestID) != "" {
+		request.RequestId = &requestID
+	}
+	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
 
-	endpoint := strings.TrimSuffix(server.URL(), "/") +
-		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) + "/invocations"
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
@@ -430,14 +449,33 @@ func postPackagedTTSInvocationWithArgs(
 	args map[string]any,
 ) factoryapi.InvocationResponse {
 	t.Helper()
+	return postPackagedTTSInvocationWithArgsAt(
+		t,
+		server.URL(),
+		factorysessions.DefaultSessionID,
+		"",
+		args,
+	)
+}
 
-	body, err := json.Marshal(factoryapi.InvocationRequest{Args: &args})
+func postPackagedTTSInvocationWithArgsAt(
+	t testing.TB,
+	baseURL, sessionID, requestID string,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	request := factoryapi.InvocationRequest{Args: &args}
+	if strings.TrimSpace(requestID) != "" {
+		request.RequestId = &requestID
+	}
+	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
 
-	endpoint := strings.TrimSuffix(server.URL(), "/") +
-		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) + "/invocations"
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)

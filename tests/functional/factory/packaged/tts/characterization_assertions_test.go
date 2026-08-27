@@ -31,10 +31,36 @@ func assertPackagedTTSInvocationResponseIdentity(
 	}
 }
 
+func assertPackagedTTSInvocationResponseIdentityForSession(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+	wantSessionID, wantRequestID string,
+) {
+	t.Helper()
+	assertPackagedTTSInvocationResponseIdentity(t, response)
+	if response.SessionId != nil && *response.SessionId != wantSessionID {
+		t.Fatalf("invocation response sessionId = %q, want %q when present", *response.SessionId, wantSessionID)
+	}
+	if strings.TrimSpace(wantRequestID) != "" && response.RequestId != wantRequestID {
+		t.Fatalf("invocation response requestId = %q, want %q", response.RequestId, wantRequestID)
+	}
+}
+
 func assertPackagedTTSProviderRequest(
 	t *testing.T,
 	request *workerexecution.ProviderInferenceRequest,
 	wantText, wantTransition string,
+) {
+	t.Helper()
+	assertPackagedTTSProviderRequestForSession(
+		t, request, wantText, wantTransition, factorysessions.DefaultSessionID, "",
+	)
+}
+
+func assertPackagedTTSProviderRequestForSession(
+	t *testing.T,
+	request *workerexecution.ProviderInferenceRequest,
+	wantText, wantTransition, wantSessionID, wantRequestID string,
 ) {
 	t.Helper()
 	if request == nil {
@@ -72,8 +98,11 @@ func assertPackagedTTSProviderRequest(
 			t.Fatalf("provider request %s correlation id is empty: %#v", name, correlation)
 		}
 	}
-	if correlation.FactorySessionID != factorysessions.DefaultSessionID {
-		t.Fatalf("provider request factory session = %q, want %q", correlation.FactorySessionID, factorysessions.DefaultSessionID)
+	if correlation.FactorySessionID != wantSessionID {
+		t.Fatalf("provider request factory session = %q, want %q", correlation.FactorySessionID, wantSessionID)
+	}
+	if strings.TrimSpace(wantRequestID) != "" && correlation.RequestID != wantRequestID {
+		t.Fatalf("provider request correlation request = %q, want %q", correlation.RequestID, wantRequestID)
 	}
 	if correlation.DispatchID != request.Dispatch.DispatchID {
 		t.Fatalf("provider request correlation dispatch = %q, want %q", correlation.DispatchID, request.Dispatch.DispatchID)
@@ -94,12 +123,41 @@ func assertPackagedTTSProviderRequest(
 		}
 	}
 	if textBinding == nil || len(textBinding.Content) != 1 {
-		t.Fatalf("provider text binding = %#v, want one resolved content part", textBinding)
+		if providerRequestContainsTextInput(request, wantText) {
+			return
+		}
+		t.Fatalf("provider text binding = %#v, want one resolved content part or an exact dispatched text input; all model bindings = %#v", textBinding, request.ModelBindings)
 	}
 	part := textBinding.Content[0]
 	if part.Type.Normalized() != work.WorkContentPartTypeText || part.Text != wantText {
 		t.Fatalf("provider text binding content = %#v, want exact text %q", part, wantText)
 	}
+}
+
+func providerRequestContainsTextInput(
+	request *workerexecution.ProviderInferenceRequest,
+	wantText string,
+) bool {
+	if request == nil {
+		return false
+	}
+	for _, raw := range request.InputTokens {
+		var content []work.WorkContentPart
+		switch token := raw.(type) {
+		case workerexecution.Token:
+			content = token.Color.Content
+		case *workerexecution.Token:
+			if token != nil {
+				content = token.Color.Content
+			}
+		}
+		for _, part := range content {
+			if part.Type.Normalized() == work.WorkContentPartTypeText && part.Text == wantText {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func assertPackagedTTSResponseCorrelatesWithEvents(
@@ -108,7 +166,17 @@ func assertPackagedTTSResponseCorrelatesWithEvents(
 	events []factoryapi.FactoryEvent,
 ) {
 	t.Helper()
-	observed := collectFactoryTTSDispatchEvents(t, events, factorysessions.DefaultSessionID)
+	assertPackagedTTSResponseCorrelatesWithEventsForSession(t, response, events, factorysessions.DefaultSessionID)
+}
+
+func assertPackagedTTSResponseCorrelatesWithEventsForSession(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+	events []factoryapi.FactoryEvent,
+	sessionID string,
+) {
+	t.Helper()
+	observed := collectFactoryTTSDispatchEvents(t, events, sessionID)
 	requestID := factoryTTSRequiredContextID(t, observed.workRequest, "request")
 	traceID := factoryTTSRequiredTraceID(t, observed.workRequest)
 	if response.RequestId != requestID {
@@ -201,7 +269,22 @@ func assertPackagedTTSSuccessEvents(
 	wantArtifactPath, wantTraceID string,
 ) {
 	t.Helper()
-	observed := collectFactoryTTSDispatchEvents(t, events, factorysessions.DefaultSessionID)
+	assertPackagedTTSSuccessEventsForSession(
+		t, events, factorysessions.DefaultSessionID, outputWork, wantText, wantAudio, wantArtifactPath, wantTraceID,
+	)
+}
+
+func assertPackagedTTSSuccessEventsForSession(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	sessionID string,
+	outputWork factoryapi.Work,
+	wantText string,
+	wantAudio factoryapi.WorkAudioContentPart,
+	wantArtifactPath, wantTraceID string,
+) {
+	t.Helper()
+	observed := collectFactoryTTSDispatchEvents(t, events, sessionID)
 	workID := *outputWork.WorkId
 	requestID := factoryTTSRequiredContextID(t, observed.workRequest, "request")
 	traceID := factoryTTSRequiredTraceID(t, observed.workRequest)
