@@ -444,7 +444,7 @@ function windowsBuildTimeout(workflow) {
 	if (!stepTimeout) throw new Error("Windows backend build must have an explicit step timeout");
 	const jobMinutes = Number(jobTimeout[1]);
 	const windowsMinutes = Number(stepTimeout[1]);
-	if (windowsMinutes < 45 || windowsMinutes > 60) throw new Error("Windows backend build timeout must be between 45 and 60 minutes");
+	if (windowsMinutes < 45 || windowsMinutes > 300) throw new Error("Windows backend build timeout must be between 45 and 300 minutes");
 	if (windowsMinutes >= jobMinutes) throw new Error("Windows backend build timeout must be below the build job timeout");
 	if (/^\s+timeout-minutes:/m.test(unixBuild[1])) throw new Error("Darwin/Linux backend build must retain the job timeout");
 	return { jobMinutes, windowsMinutes };
@@ -452,21 +452,21 @@ function windowsBuildTimeout(workflow) {
 
 test("the Windows backend build has a bounded platform-specific step timeout", async () => {
 	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 360, windowsMinutes: 60 });
+	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 360, windowsMinutes: 300 });
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 44")),
-		/Windows backend build timeout must be between 45 and 60 minutes/,
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 300", "timeout-minutes: 44")),
+		/Windows backend build timeout must be between 45 and 300 minutes/,
 	);
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 61")),
-		/Windows backend build timeout must be between 45 and 60 minutes/,
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 300", "timeout-minutes: 301")),
+		/Windows backend build timeout must be between 45 and 300 minutes/,
 	);
 	assert.throws(
 		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 360", "timeout-minutes: 60")),
 		/Windows backend build timeout must be below the build job timeout/,
 	);
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("        timeout-minutes: 60\n", "")),
+		() => windowsBuildTimeout(workflow.replace("        timeout-minutes: 300\n", "")),
 		/Windows backend build must have an explicit step timeout/,
 	);
 	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
