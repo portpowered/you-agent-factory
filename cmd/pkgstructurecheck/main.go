@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -431,10 +432,58 @@ func functionalTestNames(path string) ([]namedLine, error) {
 		if !ok || function.Recv != nil || !strings.HasPrefix(function.Name.Name, "Test") {
 			continue
 		}
+		if isGoTestMain(function, file) {
+			continue
+		}
 		names = append(names, namedLine{name: function.Name.Name, line: fileSet.Position(function.Pos()).Line})
 	}
 	slices.SortFunc(names, func(left, right namedLine) int { return strings.Compare(left.name, right.name) })
 	return names, nil
+}
+
+// isGoTestMain recognizes the lifecycle hook that the Go test runner invokes
+// before executing a package's tests. Only the exact hook signature is exempt;
+// a scenario or malformed declaration named TestMain must remain debt.
+func isGoTestMain(function *ast.FuncDecl, file *ast.File) bool {
+	if function.Name.Name != "TestMain" || function.Recv != nil || function.Type == nil || function.Type.TypeParams != nil || function.Type.Params == nil {
+		return false
+	}
+	if function.Type.Params.NumFields() != 1 || (function.Type.Results != nil && function.Type.Results.NumFields() != 0) {
+		return false
+	}
+	parameter := function.Type.Params.List[0]
+	if len(parameter.Names) > 1 {
+		return false
+	}
+	star, ok := parameter.Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	selector, ok := star.X.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "M" {
+		return false
+	}
+	packageName, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	return importsPackageAs(file, "testing", packageName.Name)
+}
+
+func importsPackageAs(file *ast.File, importPath, packageName string) bool {
+	for _, imported := range file.Imports {
+		path, err := strconv.Unquote(imported.Path.Value)
+		if err != nil || path != importPath {
+			continue
+		}
+		if imported.Name == nil && packageName == filepath.Base(importPath) {
+			return true
+		}
+		if imported.Name != nil && imported.Name.Name == packageName {
+			return true
+		}
+	}
+	return false
 }
 
 func createBaseline(repoRoot string, findings []finding, stdout io.Writer) error {

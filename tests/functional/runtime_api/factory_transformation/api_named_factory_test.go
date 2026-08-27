@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,29 +17,29 @@ import (
 func TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface(t *testing.T) {
 	support.SkipLongFunctional(t, "slow named-factory API sweep")
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 
-	created := createNamedFactoryFromBody(t, server.URL(), functionalNamedFactoryBody("beta", "beta-task"))
+	created := createNamedFactoryFromBodyForSession(t, server.URL(), server.SessionID(), functionalNamedFactoryBody("beta", "beta-task"))
 	assertFactoryWorkType(t, created, "beta-task", "created factory")
 	if created.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("created factory name = %q, want beta", created.Name)
 	}
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
 	assertFactoryWorkType(t, current, "beta-task", "current factory readback")
 
-	betaResp := submitWorkAndExpectStatus(t, server.URL(), "beta-task", "beta", http.StatusCreated)
+	betaResp := submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "beta-task", "beta", http.StatusCreated)
 	var betaSubmit factoryapi.SubmitWorkResponse
 	decodeJSONResponse(t, betaResp, &betaSubmit, "decode beta-task submit response")
 	if betaSubmit.TraceId == "" {
 		t.Fatal("expected non-empty trace ID for activated beta-task submission")
 	}
 
-	legacyResp := submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "alpha", http.StatusBadRequest)
+	legacyResp := submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "alpha-task", "alpha", http.StatusBadRequest)
 	var legacyErr factoryapi.ErrorResponse
 	decodeJSONResponse(t, legacyResp, &legacyErr, "decode alpha-task error response")
 	if legacyErr.Code != factoryapi.ErrorResponseCodeBADREQUEST {
@@ -49,14 +50,14 @@ func TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface(t *testi
 func TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract(t *testing.T) {
 	support.SkipLongFunctional(t, "slow named-factory API sweep")
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 
-	created := createNamedFactoryFromBody(t, server.URL(), functionalNamedFactoryBodyWithBundledFiles("beta", "beta-task"))
+	created := createNamedFactoryFromBodyForSession(t, server.URL(), server.SessionID(), functionalNamedFactoryBodyWithBundledFiles("beta", "beta-task"))
 	assertBundledFilesWithoutInlineScriptsAndDocs(t, created, "created response")
 
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
@@ -72,9 +73,9 @@ func TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonical
 
 func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 	body := `{
 		"name":"beta",
 		"id":"beta",
@@ -94,7 +95,7 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *t
 		}]
 	}`
 
-	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	resp := createNamedFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
@@ -116,9 +117,9 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *t
 
 func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 	body := `{
 		"name":"beta",
 		"id":"beta",
@@ -140,7 +141,7 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidat
 		}]
 	}`
 
-	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	resp := createNamedFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
@@ -158,12 +159,12 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidat
 
 func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 	initialEvents := server.GetFactoryEvents(t)
 
-	createNamedFactoryFromBody(t, server.URL(), functionalNamedFactoryBody("beta", "beta-task"))
+	createNamedFactoryFromBodyForSession(t, server.URL(), server.SessionID(), functionalNamedFactoryBody("beta", "beta-task"))
 
 	change := requireFactoryChangeAfter(t, initialEvents, server.GetFactoryEvents(t))
 	if change.Context.Tick <= latestEventTick(initialEvents) {
@@ -180,22 +181,33 @@ func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEven
 	assertFactoryWorkType(t, payload.Factory, "beta-task", "factory-change payload")
 }
 
-func createNamedFactoryFromBody(t *testing.T, serverURL, body string) factoryapi.Factory {
+func createNamedFactoryFromBodyForSession(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	body string,
+) factoryapi.Factory {
 	t.Helper()
-	resp := createNamedFactoryExpectStatus(t, serverURL, body, http.StatusOK)
+	resp := createNamedFactoryForSessionExpectStatus(t, serverURL, sessionID, body, http.StatusOK)
 	var created factoryapi.Factory
-	decodeJSONResponse(t, resp, &created, "decode upsert named factory response")
+	decodeJSONResponse(t, resp, &created, "decode session upsert named factory response")
 	return created
 }
 
-func createNamedFactoryExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
+func createNamedFactoryForSessionExpectStatus(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	body string,
+	wantStatus int,
+) *http.Response {
 	t.Helper()
 	requestBody := fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, body)
 	return putFactoryForSessionRequestExpectStatusWithClient(
 		t,
 		http.DefaultClient,
 		serverURL,
-		"/factory-sessions/~default/factory",
+		"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
 		requestBody,
 		wantStatus,
 	)

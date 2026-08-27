@@ -148,17 +148,17 @@ func runCurrentFactoryPUTPortableLayoutVariant(t *testing.T, variant portableLay
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	body, err := json.Marshal(layoutVariantFactorySaveBody(t, current, variant.nodes, variant.edges))
 	if err != nil {
 		t.Fatalf("marshal current factory save with layout variant: %v", err)
 	}
 
-	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), string(body))
 	variant.assertSavedLayout(t, saved.Layout)
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	variant.assertSavedLayout(t, reloaded.Layout)
 
 	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))

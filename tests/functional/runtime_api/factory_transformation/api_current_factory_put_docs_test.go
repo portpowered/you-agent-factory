@@ -32,7 +32,7 @@ func TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent(t *test
 		t.Fatalf("write factory config with bundled files: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "")
 	payload := requireInitialStructurePayload(t, server.GetFactoryEvents(t))
 	assertDocBundledFileInline(t, payload.Factory, "factory/docs/overview.md", "# Overview\n")
 	assertScriptBundledFileInline(t, payload.Factory, "factory/scripts/setup-workspace.py", "print('setup')\n")
@@ -40,14 +40,15 @@ func TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent(t *test
 
 func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
-	created := saveCurrentFactoryDefinition(
+	created := saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactoryDocumentWithBundledDocs(
 			t,
 			current,
@@ -64,10 +65,11 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 	assertPortableFile(t, filepath.Join(alphaDir, "docs", "overview.md"), "# Overview\n")
 	assertPortableFile(t, filepath.Join(alphaDir, "scripts", "setup-workspace.py"), "print('setup')\n")
 
-	afterCreate := getCurrentFactory(t, server.URL())
-	edited := saveCurrentFactoryDefinition(
+	afterCreate := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	edited := saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactoryDocumentWithBundledDocs(
 			t,
 			afterCreate,
@@ -80,10 +82,11 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 	assertDocBundledFileInline(t, edited, "factory/docs/overview.md", "# Overview updated\n")
 	assertPortableFile(t, filepath.Join(alphaDir, "docs", "overview.md"), "# Overview updated\n")
 
-	afterEdit := getCurrentFactory(t, server.URL())
-	renamed := saveCurrentFactoryDefinition(
+	afterEdit := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	renamed := saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactoryDocumentWithBundledDocs(
 			t,
 			afterEdit,
@@ -99,10 +102,11 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 	}
 	assertPortableFile(t, filepath.Join(alphaDir, "docs", "guide.md"), "# Overview updated\n")
 
-	afterRename := getCurrentFactory(t, server.URL())
-	deleted := saveCurrentFactoryDefinition(
+	afterRename := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	deleted := saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactoryDocumentWithBundledDocs(
 			t,
 			afterRename,
@@ -118,7 +122,7 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 		t.Fatalf("deleted doc stat error = %v, want not exist", err)
 	}
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if findBundledFile(t, reloaded, "factory/docs/guide.md") != nil {
 		t.Fatalf("deleted doc still present after reload: %#v", reloaded.SupportingFiles)
 	}
@@ -127,15 +131,16 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 
 func TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
 	initialEvents := server.GetFactoryEvents(t)
-	current := getCurrentFactory(t, server.URL())
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
-	saved := saveCurrentFactoryDefinition(
+	saved := saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactoryDocumentWithBundledDocs(
 			t,
 			current,
@@ -158,10 +163,10 @@ func TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion(
 
 func TestCurrentFactoryPUT_RejectsInvalidDocTargets(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
 	cases := []struct {
 		name       string
@@ -173,9 +178,10 @@ func TestCurrentFactoryPUT_RejectsInvalidDocTargets(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := saveCurrentFactoryDefinitionExpectStatus(
+			resp := saveCurrentFactoryForSessionExpectStatus(
 				t,
 				server.URL(),
+				server.SessionID(),
 				currentFactoryDocumentWithBundledDocs(
 					t,
 					current,
@@ -192,14 +198,15 @@ func TestCurrentFactoryPUT_RejectsInvalidDocTargets(t *testing.T) {
 
 func TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
-	resp := saveCurrentFactoryDefinitionExpectStatus(
+	resp := saveCurrentFactoryForSessionExpectStatus(
 		t,
 		server.URL(),
+		server.SessionID(),
 		currentFactoryDocumentWithBundledDocs(
 			t,
 			current,
@@ -215,10 +222,10 @@ func TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths(t *testing.T) {
 
 func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata for save")
 	}
@@ -245,7 +252,7 @@ func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(
 		}
 	}`
 
-	req, err := http.NewRequest(http.MethodPut, server.URL()+"/factory-sessions/~default/factory", bytes.NewBufferString(body))
+	req, err := http.NewRequest(http.MethodPut, server.FactoryURL(), bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("new malformed current factory save request: %v", err)
 	}
@@ -253,11 +260,11 @@ func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
+		t.Fatalf("PUT %s: %v", server.FactoryURL(), err)
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		resp.Body.Close()
-		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 400", resp.StatusCode)
+		t.Fatalf("PUT %s status = %d, want 400", server.FactoryURL(), resp.StatusCode)
 	}
 
 	var errResp factoryapi.ErrorResponse

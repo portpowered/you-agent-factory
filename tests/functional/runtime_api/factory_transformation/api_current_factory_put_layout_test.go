@@ -22,7 +22,7 @@ func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryCh
 		t.Fatalf("write default factory config with layout: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
+	server := startDocumentTransformationServer(t, rootDir, "")
 	initialPayload := requireInitialStructurePayload(t, server.GetFactoryEvents(t))
 	assertFactoryEventLayout(t, initialPayload.Factory.Layout, factoryEventLayoutExpectation{
 		nodeX:       144,
@@ -43,10 +43,11 @@ func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryCh
 	})
 
 	initialEvents := server.GetFactoryEvents(t)
-	current := getCurrentFactory(t, server.URL())
-	saveCurrentFactoryDefinition(
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
+	saveCurrentFactoryForSession(
 		t,
 		server.URL(),
+		server.SessionID(),
 		string(functionalFactoryEventLayoutDocument(
 			t,
 			"UNDEFINED",
@@ -91,8 +92,8 @@ func TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExe
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
 	body, err := json.Marshal(map[string]any{
 		"name":    "UNDEFINED",
@@ -169,10 +170,10 @@ func TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExe
 		t.Fatalf("marshal current factory save with layout: %v", err)
 	}
 
-	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), string(body))
 	assertPortableLayoutResponse(t, saved.Layout)
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	assertPortableLayoutResponse(t, reloaded.Layout)
 
 	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
@@ -185,7 +186,7 @@ func TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExe
 	}
 	assertPortableLayoutPayload(t, persisted["layout"])
 
-	submitWorkAndExpectStatus(t, server.URL(), "story", "layout-roundtrip", http.StatusCreated)
+	submitWorkForSessionAndExpectStatus(t, server.URL(), server.SessionID(), "story", "layout-roundtrip", http.StatusCreated)
 }
 
 func TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetadata(t *testing.T) {
@@ -198,18 +199,18 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetad
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
 	body, err := json.Marshal(staleLayoutPruningFactorySaveBody(t, current))
 	if err != nil {
 		t.Fatalf("marshal current factory save with stale layout: %v", err)
 	}
 
-	saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), string(body))
 	assertStaleLayoutPrunedOnDisk(t, rootDir)
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	_ = reloaded
 }
 
@@ -223,8 +224,8 @@ func TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize(t *testing.T) {
 		t.Fatalf("write default factory config: %v", err)
 	}
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
 	body, err := json.Marshal(map[string]any{
 		"name":    "UNDEFINED",
@@ -275,7 +276,7 @@ func TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize(t *testing.T) {
 		t.Fatalf("marshal current factory save with malformed layout node: %v", err)
 	}
 
-	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), string(body))
 	if saved.Layout == nil || saved.Layout.Nodes == nil || len(*saved.Layout.Nodes) != 1 {
 		t.Fatalf("saved layout nodes = %#v, want one sizeless node", saved.Layout)
 	}
@@ -286,10 +287,10 @@ func TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize(t *testing.T) {
 
 func TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
 	body := currentFactoryDocumentWithBundledDocsAndLayout(
 		t,
@@ -308,7 +309,7 @@ func TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode(t *testing.T) {
 		},
 	)
 
-	saved := saveCurrentFactoryDefinition(t, server.URL(), body)
+	saved := saveCurrentFactoryForSession(t, server.URL(), server.SessionID(), body)
 	assertDocBundledFileInline(t, saved, "factory/docs/planning.md", "# Planning\n")
 	if saved.Layout == nil || saved.Layout.Nodes == nil || len(*saved.Layout.Nodes) != 1 {
 		t.Fatalf("saved layout = %#v, want one bundled doc node", saved.Layout)
@@ -321,7 +322,7 @@ func TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode(t *testing.T) {
 		t.Fatalf("saved bundled doc layout node size = %#v, want 360x200", node.Size)
 	}
 
-	reloaded := getCurrentFactory(t, server.URL())
+	reloaded := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 	assertDocBundledFileInline(t, reloaded, "factory/docs/planning.md", "# Planning\n")
 	if reloaded.Layout == nil || reloaded.Layout.Nodes == nil || len(*reloaded.Layout.Nodes) != 1 {
 		t.Fatalf("reloaded layout = %#v, want one bundled doc node", reloaded.Layout)
@@ -330,10 +331,10 @@ func TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode(t *testing.T) {
 
 func TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	seedDocumentNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	server := startDocumentTransformationServer(t, rootDir, "alpha")
+	current := getCurrentFactoryForSession(t, server.URL(), server.SessionID())
 
 	body := currentFactoryDocumentWithBundledDocsAndLayout(
 		t,
@@ -351,7 +352,7 @@ func TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode(t *testing.T) {
 		},
 	)
 
-	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
+	resp := saveCurrentFactoryForSessionExpectStatus(t, server.URL(), server.SessionID(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid bundled doc layout save response")
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
