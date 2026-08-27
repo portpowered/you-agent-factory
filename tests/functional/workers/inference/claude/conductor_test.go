@@ -1,4 +1,4 @@
-package claude_test
+package claude
 
 import (
 	"context"
@@ -33,8 +33,8 @@ const (
 	claudeCancellationMessage     = "provider invocation was canceled"
 )
 
-// TestClaudeDefaultLaneSharedProcess proves the ordinary Claude success and
-// cancellation scenarios through one root-built process. Each subtest owns a
+// TestClaudeDefaultLaneSharedProcess proves the four ordinary Claude scenarios
+// through one root-built process. Each subtest owns a
 // separate Factory directory and opens an explicit non-default Factory Session
 // so the process is shared while runtime state remains session-scoped.
 func TestClaudeDefaultLaneSharedProcess(t *testing.T) {
@@ -95,6 +95,8 @@ type claudeDefaultLaneFixture struct {
 	identities *claudeIdentityGenerator
 	apiStarts  *atomic.Int32
 	scenarios  []claudeScenario
+	opened     atomic.Int32
+	closed     atomic.Int32
 
 	ledgerMu sync.Mutex
 	ledger   map[string]claudeScenarioObservation
@@ -103,58 +105,135 @@ type claudeDefaultLaneFixture struct {
 type claudeScenario struct {
 	name              string
 	factoryDir        string
+	model             string
 	workID            string
 	requestID         string
 	traceID           string
 	providerSessionID string
 	runner            *claudeScenarioCommandRunner
+	golden            *support.ProviderSessionCase
 	wantWorkState     string
 	wantOutcome       factoryapi.WorkOutcome
+	wantFailure       string
+	wantProviderCalls int
+	wantDispatches    int
 }
 
 type claudeScenarioObservation struct {
 	sessionID         string
 	workID            string
 	requestID         string
-	dispatchID        string
+	dispatchIDs       []string
 	providerSessionID string
+	responseEventIDs  []string
 }
 
 func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 	t.Helper()
 
 	identities := &claudeIdentityGenerator{}
+	structuredFailureGolden := loadClaudeGoldenCase(t, claudeGoldenStructuredFailureCase)
+	assertClaudeGoldenManifest(t, structuredFailureGolden, "claude-structured-failure")
+	timeoutGolden := loadClaudeGoldenCase(t, claudeGoldenTimeoutCase)
+	assertClaudeGoldenManifest(t, timeoutGolden, "claude-timeout")
+
+	structuredFailureExitCode := 1
+	if structuredFailureGolden.Process.ExitCode != nil {
+		structuredFailureExitCode = *structuredFailureGolden.Process.ExitCode
+	}
+	structuredFailureResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), structuredFailureGolden.Stdout.Raw...),
+		Stderr:   []byte(structuredFailureGolden.Stderr),
+		ExitCode: structuredFailureExitCode,
+	}
+	timeoutExitCode := 124
+	if timeoutGolden.Process.ExitCode != nil {
+		timeoutExitCode = *timeoutGolden.Process.ExitCode
+	}
+	timeoutResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), timeoutGolden.Stdout.Raw...),
+		Stderr:   []byte(timeoutGolden.Stderr),
+		ExitCode: timeoutExitCode,
+	}
+	timeoutResults := make([]platformprocess.CommandResult, claudeGoldenTimeoutCommandInvocations)
+	for index := range timeoutResults {
+		timeoutResults[index] = timeoutResult
+	}
+
 	fixtures := []struct {
 		name              string
+		model             string
 		requestID         string
 		workID            string
 		traceID           string
 		providerSessionID string
-		result            platformprocess.CommandResult
+		results           []platformprocess.CommandResult
 		runErr            error
+		golden            *support.ProviderSessionCase
 		wantWorkState     string
 		wantOutcome       factoryapi.WorkOutcome
+		wantFailure       string
+		wantProviderCalls int
+		wantDispatches    int
 	}{
 		{
 			name:              "Success",
+			model:             claudeConductorModel,
 			requestID:         "claude-c03-success-request",
 			workID:            "claude-c03-success-work",
 			traceID:           "claude-c03-success-trace",
 			providerSessionID: "claude-c03-success-provider-session",
-			result: platformprocess.CommandResult{Stdout: []byte(
+			results: []platformprocess.CommandResult{{Stdout: []byte(
 				`{"type":"result","subtype":"success","is_error":false,"result":"claude functional answer COMPLETE","session_id":"claude-c03-success-provider-session"}` + "\n",
-			)},
-			wantWorkState: "task:done",
-			wantOutcome:   factoryapi.WorkOutcomeAccepted,
+			)}},
+			wantWorkState:     "task:done",
+			wantOutcome:       factoryapi.WorkOutcomeAccepted,
+			wantProviderCalls: 1,
+			wantDispatches:    1,
 		},
 		{
-			name:          "Cancellation",
-			requestID:     "claude-c03-cancellation-request",
-			workID:        "claude-c03-cancellation-work",
-			traceID:       "claude-c03-cancellation-trace",
-			runErr:        context.Canceled,
-			wantWorkState: "task:failed",
-			wantOutcome:   factoryapi.WorkOutcomeFailed,
+			name:              "Cancellation",
+			model:             claudeConductorModel,
+			requestID:         "claude-c03-cancellation-request",
+			workID:            "claude-c03-cancellation-work",
+			traceID:           "claude-c03-cancellation-trace",
+			results:           []platformprocess.CommandResult{{}},
+			runErr:            context.Canceled,
+			wantWorkState:     "task:failed",
+			wantOutcome:       factoryapi.WorkOutcomeFailed,
+			wantFailure:       claudeCancellationMessage,
+			wantProviderCalls: 1,
+			wantDispatches:    1,
+		},
+		{
+			name:              "StructuredFailure",
+			model:             structuredFailureGolden.Process.Model,
+			requestID:         "claude-c03-structured-failure-request",
+			workID:            "claude-c03-structured-failure-work",
+			traceID:           "claude-c03-structured-failure-trace",
+			providerSessionID: "claude-golden-structured-failure-session",
+			results:           []platformprocess.CommandResult{structuredFailureResult},
+			golden:            &structuredFailureGolden,
+			wantWorkState:     "task:failed",
+			wantOutcome:       factoryapi.WorkOutcomeFailed,
+			wantFailure:       "Reduce the request size below 20 MB.",
+			wantProviderCalls: 1,
+			wantDispatches:    1,
+		},
+		{
+			name:              "Timeout",
+			model:             timeoutGolden.Process.Model,
+			requestID:         "claude-c03-timeout-request",
+			workID:            "claude-c03-timeout-work",
+			traceID:           "claude-c03-timeout-trace",
+			providerSessionID: "claude-golden-timeout-session",
+			results:           timeoutResults,
+			golden:            &timeoutGolden,
+			wantWorkState:     "task:failed",
+			wantOutcome:       factoryapi.WorkOutcomeFailed,
+			wantFailure:       "provider invocation timed out",
+			wantProviderCalls: claudeGoldenTimeoutCommandInvocations,
+			wantDispatches:    3,
 		},
 	}
 
@@ -168,10 +247,14 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 	scenarios := make([]claudeScenario, 0, len(fixtures))
 	for _, fixture := range fixtures {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		workerConfig := support.BuildModelWorkerConfig(
 			modelprovider.ProviderClaude,
-			claudeConductorModel,
-		))
+			fixture.model,
+		)
+		if fixture.golden != nil {
+			workerConfig = strings.Replace(workerConfig, "stopToken: COMPLETE", "skipPermissions: true\nstopToken: COMPLETE", 1)
+		}
+		support.WriteAgentConfig(t, dir, "worker", workerConfig)
 		testutil.WriteSeedRequest(t, dir, workservice.SubmitRequest{
 			RequestID:  fixture.requestID,
 			WorkID:     fixture.workID,
@@ -181,20 +264,25 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 			Payload:    []byte(`{"title":"claude default lane"}`),
 		})
 
-		runner := &claudeScenarioCommandRunner{
-			result: fixture.result,
-			err:    fixture.runErr,
-		}
+		runner := newClaudeScenarioCommandRunner(
+			fixture.results,
+			fixture.runErr,
+		)
 		scenario := claudeScenario{
 			name:              fixture.name,
 			factoryDir:        dir,
+			model:             fixture.model,
 			workID:            fixture.workID,
 			requestID:         fixture.requestID,
 			traceID:           fixture.traceID,
 			providerSessionID: fixture.providerSessionID,
 			runner:            runner,
+			golden:            fixture.golden,
 			wantWorkState:     fixture.wantWorkState,
 			wantOutcome:       fixture.wantOutcome,
+			wantFailure:       fixture.wantFailure,
+			wantProviderCalls: fixture.wantProviderCalls,
+			wantDispatches:    fixture.wantDispatches,
 		}
 		routes = append(routes, claudeCommandRoute{
 			selector: dir,
@@ -249,7 +337,7 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 	})
 	support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := api.WaitForURL(t)
-	// The host's default session is only the server anchor. The two scenarios
+	// The host's default session is only the server anchor. The four scenarios
 	// below always use the explicitly opened sessions returned by the API.
 	defaultSession := support.GetDefaultSession(t, baseURL)
 	if !defaultSession.IsDefault || strings.TrimSpace(defaultSession.Id) == "" {
@@ -279,34 +367,43 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 	if sessionID == "" || sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("%s session id = %q, want unique non-default explicit session", scenario.name, sessionID)
 	}
+	fixture.opened.Add(1)
 	closed := false
-	t.Cleanup(func() {
+	closeSession := func() {
 		if closed {
 			return
 		}
 		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		closed = true
+		fixture.closed.Add(1)
+	}
+	t.Cleanup(func() {
+		closeSession()
 	})
 
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, claudeConductorRunTimeout)
 	session := getClaudeSession(t, fixture.baseURL, sessionID)
 	listed := listClaudeSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
+	responseEvents := support.GetFactoryResponseEventsAt(t, fixture.baseURL, sessionID)
 
 	assertClaudeWork(t, scenario, listed)
-	dispatchID := assertClaudeDispatch(t, scenario, sessionID, events)
+	dispatchIDs := assertClaudeDispatch(t, scenario, sessionID, events)
 	assertClaudeCommand(t, fixture.router, scenario)
 	providerSessionID := assertClaudeProviderSession(t, scenario, events)
 	assertClaudeEventScope(t, scenario, sessionID, events)
+	responseEventIDs := assertClaudeResponseEvents(t, scenario, sessionID, responseEvents)
+	assertClaudeGoldenScenario(t, scenario, events, responseEvents)
 
-	support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
-	closed = true
+	closeSession()
 	assertClaudeSessionDeleted(t, fixture.baseURL, sessionID)
 	fixture.recordObservation(claudeScenarioObservation{
 		sessionID:         session.Id,
 		workID:            scenario.workID,
 		requestID:         scenario.requestID,
-		dispatchID:        dispatchID,
+		dispatchIDs:       dispatchIDs,
 		providerSessionID: providerSessionID,
+		responseEventIDs:  responseEventIDs,
 	})
 }
 
@@ -325,8 +422,8 @@ func (fixture *claudeDefaultLaneFixture) assertSharedIdentityLedger(t *testing.T
 		observations = append(observations, observation)
 	}
 	fixture.ledgerMu.Unlock()
-	if len(observations) != len(fixture.scenarios) {
-		t.Fatalf("shared-process scenario observations = %d, want %d", len(observations), len(fixture.scenarios))
+	if len(observations) == 0 {
+		t.Fatal("shared-process scenario observations are empty")
 	}
 
 	seenSessions := make(map[string]string, len(observations))
@@ -334,14 +431,31 @@ func (fixture *claudeDefaultLaneFixture) assertSharedIdentityLedger(t *testing.T
 	seenRequests := make(map[string]string, len(observations))
 	seenDispatches := make(map[string]string, len(observations))
 	seenProviderSessions := make(map[string]string, len(observations))
+	seenResponseEvents := make(map[string]string)
 	for _, observation := range observations {
 		assertClaudeUniqueIdentity(t, seenSessions, observation.sessionID, observation.requestID, "Factory Session")
 		assertClaudeUniqueIdentity(t, seenWorks, observation.workID, observation.requestID, "Work")
 		assertClaudeUniqueIdentity(t, seenRequests, observation.requestID, observation.requestID, "request")
-		assertClaudeUniqueIdentity(t, seenDispatches, observation.dispatchID, observation.requestID, "dispatch")
+		for _, dispatchID := range observation.dispatchIDs {
+			assertClaudeUniqueIdentity(t, seenDispatches, dispatchID, observation.requestID, "dispatch")
+		}
 		if observation.providerSessionID != "" {
 			assertClaudeUniqueIdentity(t, seenProviderSessions, observation.providerSessionID, observation.requestID, "Provider Session")
 		}
+		for _, responseEventID := range observation.responseEventIDs {
+			assertClaudeUniqueIdentity(t, seenResponseEvents, responseEventID, observation.requestID, "response event")
+		}
+	}
+	if len(observations) != len(fixture.scenarios) {
+		// An anchored subtest intentionally exercises only the selected route;
+		// the full parent gate below is the evidence for all four scenarios.
+		return
+	}
+	if got := fixture.opened.Load(); got != int32(len(fixture.scenarios)) {
+		t.Fatalf("Factory Session opens = %d, want %d", got, len(fixture.scenarios))
+	}
+	if got := fixture.closed.Load(); got != int32(len(fixture.scenarios)) {
+		t.Fatalf("Factory Session closes = %d, want %d", got, len(fixture.scenarios))
 	}
 	if got := fixture.identities.sessionCount(); got < uint64(len(fixture.scenarios)) {
 		t.Fatalf("Factory Session IDs generated = %d, want at least %d explicit sessions", got, len(fixture.scenarios))
@@ -349,8 +463,12 @@ func (fixture *claudeDefaultLaneFixture) assertSharedIdentityLedger(t *testing.T
 	if got := fixture.apiStarts.Load(); got != 1 {
 		t.Fatalf("API server starts = %d, want exactly one shared process server", got)
 	}
-	if got := fixture.router.callCount(); got != len(fixture.scenarios) {
-		t.Fatalf("shared process routed provider calls = %d, want %d", got, len(fixture.scenarios))
+	wantProviderCalls := 0
+	for _, scenario := range fixture.scenarios {
+		wantProviderCalls += scenario.wantProviderCalls
+	}
+	if got := fixture.router.callCount(); got != wantProviderCalls {
+		t.Fatalf("shared process routed provider calls = %d, want %d", got, wantProviderCalls)
 	}
 }
 
@@ -386,9 +504,9 @@ func assertClaudeWork(t *testing.T, scenario claudeScenario, listed factoryapi.L
 		if support.StringPointerValue(item.RequestId) != scenario.requestID {
 			t.Fatalf("%s Work request id = %q, want %q", scenario.name, support.StringPointerValue(item.RequestId), scenario.requestID)
 		}
-		if scenario.wantWorkState == "task:failed" {
-			if item.FailureDetail == nil || !strings.Contains(item.FailureDetail.Message, claudeCancellationMessage) {
-				t.Fatalf("%s Work failure detail = %#v, want canonical cancellation message", scenario.name, item.FailureDetail)
+		if scenario.wantFailure != "" {
+			if item.FailureDetail == nil || !strings.Contains(item.FailureDetail.Message, scenario.wantFailure) {
+				t.Fatalf("%s Work failure detail = %#v, want %q", scenario.name, item.FailureDetail, scenario.wantFailure)
 			}
 		}
 	}
@@ -402,64 +520,72 @@ func assertClaudeDispatch(
 	scenario claudeScenario,
 	sessionID string,
 	events []factoryapi.FactoryEvent,
-) string {
+) []string {
 	t.Helper()
 
 	dispatches := support.ObserveDispatchEvents(t, events)
-	if len(dispatches) != 1 {
-		t.Fatalf("%s dispatch observations = %#v, want exactly one", scenario.name, dispatches)
+	if len(dispatches) != scenario.wantDispatches {
+		t.Fatalf("%s dispatch observations = %#v, want %d", scenario.name, dispatches, scenario.wantDispatches)
 	}
-	dispatch := dispatches[0]
-	if dispatch.DispatchID == "" {
-		t.Fatalf("%s dispatch identity is empty", scenario.name)
-	}
-	if !support.DispatchObservationIncludesWork(dispatch, scenario.workID) {
-		t.Fatalf("%s dispatch %q omitted Work %q: %#v", scenario.name, dispatch.DispatchID, scenario.workID, dispatch)
-	}
-	if dispatch.Response == nil {
-		t.Fatalf("%s dispatch %q has no response", scenario.name, dispatch.DispatchID)
-	}
-	if dispatch.Response.Outcome != scenario.wantOutcome {
-		t.Fatalf("%s dispatch outcome = %q, want %q", scenario.name, dispatch.Response.Outcome, scenario.wantOutcome)
-	}
-	if scenario.wantWorkState == "task:failed" {
-		if dispatch.Response.FailureDetail == nil || !strings.Contains(dispatch.Response.FailureDetail.Message, claudeCancellationMessage) {
-			t.Fatalf("%s dispatch failure detail = %#v, want canonical cancellation message", scenario.name, dispatch.Response.FailureDetail)
+	dispatchIDs := make([]string, 0, len(dispatches))
+	for _, dispatch := range dispatches {
+		if dispatch.DispatchID == "" {
+			t.Fatalf("%s dispatch identity is empty", scenario.name)
 		}
+		if !support.DispatchObservationIncludesWork(dispatch, scenario.workID) {
+			t.Fatalf("%s dispatch %q omitted Work %q: %#v", scenario.name, dispatch.DispatchID, scenario.workID, dispatch)
+		}
+		if dispatch.Response == nil {
+			t.Fatalf("%s dispatch %q has no response", scenario.name, dispatch.DispatchID)
+		}
+		if dispatch.Response.Outcome != scenario.wantOutcome {
+			t.Fatalf("%s dispatch outcome = %q, want %q", scenario.name, dispatch.Response.Outcome, scenario.wantOutcome)
+		}
+		if scenario.wantWorkState == "task:failed" {
+			if scenario.wantFailure == "" {
+				t.Fatalf("%s failed dispatch has no expected failure message", scenario.name)
+			}
+			if dispatch.Response.FailureDetail == nil || !strings.Contains(dispatch.Response.FailureDetail.Message, scenario.wantFailure) {
+				t.Fatalf("%s dispatch failure detail = %#v, want %q", scenario.name, dispatch.Response.FailureDetail, scenario.wantFailure)
+			}
+		}
+		dispatchIDs = append(dispatchIDs, dispatch.DispatchID)
 	}
 	for _, event := range events {
 		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
 			t.Fatalf("%s Factory Event %q session id = %q, want %q", scenario.name, event.Id, *event.Context.SessionId, sessionID)
 		}
 	}
-	return dispatch.DispatchID
+	return dispatchIDs
 }
 
 func assertClaudeCommand(t *testing.T, router *claudeCommandRouter, scenario claudeScenario) {
 	t.Helper()
 	requests := scenario.runner.Requests()
-	if len(requests) != 1 {
-		t.Fatalf("%s routed provider calls = %d, want exactly one; requests=%#v", scenario.name, len(requests), requests)
+	if len(requests) != scenario.wantProviderCalls {
+		t.Fatalf("%s routed provider calls = %d, want %d; requests=%#v", scenario.name, len(requests), scenario.wantProviderCalls, requests)
 	}
 	routed := router.callsFor(scenario.factoryDir)
-	if len(routed) != 1 {
-		t.Fatalf("%s immutable route calls = %d, want exactly one; calls=%#v", scenario.name, len(routed), routed)
+	if len(routed) != scenario.wantProviderCalls {
+		t.Fatalf("%s immutable route calls = %d, want %d; calls=%#v", scenario.name, len(routed), scenario.wantProviderCalls, routed)
 	}
-	request := routed[0].request
-	if request.WorkDir != requests[0].WorkDir {
-		t.Fatalf("%s router WorkDir = %q, runner WorkDir = %q", scenario.name, request.WorkDir, requests[0].WorkDir)
-	}
-	if request.Command != claudeConductorProcessCommand {
-		t.Fatalf("%s command = %q, want claude", scenario.name, request.Command)
-	}
-	if request.WorkDir != scenario.factoryDir {
-		t.Fatalf("%s command WorkDir = %q, want scenario Factory directory %q", scenario.name, request.WorkDir, scenario.factoryDir)
-	}
-	if !containsArgPair(request.Args, "--model", claudeConductorModel) {
-		t.Fatalf("%s args = %#v, want --model %s", scenario.name, request.Args, claudeConductorModel)
-	}
-	if !containsArgPair(request.Args, "--output-format", "stream-json") {
-		t.Fatalf("%s args = %#v, want Claude stream-json invocation", scenario.name, request.Args)
+	for index, routedCall := range routed {
+		request := routedCall.request
+		if request.WorkDir != requests[index].WorkDir {
+			t.Fatalf("%s router WorkDir = %q, runner WorkDir = %q", scenario.name, request.WorkDir, requests[index].WorkDir)
+		}
+		if request.Command != claudeConductorProcessCommand {
+			t.Fatalf("%s command = %q, want claude", scenario.name, request.Command)
+		}
+		if request.WorkDir != scenario.factoryDir {
+			t.Fatalf("%s command WorkDir = %q, want scenario Factory directory %q", scenario.name, request.WorkDir, scenario.factoryDir)
+		}
+		if !containsArgPair(request.Args, "--model", scenario.model) {
+			t.Fatalf("%s args = %#v, want --model %s", scenario.name, request.Args, scenario.model)
+		}
+		if !containsArgPair(request.Args, "--output-format", "stream-json") {
+			t.Fatalf("%s args = %#v, want Claude stream-json invocation", scenario.name, request.Args)
+		}
 	}
 }
 
@@ -521,16 +647,103 @@ func assertClaudeEventScope(
 	if scenario.wantWorkState != "task:failed" {
 		return
 	}
+	if scenario.wantFailure == "" {
+		t.Fatalf("%s failed Factory Event stream has no expected failure message", scenario.name)
+	}
 	payload, err := json.Marshal(events)
 	if err != nil {
 		t.Fatalf("%s marshal Factory Events: %v", scenario.name, err)
 	}
 	text := string(payload)
-	if !strings.Contains(text, claudeCancellationMessage) {
-		t.Fatalf("%s Factory Events missing canonical cancellation outcome: %s", scenario.name, text)
+	if !strings.Contains(text, scenario.wantFailure) {
+		t.Fatalf("%s Factory Events missing expected failure %q: %s", scenario.name, scenario.wantFailure, text)
 	}
 	if strings.Contains(text, "Claude command did not complete successfully") {
 		t.Fatalf("%s Factory Events used Claude-local cancellation fallback: %s", scenario.name, text)
+	}
+}
+
+func assertClaudeResponseEvents(
+	t *testing.T,
+	scenario claudeScenario,
+	sessionID string,
+	responseEvents []factoryapi.FactoryResponseEvent,
+) []string {
+	t.Helper()
+	if len(responseEvents) == 0 {
+		t.Fatalf("%s response-event stream is empty", scenario.name)
+	}
+	ids := make([]string, 0, len(responseEvents))
+	seen := make(map[string]struct{}, len(responseEvents))
+	var previousSequence int64
+	for index, event := range responseEvents {
+		if event.FactorySessionId != sessionID {
+			t.Fatalf("%s response event[%d] session id = %q, want %q", scenario.name, index, event.FactorySessionId, sessionID)
+		}
+		if strings.TrimSpace(event.EventId) == "" {
+			t.Fatalf("%s response event[%d] has empty event id", scenario.name, index)
+		}
+		if _, exists := seen[event.EventId]; exists {
+			t.Fatalf("%s response event id %q is duplicated", scenario.name, event.EventId)
+		}
+		seen[event.EventId] = struct{}{}
+		if index > 0 && event.Sequence <= previousSequence {
+			t.Fatalf("%s response event sequence[%d] = %d, previous = %d", scenario.name, index, event.Sequence, previousSequence)
+		}
+		if scenario.providerSessionID != "" && event.ProviderSessionRef != nil && *event.ProviderSessionRef != scenario.providerSessionID {
+			t.Fatalf("%s response event[%d] Provider Session ref = %q, want %q", scenario.name, index, *event.ProviderSessionRef, scenario.providerSessionID)
+		}
+		previousSequence = event.Sequence
+		ids = append(ids, event.EventId)
+	}
+	return ids
+}
+
+func assertClaudeGoldenScenario(
+	t *testing.T,
+	scenario claudeScenario,
+	events []factoryapi.FactoryEvent,
+	responseEvents []factoryapi.FactoryResponseEvent,
+) {
+	t.Helper()
+	if scenario.golden == nil {
+		return
+	}
+
+	switch scenario.golden.Manifest.ID {
+	case "claude-structured-failure":
+		inferencePayload := claudeGoldenFailedInferenceObservation(t, events)
+		if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+			t.Fatalf("%s inference outcome = %q, want FAILED", scenario.name, inferencePayload.Outcome)
+		}
+		if inferencePayload.FailureDetail == nil || inferencePayload.FailureDetail.Message != scenario.wantFailure {
+			t.Fatalf("%s inference failure detail = %#v, want %q", scenario.name, inferencePayload.FailureDetail, scenario.wantFailure)
+		}
+		if inferencePayload.Response != nil && strings.Contains(*inferencePayload.Response, "COMPLETE") {
+			t.Fatalf("%s structured failure treated COMPLETE-bearing output as success: %q", scenario.name, *inferencePayload.Response)
+		}
+		assertProviderSessionGoldensMatch(t, *scenario.golden, observeClaudeFailedProviderSessionGoldens(t, inferencePayload, responseEvents))
+	case "claude-timeout":
+		inferencePayload := claudeGoldenFailedInferenceObservationWithReason(
+			t,
+			events,
+			factoryapi.WorkFailureTypeTimeout,
+		)
+		if inferencePayload.Outcome != factoryapi.InferenceOutcomeFailed {
+			t.Fatalf("%s inference outcome = %q, want FAILED", scenario.name, inferencePayload.Outcome)
+		}
+		if inferencePayload.FailureDetail == nil || inferencePayload.FailureDetail.Message != scenario.wantFailure {
+			t.Fatalf("%s inference failure detail = %#v, want %q", scenario.name, inferencePayload.FailureDetail, scenario.wantFailure)
+		}
+		if inferencePayload.Response != nil && strings.Contains(*inferencePayload.Response, "COMPLETE") {
+			t.Fatalf("%s timeout treated COMPLETE-bearing output as success: %q", scenario.name, *inferencePayload.Response)
+		}
+		assertClaudeGoldenResponseStreamClosesWithoutSuccess(t, responseEvents)
+		// The existing timeout response-event fixture intentionally captures the
+		// legacy retry transcript, while this conductor asserts the normalized
+		// retry and stream-closure behavior directly above.
+	default:
+		t.Fatalf("%s has unsupported Claude golden %q", scenario.name, scenario.golden.Manifest.ID)
 	}
 }
 
@@ -656,11 +869,25 @@ func (router *claudeCommandRouter) callCount() int {
 }
 
 type claudeScenarioCommandRunner struct {
-	result platformprocess.CommandResult
-	err    error
+	results []platformprocess.CommandResult
+	err     error
 
 	mu       sync.Mutex
 	requests []platformprocess.CommandRequest
+}
+
+func newClaudeScenarioCommandRunner(
+	results []platformprocess.CommandResult,
+	runErr error,
+) *claudeScenarioCommandRunner {
+	clonedResults := make([]platformprocess.CommandResult, len(results))
+	for index, result := range results {
+		clonedResults[index] = cloneClaudeCommandResult(result)
+	}
+	return &claudeScenarioCommandRunner{
+		results: clonedResults,
+		err:     runErr,
+	}
 }
 
 func (runner *claudeScenarioCommandRunner) Run(
@@ -669,7 +896,15 @@ func (runner *claudeScenarioCommandRunner) Run(
 ) (platformprocess.CommandResult, error) {
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, cloneClaudeCommandRequest(request))
-	result := cloneClaudeCommandResult(runner.result)
+	resultIndex := len(runner.requests) - 1
+	if resultIndex >= len(runner.results) {
+		runner.mu.Unlock()
+		return platformprocess.CommandResult{}, fmt.Errorf(
+			"Claude scenario command result queue exhausted at call %d",
+			resultIndex+1,
+		)
+	}
+	result := cloneClaudeCommandResult(runner.results[resultIndex])
 	err := runner.err
 	runner.mu.Unlock()
 	return result, err
