@@ -128,6 +128,17 @@ func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 	if err != nil {
 		t.Fatalf("create controlled ACP %s home: %v", name, err)
 	}
+	// Register home removal before the environment overrides and process
+	// close. Cleanup is LIFO: the process closes first, the test restores the
+	// caller's HOME/USERPROFILE next, and only then does Windows remove the
+	// process-scoped home. Keeping the deleted path out of the live process
+	// environment avoids a repeat-run teardown race without weakening the
+	// activation-owning root's required isolation.
+	t.Cleanup(func() {
+		if err := os.RemoveAll(home); err != nil {
+			t.Errorf("remove controlled ACP %s home: %v", name, err)
+		}
+	})
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	workingDirectoryRoot := filepath.Join(home, "workdirs")
@@ -159,9 +170,6 @@ func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 	t.Cleanup(func() {
 		if err := cohort.process.Close(context.Background()); err != nil {
 			t.Errorf("close controlled ACP %s process: %v", name, err)
-		}
-		if err := os.RemoveAll(home); err != nil {
-			t.Errorf("remove controlled ACP %s home: %v", name, err)
 		}
 	})
 	return cohort
