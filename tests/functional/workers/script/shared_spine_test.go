@@ -2,6 +2,7 @@ package script_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,10 +27,10 @@ import (
 
 const scriptSharedSpineTimeout = 15 * time.Second
 
-// TestScriptWorkerSharedSuccessSpine proves the first shared-process slice.
-// Each child owns a separate Factory directory and explicit Factory Session,
-// while all children use the same immutable root-built application and script
-// command edge.
+// TestScriptWorkerSharedSuccessSpine proves the complete short-lane shared
+// process slice. Each child owns a separate Factory directory and explicit
+// Factory Session, while all children use the same immutable root-built
+// application and routed command edges.
 func TestScriptWorkerSharedSuccessSpine(t *testing.T) {
 	fixture := newScriptSharedSpineFixture(t)
 
@@ -66,6 +67,7 @@ func newScriptSharedSpineFixture(t *testing.T) *scriptSharedSpineFixture {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:                         api.start,
 		ScriptCommandRunner:                      router,
+		ProviderCommandRunner:                    router,
 		FactorySessionIDGenerator:                identities.nextSessionID,
 		FactorySessionRuntimeInstanceIDGenerator: identities.nextRuntimeID,
 		FactorySessionResponseEventIDGenerator:   identities.nextResponseEventID,
@@ -128,14 +130,89 @@ type scriptSharedSpineFixture struct {
 	closeOnce    sync.Once
 }
 
+type scriptSharedCommandKind string
+
+const (
+	scriptSharedScriptCommand   scriptSharedCommandKind = "script"
+	scriptSharedProviderCommand scriptSharedCommandKind = "provider"
+)
+
 type scriptSharedScenario struct {
-	name           string
-	factoryDir     string
-	workName       string
-	traceID        string
-	expectedOutput string
-	noInference    bool
-	runner         *support.RecordingCommandRunner
+	name                    string
+	factoryDir              string
+	workName                string
+	traceID                 string
+	workTypeName            string
+	terminalState           string
+	expectedOutput          string
+	expectedOutcome         factoryapi.WorkOutcome
+	commandKind             scriptSharedCommandKind
+	expectedCommand         string
+	expectedArgs            []string
+	expectedArgSequences    [][]string
+	requireEmptyStdin       bool
+	expectedFailureMessage  string
+	environmentPrivacy      bool
+	noInference             bool
+	allowMultipleDispatches bool
+	runner                  *scriptSharedCommandRunner
+	assertResult            scriptSharedResultAssertion
+}
+
+type scriptSharedResultAssertion func(
+	t *testing.T,
+	fixture *scriptSharedSpineFixture,
+	scenario scriptSharedScenario,
+	sessionID string,
+	submitted factoryapi.SubmitWorkResponse,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+)
+
+// scriptSharedCommandRunner records the exact external request while keeping
+// the scenario-specific command effect behind the injected edge.
+type scriptSharedCommandRunner struct {
+	delegate platformprocess.CommandRunner
+
+	mu       sync.Mutex
+	requests []platformprocess.CommandRequest
+}
+
+func newScriptSharedCommandRunner(delegate platformprocess.CommandRunner) *scriptSharedCommandRunner {
+	return &scriptSharedCommandRunner{delegate: delegate}
+}
+
+func (runner *scriptSharedCommandRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if runner == nil || runner.delegate == nil {
+		return platformprocess.CommandResult{}, fmt.Errorf("shared script command delegate is required")
+	}
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, cloneScriptCommandRequest(request))
+	runner.mu.Unlock()
+	return runner.delegate.Run(ctx, request)
+}
+
+func (runner *scriptSharedCommandRunner) Requests() []platformprocess.CommandRequest {
+	if runner == nil {
+		return nil
+	}
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, len(runner.requests))
+	for index, request := range runner.requests {
+		requests[index] = cloneScriptCommandRequest(request)
+	}
+	return requests
+}
+
+func (runner *scriptSharedCommandRunner) Delegate() platformprocess.CommandRunner {
+	if runner == nil {
+		return nil
+	}
+	return runner.delegate
 }
 
 type scriptSharedObservation struct {
@@ -179,16 +256,25 @@ func newScriptSharedSpineScenarios(t *testing.T) []scriptSharedScenario {
 	scenarios := make([]scriptSharedScenario, 0, len(cases))
 	for _, testCase := range cases {
 		scenarios = append(scenarios, scriptSharedScenario{
-			name:           testCase.name,
-			factoryDir:     testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir")),
-			workName:       testCase.workName,
-			traceID:        testCase.traceID,
-			expectedOutput: testCase.expectedOutput,
-			noInference:    testCase.noInference,
-			runner:         support.NewRecordingCommandRunner(testCase.expectedOutput),
+			name:            testCase.name,
+			factoryDir:      testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir")),
+			workName:        testCase.workName,
+			traceID:         testCase.traceID,
+			workTypeName:    "task",
+			terminalState:   "done",
+			expectedOutput:  testCase.expectedOutput,
+			expectedOutcome: factoryapi.WorkOutcomeAccepted,
+			commandKind:     scriptSharedScriptCommand,
+			expectedCommand: "echo",
+			expectedArgs:    []string{"default-output"},
+			noInference:     testCase.noInference,
+			runner: newScriptSharedCommandRunner(
+				support.NewRecordingCommandRunner(testCase.expectedOutput),
+			),
 		})
 	}
-	return scenarios
+	scenarios = append(scenarios, newScriptSharedExecutionScenarios(t)...)
+	return append(scenarios, newScriptSharedEnvironmentScenarios(t)...)
 }
 
 func (fixture *scriptSharedSpineFixture) runScenario(
@@ -203,7 +289,7 @@ func (fixture *scriptSharedSpineFixture) runScenario(
 	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		TraceId:      &traceID,
-		WorkTypeName: "task",
+		WorkTypeName: scenario.workTypeName,
 		Payload:      map[string]string{"input": scenario.workName},
 	})
 	if submitted.SessionId == nil || *submitted.SessionId != sessionID {
@@ -220,6 +306,10 @@ func (fixture *scriptSharedSpineFixture) runScenario(
 	assertScriptSharedWork(t, scenario, submitted, listed)
 	assertScriptSharedEvents(t, scenario, sessionID, submitted, events)
 	assertScriptSharedCommand(t, fixture.commandRouter, scenario)
+	assertScriptSharedPublicPrivacy(t, scenario.name, listed, events)
+	if scenario.assertResult != nil {
+		scenario.assertResult(t, fixture, scenario, sessionID, submitted, listed, events)
+	}
 
 	fixture.recordObservation(scenario.name, scriptSharedObservation{
 		sessionID: sessionID,
@@ -390,9 +480,17 @@ func assertScriptSharedWork(
 	listed factoryapi.ListWorkResponse,
 ) {
 	t.Helper()
-	assertSessionPlaces(t, listed, map[string]int{
-		"task:done": 1, "task:init": 0, "task:failed": 0,
-	})
+	wants := map[string]int{
+		scenario.workTypeName + ":init":   0,
+		scenario.workTypeName + ":failed": 0,
+	}
+	if scenario.expectedOutcome == factoryapi.WorkOutcomeFailed {
+		wants[scenario.workTypeName+":"+scenario.terminalState] = 0
+		wants[scenario.workTypeName+":failed"] = 1
+	} else {
+		wants[scenario.workTypeName+":"+scenario.terminalState] = 1
+	}
+	assertSessionPlaces(t, listed, wants)
 	workID := support.StringPointerValue(submitted.WorkId)
 	found := 0
 	for _, item := range listed.Results {
@@ -439,18 +537,54 @@ func assertScriptSharedEvents(
 		}
 	}
 	dispatches := support.ObserveDispatchEvents(t, events)
-	if len(dispatches) != 1 || dispatches[0].Response == nil {
-		t.Fatalf("%s dispatch observations = %#v, want one completed dispatch", scenario.name, dispatches)
+	if len(dispatches) == 0 || (!scenario.allowMultipleDispatches && len(dispatches) != 1) || dispatches[0].Response == nil {
+		want := "one completed dispatch"
+		if scenario.allowMultipleDispatches {
+			want = "at least one terminal dispatch"
+		}
+		t.Fatalf("%s dispatch observations = %#v, want %s", scenario.name, dispatches, want)
 	}
-	if dispatches[0].Response.Outcome != factoryapi.WorkOutcomeAccepted {
-		t.Fatalf("%s dispatch outcome = %q, want ACCEPTED", scenario.name, dispatches[0].Response.Outcome)
+	if dispatches[0].Response.Outcome != scenario.expectedOutcome {
+		t.Fatalf("%s dispatch outcome = %q, want %q", scenario.name, dispatches[0].Response.Outcome, scenario.expectedOutcome)
 	}
 	if !support.DispatchObservationIncludesWork(dispatches[0], support.StringPointerValue(submitted.WorkId)) {
 		t.Fatalf("%s dispatch omitted Work %q", scenario.name, support.StringPointerValue(submitted.WorkId))
 	}
-	assertDispatchOutput(t, events, scenario.expectedOutput)
+	if scenario.expectedOutput != "" {
+		assertDispatchOutput(t, events, scenario.expectedOutput)
+	} else if scenario.expectedOutcome == factoryapi.WorkOutcomeFailed && dispatches[0].Response.Output != nil {
+		t.Fatalf("%s dispatch output = %#v, want no primary result", scenario.name, dispatches[0].Response.Output)
+	}
 	if scenario.noInference && (hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceRequest) || hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceResponse)) {
 		t.Fatalf("%s emitted inference events: %v", scenario.name, factoryEventTypes(events))
+	}
+}
+
+func assertScriptSharedPublicPrivacy(
+	t testing.TB,
+	label string,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	for name, value := range map[string]any{
+		"Work":   listed,
+		"events": events,
+	} {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatalf("%s %s privacy witness encoding: %v", label, name, err)
+		}
+		assertScriptSharedNoUndeclaredValue(t, label+" "+name, string(encoded))
+	}
+}
+
+func assertScriptSharedNoUndeclaredValue(t testing.TB, label string, values ...string) {
+	t.Helper()
+	for _, value := range values {
+		if strings.Contains(value, undeclaredHostEnvValue) {
+			t.Fatalf("%s leaked undeclared host environment value %q", label, undeclaredHostEnvValue)
+		}
 	}
 }
 
@@ -465,13 +599,27 @@ func assertScriptSharedCommand(
 		t.Fatalf("%s script command calls = %d, want exactly one", scenario.name, len(requests))
 	}
 	request := requests[0]
-	if request.Command != "echo" {
-		t.Fatalf("%s script command = %q, want authored command echo", scenario.name, request.Command)
+	if request.Command != scenario.expectedCommand {
+		t.Fatalf("%s command = %q, want authored command %q", scenario.name, request.Command, scenario.expectedCommand)
 	}
 	if strings.TrimSpace(request.WorkDir) == "" {
 		t.Fatalf("%s script command WorkDir is empty", scenario.name)
 	}
-	assertCommandArgs(t, request, []string{"default-output"})
+	if scenario.expectedArgs != nil {
+		assertCommandArgs(t, request, scenario.expectedArgs)
+	}
+	for _, sequence := range scenario.expectedArgSequences {
+		support.AssertArgsContainSequence(t, request.Args, sequence)
+	}
+	if scenario.requireEmptyStdin && len(request.Stdin) != 0 {
+		t.Fatalf("%s command stdin = %q, want empty stdin", scenario.name, string(request.Stdin))
+	}
+	if scenario.environmentPrivacy {
+		if envContainsKey(request.Env, undeclaredHostEnvName) {
+			t.Fatalf("%s command env contains undeclared host key %q", scenario.name, undeclaredHostEnvName)
+		}
+		assertScriptSharedNoUndeclaredValue(t, scenario.name+" command environment", request.Env...)
+	}
 	if cleanScriptRouteSelector(request.WorkDir) != cleanScriptRouteSelector(scenario.factoryDir) {
 		t.Fatalf("%s script WorkDir = %q, want scenario Factory directory %q", scenario.name, request.WorkDir, scenario.factoryDir)
 	}
@@ -486,6 +634,13 @@ func listScriptSessionWork(t testing.TB, baseURL, sessionID string) factoryapi.L
 	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 }
 
+func getScriptSharedWorkByID(t testing.TB, baseURL, sessionID, workID string) factoryapi.Work {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" +
+		url.PathEscape(sessionID) + "/work/" + url.PathEscape(workID)
+	return support.GetJSON[factoryapi.Work](t, endpoint)
+}
+
 func assertScriptSessionDeleted(t testing.TB, baseURL, sessionID string) {
 	t.Helper()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
@@ -498,6 +653,30 @@ func assertScriptSessionDeleted(t testing.TB, baseURL, sessionID string) {
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("GET deleted shared Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, strings.TrimSpace(string(body)))
 	}
+}
+
+func executeScriptSharedWorkShow(
+	t testing.TB,
+	fixture *scriptSharedSpineFixture,
+	sessionID string,
+	workID string,
+	jsonOutput bool,
+) (string, string, error) {
+	t.Helper()
+	args := []string{
+		"you",
+		"--server", fixture.baseURL,
+		"--session", sessionID,
+	}
+	if jsonOutput {
+		args = append(args, "--json")
+	}
+	args = append(args, "work", "show", workID)
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.Input.Env = sharedScriptProcessEnvironment(fixture.homeDir)
+	inputs.Input.WorkingDirectory = fixture.hostDir
+	err := fixture.process.Execute(inputs.Input)
+	return inputs.Stdout(), inputs.Stderr(), err
 }
 
 func assertScriptSharedListenerClosed(t testing.TB, baseURL string) {
