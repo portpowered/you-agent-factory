@@ -39,6 +39,8 @@ type sharedLifecycleFixture struct {
 	done             chan error
 	process          support.ApplicationProcess
 	client           *lifecycleClientProcess
+	api              *lifecycleHTTPServer
+	constructor      *lifecycleProcessConstructor
 }
 
 var lifecycleFixture *sharedLifecycleFixture
@@ -100,11 +102,12 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		return nil, fmt.Errorf("write shared remote lifecycle factory: %w", err)
 	}
 
-	api := support.NewProcessAPIServer()
+	api := newLifecycleHTTPServer()
+	constructor := &lifecycleProcessConstructor{}
 	resolveHome := func() (string, error) { return homeDir, nil }
-	process, err := support.BuildProcessWithContext(ctx, serviceedges.Edges{
+	process, err := constructor.build(ctx, "server", serviceedges.Edges{
 		BrowserOpener:                      func(context.Context, string) error { return nil },
-		APIServerStarter:                   api.Start,
+		APIServerStarter:                   api.start,
 		FactorySessionResolveHomeDirectory: resolveHome,
 		FactoryRuntimeWorkflowHome:         resolveHome,
 	})
@@ -119,12 +122,12 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 	inputs.Input.WorkingDirectory = factoryDir
 	done := make(chan error, 1)
 	go func() { done <- process.Execute(inputs.Input) }()
-	baseURL, err := api.WaitForBaseURL(15 * time.Second)
+	baseURL, err := api.waitForBaseURL(15 * time.Second)
 	if err != nil {
 		stopFailedFixture(cancel, rootDir, process, done)
 		return nil, fmt.Errorf("wait for shared server base URL: %w", err)
 	}
-	clientProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	clientProcess, err := constructor.build(context.Background(), "client", serviceedges.Edges{
 		BrowserOpener:                      func(context.Context, string) error { return nil },
 		FactorySessionResolveHomeDirectory: resolveHome,
 		FactoryRuntimeWorkflowHome:         resolveHome,
@@ -142,6 +145,8 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		cancel:           cancel,
 		done:             done,
 		process:          process,
+		api:              api,
+		constructor:      constructor,
 		client: &lifecycleClientProcess{
 			process: clientProcess,
 			env:     lifecycleEnvironment(homeDir),
@@ -178,9 +183,47 @@ func (fixture *sharedLifecycleFixture) stop() error {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared client process: %w", err))
 		}
 	}
+	listenerClosed := false
+	if fixture.api != nil {
+		if err := fixture.api.waitClosed(); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("wait for shared listener: %w", err))
+		} else if err := fixture.api.probeClosed(); err != nil {
+			cleanupErrors = append(cleanupErrors, err)
+		} else {
+			listenerClosed = true
+		}
+	}
+	roles := []string(nil)
+	if fixture.constructor != nil {
+		roles = fixture.constructor.roles()
+		if len(roles) != 2 {
+			cleanupErrors = append(cleanupErrors,
+				fmt.Errorf("shared lifecycle root-built process roles = %d (%v), want exactly 2", len(roles), roles),
+			)
+		}
+	}
+	listenerStarts := 0
+	if fixture.api != nil {
+		listenerStarts = fixture.api.startCount()
+		if listenerStarts != 1 {
+			cleanupErrors = append(cleanupErrors,
+				fmt.Errorf("shared lifecycle HTTP listener starts = %d, want exactly 1", listenerStarts),
+			)
+		}
+	}
+	rootRemoved := false
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("remove shared fixture root: %w", err))
+	} else if _, err := os.Stat(fixture.rootDir); !os.IsNotExist(err) {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("shared fixture root %q remains after cleanup: %v", fixture.rootDir, err))
+	} else {
+		rootRemoved = true
 	}
+	fmt.Fprintf(
+		os.Stderr,
+		"LIFECYCLE-005 evidence: root-built-roles=%d roles=%v http-listener-starts=%d listener-closed=%t fixture-root-removed=%t\n",
+		len(roles), roles, listenerStarts, listenerClosed, rootRemoved,
+	)
 	return errors.Join(cleanupErrors...)
 }
 
