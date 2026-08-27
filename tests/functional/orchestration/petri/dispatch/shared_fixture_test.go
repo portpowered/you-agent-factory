@@ -42,6 +42,12 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
+	if err := emitPetriDispatchRuntimeReport(); err != nil {
+		fmt.Fprintf(os.Stderr, "emit Petri dispatch runtime matrix: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
 	os.Exit(code)
 }
 
@@ -139,6 +145,11 @@ func newSharedPetriProcessFixture(t testing.TB) (*sharedPetriProcessFixture, err
 	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
 	inputs.Input.WorkingDirectory = bootstrapDir
 	fixture.command = startSharedPetriHostedCommand(process, inputs.Input)
+	if err := recordSharedPetriProcessStarted(); err != nil {
+		_ = fixture.close()
+		cleanupRoot()
+		return nil, err
+	}
 	baseURL, err := api.WaitForBaseURL(sharedPetriFixtureShutdownTimeout)
 	if err != nil {
 		_ = fixture.close()
@@ -188,6 +199,7 @@ func (fixture *sharedPetriProcessFixture) close() error {
 		processErr := fixture.process.Close(closeContext)
 		cancel()
 		closeErr = errors.Join(closeErr, processErr)
+		closeErr = errors.Join(closeErr, recordSharedPetriProcessStopped())
 	}
 	lifecycleErr := fixture.sessionLifecycleError()
 	if removeErr := os.RemoveAll(fixture.rootDir); removeErr != nil {
@@ -558,8 +570,15 @@ func openSharedPetriSessionWithRoute(
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, fixtureDir)
 	sessionID := opened.Session.Id
 	if err := fixture.recordSessionOpened(sessionID); err != nil {
+		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
 		fixture.router.unregister(fixtureDir)
 		t.Fatalf("record shared Petri Factory Session %q: %v", sessionID, err)
+	}
+	if err := recordSharedPetriScenarioOpened(t.Name(), fixtureDir, sessionID); err != nil {
+		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		fixture.router.unregister(fixtureDir)
+		fixture.recordSessionClosed(sessionID)
+		t.Fatalf("record shared Petri runtime row: %v", err)
 	}
 	session := &sharedPetriSession{
 		fixture:    fixture,
@@ -608,6 +627,9 @@ func (session *sharedPetriSession) close(t testing.TB) {
 		support.CloseFactorySessionAt(t, session.fixture.baseURL, session.sessionID)
 		session.fixture.router.unregister(session.factoryDir)
 		session.fixture.recordSessionClosed(session.sessionID)
+		if err := recordSharedPetriScenarioClosed(session.sessionID); err != nil {
+			t.Errorf("record shared Petri runtime row close: %v", err)
+		}
 	})
 }
 
