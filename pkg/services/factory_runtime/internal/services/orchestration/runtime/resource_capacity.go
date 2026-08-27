@@ -845,7 +845,10 @@ func seedRestoredWork(
 		return seededWorkIDs, nil
 	}
 	items := restoredWorkItems(restored)
-	placements := restoredWorkPlacements(restored, items)
+	placements, err := restoredWorkPlacements(restored, items)
+	if err != nil {
+		return nil, err
+	}
 	if err := validateRestoredWorkState(restored, net, items, placements, resourcePlaceIDs, toleratedWorkIDs); err != nil {
 		return nil, err
 	}

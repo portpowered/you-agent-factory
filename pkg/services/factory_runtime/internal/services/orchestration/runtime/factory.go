@@ -392,35 +392,17 @@ func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{
 		if !hasConstructionNow {
 			constructionNow = cfg.clock.Now()
 		}
-		restoredItems := restoredWorkItems(cfg.restoredWorldState)
-		recovery := classifyRestoredWorkRecovery(
-			cfg.restoredWorldState,
-			cfg.net,
-			restoredItems,
-		)
 		var err error
-		excludedWorkIDs := cloneRestoredWorkIDSet(recovery.toleratedWorkIDs)
-		if cfg.skipRestoredDispatchReconciliation {
-			if excludedWorkIDs == nil {
-				excludedWorkIDs = make(map[string]struct{}, len(seededReplayWorkIDsWithRecordedDispatch))
-			}
-			for workID := range seededReplayWorkIDsWithRecordedDispatch {
-				excludedWorkIDs[workID] = struct{}{}
-			}
-		}
-		seededRestoredWorkIDs, err = seedRestoredWork(
+		seededRestoredWorkIDs, err = restoreRestoredWorkMarking(
+			cfg,
 			marking,
-			cfg.net,
-			cfg.restoredWorldState,
 			constructionNow,
 			resourcePlaceIDs,
-			excludedWorkIDs,
-			recovery.toleratedWorkIDs,
+			seededReplayWorkIDsWithRecordedDispatch,
 		)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		logRestoredWorkRecovery(cfg, recovery)
 	}
 	return marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, nil
 }
