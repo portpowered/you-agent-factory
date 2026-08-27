@@ -2,26 +2,18 @@ package subagent
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -32,10 +24,33 @@ const packagedSubagentChildPrimaryResult = "mock worker accepted"
 // invocation through the public CLI completes with the child's authoritative
 // primary agent response instead of echoing the submitted request text,
 // including hermetic no-server success without starting an HTTP listener.
-func TestPackagedSubagentReturnsChildResult(t *testing.T) {
+func TestPackagedSubagent(t *testing.T) {
+	fixture := newSubagentSharedFixture(t)
+	t.Run("TestPackagedSubagentReturnsChildResult", func(t *testing.T) {
+		testPackagedSubagentReturnsChildResult(t, fixture)
+	})
+	t.Run("TestPackagedSubagentChildFailureReturnsStableFailure", func(t *testing.T) {
+		testPackagedSubagentChildFailureReturnsStableFailure(t, fixture)
+	})
+	t.Run("TestPackagedSubagentStreamsChildResponseEvents", func(t *testing.T) {
+		testPackagedSubagentStreamsChildResponseEvents(t, fixture)
+	})
+	t.Run("TestPackagedSubagentPropagatesLunaXHighReasoningEffort", func(t *testing.T) {
+		testPackagedSubagentPropagatesLunaXHighReasoningEffort(t, fixture)
+	})
+	t.Run("TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault", func(t *testing.T) {
+		testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t, fixture)
+	})
+}
+
+func testPackagedSubagentReturnsChildResult(t *testing.T, fixture *subagentSharedFixture) {
 	t.Run("CLI JSON returns authoritative child primary result", func(t *testing.T) {
 		requestText := fmt.Sprintf("functional-packaged-subagent-primary-%d", time.Now().UnixNano())
-		response := runPackagedSubagentCLIJSONInvocation(t, requestText)
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stdout: support.CodexSuccessStdout(packagedSubagentChildPrimaryResult),
+		})
+		scenario := fixture.newScenario(t, runner)
+		response := runPackagedSubagentCLIJSONInvocation(t, scenario, requestText)
 
 		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 			t.Fatalf("status = %q, want COMPLETED; response = %#v", response.Status, response)
@@ -50,7 +65,11 @@ func TestPackagedSubagentReturnsChildResult(t *testing.T) {
 
 	t.Run("hermetic named invocation succeeds without listening server", func(t *testing.T) {
 		requestText := "hermetic no-server packaged subagent prompt"
-		stdout, listenerStarts := runHermeticPackagedSubagentInvocation(t, requestText)
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stdout: support.CodexSuccessStdout(packagedSubagentChildPrimaryResult),
+		})
+		scenario := fixture.newScenario(t, runner)
+		stdout, listenerStarts := runHermeticPackagedSubagentInvocation(t, scenario, requestText)
 
 		if stdout != packagedSubagentChildPrimaryResult {
 			t.Fatalf("stdout = %q, want child primary result %q", stdout, packagedSubagentChildPrimaryResult)
@@ -68,9 +87,14 @@ func TestPackagedSubagentReturnsChildResult(t *testing.T) {
 // @you/subagent invocation publishes child Factory Response Events on the public
 // Factory Session response-event stream, not only the terminal invocation
 // primary result returned by the invocation API.
-func TestPackagedSubagentStreamsChildResponseEvents(t *testing.T) {
+func testPackagedSubagentStreamsChildResponseEvents(t *testing.T, fixture *subagentSharedFixture) {
 	requestText := fmt.Sprintf("functional-packaged-subagent-stream-%d", time.Now().UnixNano())
-	response, responseEvents := runPackagedSubagentAPIInvocationWithResponseEvents(t, requestText)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout(packagedSubagentChildPrimaryResult),
+	})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response, responseEvents := runPackagedSubagentAPIInvocationWithResponseEvents(t, scenario, requestText)
 
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
@@ -81,16 +105,16 @@ func TestPackagedSubagentStreamsChildResponseEvents(t *testing.T) {
 	assertPackagedSubagentChildResponseEvents(t, responseEvents)
 }
 
-func TestPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T) {
+func testPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T, fixture *subagentSharedFixture) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: support.CodexSuccessStdout("review complete"),
 	})
-	response := runPackagedSubagentProviderCLI(t, runner,
-		"--worker-provider", "CODEX",
-		"--worker-model", "gpt-5.6-luna",
-		"--worker-reasoning-effort", "xhigh",
-		"--to", "review the implementation",
-	)
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := postPackagedSubagentArgs(t, scenario, map[string]interface{}{
+		"input": "review the implementation", "workerProvider": "CODEX",
+		"workerModel": "gpt-5.6-luna", "workerReasoningEffort": "xhigh",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed", response)
 	}
@@ -105,15 +129,16 @@ func TestPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testing.T) {
+func testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testing.T, fixture *subagentSharedFixture) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: support.CodexSuccessStdout("review complete"),
 	})
-	response := runPackagedSubagentProviderCLI(t, runner,
-		"--worker-provider", "CODEX",
-		"--worker-model", "gpt-5.6-luna",
-		"--to", "review the implementation",
-	)
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := postPackagedSubagentArgs(t, scenario, map[string]interface{}{
+		"input": "review the implementation", "workerProvider": "CODEX",
+		"workerModel": "gpt-5.6-luna",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed", response)
 	}
@@ -127,40 +152,16 @@ func TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testi
 	}
 }
 
-func runPackagedSubagentProviderCLI(
-	t *testing.T,
-	runner platformprocess.CommandRunner,
-	factoryArgs ...string,
-) factoryapi.InvocationResponse {
-	t.Helper()
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
-	args := []string{
-		"you", "--json", "run",
-		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--no-record",
-	}
-	args = append(args, factoryArgs...)
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
-	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
-	}
-	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
-}
-
 // TestPackagedSubagentChildFailureReturnsStableFailure proves that packaged
 // @you/subagent invocation returns a stable failed public terminal outcome when
 // the child worker rejects, without emitting a success primary result for the
 // failing run.
-func TestPackagedSubagentChildFailureReturnsStableFailure(t *testing.T) {
+func testPackagedSubagentChildFailureReturnsStableFailure(t *testing.T, fixture *subagentSharedFixture) {
 	t.Run("CLI JSON returns stable failed terminal outcome", func(t *testing.T) {
 		requestText := fmt.Sprintf("functional-packaged-subagent-failure-%d", time.Now().UnixNano())
-		response, stderr, execErr := runPackagedSubagentCLIJSONFailureInvocation(t, requestText)
+		runner := newPackagedSubagentRejectingRunner()
+		scenario := fixture.newScenario(t, runner)
+		response, stderr, execErr := runPackagedSubagentCLIJSONFailureInvocation(t, scenario, requestText)
 
 		if execErr == nil {
 			t.Fatal("Process.Execute error = nil, want terminal packaged-subagent child failure")
@@ -180,7 +181,10 @@ func TestPackagedSubagentChildFailureReturnsStableFailure(t *testing.T) {
 
 	t.Run("API returns stable failed terminal outcome", func(t *testing.T) {
 		requestText := fmt.Sprintf("functional-packaged-subagent-api-failure-%d", time.Now().UnixNano())
-		response := runPackagedSubagentAPIFailureInvocation(t, requestText)
+		runner := newPackagedSubagentRejectingRunner()
+		scenario := fixture.newScenario(t, runner)
+		scenario.open(t)
+		response := runPackagedSubagentAPIFailureInvocation(t, scenario, requestText)
 
 		assertPackagedSubagentStableFailureInvocation(t, response)
 		if invocationPrimaryResultPresent(response) {
@@ -191,34 +195,28 @@ func TestPackagedSubagentChildFailureReturnsStableFailure(t *testing.T) {
 
 func runPackagedSubagentAPIInvocationWithResponseEvents(
 	t *testing.T,
+	scenario *subagentScenario,
 	requestText string,
 ) (factoryapi.InvocationResponse, []factoryapi.FactoryResponseEvent) {
 	t.Helper()
 
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedSubagentFactoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:        factoryDir,
-		UseMockWorkers:    true,
-		MockWorkersConfig: packagedSubagentAcceptMockWorkersConfig(),
-	})
-
-	response := postPackagedSubagentInvocation(t, server.URL(), requestText)
-	responseEvents := support.GetFactoryResponseEventsAt(t, server.URL(), factorysessions.DefaultSessionID)
+	response := postPackagedSubagentInvocation(t, scenario, requestText)
+	responseEvents := support.GetFactoryResponseEventsAt(t, scenario.fixture.baseURL, scenario.sessionID)
 	return response, responseEvents
 }
 
 func postPackagedSubagentInvocation(
 	t *testing.T,
-	serverURL string,
+	scenario *subagentScenario,
 	requestText string,
 ) factoryapi.InvocationResponse {
 	t.Helper()
-	return postPackagedSubagentArgs(t, serverURL, map[string]interface{}{"input": requestText})
+	return postPackagedSubagentArgs(t, scenario, map[string]interface{}{"input": requestText})
 }
 
 func postPackagedSubagentArgs(
 	t *testing.T,
-	serverURL string,
+	scenario *subagentScenario,
 	args map[string]interface{},
 ) factoryapi.InvocationResponse {
 	t.Helper()
@@ -226,8 +224,8 @@ func postPackagedSubagentArgs(
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
-	endpoint := strings.TrimSuffix(serverURL, "/") +
-		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + scenario.sessionID + "/invocations"
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
@@ -303,24 +301,23 @@ func responseEventMessageText(payload factoryapi.FactoryResponseEventMessagePayl
 	return ""
 }
 
-func runPackagedSubagentCLIJSONInvocation(t *testing.T, requestText string) factoryapi.InvocationResponse {
+func runPackagedSubagentCLIJSONInvocation(
+	t *testing.T,
+	scenario *subagentScenario,
+	requestText string,
+) factoryapi.InvocationResponse {
 	t.Helper()
-
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, packagedSubagentAcceptMockWorkersConfig())
 
 	args := []string{
 		"you", "--json", "run",
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers", mockWorkersPath,
 		"--no-record",
 		requestText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	inputs.Input.Env = scenario.environment
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	if inputs.Stderr() != "" {
@@ -330,88 +327,55 @@ func runPackagedSubagentCLIJSONInvocation(t *testing.T, requestText string) fact
 	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
-func runHermeticPackagedSubagentInvocation(t *testing.T, requestText string) (string, int) {
+func runHermeticPackagedSubagentInvocation(
+	t *testing.T,
+	scenario *subagentScenario,
+	requestText string,
+) (string, int) {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	listenerStarts := &listenerStartObservation{}
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		APIServerStarter: listenerStarts.Start,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, packagedSubagentAcceptMockWorkersConfig())
 	args := []string{
 		"you", "run",
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers", mockWorkersPath,
 		"--no-record", "--quiet",
 		requestText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = environment
-	inputs.Input.WorkingDirectory = workingDirectory
-	if execErr := process.Execute(inputs.Input); execErr != nil {
+	inputs.Input.Env = scenario.environment
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if execErr := scenario.fixture.process.Execute(inputs.Input); execErr != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, execErr, inputs.Stdout(), inputs.Stderr())
 	}
 	if inputs.Stderr() != "" {
 		t.Fatalf("named invocation stderr = %q, want empty; stdout=%s", inputs.Stderr(), inputs.Stdout())
 	}
-	return strings.TrimSpace(inputs.Stdout()), int(listenerStarts.calls.Load())
+	return strings.TrimSpace(inputs.Stdout()), int(scenario.fixture.apiStarter.calls.Load())
 }
 
-func packagedSubagentAcceptMockWorkersConfig() *workers.MockWorkersConfig {
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
-			WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	}
-}
-
-func packagedSubagentRejectingMockWorkersConfig() *workers.MockWorkersConfig {
-	exitCode := 7
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      factorydefinitions.PackagedSubagentWorkerName,
-			WorkstationName: factorydefinitions.PackagedSubagentRunWorkstationName,
-			RunType:         workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stderr:   "packaged subagent mock worker failure",
-				ExitCode: &exitCode,
-			},
-		}},
-	}
+func newPackagedSubagentRejectingRunner() *testutil.ProviderCommandRunner {
+	return testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stderr:   []byte("packaged subagent mock worker failure"),
+		ExitCode: 7,
+	})
 }
 
 func runPackagedSubagentCLIJSONFailureInvocation(
 	t *testing.T,
+	scenario *subagentScenario,
 	requestText string,
 ) (factoryapi.InvocationResponse, string, error) {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, packagedSubagentRejectingMockWorkersConfig())
-
 	args := []string{
 		"you", "--json", "run",
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers", mockWorkersPath,
 		"--no-record",
 		requestText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	execErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	inputs.Input.Env = scenario.environment
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	execErr := scenario.fixture.process.Execute(inputs.Input)
 
 	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	return response, inputs.Stderr(), execErr
@@ -419,17 +383,11 @@ func runPackagedSubagentCLIJSONFailureInvocation(
 
 func runPackagedSubagentAPIFailureInvocation(
 	t *testing.T,
+	scenario *subagentScenario,
 	requestText string,
 ) factoryapi.InvocationResponse {
 	t.Helper()
-
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedSubagentFactoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:        factoryDir,
-		UseMockWorkers:    true,
-		MockWorkersConfig: packagedSubagentRejectingMockWorkersConfig(),
-	})
-	return postPackagedSubagentInvocation(t, server.URL(), requestText)
+	return postPackagedSubagentInvocation(t, scenario, requestText)
 }
 
 func assertPackagedSubagentStableFailureInvocation(
@@ -500,16 +458,4 @@ func invocationResponseJSON(t *testing.T, response factoryapi.InvocationResponse
 		t.Fatalf("marshal invocation response: %v", err)
 	}
 	return string(encoded)
-}
-
-type listenerStartObservation struct {
-	calls atomic.Int32
-}
-
-func (observation *listenerStartObservation) Start(
-	_ context.Context,
-	_ platformhttpserver.StartRequest,
-) error {
-	observation.calls.Add(1)
-	return errors.New("hermetic packaged subagent invocation attempted to start an HTTP listener")
 }
