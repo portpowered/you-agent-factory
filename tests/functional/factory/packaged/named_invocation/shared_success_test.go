@@ -31,281 +31,310 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 
 	fixture := newNamedInvocationSuccessFixture(t)
 	t.Run("factory builder list and help", func(t *testing.T) {
-		scenario := fixture.newScenario(t)
-		helpOutput, helpStderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "run", "--named", packagedFactoryBuilderName, "--help"},
-		)
-		if helpStderr != "" {
-			t.Fatalf("Factory Builder help stderr = %q", helpStderr)
-		}
-		for _, fragment := range []string{
-			"Creates and installs one validated graph or JavaScript Factory from a customer request.",
-			"--factory-name",
-			"--orchestrator",
-			"--builder-provider",
-			"--builder-model",
-		} {
-			if !strings.Contains(helpOutput, fragment) {
-				t.Fatalf("Factory Builder help missing %q:\n%s", fragment, helpOutput)
-			}
-		}
-
-		listOutput, listStderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "factory", "list"},
-		)
-		if listStderr != "" {
-			t.Fatalf("factory list stderr = %q", listStderr)
-		}
-		if !strings.Contains(listOutput, packagedFactoryBuilderName) {
-			t.Fatalf("factory list output missing %q:\n%s", packagedFactoryBuilderName, listOutput)
-		}
-		factoryDir := packagedFactoryPath(scenario.homeDir, packagedFactoryBuilderName)
-		if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
-			t.Fatalf("Factory Builder was not materialized for named help: %v", err)
-		}
-		fixture.capturePackagedFactorySources(t, scenario.homeDir)
+		runFactoryBuilderListAndHelp(t, fixture)
 	})
-
 	t.Run("named goal", func(t *testing.T) {
-		scenario := fixture.newScenario(t, support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult))
-		fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
-		stdout, stderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "run", "--named", packagedGoalFactoryName, "--no-record", "--quiet", "hermetic no-server named goal prompt"},
-		)
-		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
-		if got := scenario.provider.CallCount(); got != 1 {
-			t.Fatalf("named goal provider calls = %d, want 1", got)
-		}
+		runNamedGoalSuccess(t, fixture)
 	})
-
 	t.Run("named subagent", func(t *testing.T) {
-		requestText := "hermetic no-server named subagent prompt"
-		scenario := fixture.newScenario(t, platformprocess.CommandResult{
-			Stdout: support.CodexSuccessStdout(wantHermeticInvocationPrimaryResult),
-		})
-		fixture.copyPackagedFactory(t, scenario, packagedSubagentFactoryName)
-		stdout, stderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "run", "--named", packagedSubagentFactoryName, "--no-record", "--quiet", requestText},
-		)
-		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
-		if stdout == requestText {
-			t.Fatalf("stdout echoed submitted request text instead of agent response")
-		}
-		if got := scenario.provider.CallCount(); got != 1 {
-			t.Fatalf("named subagent provider calls = %d, want 1", got)
-		}
+		runNamedSubagentSuccess(t, fixture)
 	})
-
 	t.Run("no-signature compatibility", func(t *testing.T) {
-		scenario := fixture.newScenario(t,
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-		)
-		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
-		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
-		namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
-		support.RemoveInvocationSignatureFixture(t, namedFactoryPath)
-		base := []string{"--no-record", "--quiet"}
-		cases := []struct {
-			name  string
-			input []string
-			stdin string
-		}{
-			{name: "positional compatibility", input: []string{"legacy positional input"}},
-			{name: "stdin compatibility", input: []string{"-"}, stdin: "legacy stdin input\n"},
-			{name: "signature-only syntax remains literal text", input: []string{"--mode", "fast"}},
-		}
-		for _, test := range cases {
-			test := test
-			t.Run(test.name, func(t *testing.T) {
-				namedArgs := append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, base...)
-				namedArgs = append(namedArgs, test.input...)
-				namedStdout, namedStderr := executeCustomerCommandWithStdin(
-					t, fixture.process, scenario.environment, scenario.workingDirectory, namedArgs, test.stdin,
-				)
-				fileArgs := append([]string{"you", "run", "--factory", namedFactoryPath}, base...)
-				fileArgs = append(fileArgs, test.input...)
-				fileStdout, fileStderr := executeCustomerCommandWithStdin(
-					t, fixture.process, scenario.environment, scenario.workingDirectory, fileArgs, test.stdin,
-				)
-				if namedStderr != "" || fileStderr != "" {
-					t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
-				}
-				if namedStdout != wantHermeticInvocationPrimaryResult || fileStdout != namedStdout {
-					t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
-				}
-			})
-		}
-		if got := scenario.provider.CallCount(); got != len(cases)*2 {
-			t.Fatalf("no-signature provider calls = %d, want %d", got, len(cases)*2)
-		}
+		runNoSignatureCompatibility(t, fixture)
 	})
-
 	t.Run("effective signature parity", func(t *testing.T) {
-		scenario := fixture.newScenario(t,
-			support.CodexDecisionCommandResult("canonical provider result"),
-			support.CodexDecisionCommandResult("canonical provider result"),
-		)
-		submissionStart := len(fixture.submissions.snapshot())
-		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
-		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
-		namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
-		addEffectiveSignatureFixture(t, namedFactoryPath)
-		support.ReplaceGoalWorkstationPrompt(t, namedFactoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
-		documentPath := filepath.Join(scenario.workingDirectory, "story.md")
-		if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
-			t.Fatalf("write FILE_CONTENTS fixture: %v", err)
-		}
-		common := []string{
-			"--no-record", "--quiet",
-			"equivalent canonical prompt", "one.md", "two.md",
-			"--t", "alpha", "--tag", "beta",
-			"--count", "2",
-			"--file", documentPath,
-			"-",
-		}
-		namedArgs := append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, common...)
-		namedStdout, namedStderr := executeCustomerCommandWithStdin(
-			t, fixture.process, scenario.environment, scenario.workingDirectory, namedArgs, "canonical stdin body",
-		)
-		fileArgs := append([]string{"you", "run", "--factory", namedFactoryPath}, common...)
-		fileStdout, fileStderr := executeCustomerCommandWithStdin(
-			t, fixture.process, scenario.environment, scenario.workingDirectory, fileArgs, "canonical stdin body",
-		)
-		if namedStderr != "" || fileStderr != "" {
-			t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
-		}
-		if namedStdout == "" || fileStdout != namedStdout {
-			t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
-		}
-
-		records := fixture.submissions.snapshot()[submissionStart:]
-		if len(records) != 2 {
-			t.Fatalf("canonical submissions = %d, want named and explicit-file records", len(records))
-		}
-		if !reflect.DeepEqual(records[0].Request.InvocationArguments, records[1].Request.InvocationArguments) {
-			t.Fatalf("selection canonical arguments differ: named=%#v file=%#v", records[0].Request.InvocationArguments, records[1].Request.InvocationArguments)
-		}
-		assertEffectiveSignatureSubmission(t, records[0].Request.InvocationArguments, documentPath)
-
-		calls := scenario.provider.Requests()
-		if len(calls) != 2 {
-			t.Fatalf("provider calls = %d, want named and explicit-file calls", len(calls))
-		}
-		wantPrompt := "input=equivalent canonical prompt|format=json|count=2|document=factory invocation document|stdin=canonical stdin body"
-		placeholders := []string{"${executorProvider}", "${executorModel}", "${input}", "${format}", "${count}", "${document}", "${body}", "${mode}"}
-		for index, call := range calls {
-			if call.Command != "codex" {
-				t.Fatalf("provider call %d command = %q, want codex", index, call.Command)
-			}
-			if support.RequestContainsInterpolation(call, placeholders...) {
-				t.Fatalf("provider call %d contains unresolved interpolation: %#v", index, call)
-			}
-			if got := string(call.Stdin); !strings.Contains(got, wantPrompt) {
-				t.Fatalf("provider call %d prompt = %q, want resolved prompt fragment %q", index, got, wantPrompt)
-			}
-		}
+		runEffectiveSignatureParity(t, fixture)
 	})
-
 	t.Run("default-only input", func(t *testing.T) {
-		scenario := fixture.newScenario(t,
-			support.CodexDecisionCommandResult("default applied"),
-			support.CodexDecisionCommandResult("default applied"),
-		)
-		submissionStart := len(fixture.submissions.snapshot())
-		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
-		namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
-		factoryPath := filepath.Join(namedFactoryDir, "factory.json")
-		replaceInvocationSignatureFixture(t, factoryPath, map[string]any{
-			"parameters": []any{map[string]any{
-				"name": "mode", "defaultValue": "safe",
-				"bindings": []any{map[string]any{"kind": "NAMED"}},
-			}},
-		})
-		support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
-		support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
-
-		namedStdout, namedStderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			emptyInvocationArguments("named", factoryPath, customizedNamedGoalFactoryName),
-		)
-		fileStdout, fileStderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			emptyInvocationArguments("file", factoryPath, customizedNamedGoalFactoryName),
-		)
-		if namedStderr != "" || fileStderr != "" {
-			t.Fatalf("default-only invocation stderr: named=%q file=%q", namedStderr, fileStderr)
-		}
-		if namedStdout == "" || fileStdout != namedStdout {
-			t.Fatalf("default-only selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
-		}
-
-		records := fixture.submissions.snapshot()[submissionStart:]
-		if len(records) != 2 || records[0].Request.InvocationArguments == nil || records[1].Request.InvocationArguments == nil {
-			t.Fatalf("default-only submissions = %#v, want two canonical requests", records)
-		}
-		want := workInvocationArgumentDefault("safe")
-		for index, record := range records {
-			if got := record.Request.InvocationArguments.Arguments["mode"]; !reflect.DeepEqual(got, want) {
-				t.Fatalf("default-only argument %d = %#v, want %#v", index, got, want)
-			}
-		}
-		for index, call := range scenario.provider.Requests() {
-			if call.Command != "codex" || support.RequestContainsInterpolation(call, "${mode}") {
-				t.Fatalf("default-only provider call %d = %#v, want resolved codex request", index, call)
-			}
-			if !strings.Contains(string(call.Stdin), "mode=safe") {
-				t.Fatalf("default-only provider prompt %d = %q, want resolved default", index, call.Stdin)
-			}
-		}
+		runDefaultOnlyInput(t, fixture)
 	})
-
 	t.Run("recorded named invocation", func(t *testing.T) {
-		scenario := fixture.newScenario(t,
-			support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
-		)
-		fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
-		recordingPath := filepath.Join(scenario.rootDir, "named-invocation.recording.jsonl")
-		stdout, stderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "run", "--named", packagedGoalFactoryName, "--record", recordingPath, "--quiet", "record a named invocation"},
-		)
-		assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
-		payload, err := os.ReadFile(recordingPath)
-		if err != nil {
-			t.Fatalf("read named invocation recording: %v", err)
-		}
-		replay := decodeNamedInvocationReplay(t, payload)
-		if replay.header.SchemaVersion != "agent-factory.replay.v2" || replay.header.SessionID == "" {
-			t.Fatalf("recording header = %#v, want v2 session identity", replay.header)
-		}
-		if replay.terminal.TerminalState != "FINALIZED" {
-			t.Fatalf("recording terminal state = %q, want FINALIZED", replay.terminal.TerminalState)
-		}
-		if !replay.eventTypes["DISPATCH_REQUEST"] || !replay.eventTypes["DISPATCH_RESPONSE"] {
-			t.Fatalf("recording event types = %#v, want canonical dispatch request and response", replay.eventTypes)
-		}
-		if !replay.eventTypes["SESSION_RESULT_UPDATED"] || replay.resultStatus != "FINAL" {
-			t.Fatalf("recording result projection = %q/%v, want FINAL", replay.resultStatus, replay.eventTypes["SESSION_RESULT_UPDATED"])
-		}
-		if replay.completedWorkID == "" || replay.completedWorkState != "TERMINAL" || replay.completedWorkName != "complete" {
-			t.Fatalf("recording completed Work = %q/%q/%q, want complete terminal Work", replay.completedWorkID, replay.completedWorkName, replay.completedWorkState)
-		}
-		if replay.primaryResult != wantHermeticInvocationPrimaryResult {
-			t.Fatalf("recording primary result = %q, want %q", replay.primaryResult, wantHermeticInvocationPrimaryResult)
-		}
-		if got := scenario.provider.CallCount(); got != 1 {
-			t.Fatalf("recorded named provider calls = %d, want one goal worker", got)
-		}
+		runRecordedNamedInvocation(t, fixture)
 	})
+}
+
+func runFactoryBuilderListAndHelp(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	scenario := fixture.newScenario(t)
+	helpOutput, helpStderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		[]string{"you", "run", "--named", packagedFactoryBuilderName, "--help"},
+	)
+	if helpStderr != "" {
+		t.Fatalf("Factory Builder help stderr = %q", helpStderr)
+	}
+	for _, fragment := range []string{
+		"Creates and installs one validated graph or JavaScript Factory from a customer request.",
+		"--factory-name",
+		"--orchestrator",
+		"--builder-provider",
+		"--builder-model",
+	} {
+		if !strings.Contains(helpOutput, fragment) {
+			t.Fatalf("Factory Builder help missing %q:\n%s", fragment, helpOutput)
+		}
+	}
+
+	listOutput, listStderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		[]string{"you", "factory", "list"},
+	)
+	if listStderr != "" {
+		t.Fatalf("factory list stderr = %q", listStderr)
+	}
+	if !strings.Contains(listOutput, packagedFactoryBuilderName) {
+		t.Fatalf("factory list output missing %q:\n%s", packagedFactoryBuilderName, listOutput)
+	}
+	factoryDir := packagedFactoryPath(scenario.homeDir, packagedFactoryBuilderName)
+	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
+		t.Fatalf("Factory Builder was not materialized for named help: %v", err)
+	}
+	fixture.capturePackagedFactorySources(t, scenario.homeDir)
+}
+
+func runNamedGoalSuccess(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	scenario := fixture.newScenario(t, support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult))
+	fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+	stdout, stderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		[]string{"you", "run", "--named", packagedGoalFactoryName, "--no-record", "--quiet", "hermetic no-server named goal prompt"},
+	)
+	assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
+	if got := scenario.provider.CallCount(); got != 1 {
+		t.Fatalf("named goal provider calls = %d, want 1", got)
+	}
+}
+
+func runNamedSubagentSuccess(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	requestText := "hermetic no-server named subagent prompt"
+	scenario := fixture.newScenario(t, platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout(wantHermeticInvocationPrimaryResult),
+	})
+	fixture.copyPackagedFactory(t, scenario, packagedSubagentFactoryName)
+	stdout, stderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		[]string{"you", "run", "--named", packagedSubagentFactoryName, "--no-record", "--quiet", requestText},
+	)
+	assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
+	if stdout == requestText {
+		t.Fatalf("stdout echoed submitted request text instead of agent response")
+	}
+	if got := scenario.provider.CallCount(); got != 1 {
+		t.Fatalf("named subagent provider calls = %d, want 1", got)
+	}
+}
+
+func runNoSignatureCompatibility(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	scenario := fixture.newScenario(t,
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+	)
+	factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+	namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
+	namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
+	support.RemoveInvocationSignatureFixture(t, namedFactoryPath)
+	base := []string{"--no-record", "--quiet"}
+	cases := []struct {
+		name  string
+		input []string
+		stdin string
+	}{
+		{name: "positional compatibility", input: []string{"legacy positional input"}},
+		{name: "stdin compatibility", input: []string{"-"}, stdin: "legacy stdin input\n"},
+		{name: "signature-only syntax remains literal text", input: []string{"--mode", "fast"}},
+	}
+	for _, test := range cases {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			namedArgs := append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, base...)
+			namedArgs = append(namedArgs, test.input...)
+			namedStdout, namedStderr := executeCustomerCommandWithStdin(
+				t, fixture.process, scenario.environment, scenario.workingDirectory, namedArgs, test.stdin,
+			)
+			fileArgs := append([]string{"you", "run", "--factory", namedFactoryPath}, base...)
+			fileArgs = append(fileArgs, test.input...)
+			fileStdout, fileStderr := executeCustomerCommandWithStdin(
+				t, fixture.process, scenario.environment, scenario.workingDirectory, fileArgs, test.stdin,
+			)
+			if namedStderr != "" || fileStderr != "" {
+				t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
+			}
+			if namedStdout != wantHermeticInvocationPrimaryResult || fileStdout != namedStdout {
+				t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
+			}
+		})
+	}
+	if got := scenario.provider.CallCount(); got != len(cases)*2 {
+		t.Fatalf("no-signature provider calls = %d, want %d", got, len(cases)*2)
+	}
+}
+
+func runEffectiveSignatureParity(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	scenario := fixture.newScenario(t,
+		support.CodexDecisionCommandResult("canonical provider result"),
+		support.CodexDecisionCommandResult("canonical provider result"),
+	)
+	submissionStart := len(fixture.submissions.snapshot())
+	factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+	namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
+	namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
+	addEffectiveSignatureFixture(t, namedFactoryPath)
+	support.ReplaceGoalWorkstationPrompt(t, namedFactoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
+	documentPath := filepath.Join(scenario.workingDirectory, "story.md")
+	if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
+		t.Fatalf("write FILE_CONTENTS fixture: %v", err)
+	}
+	common := []string{
+		"--no-record", "--quiet",
+		"equivalent canonical prompt", "one.md", "two.md",
+		"--t", "alpha", "--tag", "beta",
+		"--count", "2",
+		"--file", documentPath,
+		"-",
+	}
+	namedArgs := append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, common...)
+	namedStdout, namedStderr := executeCustomerCommandWithStdin(
+		t, fixture.process, scenario.environment, scenario.workingDirectory, namedArgs, "canonical stdin body",
+	)
+	fileArgs := append([]string{"you", "run", "--factory", namedFactoryPath}, common...)
+	fileStdout, fileStderr := executeCustomerCommandWithStdin(
+		t, fixture.process, scenario.environment, scenario.workingDirectory, fileArgs, "canonical stdin body",
+	)
+	if namedStderr != "" || fileStderr != "" {
+		t.Fatalf("invocation stderr: named=%q file=%q", namedStderr, fileStderr)
+	}
+	if namedStdout == "" || fileStdout != namedStdout {
+		t.Fatalf("selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
+	}
+
+	records := fixture.submissions.snapshot()[submissionStart:]
+	if len(records) != 2 {
+		t.Fatalf("canonical submissions = %d, want named and explicit-file records", len(records))
+	}
+	if !reflect.DeepEqual(records[0].Request.InvocationArguments, records[1].Request.InvocationArguments) {
+		t.Fatalf("selection canonical arguments differ: named=%#v file=%#v", records[0].Request.InvocationArguments, records[1].Request.InvocationArguments)
+	}
+	assertEffectiveSignatureSubmission(t, records[0].Request.InvocationArguments, documentPath)
+
+	calls := scenario.provider.Requests()
+	if len(calls) != 2 {
+		t.Fatalf("provider calls = %d, want named and explicit-file calls", len(calls))
+	}
+	wantPrompt := "input=equivalent canonical prompt|format=json|count=2|document=factory invocation document|stdin=canonical stdin body"
+	placeholders := []string{"${executorProvider}", "${executorModel}", "${input}", "${format}", "${count}", "${document}", "${body}", "${mode}"}
+	for index, call := range calls {
+		if call.Command != "codex" {
+			t.Fatalf("provider call %d command = %q, want codex", index, call.Command)
+		}
+		if support.RequestContainsInterpolation(call, placeholders...) {
+			t.Fatalf("provider call %d contains unresolved interpolation: %#v", index, call)
+		}
+		if got := string(call.Stdin); !strings.Contains(got, wantPrompt) {
+			t.Fatalf("provider call %d prompt = %q, want resolved prompt fragment %q", index, got, wantPrompt)
+		}
+	}
+}
+
+func runDefaultOnlyInput(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	scenario := fixture.newScenario(t,
+		support.CodexDecisionCommandResult("default applied"),
+		support.CodexDecisionCommandResult("default applied"),
+	)
+	submissionStart := len(fixture.submissions.snapshot())
+	factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+	namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
+	factoryPath := filepath.Join(namedFactoryDir, "factory.json")
+	replaceInvocationSignatureFixture(t, factoryPath, map[string]any{
+		"parameters": []any{map[string]any{
+			"name": "mode", "defaultValue": "safe",
+			"bindings": []any{map[string]any{"kind": "NAMED"}},
+		}},
+	})
+	support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
+	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
+
+	namedStdout, namedStderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		emptyInvocationArguments("named", factoryPath, customizedNamedGoalFactoryName),
+	)
+	fileStdout, fileStderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		emptyInvocationArguments("file", factoryPath, customizedNamedGoalFactoryName),
+	)
+	if namedStderr != "" || fileStderr != "" {
+		t.Fatalf("default-only invocation stderr: named=%q file=%q", namedStderr, fileStderr)
+	}
+	if namedStdout == "" || fileStdout != namedStdout {
+		t.Fatalf("default-only selection outputs differ: named=%q file=%q", namedStdout, fileStdout)
+	}
+
+	records := fixture.submissions.snapshot()[submissionStart:]
+	if len(records) != 2 || records[0].Request.InvocationArguments == nil || records[1].Request.InvocationArguments == nil {
+		t.Fatalf("default-only submissions = %#v, want two canonical requests", records)
+	}
+	want := workInvocationArgumentDefault("safe")
+	for index, record := range records {
+		if got := record.Request.InvocationArguments.Arguments["mode"]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("default-only argument %d = %#v, want %#v", index, got, want)
+		}
+	}
+	for index, call := range scenario.provider.Requests() {
+		if call.Command != "codex" || support.RequestContainsInterpolation(call, "${mode}") {
+			t.Fatalf("default-only provider call %d = %#v, want resolved codex request", index, call)
+		}
+		if !strings.Contains(string(call.Stdin), "mode=safe") {
+			t.Fatalf("default-only provider prompt %d = %q, want resolved default", index, call.Stdin)
+		}
+	}
+}
+
+func runRecordedNamedInvocation(t *testing.T, fixture *namedInvocationSuccessFixture) {
+	t.Helper()
+	scenario := fixture.newScenario(t,
+		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
+	)
+	fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
+	recordingPath := filepath.Join(scenario.rootDir, "named-invocation.recording.jsonl")
+	stdout, stderr := executeCustomerCommand(
+		t, fixture.process, scenario.environment, scenario.workingDirectory,
+		[]string{"you", "run", "--named", packagedGoalFactoryName, "--record", recordingPath, "--quiet", "record a named invocation"},
+	)
+	assertSharedInvocationResult(t, stdout, stderr, wantHermeticInvocationPrimaryResult)
+	payload, err := os.ReadFile(recordingPath)
+	if err != nil {
+		t.Fatalf("read named invocation recording: %v", err)
+	}
+	replay := decodeNamedInvocationReplay(t, payload)
+	if replay.header.SchemaVersion != "agent-factory.replay.v2" || replay.header.SessionID == "" {
+		t.Fatalf("recording header = %#v, want v2 session identity", replay.header)
+	}
+	if replay.terminal.TerminalState != "FINALIZED" {
+		t.Fatalf("recording terminal state = %q, want FINALIZED", replay.terminal.TerminalState)
+	}
+	if !replay.eventTypes["DISPATCH_REQUEST"] || !replay.eventTypes["DISPATCH_RESPONSE"] {
+		t.Fatalf("recording event types = %#v, want canonical dispatch request and response", replay.eventTypes)
+	}
+	if !replay.eventTypes["SESSION_RESULT_UPDATED"] || replay.resultStatus != "FINAL" {
+		t.Fatalf("recording result projection = %q/%v, want FINAL", replay.resultStatus, replay.eventTypes["SESSION_RESULT_UPDATED"])
+	}
+	if replay.completedWorkID == "" || replay.completedWorkState != "TERMINAL" || replay.completedWorkName != "complete" {
+		t.Fatalf("recording completed Work = %q/%q/%q, want complete terminal Work", replay.completedWorkID, replay.completedWorkName, replay.completedWorkState)
+	}
+	if replay.primaryResult != wantHermeticInvocationPrimaryResult {
+		t.Fatalf("recording primary result = %q, want %q", replay.primaryResult, wantHermeticInvocationPrimaryResult)
+	}
+	if got := scenario.provider.CallCount(); got != 1 {
+		t.Fatalf("recorded named provider calls = %d, want one goal worker", got)
+	}
 }
 
 type namedInvocationReplayLine struct {
