@@ -136,6 +136,14 @@ func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
 			)
 		}),
 	)
+	t.Cleanup(func() {
+		fixture.server.Stop(t)
+		select {
+		case <-fixture.server.Done():
+		default:
+			t.Error("shared Current Factory process is still running after Stop")
+		}
+	})
 	return fixture
 }
 
@@ -161,7 +169,7 @@ func (fixture *sharedCurrentFactoryAPI) openSession(t *testing.T, name string) *
 		if session.closed {
 			return
 		}
-		support.CloseFactorySessionAt(t, session.serverURL, session.id)
+		session.close(t)
 	})
 	return session
 }
@@ -173,6 +181,15 @@ func (session *sharedCurrentFactorySession) close(t *testing.T) {
 	}
 	support.CloseFactorySessionAt(t, session.serverURL, session.id)
 	session.closed = true
+	assertFactorySessionDeleted(t, session.serverURL, session.id)
+}
+
+// assertFactorySessionDeleted proves cleanup through the public API rather
+// than relying only on the successful DELETE response.
+func assertFactorySessionDeleted(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+	deleted := getCurrentFactoryForSessionExpectStatus(t, serverURL, sessionID, http.StatusNotFound)
+	assertNotFoundFactorySessionError(t, deleted, "deleted session")
 }
 
 func (fixture *sharedCurrentFactoryAPI) requireServerRunning(t *testing.T) {

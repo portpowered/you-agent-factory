@@ -20,7 +20,6 @@ import (
 // rewritten by the child scenarios.
 func TestSharedCurrentFactoryAPI(t *testing.T) {
 	fixture := startSharedCurrentFactoryAPI(t)
-	t.Cleanup(func() { fixture.server.Stop(t) })
 
 	t.Run("GetAndSave", func(t *testing.T) {
 		t.Parallel()
