@@ -22,63 +22,19 @@ func TestVerifyPublishedArtifactLocationsHTTPServer(t *testing.T) {
 	exactFloorDigest := publishedTestDigest(exactFloorBody)
 	belowFloorBody := publishedTestBody(MinimumPinnedArtifactSizeBytes - 1)
 	belowFloorDigest := publishedTestDigest(belowFloorBody)
-	var (
-		mu      sync.Mutex
-		methods []string
-	)
-	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		mu.Lock()
-		methods = append(methods, request.Method+" "+request.URL.Path)
-		mu.Unlock()
-
-		switch request.URL.Path {
-		case "/success":
-			writePublishedTestBody(response, validBody)
-		case "/redirect":
-			http.Redirect(response, request, "/success", http.StatusFound)
-		case "/missing-length":
-			response.WriteHeader(http.StatusOK)
-			if flusher, ok := response.(http.Flusher); ok {
-				flusher.Flush()
-			}
-			_, _ = response.Write(validBody)
-		case "/not-found":
-			response.WriteHeader(http.StatusNotFound)
-		case "/wrong-size", "/wrong-digest":
-			writePublishedTestBody(response, validBody)
-		case "/exact-floor":
-			writePublishedTestBody(response, exactFloorBody)
-		case "/below-floor":
-			writePublishedTestBody(response, belowFloorBody)
-		default:
-			response.WriteHeader(http.StatusNotImplemented)
-		}
-	}))
-	t.Cleanup(server.Close)
-
-	entry := func(path string, size int64, digest string) PublishedArtifact {
-		return PublishedArtifact{
-			BackendID: "localai-test",
-			TargetID:  "linux-amd64",
-			Location:  server.URL + path,
-			SizeBytes: size,
-			SHA256:    digest,
-		}
-	}
+	server := newPublishedArtifactTestServer(t, validBody, exactFloorBody, belowFloorBody)
 
 	t.Run("final 200 with exact body size and digest", func(t *testing.T) {
-		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/success", int64(len(validBody)), validDigest)}); err != nil {
+		if err := verifyPublishedArtifactRequest(t, server, "/success", int64(len(validBody)), validDigest); err != nil {
 			t.Fatalf("verification error = %v", err)
 		}
 	})
 
 	t.Run("follows redirect and uses GET", func(t *testing.T) {
-		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/redirect", int64(len(validBody)), validDigest)}); err != nil {
+		if err := verifyPublishedArtifactRequest(t, server, "/redirect", int64(len(validBody)), validDigest); err != nil {
 			t.Fatalf("verification error = %v", err)
 		}
-		mu.Lock()
-		defer mu.Unlock()
-		joined := strings.Join(methods, "|")
+		joined := strings.Join(server.requests(), "|")
 		if !strings.Contains(joined, "GET /redirect") || !strings.Contains(joined, "GET /success") {
 			t.Fatalf("requests = %q, want GET on redirect and final URL", joined)
 		}
@@ -88,7 +44,7 @@ func TestVerifyPublishedArtifactLocationsHTTPServer(t *testing.T) {
 	})
 
 	t.Run("does not depend on Content-Length", func(t *testing.T) {
-		if err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry("/missing-length", int64(len(validBody)), validDigest)}); err != nil {
+		if err := verifyPublishedArtifactRequest(t, server, "/missing-length", int64(len(validBody)), validDigest); err != nil {
 			t.Fatalf("verification error = %v", err)
 		}
 	})
@@ -108,17 +64,97 @@ func TestVerifyPublishedArtifactLocationsHTTPServer(t *testing.T) {
 	} {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
-			err := VerifyPublishedArtifactLocations(context.Background(), server.Client(), []PublishedArtifact{entry(testCase.path, testCase.size, testCase.digest)})
-			if err == nil {
-				t.Fatal("verification error = nil, want failure")
-			}
-			message := err.Error()
-			for _, expected := range []string{"localai-test", "linux-amd64", server.URL + testCase.path, testCase.wantDetail} {
-				if !strings.Contains(message, expected) {
-					t.Fatalf("verification error = %q, want %q", message, expected)
-				}
-			}
+			assertPublishedArtifactRejected(t, server, testCase.path, testCase.size, testCase.digest, testCase.wantDetail)
 		})
+	}
+}
+
+type publishedArtifactTestServer struct {
+	server         *httptest.Server
+	mu             sync.Mutex
+	methods        []string
+	validBody      []byte
+	exactFloorBody []byte
+	belowFloorBody []byte
+}
+
+func newPublishedArtifactTestServer(t *testing.T, validBody, exactFloorBody, belowFloorBody []byte) *publishedArtifactTestServer {
+	t.Helper()
+	testServer := &publishedArtifactTestServer{
+		validBody:      validBody,
+		exactFloorBody: exactFloorBody,
+		belowFloorBody: belowFloorBody,
+	}
+	testServer.server = httptest.NewServer(http.HandlerFunc(testServer.handle))
+	t.Cleanup(testServer.server.Close)
+	return testServer
+}
+
+func (server *publishedArtifactTestServer) handle(response http.ResponseWriter, request *http.Request) {
+	server.mu.Lock()
+	server.methods = append(server.methods, request.Method+" "+request.URL.Path)
+	server.mu.Unlock()
+
+	switch request.URL.Path {
+	case "/success":
+		writePublishedTestBody(response, server.validBody)
+	case "/redirect":
+		http.Redirect(response, request, "/success", http.StatusFound)
+	case "/missing-length":
+		response.WriteHeader(http.StatusOK)
+		if flusher, ok := response.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		_, _ = response.Write(server.validBody)
+	case "/not-found":
+		response.WriteHeader(http.StatusNotFound)
+	case "/wrong-size", "/wrong-digest":
+		writePublishedTestBody(response, server.validBody)
+	case "/exact-floor":
+		writePublishedTestBody(response, server.exactFloorBody)
+	case "/below-floor":
+		writePublishedTestBody(response, server.belowFloorBody)
+	default:
+		response.WriteHeader(http.StatusNotImplemented)
+	}
+}
+
+func (server *publishedArtifactTestServer) client() *http.Client {
+	return server.server.Client()
+}
+
+func (server *publishedArtifactTestServer) entry(path string, size int64, digest string) PublishedArtifact {
+	return PublishedArtifact{
+		BackendID: "localai-test",
+		TargetID:  "linux-amd64",
+		Location:  server.server.URL + path,
+		SizeBytes: size,
+		SHA256:    digest,
+	}
+}
+
+func (server *publishedArtifactTestServer) requests() []string {
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	return append([]string(nil), server.methods...)
+}
+
+func verifyPublishedArtifactRequest(t *testing.T, server *publishedArtifactTestServer, path string, size int64, digest string) error {
+	t.Helper()
+	return VerifyPublishedArtifactLocations(context.Background(), server.client(), []PublishedArtifact{server.entry(path, size, digest)})
+}
+
+func assertPublishedArtifactRejected(t *testing.T, server *publishedArtifactTestServer, path string, size int64, digest, wantDetail string) {
+	t.Helper()
+	err := verifyPublishedArtifactRequest(t, server, path, size, digest)
+	if err == nil {
+		t.Fatal("verification error = nil, want failure")
+	}
+	message := err.Error()
+	for _, expected := range []string{"localai-test", "linux-amd64", server.server.URL + path, wantDetail} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("verification error = %q, want %q", message, expected)
+		}
 	}
 }
 
