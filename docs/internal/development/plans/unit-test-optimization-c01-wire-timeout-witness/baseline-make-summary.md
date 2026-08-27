@@ -35,8 +35,14 @@ stdout/stderr and status captures are intentionally excluded from this lane's
 delivery diff under the operator evidence policy; they are not inputs to the
 baseline checker. The accepted reference median is `239.612s`, recomputed from
 exactly these three walls.
-The checked-in budget instance contains the complete sorted 444-package and
-18,122-test inventories derived from the v2 documents.
+The retained v2 documents and baseline mode preserve the complete sorted
+444-package and 18,122-test historical inventory derived from the accepted
+captures. The checked-in budget's final-mode reference inventory is the
+reviewed current-head inventory of 18,142 tests: the integration base added
+twenty runtime/projection test entries after the historical capture. This is
+an exact-with-reviewed-diff inventory reconciliation; it changes neither the
+accepted timing samples nor their 239.612-second median and does not create a
+new baseline.
 
 The exact baseline validation was:
 

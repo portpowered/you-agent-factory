@@ -45,9 +45,13 @@ actual values plus the rerun command. Invalid captures remain on disk for
 review; they are never silently replaced.
 
 The checked-in `go-unit-lane-latency-budget.v1.json` is the frozen policy and
-reference instance. It records the accepted median of 239.612 seconds, 444
-packages, and 18,122 tests. The adjacent Draft 2020-12 schema is compiled and
-validated before final-mode checking; the checker never rewrites either file.
+reference instance. Its accepted timing distribution remains 239.612 seconds
+over 444 packages and 18,122 historical tests. Its exact final-mode inventory
+is the reviewed current-head inventory of 18,142 tests: the integration base
+added twenty runtime/projection test entries after the historical capture.
+This is the declared `exact-with-reviewed-diff` reconciliation; all candidate
+samples must still match that reviewed inventory exactly, and the checker
+never rewrites either the budget or schema.
 
 The retained baseline ledger records all three complete uncached captures and
 the first incomplete attempt. The incomplete attempt remains separate from the
