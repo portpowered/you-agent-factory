@@ -25,6 +25,13 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// scriptSharedSpineTimeout is a hard upper bound for a stuck asynchronous
+// runtime, not a readiness delay. Work dispatch and Factory Session shutdown
+// are customer-visible lifecycle transitions exposed only through the public
+// status contract in this functional lane; the injected command edge cannot
+// deterministically prove either transition. The bounded status observation
+// therefore protects cleanup while returning as soon as the public terminal
+// state is observed.
 const scriptSharedSpineTimeout = 15 * time.Second
 
 // TestScriptWorkerSharedSuccessSpine proves the complete short-lane shared
@@ -82,7 +89,6 @@ func newScriptSharedSpineFixture(t *testing.T) *scriptSharedSpineFixture {
 		process:       process,
 		commandRouter: router,
 		api:           api,
-		identities:    identities,
 		processBuilds: &processBuilds,
 		hostDir:       hostDir,
 		homeDir:       homeDir,
@@ -115,7 +121,6 @@ type scriptSharedSpineFixture struct {
 	command       *support.ProcessCommand
 	commandRouter *scriptCommandRouter
 	api           *scriptSharedHTTPServer
-	identities    *scriptSharedIdentityGenerator
 	processBuilds *atomic.Int32
 	baseURL       string
 	hostDir       string
@@ -130,13 +135,6 @@ type scriptSharedSpineFixture struct {
 	closeOnce    sync.Once
 }
 
-type scriptSharedCommandKind string
-
-const (
-	scriptSharedScriptCommand   scriptSharedCommandKind = "script"
-	scriptSharedProviderCommand scriptSharedCommandKind = "provider"
-)
-
 type scriptSharedScenario struct {
 	name                    string
 	factoryDir              string
@@ -146,7 +144,6 @@ type scriptSharedScenario struct {
 	terminalState           string
 	expectedOutput          string
 	expectedOutcome         factoryapi.WorkOutcome
-	commandKind             scriptSharedCommandKind
 	expectedCommand         string
 	expectedArgs            []string
 	expectedArgSequences    [][]string
@@ -264,7 +261,6 @@ func newScriptSharedSpineScenarios(t *testing.T) []scriptSharedScenario {
 			terminalState:   "done",
 			expectedOutput:  testCase.expectedOutput,
 			expectedOutcome: factoryapi.WorkOutcomeAccepted,
-			commandKind:     scriptSharedScriptCommand,
 			expectedCommand: "echo",
 			expectedArgs:    []string{"default-output"},
 			noInference:     testCase.noInference,
@@ -300,6 +296,11 @@ func (fixture *scriptSharedSpineFixture) runScenario(
 		t.Fatalf("submitted Work identity = work:%q request:%q, want both identities", workID, submitted.RequestId)
 	}
 
+	// Work dispatch and Factory Session lifecycle updates are asynchronous.
+	// Observe the public terminal status rather than sleeping or handing off at
+	// the command edge: only the status contract proves that all Work state has
+	// become customer-visible and terminal. The package deadline above is a
+	// stuck-runtime safety bound, not timeout padding.
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, scriptSharedSpineTimeout)
 	listed := listScriptSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
@@ -351,6 +352,10 @@ func (fixture *scriptSharedSpineFixture) closeSession(t testing.TB, sessionID st
 	}
 	fixture.sessionMu.Unlock()
 
+	// The public close contract requires the runtime to report IDLE/FINISHED
+	// before deletion. CloseFactorySessionAt performs that bounded lifecycle
+	// observation; an injected command completion cannot prove the session is
+	// stopped and safe to delete.
 	support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
 	fixture.sessionMu.Lock()
 	fixture.closed[sessionID] = struct{}{}

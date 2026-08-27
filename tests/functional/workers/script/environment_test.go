@@ -54,7 +54,6 @@ Process the input task.
 			terminalState:      "done",
 			expectedOutput:     "script-output-ok",
 			expectedOutcome:    factoryapi.WorkOutcomeAccepted,
-			commandKind:        scriptSharedScriptCommand,
 			expectedCommand:    "echo",
 			expectedArgs:       []string{"default-output"},
 			environmentPrivacy: true,
@@ -71,7 +70,6 @@ Process the input task.
 			workTypeName:    "task",
 			terminalState:   "failed",
 			expectedOutcome: factoryapi.WorkOutcomeFailed,
-			commandKind:     scriptSharedScriptCommand,
 			expectedCommand: "echo",
 			expectedArgs:    []string{"default-output"},
 			runner:          newScriptSharedCommandRunner(missingExecutableCommandRunner{}),
@@ -85,7 +83,6 @@ Process the input task.
 			workTypeName:    "task",
 			terminalState:   "complete",
 			expectedOutcome: factoryapi.WorkOutcomeAccepted,
-			commandKind:     scriptSharedProviderCommand,
 			expectedCommand: string(modelprovider.ProviderClaude),
 			expectedArgSequences: [][]string{
 				{"--worktree", "my-feature-branch"},
