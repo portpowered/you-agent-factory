@@ -8,16 +8,37 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestPackagedQuorumRequiredInputCompletes proves that invoking the packaged
+func TestPackagedQuorum(t *testing.T) {
+	fixture := newPackagedQuorumSharedFixture(t)
+	t.Run("TestPackagedQuorumRequiredInputCompletes", func(t *testing.T) {
+		testPackagedQuorumRequiredInputCompletes(t, fixture)
+	})
+	t.Run("TestPackagedQuorumOptionalMemberSettingsReachWorkers", func(t *testing.T) {
+		testPackagedQuorumOptionalMemberSettingsReachWorkers(t, fixture)
+	})
+	t.Run("TestPackagedQuorumGatesMergeUntilBothBranchesComplete", func(t *testing.T) {
+		testPackagedQuorumGatesMergeUntilBothBranchesComplete(t, fixture)
+	})
+	t.Run("TestPackagedQuorumInsufficientSuccessfulMembersFails", func(t *testing.T) {
+		testPackagedQuorumInsufficientSuccessfulMembersFails(t, fixture)
+	})
+}
+
+// testPackagedQuorumRequiredInputCompletes proves that invoking the packaged
 // @you/quorum Factory with only the required text request completes through the
-// public CLI under edge-mocked Codex providers, dispatches both independent
+// public Factory Session API under edge-mocked Codex providers, dispatches both independent
 // branch members, and returns one merged primary result reflecting the
 // submitted request.
-func TestPackagedQuorumRequiredInputCompletes(t *testing.T) {
+func testPackagedQuorumRequiredInputCompletes(
+	t *testing.T,
+	fixture *packagedQuorumSharedFixture,
+) {
 	requestText := packagedQuorumRequestText(t)
 	runner := newPackagedQuorumCommandRunner()
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
-	response := runPackagedQuorumCLIJSONInvocation(t, runner, requestText)
+	response := runPackagedQuorumInvocation(t, scenario, map[string]any{"input": requestText})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
 	}
@@ -45,22 +66,29 @@ func TestPackagedQuorumRequiredInputCompletes(t *testing.T) {
 	)
 }
 
-// TestPackagedQuorumOptionalMemberSettingsReachWorkers proves that optional
-// branch and merge provider/model settings supplied through the public CLI
+// testPackagedQuorumOptionalMemberSettingsReachWorkers proves that optional
+// branch and merge provider/model settings supplied through the public Factory Session API
 // reach the quorum branch and merge workers under edge-mocked Codex providers
 // and complete with a merged primary result reflecting the submitted request.
-func TestPackagedQuorumOptionalMemberSettingsReachWorkers(t *testing.T) {
+func testPackagedQuorumOptionalMemberSettingsReachWorkers(
+	t *testing.T,
+	fixture *packagedQuorumSharedFixture,
+) {
 	requestText := "configured quorum optional member settings request"
 	runner := newPackagedQuorumCommandRunner()
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
-	response := runPackagedQuorumCLIJSONInvocation(
+	response := runPackagedQuorumInvocation(
 		t,
-		runner,
-		requestText,
-		"--branch-provider", "CODEX",
-		"--branch-model", "gpt-5.1",
-		"--merge-provider", "CODEX",
-		"--merge-model", "gpt-5.2",
+		scenario,
+		map[string]any{
+			"input":          requestText,
+			"branchProvider": "CODEX",
+			"branchModel":    "gpt-5.1",
+			"mergeProvider":  "CODEX",
+			"mergeModel":     "gpt-5.2",
+		},
 	)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
@@ -94,17 +122,22 @@ func TestPackagedQuorumOptionalMemberSettingsReachWorkers(t *testing.T) {
 	runner.assertProviderModel(t, packagedQuorumMergeWorkstation, codex, "gpt-5.2")
 }
 
-// TestPackagedQuorumGatesMergeUntilBothBranchesComplete proves packaged
+// testPackagedQuorumGatesMergeUntilBothBranchesComplete proves packaged
 // @you/quorum invocation does not dispatch merge until both branch members
 // complete under edge-mocked Codex providers and then returns one merged
 // primary result reflecting the submitted request.
-func TestPackagedQuorumGatesMergeUntilBothBranchesComplete(t *testing.T) {
+func testPackagedQuorumGatesMergeUntilBothBranchesComplete(
+	t *testing.T,
+	fixture *packagedQuorumSharedFixture,
+) {
 	runner := newPackagedQuorumGatedCommandRunner()
 	requestText := packagedQuorumRequestText(t)
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
 	responseCh := make(chan factoryapi.InvocationResponse, 1)
 	go func() {
-		responseCh <- runPackagedQuorumCLIJSONInvocation(t, runner, requestText)
+		responseCh <- runPackagedQuorumInvocation(t, scenario, map[string]any{"input": requestText})
 	}()
 
 	runner.waitForBranchStarts(t)
@@ -137,18 +170,20 @@ func TestPackagedQuorumGatesMergeUntilBothBranchesComplete(t *testing.T) {
 	)
 }
 
-// TestPackagedQuorumInsufficientSuccessfulMembersFails proves that packaged
+// testPackagedQuorumInsufficientSuccessfulMembersFails proves that packaged
 // @you/quorum invocation returns a failed public terminal outcome when fewer
 // than the required branch members succeed, without emitting a completed success
 // primary result for the failing run.
-func TestPackagedQuorumInsufficientSuccessfulMembersFails(t *testing.T) {
+func testPackagedQuorumInsufficientSuccessfulMembersFails(
+	t *testing.T,
+	fixture *packagedQuorumSharedFixture,
+) {
 	requestText := "functional packaged quorum insufficient successful members request"
 	runner := newPackagedQuorumBranchBFailingCommandRunner()
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
-	response, _, execErr := runPackagedQuorumCLIJSONFailureInvocation(t, runner, requestText)
-	if execErr == nil {
-		t.Fatal("Process.Execute error = nil, want terminal packaged-quorum branch failure")
-	}
+	response := runPackagedQuorumInvocation(t, scenario, map[string]any{"input": requestText})
 	assertPackagedQuorumInsufficientSuccessfulMembersFailed(t, response)
 
 	if got := runner.callCount(packagedQuorumBranchAWorkstation); got != 1 {

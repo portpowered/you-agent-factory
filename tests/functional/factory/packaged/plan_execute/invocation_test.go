@@ -1,48 +1,54 @@
 package planexecute
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 var planExecuteWorkName = regexp.MustCompile(`tasks/todo/([^` + "`" + `]+)\.md`)
 
-// TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults proves the
-// customer CLI path dispatches exactly the two documented stages and uses the
-// run-level default provider/model when no role-specific overrides are passed.
-func TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(t *testing.T) {
-	workspace := t.TempDir()
-	home := t.TempDir()
-	support.InstallPackagedFactory(t, home, factorydefinitions.PackagedPlanExecuteFactoryName)
-	assertPlanExecutePromptContracts(t)
-	runner := &planExecuteRunner{workspace: workspace}
+// TestPackagedPlanExecute groups the package's plan-and-execute behavior under
+// one reusable root-built process.
+func TestPackagedPlanExecute(t *testing.T) {
+	fixture := newPlanExecuteSharedFixture(t)
+	t.Run("TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults", func(t *testing.T) {
+		testPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(t, fixture)
+	})
+}
 
-	args := []string{
-		"you", "--json", "run", "--named", factorydefinitions.PackagedPlanExecuteFactoryName,
-		"--provider", "CODEX", "--model", "operator-default-model",
-		"--no-record", "--to", "Deliver the packaged two-stage flow",
-	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = workspace
-	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err != nil {
-		t.Fatalf("plan-execute invocation error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+// testPackagedPlanExecutePlansThenExecutesWithOperatorDefaults proves the
+// customer invocation path dispatches exactly the two documented stages and
+// uses the run-level default provider/model when no role-specific overrides
+// are passed.
+func testPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(
+	t *testing.T,
+	fixture *planExecuteSharedFixture,
+) {
+	runner := &planExecuteRunner{workspace: t.TempDir()}
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	assertPlanExecutePromptContracts(t)
+
+	requestID := fmt.Sprintf("plan-execute-%d", time.Now().UnixNano())
+	args := map[string]any{"request": "Deliver the packaged two-stage flow"}
+	response := postPlanExecuteInvocation(t, scenario, requestID, args)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v", response)
 	}
@@ -54,10 +60,42 @@ func TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(t *testing.T) 
 			t.Fatalf("request[%d] provider selection = command %q args %#v", index, request.Command, request.Args)
 		}
 	}
-	if content, err := os.ReadFile(filepath.Join(workspace, "implemented.txt")); err != nil || string(content) != "implemented from prd\n" {
+	if content, err := os.ReadFile(filepath.Join(runner.workspace, "implemented.txt")); err != nil || string(content) != "implemented from prd\n" {
 		t.Fatalf("implemented artifact = %q, error = %v", content, err)
 	}
 	assertPlanExecutePRDPassed(t, runner.PRDPath())
+}
+
+func postPlanExecuteInvocation(
+	t *testing.T,
+	scenario *planExecuteScenario,
+	requestID string,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	payload, err := json.Marshal(factoryapi.InvocationRequest{
+		RequestId: &requestID,
+		Args:      &args,
+	})
+	if err != nil {
+		t.Fatalf("marshal plan-execute invocation: %v", err)
+	}
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST plan-execute invocation: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST plan-execute invocation status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode plan-execute invocation: %v", err)
+	}
+	return decoded
 }
 
 type planExecuteRunner struct {

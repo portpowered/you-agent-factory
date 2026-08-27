@@ -1,18 +1,20 @@
 package quorum
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -172,76 +174,40 @@ func packagedQuorumContainsArgumentPair(args []string, name, value string) bool 
 	return false
 }
 
-func runPackagedQuorumCLIJSONInvocation(
+func runPackagedQuorumInvocation(
 	t *testing.T,
-	runner platformprocess.CommandRunner,
-	requestText string,
-	extraArgs ...string,
+	scenario *packagedQuorumScenario,
+	args map[string]any,
 ) factoryapi.InvocationResponse {
 	t.Helper()
-
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedQuorumFactoryName)
-
-	args := []string{
-		"you", "--json", "run",
-		"--named", factorydefinitions.PackagedQuorumFactoryName,
-		"--no-record",
-	}
-	args = append(args, extraArgs...)
-	args = append(args, requestText)
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
+	payload, err := json.Marshal(factoryapi.InvocationRequest{
+		RequestId: requestIDForQuorumInvocation(),
+		Args:      &args,
 	})
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
-			args,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
+	if err != nil {
+		t.Fatalf("marshal quorum invocation: %v", err)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST quorum invocation: %v", err)
 	}
-
-	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST quorum invocation status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode quorum invocation: %v", err)
+	}
+	return decoded
 }
 
-func runPackagedQuorumCLIJSONFailureInvocation(
-	t *testing.T,
-	runner platformprocess.CommandRunner,
-	requestText string,
-	extraArgs ...string,
-) (factoryapi.InvocationResponse, string, error) {
-	t.Helper()
-
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedQuorumFactoryName)
-
-	args := []string{
-		"you", "--json", "run",
-		"--named", factorydefinitions.PackagedQuorumFactoryName,
-		"--no-record",
-	}
-	args = append(args, extraArgs...)
-	args = append(args, requestText)
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
-	execErr := process.Execute(inputs.Input)
-
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
-	return response, inputs.Stderr(), execErr
+func requestIDForQuorumInvocation() *string {
+	requestID := fmt.Sprintf("packaged-quorum-%d", time.Now().UnixNano())
+	return &requestID
 }
 
 func assertPackagedQuorumInsufficientSuccessfulMembersFailed(
