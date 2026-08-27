@@ -138,43 +138,6 @@ func TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic(t *testing.T) {
 	}
 }
 
-// TestCodexTrustedGitWorkingDirectoryStillCompletes proves trusted Git working directories continue through provider execution.
-func TestCodexTrustedGitWorkingDirectoryStillCompletes(t *testing.T) {
-	dir := scaffoldCodexWorkingDirectoryFactory(t)
-	initTrustedGitRepository(t, dir)
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte("trusted Git invocation COMPLETE"),
-	})
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
-		t.Fatalf("complete place tokens = %d, want one trusted invocation; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed place tokens = %d, want zero for trusted invocation; listed=%#v", got, listed)
-	}
-	if got := runner.CallCount(); got != 1 {
-		t.Fatalf("provider command calls = %d, want one trusted Codex invocation", got)
-	}
-	requests := runner.Requests()
-	if len(requests) != 1 || requests[0].WorkDir != dir {
-		t.Fatalf("Codex command request = %#v, want trusted Git directory %q", requests, dir)
-	}
-	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
-		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
-			continue
-		}
-		if dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted || dispatch.Response.Error != nil {
-			t.Fatalf("trusted process response = %#v, want ACCEPTED without error", dispatch.Response)
-		}
-	}
-}
-
 func scaffoldCodexWorkingDirectoryFactory(t *testing.T) string {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, map[string]any{

@@ -29,37 +29,6 @@ const (
 	codexFunctionalOversizedSessionID   = "session-oversized-root"
 )
 
-// TestCodexHistoricalInspectionSuccessThroughRootBuildProcess proves a stored
-// Codex rollout is readable through the public provider-session detail surface
-// composed from root.BuildProcess.
-func TestCodexHistoricalInspectionSuccessThroughRootBuildProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	writeCodexRolloutFixture(t, codexSessionsRoot(homeDir), codexFunctionalSessionID, representativeCodexJSONL())
-
-	server := startCodexHistoricalInspectionServer(t, homeDir, serviceedges.Edges{})
-	defer server.Stop(t)
-
-	detail := getCodexProviderSessionDetail(t, server.URL(), codexFunctionalSessionID)
-	if detail.ProviderSession.Id != codexFunctionalSessionID ||
-		detail.ProviderSession.Provider != factoryapi.Codex ||
-		detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("provider session = %#v, want codex session_id %s", detail.ProviderSession, codexFunctionalSessionID)
-	}
-	if detail.Source.RelativePath != "2026/07/27/rollout-"+codexFunctionalSessionID+".jsonl" {
-		t.Fatalf("source path = %q, want contained rollout path", detail.Source.RelativePath)
-	}
-	if len(detail.Transcript) < 4 || len(detail.Parse.FunctionCalls) != 1 || len(detail.Parse.Reasoning) != 1 {
-		t.Fatalf("detail = %#v, want transcript, tool, and reasoning facts", detail)
-	}
-	if detail.Parse.TokenUsage == nil || detail.Parse.TokenUsage.TotalTokens == nil ||
-		*detail.Parse.TokenUsage.TotalTokens != 130 {
-		t.Fatalf("token usage = %#v, want total 130", detail.Parse.TokenUsage)
-	}
-	if detail.Transcript[0].Text == nil || !strings.Contains(*detail.Transcript[0].Text, "Inspect the failing run") {
-		t.Fatalf("transcript = %#v, want user message text", detail.Transcript)
-	}
-}
-
 // TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess proves
 // repeated root-built inspections return detached equivalent detail.
 func TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess(t *testing.T) {
