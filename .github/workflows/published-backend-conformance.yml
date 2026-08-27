@@ -1,0 +1,43 @@
+name: Published LocalAI Backend Conformance
+
+# This low-frequency lane is enabled for the immutable release after the
+# lai-v1-publish-real-backend-artifacts work publishes the manifest's assets.
+# It is deliberately separate from pull-request CI because it performs HEAD
+# requests to public release URLs.
+on:
+  schedule:
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-backend-conformance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify published backend URLs
+    if: >-
+      ${{
+        (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+        github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out current default branch
+        uses: actions/checkout@v4
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Confirm low-frequency event selection
+        run: node scripts/ci/published-backend-conformance-workflow.mjs
+
+      - name: Verify every published backend artifact URL
+        run: make test-backend-conformance-live

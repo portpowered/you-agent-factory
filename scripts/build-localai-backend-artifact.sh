@@ -163,16 +163,25 @@ case "$TARGET_ID:$BACKEND_ID" in
 esac
 
 go_dynamic_loader="none"
+windows_library_name="none"
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	case "$BACKEND_ID" in
-		localai-whisper|localai-vibevoice)
+		localai-whisper)
 			# purego v0.10.0 intentionally exposes Dlopen only on Unix. The
 			# pinned LocalAI Go entrypoints use that API unconditionally, so the
 			# Windows build adds a small build-tagged loader shim below.
 			go_dynamic_loader="xsys-windows"
+			windows_library_name="libgowhisper.dll"
 			;;
-	esac
-fi
+		localai-vibevoice)
+			# The pinned Go backend uses purego's Unix-only Dlopen call and
+			# names its fallback shared object with a Unix suffix. Windows
+			# packages stage the CMake MODULE as this DLL instead.
+			go_dynamic_loader="xsys-windows"
+			windows_library_name="libgovibevoicecpp.dll"
+			;;
+		esac
+	fi
 
 # The pinned gRPC CMake project otherwise lets the Windows generator select
 # C++14, which Abseil rejects before any backend target can compile. The
@@ -193,6 +202,15 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	grpc_protobuf_source="pinned"
 fi
 
+grpc_executable_suffix=""
+if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	# protoc launches protoc-gen-grpc itself on Windows, so the plugin path
+	# passed to CMake must name the PE executable explicitly. MSYS2's shell
+	# can resolve an omitted .exe suffix, but protoc's Windows process launch
+	# cannot.
+	grpc_executable_suffix=".exe"
+fi
+
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_git=""
 	if [[ "$TARGET_ID" == "windows-amd64" && -n "${WINDOWS_GIT_DIR:-}" ]]; then
@@ -203,7 +221,9 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_cmake_make_program=""
 	plan_windows_target=""
 	plan_grpc_protobuf_source=""
+	plan_grpc_executable_suffix=""
 	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
+	plan_windows_library_name=""
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
@@ -211,9 +231,11 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 		plan_cmake_make_program=" cmake_make_program=mingw32-make"
 		plan_windows_target=" windows_minimum_target=$windows_minimum_target"
 		plan_grpc_protobuf_source=" grpc_protobuf_source=$grpc_protobuf_source"
+		plan_grpc_executable_suffix=" grpc_executable_suffix=$grpc_executable_suffix"
+		plan_windows_library_name=" windows_library_name=$windows_library_name"
 	fi
 	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_go_dynamic_loader$plan_grpc_dependency_mode"
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_grpc_executable_suffix$plan_go_dynamic_loader$plan_windows_library_name$plan_grpc_dependency_mode"
 	exit 0
 fi
 
@@ -229,6 +251,9 @@ rm -rf "${backend_path}/package"
 
 cmake_args=()
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	# The pinned cpp-httplib release rejects Windows 8 and older at compile time.
+	# Build the PE artifact against the Windows 10 API surface it requires.
+	windows_minimum_target="0x0A00"
 	# A static vcpkg triplet keeps third-party gRPC/protobuf/abseil libraries out
 	# of the runtime DLL closure. The link flags cover the MinGW C++ runtime;
 	# any remaining native DLL is staged and verified below.
@@ -285,8 +310,8 @@ grpc_added_cmake_args=""
 build_grpc_dependencies() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	local install_path="${grpc_path}/installed_packages"
-	local protoc_path="${install_path}/bin/protoc"
-	local plugin_path="${install_path}/bin/grpc_cpp_plugin"
+	local protoc_path="${install_path}/bin/protoc${grpc_executable_suffix}"
+	local plugin_path="${install_path}/bin/grpc_cpp_plugin${grpc_executable_suffix}"
 	local grpc_cmake_args="${grpc_dependency_cmake_args_text}"
 	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -DProtobuf_INCLUDE_DIRS=${install_path}/include -DProtobuf_PROTOC_EXECUTABLE=${protoc_path} -D_PROTOBUF_PROTOC=${protoc_path} -D_GRPC_CPP_PLUGIN_EXECUTABLE=${plugin_path} -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
 
@@ -314,7 +339,7 @@ build_grpc_dependencies() {
 	# gRPC installs the compiler as protoc. Keep the build in the upstream path,
 	# but make the verified executable available under the name it requests.
 	if [[ ! -e "${install_path}/bin/proto" ]]; then
-		ln -s protoc "${install_path}/bin/proto"
+		ln -s "protoc${grpc_executable_suffix}" "${install_path}/bin/proto"
 	fi
 }
 
@@ -349,7 +374,7 @@ run_direct_grpc_server_make() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	env \
 		"_PROTOBUF_PROTOC=${grpc_path}/installed_packages/bin/proto" \
-		"_GRPC_CPP_PLUGIN_EXECUTABLE=${grpc_path}/installed_packages/bin/grpc_cpp_plugin" \
+		"_GRPC_CPP_PLUGIN_EXECUTABLE=${grpc_path}/installed_packages/bin/grpc_cpp_plugin${grpc_executable_suffix}" \
 		"PATH=${grpc_path}/installed_packages/bin:${PATH}" \
 		CMAKE_ARGS="$cmake_args_text_arg" \
 		"$make_command" -C "$backend_path" "$@"
@@ -379,16 +404,36 @@ fs.writeFileSync(path, source.replace(needle, replacement));
 
 generate_go_protocol() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
-	local protoc_path="${grpc_path}/installed_packages/bin/protoc"
+	local protoc_path="${grpc_path}/installed_packages/bin/protoc${grpc_executable_suffix}"
 	local protocol_output="${LOCALAI_ROOT}/pkg/grpc/proto"
 	local go_bin
+	local go_install_attempts=3
+	local go_install_retry_delay_seconds=5
+
+	install_go_tool() {
+		local module="$1"
+		local attempt
+
+		for ((attempt = 1; attempt <= go_install_attempts; attempt++)); do
+			if go install "$module"; then
+				return 0
+			fi
+			if ((attempt < go_install_attempts)); then
+				echo "retrying Go tool installation ${module} (${attempt}/${go_install_attempts})" >&2
+				sleep "$go_install_retry_delay_seconds"
+			fi
+		done
+
+		echo "failed to install Go tool ${module} after ${go_install_attempts} attempts" >&2
+		return 1
+	}
 
 	go_bin="$(go env GOPATH)/bin"
 	if command -v cygpath >/dev/null 2>&1; then
 		go_bin="$(cygpath -u "$go_bin")"
 	fi
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
+	install_go_tool google.golang.org/grpc/cmd/protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af
+	install_go_tool google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
 	mkdir -p "$protocol_output"
 	PATH="$go_bin:$PATH" "$protoc_path" \
 		--experimental_allow_proto3_optional \
@@ -412,34 +457,11 @@ patch_windows_go_loader() {
 		exit 1
 	fi
 
-	node - "$main_source" "$loader_source" <<'NODE'
-const { readFileSync, writeFileSync } = require("node:fs");
-
-const [mainPath, loaderPath] = process.argv.slice(2);
-const source = readFileSync(mainPath, "utf8");
-const needle = "purego.Dlopen(libName, purego.RTLD_NOW|purego.RTLD_GLOBAL)";
-const occurrences = source.split(needle).length - 1;
-if (occurrences !== 1) {
-	console.error(`expected one purego dynamic-loader call in ${mainPath}, found ${occurrences}`);
-	process.exit(1);
-}
-
-writeFileSync(mainPath, source.replace(needle, "loadBackendLibrary(libName)"));
-writeFileSync(
-	loaderPath,
-	`//go:build windows
-
-package main
-
-import "golang.org/x/sys/windows"
-
-func loadBackendLibrary(name string) (uintptr, error) {
-	handle, err := windows.LoadLibrary(name)
-	return uintptr(handle), err
-}
-`,
-);
-NODE
+	node "${repository_root}/scripts/localai-backend-windows-patch.mjs" \
+		"$main_source" \
+		"$loader_source" \
+		"$windows_library_name" \
+		"$BACKEND_ID"
 }
 
 stage_darwin_llama_package() {
@@ -555,6 +577,33 @@ stage_windows_runtime() {
 	done
 }
 
+run_windows_startup_smoke() {
+	if [[ "$TARGET_ID" != "windows-amd64" ]]; then
+		return
+	fi
+
+	local package_root="${backend_path}/package"
+	local binary_path="${package_root}/${binary}.exe"
+	local smoke_binary="$binary_path"
+	local smoke_workdir="$package_root"
+	if command -v cygpath >/dev/null 2>&1; then
+		smoke_binary="$(cygpath -w "$binary_path")"
+		smoke_workdir="$(cygpath -w "$package_root")"
+	fi
+
+	if [[ ! -s "$binary_path" ]]; then
+		echo "Windows backend startup smoke is missing ${binary_path}" >&2
+		exit 1
+	fi
+	echo "Starting packaged Windows backend for loopback health/protocol smoke: ${smoke_binary}"
+	(
+		cd "$repository_root"
+		go run ./scripts/localai-backend-startup-smoke.go \
+			--binary "$smoke_binary" \
+			--workdir "$smoke_workdir"
+	)
+}
+
 build_grpc_dependencies
 generate_go_protocol
 
@@ -631,6 +680,7 @@ case "$build_strategy" in
 esac
 
 package_root="${backend_path}/package"
+run_windows_startup_smoke
 node "$workflow_script" verify-payload \
 	--package-root "$package_root" \
 	--binary "$binary" \

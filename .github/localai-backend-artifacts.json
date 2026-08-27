@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "packagingRevision": 2,
   "nodeVersion": "22.14.0",
   "localaiRepository": "https://github.com/mudler/LocalAI.git",
   "localaiCommit": "b224c96db6f4b87306a33a808650bfce63b12588",

@@ -10,12 +10,14 @@ import {
 	createManifest,
 	loadConfig,
 	matrixForConfig,
+	minimumPublishedArchiveSizeBytes,
 	publicationIdentity,
 	validateConfig,
 	verifyPayload,
 	verifyManifestArchives,
 	writePublicationBundle,
 } from "./localai-backend-artifact-workflow.mjs";
+import { patchWindowsGoLoader } from "./localai-backend-windows-patch.mjs";
 
 const config = loadConfig();
 
@@ -55,6 +57,12 @@ test("matrix validation rejects mutable refs, floating runners, and extra target
 	assert.ok(result.errors.some((error) => error.includes("localaiCommit")));
 	assert.ok(result.errors.some((error) => error.includes("runner must not be floating")));
 	assert.ok(result.errors.some((error) => error.includes("targets must be exactly")));
+});
+
+test("publication identity requires an explicit packaging revision", () => {
+	const invalid = structuredClone(config);
+	delete invalid.packagingRevision;
+	assert.throws(() => publicationIdentity(invalid), /packagingRevision must be a positive safe integer/);
 });
 
 test("each target payload verifier checks the native executable identity", async (t) => {
@@ -156,7 +164,7 @@ function metadataFixture(backend, target) {
 		},
 		protocol: { path: config.protocolPath, revision: config.protocolRevision },
 		toolchain: { ...config.toolchain, grpcCommit: config.grpcCommit, vcpkgCommit: config.vcpkgCommit },
-		buildInputs: { nodeVersion: config.nodeVersion, actionPins: config.workflowPins, hostToolchain: config.hostToolchain },
+		buildInputs: { nodeVersion: config.nodeVersion, packagingRevision: config.packagingRevision, actionPins: config.workflowPins, hostToolchain: config.hostToolchain },
 		payload: { binary: backend.binary, makeTarget: backend.makeTarget },
 	};
 }
@@ -167,11 +175,17 @@ async function matrixArtifactFixture(t) {
 	for (const backend of config.backends) {
 		for (const target of config.targets) {
 			const archiveName = artifactArchiveName({ backend, target });
-			await writeFile(join(root, archiveName), Buffer.from(`${backend.id}/${target.id}`));
+			await writeFile(join(root, archiveName), archiveFixtureBytes(backend, target));
 			await writeFile(join(root, `${archiveName}.metadata.json`), `${JSON.stringify(metadataFixture(backend, target))}\n`);
 		}
 	}
 	return root;
+}
+
+function archiveFixtureBytes(backend, target) {
+	const bytes = Buffer.alloc(minimumPublishedArchiveSizeBytes + 1, 0x42);
+	bytes.write(`${backend.id}/${target.id}`);
+	return bytes;
 }
 
 test("the join emits one P1 manifest for the exact nine archives and re-verifies their bytes", async (t) => {
@@ -188,6 +202,7 @@ test("the join emits one P1 manifest for the exact nine archives and re-verifies
 	assert.equal(result.manifest.kind, "localai-backend-artifacts");
 	assert.equal(result.manifest.artifacts.length, 9);
 	assert.equal(result.manifest.publication.releaseTag, publicationIdentity(config).releaseTag);
+	assert.equal(result.manifest.publication.packagingRevision, config.packagingRevision);
 	const artifact = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/darwin-arm64");
 	assert.equal(artifact.target.operatingSystem, "darwin");
 	assert.deepEqual(artifact.target.accelerators, ["metal"]);
@@ -195,7 +210,7 @@ test("the join emits one P1 manifest for the exact nine archives and re-verifies
 	assert.equal(artifact.protocol.revision, config.protocolRevision);
 	assert.match(artifact.artifact.location, new RegExp(`/${result.manifest.publication.releaseTag}/`));
 	assert.match(artifact.artifact.sha256, /^[0-9a-f]{64}$/);
-	assert.equal(artifact.artifact.sizeBytes, Buffer.from("localai-llamacpp/darwin-arm64").length);
+	assert.equal(artifact.artifact.sizeBytes, minimumPublishedArchiveSizeBytes + 1);
 	assert.deepEqual((await readdir(outputRoot)).sort(), [
 		"localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
 		"localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
@@ -271,7 +286,9 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		cmake_make_program: "mingw32-make",
 		windows_minimum_target: "0x0602",
 		grpc_protobuf_source: "pinned",
+		grpc_executable_suffix: ".exe",
 		go_dynamic_loader: "none",
+		windows_library_name: "none",
 		grpc_dependency_mode: "standalone",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
@@ -297,9 +314,74 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		"xsys-windows",
 	);
 	assert.equal(
+		buildPlan({ backend: "localai-whisper", target: "windows-amd64", buildType: "cpu" }).windows_library_name,
+		"libgowhisper.dll",
+	);
+	assert.equal(
 		buildPlan({ backend: "localai-vibevoice", target: "windows-amd64", buildType: "cpu" }).go_dynamic_loader,
 		"xsys-windows",
 	);
+	assert.equal(
+		buildPlan({ backend: "localai-vibevoice", target: "windows-amd64", buildType: "cpu" }).windows_library_name,
+		"libgovibevoicecpp.dll",
+	);
+});
+
+test("the join rejects every config-derived placeholder archive before adoption", async (t) => {
+	const matrixRoot = await matrixArtifactFixture(t);
+	for (const backend of config.backends) {
+		for (const target of config.targets) {
+			const archiveName = artifactArchiveName({ backend, target });
+			for (const size of [minimumPublishedArchiveSizeBytes, minimumPublishedArchiveSizeBytes - 1]) {
+				await writeFile(join(matrixRoot, archiveName), Buffer.alloc(size));
+				assert.throws(
+					() => createManifest({ config, artifactDirectory: matrixRoot, repository: "portpowered/infinite-you" }),
+					new RegExp(`${backend.id}/${target.id} archive is placeholder-sized at ${size} bytes`),
+				);
+			}
+			await writeFile(join(matrixRoot, archiveName), archiveFixtureBytes(backend, target));
+		}
+	}
+});
+
+test("placeholder rejection leaves the previously adopted bundle untouched", async (t) => {
+	const matrixRoot = await matrixArtifactFixture(t);
+	const placeholder = artifactArchiveName({ backend: config.backends[0], target: config.targets[0] });
+	await writeFile(join(matrixRoot, placeholder), Buffer.alloc(minimumPublishedArchiveSizeBytes));
+
+	const outputRoot = await mkdtemp(join(tmpdir(), "localai-backend-existing-release-"));
+	t.after(() => rm(outputRoot, { recursive: true, force: true }));
+	const previousManifest = join(outputRoot, "previous-manifest.json");
+	await writeFile(previousManifest, "previous immutable release");
+
+	assert.throws(
+		() => writePublicationBundle({
+			config,
+			artifactDirectory: matrixRoot,
+			outputDirectory: outputRoot,
+			repository: "portpowered/infinite-you",
+		}),
+		/placeholder-sized/,
+	);
+	assert.deepEqual((await readdir(outputRoot)).sort(), ["previous-manifest.json"]);
+	assert.equal(await readFile(previousManifest, "utf8"), "previous immutable release");
+});
+
+test("the workflow uses immutable actions, package inputs, and the pinned tag guard", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
+	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
+	assert.doesNotMatch(workflow, /update:\s*true/);
+	assert.doesNotMatch(workflow, /apt-get/);
+	assert.doesNotMatch(workflow, /brew install make\b/);
+	assert.match(workflow, /windows_vcpkg_triplet/);
+	assert.match(
+		workflow,
+		/vcpkg\.exe install grpc:\$\{\{ needs\.validate-inputs\.outputs\.windows_vcpkg_triplet \}\}[^\n]*--overlay-triplets=\$overlayTriplets/,
+	);
+	assert.match(workflow, /git\/ref\/tags/);
+	assert.match(workflow, /git\/tags/);
+	assert.match(workflow, /exists but its target could not be resolved/);
 });
 
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
@@ -362,7 +444,7 @@ function windowsBuildTimeout(workflow) {
 	if (!stepTimeout) throw new Error("Windows backend build must have an explicit step timeout");
 	const jobMinutes = Number(jobTimeout[1]);
 	const windowsMinutes = Number(stepTimeout[1]);
-	if (windowsMinutes < 45 || windowsMinutes > 60) throw new Error("Windows backend build timeout must be between 45 and 60 minutes");
+	if (windowsMinutes < 45 || windowsMinutes > 300) throw new Error("Windows backend build timeout must be between 45 and 300 minutes");
 	if (windowsMinutes >= jobMinutes) throw new Error("Windows backend build timeout must be below the build job timeout");
 	if (/^\s+timeout-minutes:/m.test(unixBuild[1])) throw new Error("Darwin/Linux backend build must retain the job timeout");
 	return { jobMinutes, windowsMinutes };
@@ -370,32 +452,91 @@ function windowsBuildTimeout(workflow) {
 
 test("the Windows backend build has a bounded platform-specific step timeout", async () => {
 	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
-	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 360, windowsMinutes: 60 });
+	assert.deepEqual(windowsBuildTimeout(workflow), { jobMinutes: 360, windowsMinutes: 300 });
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 44")),
-		/Windows backend build timeout must be between 45 and 60 minutes/,
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 300", "timeout-minutes: 44")),
+		/Windows backend build timeout must be between 45 and 300 minutes/,
 	);
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 60", "timeout-minutes: 61")),
-		/Windows backend build timeout must be between 45 and 60 minutes/,
+		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 300", "timeout-minutes: 301")),
+		/Windows backend build timeout must be between 45 and 300 minutes/,
 	);
 	assert.throws(
 		() => windowsBuildTimeout(workflow.replace("timeout-minutes: 360", "timeout-minutes: 60")),
 		/Windows backend build timeout must be below the build job timeout/,
 	);
 	assert.throws(
-		() => windowsBuildTimeout(workflow.replace("        timeout-minutes: 60\n", "")),
+		() => windowsBuildTimeout(workflow.replace("        timeout-minutes: 300\n", "")),
 		/Windows backend build must have an explicit step timeout/,
 	);
+	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
+	assert.match(buildScript, /backend\/cpp\/grpc/);
+	assert.match(buildScript, /compatibility_path="\$\{LOCALAI_ROOT\}\/backend\/grpc"/);
+	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
+	assert.match(buildScript, /windows_minimum_target="0x0A00"/);
+	assert.match(buildScript, /-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=\$\{windows_minimum_target\}/);
+	assert.match(buildScript, /grpc-server/);
+	assert.match(buildScript, /llama-cpp-cpu-all/);
+	assert.match(buildScript, /localai-backend-startup-smoke\.go/);
+	const startupSmoke = await readFile("scripts/localai-backend-startup-smoke.go", "utf8");
+	assert.match(startupSmoke, /LOCALAI_BACKEND_STARTUP_OK/);
+	});
+
+test("the Windows Go patch selects the staged DLL and adapts Whisper callbacks", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-patch-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const mainPath = join(root, "main.go");
+	const loaderPath = join(root, "localai-backend-library_windows.go");
+	await writeFile(
+		mainPath,
+		[
+			"package main",
+			"",
+			"import (",
+			'\t"os"',
+			'\t"runtime"',
+			'\t"github.com/ebitengine/purego"',
+			")",
+			"",
+			"func onNewSegment(int32, int32, uintptr) {}",
+			"",
+			"func main() {",
+			'\tlibName := os.Getenv("WHISPER_LIBRARY")',
+			'\tif libName == "" {',
+			'\t\tif runtime.GOOS == "darwin" {',
+			'\t\t\tlibName = "./libgowhisper-fallback.dylib"',
+			'\t\t} else {',
+			'\t\t\tlibName = "./libgowhisper-fallback.so"',
+			"\t\t}",
+			"\t}",
+			"\tgosd, err := purego.Dlopen(libName, purego.RTLD_NOW|purego.RTLD_GLOBAL)",
+			"\t_ = gosd",
+			"\t_ = err",
+			"\t_ = purego.NewCallback(onNewSegment)",
+			"}",
+			"",
+		].join("\n"),
+	);
+
+	patchWindowsGoLoader({ mainPath, loaderPath, libraryName: "libgowhisper.dll", backendID: "localai-whisper" });
+	const patchedMain = await readFile(mainPath, "utf8");
+	const loader = await readFile(loaderPath, "utf8");
+	assert.match(patchedMain, /loadBackendLibrary\(libName\)/);
+	assert.match(patchedMain, /runtime\.GOOS == "windows"/);
+	assert.match(patchedMain, /libName = "\.\/libgowhisper\.dll"/);
+	assert.match(patchedMain, /purego\.NewCallback\(localAINewSegmentCallback\)/);
+	assert.match(loader, /\/\/go:build windows/);
+	assert.match(loader, /windows\.LoadLibrary/);
+	assert.match(loader, /func localAINewSegmentCallback\([^)]*\) uintptr/);
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
 	const root = await matrixArtifactFixture(t);
 	const manifest = createManifest({ config, artifactDirectory: root, repository: "portpowered/infinite-you" });
 	const archiveName = manifest.artifacts[0].artifact.name;
-	await writeFile(join(root, archiveName), "tampered bytes");
+	await writeFile(join(root, archiveName), Buffer.alloc(minimumPublishedArchiveSizeBytes + 1, 0x43));
 	assert.throws(
-		() => verifyManifestArchives({ manifest, artifactDirectory: root }),
+		() => verifyManifestArchives({ config, manifest, artifactDirectory: root }),
 		/integrity mismatch/,
 	);
 });

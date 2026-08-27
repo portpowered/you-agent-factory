@@ -204,9 +204,10 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: you-agent-factory
         shell: msys2 {0}
-        # Keep the Windows build below the job ceiling without changing the
-        # existing Darwin/Linux build budget.
-        timeout-minutes: 60
+        # The pinned static gRPC dependency graph can take more than an hour
+        # on a hosted Windows runner. Keep the step below the job ceiling so
+        # the backend build, package closure, and startup smoke can finish.
+        timeout-minutes: 300
         run: |
           set -euo pipefail
           bash scripts/build-localai-backend-artifact.sh
@@ -353,11 +354,6 @@ jobs:
             return 1
           }
 
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "immutable backend release already exists: $RELEASE_TAG" >&2
-            exit 1
-          fi
-
           if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             if ! existing_tag_target="$(resolve_tag_target "$RELEASE_TAG")"; then
               echo "immutable backend tag $RELEASE_TAG exists but its target could not be resolved" >&2
@@ -368,22 +364,44 @@ jobs:
               exit 1
             fi
             echo "reusing existing immutable tag $RELEASE_TAG at $GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/$RELEASE_TAG" \
+              -f "sha=$GITHUB_SHA" >/dev/null
+            echo "created immutable tag $RELEASE_TAG at $GITHUB_SHA"
           fi
-
-          gh release create "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --draft \
-            --title "Pinned LocalAI backends $RELEASE_TAG" \
-            --notes "Complete nine-platform backend publication. The release remains draft until every archive and manifest asset is uploaded."
 
           created_tag_target="$(resolve_tag_target "$RELEASE_TAG")"
           if [[ "$created_tag_target" != "$GITHUB_SHA" ]]; then
-            echo "release tag $RELEASE_TAG resolved to $created_tag_target after creation, expected $GITHUB_SHA" >&2
+            echo "immutable backend tag $RELEASE_TAG resolved to $created_tag_target after creation, expected $GITHUB_SHA" >&2
             exit 1
           fi
 
-          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" .artifacts/release/*
-          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+          release_rows="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | [.id, (.draft | tostring)] | @tsv")"
+          if [[ -n "$release_rows" ]]; then
+            release_row="${release_rows%%$'\n'*}"
+            IFS=$'\t' read -r release_id release_is_draft <<< "$release_row"
+            if [[ "$release_is_draft" != "true" ]]; then
+              echo "immutable backend release already exists: $RELEASE_TAG" >&2
+              exit 1
+            fi
+            echo "reusing existing draft backend release $RELEASE_TAG id=$release_id"
+          else
+            release_id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f "tag_name=$RELEASE_TAG" \
+              -f "target_commitish=$GITHUB_SHA" \
+              -f "name=Pinned LocalAI backends $RELEASE_TAG" \
+              -f "body=Complete nine-platform backend publication. The release remains draft until every archive and manifest asset is uploaded." \
+              -F draft=true \
+              --jq '.id')"
+            echo "created draft backend release $RELEASE_TAG id=$release_id"
+          fi
+
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber .artifacts/release/*
           printf '{"draft":false}\n' | gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" --input - >/dev/null
+          published_tag_target="$(resolve_tag_target "$RELEASE_TAG")"
+          if [[ "$published_tag_target" != "$GITHUB_SHA" ]]; then
+            echo "published backend tag $RELEASE_TAG resolved to $published_tag_target, expected $GITHUB_SHA" >&2
+            exit 1
+          fi
           echo "LOCALAI_BACKEND_RELEASE_PUBLISHED tag=$RELEASE_TAG assets=10"

@@ -33,6 +33,7 @@ jobs:
       run_readme: ${{ steps.classify.outputs.run_readme != 'false' }}
       run_frontend: ${{ steps.classify.outputs.run_frontend != 'false' }}
       run_backend: ${{ steps.classify.outputs.run_backend != 'false' }}
+      run_backend_conformance: ${{ steps.classify.outputs.run_backend_conformance != 'false' }}
       run_ui_backend_integration: ${{ steps.classify.outputs.run_ui_backend_integration != 'false' }}
       run_api_package: ${{ steps.classify.outputs.run_api_package != 'false' }}
       run_packaged_factories_package: ${{ steps.classify.outputs.run_packaged_factories_package != 'false' }}
@@ -41,6 +42,7 @@ jobs:
       readme_reason: ${{ steps.classify.outputs.readme_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       frontend_reason: ${{ steps.classify.outputs.frontend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       backend_reason: ${{ steps.classify.outputs.backend_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
+      backend_conformance_reason: ${{ steps.classify.outputs.backend_conformance_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       ui_backend_integration_reason: ${{ steps.classify.outputs.ui_backend_integration_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       api_package_reason: ${{ steps.classify.outputs.api_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
       packaged_factories_package_reason: ${{ steps.classify.outputs.packaged_factories_package_reason || steps.classify.outputs.reason || 'Conservative full verification.' }}
@@ -59,7 +61,7 @@ jobs:
         run: go run ./cmd/ciclassify -base "${{ github.event.pull_request.base.sha }}" -head "${{ github.event.pull_request.head.sha }}"
       - if: github.event_name != 'pull_request'
         run: |
-          for lane in docs_reference readme frontend backend ui_backend_integration api_package packaged_factories_package model_providers_package; do
+          for lane in docs_reference readme frontend backend backend_conformance ui_backend_integration api_package packaged_factories_package model_providers_package; do
             echo "run_${lane}=true" >> "$GITHUB_OUTPUT"
           done
           echo "classification=full" >> "$GITHUB_OUTPUT"
@@ -585,6 +587,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  backend-conformance:
+    name: Backend Conformance
+    needs: classify
+    if: always() && needs.classify.outputs.run_backend_conformance != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Run offline backend conformance guard
+        run: make test-backend-conformance
+
   backend-lint:
     name: Backend Lint
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -804,7 +823,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-test-stability, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-unit-latency, backend-test-stability, backend-conformance, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -825,6 +844,7 @@ jobs:
           RUN_README: ${{ needs.classify.outputs.run_readme }}
           RUN_FRONTEND: ${{ needs.classify.outputs.run_frontend }}
           RUN_BACKEND: ${{ needs.classify.outputs.run_backend }}
+          RUN_BACKEND_CONFORMANCE: ${{ needs.classify.outputs.run_backend_conformance }}
           RUN_UI_BACKEND: ${{ needs.classify.outputs.run_ui_backend_integration }}
           RUN_API: ${{ needs.classify.outputs.run_api_package }}
           RUN_PACKAGED: ${{ needs.classify.outputs.run_packaged_factories_package }}
@@ -833,6 +853,7 @@ jobs:
           README_REASON: ${{ needs.classify.outputs.readme_reason }}
           FRONTEND_REASON: ${{ needs.classify.outputs.frontend_reason }}
           BACKEND_REASON: ${{ needs.classify.outputs.backend_reason }}
+          BACKEND_CONFORMANCE_REASON: ${{ needs.classify.outputs.backend_conformance_reason }}
           UI_BACKEND_REASON: ${{ needs.classify.outputs.ui_backend_integration_reason }}
           API_REASON: ${{ needs.classify.outputs.api_package_reason }}
           PACKAGED_REASON: ${{ needs.classify.outputs.packaged_factories_package_reason }}
@@ -852,6 +873,7 @@ jobs:
           RUN_BACKEND_UNIT_LATENCY: "true"
           BACKEND_UNIT_LATENCY_REASON: "The canonical three-sample uncached unit-lane latency budget is required on every pull request and push to main."
           BACKEND_UNIT_LATENCY_RESULT: ${{ needs.backend-unit-latency.result }}
+          BACKEND_CONFORMANCE_RESULT: ${{ needs.backend-conformance.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
