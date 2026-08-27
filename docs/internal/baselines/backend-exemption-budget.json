@@ -609,12 +609,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/factory/packaged/tts/invocation_test.go#scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go#TestPetriParentOrSameNameGuardReleasesExpectedWork",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."

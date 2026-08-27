@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,197 +11,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-type packagedTTSFakeProvider struct {
-	testutil.ProviderServiceAdapter
-	mu           sync.Mutex
-	audio        []byte
-	artifactRoot string
-	audioPath    string
-	calls        int
-	last         *workerexecution.ProviderInferenceRequest
-}
-
-func newPackagedTTSFakeProvider(t testing.TB, audio []byte) *packagedTTSFakeProvider {
-	t.Helper()
-	provider := &packagedTTSFakeProvider{
-		audio:        append([]byte(nil), audio...),
-		artifactRoot: t.TempDir(),
-	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
-	return provider
-}
-
-func (provider *packagedTTSFakeProvider) callCount() int {
-	if provider == nil {
-		return 0
-	}
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	return provider.calls
-}
-
-func (provider *packagedTTSFakeProvider) lastAudioPath() string {
-	if provider == nil {
-		return ""
-	}
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	return provider.audioPath
-}
-
-func (provider *packagedTTSFakeProvider) lastRequest() *workerexecution.ProviderInferenceRequest {
-	if provider == nil {
-		return nil
-	}
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	if provider.last == nil {
-		return nil
-	}
-	cloned := workerexecution.CloneProviderInferenceRequest(*provider.last)
-	return &cloned
-}
-
-func (provider *packagedTTSFakeProvider) ownedArtifactRoot() string {
-	if provider == nil {
-		return ""
-	}
-	return provider.artifactRoot
-}
-
-func (provider *packagedTTSFakeProvider) Infer(
-	_ context.Context,
-	request workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	provider.mu.Lock()
-	provider.calls++
-	callNumber := provider.calls
-	cloned := workerexecution.CloneProviderInferenceRequest(request)
-	provider.last = &cloned
-	provider.mu.Unlock()
-	if strings.TrimSpace(request.ModelOperation) != "TTS" {
-		return workerexecution.InferenceResponse{}, fmt.Errorf(
-			"packaged tts fake provider unexpected operation %q",
-			request.ModelOperation,
-		)
-	}
-
-	outputFile := filepath.Join(provider.artifactRoot, fmt.Sprintf("audio-%d.wav", callNumber))
-	if err := os.WriteFile(outputFile, provider.audio, 0o644); err != nil {
-		return workerexecution.InferenceResponse{}, fmt.Errorf("write fake tts audio artifact: %w", err)
-	}
-	provider.mu.Lock()
-	provider.audioPath = outputFile
-	provider.mu.Unlock()
-
-	encoded, err := json.Marshal([]work.WorkContentPart{{
-		Type:        work.WorkContentPartTypeAudio,
-		File:        outputFile,
-		ContentType: "audio/wav",
-		Slot:        "audio",
-	}})
-	if err != nil {
-		return workerexecution.InferenceResponse{}, fmt.Errorf("marshal fake tts audio content: %w", err)
-	}
-	return workerexecution.InferenceResponse{
-		Content: string(encoded),
-		Diagnostics: &workerexecution.WorkDiagnostics{
-			Metadata: map[string]string{
-				workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
-			},
-		},
-	}, nil
-}
-
-type packagedTTSFailingFakeProvider struct {
-	testutil.ProviderServiceAdapter
-	mu           sync.Mutex
-	calls        int
-	last         *workerexecution.ProviderInferenceRequest
-	failMessage  string
-	artifactRoot string
-}
-
-func newPackagedTTSFailingFakeProvider(t testing.TB, message string) *packagedTTSFailingFakeProvider {
-	t.Helper()
-	provider := &packagedTTSFailingFakeProvider{
-		failMessage:  message,
-		artifactRoot: t.TempDir(),
-	}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
-	return provider
-}
-
-func (provider *packagedTTSFailingFakeProvider) callCount() int {
-	if provider == nil {
-		return 0
-	}
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	return provider.calls
-}
-
-func (provider *packagedTTSFailingFakeProvider) lastRequest() *workerexecution.ProviderInferenceRequest {
-	if provider == nil {
-		return nil
-	}
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	if provider.last == nil {
-		return nil
-	}
-	cloned := workerexecution.CloneProviderInferenceRequest(*provider.last)
-	return &cloned
-}
-
-func (provider *packagedTTSFailingFakeProvider) lastAudioPath() string {
-	return ""
-}
-
-func (provider *packagedTTSFailingFakeProvider) ownedArtifactRoot() string {
-	if provider == nil {
-		return ""
-	}
-	return provider.artifactRoot
-}
-
-func (provider *packagedTTSFailingFakeProvider) Infer(
-	_ context.Context,
-	request workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	provider.mu.Lock()
-	provider.calls++
-	cloned := workerexecution.CloneProviderInferenceRequest(request)
-	provider.last = &cloned
-	provider.mu.Unlock()
-	if strings.TrimSpace(request.ModelOperation) != "TTS" {
-		return workerexecution.InferenceResponse{}, fmt.Errorf(
-			"packaged tts failing fake provider unexpected operation %q",
-			request.ModelOperation,
-		)
-	}
-	return workerexecution.InferenceResponse{}, errors.New(provider.failMessage)
-}
-
-// overwritePackagedTTSFactoryWithProviderFakeTopology keeps the installed
+// overwritePackagedTTSFactoryWithCommandRunnerTopology keeps the installed
 // @you/tts layout but replaces authored topology with a cloud-backed inference
-// worker that reaches the provider override fake edge.
-func overwritePackagedTTSFactoryWithProviderFakeTopology(t *testing.T, factoryDir string) {
-	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
-}
-
+// worker that reaches the ProviderCommandRunner edge.
 func overwritePackagedTTSFactoryWithCommandRunnerTopology(t *testing.T, factoryDir string) {
 	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
 }
@@ -561,31 +380,6 @@ func postPackagedTTSInvocationWithArgsContext(
 		return factoryapi.InvocationResponse{}, fmt.Errorf("decode POST %s response: %w", endpoint, err)
 	}
 	return decoded, nil
-}
-
-func modelBindingJSON(
-	bindings []workerexecution.ResolvedModelOperationBinding,
-	slot string,
-) (json.RawMessage, bool) {
-	for _, binding := range bindings {
-		if binding.Slot != slot || len(binding.Content) == 0 {
-			continue
-		}
-		part := binding.Content[0]
-		if len(part.JSON) > 0 {
-			return part.JSON, true
-		}
-	}
-	return nil, false
-}
-
-func stringValueFromBindingJSON(payload json.RawMessage, key string) string {
-	var decoded map[string]any
-	if err := json.Unmarshal(payload, &decoded); err != nil {
-		return ""
-	}
-	value, _ := decoded[key].(string)
-	return value
 }
 
 func invocationTextSourceKindPtr() *factoryapi.InvocationInputSourceKind {

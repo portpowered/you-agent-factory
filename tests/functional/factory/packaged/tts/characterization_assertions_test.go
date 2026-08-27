@@ -2,15 +2,85 @@ package tts
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func assertPackagedTTSCommandRequest(
+	t testing.TB,
+	request platformprocess.CommandRequest,
+	wantWorkDir string,
+) {
+	t.Helper()
+	if request.Command != "codex" {
+		t.Fatalf("packaged TTS command = %q, want codex", request.Command)
+	}
+	wantArgs := []string{"exec", "--json", "--model", factorydefinitions.DefaultTTSModelName, "-"}
+	if !reflect.DeepEqual(request.Args, wantArgs) {
+		t.Fatalf("packaged TTS command args = %#v, want %#v", request.Args, wantArgs)
+	}
+	if request.WorkDir != wantWorkDir {
+		t.Fatalf("packaged TTS command workdir = %q, want scenario factory %q", request.WorkDir, wantWorkDir)
+	}
+	if strings.TrimSpace(string(request.Stdin)) == "" {
+		t.Fatal("packaged TTS command prompt is empty, want provider input")
+	}
+}
+
+func assertPackagedTTSResolvedBindings(
+	t testing.TB,
+	event *factoryapi.FactoryEvent,
+	wantVoice, wantFormat string,
+) {
+	t.Helper()
+	payload, err := event.Payload.AsModelResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode packaged MODEL_RESPONSE %q: %v", event.Id, err)
+	}
+	if payload.Bindings == nil {
+		t.Fatalf("packaged MODEL_RESPONSE bindings = nil, want voice and format bindings")
+	}
+	assertPackagedTTSResolvedJSONBinding(t, *payload.Bindings, "voice", wantVoice)
+	assertPackagedTTSResolvedJSONBinding(t, *payload.Bindings, "format", wantFormat)
+}
+
+func assertPackagedTTSResolvedJSONBinding(
+	t testing.TB,
+	bindings []factoryapi.ResolvedModelOperationBinding,
+	wantSlot, wantValue string,
+) {
+	t.Helper()
+	for _, binding := range bindings {
+		if binding.Slot != wantSlot {
+			continue
+		}
+		if len(binding.Content) != 1 {
+			t.Fatalf("packaged MODEL_RESPONSE %s binding content = %#v, want one JSON part", wantSlot, binding.Content)
+		}
+		part, err := binding.Content[0].AsWorkJsonContentPart()
+		if err != nil {
+			t.Fatalf("decode packaged MODEL_RESPONSE %s binding JSON: %v", wantSlot, err)
+		}
+		object, ok := part.Json.(map[string]interface{})
+		if !ok {
+			t.Fatalf("packaged MODEL_RESPONSE %s binding JSON = %#v, want object", wantSlot, part.Json)
+		}
+		got, ok := object["name"].(string)
+		if !ok || got != wantValue {
+			t.Fatalf("packaged MODEL_RESPONSE %s binding name = %#v, want %q", wantSlot, object["name"], wantValue)
+		}
+		return
+	}
+	t.Fatalf("packaged MODEL_RESPONSE bindings = %#v, want %s slot", bindings, wantSlot)
+}
 
 func assertPackagedTTSInvocationResponseIdentity(
 	t *testing.T,

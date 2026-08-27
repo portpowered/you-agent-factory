@@ -15,149 +15,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const packagedTTSSharedFixtureTimeout = 30 * time.Second
-
-type packagedTTSProviderOutcome interface {
-	Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
-	callCount() int
-	lastRequest() *workerexecution.ProviderInferenceRequest
-	lastAudioPath() string
-	ownedArtifactRoot() string
-}
-
-// packagedTTSInferenceBarrier makes the concurrent isolation witness
-// deterministic: both model calls must cross the shared provider boundary
-// before either controlled outcome is released.
-type packagedTTSInferenceBarrier struct {
-	mu       sync.Mutex
-	entered  int
-	expected int
-	released bool
-	release  chan struct{}
-}
-
-func newPackagedTTSInferenceBarrier(expected int) *packagedTTSInferenceBarrier {
-	return &packagedTTSInferenceBarrier{
-		expected: expected,
-		release:  make(chan struct{}),
-	}
-}
-
-func (barrier *packagedTTSInferenceBarrier) wait(ctx context.Context) error {
-	if barrier == nil {
-		return nil
-	}
-	barrier.mu.Lock()
-	barrier.entered++
-	if barrier.entered >= barrier.expected && !barrier.released {
-		barrier.released = true
-		close(barrier.release)
-	}
-	barrier.mu.Unlock()
-	select {
-	case <-barrier.release:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-// packagedTTSSharedProvider routes each controlled model outcome by the
-// request identity carried through the real Providers boundary. The registry
-// is synchronized because the same process is deliberately usable by the
-// selected concurrent-isolation witness.
-type packagedTTSSharedProvider struct {
-	testutil.ProviderServiceAdapter
-
-	mu      sync.Mutex
-	routes  map[string]packagedTTSProviderOutcome
-	barrier *packagedTTSInferenceBarrier
-}
-
-func newPackagedTTSSharedProvider() *packagedTTSSharedProvider {
-	provider := &packagedTTSSharedProvider{routes: make(map[string]packagedTTSProviderOutcome)}
-	provider.ProviderServiceAdapter.InferFunc = provider.Infer
-	return provider
-}
-
-func (provider *packagedTTSSharedProvider) register(
-	selector string,
-	outcome packagedTTSProviderOutcome,
-) error {
-	selector = strings.TrimSpace(selector)
-	if selector == "" {
-		return fmt.Errorf("TTS route selector is required")
-	}
-	if outcome == nil {
-		return fmt.Errorf("TTS route %q has no provider outcome", selector)
-	}
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	if _, exists := provider.routes[selector]; exists {
-		return fmt.Errorf("TTS route selector %q is already registered", selector)
-	}
-	provider.routes[selector] = outcome
-	return nil
-}
-
-func (provider *packagedTTSSharedProvider) unregister(selector string) error {
-	selector = strings.TrimSpace(selector)
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	if _, exists := provider.routes[selector]; !exists {
-		return fmt.Errorf("TTS route selector %q is not registered", selector)
-	}
-	delete(provider.routes, selector)
-	return nil
-}
-
-func (provider *packagedTTSSharedProvider) routeCount() int {
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	return len(provider.routes)
-}
-
-func (provider *packagedTTSSharedProvider) setInferenceBarrier(
-	barrier *packagedTTSInferenceBarrier,
-) {
-	provider.mu.Lock()
-	defer provider.mu.Unlock()
-	provider.barrier = barrier
-}
-
-func (provider *packagedTTSSharedProvider) Infer(
-	ctx context.Context,
-	request workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	selector := strings.TrimSpace(request.Correlation.RequestID)
-	if selector == "" {
-		selector = strings.TrimSpace(request.Dispatch.Execution.RequestID)
-	}
-	provider.mu.Lock()
-	outcome := provider.routes[selector]
-	barrier := provider.barrier
-	provider.mu.Unlock()
-	if outcome == nil {
-		return workerexecution.InferenceResponse{}, fmt.Errorf(
-			"no packaged TTS route registered for request %q",
-			selector,
-		)
-	}
-	if err := barrier.wait(ctx); err != nil {
-		return workerexecution.InferenceResponse{}, err
-	}
-	return outcome.Infer(ctx, request)
-}
 
 // packagedTTSSharedHTTPServer counts the one loopback transport start owned
 // by the parent group while delegating all server behavior to the functional
@@ -165,12 +31,17 @@ func (provider *packagedTTSSharedProvider) Infer(
 type packagedTTSSharedHTTPServer struct {
 	server *support.ProcessAPIServer
 
-	mu     sync.Mutex
-	starts int
+	mu       sync.Mutex
+	starts   int
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 func newPackagedTTSSharedHTTPServer() *packagedTTSSharedHTTPServer {
-	return &packagedTTSSharedHTTPServer{server: support.NewProcessAPIServer()}
+	return &packagedTTSSharedHTTPServer{
+		server: support.NewProcessAPIServer(),
+		done:   make(chan struct{}),
+	}
 }
 
 func (server *packagedTTSSharedHTTPServer) start(
@@ -180,6 +51,7 @@ func (server *packagedTTSSharedHTTPServer) start(
 	server.mu.Lock()
 	server.starts++
 	server.mu.Unlock()
+	defer server.doneOnce.Do(func() { close(server.done) })
 	return server.server.Start(ctx, request)
 }
 
@@ -189,6 +61,15 @@ func (server *packagedTTSSharedHTTPServer) startCount() int {
 	return server.starts
 }
 
+func (server *packagedTTSSharedHTTPServer) waitClosed(ctx context.Context) error {
+	select {
+	case <-server.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 type packagedTTSSharedFixture struct {
 	rootDir         string
 	baseFactoryDir  string
@@ -196,7 +77,7 @@ type packagedTTSSharedFixture struct {
 	process         support.ApplicationProcess
 	command         *support.ProcessCommand
 	api             *packagedTTSSharedHTTPServer
-	provider        *packagedTTSSharedProvider
+	commandRunner   *packagedTTSSharedCommandRunner
 	mu              sync.Mutex
 	childSessionIDs []string
 	artifactRoots   []string
@@ -219,17 +100,19 @@ func newPackagedTTSSharedFixture(t *testing.T) *packagedTTSSharedFixture {
 	}
 
 	api := newPackagedTTSSharedHTTPServer()
-	provider := newPackagedTTSSharedProvider()
+	commandRunner := newPackagedTTSSharedCommandRunner()
+	processBuilds := 0
 	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter: api.start,
-		ProviderOverride: provider,
+		APIServerStarter:      api.start,
+		ProviderCommandRunner: commandRunner,
 	})
+	processBuilds++
 	fixture := &packagedTTSSharedFixture{
 		rootDir:       rootDir,
 		process:       process,
 		api:           api,
-		provider:      provider,
-		processBuilds: 1,
+		commandRunner: commandRunner,
+		processBuilds: processBuilds,
 	}
 
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
@@ -268,7 +151,7 @@ type packagedTTSSharedScenario struct {
 	factoryDir   string
 	sessionID    string
 	selector     string
-	provider     packagedTTSProviderOutcome
+	outcome      packagedTTSEdgeOutcome
 	artifactRoot string
 	cleanupOnce  sync.Once
 }
@@ -304,14 +187,14 @@ func (fixture *packagedTTSSharedFixture) openPackagedScenario(
 	if optionalVoiceAndFormat {
 		overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t, factoryDir)
 	} else {
-		overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
+		overwritePackagedTTSFactoryWithCommandRunnerTopology(t, factoryDir)
 	}
 	return fixture.openScenario(
 		t,
 		homeDir,
 		factoryDir,
 		selector,
-		newPackagedTTSFakeProvider(t, []byte(packagedTTSFakeAudioFixture)),
+		newPackagedTTSSuccessOutcome(t, []byte(packagedTTSFakeAudioFixture)),
 	)
 }
 
@@ -331,14 +214,14 @@ func (fixture *packagedTTSSharedFixture) openPackagedFailureScenario(
 	if optionalVoiceAndFormat {
 		overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t, factoryDir)
 	} else {
-		overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
+		overwritePackagedTTSFactoryWithCommandRunnerTopology(t, factoryDir)
 	}
 	return fixture.openScenario(
 		t,
 		homeDir,
 		factoryDir,
 		selector,
-		newPackagedTTSFailingFakeProvider(t, failureMessage),
+		newPackagedTTSFailureOutcome(t, failureMessage),
 	)
 }
 
@@ -354,7 +237,7 @@ func (fixture *packagedTTSSharedFixture) openGenericScenario(
 		homeDir,
 		factoryDir,
 		selector,
-		newPackagedTTSFakeProvider(t, []byte(packagedTTSFakeAudioFixture)),
+		newPackagedTTSSuccessOutcome(t, []byte(packagedTTSFakeAudioFixture)),
 	)
 }
 
@@ -370,14 +253,14 @@ func (fixture *packagedTTSSharedFixture) openGenericFailureScenario(
 		homeDir,
 		factoryDir,
 		selector,
-		newPackagedTTSFailingFakeProvider(t, failureMessage),
+		newPackagedTTSFailureOutcome(t, failureMessage),
 	)
 }
 
 func (fixture *packagedTTSSharedFixture) openScenario(
 	t *testing.T,
 	homeDir, factoryDir, selector string,
-	outcome packagedTTSProviderOutcome,
+	outcome packagedTTSEdgeOutcome,
 ) *packagedTTSSharedScenario {
 	t.Helper()
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
@@ -388,14 +271,14 @@ func (fixture *packagedTTSSharedFixture) openScenario(
 	if sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("shared TTS child session id = %q, want explicit non-default session", sessionID)
 	}
-	if err := fixture.provider.register(selector, outcome); err != nil {
+	if err := fixture.commandRunner.register(selector, factoryDir, outcome); err != nil {
 		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
 		t.Fatalf("register shared TTS route %q: %v", selector, err)
 	}
 
 	scenario := &packagedTTSSharedScenario{
 		fixture: fixture, homeDir: homeDir, factoryDir: factoryDir,
-		sessionID: sessionID, selector: selector, provider: outcome,
+		sessionID: sessionID, selector: selector, outcome: outcome,
 		artifactRoot: outcome.ownedArtifactRoot(),
 	}
 	fixture.addActiveScenario(sessionID, scenario.artifactRoot)
@@ -409,7 +292,7 @@ func (scenario *packagedTTSSharedScenario) cleanup(t testing.TB) {
 	}
 	scenario.cleanupOnce.Do(func() {
 		support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
-		if err := scenario.fixture.provider.unregister(scenario.selector); err != nil {
+		if err := scenario.fixture.commandRunner.unregister(scenario.selector); err != nil {
 			t.Errorf("unregister shared TTS route %q: %v", scenario.selector, err)
 		}
 		removePackagedTTSOwnedPath(t, scenario.artifactRoot)
@@ -464,6 +347,9 @@ func (fixture *packagedTTSSharedFixture) close(t testing.TB) {
 		if err := fixture.process.Close(closeCtx); err != nil {
 			t.Errorf("close shared TTS application process: %v", err)
 		}
+		if err := fixture.api.waitClosed(closeCtx); err != nil {
+			t.Errorf("wait for shared TTS API server shutdown: %v", err)
+		}
 	})
 }
 
@@ -478,21 +364,19 @@ func (fixture *packagedTTSSharedFixture) finalize(t testing.TB) {
 
 func assertPackagedTTSListenerClosed(t testing.TB, baseURL string) {
 	t.Helper()
+	// fixture.api.waitClosed observes the injected starter returning before this
+	// single connection check. A process-stop signal is deterministic here; a
+	// polling/sleep loop would only hide a lifecycle race.
 	client := &http.Client{Timeout: 250 * time.Millisecond}
+	defer client.CloseIdleConnections()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
-	deadline := time.Now().Add(5 * time.Second)
-	var lastResponse string
-	for time.Now().Before(deadline) {
-		response, err := client.Get(endpoint)
-		if err != nil {
-			return
-		}
-		body, readErr := io.ReadAll(response.Body)
-		response.Body.Close()
-		lastResponse = fmt.Sprintf("status=%d body=%q readError=%v", response.StatusCode, strings.TrimSpace(string(body)), readErr)
-		time.Sleep(10 * time.Millisecond)
+	response, err := client.Get(endpoint)
+	if err != nil {
+		return
 	}
-	t.Errorf("shared TTS listener at %s remains reachable after process cleanup: %s", endpoint, lastResponse)
+	defer response.Body.Close()
+	body, readErr := io.ReadAll(response.Body)
+	t.Errorf("shared TTS listener at %s remains reachable after process cleanup: status=%d body=%q readError=%v", endpoint, response.StatusCode, strings.TrimSpace(string(body)), readErr)
 }
 
 func removeString(values []string, target string) []string {
@@ -553,18 +437,11 @@ func runPackagedTTSSharedRequiredInput(
 	assertPackagedTTSInvocationResponseIdentityForSession(t, response, scenario.sessionID, requestID)
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	assertPackagedTTSProviderRequestForSession(
-		t,
-		scenario.provider.lastRequest(),
-		text,
-		"execute-tts",
-		scenario.sessionID,
-		requestID,
-	)
-	if scenario.provider.callCount() != 1 {
-		t.Fatalf("shared required-input provider calls = %d, want one", scenario.provider.callCount())
+	assertPackagedTTSCommandRequest(t, scenario.outcome.lastRequest(), scenario.factoryDir)
+	if scenario.outcome.callCount() != 1 {
+		t.Fatalf("shared required-input command calls = %d, want one", scenario.outcome.callCount())
 	}
-	artifactPath := scenario.provider.lastAudioPath()
+	artifactPath := scenario.outcome.lastAudioPath()
 	assertPackagedTTSAudioBytes(t, artifactPath)
 
 	listed := listPackagedTTSSessionWork(t, fixture.baseURL, scenario.sessionID)
@@ -593,18 +470,11 @@ func runPackagedTTSSharedWorkEvents(
 	}
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	assertPackagedTTSProviderRequestForSession(
-		t,
-		scenario.provider.lastRequest(),
-		text,
-		"tts-dispatch",
-		scenario.sessionID,
-		requestID,
-	)
-	if scenario.provider.callCount() != 1 {
-		t.Fatalf("shared Work/events provider calls = %d, want one", scenario.provider.callCount())
+	assertPackagedTTSCommandRequest(t, scenario.outcome.lastRequest(), scenario.factoryDir)
+	if scenario.outcome.callCount() != 1 {
+		t.Fatalf("shared Work/events command calls = %d, want one", scenario.outcome.callCount())
 	}
-	artifactPath := scenario.provider.lastAudioPath()
+	artifactPath := scenario.outcome.lastAudioPath()
 	assertPackagedTTSAudioBytes(t, artifactPath)
 
 	listed := listPackagedTTSSessionWork(t, fixture.baseURL, scenario.sessionID)
@@ -638,31 +508,20 @@ func runPackagedTTSSharedOptionalVoiceAndFormat(
 	assertPackagedTTSInvocationResponseIdentityForSession(t, response, scenario.sessionID, requestID)
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	request := scenario.provider.lastRequest()
-	assertPackagedTTSProviderRequestForSession(t, request, text, "execute-tts", scenario.sessionID, requestID)
-	if request == nil {
-		t.Fatal("shared optional voice/format provider request is nil")
+	request := scenario.outcome.lastRequest()
+	assertPackagedTTSCommandRequest(t, request, scenario.factoryDir)
+	if scenario.outcome.callCount() != 1 {
+		t.Fatalf("shared optional voice/format command calls = %d, want one", scenario.outcome.callCount())
 	}
-	if voiceBinding, ok := modelBindingJSON(request.ModelBindings, "voice"); !ok {
-		t.Fatalf("shared model bindings = %#v, want voice slot binding", request.ModelBindings)
-	} else if got := stringValueFromBindingJSON(voiceBinding, "name"); got != voice {
-		t.Fatalf("shared voice binding name = %q, want %q", got, voice)
-	}
-	if formatBinding, ok := modelBindingJSON(request.ModelBindings, "format"); !ok {
-		t.Fatalf("shared model bindings = %#v, want format slot binding", request.ModelBindings)
-	} else if got := stringValueFromBindingJSON(formatBinding, "name"); got != format {
-		t.Fatalf("shared format binding name = %q, want %q", got, format)
-	}
-	if scenario.provider.callCount() != 1 {
-		t.Fatalf("shared optional voice/format provider calls = %d, want one", scenario.provider.callCount())
-	}
-	artifactPath := scenario.provider.lastAudioPath()
+	artifactPath := scenario.outcome.lastAudioPath()
 	assertPackagedTTSAudioBytes(t, artifactPath)
 
 	listed := listPackagedTTSSessionWork(t, fixture.baseURL, scenario.sessionID)
 	outputWork := packagedTTSCompletedMetadataWork(t, listed, artifactPath, response.TraceId)
 	audio := packagedTTSExpectedAudioPart(t, artifactPath)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, scenario.sessionID)
+	observed := collectFactoryTTSDispatchEvents(t, events, scenario.sessionID)
+	assertPackagedTTSResolvedBindings(t, observed.modelResponse, voice, format)
 	assertPackagedTTSSuccessEventsForSession(
 		t, events, scenario.sessionID, outputWork, text, audio, artifactPath, response.TraceId,
 	)
@@ -686,12 +545,12 @@ func runPackagedTTSSharedGenericFailure(
 	}
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	request := scenario.provider.lastRequest()
-	assertPackagedTTSProviderRequestForSession(t, request, text, "tts-dispatch", scenario.sessionID, requestID)
-	if scenario.provider.callCount() != 1 {
-		t.Fatalf("shared generic failure provider calls = %d, want one", scenario.provider.callCount())
+	request := scenario.outcome.lastRequest()
+	assertPackagedTTSCommandRequest(t, request, scenario.factoryDir)
+	if scenario.outcome.callCount() != 1 {
+		t.Fatalf("shared generic failure command calls = %d, want one", scenario.outcome.callCount())
 	}
-	assertPackagedTTSNoArtifact(t, scenario.provider)
+	assertPackagedTTSNoArtifact(t, scenario.outcome)
 
 	listed := listPackagedTTSSessionWork(t, fixture.baseURL, scenario.sessionID)
 	failedWork := factoryTTSFailedWork(t, listed)
@@ -731,12 +590,12 @@ func runPackagedTTSSharedPackagedModelFailure(
 	assertPackagedTTSInvocationResponseIdentityForSession(t, response, scenario.sessionID, requestID)
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	request := scenario.provider.lastRequest()
-	assertPackagedTTSProviderRequestForSession(t, request, text, "execute-tts", scenario.sessionID, requestID)
-	if scenario.provider.callCount() != 1 {
-		t.Fatalf("shared packaged model failure provider calls = %d, want one", scenario.provider.callCount())
+	request := scenario.outcome.lastRequest()
+	assertPackagedTTSCommandRequest(t, request, scenario.factoryDir)
+	if scenario.outcome.callCount() != 1 {
+		t.Fatalf("shared packaged model failure command calls = %d, want one", scenario.outcome.callCount())
 	}
-	assertPackagedTTSNoArtifact(t, scenario.provider)
+	assertPackagedTTSNoArtifact(t, scenario.outcome)
 
 	listed := listPackagedTTSSessionWork(t, fixture.baseURL, scenario.sessionID)
 	failedWork := factoryTTSFailedWork(t, listed)
@@ -755,146 +614,7 @@ func runPackagedTTSSharedPackagedModelFailure(
 	return sharedTTSSharedEvidence(t, "packaged_model_failure", scenario, requestID, failedWork, events, "")
 }
 
-type packagedTTSConcurrentInvocationResult struct {
-	name     string
-	response factoryapi.InvocationResponse
-	err      error
-}
-
-func runPackagedTTSSharedConcurrentIsolation(
-	t *testing.T,
-	fixture *packagedTTSSharedFixture,
-) {
-	t.Helper()
-	const (
-		successRequestID = "tts-shared-concurrent-success"
-		failureRequestID = "tts-shared-concurrent-failure"
-		successText      = "functional shared concurrent packaged tts success"
-		failureText      = "functional shared concurrent packaged tts failure"
-		voice            = "alloy"
-		format           = "mp3"
-		failureMessage   = "omnivoice concurrent invoke failed: exit status 1"
-	)
-	success := fixture.openPackagedScenario(t, successRequestID, true)
-	failure := fixture.openPackagedFailureScenario(t, failureRequestID, failureMessage, true)
-
-	barrier := newPackagedTTSInferenceBarrier(2)
-	fixture.provider.setInferenceBarrier(barrier)
-	results := make(chan packagedTTSConcurrentInvocationResult, 2)
-	go func() {
-		response, err := postPackagedTTSInvocationWithArgsContext(
-			t.Context(), fixture.baseURL, success.sessionID, successRequestID,
-			map[string]any{"text": successText, "voice": voice, "format": format},
-		)
-		results <- packagedTTSConcurrentInvocationResult{name: "success", response: response, err: err}
-	}()
-	go func() {
-		response, err := postPackagedTTSInvocationWithArgsContext(
-			t.Context(), fixture.baseURL, failure.sessionID, failureRequestID,
-			map[string]any{"text": failureText, "voice": voice, "format": format},
-		)
-		results <- packagedTTSConcurrentInvocationResult{name: "failure", response: response, err: err}
-	}()
-
-	var successResult, failureResult packagedTTSConcurrentInvocationResult
-	for range 2 {
-		result := <-results
-		switch result.name {
-		case "success":
-			successResult = result
-		case "failure":
-			failureResult = result
-		default:
-			t.Fatalf("concurrent TTS result has unknown name %q", result.name)
-		}
-	}
-	fixture.provider.setInferenceBarrier(nil)
-	if successResult.err != nil {
-		t.Fatalf("concurrent success invocation error = %v", successResult.err)
-	}
-	if failureResult.err != nil {
-		t.Fatalf("concurrent failure invocation error = %v", failureResult.err)
-	}
-	if successResult.response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("concurrent success response = %#v, want COMPLETED", successResult.response)
-	}
-	if failureResult.response.Status != factoryapi.InvocationTerminalStatusFailed {
-		t.Fatalf("concurrent failure response = %#v, want FAILED", failureResult.response)
-	}
-	if failureResult.response.ErrorCode == nil || *failureResult.response.ErrorCode != factoryapi.INVOCATIONTTSGENERATIONFAILED {
-		t.Fatalf("concurrent failure errorCode = %#v, want INVOCATION_TTS_GENERATION_FAILED", failureResult.response.ErrorCode)
-	}
-	assertPackagedTTSInvocationResponseIdentityForSession(t, successResult.response, success.sessionID, successRequestID)
-	assertPackagedTTSInvocationResponseIdentityForSession(t, failureResult.response, failure.sessionID, failureRequestID)
-	if primaryResultContainsTTSArtifactMetadata(t, failureResult.response.PrimaryResult) {
-		t.Fatalf("concurrent failure primary result = %#v, want no success-shaped artifact metadata", failureResult.response.PrimaryResult)
-	}
-
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, success.sessionID, packagedTTSSharedFixtureTimeout)
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, failure.sessionID, packagedTTSSharedFixtureTimeout)
-	successRequest := success.provider.lastRequest()
-	failureRequest := failure.provider.lastRequest()
-	assertPackagedTTSProviderRequestForSession(t, successRequest, successText, "execute-tts", success.sessionID, successRequestID)
-	assertPackagedTTSProviderRequestForSession(t, failureRequest, failureText, "execute-tts", failure.sessionID, failureRequestID)
-	assertPackagedTTSOptionalBindings(t, successRequest, voice, format)
-	assertPackagedTTSOptionalBindings(t, failureRequest, voice, format)
-	if success.provider.callCount() != 1 || failure.provider.callCount() != 1 {
-		t.Fatalf("concurrent provider calls = success:%d failure:%d, want one each", success.provider.callCount(), failure.provider.callCount())
-	}
-
-	successArtifactPath := success.provider.lastAudioPath()
-	assertPackagedTTSAudioBytes(t, successArtifactPath)
-	assertPackagedTTSNoArtifact(t, failure.provider)
-	successListed := listPackagedTTSSessionWork(t, fixture.baseURL, success.sessionID)
-	failureListed := listPackagedTTSSessionWork(t, fixture.baseURL, failure.sessionID)
-	successWork := packagedTTSCompletedMetadataWork(t, successListed, successArtifactPath, successResult.response.TraceId)
-	failureWork := factoryTTSFailedWork(t, failureListed)
-	successAudio := packagedTTSExpectedAudioPart(t, successArtifactPath)
-	successEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, success.sessionID)
-	failureEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, failure.sessionID)
-	assertPackagedTTSSuccessEventsForSession(
-		t, successEvents, success.sessionID, successWork, successText, successAudio,
-		successArtifactPath, successResult.response.TraceId,
-	)
-	assertPackagedTTSResponseCorrelatesWithEventsForSession(t, successResult.response, successEvents, success.sessionID)
-	failureObserved := collectFactoryTTSDispatchEvents(t, failureEvents, failure.sessionID)
-	failureWorkID := *failureWork.WorkId
-	failureTraceID := factoryTTSRequiredTraceID(t, failureObserved.workRequest)
-	failureDispatchID := factoryTTSRequiredContextID(t, failureObserved.dispatchRequest, "dispatch")
-	assertFactoryTTSContextCorrelation(t, failureObserved, failureWorkID, failureRequestID, failureTraceID, failureDispatchID)
-	assertPackagedTTSWorkRequest(t, failureObserved.workRequest, failureWorkID, failureText)
-	assertPackagedTTSDispatchRequest(t, failureObserved.dispatchRequest, failureWorkID)
-	assertFactoryTTSFailureModelEvents(t, failureObserved, failureMessage)
-	assertPackagedTTSFailureDispatchResponse(t, failureObserved.dispatchResponse, failureWorkID, failureText, failureMessage)
-	assertPackagedTTSResponseCorrelatesWithEventsForSession(t, failureResult.response, failureEvents, failure.sessionID)
-	assertPackagedTTSNoArtifactEvents(t, failureEvents)
-
-	successEvidence := sharedTTSSharedEvidence(t, "concurrent_success", success, successRequestID, successWork, successEvents, successArtifactPath)
-	failureEvidence := sharedTTSSharedEvidence(t, "concurrent_failure", failure, failureRequestID, failureWork, failureEvents, "")
-	assertPackagedTTSConcurrentEvidenceDisjoint(t, successEvidence, failureEvidence)
-	success.cleanup(t)
-	failure.cleanup(t)
-}
-
-func assertPackagedTTSOptionalBindings(
-	t *testing.T,
-	request *workerexecution.ProviderInferenceRequest,
-	wantVoice, wantFormat string,
-) {
-	t.Helper()
-	if voiceBinding, ok := modelBindingJSON(request.ModelBindings, "voice"); !ok {
-		t.Fatalf("shared model bindings = %#v, want voice slot binding", request.ModelBindings)
-	} else if got := stringValueFromBindingJSON(voiceBinding, "name"); got != wantVoice {
-		t.Fatalf("shared voice binding name = %q, want %q", got, wantVoice)
-	}
-	if formatBinding, ok := modelBindingJSON(request.ModelBindings, "format"); !ok {
-		t.Fatalf("shared model bindings = %#v, want format slot binding", request.ModelBindings)
-	} else if got := stringValueFromBindingJSON(formatBinding, "name"); got != wantFormat {
-		t.Fatalf("shared format binding name = %q, want %q", got, wantFormat)
-	}
-}
-
-func assertPackagedTTSNoArtifact(t testing.TB, outcome packagedTTSProviderOutcome) {
+func assertPackagedTTSNoArtifact(t testing.TB, outcome packagedTTSEdgeOutcome) {
 	t.Helper()
 	if path := outcome.lastAudioPath(); strings.TrimSpace(path) != "" {
 		t.Fatalf("failed shared TTS outcome recorded audio path %q, want no artifact", path)
@@ -1001,16 +721,16 @@ func sharedTTSSharedEvidence(
 func (fixture *packagedTTSSharedFixture) assertDuplicateRouteRejected(t *testing.T) error {
 	t.Helper()
 	selector := "tts-shared-duplicate-selector"
-	first := newPackagedTTSFakeProvider(t, []byte(packagedTTSFakeAudioFixture))
-	second := newPackagedTTSFakeProvider(t, []byte(packagedTTSFakeAudioFixture))
-	if err := fixture.provider.register(selector, first); err != nil {
+	first := newPackagedTTSSuccessOutcome(t, []byte(packagedTTSFakeAudioFixture))
+	second := newPackagedTTSSuccessOutcome(t, []byte(packagedTTSFakeAudioFixture))
+	if err := fixture.commandRunner.register(selector, fixture.baseFactoryDir, first); err != nil {
 		return fmt.Errorf("register first duplicate-selector route: %w", err)
 	}
-	if err := fixture.provider.register(selector, second); err == nil {
-		_ = fixture.provider.unregister(selector)
+	if err := fixture.commandRunner.register(selector, fixture.baseFactoryDir, second); err == nil {
+		_ = fixture.commandRunner.unregister(selector)
 		return fmt.Errorf("duplicate TTS route selector %q was accepted", selector)
 	}
-	if err := fixture.provider.unregister(selector); err != nil {
+	if err := fixture.commandRunner.unregister(selector); err != nil {
 		return fmt.Errorf("cleanup duplicate-selector route: %w", err)
 	}
 	for label, root := range map[string]string{
@@ -1024,8 +744,8 @@ func (fixture *packagedTTSSharedFixture) assertDuplicateRouteRejected(t *testing
 			return fmt.Errorf("%s root %q remains; stat error: %v", label, root, err)
 		}
 	}
-	if fixture.provider.routeCount() != 0 {
-		return fmt.Errorf("duplicate TTS route cleanup changed registry count to %d, want zero", fixture.provider.routeCount())
+	if fixture.commandRunner.routeCount() != 0 {
+		return fmt.Errorf("duplicate TTS route cleanup changed registry count to %d, want zero", fixture.commandRunner.routeCount())
 	}
 	return nil
 }
@@ -1037,8 +757,8 @@ func (fixture *packagedTTSSharedFixture) assertInvalidSessionOpenRejected(t *tes
 	if status != http.StatusBadRequest {
 		t.Fatalf("invalid shared TTS session open status = %d, want 400: %s", status, strings.TrimSpace(string(body)))
 	}
-	if fixture.provider.routeCount() != 0 {
-		t.Fatalf("invalid shared TTS session open left %d provider routes", fixture.provider.routeCount())
+	if fixture.commandRunner.routeCount() != 0 {
+		t.Fatalf("invalid shared TTS session open left %d command routes", fixture.commandRunner.routeCount())
 	}
 }
 
@@ -1098,8 +818,8 @@ func (fixture *packagedTTSSharedFixture) assertSharedEligibleEvidence(
 			t.Fatalf("shared %s temporary state root = %q, want removed; stat error = %v", item.name, item.homeDir, err)
 		}
 	}
-	if got := fixture.provider.routeCount(); got != 0 {
-		t.Fatalf("shared TTS provider route count after child cleanup = %d, want zero", got)
+	if got := fixture.commandRunner.routeCount(); got != 0 {
+		t.Fatalf("shared TTS command route count after child cleanup = %d, want zero", got)
 	}
 }
 
