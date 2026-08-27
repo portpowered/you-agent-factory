@@ -1,0 +1,256 @@
+name: Regenerate Shared CI Baselines
+
+# CI's Backend Unit Latency job is the source of the three real hosted samples.
+# Waiting for its completed workflow_run keeps regeneration tied to delivered
+# checks instead of racing an in-progress main push or inventing local samples.
+# The source run may fail because a baseline is stale; artifact and generator
+# validation, rather than the source conclusion alone, decide publication.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-ci-baseline-regeneration
+  cancel-in-progress: true
+
+jobs:
+  reconcile:
+    name: Reconcile shared CI baselines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    env:
+      # This must be a repository-approved dedicated bot or GitHub App token
+      # with contents:write, pull-requests:write, and actions:read. A separate
+      # credential is required because GITHUB_TOKEN-created pushes do not start
+      # the normal pull_request CI workflow.
+      GH_TOKEN: ${{ secrets.SHARED_BASELINE_BOT_TOKEN }}
+      REPOSITORY: ${{ github.repository }}
+      DEFAULT_BRANCH: main
+      BOT_BRANCH: automation/shared-ci-baselines
+      DEADCODE_BASELINE: docs/internal/baselines/deadcode-baseline.txt
+      UNIT_BUDGET_BASELINE: docs/internal/baselines/go-unit-lane-latency-budget.v1.json
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      SOURCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+    steps:
+      - name: Validate the completed source CI identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event.workflow_run.name }}" != "CI" ]]; then
+            echo "::error title=Unexpected source workflow::Expected CI, received ${{ github.event.workflow_run.name }}" >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.workflow_run.head_branch }}" != "$DEFAULT_BRANCH" ]]; then
+            echo "::error title=Unexpected source branch::Expected $DEFAULT_BRANCH, received ${{ github.event.workflow_run.head_branch }}" >&2
+            exit 1
+          fi
+          if [[ "${{ github.event.workflow_run.conclusion }}" != "success" ]]; then
+            echo "::warning title=Source CI was not green::CI run $SOURCE_RUN_ID concluded with ${{ github.event.workflow_run.conclusion }}; publication still requires complete valid hosted evidence."
+          fi
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error title=Missing bot credential::Configure SHARED_BASELINE_BOT_TOKEN as the approved bot/App credential; no branch or pull request was created." >&2
+            exit 1
+          fi
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error title=Invalid source revision::Expected a complete commit SHA, received $SOURCE_SHA" >&2
+            exit 1
+          fi
+
+      - name: Check out the delivered main revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download the exact unit-latency evidence from source CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- .artifacts/unit-latency
+          mkdir -p .artifacts/unit-latency
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$REPOSITORY" \
+            --name backend-unit-latency-evidence \
+            --dir .artifacts/unit-latency
+          for ordinal in 1 2 3; do
+            sample=".artifacts/unit-latency/run-${ordinal}.v2.json"
+            if [[ ! -s "$sample" ]]; then
+              echo "::error title=Missing unit-latency evidence::Expected non-empty $sample from source CI run $SOURCE_RUN_ID" >&2
+              exit 1
+            fi
+          done
+
+      - name: Prepare the serialized automation branch
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          current_main_sha="$(git rev-parse "origin/$DEFAULT_BRANCH")"
+          if [[ "$current_main_sha" != "$SOURCE_SHA" ]]; then
+            echo "::notice title=Superseded baseline run::main moved to $current_main_sha while this source run was completing; newer CI owns reconciliation."
+            echo "reconcile=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git ls-remote --exit-code --heads origin "$BOT_BRANCH" >/dev/null 2>&1; then
+            git fetch --force origin "refs/heads/$BOT_BRANCH:refs/remotes/origin/$BOT_BRANCH"
+            bot_branch_exists=true
+            bot_branch_sha="$(git rev-parse "origin/$BOT_BRANCH")"
+          else
+            bot_branch_exists=false
+            bot_branch_sha=""
+          fi
+          git switch --detach "$SOURCE_SHA"
+          git switch -C "$BOT_BRANCH" "$SOURCE_SHA"
+          echo "main_sha=$current_main_sha" >> "$GITHUB_OUTPUT"
+          echo "bot_branch_exists=$bot_branch_exists" >> "$GITHUB_OUTPUT"
+          echo "bot_branch_sha=$bot_branch_sha" >> "$GITHUB_OUTPUT"
+          echo "reconcile=true" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate both shared baselines from delivered checks
+        if: steps.prepare.outputs.reconcile == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          make regenerate-shared-ci-baselines \
+            BASELINE_REGEN_ROOT=. \
+            UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" \
+            UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json"
+
+      - name: Validate generated working-tree scope
+        id: candidate
+        if: steps.prepare.outputs.reconcile == 'true'
+        shell: bash
+        run: node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree --github-output "$GITHUB_OUTPUT"
+
+      - name: Close an obsolete PR after a no-diff regeneration
+        if: steps.prepare.outputs.reconcile == 'true' && steps.candidate.outputs.changed != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr_json="$(gh pr list --repo "$REPOSITORY" --state open --base "$DEFAULT_BRANCH" --head "$BOT_BRANCH" --json number,url --limit 10)"
+          pr_count="$(jq 'length' <<<"$pr_json")"
+          if [[ "$pr_count" -gt 1 ]]; then
+            echo "::error title=Duplicate baseline PRs::Found $pr_count open PRs for $BOT_BRANCH; refusing to select one." >&2
+            exit 1
+          fi
+          if [[ "$pr_count" == "1" ]]; then
+            pr_number="$(jq -r '.[0].number' <<<"$pr_json")"
+            gh pr close "$pr_number" --repo "$REPOSITORY" \
+              --comment "The latest successful main CI run regenerated no changes; this reconciliation is no longer needed."
+            echo "Closed obsolete shared-baseline PR #$pr_number."
+          else
+            echo "Shared CI baselines already match main; no commit or pull request is needed."
+          fi
+
+      - name: Publish or reuse the bot branch and pull request
+        if: steps.prepare.outputs.reconcile == 'true' && steps.candidate.outputs.changed == 'true'
+        shell: bash
+        env:
+          MAIN_SHA: ${{ steps.prepare.outputs.main_sha }}
+          BOT_BRANCH_EXISTS: ${{ steps.prepare.outputs.bot_branch_exists }}
+          BOT_BRANCH_SHA: ${{ steps.prepare.outputs.bot_branch_sha }}
+          CHANGED_PATHS: ${{ steps.candidate.outputs.paths }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree --require-changes
+
+          candidate_matches_remote=false
+          if [[ "$BOT_BRANCH_EXISTS" == "true" ]]; then
+            remote_paths="$(git diff --name-only "$MAIN_SHA" "origin/$BOT_BRANCH" | sort -u)"
+            if printf '%s\n' "$remote_paths" | node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-paths >/dev/null; then
+              candidate_matches_remote=true
+              for path in "$DEADCODE_BASELINE" "$UNIT_BUDGET_BASELINE"; do
+                if ! git diff --quiet "origin/$BOT_BRANCH" -- "$path"; then
+                  candidate_matches_remote=false
+                  break
+                fi
+              done
+            fi
+          fi
+
+          if [[ "$candidate_matches_remote" == "true" ]]; then
+            echo "Existing bot branch already contains the exact generated candidate; no second commit will be created."
+            git reset --hard "$MAIN_SHA"
+            commit_sha="$BOT_BRANCH_SHA"
+          else
+            git fetch --force origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+            latest_main_sha="$(git rev-parse "origin/$DEFAULT_BRANCH")"
+            if [[ "$latest_main_sha" != "$MAIN_SHA" ]]; then
+              echo "::notice title=Superseded baseline candidate::main moved to $latest_main_sha before publication; newer CI owns reconciliation."
+              exit 0
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- "$DEADCODE_BASELINE" "$UNIT_BUDGET_BASELINE"
+            node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-staged
+            git commit -m "$SHARED_BASELINE_PR_TITLE"
+            gh auth setup-git --hostname github.com
+            if [[ -n "$BOT_BRANCH_SHA" ]]; then
+              git push --force-with-lease="refs/heads/$BOT_BRANCH:$BOT_BRANCH_SHA" origin "$BOT_BRANCH:$BOT_BRANCH"
+            else
+              git push --force-with-lease origin "$BOT_BRANCH:$BOT_BRANCH"
+            fi
+            commit_sha="$(git rev-parse HEAD)"
+          fi
+
+          git fetch --force origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          latest_main_sha="$(git rev-parse "origin/$DEFAULT_BRANCH")"
+          if [[ "$latest_main_sha" != "$MAIN_SHA" ]]; then
+            echo "::notice title=Superseded published candidate::main moved to $latest_main_sha before PR reconciliation; newer CI owns the fixed branch."
+            exit 0
+          fi
+
+          pr_json="$(gh pr list --repo "$REPOSITORY" --state open --base "$DEFAULT_BRANCH" --head "$BOT_BRANCH" --json number,url --limit 10)"
+          pr_count="$(jq 'length' <<<"$pr_json")"
+          if [[ "$pr_count" -gt 1 ]]; then
+            echo "::error title=Duplicate baseline PRs::Found $pr_count open PRs for $BOT_BRANCH; refusing to select one." >&2
+            exit 1
+          fi
+          pr_body="$(node scripts/ci/shared-baseline-regeneration-workflow.mjs render-body \
+            --source-sha "$MAIN_SHA" \
+            --commit-sha "$commit_sha" \
+            --run-url "$SOURCE_RUN_URL" \
+            --paths "$CHANGED_PATHS")"
+          if [[ "$pr_count" == "1" ]]; then
+            pr_number="$(jq -r '.[0].number' <<<"$pr_json")"
+            gh pr edit "$pr_number" --repo "$REPOSITORY" \
+              --title "$SHARED_BASELINE_PR_TITLE" --body "$pr_body"
+          else
+            pr_url="$(gh pr create --repo "$REPOSITORY" --base "$DEFAULT_BRANCH" --head "$BOT_BRANCH" \
+              --title "$SHARED_BASELINE_PR_TITLE" --body "$pr_body")"
+            pr_number="$(gh pr view "$pr_url" --repo "$REPOSITORY" --json number --jq '.number')"
+          fi
+
+          pr_metadata="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json baseRefName,headRefName,headRefOid,isDraft,files)"
+          if [[ "$(jq -r '.baseRefName' <<<"$pr_metadata")" != "$DEFAULT_BRANCH" || "$(jq -r '.headRefName' <<<"$pr_metadata")" != "$BOT_BRANCH" ]]; then
+            echo "::error title=Unexpected baseline PR refs::PR #$pr_number does not target $DEFAULT_BRANCH from $BOT_BRANCH." >&2
+            exit 1
+          fi
+          if [[ "$(jq -r '.headRefOid' <<<"$pr_metadata")" != "$commit_sha" ]]; then
+            echo "::error title=Stale baseline PR head::PR #$pr_number does not point to generated commit $commit_sha." >&2
+            exit 1
+          fi
+          remote_paths="$(jq -r '.files[].path' <<<"$pr_metadata" | sort -u)"
+          printf '%s\n' "$remote_paths" | node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-paths
+          if [[ "$(jq -r '.isDraft' <<<"$pr_metadata")" == "true" ]]; then
+            gh pr ready "$pr_number" --repo "$REPOSITORY"
+          fi
+          echo "Requesting auto-merge for baseline PR #$pr_number after verifying its generated head and file scope."
+          gh pr merge "$pr_number" --repo "$REPOSITORY" --auto --squash --delete-branch --match-head-commit "$commit_sha"
