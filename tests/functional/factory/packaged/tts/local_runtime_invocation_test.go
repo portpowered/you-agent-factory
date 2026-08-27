@@ -44,6 +44,7 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	}))
 	t.Cleanup(modelServer.Close)
 	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+	launcher := &packagedTTSModelHostLauncher{endpoint: modelServer.URL}
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--named", factorydefinitions.PackagedTTSFactoryName,
@@ -67,12 +68,17 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 		) (serviceedges.ModelBackendArtifactSelection, error) {
 			return packagedTTSPinnedBackendSelection(), nil
 		},
-		ModelHostProcessLauncher:      &packagedTTSModelHostLauncher{endpoint: modelServer.URL},
+		ModelHostProcessLauncher:      launcher,
 		ModelHostProtocolNegotiator:   packagedTTSHostProtocolNegotiator{},
 		ModelHostCompatibilityChecker: packagedTTSHostCompatibilityChecker{},
 		ModelHostHTTPClient:           modelServer.Client(),
 		ModelRuntimeHTTPClient:        modelServer.Client(),
 		ModelInvocationBackend:        backend.Invoke,
+	})
+	t.Cleanup(func() {
+		if launcher.StartCount() != 1 || launcher.StopCount() != 1 {
+			t.Errorf("local model host lifecycle = starts %d, stops %d; want one start and one cleanup stop", launcher.StartCount(), launcher.StopCount())
+		}
 	})
 	support.CleanupProcess(t, process)
 	if err := process.Execute(inputs.Input); err != nil {
@@ -81,6 +87,12 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+	if response.RequestId == "" || response.TraceId == "" {
+		t.Fatalf("local TTS invocation identity = request %q trace %q, want non-empty values", response.RequestId, response.TraceId)
+	}
+	if backend.CallCount() != 1 {
+		t.Fatalf("Models TTS invocation count = %d, want one local-runtime attempt", backend.CallCount())
 	}
 
 	request := backend.LastRequest(t)
@@ -167,7 +179,12 @@ func (backend *packagedTTSModelsBackend) LastRequest(t testing.TB) models.Invoke
 	return request
 }
 
-type packagedTTSModelHostLauncher struct{ endpoint string }
+type packagedTTSModelHostLauncher struct {
+	mu       sync.Mutex
+	endpoint string
+	starts   int
+	stops    int
+}
 
 func (launcher *packagedTTSModelHostLauncher) Start(
 	context.Context,
@@ -177,9 +194,13 @@ func (launcher *packagedTTSModelHostLauncher) Start(
 	Wait() error
 	Stop(context.Context) error
 }, error) {
+	launcher.mu.Lock()
+	launcher.starts++
+	launcher.mu.Unlock()
 	return &packagedTTSModelHostProcess{
 		endpoint: launcher.endpoint,
 		stopped:  make(chan struct{}),
+		onStop:   launcher.recordStop,
 	}, nil
 }
 
@@ -187,6 +208,7 @@ type packagedTTSModelHostProcess struct {
 	endpoint string
 	stopped  chan struct{}
 	once     sync.Once
+	onStop   func()
 }
 
 func (process *packagedTTSModelHostProcess) HealthEndpoint() string { return process.endpoint }
@@ -195,8 +217,31 @@ func (process *packagedTTSModelHostProcess) Wait() error {
 	return nil
 }
 func (process *packagedTTSModelHostProcess) Stop(context.Context) error {
-	process.once.Do(func() { close(process.stopped) })
+	process.once.Do(func() {
+		close(process.stopped)
+		if process.onStop != nil {
+			process.onStop()
+		}
+	})
 	return nil
+}
+
+func (launcher *packagedTTSModelHostLauncher) recordStop() {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	launcher.stops++
+}
+
+func (launcher *packagedTTSModelHostLauncher) StartCount() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.starts
+}
+
+func (launcher *packagedTTSModelHostLauncher) StopCount() int {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	return launcher.stops
 }
 
 type packagedTTSHostProtocolNegotiator struct{}

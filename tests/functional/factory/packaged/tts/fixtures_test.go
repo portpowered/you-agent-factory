@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -26,15 +25,20 @@ import (
 
 type packagedTTSFakeProvider struct {
 	testutil.ProviderServiceAdapter
-	mu        sync.Mutex
-	audio     []byte
-	audioPath string
-	calls     int
-	last      *workerexecution.ProviderInferenceRequest
+	mu           sync.Mutex
+	audio        []byte
+	artifactRoot string
+	audioPath    string
+	calls        int
+	last         *workerexecution.ProviderInferenceRequest
 }
 
-func newPackagedTTSFakeProvider(audio []byte) *packagedTTSFakeProvider {
-	provider := &packagedTTSFakeProvider{audio: append([]byte(nil), audio...)}
+func newPackagedTTSFakeProvider(t testing.TB, audio []byte) *packagedTTSFakeProvider {
+	t.Helper()
+	provider := &packagedTTSFakeProvider{
+		audio:        append([]byte(nil), audio...),
+		artifactRoot: t.TempDir(),
+	}
 	provider.ProviderServiceAdapter.InferFunc = provider.Infer
 	return provider
 }
@@ -76,6 +80,7 @@ func (provider *packagedTTSFakeProvider) Infer(
 ) (workerexecution.InferenceResponse, error) {
 	provider.mu.Lock()
 	provider.calls++
+	callNumber := provider.calls
 	cloned := workerexecution.CloneProviderInferenceRequest(request)
 	provider.last = &cloned
 	provider.mu.Unlock()
@@ -86,7 +91,7 @@ func (provider *packagedTTSFakeProvider) Infer(
 		)
 	}
 
-	outputFile := filepath.Join(os.TempDir(), fmt.Sprintf("packaged-tts-fake-%d.wav", time.Now().UnixNano()))
+	outputFile := filepath.Join(provider.artifactRoot, fmt.Sprintf("audio-%d.wav", callNumber))
 	if err := os.WriteFile(outputFile, provider.audio, 0o644); err != nil {
 		return workerexecution.InferenceResponse{}, fmt.Errorf("write fake tts audio artifact: %w", err)
 	}
@@ -134,6 +139,19 @@ func (provider *packagedTTSFailingFakeProvider) callCount() int {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 	return provider.calls
+}
+
+func (provider *packagedTTSFailingFakeProvider) lastRequest() *workerexecution.ProviderInferenceRequest {
+	if provider == nil {
+		return nil
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if provider.last == nil {
+		return nil
+	}
+	cloned := workerexecution.CloneProviderInferenceRequest(*provider.last)
+	return &cloned
 }
 
 func (provider *packagedTTSFailingFakeProvider) Infer(
