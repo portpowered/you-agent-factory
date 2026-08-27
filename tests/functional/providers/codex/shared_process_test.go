@@ -78,6 +78,36 @@ func (server *codexSharedHTTPServer) waitClosed(ctx context.Context) error {
 	}
 }
 
+// codexProcessConstructor records successful root-built process constructions
+// at the local construction boundary. The shared fixture uses this helper for
+// every process it builds, so its topology assertion observes construction
+// rather than comparing an initialized literal with the expected count.
+type codexProcessConstructor struct {
+	mu     sync.Mutex
+	builds int
+}
+
+func (constructor *codexProcessConstructor) build(
+	t testing.TB,
+	edges serviceedges.Edges,
+) support.ApplicationProcess {
+	t.Helper()
+	process, err := support.BuildProcessWithContext(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	constructor.mu.Lock()
+	constructor.builds++
+	constructor.mu.Unlock()
+	return process
+}
+
+func (constructor *codexProcessConstructor) count() int {
+	constructor.mu.Lock()
+	defer constructor.mu.Unlock()
+	return constructor.builds
+}
+
 type codexSharedProcessFixture struct {
 	rootDir                  string
 	homeDir                  string
@@ -93,7 +123,7 @@ type codexSharedProcessFixture struct {
 	command       *support.ProcessCommand
 	api           *codexSharedHTTPServer
 	commandRunner *codexSharedCommandRunner
-	processBuilds int
+	constructor   *codexProcessConstructor
 
 	sessionMu         sync.Mutex
 	openedSessionIDs  []string
@@ -116,7 +146,8 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 	runner := prepareCodexSharedRoutes(t, paths, rootDir)
 
 	api := newCodexSharedHTTPServer()
-	process := support.BuildProcess(t, serviceedges.Edges{
+	constructor := &codexProcessConstructor{}
+	process := constructor.build(t, serviceedges.Edges{
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
@@ -129,7 +160,7 @@ func newCodexSharedProcessFixture(t *testing.T) *codexSharedProcessFixture {
 		containmentOutsideDir:    containment.outsideDir,
 		containmentAvailable:     containment.available,
 		containmentCapabilityErr: containment.err,
-		process:                  process, api: api, commandRunner: runner, processBuilds: 1,
+		process:                  process, api: api, commandRunner: runner, constructor: constructor,
 	}
 
 	inputs := support.FakeInputs(context.Background(), []string{
@@ -552,8 +583,8 @@ func (fixture *codexSharedProcessFixture) assertSessionTopology(t testing.TB) {
 
 func (fixture *codexSharedProcessFixture) assertTopology(t testing.TB) {
 	t.Helper()
-	if fixture.processBuilds != 1 || fixture.api.startCount() != 1 {
-		t.Fatalf("shared Codex topology = root:%d http:%d, want one each", fixture.processBuilds, fixture.api.startCount())
+	if got := fixture.constructor.count(); got != 1 || fixture.api.startCount() != 1 {
+		t.Fatalf("shared Codex topology = root:%d http:%d, want one each", got, fixture.api.startCount())
 	}
 	if got := fixture.commandRunner.CallCount(); got != 3 {
 		t.Fatalf("shared Codex command calls = %d, want one call for each Work route", got)

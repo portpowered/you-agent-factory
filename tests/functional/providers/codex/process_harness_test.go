@@ -199,7 +199,6 @@ func startCodexHistoricalInspectionServer(
 	dir := support.ScaffoldSingleStepFactory(t, "codex-historical-inspection")
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Edges:                     edges,
 		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
