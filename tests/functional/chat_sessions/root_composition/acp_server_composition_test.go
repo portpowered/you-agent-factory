@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
@@ -29,6 +30,100 @@ type rpcMessage struct {
 	ID     json.RawMessage      `json:"id"`
 	Result json.RawMessage      `json:"result"`
 	Error  *acpsdk.RequestError `json:"error"`
+}
+
+// catalogCohort is the immutable no-profile process used by catalog-only
+// witnesses. It owns every published packaged Factory in one fixed home, so
+// absent-profile enumeration and target switching can share the same root
+// without changing profile state or activating a Factory runtime.
+type catalogCohort struct {
+	home      string
+	process   support.ApplicationProcess
+	installed []string
+}
+
+var catalogCohortState struct {
+	sync.Mutex
+	cohort *catalogCohort
+	err    error
+}
+
+func catalogCohortForTest(t *testing.T) *catalogCohort {
+	t.Helper()
+
+	catalogCohortState.Lock()
+	defer catalogCohortState.Unlock()
+	if catalogCohortState.cohort == nil && catalogCohortState.err == nil {
+		home, err := os.MkdirTemp("", "you-chat-catalog-cohort-")
+		if err != nil {
+			catalogCohortState.err = fmt.Errorf("create catalog cohort home: %w", err)
+		} else {
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			installed := seedEveryInstalledPackagedFactory(t, home)
+			process, buildErr := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+			if buildErr != nil {
+				catalogCohortState.err = fmt.Errorf("build catalog cohort process: %w", buildErr)
+				_ = os.RemoveAll(home)
+			} else {
+				catalogCohortState.cohort = &catalogCohort{
+					home:      home,
+					process:   process,
+					installed: installed,
+				}
+			}
+		}
+	}
+	if catalogCohortState.err != nil {
+		t.Fatalf("catalog cohort: %v", catalogCohortState.err)
+	}
+
+	cohort := catalogCohortState.cohort
+	t.Setenv("HOME", cohort.home)
+	t.Setenv("USERPROFILE", cohort.home)
+	return cohort
+}
+
+// closeCatalogCohort releases the process and fixed home after all package
+// tests have finished. It is called by the package TestMain next to the
+// story-001 controlled cohort cleanup.
+func closeCatalogCohort() {
+	catalogCohortState.Lock()
+	cohort := catalogCohortState.cohort
+	catalogCohortState.Unlock()
+	if cohort == nil {
+		return
+	}
+	if err := cohort.process.Close(context.Background()); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "catalog cohort close: %v\n", err)
+	}
+	if err := os.RemoveAll(cohort.home); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "catalog cohort home cleanup: %v\n", err)
+	}
+}
+
+// newCatalogProfileCohort builds one immutable process for an authored ACP
+// Agent profile. Different allowlists are deliberately separate cohorts; the
+// profile is read from the fixed home and must never be rewritten after root
+// construction to make two catalog cases fit one process.
+func newCatalogProfileCohort(
+	t *testing.T,
+	name, defaultTarget string,
+	allowedTargets []string,
+) *catalogCohort {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	seedEveryInstalledPackagedFactory(t, home)
+	support.SeedACPAgentProfile(t, home, defaultTarget, allowedTargets)
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("build %s catalog profile cohort: %v", name, err)
+	}
+	cohort := &catalogCohort{home: home, process: process}
+	closeProcessCleanly(t, process)
+	return cohort
 }
 
 // TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess
@@ -244,19 +339,11 @@ func selectOptionValues(t *testing.T, option acpsdk.SessionConfigOptionSelect) [
 // workers.acp.agentProfile sees every installed Factory in the ACP client's
 // picker, not just Factory Builder.
 func TestACPServerWithNoAuthoredAgentProfileOffersEveryInstalledFactory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	installed := seedEveryInstalledPackagedFactory(t, home)
+	cohort := catalogCohortForTest(t)
+	installed := cohort.installed
 	// Deliberately no SeedACPAgentProfile call: an absent profile must mean
 	// "unrestricted", which is the whole point of this cell.
-
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	server := process.ACPServer()
+	server := cohort.process.ACPServer()
 	if server == nil {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
@@ -307,22 +394,12 @@ func TestACPServerWithNoAuthoredAgentProfileOffersEveryInstalledFactory(t *testi
 // allowedTargets remains a real opt-in restriction after the default became
 // unrestricted.
 func TestACPServerAuthoredAllowedTargetsStillRestrictsCatalog(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedEveryInstalledPackagedFactory(t, home)
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{
+	cohort := newCatalogProfileCohort(t, "restricted", "factory:@you/goal", []string{
 		"factory:@you/goal",
 		"factory:@you/classify",
 	})
 
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-
-	_, option := factoryTargetSelectOption(t, process.ACPServer(), t.TempDir())
+	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), t.TempDir())
 	want := []string{"factory:@you/goal", "factory:@you/classify"}
 	got := selectOptionValues(t, option)
 	if len(got) != len(want) {
@@ -337,17 +414,11 @@ func TestACPServerAuthoredAllowedTargetsStillRestrictsCatalog(t *testing.T) {
 // unrestricted operator can actually switch the session onto a different
 // installed Factory, not merely see it listed.
 func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedEveryInstalledPackagedFactory(t, home)
-
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
+	cohort := catalogCohortForTest(t)
+	server := cohort.process.ACPServer()
+	if server == nil {
+		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
-	server := process.ACPServer()
 
 	cwd := t.TempDir()
 	sessionID, option := factoryTargetSelectOption(t, server, cwd)
@@ -394,25 +465,14 @@ func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
 // with both alphabetical order and current-target-first order here, so neither
 // can satisfy this cell by coincidence.
 func TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedEveryInstalledPackagedFactory(t, home)
-	// loop/goal/classify: not alphabetical, and the default is authored
-	// second rather than first.
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{
+	cohort := newCatalogProfileCohort(t, "authored-order", "factory:@you/goal", []string{
 		"factory:@you/loop",
 		"factory:@you/goal",
 		"factory:@you/classify",
 	})
-
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-
-	_, option := factoryTargetSelectOption(t, process.ACPServer(), t.TempDir())
+	// loop/goal/classify: not alphabetical, and the default is authored
+	// second rather than first.
+	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), t.TempDir())
 	want := []string{"factory:@you/loop", "factory:@you/goal", "factory:@you/classify"}
 	got := selectOptionValues(t, option)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -429,18 +489,8 @@ func TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder(t *testing.T) 
 // target first, then every other installed Factory in canonical reference
 // order.
 func TestACPServerUnrestrictedTargetsAreOfferedCurrentFirstThenSorted(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedEveryInstalledPackagedFactory(t, home)
-
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-
-	_, option := factoryTargetSelectOption(t, process.ACPServer(), t.TempDir())
+	cohort := catalogCohortForTest(t)
+	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), t.TempDir())
 	got := selectOptionValues(t, option)
 	if len(got) < 3 {
 		t.Fatalf("Factory target choices = %v, want the full installed catalog", got)

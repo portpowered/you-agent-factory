@@ -44,6 +44,8 @@ var controlledCohortState struct {
 func TestMain(m *testing.M) {
 	code := m.Run()
 
+	closeCatalogCohort()
+
 	controlledCohortState.Lock()
 	cohort := controlledCohortState.cohort
 	controlledCohortState.Unlock()

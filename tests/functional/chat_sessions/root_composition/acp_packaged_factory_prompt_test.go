@@ -3,6 +3,7 @@ package root_composition_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +32,91 @@ type packagedFactoryPromptCase struct {
 	providerStdout []string
 	// wantText must appear in the streamed assistant text.
 	wantText string
+	// wantProviderCalls is the characterized number of provider invocations
+	// needed for this packaged Factory's one ACP turn.
+	wantProviderCalls int
+}
+
+// packagedFactoryCohort is a fixed-home/profile root for one packaged Factory
+// prompt cell. The target profile and catalog are written before construction
+// and never changed afterward. A prompt cell that activates a Factory remains
+// its own cohort until the production activation lifetime can be released;
+// catalog-only cells use the shared cohort in acp_server_composition_test.go.
+type packagedFactoryCohort struct {
+	home    string
+	process support.ApplicationProcess
+}
+
+func newPackagedFactoryCohort(
+	t *testing.T,
+	factory, target string,
+	runner process.CommandRunner,
+) *packagedFactoryCohort {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	seedInstalledPackagedFactory(t, home, factory)
+	support.SeedACPAgentProfile(t, home, target, []string{target})
+	buildProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("build packaged Factory %s cohort: %v", factory, err)
+	}
+	cohort := &packagedFactoryCohort{home: home, process: buildProcess}
+	closeProcessCleanly(t, buildProcess)
+	return cohort
+}
+
+// packagedFactoryPromptRunner routes by the provider request shape instead of
+// consuming a result queue. This keeps the fixture valid if the workflow
+// schedules compatible calls in a different order.
+type packagedFactoryPromptRunner struct {
+	factory string
+	outputs []string
+
+	mu       sync.Mutex
+	requests []process.CommandRequest
+}
+
+func newPackagedFactoryPromptRunner(testCase packagedFactoryPromptCase) *packagedFactoryPromptRunner {
+	return &packagedFactoryPromptRunner{
+		factory: testCase.factory,
+		outputs: append([]string(nil), testCase.providerStdout...),
+	}
+}
+
+func (runner *packagedFactoryPromptRunner) Run(
+	_ context.Context,
+	request process.CommandRequest,
+) (process.CommandResult, error) {
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, request)
+	runner.mu.Unlock()
+
+	prompt := strings.ToLower(string(request.Stdin))
+	var output string
+	switch runner.factory {
+	case "@you/goal", "@you/loop":
+		output = runner.outputs[0]
+	case "@you/classify":
+		if strings.Contains(prompt, "return exactly one plain-text label") ||
+			strings.Contains(prompt, "return only one lowercase label") {
+			output = runner.outputs[0]
+		} else {
+			output = runner.outputs[1]
+		}
+	default:
+		return process.CommandResult{}, fmt.Errorf("no packaged prompt route for Factory %q", runner.factory)
+	}
+	return process.CommandResult{Stdout: support.CodexSuccessStdout(output)}, nil
+}
+
+func (runner *packagedFactoryPromptRunner) callCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return len(runner.requests)
 }
 
 // TestPackagedFactoriesCompleteOneACPPromptTurn proves the packaged Factories
@@ -56,7 +142,8 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 			providerStdout: []string{
 				`{"decision":"accepted","feedback":"","output":"goal reached over ACP"}`,
 			},
-			wantText: "goal reached over ACP",
+			wantText:          "goal reached over ACP",
+			wantProviderCalls: 1,
 		},
 		{
 			name:    "classify",
@@ -67,7 +154,8 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 				"small",
 				"classified answer over ACP",
 			},
-			wantText: "classified answer over ACP",
+			wantText:          "classified answer over ACP",
+			wantProviderCalls: 2,
 		},
 		{
 			name:    "loop",
@@ -78,26 +166,18 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 				"loop execution over ACP",
 				"loop execution over ACP",
 			},
-			wantText: "loop execution over ACP",
+			wantText:          "loop execution over ACP",
+			wantProviderCalls: 1,
 		},
 	}
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
-			seedInstalledPackagedFactory(t, home, testCase.factory)
-			support.SeedACPAgentProfile(t, home, testCase.target, []string{testCase.target})
-
-			results := make([]process.CommandResult, 0, len(testCase.providerStdout))
-			for _, stdout := range testCase.providerStdout {
-				results = append(results, process.CommandResult{Stdout: []byte(stdout)})
-			}
-			runner := support.NewShapedProviderCommandRunner(results...)
+			runner := newPackagedFactoryPromptRunner(testCase)
+			cohort := newPackagedFactoryCohort(t, testCase.factory, testCase.target, runner)
 
 			cwd := t.TempDir()
-			stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+			stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 			sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 			if sessionID == "" {
@@ -122,6 +202,9 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 			}
 			if !strings.Contains(assistantText, testCase.wantText) {
 				t.Fatalf("streamed assistant text = %q, want it to contain %q", assistantText, testCase.wantText)
+			}
+			if got := runner.callCount(); got != testCase.wantProviderCalls {
+				t.Fatalf("provider call count = %d, want %d for the request-shaped fixture", got, testCase.wantProviderCalls)
 			}
 		})
 	}
@@ -172,6 +255,12 @@ func (runner *planParallelACPRunner) Run(
 	}
 }
 
+func (runner *planParallelACPRunner) callCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.requests
+}
+
 // TestPackagedPlanParallelCompletesOneACPPromptTurn covers the multi-stage
 // packaged Factory problems.md names first. It needs its own cell because
 // plan-parallel dispatches planner, executor, and merge workers whose prompts
@@ -181,16 +270,16 @@ func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	seedInstalledPackagedFactory(t, home, "@you/plan-parallel")
-	support.SeedACPAgentProfile(t, home, "factory:@you/plan-parallel", []string{"factory:@you/plan-parallel"})
+	runner := &planParallelACPRunner{}
+	cohort := newPackagedFactoryCohort(
+		t,
+		"@you/plan-parallel",
+		"factory:@you/plan-parallel",
+		runner,
+	)
 
 	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{
-		ProviderCommandRunner: &planParallelACPRunner{},
-	})
+	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
@@ -212,6 +301,9 @@ func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 	}
 	if text := agentMessageText(t, notifications); !strings.Contains(text, "merged plan-parallel result over ACP") {
 		t.Fatalf("streamed assistant text = %q, want the merged result", text)
+	}
+	if got := runner.callCount(); got != 3 {
+		t.Fatalf("provider call count = %d, want planner, task, and merge calls", got)
 	}
 }
 
@@ -256,16 +348,15 @@ func TestFactoryBuilderGreetsOnAVagueFirstACPTurn(t *testing.T) {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	seedInstalledPackagedFactory(t, home, "@you/factory-builder")
-	support.SeedACPAgentProfile(t, home,
-		"factory:@you/factory-builder", []string{"factory:@you/factory-builder"})
-
 	runner := &builderGreetingACPRunner{}
+	cohort := newPackagedFactoryCohort(
+		t,
+		"@you/factory-builder",
+		"factory:@you/factory-builder",
+		runner,
+	)
 	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	promptResp, notifications := driveServeACPSessionPrompt(t, stdin, stdout, sessionID, "hi")
@@ -353,21 +444,17 @@ func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	// A JavaScript Factory's agent.run children carry no provider of their
 	// own -- @you/spawn passes an empty executorProvider/modelProvider -- so
 	// the operator default is what selects their runner. An ACP client cannot
 	// pass `--provider`, which is how the CLI supplies one.
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
-	seedInstalledPackagedFactory(t, home, "@you/spawn")
-	support.SeedACPAgentProfile(t, home, "factory:@you/spawn", []string{"factory:@you/spawn"})
 
 	runner := &spawnACPRunner{}
+	cohort := newPackagedFactoryCohort(t, "@you/spawn", "factory:@you/spawn", runner)
 	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
@@ -450,17 +537,18 @@ func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testin
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
-	seedInstalledPackagedFactory(t, home, "@you/deep-research")
-	support.SeedACPAgentProfile(t, home, "factory:@you/deep-research", []string{"factory:@you/deep-research"})
 
 	runner := &deepResearchACPRunner{}
+	cohort := newPackagedFactoryCohort(
+		t,
+		"@you/deep-research",
+		"factory:@you/deep-research",
+		runner,
+	)
 	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
