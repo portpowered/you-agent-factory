@@ -17,42 +17,54 @@ import (
 const logicalMoveRouterWorkstation = "router"
 
 // TestSharedProcessWorkRouting establishes the logical-move executable spine.
-// Each child owns one explicit Factory Session while the package fixture keeps
+// Independent top-level groups run concurrently after fixture construction;
+// each child owns one explicit Factory Session while the package fixture keeps
 // the root-built service-mode process and controlled command edge shared.
 func TestSharedProcessWorkRouting(t *testing.T) {
 	fixture := ensureWorkRoutingPackageFixture(t)
 
 	t.Run("LogicalMove/CompletesWithoutWorkerDispatch", func(t *testing.T) {
+		t.Parallel()
 		runLogicalMoveCompletesWithoutWorkerDispatch(t, fixture)
 	})
 	t.Run("LogicalMove/PreservesWorkPayloadAndLineage", func(t *testing.T) {
+		t.Parallel()
 		runLogicalMovePreservesWorkPayloadAndLineage(t, fixture)
 	})
 	t.Run("LogicalMove/MultipleOutputsCreatesEveryExpectedWork", func(t *testing.T) {
+		t.Parallel()
 		runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture)
 	})
 	t.Run("ClassifierSuccess/RoutesEveryKnownDecision", func(t *testing.T) {
+		t.Parallel()
 		runClassifierRoutesEveryKnownDecision(t, fixture)
 	})
 	t.Run("ClassifierFanout/PreservesPayload", func(t *testing.T) {
+		t.Parallel()
 		runClassifierMultiOutputPreservesPayload(t, fixture)
 	})
 	t.Run("RoutingGuard/SelectorFailureClosesSession", func(t *testing.T) {
+		t.Parallel()
 		runClassifierRoutingSelectorGuard(t, fixture)
 	})
 	t.Run("ClassifierFailure/UnknownAndMalformedDecision", func(t *testing.T) {
+		t.Parallel()
 		runClassifierUnknownAndMalformedDecisionFailures(t, fixture)
 	})
 	t.Run("ClassifierFailure/ReworkFailureTerminatesWithoutCompletion", func(t *testing.T) {
+		t.Parallel()
 		runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture)
 	})
 	t.Run("ClassifierRejection/RoutesToFailedTerminal", func(t *testing.T) {
+		t.Parallel()
 		runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture)
 	})
 	t.Run("ClassifierRejection/RecordsDispatchFeedback", func(t *testing.T) {
+		t.Parallel()
 		runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture)
 	})
 	t.Run("ClassifierRejection/ReleasesResourcesForSubsequentWork", func(t *testing.T) {
+		t.Parallel()
 		runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture)
 	})
 }
