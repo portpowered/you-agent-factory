@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,49 @@ func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	return dir
+}
+
+// newPackagedGoalAcceptedProviderRunner returns a Codex-shaped command runner
+// that accepts one executor dispatch with the stable accepted decision.
+func newPackagedGoalAcceptedProviderRunner(t *testing.T) *packagedGoalRepeatingProviderRunner {
+	t.Helper()
+	return &packagedGoalRepeatingProviderRunner{decisionEnvelope: goalDecisionEnvelope(
+		"accepted", "", packagedGoalMockWorkerAcceptedSummary,
+	)}
+}
+
+// newPackagedGoalFailingProviderRunner returns the controlled provider failure
+// used by the runtime-failure child while keeping the real Workers boundary.
+func newPackagedGoalFailingProviderRunner(t *testing.T) *support.ShapedProviderCommandRunner {
+	t.Helper()
+	return support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("mock provider failure"),
+	})
+}
+
+type packagedGoalRepeatingProviderRunner struct {
+	mu               sync.Mutex
+	decisionEnvelope string
+	calls            int
+}
+
+func (runner *packagedGoalRepeatingProviderRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	runner.calls++
+	return platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout(runner.decisionEnvelope),
+	}, nil
+}
+
+func (runner *packagedGoalRepeatingProviderRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
 }
 
 func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
@@ -85,75 +129,6 @@ func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
 		t.Fatalf("write packaged goal mock-workers config: %v", err)
 	}
 	return path
-}
-
-func writePackagedGoalFailingMockWorkersConfig(t *testing.T) string {
-	t.Helper()
-
-	cfg := workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      "goal-executor",
-				WorkstationName: packagedGoalExecuteWorkstationName,
-				RunType:         workers.MockWorkerRunTypeReject,
-				RejectConfig: &workers.MockWorkerRejectConfig{
-					Stderr: "mock provider failure",
-				},
-			},
-		},
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal packaged goal failing mock-workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-failing.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write packaged goal failing mock-workers config: %v", err)
-	}
-	return path
-}
-
-func startPackagedGoalInvocationServer(t *testing.T, factoryDir, mockWorkersPath string) *support.FunctionalAPIServer {
-	t.Helper()
-
-	payload, err := os.ReadFile(mockWorkersPath)
-	if err != nil {
-		t.Fatalf("read customer mock-workers config: %v", err)
-	}
-	var mockWorkersConfig workers.MockWorkersConfig
-	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
-		t.Fatalf("decode customer mock-workers config: %v", err)
-	}
-
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		MockWorkersConfig:         &mockWorkersConfig,
-	})
-}
-
-func postPackagedGoalInvocation(
-	t *testing.T,
-	factoryDir string,
-	mockWorkersPath string,
-	goalText string,
-) factoryapi.InvocationResponse {
-	t.Helper()
-
-	_, response := invokePackagedGoal(t, factoryDir, mockWorkersPath, goalText)
-	return response
-}
-
-func invokePackagedGoal(
-	t *testing.T,
-	factoryDir string,
-	mockWorkersPath string,
-	goalText string,
-) (*support.FunctionalAPIServer, factoryapi.InvocationResponse) {
-	t.Helper()
-
-	server := startPackagedGoalInvocationServer(t, factoryDir, mockWorkersPath)
-	return server, postPackagedGoalInvocationToServer(t, server, goalText)
 }
 
 func invokePackagedGoalWithProviderRunner(

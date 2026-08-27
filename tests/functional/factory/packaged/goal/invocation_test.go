@@ -45,21 +45,6 @@ func TestPackagedGoalQuietCLIBatchExitsWithoutContinuousMode(t *testing.T) {
 	}
 }
 
-// TestPackagedGoalAcceptCompletesWithSummary proves packaged @you/goal invocation
-// completes through the public session invocation API with an explicit summary
-// primary result distinct from the submitted goal text.
-func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
-	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
-
-	submitted := "customer goal request text"
-	response := postPackagedGoalInvocation(t, dir, mockWorkersPath, submitted)
-	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalMockWorkerAcceptedSummary)
-	if primaryResultText(t, response) == submitted {
-		t.Fatal("primaryResult echoed submitted goal text")
-	}
-}
-
 // TestPackagedGoalContinueRepeatsThenCompletes proves a packaged @you/goal
 // continue decision feeds back through the public session invocation API,
 // triggers another executor dispatch on the built-in repeater workstation, and
@@ -155,18 +140,6 @@ func TestPackagedGoalBlockedDecisionStopsInInspectableBlockedState(t *testing.T)
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("provider invocation count = %d, want 1 for blocked stop", got)
 	}
-}
-
-// TestPackagedGoalUnknownDecisionFails proves packaged @you/goal invocation through
-// the public session invocation API fails with stable runtime-failure details and no
-// success primary result when mock workers surface an invalid worker outcome on the
-// built-in execute-goal topology.
-func TestPackagedGoalUnknownDecisionFails(t *testing.T) {
-	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	mockWorkersPath := writePackagedGoalFailingMockWorkersConfig(t)
-
-	response := postPackagedGoalInvocation(t, dir, mockWorkersPath, "invoke packaged goal with failing worker")
-	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
 }
 
 // TestPackagedGoalPausedSubmissionResumes proves packaged @you/goal work submitted
