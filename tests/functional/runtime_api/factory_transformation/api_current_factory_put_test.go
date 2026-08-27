@@ -8,13 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -36,6 +39,10 @@ const (
 	// stuck Execute, Close, or filesystem cleanup must fail the package instead
 	// of leaving the test process blocked or reporting a false green result.
 	sharedFactoryTransformationShutdownTimeout = 5 * time.Second
+
+	// Windows exposes WSAECONNREFUSED as errno 10061; syscall's portable
+	// ECONNREFUSED value is an invented errno on Windows.
+	sharedFactoryTransformationWindowsConnectionRefused = syscall.Errno(10061)
 )
 
 // sharedFactoryTransformationFixture owns the one package-scoped application
@@ -218,10 +225,14 @@ func (fixture *sharedFactoryTransformationFixture) stop() error {
 // the expected observable result; a successful response proves teardown left
 // the package-owned listener reachable and therefore fails cleanup.
 func sharedFactoryTransformationListenerClosed(baseURL string) error {
+	return sharedFactoryTransformationListenerClosedWithTimeout(baseURL, sharedFactoryTransformationShutdownTimeout)
+}
+
+func sharedFactoryTransformationListenerClosedWithTimeout(baseURL string, timeout time.Duration) error {
 	if strings.TrimSpace(baseURL) == "" {
-		return nil
+		return fmt.Errorf("listener cleanup probe requires a non-empty base URL")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sharedFactoryTransformationShutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(
 		ctx,
@@ -234,10 +245,57 @@ func sharedFactoryTransformationListenerClosed(baseURL string) error {
 	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return nil
+		if sharedFactoryTransformationConnectionWasRefused(err) {
+			return nil
+		}
+		return fmt.Errorf("listener cleanup probe did not prove the listener was closed: %w", err)
 	}
 	defer response.Body.Close()
 	return fmt.Errorf("shared HTTP listener remained reachable after shutdown with status %d", response.StatusCode)
+}
+
+func sharedFactoryTransformationConnectionWasRefused(err error) bool {
+	var operationError *net.OpError
+	if !errors.As(err, &operationError) || operationError.Op != "dial" {
+		return false
+	}
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, sharedFactoryTransformationWindowsConnectionRefused)
+}
+
+func assertSharedFactoryTransformationListenerProbe(t *testing.T) {
+	t.Helper()
+	t.Run("reachable response fails cleanup", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		t.Cleanup(server.Close)
+
+		err := sharedFactoryTransformationListenerClosedWithTimeout(server.URL, time.Second)
+		if err == nil || !strings.Contains(err.Error(), "remained reachable") {
+			t.Fatalf("reachable listener probe error = %v, want reachable-listener cleanup error", err)
+		}
+	})
+	t.Run("accepted but unresponsive listener fails cleanup", func(t *testing.T) {
+		accepted := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+			close(accepted)
+			<-request.Context().Done()
+		}))
+		t.Cleanup(server.Close)
+
+		err := sharedFactoryTransformationListenerClosedWithTimeout(server.URL, 50*time.Millisecond)
+		// The bounded observation distinguishes an accepted request from a dial
+		// timeout while keeping a broken httptest server from hanging this test.
+		select {
+		case <-accepted:
+		case <-time.After(time.Second):
+			t.Fatal("unresponsive listener test did not reach its handler")
+		}
+		if err == nil {
+			t.Fatal("unresponsive listener probe error = nil, want cleanup failure")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("unresponsive listener probe error = %v, want context deadline cause", err)
+		}
+	})
 }
 
 func waitForSharedFactoryTransformationProcess(done <-chan error) error {
@@ -1044,6 +1102,9 @@ func TestCurrentFactoryPUT_RequiresAdvancedSaveVersion(t *testing.T) {
 			runAdvancedSaveVersionCase(t, server, tc)
 		})
 	}
+	t.Run("listener cleanup probe classification", func(t *testing.T) {
+		assertSharedFactoryTransformationListenerProbe(t)
+	})
 }
 
 type advancedSaveVersionCase struct {
