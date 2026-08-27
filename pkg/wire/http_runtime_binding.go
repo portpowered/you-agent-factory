@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/costs"
@@ -24,7 +26,9 @@ import (
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
+	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -222,13 +226,69 @@ func newHTTPWorkerSessionsHandler(
 	if opened.WorkerSessions == nil {
 		return nil
 	}
-	return workersessionshttp.NewHandler(
-		workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
-			opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
-			opened.WorkerSessions, opened.WorkerSessions, opened.Work,
-			newWorkerSessionsFactorySessionScopeResolver(opened.FactorySessions),
-		), opened.Logger,
+	resolver := newWorkerSessionsFactorySessionScopeResolver(opened.FactorySessions)
+	adapter := workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
+		opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
+		opened.WorkerSessions, opened.WorkerSessions, opened.Work, resolver,
 	)
+	if adapter == nil {
+		return nil
+	}
+	fleet := workersessionswire.NewFleetObservationService(func(ctx context.Context) ([]workersessions.Service, error) {
+		return workerSessionObservationSources(ctx, opened)
+	})
+	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet), opened.Logger)
+}
+
+func workerSessionObservationSources(
+	ctx context.Context,
+	opened factorysessionwire.OpenedApplicationRuntime,
+) ([]workersessions.Service, error) {
+	sources := make([]workersessions.Service, 0, 1)
+	if opened.WorkerSessions != nil {
+		sources = append(sources, opened.WorkerSessions)
+	}
+	if opened.FactorySessions == nil {
+		return sources, nil
+	}
+	projections, err := opened.FactorySessions.ListFactorySessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provider, ok := opened.FactorySessions.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.Service
+	})
+	if !ok {
+		return sources, nil
+	}
+	ids := make([]string, 0, len(projections))
+	for _, projection := range projections {
+		id := strings.TrimSpace(projection.Context.FactorySessionID)
+		if id == "" && projection.Context.Session != nil {
+			id = strings.TrimSpace(projection.Context.Session.ID)
+		}
+		if id == "" || containsString(ids, id) {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if observation := provider.WorkerSessionsObservationForSession(id); observation != nil {
+			sources = append(sources, observation)
+		}
+	}
+	return sources, nil
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+
+		}
+	}
+	return false
 }
 
 func newHTTPCostsHandler(

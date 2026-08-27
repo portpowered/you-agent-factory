@@ -29,6 +29,13 @@ type observationService interface {
 	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 
+// topLevelObservationService is the narrow capability consumed by the
+// process-wide list adapter. A fleet view may combine runtime-bound services
+// without becoming the owner of Work-scoped reads or lifecycle operations.
+type topLevelObservationService interface {
+	ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
+}
+
 type startService interface {
 	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
 }
@@ -76,6 +83,7 @@ type workerSessionScope struct {
 
 type Adapter struct {
 	observations observationService
+	topLevel     topLevelObservationService
 	starter      startService
 	continuer    continuationService
 	interrupter  interruptService
@@ -427,7 +435,7 @@ func NewAdapter(
 	if observations == nil || workRoot == nil {
 		return nil
 	}
-	return &Adapter{observations: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers)}
+	return &Adapter{observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers)}
 }
 
 // NewAdapterWithStart binds the Worker Sessions start capability in addition
@@ -441,7 +449,7 @@ func NewAdapterWithStart(
 	if starter == nil || observations == nil || workRoot == nil {
 		return nil
 	}
-	return &Adapter{starter: starter, observations: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers)}
+	return &Adapter{starter: starter, observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers)}
 }
 
 // NewAdapterWithStartAndContinue binds both direct admission operations while
@@ -456,7 +464,7 @@ func NewAdapterWithStartAndContinue(
 	if starter == nil || continuer == nil || observations == nil || workRoot == nil {
 		return nil
 	}
-	return &Adapter{starter: starter, continuer: continuer, observations: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers)}
+	return &Adapter{starter: starter, continuer: continuer, observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers)}
 }
 
 // NewAdapterWithStartAndContinueAndInterrupt binds the direct admission and
@@ -475,7 +483,7 @@ func NewAdapterWithStartAndContinueAndInterrupt(
 	}
 	return &Adapter{
 		starter: starter, continuer: continuer, interrupter: interrupter,
-		observations: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
+		observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
 	}
 }
 
@@ -496,8 +504,21 @@ func NewAdapterWithStartAndContinueAndInterruptAndControl(
 	}
 	return &Adapter{
 		starter: starter, continuer: continuer, interrupter: interrupter,
-		controller: controller, observations: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
+		controller: controller, observations: observations, topLevel: observations, work: workRoot, resolver: firstSessionScopeResolver(resolvers),
 	}
+}
+
+// WithTopLevelObservationService returns a copy whose fleet-wide list reads
+// use the supplied process-level view. Work-scoped reads and lifecycle
+// controls continue to use the runtime-bound service already held by the
+// adapter.
+func (a *Adapter) WithTopLevelObservationService(service topLevelObservationService) *Adapter {
+	if a == nil || service == nil {
+		return a
+	}
+	bound := *a
+	bound.topLevel = service
+	return &bound
 }
 
 // StartWorkerSession maps one typed HTTP request to the Worker Sessions-owned
@@ -696,7 +717,7 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 	maxResults *int,
 	nextToken *string,
 ) (factoryapi.ListWorkerSessionsResponse, error) {
-	if a == nil || a.observations == nil {
+	if a == nil || (a.observations == nil && a.topLevel == nil) {
 		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
 	}
 	if ctx == nil {
@@ -718,7 +739,11 @@ func (a *Adapter) ListTopLevelWorkerSessions(
 	if nextToken != nil {
 		request.NextToken = strings.TrimSpace(*nextToken)
 	}
-	result, err := a.observations.ListWorkerSessionObservations(ctx, request)
+	topLevel := a.topLevel
+	if topLevel == nil {
+		topLevel = a.observations
+	}
+	result, err := topLevel.ListWorkerSessionObservations(ctx, request)
 	if err != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("list top-level Worker Session observations: %w", err)
 	}
