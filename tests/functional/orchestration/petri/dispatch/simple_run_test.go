@@ -2,7 +2,6 @@
 package dispatch
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -231,18 +229,23 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 			Payload:    []byte(`{"title":"rejection loop test"}`),
 		})
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Needs more work. REJECTED"},
-			workerexecution.InferenceResponse{Content: "Code revised. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Still not right. REJECTED"},
-			workerexecution.InferenceResponse{Content: "Code revised again. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Looks good now. ACCEPTED"},
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("PRD created. COMPLETE"),
+				sharedPetriProviderOutput("Code written. COMPLETE"),
+				sharedPetriProviderOutput("Needs more work. REJECTED"),
+				sharedPetriProviderOutput("Code revised. COMPLETE"),
+				sharedPetriProviderOutput("Still not right. REJECTED"),
+				sharedPetriProviderOutput("Code revised again. COMPLETE"),
+				sharedPetriProviderOutput("Looks good now. ACCEPTED"),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+			t,
+			dir,
+			route,
+			30*time.Second,
 		)
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 30*time.Second)
 
 		terminal := support.WorkCustomerLocation("story", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -269,9 +272,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 			factoryapi.WorkOutcomeRejected,
 			factoryapi.WorkOutcomeAccepted,
 		})
-		if provider.CallCount() != 7 {
-			t.Errorf("provider call count = %d, want 7", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 7)
 	})
 
 	t.Run("idea_plan_execute_review_reaches_task_complete", func(t *testing.T) {
@@ -422,14 +423,15 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`{"title":"will fail at provider"}`),
 		})
 
-		provider := testutil.NewMockProviderWithErrors(
-			[]workerexecution.InferenceResponse{{Content: ""}},
-			[]error{fmt.Errorf("provider inference failed")},
-		)
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriCommandError(fmt.Errorf("provider inference failed")),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderOverride: provider},
+			route,
 			10*time.Second,
 		)
 
@@ -450,9 +452,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
-		if provider.CallCount() != 1 {
-			t.Errorf("provider call count = %d, want 1", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
 	t.Run("provider_command_exit_routes_to_failed_terminal", func(t *testing.T) {
@@ -465,14 +465,18 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`work payload`),
 		})
 
-		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stderr:   []byte("provider unavailable"),
-			ExitCode: 1,
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("provider unavailable"),
+					ExitCode: 1,
+				}),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			route,
 			10*time.Second,
 		)
 
@@ -490,6 +494,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
 	t.Run("rejected_worker_outcome_routes_to_failed_terminal", func(t *testing.T) {
@@ -502,11 +507,15 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`work payload`),
 		})
 
-		provider := testutil.NewMockProvider(support.RejectedProviderResponse("not good enough"))
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("not good enough"),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderOverride: provider},
+			route,
 			10*time.Second,
 		)
 
@@ -543,13 +552,15 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`{"title":"broken idea"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"planner": {{Content: "failed"}},
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("failed"),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderOverride: provider},
+			route,
 			10*time.Second,
 		)
 
@@ -586,14 +597,16 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`{"title":"failing executor"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner":  {{Content: "success<COMPLETE>"}},
-			"executor": {{Content: "failed", Error: errors.New("failed executors")}},
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("success<COMPLETE>"),
+				sharedPetriCommandError(errors.New("failed executors")),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderOverride: provider},
+			route,
 			15*time.Second,
 		)
 
@@ -620,13 +633,18 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 		testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title":"broken idea"}`))
 
-		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stderr:   []byte("LLM timeout"),
-			ExitCode: 1,
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriFixedCommandResult(platformprocess.CommandResult{
+				Stderr:   []byte("LLM timeout"),
+				ExitCode: 1,
+			}),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+			t,
+			dir,
+			route,
+			10*time.Second,
+		)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("idea", "failed"):  1,
@@ -643,16 +661,23 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner": {{Content: "Task processed successfully.\n<COMPLETE>\n"}},
-		})
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-			ScriptCommandRunner: nonZeroExitScriptCommandRunner{
-				stderr:   "script execution failed",
-				exitCode: 1,
-			},
-		}, 10*time.Second)
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("Task processed successfully.\n<COMPLETE>\n"),
+			),
+			script: sharedPetriScriptSequence(
+				sharedPetriCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("script execution failed"),
+					ExitCode: 1,
+				}),
+			),
+		}
+		_, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+			t,
+			dir,
+			route,
+			10*time.Second,
+		)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("idea", "complete"): 1,
@@ -662,9 +687,8 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			support.WorkCustomerLocation("task", "failed"):   0,
 			support.WorkCustomerLocation("task", "complete"): 0,
 		})
-		if provider.CallCount("planner") != 1 {
-			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
+		assertSharedPetriCommandCalls(t, dir, 2)
 		assertPublicDispatchEvents(t, events, 1)
 	})
 
@@ -674,13 +698,17 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner": {{Content: "Task processed unsuccessfully.<FAILED>"}},
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride:    provider,
-			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
-		}, 10*time.Second)
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("Task processed unsuccessfully.<FAILED>"),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+			t,
+			dir,
+			route,
+			10*time.Second,
+		)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("idea", "failed"):   1,
@@ -702,18 +730,22 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			Payload:    []byte(`{"title":"processor exhaustion"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner": {
-				{Content: "Task processed successfully.\n<COMPLETE>\n"},
-			},
-			"processor": {
-				{Content: "Task execution failed.<FAILED>"},
-			},
-		})
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride:    provider,
-			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
-		}, 15*time.Second)
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("Task processed successfully.\n<COMPLETE>\n"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+			),
+		}
+		_, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+			t,
+			dir,
+			route,
+			15*time.Second,
+		)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("idea", "complete"): 1,
@@ -724,23 +756,14 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 		assertListedWorkStateTrace(t, listed, "idea", "complete", originTraceID)
 		assertListedWorkStateTrace(t, listed, "plan", "complete", originTraceID)
 		assertListedWorkStateTrace(t, listed, "task", "failed", originTraceID)
-		if provider.CallCount("planner") != 1 {
-			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
-		}
-		if provider.CallCount("processor") != 5 {
-			t.Errorf("processor call count = %d, want 5 before visit-count exhaustion", provider.CallCount("processor"))
-		}
-		if provider.CallCount("reviewer") != 0 {
-			t.Errorf("reviewer call count = %d, want 0 after processor exhaustion", provider.CallCount("reviewer"))
-		}
-		assertPublicDispatchEvents(t, events, provider.CallCount("planner")+provider.CallCount("processor"))
+		assertSharedPetriProviderCalls(t, dir, 6)
+		assertPublicDispatchEvents(t, events, 6)
 	})
 }
 
 // TestPetriExecutorDispatchTerminalRouting proves executor failure and success
 // routing for Petri workstations with and without authored failure arcs using
-// root.BuildProcess + ProviderCommandRunner captures (retired guards_batch
-// executor_failure scenarios).
+// root.BuildProcess and the shared ProviderCommandRunner edge.
 func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 	t.Run("provider_process_failure_without_failure_arcs_routes_to_failed", func(t *testing.T) {
 		t.Parallel()
@@ -752,11 +775,15 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 			Payload:    []byte("work payload"),
 		})
 
-		runner := &recordingProviderCommandRunner{runErr: errors.New("executor crashed")}
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriCommandError(errors.New("executor crashed")),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			route,
 			10*time.Second,
 		)
 
@@ -775,9 +802,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
 		assertFailedDispatchResponseErrorForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
-		if runner.callCount() != 1 {
-			t.Errorf("provider command call count = %d, want 1", runner.callCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
 	t.Run("provider_nonzero_exit_without_failure_arcs_routes_to_failed", func(t *testing.T) {
@@ -790,14 +815,18 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 			Payload:    []byte("work"),
 		})
 
-		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stderr:   []byte("provider unavailable"),
-			ExitCode: 1,
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("provider unavailable"),
+					ExitCode: 1,
+				}),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			route,
 			10*time.Second,
 		)
 
@@ -815,9 +844,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
-		if runner.CallCount() != 1 {
-			t.Errorf("provider command call count = %d, want 1", runner.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
 	t.Run("provider_failure_with_failure_arcs_routes_to_failed_not_done", func(t *testing.T) {
@@ -830,14 +857,18 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 			Payload:    []byte("work"),
 		})
 
-		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stderr:   []byte("intentional failure"),
-			ExitCode: 1,
-		})
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriCommandResult(platformprocess.CommandResult{
+					Stderr:   []byte("intentional failure"),
+					ExitCode: 1,
+				}),
+			),
+		}
+		session, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			route,
 			10*time.Second,
 		)
 
@@ -858,9 +889,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 		}
 		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
 		assertNoAcceptedDispatchMovesWorkToCustomerState(t, events, failedWorkID, doneTerminal)
-		if runner.CallCount() != 1 {
-			t.Errorf("provider command call count = %d, want 1", runner.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
 	t.Run("provider_success_leaves_work_at_authored_done_place", func(t *testing.T) {
@@ -873,13 +902,15 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 			Payload:    []byte("work"),
 		})
 
-		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-			Stdout: support.CodexSuccessStdout("COMPLETE"),
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("COMPLETE"),
+			),
+		}
+		session, listed := runSharedPetriFactoryToCompletionWithRouteAndWork(
 			t,
 			dir,
-			serviceedges.Edges{ProviderCommandRunner: runner},
+			route,
 			10*time.Second,
 		)
 
@@ -891,30 +922,8 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, doneTerminal, []string{traceID})
 		assertQuiescentSession(t, session, 1, 0)
-		if runner.CallCount() != 1 {
-			t.Errorf("provider command call count = %d, want 1", runner.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
-}
-
-type recordingProviderCommandRunner struct {
-	requests []platformprocess.CommandRequest
-	runErr   error
-}
-
-func (r *recordingProviderCommandRunner) Run(
-	_ context.Context,
-	req platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	r.requests = append(r.requests, req)
-	if r.runErr != nil {
-		return platformprocess.CommandResult{}, r.runErr
-	}
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}, nil
-}
-
-func (r *recordingProviderCommandRunner) callCount() int {
-	return len(r.requests)
 }
 
 // runSharedPetriInvocationMapping proves submitted Work payload and
@@ -1037,8 +1046,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 }
 
 // TestPetriInvocationInputAndOutputMapping retains the failed-lineage witness
-// on the isolated edge until the failure-migration story supplies its
-// deterministic shared failure router.
+// while the shared command edge supplies deterministic provider outcomes.
 func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 	t.Run("failed_terminal_preserves_origin_trace_lineage", func(t *testing.T) {
 		t.Parallel()
@@ -1050,18 +1058,22 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 			Payload:    []byte(`{"title":"failed lineage mapping"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner": {
-				{Content: "Task processed successfully.\n<COMPLETE>\n"},
-			},
-			"processor": {
-				{Content: "Task execution failed.<FAILED>"},
-			},
-		})
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride:    provider,
-			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
-		}, 15*time.Second)
+		route := sharedPetriRouteConfig{
+			provider: sharedPetriProviderSequence(
+				sharedPetriProviderOutput("Task processed successfully.\n<COMPLETE>\n"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+				sharedPetriProviderOutput("Task execution failed.<FAILED>"),
+			),
+		}
+		_, listed := runSharedPetriFactoryToCompletionWithRouteAndWork(
+			t,
+			dir,
+			route,
+			15*time.Second,
+		)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("idea", "complete"): 1,
@@ -1274,19 +1286,4 @@ func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wan
 	if categories.Failed != wantFailed {
 		t.Errorf("session failed count = %d, want %d", categories.Failed, wantFailed)
 	}
-}
-
-type nonZeroExitScriptCommandRunner struct {
-	stderr   string
-	exitCode int
-}
-
-func (r nonZeroExitScriptCommandRunner) Run(
-	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{
-		Stderr:   []byte(r.stderr),
-		ExitCode: r.exitCode,
-	}, nil
 }

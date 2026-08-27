@@ -253,12 +253,31 @@ type sharedPetriCommandRouter struct {
 	history map[string]sharedPetriCommandRoute
 }
 
+type sharedPetriCommandResponder func(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error)
+
+type sharedPetriRouteConfig struct {
+	provider sharedPetriCommandResponder
+	script   sharedPetriCommandResponder
+}
+
 type sharedPetriCommandRoute struct {
-	factoryDir    string
-	calls         int
-	providerCalls int
-	scriptCalls   int
-	requests      []platformprocess.CommandRequest
+	factoryDir        string
+	calls             int
+	providerCalls     int
+	scriptCalls       int
+	requests          []platformprocess.CommandRequest
+	providerResponder sharedPetriCommandResponder
+	scriptResponder   sharedPetriCommandResponder
+}
+
+type sharedPetriCommandResponse struct {
+	result              platformprocess.CommandResult
+	err                 error
+	providerOutput      string
+	shapeProviderOutput bool
 }
 
 func newSharedPetriCommandRouter() *sharedPetriCommandRouter {
@@ -268,17 +287,31 @@ func newSharedPetriCommandRouter() *sharedPetriCommandRouter {
 	}
 }
 
-func (router *sharedPetriCommandRouter) register(factoryDir string) error {
+func (router *sharedPetriCommandRouter) register(
+	factoryDir string,
+	configs ...sharedPetriRouteConfig,
+) error {
 	factoryDir = filepath.Clean(factoryDir)
 	if factoryDir == "." || strings.TrimSpace(factoryDir) == "" {
 		return errors.New("shared Petri route Factory directory is required")
+	}
+	if len(configs) > 1 {
+		return errors.New("shared Petri route accepts at most one configuration")
+	}
+	var config sharedPetriRouteConfig
+	if len(configs) == 1 {
+		config = configs[0]
 	}
 	router.mu.Lock()
 	defer router.mu.Unlock()
 	if _, exists := router.routes[factoryDir]; exists {
 		return fmt.Errorf("shared Petri route for %q is already registered", factoryDir)
 	}
-	router.routes[factoryDir] = &sharedPetriCommandRoute{factoryDir: factoryDir}
+	router.routes[factoryDir] = &sharedPetriCommandRoute{
+		factoryDir:        factoryDir,
+		providerResponder: config.provider,
+		scriptResponder:   config.script,
+	}
 	return nil
 }
 
@@ -341,12 +374,15 @@ func (router *sharedPetriCommandRouter) Run(
 	}
 	router.mu.Lock()
 	route := router.routeForRequest(request)
+	var responder sharedPetriCommandResponder
 	if route != nil {
 		route.calls++
 		if isSharedPetriProviderCommand(request.Command) {
 			route.providerCalls++
+			responder = route.providerResponder
 		} else {
 			route.scriptCalls++
+			responder = route.scriptResponder
 		}
 		route.requests = append(route.requests, platformprocess.CommandRequest{
 			Command: request.Command,
@@ -360,12 +396,95 @@ func (router *sharedPetriCommandRouter) Run(
 	if route == nil {
 		return platformprocess.CommandResult{}, fmt.Errorf("no shared Petri command route matched the request")
 	}
+	if responder != nil {
+		return responder(ctx, request)
+	}
 	if isSharedPetriProviderCommand(request.Command) {
 		return platformprocess.CommandResult{
 			Stdout: sharedPetriProviderStdout(request.Command, "Done. <COMPLETE> COMPLETE ACCEPTED"),
 		}, nil
 	}
 	return platformprocess.CommandResult{Stdout: []byte("script-output-ok")}, nil
+}
+
+func sharedPetriProviderSequence(
+	responses ...sharedPetriCommandResponse,
+) sharedPetriCommandResponder {
+	return sharedPetriCommandSequence(true, responses...)
+}
+
+func sharedPetriScriptSequence(
+	responses ...sharedPetriCommandResponse,
+) sharedPetriCommandResponder {
+	return sharedPetriCommandSequence(false, responses...)
+}
+
+func sharedPetriCommandSequence(
+	providerOutput bool,
+	responses ...sharedPetriCommandResponse,
+) sharedPetriCommandResponder {
+	var mu sync.Mutex
+	next := 0
+	return func(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+		if err := ctx.Err(); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		mu.Lock()
+		if next >= len(responses) {
+			mu.Unlock()
+			return platformprocess.CommandResult{}, fmt.Errorf(
+				"shared Petri %s response sequence exhausted for %q",
+				sharedPetriCommandKind(providerOutput),
+				filepath.Base(request.Command),
+			)
+		}
+		response := responses[next]
+		next++
+		mu.Unlock()
+
+		result := cloneSharedPetriCommandResult(response.result)
+		if providerOutput && response.shapeProviderOutput {
+			result.Stdout = sharedPetriProviderStdout(request.Command, response.providerOutput)
+		}
+		return result, response.err
+	}
+}
+
+func sharedPetriFixedCommandResult(result platformprocess.CommandResult) sharedPetriCommandResponder {
+	return func(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+		if err := ctx.Err(); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		return cloneSharedPetriCommandResult(result), nil
+	}
+}
+
+func sharedPetriProviderOutput(content string) sharedPetriCommandResponse {
+	return sharedPetriCommandResponse{
+		providerOutput:      content,
+		shapeProviderOutput: true,
+	}
+}
+
+func sharedPetriCommandResult(result platformprocess.CommandResult) sharedPetriCommandResponse {
+	return sharedPetriCommandResponse{result: result}
+}
+
+func sharedPetriCommandError(err error) sharedPetriCommandResponse {
+	return sharedPetriCommandResponse{err: err}
+}
+
+func sharedPetriCommandKind(provider bool) string {
+	if provider {
+		return "provider"
+	}
+	return "script"
+}
+
+func cloneSharedPetriCommandResult(result platformprocess.CommandResult) platformprocess.CommandResult {
+	result.Stdout = append([]byte(nil), result.Stdout...)
+	result.Stderr = append([]byte(nil), result.Stderr...)
+	return result
 }
 
 func sharedPetriProviderStdout(command, result string) []byte {
@@ -423,9 +542,17 @@ type sharedPetriSession struct {
 }
 
 func openSharedPetriSession(t *testing.T, fixtureDir string) *sharedPetriSession {
+	return openSharedPetriSessionWithRoute(t, fixtureDir, sharedPetriRouteConfig{})
+}
+
+func openSharedPetriSessionWithRoute(
+	t *testing.T,
+	fixtureDir string,
+	config sharedPetriRouteConfig,
+) *sharedPetriSession {
 	t.Helper()
 	fixture := sharedPetriProcess(t)
-	if err := fixture.router.register(fixtureDir); err != nil {
+	if err := fixture.router.register(fixtureDir, config); err != nil {
 		t.Fatalf("register shared Petri command route: %v", err)
 	}
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, fixtureDir)
@@ -517,8 +644,22 @@ func runSharedPetriFactoryToCompletionWithEdgesAndObservations(
 	_ serviceedges.Edges,
 	timeout time.Duration,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	return runSharedPetriFactoryToCompletionWithRouteAndObservations(
+		t,
+		dir,
+		sharedPetriRouteConfig{},
+		timeout,
+	)
+}
+
+func runSharedPetriFactoryToCompletionWithRouteAndObservations(
+	t *testing.T,
+	dir string,
+	config sharedPetriRouteConfig,
+	timeout time.Duration,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	t.Helper()
-	selection := openSharedPetriSession(t, dir)
+	selection := openSharedPetriSessionWithRoute(t, dir, config)
 	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	session := getSharedPetriSession(t, selection.fixture.baseURL, selection.sessionID)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
@@ -526,6 +667,22 @@ func runSharedPetriFactoryToCompletionWithEdgesAndObservations(
 	selection.close(t)
 	assertSharedPetriRouteRequests(t, dir)
 	return session, listed, events
+}
+
+func runSharedPetriFactoryToCompletionWithRouteAndWork(
+	t *testing.T,
+	dir string,
+	config sharedPetriRouteConfig,
+	timeout time.Duration,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+	t.Helper()
+	session, listed, _ := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+		t,
+		dir,
+		config,
+		timeout,
+	)
+	return session, listed
 }
 
 func assertSharedPetriRouteRequests(t testing.TB, dir string) {
