@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"go/build"
 	"io"
 	"os"
 	"os/exec"
@@ -18,13 +19,15 @@ import (
 const modulePath = testlanes.ModulePath
 
 type config struct {
-	count        int
-	jobs         int
-	root         string
-	short        bool
-	timeout      time.Duration
-	vet          bool
-	timingOutput string
+	count              int
+	jobs               int
+	root               string
+	short              bool
+	timeout            time.Duration
+	vet                bool
+	timingOutput       string
+	timingCommand      string
+	computedLaneBudget int
 }
 
 var executeUnitLane = run
@@ -70,6 +73,8 @@ func parseConfig() config {
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.vet, "vet", false, "run go test's implicit vet pass")
 	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic versioned unit package timing summary JSON document")
+	flag.StringVar(&cfg.timingCommand, "timing-command", "", "optional command identity to include in the timing summary")
+	flag.IntVar(&cfg.computedLaneBudget, "computed-lane-budget", 0, "optional computed lane budget to include in the timing summary")
 	flag.Parse()
 	if cfg.jobs < 1 {
 		cfg.jobs = 1
@@ -99,6 +104,13 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 			return nil
 		}
 		if !strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+		buildable, err := build.Default.MatchFile(filepath.Dir(path), entry.Name())
+		if err != nil {
+			return fmt.Errorf("match build constraints for %s: %w", path, err)
+		}
+		if !buildable {
 			return nil
 		}
 		relativeDir, err := filepath.Rel(rootDir, filepath.Dir(path))
@@ -160,7 +172,11 @@ func runUnitTests(cfg config, packages []string) error {
 		}
 	}
 
-	summary := accumulator.summary(time.Since(started).Seconds())
+	run := unitTimingRun{}
+	if strings.TrimSpace(cfg.timingOutput) != "" {
+		run = unitTimingRunIdentity(cfg)
+	}
+	summary := accumulator.summaryWithRun(time.Since(started).Seconds(), run)
 	var outputErrs []error
 	if err := writeUnitTimingSummary(stdoutWriter, summary); err != nil {
 		outputErrs = append(outputErrs, err)

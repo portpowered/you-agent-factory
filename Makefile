@@ -92,6 +92,7 @@ endif
 
 FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
+UNIT_TIMING_OUTPUT ?=
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
@@ -508,7 +509,7 @@ test-unit:
 	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
 
 test-unit-fresh:
-	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT) $(if $(UNIT_TIMING_OUTPUT),-timing-output "$(UNIT_TIMING_OUTPUT)" -timing-command "make test-unit-fresh UNIT_DEFAULT_JOBS=$(UNIT_DEFAULT_JOBS) UNIT_TIMING_OUTPUT=$(UNIT_TIMING_OUTPUT)" -computed-lane-budget $(GO_LANE_BUDGET),)
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
 # pull-request base ref/SHA; the command resolves its merge-base with head,
