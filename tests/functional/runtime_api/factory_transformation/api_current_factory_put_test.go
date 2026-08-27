@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +23,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	// The public status signal is the same readiness contract used by the
+	// previous per-scenario helper. It is a ceiling only; successful readiness
+	// returns immediately without delaying the package.
+	sharedFactoryTransformationReadyTimeout = 15 * time.Second
+	sharedFactoryTransformationStatusPoll   = 10 * time.Millisecond
+
+	// Shutdown has to be bounded because TestMain owns the package exit. A
+	// stuck Execute, Close, or filesystem cleanup must fail the package instead
+	// of leaving the test process blocked or reporting a false green result.
+	sharedFactoryTransformationShutdownTimeout = 5 * time.Second
 )
 
 // sharedFactoryTransformationFixture owns the one package-scoped application
@@ -53,7 +68,12 @@ func TestMain(m *testing.M) {
 	factoryTransformationFixture = fixture
 
 	exitCode := m.Run()
-	fixture.stop()
+	if err := fixture.stop(); err != nil {
+		fmt.Fprintf(os.Stderr, "stop shared factory transformation fixture: %v\n", err)
+		if exitCode == 0 {
+			exitCode = 1
+		}
+	}
 	os.Exit(exitCode)
 }
 
@@ -63,27 +83,6 @@ func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixt
 		cancel:         cancel,
 		seenSessionIDs: make(map[string]struct{}),
 	}
-	cleanup := func() {
-		cancel()
-		if fixture.done != nil {
-			select {
-			case <-fixture.done:
-			case <-time.After(5 * time.Second):
-			}
-		}
-		if fixture.process != nil {
-			closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = fixture.process.Close(closeCtx)
-			cancelClose()
-		}
-		if fixture.factoryDir != "" {
-			_ = os.RemoveAll(fixture.factoryDir)
-		}
-		if fixture.homeDir != "" {
-			_ = os.RemoveAll(fixture.homeDir)
-		}
-	}
-
 	var err error
 	fixture.factoryDir, err = os.MkdirTemp("", "factory-transformation-shared-root-")
 	if err != nil {
@@ -92,16 +91,20 @@ func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixt
 	}
 	fixture.homeDir, err = os.MkdirTemp("", "factory-transformation-shared-home-")
 	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("create shared operator home: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("create shared operator home: %w", err),
+			fixture.cleanup(),
+		)
 	}
 	if err := os.WriteFile(
 		filepath.Join(fixture.factoryDir, interfaces.FactoryConfigFile),
 		[]byte(functionalNamedFactoryPayloadJSON("shared-runtime", "shared-task")),
 		0o644,
 	); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("write shared Factory config: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("write shared Factory config: %w", err),
+			fixture.cleanup(),
+		)
 	}
 
 	api := support.NewProcessAPIServer()
@@ -115,8 +118,10 @@ func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixt
 		ScriptCommandRunner:   scriptRunner,
 	})
 	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("build shared root process: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("build shared root process: %w", err),
+			fixture.cleanup(),
+		)
 	}
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "run", "--continuously", "--with-server", "--quiet",
@@ -130,17 +135,65 @@ func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixt
 	fixture.done = make(chan error, 1)
 	go func() { fixture.done <- fixture.process.Execute(inputs.Input) }()
 
-	fixture.baseURL, err = api.WaitForBaseURL(15 * time.Second)
+	fixture.baseURL, err = api.WaitForBaseURL(sharedFactoryTransformationReadyTimeout)
 	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("wait for shared server base URL: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("wait for shared server base URL: %w", err),
+			fixture.cleanup(),
+		)
+	}
+	if err := waitForSharedFactoryTransformationRuntime(fixture.baseURL); err != nil {
+		return nil, errors.Join(
+			fmt.Errorf("wait for shared runtime readiness: %w", err),
+			fixture.cleanup(),
+		)
 	}
 	return fixture, nil
 }
 
-func (fixture *sharedFactoryTransformationFixture) stop() {
+// cleanup cancels the daemon invocation, joins its Execute result, closes the
+// reusable process, and removes both package-owned roots. Cancellation is the
+// expected successful daemon result; every other lifecycle or cleanup error is
+// returned so TestMain can fail closed.
+func (fixture *sharedFactoryTransformationFixture) cleanup() error {
 	if fixture == nil {
-		return
+		return nil
+	}
+	var cleanupErrors []error
+	if fixture.cancel != nil {
+		fixture.cancel()
+	}
+	if fixture.done != nil {
+		if err := waitForSharedFactoryTransformationProcess(fixture.done); err != nil {
+			cleanupErrors = append(cleanupErrors, err)
+		}
+	}
+	if fixture.process != nil {
+		closeCtx, cancelClose := context.WithTimeout(
+			context.Background(),
+			sharedFactoryTransformationShutdownTimeout,
+		)
+		if err := fixture.process.Close(closeCtx); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("close application process: %w", err))
+		}
+		cancelClose()
+	}
+	if fixture.factoryDir != "" {
+		if err := os.RemoveAll(fixture.factoryDir); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove Factory root %s: %w", fixture.factoryDir, err))
+		}
+	}
+	if fixture.homeDir != "" {
+		if err := os.RemoveAll(fixture.homeDir); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove operator home %s: %w", fixture.homeDir, err))
+		}
+	}
+	return errors.Join(cleanupErrors...)
+}
+
+func (fixture *sharedFactoryTransformationFixture) stop() error {
+	if fixture == nil {
+		return nil
 	}
 	if fixture.providerRunner != nil && fixture.scriptRunner != nil {
 		fmt.Fprintf(
@@ -150,26 +203,71 @@ func (fixture *sharedFactoryTransformationFixture) stop() {
 			fixture.scriptRunner.CallCount(),
 		)
 	}
-	fixture.cancel()
-	if fixture.done != nil {
+	return fixture.cleanup()
+}
+
+func waitForSharedFactoryTransformationProcess(done <-chan error) error {
+	shutdownTimer := time.NewTimer(sharedFactoryTransformationShutdownTimeout)
+	defer shutdownTimer.Stop()
+	select {
+	case err := <-done:
+		if err == nil || errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return fmt.Errorf("Process.Execute returned during shutdown: %w", err)
+	case <-shutdownTimer.C:
+		return fmt.Errorf(
+			"timed out waiting %s for Process.Execute shutdown",
+			sharedFactoryTransformationShutdownTimeout,
+		)
+	}
+}
+
+// waitForSharedFactoryTransformationRuntime preserves the old
+// WaitForServiceModeRuntime=true contract for a TestMain-owned fixture. The
+// package entrypoint has no testing.TB, so it observes the same public status
+// endpoint directly and returns as soon as RuntimeStatus is populated. The
+// bounded timer is a fail-closed startup ceiling, while the short ticker is
+// signal polling rather than a sleep or a readiness guess based only on the
+// listener binding.
+func waitForSharedFactoryTransformationRuntime(baseURL string) error {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
+	ctx, cancel := context.WithTimeout(context.Background(), sharedFactoryTransformationReadyTimeout)
+	defer cancel()
+	ticker := time.NewTicker(sharedFactoryTransformationStatusPoll)
+	defer ticker.Stop()
+	var last factoryapi.StatusResponse
+	var lastErr error
+	for {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return fmt.Errorf("build runtime readiness request: %w", err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err == nil {
+			func() {
+				defer response.Body.Close()
+				if response.StatusCode != http.StatusOK {
+					lastErr = fmt.Errorf("status = %d", response.StatusCode)
+					return
+				}
+				if err := json.NewDecoder(response.Body).Decode(&last); err != nil {
+					lastErr = err
+					return
+				}
+				lastErr = nil
+			}()
+			if lastErr == nil && last.RuntimeStatus != "" {
+				return nil
+			}
+		} else {
+			lastErr = err
+		}
 		select {
-		case <-fixture.done:
-		case <-time.After(5 * time.Second):
-			fmt.Fprintln(os.Stderr, "timed out waiting for shared factory transformation process")
+		case <-ticker.C:
+		case <-ctx.Done():
+			return fmt.Errorf("last=%#v error=%v: %w", last, lastErr, ctx.Err())
 		}
-	}
-	if fixture.process != nil {
-		closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := fixture.process.Close(closeCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared factory transformation process: %v\n", err)
-		}
-		cancelClose()
-	}
-	if err := os.RemoveAll(fixture.factoryDir); err != nil {
-		fmt.Fprintf(os.Stderr, "remove shared Factory root %s: %v\n", fixture.factoryDir, err)
-	}
-	if err := os.RemoveAll(fixture.homeDir); err != nil {
-		fmt.Fprintf(os.Stderr, "remove shared operator home %s: %v\n", fixture.homeDir, err)
 	}
 }
 
