@@ -166,6 +166,11 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	// resolution, before any provider or workflow runs -- so it stays fast
 	// and runs even under -short, which is exactly the lane
 	// `make test-functional-coverage` uses.
+	// It remains scenario-local because the test deliberately removes the
+	// installed Factory, clears both home-directory variables, and corrupts the
+	// Operator Settings document after admission. Those destructive inputs are
+	// the filesystem and resolver property under test and cannot be shared with
+	// another ACP session without changing its dependency edge.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -173,7 +178,10 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	runner := &controlledACPCommandRunner{}
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -216,13 +224,15 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	}
 
 	firstResp := sendSessionPrompt(t, server, sessionID, "please help with this goal")
-	if firstResp.Error == nil {
-		t.Fatal("first session/prompt response error = nil, want a bounded internal error for an unresolvable Factory target")
-	}
+	firstErrorData := assertBoundedDependencyError(t, firstResp, "first unresolvable-target prompt")
 
 	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the unresolvable target failure")
-	if secondResp.Error == nil {
-		t.Fatal("second session/prompt response error = nil, want the same bounded rejection, not a stranded busy session")
+	secondErrorData := assertBoundedDependencyError(t, secondResp, "retry after unresolvable-target prompt")
+	if secondErrorData != firstErrorData {
+		t.Fatalf("retry error data = %s, want the same bounded error data as the first failure %s", secondErrorData, firstErrorData)
+	}
+	if strings.Contains(strings.ToLower(secondResp.Error.Error()), "busy") {
+		t.Fatalf("retry error = %v, want a fresh bounded resolver failure after busy state was released", secondResp.Error)
 	}
 
 	// The third episode's prompt proves the resolver's own earlier
@@ -232,8 +242,9 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
 	thirdResp := sendSessionPrompt(t, server, thirdSessionID, "a prompt with no resolvable home directory")
-	if thirdResp.Error == nil {
-		t.Fatal("third session/prompt response error = nil, want a bounded internal error when the home directory cannot be resolved")
+	thirdErrorData := assertBoundedDependencyError(t, thirdResp, "missing-home prompt")
+	if thirdErrorData != firstErrorData {
+		t.Fatalf("missing-home error data = %s, want the same bounded dependency error data %s", thirdErrorData, firstErrorData)
 	}
 
 	// The fourth episode's prompt proves the resolver's Operator Defaults
@@ -248,9 +259,39 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
 	}
 	fourthResp := sendSessionPrompt(t, server, fourthSessionID, "a prompt with no resolvable Operator Defaults")
-	if fourthResp.Error == nil {
-		t.Fatal("fourth session/prompt response error = nil, want a bounded internal error when Operator Defaults cannot be resolved")
+	fourthErrorData := assertBoundedDependencyError(t, fourthResp, "corrupt-Operator-Settings prompt")
+	if fourthErrorData != firstErrorData {
+		t.Fatalf("corrupt-settings error data = %s, want the same bounded dependency error data %s", fourthErrorData, firstErrorData)
 	}
+	if got := runner.requestCount(); got != 0 {
+		t.Fatalf("provider command calls during resolver failures = %d, want 0 (all failures precede Factory execution)", got)
+	}
+}
+
+// assertBoundedDependencyError proves the resolver failure reaches the ACP
+// boundary as the fixed dependency_unavailable shape. The returned canonical
+// JSON is compared across failure classes and the retry so a later change
+// cannot leak a target, path, operator document, or prompt into the error.
+func assertBoundedDependencyError(t *testing.T, resp rpcMessage, operation string) string {
+	t.Helper()
+	if resp.Error == nil {
+		t.Fatalf("%s error = nil, want a bounded internal dependency error", operation)
+	}
+	if resp.Error.Code != internalErrorCode {
+		t.Fatalf("%s error code = %d, want %d (internal error)", operation, resp.Error.Code, internalErrorCode)
+	}
+	encodedData, err := json.Marshal(resp.Error.Data)
+	if err != nil {
+		t.Fatalf("marshal %s error data: %v", operation, err)
+	}
+	var data map[string]string
+	if err := json.Unmarshal(encodedData, &data); err != nil {
+		t.Fatalf("%s error data %s is not a flat string map: %v", operation, encodedData, err)
+	}
+	if len(data) != 1 || data["reason"] != "dependency_unavailable" {
+		t.Fatalf("%s error data = %s, want exactly {reason: dependency_unavailable}", operation, encodedData)
+	}
+	return string(encodedData)
 }
 
 // closeProcessCleanly registers a cleanup that closes process and fails the

@@ -118,6 +118,11 @@ func TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess(t *testing.T) 
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
+	// The root stays scenario-local because this witness owns a different
+	// local-real command protocol (an ACP client talking to a scripted ACP
+	// server over OS pipes), a fixed peer session identity, and a completed
+	// ACP-execution Factory activation. Combining it with another activation
+	// would make the peer/session and process-scoped ~default lifetime mutable.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

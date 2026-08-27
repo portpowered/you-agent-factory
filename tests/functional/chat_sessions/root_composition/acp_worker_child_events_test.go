@@ -29,12 +29,10 @@ import (
 // -- and must never surface as top-level assistant output. The Factory, not
 // the Worker, is what speaks to the customer.
 //
-// The producer for that route does not exist yet: workersessions.PublishRecord
-// has no production callers, so the Worker topic carries only the opening
-// SESSION/STARTED and the terminal record, and Worker output instead travels
-// the Factory Session response-event stream and lands top-level. These cells
-// are therefore expected to fail until that producer is wired, and they are
-// written to fail on the specific difference rather than on harness setup.
+// The child records are asserted through the production Worker Session and
+// Chat Session response-event path. The tests keep the local-real ACP peer
+// edge intact so a passing result proves both attribution and the subprocess
+// protocol, rather than only an in-process projection.
 
 const acpWorkerChildPeerEnvironment = "YOU_TEST_ACP_WORKER_CHILD_PEER"
 
@@ -304,6 +302,12 @@ func describeACPWorkerNotifications(notifications []acpsdk.SessionNotification) 
 func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.SessionNotification {
 	t.Helper()
 
+	// The ACP-execution provider keeps one self-reexec'd peer process for all
+	// stages in this Factory and opens distinct protocol sessions for distinct
+	// Workers. This fixture deliberately keeps its root scenario-local: the
+	// seeded stage topology and the completed on-demand Factory activation are
+	// immutable process-scoped inputs that cannot be safely combined with
+	// another cell until Factory release/reopen is publicly supported.
 	home, cwd := seedACPWorkerChildHome(t, name, stages)
 	var starts atomic.Int32
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{
@@ -326,6 +330,9 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 	if decoded.StopReason != acpsdk.StopReasonEndTurn {
 		t.Fatalf("stopReason = %q, want %q; notifications = %s",
 			decoded.StopReason, acpsdk.StopReasonEndTurn, describeACPWorkerNotifications(notifications))
+	}
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("ACP peer subprocess starts = %d, want exactly 1 (one local-real peer shared by this Factory's Worker sessions)", got)
 	}
 	return notifications
 }
@@ -502,6 +509,11 @@ func TestJavaScriptFactoryChildrenAreVisibleAsWorkers(t *testing.T) {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
+	// This cell intentionally owns its root: the @you/spawn activation depends
+	// on the process environment's default Worker provider and its completed
+	// activation remains retained under the process-scoped ~default binding.
+	// Sharing it with another activation-owning witness would change that
+	// production lifecycle edge, not merely reuse immutable wiring.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
