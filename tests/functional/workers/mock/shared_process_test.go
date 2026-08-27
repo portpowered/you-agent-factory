@@ -470,7 +470,19 @@ func assertSharedWorkersMockEndpointStatus(
 func writeSharedMockWorkersConfig(t *testing.T, gate *support.MockWorkerGate) string {
 	t.Helper()
 
-	payload := map[string]any{
+	payloadBytes, err := json.Marshal(sharedMockWorkersPayload(gate))
+	if err != nil {
+		t.Fatalf("marshal shared mock workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "shared-mock-workers.json")
+	if err := os.WriteFile(path, payloadBytes, 0o600); err != nil {
+		t.Fatalf("write shared mock workers config: %v", err)
+	}
+	return path
+}
+
+func sharedMockWorkersPayload(gate *support.MockWorkerGate) map[string]any {
+	return map[string]any{
 		"unmatchedDispatchPolicy": "passthrough",
 		"mockWorkers": []map[string]any{
 			{
@@ -564,15 +576,6 @@ func writeSharedMockWorkersConfig(t *testing.T, gate *support.MockWorkerGate) st
 		},
 		"futureTopLevel": true,
 	}
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal shared mock workers config: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "shared-mock-workers.json")
-	if err := os.WriteFile(path, payloadBytes, 0o600); err != nil {
-		t.Fatalf("write shared mock workers config: %v", err)
-	}
-	return path
 }
 
 func writeSharedWorkersMockOperatorHome(t *testing.T) string {
