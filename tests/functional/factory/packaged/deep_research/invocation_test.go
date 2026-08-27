@@ -54,6 +54,33 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	)
 	scenario := fixture.newScenario(t, provider)
 	factoryPath := filepath.Join(scenario.factoryDir, factorydefinitions.FactoryConfigFile)
+	stalePayload := prepareStaleDeepResearchMaterialization(t, factoryPath)
+	commandArgs, inputs, invocationErr := runDeepResearchRefreshHelp(t, fixture, scenario)
+
+	activePayload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read refreshed deep-research materialization: %v", err)
+	}
+	assertDeepResearchExternalNames(t, activePayload, "research-model-provider", "research-model", "research-depth", "max-subagents")
+	assertDeepResearchExternalNamesAbsent(t, activePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+
+	backupPath := assertDeepResearchRefreshBackup(t, scenario, stalePayload)
+	_, structuredResponse, structuredArgs := runDeepResearchRefreshedInvocations(t, scenario, provider)
+	t.Logf(
+		"customer command %q refreshed %s; backup=%s; invocation_error=%v; help_output=%t; durable_commands=2; structured_command=%q; structured_status=%q; structured_provider_result=%t",
+		strings.Join(commandArgs, " "),
+		scenario.factoryDir,
+		backupPath,
+		invocationErr,
+		strings.TrimSpace(inputs.Stdout()) != "",
+		"durable API first invocation; "+strings.Join(structuredArgs, " "),
+		structuredResponse.Status,
+		structuredResponse.Result != nil && structuredResponse.Result.PrimaryResult != nil,
+	)
+}
+
+func prepareStaleDeepResearchMaterialization(t *testing.T, factoryPath string) []byte {
+	t.Helper()
 	currentPayload, err := os.ReadFile(factoryPath)
 	if err != nil {
 		t.Fatalf("read current deep-research materialization: %v", err)
@@ -63,7 +90,15 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 		t.Fatalf("write stale deep-research materialization: %v", err)
 	}
 	assertDeepResearchExternalNames(t, stalePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+	return stalePayload
+}
 
+func runDeepResearchRefreshHelp(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+	scenario *deepResearchScenario,
+) ([]string, *support.CapturedInputs, error) {
+	t.Helper()
 	commandArgs := []string{
 		"you", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName, "--help",
 	}
@@ -82,14 +117,15 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	if invocationErr != nil {
 		t.Fatalf("refreshed named deep-research help error = %v", invocationErr)
 	}
+	return commandArgs, inputs, invocationErr
+}
 
-	activePayload, err := os.ReadFile(factoryPath)
-	if err != nil {
-		t.Fatalf("read refreshed deep-research materialization: %v", err)
-	}
-	assertDeepResearchExternalNames(t, activePayload, "research-model-provider", "research-model", "research-depth", "max-subagents")
-	assertDeepResearchExternalNamesAbsent(t, activePayload, "model-provider", "model", "researchDepth", "maxSubagents")
-
+func assertDeepResearchRefreshBackup(
+	t *testing.T,
+	scenario *deepResearchScenario,
+	stalePayload []byte,
+) string {
+	t.Helper()
 	backupRoot := filepath.Join(filepath.Dir(filepath.Dir(scenario.factoryDir)), ".you-packaged-backups")
 	backupEntries, err := os.ReadDir(backupRoot)
 	if err != nil {
@@ -114,6 +150,19 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	if filepath.Clean(backupDirs[0]) == filepath.Clean(scenario.factoryDir) {
 		t.Fatalf("backup path %s is still the active Factory path", backupDirs[0])
 	}
+	return backupDirs[0]
+}
+
+func runDeepResearchRefreshedInvocations(
+	t *testing.T,
+	scenario *deepResearchScenario,
+	provider *testutil.ProviderCommandRunner,
+) (
+	factoryapi.FactorySessionSyncExecutionResponse,
+	factoryapi.FactorySessionSyncExecutionResponse,
+	[]string,
+) {
+	t.Helper()
 	scenario.open(t)
 	firstResponse := startPackagedDeepResearchInvocation(
 		t,
@@ -150,17 +199,7 @@ func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	if !strings.Contains(string(request.Stdin), "What is a Petri net?") {
 		t.Fatalf("provider prompt = %q, want the exact customer topic", string(request.Stdin))
 	}
-	t.Logf(
-		"customer command %q refreshed %s; backup=%s; invocation_error=%v; help_output=%t; durable_commands=2; structured_command=%q; structured_status=%q; structured_provider_result=%t",
-		strings.Join(commandArgs, " "),
-		scenario.factoryDir,
-		backupDirs[0],
-		invocationErr,
-		strings.TrimSpace(inputs.Stdout()) != "",
-		"durable API first invocation; "+strings.Join(structuredArgs, " "),
-		structuredResponse.Status,
-		structuredResponse.Result != nil && structuredResponse.Result.PrimaryResult != nil,
-	)
+	return firstResponse, structuredResponse, structuredArgs
 }
 
 func deepResearchCustomerEnvironment(homeDir string) []string {
