@@ -90,6 +90,18 @@ function fakeHarnessProcess(spawnCalls) {
   };
 }
 
+function fakeSpawnErrorHarnessProcess() {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.exitCode = null;
+  child.signalCode = null;
+  queueMicrotask(() => {
+    child.emit("error", new Error("spawn failed"));
+  });
+  return child;
+}
+
 async function fetchJSON(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -177,6 +189,56 @@ describe("real backend durable session setup", () => {
         "phase=process-launch started mode=prebuilt-artifact",
       );
       await backend.stop();
+    } finally {
+      await rm(artifactDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects promptly and cleans up the temporary home after a spawn error", async () => {
+    const artifactDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "you-browser-api-harness-test-"),
+    );
+    const artifactPath = path.join(artifactDirectory, "browser_api_harness");
+    await writeFile(artifactPath, "prebuilt browser api harness");
+    let customerHome = null;
+    const startPromise = startRealBackendBrowserHarness({
+      apiPort: 43123,
+      createTemporaryHome: async () => {
+        customerHome = await mkdtemp(
+          path.join(os.tmpdir(), "you-browser-backend-spawn-error-test-"),
+        );
+        return customerHome;
+      },
+      harnessPath: artifactPath,
+      resolveGoCache: fakeGoCache,
+      spawnProcess: fakeSpawnErrorHarnessProcess,
+      workflowFixture: "agent-run-fake-child.workflow.js",
+      workflowName: "agent-run-fake-child",
+    });
+
+    try {
+      const failure = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("spawn-error cleanup did not settle promptly"));
+        }, 1_000);
+        startPromise.then(
+          () => {
+            clearTimeout(timeout);
+            reject(new Error("spawn-error setup unexpectedly became ready"));
+          },
+          (error) => {
+            clearTimeout(timeout);
+            resolve(error);
+          },
+        );
+      });
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure.message).toMatch(
+        /Real backend browser harness process error: Error: spawn failed[\s\S]*phase=harness-compilation\/setup/,
+      );
+      expect(customerHome).not.toBeNull();
+      expect(existsSync(customerHome)).toBe(false);
     } finally {
       await rm(artifactDirectory, { force: true, recursive: true });
     }

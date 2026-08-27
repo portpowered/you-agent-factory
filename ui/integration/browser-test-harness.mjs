@@ -1072,6 +1072,8 @@ const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
 const browserProcessStateKey = "__agentFactoryBrowserIntegrationBrowserState";
 const browserPreviewStateKey = "__agentFactoryBrowserIntegrationPreviewState";
 const repoProcessGroupKey = Symbol("repoProcessGroup");
+const repoProcessSpawnedKey = Symbol("repoProcessSpawned");
+const repoProcessErrorKey = Symbol("repoProcessError");
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;
 export const exportCoverImagePath = path.resolve(
@@ -1362,6 +1364,7 @@ function spawnRuntime(args, extraEnv = {}, options = {}) {
     shell: false,
     stdio: "pipe",
   });
+  trackRepoProcess(child);
   child[repoProcessGroupKey] = process.platform !== "win32";
   return child;
 }
@@ -1374,7 +1377,18 @@ function spawnRepoProcess(command, args, options = {}) {
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  trackRepoProcess(child);
   child[repoProcessGroupKey] = process.platform !== "win32";
+  return child;
+}
+
+function trackRepoProcess(child) {
+  child.once("spawn", () => {
+    child[repoProcessSpawnedKey] = true;
+  });
+  child.once("error", (error) => {
+    child[repoProcessErrorKey] = error;
+  });
   return child;
 }
 
@@ -1711,6 +1725,7 @@ export function waitForRealBackendHarnessReadiness({
     }
 
     function rejectWithProcessError(error) {
+      child[repoProcessErrorKey] = error;
       settleFailure(
         new Error(`Real backend browser harness process error: ${error}`),
       );
@@ -1861,18 +1876,60 @@ async function runRuntime(
   }
 }
 
+function waitForProcessTermination(child) {
+  if (
+    !child ||
+    child.exitCode !== null ||
+    child.signalCode !== null ||
+    (child[repoProcessErrorKey] && !child[repoProcessSpawnedKey])
+  ) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child.off("exit", settle);
+      child.off("error", settle);
+      child.off("close", settle);
+      resolve();
+    };
+
+    child.once("exit", settle);
+    child.once("error", settle);
+    child.once("close", settle);
+
+    if (
+      child.exitCode !== null ||
+      child.signalCode !== null ||
+      (child[repoProcessErrorKey] && !child[repoProcessSpawnedKey])
+    ) {
+      settle();
+    }
+  });
+}
+
 async function stopProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
+  if (
+    !child ||
+    child.exitCode !== null ||
+    child.signalCode !== null ||
+    (child[repoProcessErrorKey] && !child[repoProcessSpawnedKey])
+  ) {
     return;
   }
 
-  const exited = once(child, "exit");
+  const exited = waitForProcessTermination(child);
   if (process.platform === "win32") {
     const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
       shell: false,
       stdio: "ignore",
     });
-    await once(killer, "exit");
+    await waitForProcessTermination(killer);
     await exited;
     return;
   }
@@ -2816,6 +2873,8 @@ export async function startRealBackendBrowserHarness({
   resolveGoCache = resolveGoCacheEnvironment,
   spawnProcess = spawnRepoProcess,
   startMode = "sync",
+  createTemporaryHome = () =>
+    mkdtemp(path.join(tmpdir(), "you-browser-backend-")),
   workflowFixture,
   workflowName,
 } = {}) {
@@ -2838,9 +2897,7 @@ export async function startRealBackendBrowserHarness({
     "phase=temporary-home-setup started",
   );
   const temporaryHomeStartedAt = now();
-  const customerHome = await mkdtemp(
-    path.join(tmpdir(), "you-browser-backend-"),
-  );
+  const customerHome = await createTemporaryHome();
   writeRealBackendHarnessDiagnostic(
     diagnosticWriter,
     `phase=temporary-home-setup complete elapsed=${formatRealBackendHarnessDuration(Math.max(0, now() - temporaryHomeStartedAt))}`,
