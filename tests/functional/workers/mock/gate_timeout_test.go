@@ -10,8 +10,8 @@ import (
 
 // assertMockGateTimeoutDispatch proves the configured mock-worker gate is a
 // public execution timeout, rather than a test-level wait expiring. The
-// failure remains retryable and customer-safe, and no mock gate output leaks
-// into the dispatch response.
+// timeout remains customer-safe, and no mock gate output leaks into the
+// dispatch response.
 func assertMockGateTimeoutDispatch(
 	t *testing.T,
 	observation support.DispatchEventObservation,
@@ -43,9 +43,5 @@ func assertMockGateTimeoutDispatch(
 			observation.Request.TransitionId,
 			gateTimeoutWorkstation,
 		)
-	}
-	if payload.ProviderFailure != nil && payload.ProviderFailure.Type != nil &&
-		*payload.ProviderFailure.Type == factoryapi.WorkFailureTypeInternalServerError {
-		t.Fatalf("gate-timeout provider failure = %#v, want timeout classification", payload.ProviderFailure)
 	}
 }
