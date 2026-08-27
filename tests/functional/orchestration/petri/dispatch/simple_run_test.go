@@ -1270,9 +1270,9 @@ func writeServicePipelineWorkerConfig(t *testing.T, dir, workerName string) {
 	)
 }
 
-func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
+func assertQuiescentSession(t *testing.T, status factoryapi.StatusResponse, wantTerminal, wantFailed int) {
 	t.Helper()
-	categories := session.Runtime.Progress.Categories
+	categories := status.Categories
 	if categories.Initial != 0 || categories.Processing != 0 {
 		t.Errorf(
 			"session still has in-progress Work: initial=%d processing=%d",
@@ -1286,4 +1286,16 @@ func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wan
 	if categories.Failed != wantFailed {
 		t.Errorf("session failed count = %d, want %d", categories.Failed, wantFailed)
 	}
+}
+
+func assertQuiescentFactorySession(
+	t *testing.T,
+	session factoryapi.FactorySession,
+	wantTerminal,
+	wantFailed int,
+) {
+	t.Helper()
+	assertQuiescentSession(t, factoryapi.StatusResponse{
+		Categories: session.Runtime.Progress.Categories,
+	}, wantTerminal, wantFailed)
 }

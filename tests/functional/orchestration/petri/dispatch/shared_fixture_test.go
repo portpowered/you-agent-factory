@@ -654,15 +654,14 @@ func runSharedPetriFactoryToCompletionWithEdgesAndWork(
 	dir string,
 	_ serviceedges.Edges,
 	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+) (factoryapi.StatusResponse, factoryapi.ListWorkResponse) {
 	t.Helper()
 	selection := openSharedPetriSession(t, dir)
-	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
-	session := getSharedPetriSession(t, selection.fixture.baseURL, selection.sessionID)
+	status := support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
 	selection.close(t)
 	assertSharedPetriRouteRequests(t, dir)
-	return session, listed
+	return status, listed
 }
 
 func runSharedPetriFactoryToCompletionWithEdgesAndListedWork(
@@ -685,7 +684,7 @@ func runSharedPetriFactoryToCompletionWithEdgesAndObservations(
 	dir string,
 	_ serviceedges.Edges,
 	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+) (factoryapi.StatusResponse, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	return runSharedPetriFactoryToCompletionWithRouteAndObservations(
 		t,
 		dir,
@@ -699,16 +698,15 @@ func runSharedPetriFactoryToCompletionWithRouteAndObservations(
 	dir string,
 	config sharedPetriRouteConfig,
 	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+) (factoryapi.StatusResponse, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	t.Helper()
 	selection := openSharedPetriSessionWithRoute(t, dir, config)
-	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
-	session := getSharedPetriSession(t, selection.fixture.baseURL, selection.sessionID)
+	status := support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, selection.fixture.baseURL, selection.sessionID)
 	selection.close(t)
 	assertSharedPetriRouteRequests(t, dir)
-	return session, listed, events
+	return status, listed, events
 }
 
 func runSharedPetriFactoryToCompletionWithRouteAndWork(
@@ -716,15 +714,14 @@ func runSharedPetriFactoryToCompletionWithRouteAndWork(
 	dir string,
 	config sharedPetriRouteConfig,
 	timeout time.Duration,
-) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+) (factoryapi.StatusResponse, factoryapi.ListWorkResponse) {
 	t.Helper()
 	selection := openSharedPetriSessionWithRoute(t, dir, config)
-	support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
-	session := getSharedPetriSession(t, selection.fixture.baseURL, selection.sessionID)
+	status := support.WaitForSessionTerminalStatus(t, selection.fixture.baseURL, selection.sessionID, timeout)
 	listed := listSharedPetriSessionWork(t, selection.fixture.baseURL, selection.sessionID)
 	selection.close(t)
 	assertSharedPetriRouteRequests(t, dir)
-	return session, listed
+	return status, listed
 }
 
 func runSharedPetriFactoryToCompletionWithRouteAndListedWork(
@@ -757,19 +754,6 @@ func assertSharedPetriRouteRequests(t testing.TB, dir string) {
 			request.WorkDir,
 		)
 	}
-}
-
-func getSharedPetriSession(t testing.TB, baseURL, sessionID string) factoryapi.FactorySession {
-	t.Helper()
-	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
-		t,
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID),
-	)
-	session, err := response.AsFactorySession()
-	if err != nil {
-		t.Fatalf("decode shared Petri Factory Session %q: %v", sessionID, err)
-	}
-	return session
 }
 
 func listSharedPetriSessionWork(t testing.TB, baseURL, sessionID string) factoryapi.ListWorkResponse {

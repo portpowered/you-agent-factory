@@ -55,7 +55,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 	})
 	assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
 	assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
-	assertQuiescentSession(t, session, 0, 1)
+	assertQuiescentFactorySession(t, session, 0, 1)
 
 	failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
 	if !ok {

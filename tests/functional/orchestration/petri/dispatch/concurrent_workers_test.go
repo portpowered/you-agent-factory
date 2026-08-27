@@ -507,9 +507,13 @@ func assertNoAcceptedDispatchMovesWorkToCustomerState(
 	}
 }
 
-func assertResourceAvailability(t *testing.T, session factoryapi.FactorySession, name string, want int) {
+func assertResourceAvailability(t *testing.T, status factoryapi.StatusResponse, name string, want int) {
 	t.Helper()
-	for _, resource := range session.Runtime.Usage.Resources {
+	if status.Resources == nil {
+		t.Errorf("session status missing resource usage, want %s=%d", name, want)
+		return
+	}
+	for _, resource := range *status.Resources {
 		if resource.Name == name {
 			if resource.Available != want || resource.Total != want {
 				t.Errorf("resource %s usage = %#v, want %d available and total", name, resource, want)
