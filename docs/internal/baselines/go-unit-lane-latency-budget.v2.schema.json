@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://portpowered.dev/schemas/go-unit-lane-latency-budget.v2.json",
+  "title": "Go unit-lane latency budget v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "owner", "entrypoint", "historicalReference", "referenceCI", "candidate", "policy"],
+  "properties": {
+    "version": { "const": 2 },
+    "owner": { "const": "backend-unit-lane" },
+    "entrypoint": { "const": "make test-unit-fresh" },
+    "historicalReference": { "$ref": "#/$defs/historicalReference" },
+    "referenceCI": { "$ref": "#/$defs/cohortExpectation" },
+    "candidate": { "$ref": "#/$defs/candidateExpectation" },
+    "policy": { "$ref": "#/$defs/policy" }
+  },
+  "$defs": {
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "image", "imageVersion", "os", "architecture", "cpuModel"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "imageVersion": { "type": "string", "minLength": 1 },
+        "os": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "cpuModel": { "type": "string", "minLength": 1 }
+      }
+    },
+    "historicalReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseCommit", "measurementCommit", "runner", "goVersion", "unitDefaultJobs", "computedLaneBudget", "samples", "medianWallSeconds", "packageCount", "testCount", "inventorySha256"],
+      "properties": {
+        "baseCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "measurementCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runner": { "$ref": "#/$defs/runner" },
+        "goVersion": { "type": "string", "pattern": "^go[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "unitDefaultJobs": { "type": "integer", "minimum": 1 },
+        "computedLaneBudget": { "type": "integer", "minimum": 1 },
+        "samples": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "medianWallSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "packageCount": { "type": "integer", "minimum": 1 },
+        "testCount": { "type": "integer", "minimum": 1 },
+        "inventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "cohortExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "packageCount", "testCount", "inventorySha256"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "packageCount": { "type": "integer", "minimum": 1 },
+        "testCount": { "type": "integer", "minimum": 1 },
+        "inventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "candidateExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inventorySource", "packageCount", "testCount", "inventorySha256"],
+      "properties": {
+        "inventorySource": { "type": "string", "minLength": 1 },
+        "packageCount": { "type": "integer", "minimum": 1 },
+        "testCount": { "type": "integer", "minimum": 1 },
+        "inventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredConsecutiveSamples", "minimumImprovementPercent", "maximumRunAboveMedianPercent", "requiredCachedPackages", "requiredUnknownPackages", "requiredRunnerIdentityFields", "inventoryPolicy", "invalidSamplePolicy"],
+      "properties": {
+        "requiredConsecutiveSamples": { "const": 3 },
+        "minimumImprovementPercent": { "const": 25 },
+        "maximumRunAboveMedianPercent": { "const": 10 },
+        "requiredCachedPackages": { "const": 0 },
+        "requiredUnknownPackages": { "const": 0 },
+        "requiredRunnerIdentityFields": {
+          "type": "array",
+          "const": ["provider", "image", "imageVersion", "os", "architecture", "cpuModel"]
+        },
+        "inventoryPolicy": { "const": "exact-with-reviewed-diff" },
+        "invalidSamplePolicy": { "const": "retain-and-fail-unless-predeclared-invalidation-matches" }
+      }
+    }
+  }
+}

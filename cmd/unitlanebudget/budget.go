@@ -74,11 +74,42 @@ type timingSummary struct {
 }
 
 type latencyBudget struct {
-	Version    int             `json:"version"`
-	Owner      string          `json:"owner"`
-	Entrypoint string          `json:"entrypoint"`
-	Reference  budgetReference `json:"reference"`
-	Policy     budgetPolicy    `json:"policy"`
+	Version             int                  `json:"version"`
+	Owner               string               `json:"owner"`
+	Entrypoint          string               `json:"entrypoint"`
+	Reference           budgetReference      `json:"reference"`
+	HistoricalReference historicalReference  `json:"historicalReference"`
+	ReferenceCI         cohortExpectation    `json:"referenceCI"`
+	Candidate           candidateExpectation `json:"candidate"`
+	Policy              budgetPolicy         `json:"policy"`
+}
+
+type historicalReference struct {
+	BaseCommit         string       `json:"baseCommit"`
+	MeasurementCommit  string       `json:"measurementCommit"`
+	Runner             timingRunner `json:"runner"`
+	GoVersion          string       `json:"goVersion"`
+	UnitDefaultJobs    int          `json:"unitDefaultJobs"`
+	ComputedLaneBudget int          `json:"computedLaneBudget"`
+	Samples            []float64    `json:"samples"`
+	MedianWallSeconds  float64      `json:"medianWallSeconds"`
+	PackageCount       int          `json:"packageCount"`
+	TestCount          int          `json:"testCount"`
+	InventorySHA256    string       `json:"inventorySha256"`
+}
+
+type cohortExpectation struct {
+	Commit          string `json:"commit"`
+	PackageCount    int    `json:"packageCount"`
+	TestCount       int    `json:"testCount"`
+	InventorySHA256 string `json:"inventorySha256"`
+}
+
+type candidateExpectation struct {
+	InventorySource string `json:"inventorySource"`
+	PackageCount    int    `json:"packageCount"`
+	TestCount       int    `json:"testCount"`
+	InventorySHA256 string `json:"inventorySha256"`
 }
 
 type budgetReference struct {
@@ -94,13 +125,14 @@ type budgetReference struct {
 }
 
 type budgetPolicy struct {
-	RequiredConsecutiveSamples   int     `json:"requiredConsecutiveSamples"`
-	MinimumImprovementPercent    float64 `json:"minimumImprovementPercent"`
-	MaximumRunAboveMedianPercent float64 `json:"maximumRunAboveMedianPercent"`
-	RequiredCachedPackages       int     `json:"requiredCachedPackages"`
-	RequiredUnknownPackages      int     `json:"requiredUnknownPackages"`
-	InventoryPolicy              string  `json:"inventoryPolicy"`
-	InvalidSamplePolicy          string  `json:"invalidSamplePolicy"`
+	RequiredConsecutiveSamples   int      `json:"requiredConsecutiveSamples"`
+	MinimumImprovementPercent    float64  `json:"minimumImprovementPercent"`
+	MaximumRunAboveMedianPercent float64  `json:"maximumRunAboveMedianPercent"`
+	RequiredCachedPackages       int      `json:"requiredCachedPackages"`
+	RequiredUnknownPackages      int      `json:"requiredUnknownPackages"`
+	RequiredRunnerIdentityFields []string `json:"requiredRunnerIdentityFields"`
+	InventoryPolicy              string   `json:"inventoryPolicy"`
+	InvalidSamplePolicy          string   `json:"invalidSamplePolicy"`
 }
 
 type budgetReport struct {
@@ -114,6 +146,7 @@ type budgetReport struct {
 	TestCount                int
 	CachedPackages           int
 	UnknownPackages          int
+	ManifestPath             string
 }
 
 type validationProblems struct {
@@ -188,7 +221,7 @@ func loadLatencyBudget(path string) (latencyBudget, error) {
 	if err != nil {
 		return latencyBudget{}, fmt.Errorf("budget %q: read JSON: %w", path, err)
 	}
-	if err := validateLatencyBudgetDocument(budgetSchemaPath(path), data); err != nil {
+	if err := validateLatencyBudgetDocument(budgetSchemaPathForData(path, data), data); err != nil {
 		return latencyBudget{}, fmt.Errorf("budget %q: schema validation: %w", path, err)
 	}
 	var budget latencyBudget
@@ -199,11 +232,33 @@ func loadLatencyBudget(path string) (latencyBudget, error) {
 }
 
 func budgetSchemaPath(budgetPath string) string {
-	adjacent := filepath.Join(filepath.Dir(budgetPath), "go-unit-lane-latency-budget.schema.json")
+	name := filepath.Base(budgetPath)
+	schemaName := "go-unit-lane-latency-budget.schema.json"
+	if strings.Contains(name, ".v2.") {
+		schemaName = "go-unit-lane-latency-budget.v2.schema.json"
+	}
+	adjacent := filepath.Join(filepath.Dir(budgetPath), schemaName)
 	if _, err := os.Stat(adjacent); err == nil {
 		return adjacent
 	}
+	if schemaName == "go-unit-lane-latency-budget.v2.schema.json" {
+		return filepath.FromSlash("docs/internal/baselines/go-unit-lane-latency-budget.v2.schema.json")
+	}
 	return latencyBudgetSchemaPath
+}
+
+func budgetSchemaPathForData(budgetPath string, data []byte) string {
+	var envelope struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &envelope); err == nil && envelope.Version == 2 {
+		name := filepath.Join(filepath.Dir(budgetPath), "go-unit-lane-latency-budget.v2.schema.json")
+		if _, err := os.Stat(name); err == nil {
+			return name
+		}
+		return filepath.FromSlash("docs/internal/baselines/go-unit-lane-latency-budget.v2.schema.json")
+	}
+	return budgetSchemaPath(budgetPath)
 }
 
 func decodeJSONFile(path string, destination any) error {
@@ -483,6 +538,10 @@ func validateFinal(budget latencyBudget, samples []timingSummary) (budgetReport,
 }
 
 func validateBudgetShape(problems *validationProblems, budget latencyBudget) {
+	if budget.Version == 2 {
+		validateV2BudgetShape(problems, budget)
+		return
+	}
 	if budget.Version != 1 {
 		problems.add("budget version: expected 1, actual %d", budget.Version)
 	}
@@ -607,6 +666,9 @@ func renderBudgetReport(report budgetReport) string {
 	}
 	fmt.Fprintf(&builder, "Inventory: %d packages, %d tests\n", report.PackageCount, report.TestCount)
 	fmt.Fprintf(&builder, "Cache: %d cached, %d unknown\n", report.CachedPackages, report.UnknownPackages)
+	if report.ManifestPath != "" {
+		fmt.Fprintf(&builder, "Manifest: %s\n", report.ManifestPath)
+	}
 	builder.WriteString("Result: pass\n")
 	return builder.String()
 }

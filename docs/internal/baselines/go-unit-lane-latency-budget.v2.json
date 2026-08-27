@@ -1,0 +1,58 @@
+{
+  "version": 2,
+  "owner": "backend-unit-lane",
+  "entrypoint": "make test-unit-fresh",
+  "historicalReference": {
+    "baseCommit": "9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff",
+    "measurementCommit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+    "runner": {
+      "provider": "local-wsl",
+      "image": "ubuntu-24.04",
+      "imageVersion": "24.04.1-wsl2",
+      "os": "linux",
+      "architecture": "amd64",
+      "cpuModel": "13th Gen Intel(R) Core(TM) i7-13700K"
+    },
+    "goVersion": "go1.25.0",
+    "unitDefaultJobs": 2,
+    "computedLaneBudget": 2,
+    "samples": [
+      222.006,
+      239.612,
+      258.271
+    ],
+    "medianWallSeconds": 239.612,
+    "packageCount": 444,
+    "testCount": 18122,
+    "inventorySha256": "508aabd7976efa0fdd16d322a24a0da3f18d6b9fed1725ea3773f4e99da01897"
+  },
+  "referenceCI": {
+    "commit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+    "packageCount": 444,
+    "testCount": 18122,
+    "inventorySha256": "508aabd7976efa0fdd16d322a24a0da3f18d6b9fed1725ea3773f4e99da01897"
+  },
+  "candidate": {
+    "inventorySource": "docs/internal/development/unit-test-optimization/unit-lane-inventory-reconciliation.v1.json",
+    "packageCount": 444,
+    "testCount": 18154,
+    "inventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677"
+  },
+  "policy": {
+    "requiredConsecutiveSamples": 3,
+    "minimumImprovementPercent": 25,
+    "maximumRunAboveMedianPercent": 10,
+    "requiredCachedPackages": 0,
+    "requiredUnknownPackages": 0,
+    "requiredRunnerIdentityFields": [
+      "provider",
+      "image",
+      "imageVersion",
+      "os",
+      "architecture",
+      "cpuModel"
+    ],
+    "inventoryPolicy": "exact-with-reviewed-diff",
+    "invalidSamplePolicy": "retain-and-fail-unless-predeclared-invalidation-matches"
+  }
+}

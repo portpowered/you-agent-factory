@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://portpowered.dev/schemas/go-unit-lane-reference-ci-evidence.v1.json",
+  "title": "Go unit-lane reference-CI verdict manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "status", "referenceCommit", "candidateCommit", "runner", "goVersion", "unitDefaultJobs", "computedLaneBudget", "reference", "candidate", "minimumImprovementPercent", "actualImprovementPercent", "maximumRunAboveMedianPercent", "actualMaximumRunAboveMedianPercent", "diagnostics"],
+  "properties": {
+    "schema": { "const": "you-agent-factory.unit-lane-reference-ci-evidence.v1" },
+    "version": { "const": 1 },
+    "status": { "enum": ["pass", "fail"] },
+    "referenceCommit": { "type": "string", "minLength": 1 },
+    "candidateCommit": { "type": "string", "minLength": 1 },
+    "runner": { "$ref": "#/$defs/runner" },
+    "goVersion": { "type": "string", "minLength": 1 },
+    "unitDefaultJobs": { "type": "integer", "minimum": 0 },
+    "computedLaneBudget": { "type": "integer", "minimum": 0 },
+    "reference": { "$ref": "#/$defs/cohort" },
+    "candidate": { "$ref": "#/$defs/cohort" },
+    "minimumImprovementPercent": { "type": "number", "minimum": 0 },
+    "actualImprovementPercent": { "type": "number" },
+    "maximumRunAboveMedianPercent": { "type": "number", "minimum": 0 },
+    "actualMaximumRunAboveMedianPercent": { "type": "number", "minimum": 0 },
+    "diagnostics": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "$defs": {
+    "runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "image", "imageVersion", "os", "architecture", "cpuModel"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "image": { "type": "string", "minLength": 1 },
+        "imageVersion": { "type": "string", "minLength": 1 },
+        "os": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 },
+        "cpuModel": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "path", "command", "sha256", "wallSeconds"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "path": { "type": "string", "minLength": 1 },
+        "command": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "wallSeconds": { "type": "number", "minimum": 0 }
+      }
+    },
+    "cohort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "medianWallSeconds", "packageCount", "testCount", "inventorySha256", "cachedPackages", "unknownPackages"],
+      "properties": {
+        "samples": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/sample" } },
+        "medianWallSeconds": { "type": "number", "minimum": 0 },
+        "packageCount": { "type": "integer", "minimum": 0 },
+        "testCount": { "type": "integer", "minimum": 0 },
+        "inventorySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "cachedPackages": { "type": "integer", "minimum": 0 },
+        "unknownPackages": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "pass" } } },
+      "then": {
+        "properties": {
+          "reference": { "properties": { "samples": { "minItems": 3, "maxItems": 3 }, "medianWallSeconds": { "exclusiveMinimum": 0 }, "packageCount": { "minimum": 1 }, "testCount": { "minimum": 1 } } },
+          "candidate": { "properties": { "samples": { "minItems": 3, "maxItems": 3 }, "medianWallSeconds": { "exclusiveMinimum": 0 }, "packageCount": { "minimum": 1 }, "testCount": { "minimum": 1 } } }
+        }
+      }
+    }
+  ]
+}

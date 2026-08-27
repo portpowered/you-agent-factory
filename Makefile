@@ -93,8 +93,11 @@ endif
 FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_TIMING_OUTPUT ?=
-UNIT_LATENCY_BUDGET ?= docs/internal/baselines/go-unit-lane-latency-budget.v1.json
-UNIT_LATENCY_SAMPLES ?= .artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json
+UNIT_LATENCY_BUDGET ?= docs/internal/baselines/go-unit-lane-latency-budget.v2.json
+UNIT_LATENCY_HISTORICAL_SAMPLES ?= docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-1-replacement.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-2.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-3.v2.json
+UNIT_LATENCY_REFERENCE_SAMPLES ?= .artifacts/unit-latency/reference/run-1.v2.json,.artifacts/unit-latency/reference/run-2.v2.json,.artifacts/unit-latency/reference/run-3.v2.json
+UNIT_LATENCY_SAMPLES ?= .artifacts/unit-latency/candidate/run-1.v2.json,.artifacts/unit-latency/candidate/run-2.v2.json,.artifacts/unit-latency/candidate/run-3.v2.json
+UNIT_LATENCY_MANIFEST ?= .artifacts/unit-latency/reference-ci-manifest.v1.json
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 FUNCTIONAL_LONG_COMPILE_PACKAGES := $(FUNCTIONAL_LONG_PACKAGES) ./pkg/services/models/internal/backendconformance
@@ -515,7 +518,7 @@ test-unit-fresh:
 	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT) $(if $(UNIT_TIMING_OUTPUT),-timing-output "$(UNIT_TIMING_OUTPUT)" -timing-command "make test-unit-fresh UNIT_DEFAULT_JOBS=$(UNIT_DEFAULT_JOBS) UNIT_TIMING_OUTPUT=$(UNIT_TIMING_OUTPUT)" -computed-lane-budget $(GO_LANE_BUDGET),)
 
 test-unit-latency-budget:
-	$(GO) run ./cmd/unitlanebudget -budget "$(UNIT_LATENCY_BUDGET)" -samples "$(UNIT_LATENCY_SAMPLES)"
+	$(GO) run ./cmd/unitlanebudget -mode final -budget "$(UNIT_LATENCY_BUDGET)" -historical-samples "$(UNIT_LATENCY_HISTORICAL_SAMPLES)" -reference-samples "$(UNIT_LATENCY_REFERENCE_SAMPLES)" -samples "$(UNIT_LATENCY_SAMPLES)" -manifest "$(UNIT_LATENCY_MANIFEST)"
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
 # pull-request base ref/SHA; the command resolves its merge-base with head,
