@@ -204,9 +204,10 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: you-agent-factory
         shell: msys2 {0}
-        # Keep the Windows build below the job ceiling without changing the
-        # existing Darwin/Linux build budget.
-        timeout-minutes: 60
+        # The pinned static gRPC dependency graph can take more than an hour
+        # on a hosted Windows runner. Keep the step below the job ceiling so
+        # the backend build, package closure, and startup smoke can finish.
+        timeout-minutes: 300
         run: |
           set -euo pipefail
           bash scripts/build-localai-backend-artifact.sh
