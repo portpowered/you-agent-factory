@@ -28,7 +28,12 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const wantPackagedGoalPrimaryResult = "mock worker accepted"
+const (
+	wantPackagedGoalPrimaryResult   = "mock worker accepted"
+	// Race instrumentation and concurrent CI lanes can delay production wiring
+	// before listener binding; readiness returns immediately once it is bound.
+	crossPackagedServerReadyTimeout = 90 * time.Second
+)
 
 // TestPackagedFactoryInvokedByCLICanBeInspectedByAPI proves a packaged @you/goal
 // invocation started through the public you run CLI with a run-scoped server
@@ -57,6 +62,13 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	server := support.NewProcessAPIServer()
 	fixture.router.set(server)
 	process := fixture.process
+	shutdownGate := make(chan struct{})
+	var releaseShutdown sync.Once
+	releaseServerShutdown := func() {
+		releaseShutdown.Do(func() { close(shutdownGate) })
+	}
+	server.HoldShutdownUntilSignaled(shutdownGate)
+	t.Cleanup(releaseServerShutdown)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -80,10 +92,19 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		execDone <- process.Execute(inputs.Input)
 	}()
 
-	baseURL := server.WaitForURL(t)
+	baseURL, err := server.WaitForBaseURL(crossPackagedServerReadyTimeout)
+	if err != nil {
+		t.Fatalf("wait for packaged cross inspect API server: %v", err)
+	}
 	eventCollector := startPackagedGoalFactoryEventCollector(ctx, t, baseURL)
 
-	inspection, execErr := pollPackagedGoalAPIInspectionUntilCLICompletes(ctx, t, baseURL, execDone)
+	inspection, execErr := pollPackagedGoalAPIInspectionUntilCLICompletes(
+		ctx,
+		t,
+		baseURL,
+		execDone,
+		releaseServerShutdown,
+	)
 	eventCollector.stop()
 	events := eventCollector.snapshot()
 	if retained, retainErr := tryGetRetainedFactoryEvents(baseURL); retainErr == nil {
@@ -183,7 +204,10 @@ func TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable(t *tes
 
 	crossCharacterization.recordRootStart("idle")
 	command := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := server.WaitForURL(t)
+	baseURL, err := server.WaitForBaseURL(crossPackagedServerReadyTimeout)
+	if err != nil {
+		t.Fatalf("wait for packaged cross idle API server: %v", err)
+	}
 	support.GetDefaultSession(t, baseURL)
 	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
 
@@ -546,6 +570,7 @@ func pollPackagedGoalAPIInspectionUntilCLICompletes(
 	t *testing.T,
 	baseURL string,
 	execDone <-chan error,
+	releaseServerShutdown func(),
 ) (packagedGoalAPIInspection, error) {
 	t.Helper()
 
@@ -563,12 +588,18 @@ func pollPackagedGoalAPIInspectionUntilCLICompletes(
 
 		if candidate, err := fetchPackagedGoalAPIInspectionSnapshot(baseURL); err == nil {
 			snapshot = preferStrongerPackagedGoalAPIInspection(snapshot, candidate)
+			if hasPackagedGoalTerminalWork(snapshot.listed) && releaseServerShutdown != nil {
+				releaseServerShutdown()
+			}
 		}
 
 		select {
 		case execErr := <-execDone:
 			if candidate, err := fetchPackagedGoalAPIInspectionSnapshot(baseURL); err == nil {
 				snapshot = preferStrongerPackagedGoalAPIInspection(snapshot, candidate)
+				if hasPackagedGoalTerminalWork(snapshot.listed) && releaseServerShutdown != nil {
+					releaseServerShutdown()
+				}
 			}
 			return snapshot, execErr
 		case <-ctx.Done():
@@ -653,7 +684,20 @@ func preferStrongerPackagedGoalAPIInspection(
 }
 
 func hasPackagedGoalAPIInspectabilityEvidence(snapshot packagedGoalAPIInspection) bool {
-	return hasPackagedGoalCompleteWork(snapshot.listed)
+	return hasPackagedGoalTerminalWork(snapshot.listed)
+}
+
+func hasPackagedGoalTerminalWork(listed factoryapi.ListWorkResponse) bool {
+	for _, work := range listed.Results {
+		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" || work.State == nil {
+			continue
+		}
+		if work.State.Type == factoryapi.WorkStateTypeTERMINAL ||
+			work.State.Type == factoryapi.WorkStateTypeFAILED {
+			return true
+		}
+	}
+	return false
 }
 
 func hasPackagedGoalCompleteWork(listed factoryapi.ListWorkResponse) bool {
@@ -1420,11 +1464,11 @@ func startPackagedGoalParityAPIServer(
 	inputs.Input.WorkingDirectory = factoryDir
 	crossCharacterization.recordRootStart("parity-api")
 	command := startCrossHostedCommand(t, fixture.process, inputs)
-	baseURL, err := server.WaitForBaseURL(15 * time.Second)
+	baseURL, err := server.WaitForBaseURL(crossPackagedServerReadyTimeout)
 	if err != nil {
 		t.Fatalf("wait for packaged goal parity API server: %v", err)
 	}
-	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+	support.WaitForStatus(t, baseURL, crossPackagedServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 	parityServer := &packagedGoalParityAPIServer{command: command, url: baseURL, homeDir: homeDir}

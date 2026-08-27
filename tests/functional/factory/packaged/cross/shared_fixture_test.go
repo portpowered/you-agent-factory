@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 			code = 1
 		}
 	}
-	if crossCharacterization.completedScenarioCount() == crossCharacterizationExpectedScenarios {
+	if crossCharacterization.scenarioMatrixComplete() {
 		fmt.Fprintf(os.Stderr, "packaged cross characterization: %s\n", crossCharacterization.summary())
 	}
 	os.Exit(code)

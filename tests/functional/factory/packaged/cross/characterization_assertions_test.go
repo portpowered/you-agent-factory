@@ -24,6 +24,17 @@ const (
 	crossCharacterizationExpectedSessions  = 5
 )
 
+var crossCharacterizationScenarioNames = [...]string{
+	"cli-api inspect",
+	"continuous idle",
+	"positional success",
+	"stdin success",
+	"named factory success",
+	"empty input rejected",
+	"source conflict rejected",
+	"unresolved primary result",
+}
+
 var crossCharacterization = newCrossCharacterizationLedger()
 
 type crossCharacterizationLedger struct {
@@ -38,7 +49,7 @@ type crossCharacterizationLedger struct {
 	sessionsClosed  map[string]struct{}
 	sessionsDeleted map[string]struct{}
 
-	completedScenarios map[string]struct{}
+	completedScenarios map[string]int
 	pathProbes         int
 	sharedFixtureClean bool
 }
@@ -50,7 +61,7 @@ func newCrossCharacterizationLedger() *crossCharacterizationLedger {
 		sessionsOpened:     make(map[string]struct{}),
 		sessionsClosed:     make(map[string]struct{}),
 		sessionsDeleted:    make(map[string]struct{}),
-		completedScenarios: make(map[string]struct{}),
+		completedScenarios: make(map[string]int),
 	}
 }
 
@@ -120,13 +131,48 @@ func (ledger *crossCharacterizationLedger) recordSessionDeleted(sessionID string
 func (ledger *crossCharacterizationLedger) recordScenarioComplete(name string) {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
-	ledger.completedScenarios[name] = struct{}{}
+	ledger.completedScenarios[name]++
 }
 
-func (ledger *crossCharacterizationLedger) completedScenarioCount() int {
+func (ledger *crossCharacterizationLedger) scenarioMatrixComplete() bool {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
-	return len(ledger.completedScenarios)
+	runs, err := ledger.completedScenarioRunsLocked()
+	return err == nil && runs > 0
+}
+
+func (ledger *crossCharacterizationLedger) completedScenarioRunsLocked() (int, error) {
+	if len(ledger.completedScenarios) == 0 {
+		return 0, nil
+	}
+	expectedNames := make(map[string]struct{}, len(crossCharacterizationScenarioNames))
+	for _, name := range crossCharacterizationScenarioNames {
+		expectedNames[name] = struct{}{}
+	}
+	for name := range ledger.completedScenarios {
+		if _, ok := expectedNames[name]; !ok {
+			return 0, fmt.Errorf("unexpected packaged cross scenario %q", name)
+		}
+	}
+
+	runs := 0
+	for _, name := range crossCharacterizationScenarioNames {
+		count := ledger.completedScenarios[name]
+		if count == 0 {
+			return 0, nil
+		}
+		if runs == 0 {
+			runs = count
+			continue
+		}
+		if count != runs {
+			return 0, fmt.Errorf(
+				"packaged cross scenario %q completed %d times, want %d like the other scenarios",
+				name, count, runs,
+			)
+		}
+	}
+	return runs, nil
 }
 
 func (ledger *crossCharacterizationLedger) recordPathProbe() {
@@ -144,35 +190,43 @@ func (ledger *crossCharacterizationLedger) recordSharedFixtureCleanup() {
 func (ledger *crossCharacterizationLedger) validateAfterSuite() error {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
-	if len(ledger.completedScenarios) != crossCharacterizationExpectedScenarios {
+	runs, err := ledger.completedScenarioRunsLocked()
+	if err != nil {
+		return fmt.Errorf("CHAR-001 scenario repetition accounting: %w", err)
+	}
+	if runs == 0 {
 		return nil
 	}
 
+	expectedRoots := crossCharacterizationExpectedRoots * runs
 	rootStarts := sumCrossCharacterizationCounts(ledger.rootStarts)
 	rootCloses := sumCrossCharacterizationCounts(ledger.rootCloses)
-	if rootStarts != crossCharacterizationExpectedRoots || rootCloses != crossCharacterizationExpectedRoots {
+	if rootStarts != expectedRoots || rootCloses != expectedRoots {
 		return fmt.Errorf(
-			"CHAR-001 scenario roots started=%d closed=%d, want %d/%d by kind starts=%v closes=%v",
+			"CHAR-001 scenario roots started=%d closed=%d, want %d/%d across %d runs (%d/%d per run) by kind starts=%v closes=%v",
 			rootStarts, rootCloses,
+			expectedRoots, expectedRoots, runs,
 			crossCharacterizationExpectedRoots, crossCharacterizationExpectedRoots,
 			ledger.rootStarts, ledger.rootCloses,
 		)
 	}
-	if ledger.serverStarts != crossCharacterizationExpectedServers || ledger.serverCloses != crossCharacterizationExpectedServers {
+	expectedServers := crossCharacterizationExpectedServers * runs
+	if ledger.serverStarts != expectedServers || ledger.serverCloses != expectedServers {
 		return fmt.Errorf(
-			"CHAR-001 loopback servers started=%d closed=%d, want %d/%d",
+			"CHAR-001 loopback servers started=%d closed=%d, want %d/%d across %d runs (%d/%d per run)",
 			ledger.serverStarts, ledger.serverCloses,
+			expectedServers, expectedServers, runs,
 			crossCharacterizationExpectedServers, crossCharacterizationExpectedServers,
 		)
 	}
-	if len(ledger.sessionsOpened) != crossCharacterizationExpectedSessions ||
-		len(ledger.sessionsClosed) != crossCharacterizationExpectedSessions ||
-		len(ledger.sessionsDeleted) != crossCharacterizationExpectedSessions {
+	expectedSessions := crossCharacterizationExpectedSessions * runs
+	if len(ledger.sessionsOpened) != expectedSessions ||
+		len(ledger.sessionsClosed) != expectedSessions ||
+		len(ledger.sessionsDeleted) != expectedSessions {
 		return fmt.Errorf(
-			"CHAR-001 explicit Factory Sessions opened/closed/deleted=%d/%d/%d, want %d/%d/%d",
+			"CHAR-001 explicit Factory Sessions opened/closed/deleted=%d/%d/%d, want %d/%d/%d across %d runs (%d per run)",
 			len(ledger.sessionsOpened), len(ledger.sessionsClosed), len(ledger.sessionsDeleted),
-			crossCharacterizationExpectedSessions,
-			crossCharacterizationExpectedSessions,
+			expectedSessions, expectedSessions, expectedSessions, runs,
 			crossCharacterizationExpectedSessions,
 		)
 	}
@@ -188,14 +242,25 @@ func (ledger *crossCharacterizationLedger) validateAfterSuite() error {
 func (ledger *crossCharacterizationLedger) summary() string {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
+	runs, _ := ledger.completedScenarioRunsLocked()
 	return fmt.Sprintf(
-		"scenario_roots=%d/%d servers=%d/%d sessions_opened=%d sessions_closed=%d sessions_deleted=%d path_probes=%d completed=%d",
+		"runs=%d scenario_roots=%d/%d per_run=%d/%d servers=%d/%d per_run=%d/%d sessions_opened=%d sessions_closed=%d sessions_deleted=%d path_probes=%d completed=%d/%d",
+		runs,
 		sumCrossCharacterizationCounts(ledger.rootStarts),
 		sumCrossCharacterizationCounts(ledger.rootCloses),
+		crossCharacterizationExpectedRoots,
+		crossCharacterizationExpectedRoots,
 		ledger.serverStarts, ledger.serverCloses,
+		crossCharacterizationExpectedServers,
+		crossCharacterizationExpectedServers,
 		len(ledger.sessionsOpened), len(ledger.sessionsClosed), len(ledger.sessionsDeleted),
-		ledger.pathProbes, len(ledger.completedScenarios),
+		ledger.pathProbes, ledger.completedScenarioCountLocked(),
+		crossCharacterizationExpectedScenarios*runs,
 	)
+}
+
+func (ledger *crossCharacterizationLedger) completedScenarioCountLocked() int {
+	return sumCrossCharacterizationCounts(ledger.completedScenarios)
 }
 
 func sumCrossCharacterizationCounts(counts map[string]int) int {
