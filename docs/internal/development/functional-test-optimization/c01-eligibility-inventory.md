@@ -1,7 +1,7 @@
 # C01 executable eligibility inventory
 
 - Source clean commit: `b6ba77b177af0fa2589b25eb99ee6b58b6385b03`
-- Last artifact update UTC: `2026-08-27T10:14:23.4372820Z`
+- Last artifact update UTC: `2026-08-27T16:59:55.6927696Z`
 - Status: stories 001–004 complete; VAL-001 clean-room artifact loopback passed.
 - Scope: additive inventory only. No tests, support APIs, production behavior, contracts, generated outputs, or remote/paid calls were changed.
 
@@ -1061,7 +1061,8 @@ The Windows run explicitly skips `TestProcessGoneReleasesSameRouteAdmissionThrou
 
 ## VAL-001 clean-room artifact loopback
 
-- Status: **PASS** — the loopback used a detached clean checkout at delivered head `8c90a978c38127b40ba8b2b2982b028648003598`; the checkout had no untracked or modified files.
+- Status: **PASS** — the loopback used a detached clean checkout of the delivered content; the checkout had no untracked or modified files. The authoritative post-commit PR loopback report records the delivered full commit SHA because a committed artifact cannot embed a self-referential full SHA.
+- Identity convention: the post-commit PR loopback report is authoritative for delivered-head identity; this committed artifact intentionally records no self-referential full commit SHA.
 - Procedure: parse the JSON, reconcile the ordered Markdown sample and statistics tables, independently recompute all 39 package medians, variances, and flags, inspect recovered history and the two-file scope, run `make test-lane-audit`, and run `go run ./cmd/markdown-linter docs/internal/development/plans/backlog/shared-functional-process-sessions.md docs/internal/development/functional-test-optimization/c01-eligibility-inventory.md`.
 - Observed: 39 packages, 354 rows, 117 ordered samples, all 117 samples with 21 required fields and diagnostic references, 39/39 statistics matches, all three recovered commits present as ancestors, and exact two-file scope; audit and Markdown lint both exited 0.
 - Proves: clean-checkout artifact parsing, retained-sample and statistics reproducibility, Markdown/JSON agreement, recovered-history/scope preservation, current lane-audit policy, and Markdown conformance.
