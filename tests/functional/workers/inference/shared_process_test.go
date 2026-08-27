@@ -21,6 +21,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -62,6 +63,7 @@ type inferenceProcessGroup struct {
 	daemon           *inferenceDaemon
 	commands         *inferenceCommandRouter
 	scripts          *inferenceCommandRouter
+	override         *inferenceProviderOverride
 	workerRecordings *inferenceWorkerRecordingRouter
 
 	externals map[string]*inferenceIntegrationRouter
@@ -99,6 +101,7 @@ func (group *inferenceProcessGroup) setup() {
 
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
+	group.override = &inferenceProviderOverride{}
 	group.workerRecordings = &inferenceWorkerRecordingRouter{fallback: newWSRFT004RecordingStore()}
 	group.externals = make(map[string]*inferenceIntegrationRouter)
 	providerDefinitions := []struct {
@@ -129,6 +132,7 @@ func (group *inferenceProcessGroup) setup() {
 		APIServerStarter:      group.startAPIServer,
 		ProviderCommandRunner: group.commands,
 		ScriptCommandRunner:   group.scripts,
+		ProviderOverride:      group.override,
 		WorkerRecordingWriter: group.workerRecordings,
 		ProviderRegistrations: registrations,
 	})
@@ -246,6 +250,7 @@ func (group *inferenceProcessGroup) startAPIServer(
 type sharedInferenceScenario struct {
 	commandRunner         platformprocess.CommandRunner
 	scriptRunner          platformprocess.CommandRunner
+	providerOverride      providers.Service
 	providerRegistrations []sharedInferenceProviderRegistration
 	workerRecordingWriter recordings.WorkerRecordingWriter
 	env                   []string
@@ -298,8 +303,10 @@ func runSharedInferenceFactory(
 	group.ensure(t)
 	group.mu.Lock()
 	defer group.mu.Unlock()
+	group.override.set(scenario.providerOverride)
 	releaseResponse := prepareSharedInferenceScenario(t, group, dir, scenario)
 	defer func() {
+		group.override.set(nil)
 		group.commands.clear(dir)
 		group.scripts.clear(dir)
 		group.workerRecordings.set(nil)
@@ -554,9 +561,11 @@ func withSharedInferenceProcess(
 	group.ensure(t)
 	group.mu.Lock()
 	defer group.mu.Unlock()
+	group.override.set(scenario.providerOverride)
 	group.workerRecordings.set(scenario.workerRecordingWriter)
 	group.setExternalRegistrations(scenario.providerRegistrations)
 	defer func() {
+		group.override.set(nil)
 		group.workerRecordings.set(nil)
 		group.setExternalRegistrations(nil)
 	}()
@@ -574,6 +583,7 @@ func withSharedInferenceProcessAt(
 	group.ensure(t)
 	group.mu.Lock()
 	defer group.mu.Unlock()
+	group.override.set(scenario.providerOverride)
 	if scenario.stopDaemonForExecute {
 		if err := group.stopDaemon(); err != nil {
 			t.Fatalf("stop shared inference daemon for direct execution: %v", err)
@@ -590,6 +600,7 @@ func withSharedInferenceProcessAt(
 	group.workerRecordings.set(scenario.workerRecordingWriter)
 	group.setExternalRegistrations(scenario.providerRegistrations)
 	defer func() {
+		group.override.set(nil)
 		group.commands.clear(dir)
 		group.scripts.clear(dir)
 		group.workerRecordings.set(nil)
@@ -699,6 +710,130 @@ func readSharedInferenceWorkerReplay(
 		return nil, nil, fmt.Errorf("read Worker Session events: %w", err)
 	}
 	return nil, nil, errors.New("Worker Session event stream ended without replay summary")
+}
+
+// inferenceProviderOverride routes the optional Providers root edge to one
+// serialized scenario. The shared application process keeps the canonical
+// Providers service for ordinary named executor paths; only a scenario that
+// explicitly supplies this edge can exercise the provider-result normalization
+// path with structured diagnostics.
+type inferenceProviderOverride struct {
+	mu       sync.RWMutex
+	delegate providers.Service
+}
+
+func (router *inferenceProviderOverride) set(delegate providers.Service) {
+	router.mu.Lock()
+	router.delegate = delegate
+	router.mu.Unlock()
+}
+
+func (router *inferenceProviderOverride) current() (providers.Service, error) {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	if router.delegate == nil {
+		return nil, errors.New("shared inference provider override is not configured")
+	}
+	return router.delegate, nil
+}
+
+func (router *inferenceProviderOverride) ListProviders(
+	ctx context.Context,
+	request providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ListProvidersResult{}, err
+	}
+	return delegate.ListProviders(ctx, request)
+}
+
+func (router *inferenceProviderOverride) GetProvider(
+	ctx context.Context,
+	request providers.GetProviderRequest,
+) (providers.GetProviderResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.GetProviderResult{}, err
+	}
+	return delegate.GetProvider(ctx, request)
+}
+
+func (router *inferenceProviderOverride) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ResolveIdentityResult{}, err
+	}
+	return delegate.ResolveIdentity(ctx, request)
+}
+
+func (router *inferenceProviderOverride) ResolveSelection(
+	ctx context.Context,
+	request providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ResolveSelectionResult{}, err
+	}
+	return delegate.ResolveSelection(ctx, request)
+}
+
+func (router *inferenceProviderOverride) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	delegate, err := router.current()
+	if err != nil {
+		return err
+	}
+	return delegate.ValidatePrerequisites(ctx, request)
+}
+
+func (router *inferenceProviderOverride) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	return delegate.Execute(ctx, request)
+}
+
+func (router *inferenceProviderOverride) ControlAttempt(
+	ctx context.Context,
+	request providers.ControlAttemptRequest,
+) (providers.ControlAttemptResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ControlAttemptResult{}, err
+	}
+	return delegate.ControlAttempt(ctx, request)
+}
+
+func (router *inferenceProviderOverride) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ContinueResult{}, err
+	}
+	return delegate.Continue(ctx, request)
+}
+
+func (router *inferenceProviderOverride) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	delegate, err := router.current()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	return delegate.ContinueReference(ctx, request)
 }
 
 type inferenceIntegrationRouter struct {
@@ -821,16 +956,6 @@ func sharedInferenceWithExecutorProvider(config, provider string) string {
 	return strings.Replace(config, marker, "executorProvider: "+provider+"\n"+marker, 1)
 }
 
-func sharedInferenceWithProviderAlias(config, provider string) string {
-	for _, current := range []string{"CODEX", "codex"} {
-		updated := strings.Replace(config, "modelProvider: "+current, "modelProvider: "+provider, 1)
-		if updated != config {
-			return updated
-		}
-	}
-	return config
-}
-
 func writeSharedInferenceHostFactory(dir string) error {
 	if err := os.MkdirAll(filepath.Join(dir, "workers", "worker"), 0o755); err != nil {
 		return fmt.Errorf("create shared host worker directory: %w", err)
@@ -880,3 +1005,4 @@ var _ recordings.WorkerRecordingWriter = (*inferenceWorkerRecordingRouter)(nil)
 var _ recordings.WorkerRecordingReader = (*inferenceWorkerRecordingRouter)(nil)
 var _ recordings.WorkerRecordingFailureWriter = (*inferenceWorkerRecordingRouter)(nil)
 var _ sharedInferenceProviderIntegration = (*inferenceIntegrationRouter)(nil)
+var _ providers.Service = (*inferenceProviderOverride)(nil)

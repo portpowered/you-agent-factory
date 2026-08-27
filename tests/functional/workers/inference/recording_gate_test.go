@@ -138,7 +138,10 @@ func TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth(t *testing.T) {
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, test.fixture))
 			support.ClearSeedInputs(t, dir)
 			loaded := loadOpeningRecordFixture(t, "codex", "success")
-			support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+			support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+				support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
+				"CODEX",
+			))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-008 recording loss"}`))
 
 			queueWSRFT004ProviderResult(t, runner, test.exitCode, "injected execution result")
@@ -186,7 +189,10 @@ func wsrFT004Factory(t *testing.T) string {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.ClearSeedInputs(t, dir)
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
+		"CODEX",
+	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-004 durable opening"}`))
 	return dir
 }

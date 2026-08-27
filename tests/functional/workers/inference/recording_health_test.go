@@ -171,7 +171,10 @@ func wsrFT004FactoryForFixture(t *testing.T, fixture string) string {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, fixture))
 	support.ClearSeedInputs(t, dir)
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
+		"CODEX",
+	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-007 recording health"}`))
 	return dir
 }
