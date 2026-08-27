@@ -1592,6 +1592,7 @@ func TestPrepareDetachedModelRecordingRecordsDetachedRequestAndResponse(t *testi
 		t.Fatal("previous terminal hook was not called")
 	}
 	assertDetachedModelResponseEvent(t, ledger.events)
+	assertDetachedModelResponseContentDecodesStructuredWorkerText(t)
 	request.Input.ModelBindings[0].Content[0].Text = "mutated"
 	if (*ledger.events[1].Response.Bindings)[0].Content[0].Text != "binding" {
 		t.Fatal("recorded response bindings alias the Execute request")
@@ -1678,6 +1679,33 @@ func assertDetachedModelResponseContent(t *testing.T, response *workers.ModelRes
 	}
 	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata["input_tokens"] != "3" {
 		t.Fatalf("recorded response diagnostics = %#v, want public provider metadata", diagnostics)
+	}
+}
+
+func assertDetachedModelResponseContentDecodesStructuredWorkerText(t *testing.T) {
+	t.Helper()
+	raw, err := json.Marshal([]work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
+		File:        "C:/tmp/factory-work.wav",
+		ContentType: "audio/wav",
+	}})
+	if err != nil {
+		t.Fatalf("marshal structured worker output: %v", err)
+	}
+	got := detachedModelResponseContent([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
+		Text: string(raw),
+	}})
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeAudio || got[0].File != "C:/tmp/factory-work.wav" || got[0].ContentType != "audio/wav" {
+		t.Fatalf("decoded detached response content = %#v, want one audio part", got)
+	}
+
+	plain := detachedModelResponseContent([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
+		Text: "plain provider response",
+	}})
+	if len(plain) != 1 || plain[0].Type != work.WorkContentPartTypeText || plain[0].Text != "plain provider response" {
+		t.Fatalf("plain detached response content = %#v, want unchanged text", plain)
 	}
 }
 

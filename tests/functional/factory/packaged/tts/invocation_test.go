@@ -256,12 +256,14 @@ func factoryTTSAudioPart(t *testing.T, item factoryapi.Work) factoryapi.WorkAudi
 }
 
 type factoryTTSDispatchEvents struct {
-	workRequest      *factoryapi.FactoryEvent
-	dispatchRequest  *factoryapi.FactoryEvent
-	association      *factoryapi.FactoryEvent
-	modelRequest     *factoryapi.FactoryEvent
-	modelResponse    *factoryapi.FactoryEvent
-	dispatchResponse *factoryapi.FactoryEvent
+	workRequest        *factoryapi.FactoryEvent
+	dispatchRequest    *factoryapi.FactoryEvent
+	association        *factoryapi.FactoryEvent
+	modelRequest       *factoryapi.FactoryEvent
+	modelResponse      *factoryapi.FactoryEvent
+	dispatchResponse   *factoryapi.FactoryEvent
+	modelRequestCount  int
+	modelResponseCount int
 }
 
 func assertFactoryTTSSuccessEvents(
@@ -312,10 +314,16 @@ func collectFactoryTTSDispatchEvents(
 			observed.association = event
 		case factoryapi.FactoryEventTypeModelRequest:
 			factoryTTSRequireSessionID(t, event, sessionID)
-			observed.modelRequest = event
+			observed.modelRequestCount++
+			if observed.modelRequest == nil {
+				observed.modelRequest = event
+			}
 		case factoryapi.FactoryEventTypeModelResponse:
 			factoryTTSRequireSessionID(t, event, sessionID)
-			observed.modelResponse = event
+			observed.modelResponseCount++
+			if observed.modelResponse == nil {
+				observed.modelResponse = event
+			}
 		case factoryapi.FactoryEventTypeDispatchResponse:
 			factoryTTSRequireSessionID(t, event, sessionID)
 			observed.dispatchResponse = event
@@ -324,6 +332,13 @@ func collectFactoryTTSDispatchEvents(
 	if observed.workRequest == nil || observed.dispatchRequest == nil || observed.association == nil || observed.modelRequest == nil ||
 		observed.modelResponse == nil || observed.dispatchResponse == nil {
 		t.Fatalf("TTS Factory Events missing required request/dispatch/model/response records: %#v", observed)
+	}
+	if observed.modelRequestCount != 1 || observed.modelResponseCount != 1 {
+		t.Fatalf(
+			"TTS Factory model event counts = MODEL_REQUEST:%d MODEL_RESPONSE:%d, want exactly one of each",
+			observed.modelRequestCount,
+			observed.modelResponseCount,
+		)
 	}
 	return observed
 }
@@ -423,13 +438,13 @@ func assertFactoryTTSModelEvents(
 		t.Fatalf("MODEL_RESPONSE payload = %#v, want successful TTS response correlated to %q", response, request.ModelRequestId)
 	}
 	if response.OutputContent == nil || len(*response.OutputContent) != 1 {
-		t.Fatalf("MODEL_RESPONSE outputContent = %#v, want one text-encoded AUDIO part", response.OutputContent)
+		t.Fatalf("MODEL_RESPONSE outputContent = %#v, want one AUDIO part", response.OutputContent)
 	}
-	modelText, err := (*response.OutputContent)[0].AsWorkTextContentPart()
+	modelAudio, err := (*response.OutputContent)[0].AsWorkAudioContentPart()
 	if err != nil {
-		t.Fatalf("MODEL_RESPONSE output as text: %v", err)
+		t.Fatalf("MODEL_RESPONSE output as AUDIO: %v", err)
 	}
-	assertFactoryTTSRawAudioOutput(t, "MODEL_RESPONSE", modelText.Text, wantAudio)
+	assertFactoryTTSAudioShape(t, modelAudio, wantAudio, "MODEL_RESPONSE")
 }
 
 func assertFactoryTTSDispatchResponse(
