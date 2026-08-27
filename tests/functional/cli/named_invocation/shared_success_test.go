@@ -32,21 +32,6 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 	fixture := newNamedInvocationSuccessFixture(t)
 	t.Run("factory builder list and help", func(t *testing.T) {
 		scenario := fixture.newScenario(t)
-		factoryDir := initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedFactoryBuilderName,
-		)
-		listOutput, listStderr := executeCustomerCommand(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			[]string{"you", "factory", "list"},
-		)
-		if listStderr != "" {
-			t.Fatalf("factory list stderr = %q", listStderr)
-		}
-		if !strings.Contains(listOutput, packagedFactoryBuilderName) {
-			t.Fatalf("factory list output missing %q:\n%s", packagedFactoryBuilderName, listOutput)
-		}
-
 		helpOutput, helpStderr := executeCustomerCommand(
 			t, fixture.process, scenario.environment, scenario.workingDirectory,
 			[]string{"you", "run", "--named", packagedFactoryBuilderName, "--help"},
@@ -65,6 +50,18 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 				t.Fatalf("Factory Builder help missing %q:\n%s", fragment, helpOutput)
 			}
 		}
+
+		listOutput, listStderr := executeCustomerCommand(
+			t, fixture.process, scenario.environment, scenario.workingDirectory,
+			[]string{"you", "factory", "list"},
+		)
+		if listStderr != "" {
+			t.Fatalf("factory list stderr = %q", listStderr)
+		}
+		if !strings.Contains(listOutput, packagedFactoryBuilderName) {
+			t.Fatalf("factory list output missing %q:\n%s", packagedFactoryBuilderName, listOutput)
+		}
+		factoryDir := packagedFactoryPath(scenario.homeDir, packagedFactoryBuilderName)
 		if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
 			t.Fatalf("Factory Builder was not materialized for named help: %v", err)
 		}
