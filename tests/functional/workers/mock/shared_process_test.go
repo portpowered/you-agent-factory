@@ -22,6 +22,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -40,7 +41,9 @@ const (
 // a distinct public Factory Session and a fresh command-edge delegate. The
 // plain-batch drain rows run last, after the hosted invocation is stopped, so
 // they can reuse the same root without concurrently activating another
-// default runtime.
+// default runtime. The resource-set CLI evidence belongs to this one
+// package-scoped group because its executable behavior is exercised by the
+// LiveCapacityIncrease child row below.
 func TestSharedProcessWorkersMock(t *testing.T) {
 	fixture := newSharedWorkersMockFixture(t)
 
@@ -73,6 +76,7 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 			test.run(t, fixture)
 		})
 	}
+	functionalevidence.Covers(t, "cli/you.session.resource.set")
 }
 
 type sharedWorkersMockFixture struct {
@@ -118,6 +122,7 @@ type sharedWorkersMockSessionIDGenerator struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	id     string
+	lastID string
 }
 
 func (generator *sharedWorkersMockSessionIDGenerator) armCancellation(
@@ -136,24 +141,37 @@ func (generator *sharedWorkersMockSessionIDGenerator) Generate() string {
 	id := generator.id
 	generator.cancel = nil
 	generator.id = ""
+	if id == "" {
+		id = uuid.NewString()
+	}
+	generator.lastID = id
 	generator.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
-	if id != "" {
-		return id
-	}
-	return uuid.NewString()
+	return id
+}
+
+func (generator *sharedWorkersMockSessionIDGenerator) lastGeneratedID() string {
+	generator.mu.Lock()
+	defer generator.mu.Unlock()
+	return generator.lastID
 }
 
 type sharedWorkersMockInputDirectoryWalker struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
+	mu       sync.Mutex
+	cancel   context.CancelFunc
+	cancelID string
+	lastID   string
 }
 
-func (walker *sharedWorkersMockInputDirectoryWalker) armCancellation(cancel context.CancelFunc) {
+func (walker *sharedWorkersMockInputDirectoryWalker) armCancellation(
+	cancel context.CancelFunc,
+	cancelID string,
+) {
 	walker.mu.Lock()
 	walker.cancel = cancel
+	walker.cancelID = cancelID
 	walker.mu.Unlock()
 }
 
@@ -163,13 +181,22 @@ func (walker *sharedWorkersMockInputDirectoryWalker) Walk(
 ) error {
 	walker.mu.Lock()
 	cancel := walker.cancel
+	cancelID := walker.cancelID
 	walker.cancel = nil
+	walker.cancelID = ""
+	walker.lastID = cancelID
 	walker.mu.Unlock()
 	if cancel != nil {
 		cancel()
 		return nil
 	}
 	return filepath.WalkDir(directory, walk)
+}
+
+func (walker *sharedWorkersMockInputDirectoryWalker) lastCancellationID() string {
+	walker.mu.Lock()
+	defer walker.mu.Unlock()
+	return walker.lastID
 }
 
 func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
@@ -243,11 +270,12 @@ func (fixture *sharedWorkersMockFixture) useCommandRunners(
 	fixture.scriptEdge.set(script)
 }
 
-// prepareLocalActivation closes the one continuous host before a plain local
-// run is admitted. The root process itself remains alive and reusable; only
-// its active default runtime is stopped. Keeping this transition serialized
-// prevents a second invocation from racing the host teardown and fails closed
-// if a future caller forgets to prepare the local lane.
+// prepareLocalActivation closes the one continuous host before one of the four
+// documented no-server exception rows is admitted. The root process itself
+// remains alive and reusable; only its active default runtime is stopped.
+// Keeping this transition serialized prevents a second invocation from racing
+// the host teardown and fails closed if a future caller forgets to prepare the
+// local lane.
 func (fixture *sharedWorkersMockFixture) prepareLocalActivation(t *testing.T) {
 	t.Helper()
 	fixture.activationMu.Lock()
@@ -269,6 +297,10 @@ func (fixture *sharedWorkersMockFixture) executeLocal(
 	input root.Input,
 ) error {
 	t.Helper()
+	// The local CLI has no public Factory Session selector. These calls are
+	// therefore intentionally limited to the plain-batch exception rows, whose
+	// own input/HOME/runtime identities and Process.Execute completion provide
+	// the isolation and cleanup boundary.
 	return (&sharedWorkersMockLocalProcess{fixture: fixture, tb: t}).Execute(input)
 }
 
