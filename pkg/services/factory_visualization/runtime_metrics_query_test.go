@@ -552,30 +552,24 @@ func TestRuntimeMetricsQueryDiscardsPartialAggregateAfterStreamFailure(t *testin
 	if !reflect.DeepEqual(result, factoryvisualization.RuntimeMetricsQueryResult{}) {
 		t.Fatalf("partial query result = %#v, want zero result on stream failure", result)
 	}
-}
 
-func TestRuntimeMetricsQueryPreservesReaderCancellation(t *testing.T) {
-	t.Parallel()
-
-	reader := &runtimeMetricsReaderStub{streamErr: context.Canceled}
-	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	cancellationReader := &runtimeMetricsReaderStub{streamErr: context.Canceled}
+	cancellationQuery, err := factoryvisualizationwire.NewRuntimeMetricsQuery(cancellationReader, logging.NoopLogger{})
 	if err != nil {
-		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
+		t.Fatalf("NewRuntimeMetricsQuery(cancellation) error = %v", err)
 	}
-
-	_, err = query.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
+	_, err = cancellationQuery.QueryRuntimeMetrics(context.Background(), factoryvisualization.RuntimeMetricsQueryRequest{MetricsRoot: t.TempDir()})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("QueryRuntimeMetrics() error = %v, want context.Canceled", err)
 	}
-	var queryErr *factoryvisualization.RuntimeMetricsQueryError
-	if errors.As(err, &queryErr) {
+	var cancellationQueryErr *factoryvisualization.RuntimeMetricsQueryError
+	if errors.As(err, &cancellationQueryErr) {
 		t.Fatalf("QueryRuntimeMetrics() error = %v, want cancellation without a read-failure wrapper", err)
 	}
 }
 
-func TestRuntimeMetricsQueryPrefersIncrementalReaderCapability(t *testing.T) {
-	t.Parallel()
-
+func assertRuntimeMetricsQueryPrefersIncrementalReaderCapability(t *testing.T) {
+	t.Helper()
 	reader := &runtimeMetricsReaderStub{records: []factoryvisualization.RuntimeMetricRecord{
 		metricRecord("provider.input_tokens", 7, "session-a", "runtime-a", "workstation-a", "worker-a", "provider-a", "", "tokens"),
 	}}
@@ -641,6 +635,7 @@ func TestRuntimeMetricsQueryFallsBackToReadOnlyReader(t *testing.T) {
 	if result.Totals.InputTokens != 4 || len(result.Providers) != 1 || result.Providers[0].Key != "provider-a" {
 		t.Fatalf("legacy reader result = %#v, want session-a/provider-a only", result)
 	}
+	assertRuntimeMetricsQueryPrefersIncrementalReaderCapability(t)
 }
 
 func TestRuntimeMetricsQueryBuildsDeterministicCorrelatedUsageRows(t *testing.T) {

@@ -36,6 +36,7 @@ func TestRuntimeMetricsSelectionReducesSessionProjectionAndDateWork(t *testing.T
 		"",
 	)
 	assertSelectionWorkReduction(t, allStats, sessionStats, providerStats, windowStats)
+	runRuntimeMetricsQueryBoundsDecodedRecordLifetimeAcrossArtifactScale(t)
 }
 
 func TestRuntimeMetricsSelectionKeepsLegacyArtifactForEnvelopeFiltering(t *testing.T) {
@@ -66,6 +67,8 @@ func TestRuntimeMetricsSelectionKeepsLegacyArtifactForEnvelopeFiltering(t *testi
 	if decoded != 3 || stats.ArtifactsOpened != 1 || stats.RecordsDecoded != 3 {
 		t.Fatalf("legacy selection work = decoded %d, stats %#v; want three records from one opened artifact", decoded, stats)
 	}
+	runRuntimeMetricsQueryCharacterizesFixedArtifactCorpus(t)
+	runRuntimeMetricsQueryCharacterizationRejectsMalformedCompleteLine(t)
 }
 
 func collectSelectionStats(

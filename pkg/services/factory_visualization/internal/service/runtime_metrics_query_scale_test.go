@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 )
 
 const (
@@ -24,7 +23,8 @@ const (
 	scaleProbeField         = "__runtime_metrics_scale_probe"
 )
 
-func TestRuntimeMetricsQueryBoundsDecodedRecordLifetimeAcrossArtifactScale(t *testing.T) {
+func runRuntimeMetricsQueryBoundsDecodedRecordLifetimeAcrossArtifactScale(t *testing.T) {
+	t.Helper()
 	smallRoot := installScaleMetricsTree(t, scaleSmallArtifactCount)
 	largeRoot := installScaleMetricsTree(t, scaleLargeArtifactCount)
 
@@ -156,7 +156,7 @@ func newScaleMetricsQuery(t *testing.T) (factoryvisualization.RuntimeMetricsQuer
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
 	}
 	tracked := &scaleMetricsReader{delegate: reader}
-	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(tracked, logging.NoopLogger{})
+	query, err := NewRuntimeMetricsQuery(tracked, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}

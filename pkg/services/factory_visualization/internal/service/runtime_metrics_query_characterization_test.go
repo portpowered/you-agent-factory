@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"compress/gzip"
@@ -15,12 +15,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 )
 
-func TestRuntimeMetricsQueryCharacterizesFixedArtifactCorpus(t *testing.T) {
-	t.Parallel()
-
+func runRuntimeMetricsQueryCharacterizesFixedArtifactCorpus(t *testing.T) {
+	t.Helper()
 	root := installFixedCharacterizationCorpus(t)
 
 	query := newFixedCharacterizationQuery(t)
@@ -117,7 +115,7 @@ func newFixedCharacterizationQuery(t *testing.T) factoryvisualization.RuntimeMet
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
 	}
-	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	query, err := NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}
@@ -158,28 +156,24 @@ func assertFixedCharacterizationFilters(t *testing.T, query factoryvisualization
 		},
 	}
 	for _, testCase := range cases {
-		testCase := testCase
-		t.Run(testCase.name, func(t *testing.T) {
-			result, err := query.QueryRuntimeMetrics(context.Background(), testCase.request)
-			if err != nil {
-				t.Fatalf("QueryRuntimeMetrics() error = %v", err)
-			}
-			if result.Totals.InputTokens != testCase.inputTokens || result.Totals.OutputTokens != testCase.outputTokens || result.Totals.CompletedDispatches != testCase.completed {
-				t.Fatalf("totals = %#v, want input %v, output %v, completed %v", result.Totals, testCase.inputTokens, testCase.outputTokens, testCase.completed)
-			}
-			assertBreakdownKeys(t, result.Workstations, testCase.workstations)
-			if len(result.UsageRows) != testCase.usageRows {
-				t.Fatalf("usage rows = %#v, want %d rows", result.UsageRows, testCase.usageRows)
-			}
-			assertDuration(t, result.Totals.DispatchDuration, testCase.dispatchP50, testCase.dispatchP95, len(testCase.workstations), "ms")
-			assertDuration(t, result.Totals.ProviderDuration, testCase.providerP50, testCase.providerP95, len(testCase.workstations), "ms")
-		})
+		result, err := query.QueryRuntimeMetrics(context.Background(), testCase.request)
+		if err != nil {
+			t.Fatalf("%s: QueryRuntimeMetrics() error = %v", testCase.name, err)
+		}
+		if result.Totals.InputTokens != testCase.inputTokens || result.Totals.OutputTokens != testCase.outputTokens || result.Totals.CompletedDispatches != testCase.completed {
+			t.Fatalf("%s: totals = %#v, want input %v, output %v, completed %v", testCase.name, result.Totals, testCase.inputTokens, testCase.outputTokens, testCase.completed)
+		}
+		assertBreakdownKeys(t, result.Workstations, testCase.workstations)
+		if len(result.UsageRows) != testCase.usageRows {
+			t.Fatalf("%s: usage rows = %#v, want %d rows", testCase.name, result.UsageRows, testCase.usageRows)
+		}
+		assertDuration(t, result.Totals.DispatchDuration, testCase.dispatchP50, testCase.dispatchP95, len(testCase.workstations), "ms")
+		assertDuration(t, result.Totals.ProviderDuration, testCase.providerP50, testCase.providerP95, len(testCase.workstations), "ms")
 	}
 }
 
-func TestRuntimeMetricsQueryCharacterizationRejectsMalformedCompleteLine(t *testing.T) {
-	t.Parallel()
-
+func runRuntimeMetricsQueryCharacterizationRejectsMalformedCompleteLine(t *testing.T) {
+	t.Helper()
 	root := t.TempDir()
 	path := filepath.Join(root, "120000.000000000-runtime-metrics-session-a-runtime-a.log")
 	writeRuntimeMetricsJSONL(
@@ -195,7 +189,7 @@ func TestRuntimeMetricsQueryCharacterizationRejectsMalformedCompleteLine(t *test
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsReader() error = %v", err)
 	}
-	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
+	query, err := NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsQuery() error = %v", err)
 	}
