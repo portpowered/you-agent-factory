@@ -65,10 +65,6 @@ func handlerWithPprof(
 	return mux
 }
 
-func pprofIndex(writer http.ResponseWriter, request *http.Request) {
-	pprofIndexWithWaiter(waitPprofDuration)(writer, request)
-}
-
 func pprofIndexWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
 	if waiter == nil {
 		waiter = waitPprofDuration
@@ -183,10 +179,6 @@ Profile Descriptions:
 	return err
 }
 
-func pprofNamed(name string) http.Handler {
-	return pprofNamedWithWaiter(name, waitPprofDuration)
-}
-
 func pprofNamedWithWaiter(name string, waiter pprofDurationWaiter) http.Handler {
 	if waiter == nil {
 		waiter = waitPprofDuration
@@ -218,16 +210,6 @@ func pprofNamedWithWaiter(name string, waiter pprofDurationWaiter) http.Handler 
 		}
 		_ = profile.WriteTo(writer, debug)
 	})
-}
-
-func servePprofDeltaProfile(
-	writer http.ResponseWriter,
-	request *http.Request,
-	name string,
-	profile *runtimepprof.Profile,
-	secondsValue string,
-) {
-	servePprofDeltaProfileWithWaiter(writer, request, name, profile, secondsValue, waitPprofDuration)
 }
 
 func servePprofDeltaProfileWithWaiter(
@@ -320,10 +302,6 @@ func pprofCmdline(commandLineReader CommandLineReader) http.HandlerFunc {
 	}
 }
 
-func pprofCPU(writer http.ResponseWriter, request *http.Request) {
-	pprofCPUWithWaiter(waitPprofDuration)(writer, request)
-}
-
 func pprofCPUWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
 	if waiter == nil {
 		waiter = waitPprofDuration
@@ -343,10 +321,6 @@ func pprofCPUWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
 		defer runtimepprof.StopCPUProfile()
 		_ = waiter(request.Context(), time.Duration(seconds)*time.Second)
 	}
-}
-
-func pprofTrace(writer http.ResponseWriter, request *http.Request) {
-	pprofTraceWithWaiter(waitPprofDuration)(writer, request)
 }
 
 func pprofTraceWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
