@@ -1,15 +1,17 @@
 package inference_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -21,6 +23,52 @@ const (
 )
 
 const providerExitNormalizationSessionID = "provider-exit-normalization-session"
+
+type inferenceFailureIntegration struct {
+	identity    sharedInferenceProviderIdentity
+	invokeError error
+	mu          sync.Mutex
+	calls       int
+}
+
+func (integration *inferenceFailureIntegration) Identity() sharedInferenceProviderIdentity {
+	return integration.identity
+}
+
+func (*inferenceFailureIntegration) MaximumCapabilities() sharedInferenceProviderCapabilitySet {
+	return sharedInferencePromptCapabilities()
+}
+
+func (*inferenceFailureIntegration) Discover(context.Context) (sharedInferenceProviderDiscovery, error) {
+	return sharedInferenceProviderDiscovery{}, nil
+}
+
+func (integration *inferenceFailureIntegration) Capabilities(
+	_ context.Context,
+	_ sharedInferenceProviderInvocationRequest,
+) (sharedInferenceProviderCapabilitySet, error) {
+	return integration.MaximumCapabilities(), nil
+}
+
+func (integration *inferenceFailureIntegration) Invoke(
+	_ context.Context,
+	_ sharedInferenceProviderInvocationRequest,
+	_ sharedInferenceProviderResponseWriter,
+) error {
+	integration.mu.Lock()
+	integration.calls++
+	integration.mu.Unlock()
+	if integration.invokeError != nil {
+		return integration.invokeError
+	}
+	return errors.New("inference failure integration is not configured")
+}
+
+func (integration *inferenceFailureIntegration) CallCount() int {
+	integration.mu.Lock()
+	defer integration.mu.Unlock()
+	return integration.calls
+}
 
 const (
 	failureRedactionPromptNeedle     = "probe-prompt-redaction-9f3a7c"
@@ -95,18 +143,28 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 // completion evidence.
 func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+	const (
+		providerID    = "registered.provider"
+		providerAlias = "registered"
+	)
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithProviderAlias(
 		support.BuildModelWorkerConfig(
 			modelprovider.ProviderCodex,
 			"gpt-5-codex",
 		),
-		"SCRIPT_WRAP",
+		providerAlias,
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider missing completion evidence"}`))
 
-	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{})
+	provider := &inferenceFailureIntegration{
+		identity:    providerID,
+		invokeError: errors.New("provider completion evidence was missing"),
+	}
 	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
-		providerOverride: provider,
+		providerRegistrations: []sharedInferenceProviderRegistration{{
+			Manifest:    sharedInferenceExternalManifest(providerID, providerAlias),
+			Integration: provider,
+		}},
 	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -140,29 +198,28 @@ func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
 // in for an authoritative final provider response.
 func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+	const (
+		providerID    = "registered.provider"
+		providerAlias = "registered"
+	)
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithProviderAlias(
 		support.BuildModelWorkerConfig(
 			modelprovider.ProviderCodex,
 			"gpt-5-codex",
 		),
-		"SCRIPT_WRAP",
+		providerAlias,
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider contradictory completion"}`))
 
-	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{
-		Content: "partial output before provider completion",
-		Diagnostics: &workerexecution.WorkDiagnostics{
-			Command:  &workerexecution.CommandDiagnostic{ExitCode: 0},
-			Metadata: map[string]string{"artifact_present": "true"},
-			Provider: &workerexecution.ProviderDiagnostic{
-				ResponseMetadata: map[string]string{
-					workerexecution.ProviderResponseMetadataCompletionEvidence: "task_complete",
-				},
-			},
-		},
-	})
+	provider := &inferenceFailureIntegration{
+		identity:    providerID,
+		invokeError: errors.New("provider completion evidence was contradictory"),
+	}
 	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
-		providerOverride: provider,
+		providerRegistrations: []sharedInferenceProviderRegistration{{
+			Manifest:    sharedInferenceExternalManifest(providerID, providerAlias),
+			Integration: provider,
+		}},
 	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {

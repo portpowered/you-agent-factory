@@ -22,6 +22,77 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// These aliases let the shared process fixture consume the public provider
+// registration contract without importing the Providers wire package from the
+// harness itself. The composition edge remains serviceedges.Edges at the root
+// boundary.
+type (
+	sharedInferenceProviderRegistration          = inference.Registration
+	sharedInferenceProviderIntegration           = inference.Integration
+	sharedInferenceProviderIdentity              = inference.Identity
+	sharedInferenceProviderCapabilitySet         = inference.CapabilitySet
+	sharedInferenceProviderDiscovery             = inference.Discovery
+	sharedInferenceProviderInvocationRequest     = inference.InvocationRequest
+	sharedInferenceProviderResponseWriter        = inference.ResponseWriter
+	sharedInferenceProviderExecutionCapabilities = inference.ExecutionCapabilities
+	sharedInferenceProviderManifest              = inference.Manifest
+)
+
+const (
+	sharedInferenceImplementationExternallySupplied = inference.ImplementationExternallySupplied
+	sharedInferenceSupportProduction                = inference.SupportProduction
+)
+
+func sharedInferencePromptCapabilities() sharedInferenceProviderCapabilitySet {
+	return inference.NewCapabilitySet(inference.CapabilityPromptSubmission)
+}
+
+func TestSharedInferenceCommandRouterRejectsUnknownSelector(t *testing.T) {
+	validDir := filepath.Join(t.TempDir(), "valid")
+	var calls int
+	runner := inferenceSelectorProbeRunner{calls: &calls}
+	router := &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
+	if err := router.set(validDir, runner, nil, inferenceRouteContext{
+		scenarioName: "selector-probe",
+		sessionID:    "selector-probe-session",
+	}); err != nil {
+		t.Fatalf("register valid selector: %v", err)
+	}
+	if err := router.set(validDir, runner, nil, inferenceRouteContext{
+		scenarioName: "duplicate-probe",
+		sessionID:    "duplicate-probe-session",
+	}); err == nil {
+		t.Fatal("duplicate selector registration succeeded, want explicit registration error")
+	}
+
+	_, err := router.Run(t.Context(), platformprocess.CommandRequest{
+		Command: "provider",
+		WorkDir: filepath.Join(t.TempDir(), "unknown"),
+	})
+	if err == nil {
+		t.Fatal("unknown selector succeeded, want exact-route failure")
+	}
+	if !strings.Contains(err.Error(), "selector-probe") ||
+		!strings.Contains(err.Error(), "selector-probe-session") {
+		t.Fatalf("unknown selector error = %q, want scenario and session context", err)
+	}
+	if calls != 0 {
+		t.Fatalf("valid command runner calls = %d after unknown selector, want 0", calls)
+	}
+}
+
+type inferenceSelectorProbeRunner struct {
+	calls *int
+}
+
+func (runner inferenceSelectorProbeRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	(*runner.calls)++
+	return platformprocess.CommandResult{}, nil
+}
+
 // TestExplicitProviderAndModelReachSelectedProviderEdge proves that when a worker
 // declares an explicit provider and model, root.BuildProcess dispatch invokes the
 // matching registered provider-process edge, completes factory dispatch through
