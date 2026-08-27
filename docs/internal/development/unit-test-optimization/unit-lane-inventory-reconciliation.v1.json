@@ -1,0 +1,570 @@
+{
+  "schema": "you-agent-factory.unit-lane-inventory-reconciliation.v1",
+  "version": 1,
+  "integrationBase": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+  "countUnit": {
+    "identity": "package::Test",
+    "sourceField": "packages[].tests[]",
+    "terminalActions": [
+      "pass",
+      "fail",
+      "skip"
+    ],
+    "parentAndNamedSubtestsAreDistinct": true,
+    "deduplicateWithinPackage": true,
+    "canonicalization": "sort unique identities by ordinal byte order; join UTF-8 identities with LF and no trailing LF; SHA-256"
+  },
+  "sources": {
+    "accepted": [
+      {
+        "path": "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-1-replacement.v2.json",
+        "sourceCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+        "runCommit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+        "command": "make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=baseline-make-run-1-replacement.v2.json",
+        "sha256": "ba7e1364ed5c88d66071d4cac4b2bf027571044ef7d159b16d25435f7fc95d8a"
+      },
+      {
+        "path": "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-2.v2.json",
+        "sourceCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+        "runCommit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+        "command": "make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=baseline-make-run-2.v2.json",
+        "sha256": "d30fdc0215d50a14c0a4cef65b234fde68a680e4015e37b5d9a463c9f361723f"
+      },
+      {
+        "path": "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-3.v2.json",
+        "sourceCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+        "runCommit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+        "command": "make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=baseline-make-run-3.v2.json",
+        "sha256": "e4288d9085e19ea3e7f8a87e0ad67ca52b38a255e0bc1e1a569ad59fbd008d98"
+      }
+    ],
+    "hosted": {
+      "runId": 33081887532,
+      "runCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+      "runStatus": "completed",
+      "runConclusion": "failure",
+      "artifactId": 9650757586,
+      "artifactName": "backend-unit-latency-evidence",
+      "archiveSha256": "392090efb0dadc282188348a2de222055aa716abf5742fc19a98f0317e49b2f0",
+      "retrieval": {
+        "metadataCommand": "gh run view 33081887532 --json databaseId,headSha,status,conclusion,createdAt,updatedAt,workflowName,event,url",
+        "downloadCommand": "gh run download 33081887532 --name backend-unit-latency-evidence --dir <temporary-output-directory>",
+        "fileStatusEvidence": "Each hosted v2 file is complete and its adjacent status file reports exit_status=0; the overall CI failure is not used as unit-capture success evidence."
+      },
+      "files": [
+        {
+          "path": "run-1.v2.json",
+          "sourceCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+          "command": "make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=.artifacts/unit-latency/run-1.v2.json",
+          "sha256": "f113e518fd0516bb89f5331676992bc8e6d8cdfaf8f376142c4eb3dba65e5703"
+        },
+        {
+          "path": "run-2.v2.json",
+          "sourceCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+          "command": "make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=.artifacts/unit-latency/run-2.v2.json",
+          "sha256": "8a648941dd9fe4dd067cf842f2d19dc4d4d8287af3db536d0a904cdd23904c0b"
+        },
+        {
+          "path": "run-3.v2.json",
+          "sourceCommit": "56eed9d6f23f2255bf5a021aa663b8b6387ea943",
+          "command": "make test-unit-fresh UNIT_DEFAULT_JOBS=2 UNIT_TIMING_OUTPUT=.artifacts/unit-latency/run-3.v2.json",
+          "sha256": "dd4b249d57d339c234936a4d658155bec321b0b1be650f0dcfa75b866e9a556c"
+        }
+      ]
+    }
+  },
+  "cohortProof": {
+    "accepted": {
+      "sourcePaths": [
+        "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-1-replacement.v2.json",
+        "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-2.v2.json",
+        "docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-3.v2.json"
+      ],
+      "allComplete": true,
+      "packageCount": 444,
+      "testCount": 18122,
+      "inventorySha256": "508aabd7976efa0fdd16d322a24a0da3f18d6b9fed1725ea3773f4e99da01897",
+      "allThreeInventoriesEqual": true
+    },
+    "hosted": {
+      "sourcePaths": [
+        "run-1.v2.json",
+        "run-2.v2.json",
+        "run-3.v2.json"
+      ],
+      "allComplete": true,
+      "packageCount": 444,
+      "testCount": 18154,
+      "inventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677",
+      "allThreeInventoriesEqual": true
+    }
+  },
+  "comparison": {
+    "accepted": {
+      "packageCount": 444,
+      "testCount": 18122,
+      "inventorySha256": "508aabd7976efa0fdd16d322a24a0da3f18d6b9fed1725ea3773f4e99da01897"
+    },
+    "final": {
+      "packageCount": 444,
+      "testCount": 18154,
+      "inventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677"
+    },
+    "rawSetDelta": {
+      "finalOnly": 33,
+      "baselineOnly": 1,
+      "net": 32
+    },
+    "finalOnlyIdentitiesRecorded": 33,
+    "finalOnlyIdentities": [
+      "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestCommitRollsBackWhenStagingIsMissing",
+      "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestReplaceWatchedDirectoryContentsReplacesContentAndCleansUp",
+      "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup",
+      "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup/empty_backup",
+      "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup/missing_backup",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_DoesNotRedispatchCompletedAutomationWithCanonicalCompletionPlacement",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsCompletedAutomationWithIncompatibleTopology",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsConflictingCompletedDispatchPlaces",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsConflictingCurrentWorkPlacements",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences/missing_dispatch_identity",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences/unknown_Work",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts/incomplete_dispatch_history",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts/time_prefix_without_canonical_automation_identity",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/active_dispatch_also_references_Work",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/failed_dispatch_also_references_Work",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/multiple_accepted_completions",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/non-accepted_completion",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredWorkStateChangeSupersedesCompletedDispatchOutputPlacement",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresCompletedWorkFromCanonicalDispatchOutputWhenOccupancyIsMissing",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresFailedDispatchReferencesWithoutDroppingFailedWork",
+      "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresOtherWorkWhenCompletedCronWorkHasNoOccupancy",
+      "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests::TestReconstructFactoryWorldState_CompletesCronWorkWithoutRetainingOccupancy",
+      "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceMergesAndPagesSources",
+      "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServicePreservesOptionalProjectionFacts",
+      "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput",
+      "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/invalid_cursor",
+      "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/invalid_scope",
+      "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/negative_limit",
+      "github.com/portpowered/infinite-you/pkg/wire::TestMetricsCLICompletesReportAfterStandardCLITimeout/success_crosses_local_HTTP_and_renders_report",
+      "github.com/portpowered/infinite-you/pkg/wire::TestMetricsCLICompletesReportAfterStandardCLITimeout/transport_failure_preserves_cause_and_output"
+    ],
+    "baselineOnlyIdentitiesRecorded": 1,
+    "baselineOnly": [
+      "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestProductionDirectoryReplacementAdapterIsSelectedOnlyByWire"
+    ],
+    "identityExplanations": [
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestCommitRollsBackWhenStagingIsMissing",
+        "owner": "directoryreplace",
+        "classification": "added recovery witness",
+        "explanation": "New parent test proving a missing staging directory rolls back without leaving replacement backup state."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestReplaceWatchedDirectoryContentsReplacesContentAndCleansUp",
+        "owner": "directoryreplace",
+        "classification": "added platform witness",
+        "explanation": "New parent test proving the Windows watched-directory replacement path replaces contents and cleans up; on Linux its terminal action is skip and remains countable under the declared unit."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup",
+        "owner": "directoryreplace",
+        "classification": "added recovery witness",
+        "explanation": "New parent test proving restore is a no-op when backup state is empty or absent."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup/empty_backup",
+        "owner": "directoryreplace",
+        "classification": "added named subtest witness",
+        "explanation": "Named subtest for the empty-backup restore case belonging to the new recovery witness."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup/missing_backup",
+        "owner": "directoryreplace",
+        "classification": "added named subtest witness",
+        "explanation": "Named subtest for the missing-backup restore case belonging to the new recovery witness."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_DoesNotRedispatchCompletedAutomationWithCanonicalCompletionPlacement",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test for completed automation with canonical completion placement."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsCompletedAutomationWithIncompatibleTopology",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test for rejecting completed automation with incompatible topology."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsConflictingCompletedDispatchPlaces",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test for conflicting completed dispatch places."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsConflictingCurrentWorkPlacements",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test for conflicting current Work placements."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery parent test for malformed failed-dispatch references."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences/missing_dispatch_identity",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for a failed-dispatch reference missing its dispatch identity."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences/unknown_Work",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for a failed-dispatch reference pointing at unknown Work."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery parent test requiring canonical completion facts."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts/incomplete_dispatch_history",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for incomplete dispatch history."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts/time_prefix_without_canonical_automation_identity",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for a time prefix without canonical automation identity."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery parent test requiring exactly one accepted completion."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/active_dispatch_also_references_Work",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for an active dispatch that also references Work."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/failed_dispatch_also_references_Work",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for a failed dispatch that also references Work."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/multiple_accepted_completions",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for multiple accepted completions."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/non-accepted_completion",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added named subtest witness",
+        "explanation": "Named recovery subtest for a completion that is not accepted."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredWorkStateChangeSupersedesCompletedDispatchOutputPlacement",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test proving a restored Work state change supersedes completed dispatch output placement."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresCompletedWorkFromCanonicalDispatchOutputWhenOccupancyIsMissing",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test restoring completed Work from canonical dispatch output when occupancy is missing."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresFailedDispatchReferencesWithoutDroppingFailedWork",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test restoring failed-dispatch references without dropping failed Work."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresOtherWorkWhenCompletedCronWorkHasNoOccupancy",
+        "owner": "Factory Runtime orchestration",
+        "classification": "added orchestration recovery witness",
+        "explanation": "New Factory Runtime recovery test restoring other Work when completed cron Work has no occupancy."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests::TestReconstructFactoryWorldState_CompletesCronWorkWithoutRetainingOccupancy",
+        "owner": "Recordings projection",
+        "classification": "added projection witness",
+        "explanation": "New recording projection test proving reconstructed Factory world state completes cron Work without retaining occupancy."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceMergesAndPagesSources",
+        "owner": "Worker Sessions/Wire",
+        "classification": "added service-wire witness",
+        "explanation": "New Worker Sessions/Wire test for merging and paging observation sources."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServicePreservesOptionalProjectionFacts",
+        "owner": "Worker Sessions/Wire",
+        "classification": "added service-wire witness",
+        "explanation": "New Worker Sessions/Wire test preserving optional projection facts."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput",
+        "owner": "Worker Sessions/Wire",
+        "classification": "added service-wire witness",
+        "explanation": "New Worker Sessions/Wire parent test for non-nil empty results and invalid-input rejection."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/invalid_cursor",
+        "owner": "Worker Sessions/Wire",
+        "classification": "added named subtest witness",
+        "explanation": "Named Worker Sessions/Wire subtest for invalid cursor input."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/invalid_scope",
+        "owner": "Worker Sessions/Wire",
+        "classification": "added named subtest witness",
+        "explanation": "Named Worker Sessions/Wire subtest for invalid scope input."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/negative_limit",
+        "owner": "Worker Sessions/Wire",
+        "classification": "added named subtest witness",
+        "explanation": "Named Worker Sessions/Wire subtest for negative limit input."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/wire::TestMetricsCLICompletesReportAfterStandardCLITimeout/success_crosses_local_HTTP_and_renders_report",
+        "owner": "Wire",
+        "classification": "added named integration witness",
+        "explanation": "Named Wire subtest proving a metrics CLI success crosses local HTTP and renders its report after the standard timeout."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/wire::TestMetricsCLICompletesReportAfterStandardCLITimeout/transport_failure_preserves_cause_and_output",
+        "owner": "Wire",
+        "classification": "added named integration witness",
+        "explanation": "Named Wire subtest proving transport failure preserves its cause and output after the standard timeout."
+      },
+      {
+        "side": "baselineOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestProductionDirectoryReplacementAdapterIsSelectedOnlyByWire",
+        "owner": "directoryreplace",
+        "classification": "relocated boundary witness; no real behavioral removal",
+        "explanation": "The old package-level scan witness moved to cmd/pkgboundarycheck in a62c9c101; successor tests retain constructor-selection, production-helper rejection, and Wire/outer-test allowance coverage."
+      }
+    ],
+    "groups": [
+      {
+        "owner": "Factory Runtime orchestration",
+        "finalOnly": 19,
+        "baselineOnly": 0,
+        "net": 19,
+        "explanation": "Nineteen new Factory Runtime orchestration recovery identities cover completed automation, dispatch references, Work placement, and occupancy restoration.",
+        "finalOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_DoesNotRedispatchCompletedAutomationWithCanonicalCompletionPlacement",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsCompletedAutomationWithIncompatibleTopology",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsConflictingCompletedDispatchPlaces",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsConflictingCurrentWorkPlacements",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences/missing_dispatch_identity",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RejectsMalformedFailedDispatchReferences/unknown_Work",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts/incomplete_dispatch_history",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRecoveryRequiresCanonicalCompletionFacts/time_prefix_without_canonical_automation_identity",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/active_dispatch_also_references_Work",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/failed_dispatch_also_references_Work",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/multiple_accepted_completions",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredAutomationRequiresOneAcceptedCompletion/non-accepted_completion",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoredWorkStateChangeSupersedesCompletedDispatchOutputPlacement",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresCompletedWorkFromCanonicalDispatchOutputWhenOccupancyIsMissing",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresFailedDispatchReferencesWithoutDroppingFailedWork",
+          "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresOtherWorkWhenCompletedCronWorkHasNoOccupancy"
+        ],
+        "baselineOnlyIdentities": []
+      },
+      {
+        "owner": "Recordings projection",
+        "finalOnly": 1,
+        "baselineOnly": 0,
+        "net": 1,
+        "explanation": "One new recording projection identity covers completed cron Work without retained occupancy.",
+        "finalOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests::TestReconstructFactoryWorldState_CompletesCronWorkWithoutRetainingOccupancy"
+        ],
+        "baselineOnlyIdentities": []
+      },
+      {
+        "owner": "directoryreplace",
+        "finalOnly": 5,
+        "baselineOnly": 1,
+        "net": 4,
+        "explanation": "Three new directory-replacement parents and two restore subtests add recovery and cleanup coverage; the former production-selection scan is a relocated boundary witness.",
+        "finalOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestCommitRollsBackWhenStagingIsMissing",
+          "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestReplaceWatchedDirectoryContentsReplacesContentAndCleansUp",
+          "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup",
+          "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup/empty_backup",
+          "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestRestoreIsNoOpForEmptyOrMissingBackup/missing_backup"
+        ],
+        "baselineOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestProductionDirectoryReplacementAdapterIsSelectedOnlyByWire"
+        ]
+      },
+      {
+        "owner": "Worker Sessions/Wire",
+        "finalOnly": 6,
+        "baselineOnly": 0,
+        "net": 6,
+        "explanation": "Six new Worker Sessions/Wire identities cover source merging, optional projection facts, and invalid observation inputs.",
+        "finalOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceMergesAndPagesSources",
+          "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServicePreservesOptionalProjectionFacts",
+          "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput",
+          "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/invalid_cursor",
+          "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/invalid_scope",
+          "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceReturnsNonNilEmptyAndRejectsInvalidInput/negative_limit"
+        ],
+        "baselineOnlyIdentities": []
+      },
+      {
+        "owner": "Wire",
+        "finalOnly": 2,
+        "baselineOnly": 0,
+        "net": 2,
+        "explanation": "Two new Wire identities cover metrics CLI success and transport-failure rendering across local HTTP.",
+        "finalOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/wire::TestMetricsCLICompletesReportAfterStandardCLITimeout/success_crosses_local_HTTP_and_renders_report",
+          "github.com/portpowered/infinite-you/pkg/wire::TestMetricsCLICompletesReportAfterStandardCLITimeout/transport_failure_preserves_cause_and_output"
+        ],
+        "baselineOnlyIdentities": []
+      }
+    ],
+    "baselineOnlyClassification": "relocated boundary witness; no real behavioral removal",
+    "realBehavioralRemovals": 0,
+    "exactReconstruction": {
+      "formula": "final = (accepted - baselineOnly) union finalOnly",
+      "acceptedSetSize": 18122,
+      "baselineOnlyRemoved": 1,
+      "finalOnlyAdded": 33,
+      "reconstructedSetSize": 18154,
+      "reconstructedInventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677",
+      "matchesFinalSet": true,
+      "countEquation": "18154 = 18122 - 1 + 33",
+      "groupNetEquation": "19 + 1 + 4 + 6 + 2 = 32"
+    },
+    "equation": "final = (accepted - baselineOnly) union finalOnly; 18154 = 18122 - 1 + 33"
+  },
+  "historyContinuity": {
+    "criterion": "HIST-001",
+    "baselineOnlyIdentity": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestProductionDirectoryReplacementAdapterIsSelectedOnlyByWire",
+    "baselineWitness": {
+      "commit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+      "path": "pkg/platform/directoryreplace/policy_boundary_test.go",
+      "symbol": "TestProductionDirectoryReplacementAdapterIsSelectedOnlyByWire",
+      "presentInAcceptedCaptureTree": true
+    },
+    "transition": {
+      "commit": "a62c9c1017af7d4bb6d27437f606e8d1225d0007",
+      "parent": "1ac6ec4091c3a94934c6d28cba70a5dc185d13b4",
+      "description": "move directory replacement boundary witness",
+      "ancestorOfIntegrationBase": true
+    },
+    "successorBoundaryWitnesses": [
+      {
+        "identity": "github.com/portpowered/infinite-you/cmd/pkgboundarycheck::TestRunRecognizesDirectoryReplacementConstructorAsExactWireSelection",
+        "path": "cmd/pkgboundarycheck/production_defaults_test.go",
+        "commit": "a62c9c1017af7d4bb6d27437f606e8d1225d0007",
+        "property": "A directory replacement constructor selected by Wire is accepted."
+      },
+      {
+        "identity": "github.com/portpowered/infinite-you/cmd/pkgboundarycheck::TestRunEnforcesDirectoryReplacementSelectionBoundary",
+        "path": "cmd/pkgboundarycheck/production_defaults_test.go",
+        "commit": "a62c9c1017af7d4bb6d27437f606e8d1225d0007",
+        "property": "Production-helper constructor and composite-literal selections are rejected while Wire and outer-test selections are accepted.",
+        "cases": [
+          "constructor in production helper is blocked",
+          "composite literal in production helper is blocked",
+          "composite literal in Wire is allowed",
+          "outer test selection is allowed"
+        ]
+      },
+      {
+        "identity": "github.com/portpowered/infinite-you/cmd/pkgboundarycheck::TestPlatformAdapterSelectionIsRestrictedToWireAndOuterTests",
+        "path": "cmd/pkgboundarycheck/production_defaults_test.go",
+        "commit": "a62c9c1017af7d4bb6d27437f606e8d1225d0007",
+        "property": "Directory replacement adapter selection remains restricted to Wire and outer test composition."
+      }
+    ],
+    "continuityProven": true,
+    "classification": "relocated boundary witness; no real behavioral removal",
+    "explanation": "The baseline identity was a package-local source scan. Commit a62c9c101 removed that duplicate scan from the platform package and established the maintained package-boundary checker witnesses at the customer-independent boundary owner; the unit inventory therefore has one identity relocation and zero real behavioral removals."
+  },
+  "validationContract": {
+    "schemaCriterion": "SCHEMA-001",
+    "hashCriterion": "HASH-001",
+    "inventoryCriterion": "INV-001",
+    "historyCriterion": "HIST-001",
+    "failurePolicy": {
+      "missingOrExpiredSource": "fail closed",
+      "malformedSourceOrArtifact": "fail closed",
+      "sourceHashMismatch": "fail closed",
+      "duplicateIdentityOrSource": "fail closed",
+      "cohortOrSetInconsistency": "fail closed",
+      "scalarOnlyOrSubstituteEvidence": "forbidden"
+    },
+    "requiredInvariants": [
+      "schema and version are exact",
+      "all six source bytes match their pinned SHA-256 values",
+      "all source documents are complete v2 documents with 444 packages",
+      "each three-capture cohort has equal canonical inventory",
+      "accepted and final canonical inventory hashes and counts match comparison",
+      "all final-only and baseline-only identities are unique and fully mapped",
+      "set reconstruction and count equations are exact",
+      "group net totals are 19/1/4/6/2 and sum to 32",
+      "history continuity proves zero real behavioral removals"
+    ]
+  }
+}
