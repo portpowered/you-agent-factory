@@ -95,6 +95,8 @@ UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 UNIT_TIMING_OUTPUT ?=
 UNIT_LATENCY_BUDGET ?= docs/internal/baselines/go-unit-lane-latency-budget.v1.json
 UNIT_LATENCY_SAMPLES ?= .artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json
+BASELINE_REGEN_ROOT ?= .
+BASELINE_REGEN_DEADCODE_REPORT ?=
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 FUNCTIONAL_LONG_COMPILE_PACKAGES := $(FUNCTIONAL_LONG_PACKAGES) ./pkg/services/models/internal/backendconformance
@@ -235,7 +237,7 @@ endef
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
-.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
+.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
@@ -516,6 +518,9 @@ test-unit-fresh:
 
 test-unit-latency-budget:
 	$(GO) run ./cmd/unitlanebudget -budget "$(UNIT_LATENCY_BUDGET)" -samples "$(UNIT_LATENCY_SAMPLES)"
+
+regenerate-shared-ci-baselines:
+	$(GO) run ./cmd/unitlanebudget -mode regenerate -root "$(BASELINE_REGEN_ROOT)" -budget "$(UNIT_LATENCY_BUDGET)" -samples "$(UNIT_LATENCY_SAMPLES)" $(if $(strip $(BASELINE_REGEN_DEADCODE_REPORT)),-deadcode-report "$(BASELINE_REGEN_DEADCODE_REPORT)",)
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
 # pull-request base ref/SHA; the command resolves its merge-base with head,

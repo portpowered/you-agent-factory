@@ -8,9 +8,11 @@ import (
 )
 
 type budgetConfig struct {
-	budgetPath string
-	samples    string
-	mode       string
+	budgetPath     string
+	samples        string
+	mode           string
+	root           string
+	deadcodeReport string
 }
 
 var stdoutWriter io.Writer = os.Stdout
@@ -25,8 +27,11 @@ func main() {
 
 func run() error {
 	cfg := parseConfig()
-	if cfg.mode != "final" && cfg.mode != "baseline" {
-		return checkerError(fmt.Errorf("mode: expected final or baseline, actual %q", cfg.mode))
+	if cfg.mode != "final" && cfg.mode != "baseline" && cfg.mode != "regenerate" {
+		return checkerError(fmt.Errorf("mode: expected final, baseline, or regenerate, actual %q", cfg.mode))
+	}
+	if cfg.mode == "regenerate" {
+		return regenerateSharedBaselines(cfg)
 	}
 	paths, err := splitSamplePaths(cfg.samples)
 	if err != nil {
@@ -60,7 +65,9 @@ func parseConfig() budgetConfig {
 	cfg := budgetConfig{}
 	flag.StringVar(&cfg.budgetPath, "budget", "docs/internal/baselines/go-unit-lane-latency-budget.v1.json", "unit-lane latency budget JSON path")
 	flag.StringVar(&cfg.samples, "samples", "", "comma-separated v2 timing summary paths")
-	flag.StringVar(&cfg.mode, "mode", "final", "validation mode: final or baseline")
+	flag.StringVar(&cfg.mode, "mode", "final", "validation mode: final, baseline, or regenerate")
+	flag.StringVar(&cfg.root, "root", ".", "repository root for regeneration inputs and outputs")
+	flag.StringVar(&cfg.deadcodeReport, "deadcode-report", "", "normalized deadcode report to use; runs the pinned analyzer when omitted")
 	flag.Parse()
 	return cfg
 }
