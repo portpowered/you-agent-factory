@@ -38,7 +38,9 @@ func runPackagedTTSSharedConcurrentIsolation(
 	)
 	successResult, failureResult := collectPackagedTTSConcurrentResults(t, results)
 	assertPackagedTTSConcurrentResponses(t, success, failure, successResult, failureResult)
-	assertPackagedTTSConcurrentCommandEvidence(t, success, failure)
+	assertPackagedTTSConcurrentCommandEvidence(
+		t, success, failure, successText, failureText, voice, format,
+	)
 	assertPackagedTTSConcurrentPublicEvidence(
 		t, fixture, success, failure, successResult, failureResult,
 		successText, failureText, voice, format, failureMessage,
@@ -123,12 +125,17 @@ func assertPackagedTTSConcurrentResponses(
 func assertPackagedTTSConcurrentCommandEvidence(
 	t *testing.T,
 	success, failure *packagedTTSSharedScenario,
+	successText, failureText, voice, format string,
 ) {
 	t.Helper()
 	successRequest := success.outcome.lastRequest()
 	failureRequest := failure.outcome.lastRequest()
-	assertPackagedTTSCommandRequest(t, successRequest, success.factoryDir)
-	assertPackagedTTSCommandRequest(t, failureRequest, failure.factoryDir)
+	assertPackagedTTSCommandRequest(
+		t, successRequest, success.factoryDir, successText, voice, format,
+	)
+	assertPackagedTTSCommandRequest(
+		t, failureRequest, failure.factoryDir, failureText, voice, format,
+	)
 	if success.outcome.callCount() != 1 || failure.outcome.callCount() != 1 {
 		t.Fatalf("concurrent command calls = success:%d failure:%d, want one each", success.outcome.callCount(), failure.outcome.callCount())
 	}

@@ -9,8 +9,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -18,6 +16,9 @@ func assertPackagedTTSCommandRequest(
 	t testing.TB,
 	request platformprocess.CommandRequest,
 	wantWorkDir string,
+	wantText string,
+	wantVoice string,
+	wantFormat string,
 ) {
 	t.Helper()
 	if request.Command != "codex" {
@@ -32,6 +33,21 @@ func assertPackagedTTSCommandRequest(
 	}
 	if strings.TrimSpace(string(request.Stdin)) == "" {
 		t.Fatal("packaged TTS command prompt is empty, want provider input")
+	}
+	assertPackagedTTSCommandEdgeValues(t, string(request.Stdin), wantText, wantVoice, wantFormat)
+}
+
+func assertPackagedTTSCommandEdgeValues(
+	t testing.TB,
+	prompt, wantText, wantVoice, wantFormat string,
+) {
+	t.Helper()
+	if strings.Contains(prompt, "${") {
+		t.Fatalf("packaged TTS command prompt = %q, contains unresolved invocation interpolation", prompt)
+	}
+	want := packagedTTSCommandEdgeWitness(wantText, wantVoice, wantFormat)
+	if !strings.Contains(prompt, want) {
+		t.Fatalf("packaged TTS command prompt = %q, want exact bound edge witness %q", prompt, want)
 	}
 }
 
@@ -114,120 +130,6 @@ func assertPackagedTTSInvocationResponseIdentityForSession(
 	if strings.TrimSpace(wantRequestID) != "" && response.RequestId != wantRequestID {
 		t.Fatalf("invocation response requestId = %q, want %q", response.RequestId, wantRequestID)
 	}
-}
-
-func assertPackagedTTSProviderRequest(
-	t *testing.T,
-	request *workerexecution.ProviderInferenceRequest,
-	wantText, wantTransition string,
-) {
-	t.Helper()
-	assertPackagedTTSProviderRequestForSession(
-		t, request, wantText, wantTransition, factorysessions.DefaultSessionID, "",
-	)
-}
-
-func assertPackagedTTSProviderRequestForSession(
-	t *testing.T,
-	request *workerexecution.ProviderInferenceRequest,
-	wantText, wantTransition, wantSessionID, wantRequestID string,
-) {
-	t.Helper()
-	if request == nil {
-		t.Fatal("provider request is nil, want one captured TTS attempt")
-	}
-	if request.ModelOperation != "TTS" || request.WorkerType != "tts-executor" {
-		t.Fatalf("provider request operation/worker = %q/%q, want TTS/tts-executor", request.ModelOperation, request.WorkerType)
-	}
-	if request.Model != factorydefinitions.DefaultTTSModelName {
-		t.Fatalf("provider request model = %q, want %q", request.Model, factorydefinitions.DefaultTTSModelName)
-	}
-	if !strings.EqualFold(strings.TrimSpace(request.ModelProvider), "CODEX") {
-		t.Fatalf("provider request model provider = %q, want CODEX binding", request.ModelProvider)
-	}
-	if request.Dispatch.TransitionID != wantTransition {
-		t.Fatalf("provider request transition = %q, want %q", request.Dispatch.TransitionID, wantTransition)
-	}
-	if strings.TrimSpace(request.Dispatch.DispatchID) == "" {
-		t.Fatal("provider request dispatch id is empty")
-	}
-	if len(request.Dispatch.Execution.WorkIDs) != 1 || strings.TrimSpace(request.Dispatch.Execution.WorkIDs[0]) == "" {
-		t.Fatalf("provider request work ids = %#v, want one non-empty work identity", request.Dispatch.Execution.WorkIDs)
-	}
-	correlation := request.Correlation
-	for name, value := range map[string]string{
-		"factory session": correlation.FactorySessionID,
-		"runtime":         correlation.RuntimeID,
-		"generation":      correlation.GenerationID,
-		"dispatch":        correlation.DispatchID,
-		"attempt":         correlation.AttemptID,
-		"request":         correlation.RequestID,
-		"trace":           correlation.TraceID,
-	} {
-		if strings.TrimSpace(value) == "" {
-			t.Fatalf("provider request %s correlation id is empty: %#v", name, correlation)
-		}
-	}
-	if correlation.FactorySessionID != wantSessionID {
-		t.Fatalf("provider request factory session = %q, want %q", correlation.FactorySessionID, wantSessionID)
-	}
-	if strings.TrimSpace(wantRequestID) != "" && correlation.RequestID != wantRequestID {
-		t.Fatalf("provider request correlation request = %q, want %q", correlation.RequestID, wantRequestID)
-	}
-	if correlation.DispatchID != request.Dispatch.DispatchID {
-		t.Fatalf("provider request correlation dispatch = %q, want %q", correlation.DispatchID, request.Dispatch.DispatchID)
-	}
-	if correlation.RequestID != request.Dispatch.Execution.RequestID {
-		t.Fatalf("provider request correlation request = %q, want dispatch request %q", correlation.RequestID, request.Dispatch.Execution.RequestID)
-	}
-	if correlation.TraceID != request.Dispatch.Execution.TraceID {
-		t.Fatalf("provider request correlation trace = %q, want dispatch trace %q", correlation.TraceID, request.Dispatch.Execution.TraceID)
-	}
-
-	var textBinding *workerexecution.ResolvedModelOperationBinding
-	for index := range request.ModelBindings {
-		binding := &request.ModelBindings[index]
-		if binding.Slot == "text" {
-			textBinding = binding
-			break
-		}
-	}
-	if textBinding == nil || len(textBinding.Content) != 1 {
-		if providerRequestContainsTextInput(request, wantText) {
-			return
-		}
-		t.Fatalf("provider text binding = %#v, want one resolved content part or an exact dispatched text input; all model bindings = %#v", textBinding, request.ModelBindings)
-	}
-	part := textBinding.Content[0]
-	if part.Type.Normalized() != work.WorkContentPartTypeText || part.Text != wantText {
-		t.Fatalf("provider text binding content = %#v, want exact text %q", part, wantText)
-	}
-}
-
-func providerRequestContainsTextInput(
-	request *workerexecution.ProviderInferenceRequest,
-	wantText string,
-) bool {
-	if request == nil {
-		return false
-	}
-	for _, raw := range request.InputTokens {
-		var content []work.WorkContentPart
-		switch token := raw.(type) {
-		case workerexecution.Token:
-			content = token.Color.Content
-		case *workerexecution.Token:
-			if token != nil {
-				content = token.Color.Content
-			}
-		}
-		for _, part := range content {
-			if part.Type.Normalized() == work.WorkContentPartTypeText && part.Text == wantText {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func assertPackagedTTSResponseCorrelatesWithEvents(

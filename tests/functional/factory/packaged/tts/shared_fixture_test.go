@@ -437,7 +437,9 @@ func runPackagedTTSSharedRequiredInput(
 	assertPackagedTTSInvocationResponseIdentityForSession(t, response, scenario.sessionID, requestID)
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	assertPackagedTTSCommandRequest(t, scenario.outcome.lastRequest(), scenario.factoryDir)
+	assertPackagedTTSCommandRequest(
+		t, scenario.outcome.lastRequest(), scenario.factoryDir, text, "", "",
+	)
 	if scenario.outcome.callCount() != 1 {
 		t.Fatalf("shared required-input command calls = %d, want one", scenario.outcome.callCount())
 	}
@@ -470,7 +472,9 @@ func runPackagedTTSSharedWorkEvents(
 	}
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
-	assertPackagedTTSCommandRequest(t, scenario.outcome.lastRequest(), scenario.factoryDir)
+	assertPackagedTTSCommandRequest(
+		t, scenario.outcome.lastRequest(), scenario.factoryDir, text, "", "",
+	)
 	if scenario.outcome.callCount() != 1 {
 		t.Fatalf("shared Work/events command calls = %d, want one", scenario.outcome.callCount())
 	}
@@ -509,7 +513,9 @@ func runPackagedTTSSharedOptionalVoiceAndFormat(
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
 	request := scenario.outcome.lastRequest()
-	assertPackagedTTSCommandRequest(t, request, scenario.factoryDir)
+	assertPackagedTTSCommandRequest(
+		t, request, scenario.factoryDir, text, voice, format,
+	)
 	if scenario.outcome.callCount() != 1 {
 		t.Fatalf("shared optional voice/format command calls = %d, want one", scenario.outcome.callCount())
 	}
@@ -546,7 +552,9 @@ func runPackagedTTSSharedGenericFailure(
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
 	request := scenario.outcome.lastRequest()
-	assertPackagedTTSCommandRequest(t, request, scenario.factoryDir)
+	assertPackagedTTSCommandRequest(
+		t, request, scenario.factoryDir, text, "", "",
+	)
 	if scenario.outcome.callCount() != 1 {
 		t.Fatalf("shared generic failure command calls = %d, want one", scenario.outcome.callCount())
 	}
@@ -591,7 +599,9 @@ func runPackagedTTSSharedPackagedModelFailure(
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, scenario.sessionID, packagedTTSSharedFixtureTimeout)
 
 	request := scenario.outcome.lastRequest()
-	assertPackagedTTSCommandRequest(t, request, scenario.factoryDir)
+	assertPackagedTTSCommandRequest(
+		t, request, scenario.factoryDir, text, "", "",
+	)
 	if scenario.outcome.callCount() != 1 {
 		t.Fatalf("shared packaged model failure command calls = %d, want one", scenario.outcome.callCount())
 	}

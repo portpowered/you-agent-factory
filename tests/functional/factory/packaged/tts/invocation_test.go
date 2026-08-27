@@ -72,6 +72,7 @@ func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
 		t.Fatalf("provider command call count = %d, want one named packaged invocation", runner.CallCount())
 	}
 	request := runner.LastRequest()
+	assertPackagedTTSCommandRequest(t, request, inputs.Input.WorkingDirectory, text, "", "")
 	if request.Command != "codex" {
 		t.Fatalf("provider command = %q, want codex", request.Command)
 	}

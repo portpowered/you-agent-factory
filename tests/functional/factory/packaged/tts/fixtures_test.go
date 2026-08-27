@@ -23,17 +23,18 @@ import (
 // @you/tts layout but replaces authored topology with a cloud-backed inference
 // worker that reaches the ProviderCommandRunner edge.
 func overwritePackagedTTSFactoryWithCommandRunnerTopology(t *testing.T, factoryDir string) {
-	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
+	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory, false)
 }
 
 func overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t *testing.T, factoryDir string) {
-	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat)
+	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat, true)
 }
 
 func overwritePackagedTTSFactoryTopology(
 	t *testing.T,
 	factoryDir string,
 	scaffoldFactory func(*testing.T) string,
+	includeOptionalEdgeValues bool,
 ) {
 	t.Helper()
 
@@ -57,6 +58,7 @@ func overwritePackagedTTSFactoryTopology(
 		t.Fatalf("unmarshal scaffold factory.json: %v", err)
 	}
 	preservePackagedTTSWorkstationPrompt(t, factoryDir, packaged, scaffold)
+	appendPackagedTTSCommandEdgeWitness(t, scaffold, includeOptionalEdgeValues)
 	scaffold["id"] = factorydefinitions.PackagedTTSFactoryProject
 	scaffold["name"] = "tts"
 
@@ -132,6 +134,78 @@ func preservePackagedTTSWorkstationPrompt(
 	t.Fatalf("scaffold TTS workstation %q is missing", factorydefinitions.PackagedTTSInvokeWorkstationName)
 }
 
+func appendPackagedTTSCommandEdgeWitness(
+	t testing.TB,
+	scaffold map[string]any,
+	includeOptionalValues bool,
+) {
+	t.Helper()
+	// ProviderCommandRunner receives only the rendered UserMessage. Keep this
+	// witness in the copied test Factory so the real interpolation path binds
+	// each scenario's values before the platform edge without changing assets.
+	workstations, ok := scaffold["workstations"].([]any)
+	if !ok {
+		t.Fatalf("scaffold TTS workstations = %#v, want array", scaffold["workstations"])
+	}
+	for _, raw := range workstations {
+		workstation, ok := raw.(map[string]any)
+		if !ok || workstation["name"] != factorydefinitions.PackagedTTSInvokeWorkstationName {
+			continue
+		}
+		prompt, ok := workstation["body"].(string)
+		if !ok {
+			t.Fatalf("scaffold TTS workstation body = %#v, want string", workstation["body"])
+		}
+		workstation["body"] = packagedTTSInvocationEdgeWitnessPrompt(prompt, includeOptionalValues)
+		return
+	}
+	t.Fatalf("scaffold TTS workstation %q is missing", factorydefinitions.PackagedTTSInvokeWorkstationName)
+}
+
+const (
+	packagedTTSCommandEdgeWitnessHeader       = "TTS_EDGE_WITNESS"
+	packagedTTSCommandEdgeWitnessTextPrefix   = "text="
+	packagedTTSCommandEdgeWitnessVoicePrefix  = "voice="
+	packagedTTSCommandEdgeWitnessFormatPrefix = "format="
+)
+
+func packagedTTSInvocationEdgeWitnessPrompt(prompt string, includeOptionalValues bool) string {
+	lines := []string{
+		strings.TrimRight(prompt, "\r\n"),
+		"",
+		packagedTTSCommandEdgeWitnessHeader,
+		packagedTTSCommandEdgeWitnessTextPrefix + "${text}",
+	}
+	if includeOptionalValues {
+		lines = append(lines,
+			packagedTTSCommandEdgeWitnessVoicePrefix+"${voice}",
+			packagedTTSCommandEdgeWitnessFormatPrefix+"${format}",
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func packagedTTSGenericEdgeWitnessPrompt() string {
+	return strings.Join([]string{
+		packagedTTSCommandEdgeWitnessHeader,
+		packagedTTSCommandEdgeWitnessTextPrefix + "{{ (index .Inputs 0).Payload }}",
+	}, "\n")
+}
+
+func packagedTTSCommandEdgeWitness(wantText, wantVoice, wantFormat string) string {
+	lines := []string{
+		packagedTTSCommandEdgeWitnessHeader,
+		packagedTTSCommandEdgeWitnessTextPrefix + wantText,
+	}
+	if wantVoice != "" || wantFormat != "" {
+		lines = append(lines,
+			packagedTTSCommandEdgeWitnessVoicePrefix+wantVoice,
+			packagedTTSCommandEdgeWitnessFormatPrefix+wantFormat,
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func authoredPromptBody(content string) string {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	if !strings.HasPrefix(content, "---\n") {
@@ -154,7 +228,7 @@ func scaffoldFactoryTTSAudioDispatch(t *testing.T) string {
 
 func scaffoldTTSLikeFactory(t *testing.T, workstationName string) string {
 	t.Helper()
-	return support.ScaffoldFactory(t, map[string]any{
+	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "tts",
 		"invocationSignature": map[string]any{
 			"parameters": []map[string]any{{
@@ -208,6 +282,7 @@ func scaffoldTTSLikeFactory(t *testing.T, workstationName string) string {
 		}},
 		"workstations": []map[string]any{{
 			"name":      workstationName,
+			"body":      packagedTTSGenericEdgeWitnessPrompt(),
 			"type":      "INFERENCE_RUN",
 			"operation": "TTS",
 			"worker":    "tts-executor",
@@ -231,6 +306,13 @@ func scaffoldTTSLikeFactory(t *testing.T, workstationName string) string {
 			}},
 		}},
 	})
+	support.WriteWorkstationConfig(
+		t,
+		dir,
+		workstationName,
+		"---\ntype: MODEL_WORKSTATION\n---\n"+packagedTTSGenericEdgeWitnessPrompt()+"\n",
+	)
+	return dir
 }
 
 func postPackagedTTSInvocation(
