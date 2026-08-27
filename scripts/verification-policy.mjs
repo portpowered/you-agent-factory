@@ -232,6 +232,12 @@ function policyInputFromEnvironment() {
 				"BACKEND_STABILITY_RESULT",
 			),
 			directLane(
+				"Backend Unit Latency",
+				"RUN_BACKEND_UNIT_LATENCY",
+				"BACKEND_UNIT_LATENCY_REASON",
+				"BACKEND_UNIT_LATENCY_RESULT",
+			),
+			directLane(
 				"Backend Lint",
 				"RUN_BACKEND_LINT",
 				"BACKEND_LINT_REASON",
