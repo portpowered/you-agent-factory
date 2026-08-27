@@ -166,15 +166,71 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	// resolution, before any provider or workflow runs -- so it stays fast
 	// and runs even under -short, which is exactly the lane
 	// `make test-functional-coverage` uses.
-	// It remains scenario-local because the test deliberately removes the
-	// installed Factory, clears both home-directory variables, and corrupts the
-	// Operator Settings document after admission. Those destructive inputs are
-	// the filesystem and resolver property under test and cannot be shared with
-	// another ACP session without changing its dependency edge.
+	scenario := newUnresolvableFactoryScenario(t)
+
+	firstResp := sendSessionPrompt(t, scenario.server, scenario.sessionID, "please help with this goal")
+	firstErrorData := assertBoundedDependencyError(t, firstResp, "first unresolvable-target prompt")
+
+	secondResp := sendSessionPrompt(t, scenario.server, scenario.sessionID, "a retry after the unresolvable target failure")
+	secondErrorData := assertBoundedDependencyError(t, secondResp, "retry after unresolvable-target prompt")
+	if secondErrorData != firstErrorData {
+		t.Fatalf("retry error data = %s, want the same bounded error data as the first failure %s", secondErrorData, firstErrorData)
+	}
+	if strings.Contains(strings.ToLower(secondResp.Error.Error()), "busy") {
+		t.Fatalf("retry error = %v, want a fresh bounded resolver failure after busy state was released", secondResp.Error)
+	}
+
+	// The third episode's prompt proves the resolver's own earlier
+	// home-directory lookup failure (reached before any catalog lookup)
+	// fails exactly as safely: unset both home-directory environment
+	// variables only for this call.
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	thirdResp := sendSessionPrompt(t, scenario.server, scenario.thirdSessionID, "a prompt with no resolvable home directory")
+	thirdErrorData := assertBoundedDependencyError(t, thirdResp, "missing-home prompt")
+	if thirdErrorData != firstErrorData {
+		t.Fatalf("missing-home error data = %s, want the same bounded dependency error data %s", thirdErrorData, firstErrorData)
+	}
+
+	// The fourth episode's prompt proves the resolver's Operator Defaults
+	// resolution failure classifies the same safe way: restore a resolvable
+	// home directory and the installed Factory this episode's own target
+	// still needs to resolve past the earlier catalog-lookup branch, then
+	// corrupt only the persisted Operator Settings document.
+	t.Setenv("HOME", scenario.home)
+	t.Setenv("USERPROFILE", scenario.home)
+	seedInstalledPackagedFactory(t, scenario.home, "@you/goal")
+	if err := os.WriteFile(operatorsettings.DefaultConfigPath(scenario.home), []byte("not valid json"), 0o644); err != nil {
+		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
+	}
+	fourthResp := sendSessionPrompt(t, scenario.server, scenario.fourthSessionID, "a prompt with no resolvable Operator Defaults")
+	fourthErrorData := assertBoundedDependencyError(t, fourthResp, "corrupt-Operator-Settings prompt")
+	if fourthErrorData != firstErrorData {
+		t.Fatalf("corrupt-settings error data = %s, want the same bounded dependency error data %s", fourthErrorData, firstErrorData)
+	}
+	if got := scenario.runner.requestCount(); got != 0 {
+		t.Fatalf("provider command calls during resolver failures = %d, want 0 (all failures precede Factory execution)", got)
+	}
+}
+
+type unresolvableFactoryScenario struct {
+	home            string
+	server          acp.Server
+	runner          *controlledACPCommandRunner
+	sessionID       string
+	thirdSessionID  string
+	fourthSessionID string
+}
+
+func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
+	t.Helper()
+	// This scenario is local because it removes the installed Factory, clears
+	// both home-directory variables, and corrupts Operator Settings after
+	// admission. Those destructive inputs are the filesystem and resolver
+	// properties under test and cannot be shared with another ACP session.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
@@ -193,28 +249,20 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 
 	cwd := t.TempDir()
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+	fourthSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-	// Two more session/new calls, while the installed Factory, home
-	// directory, and Operator Settings document are all still intact, admit
-	// a third and fourth episode this test reuses below only after breaking
-	// home-directory resolution and Operator Settings resolution
-	// respectively -- session admission itself must not depend on either.
-	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if thirdSessionID == "" {
 		t.Fatal("session/new (third episode) returned a blank sessionId")
 	}
-	fourthSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if fourthSessionID == "" {
 		t.Fatal("session/new (fourth episode) returned a blank sessionId")
 	}
 
-	// Remove the installed Factory's own directory only after session/new
-	// already resolved and admitted it, so the runtime resolver's
-	// named-Factory cross-root lookup -- reached only from Factory dispatch,
-	// never from session/new's separate effective-catalog check -- fails at
-	// prompt-dispatch time.
+	// Remove the installed Factory only after session/new admitted all three
+	// episodes, so prompt dispatch takes the runtime resolver's failure path.
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
 	if err != nil {
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
@@ -222,49 +270,13 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	if err := os.RemoveAll(filepath.Join(globalRoot, "@you", "goal")); err != nil {
 		t.Fatalf("RemoveAll(installed Factory directory) error = %v", err)
 	}
-
-	firstResp := sendSessionPrompt(t, server, sessionID, "please help with this goal")
-	firstErrorData := assertBoundedDependencyError(t, firstResp, "first unresolvable-target prompt")
-
-	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the unresolvable target failure")
-	secondErrorData := assertBoundedDependencyError(t, secondResp, "retry after unresolvable-target prompt")
-	if secondErrorData != firstErrorData {
-		t.Fatalf("retry error data = %s, want the same bounded error data as the first failure %s", secondErrorData, firstErrorData)
-	}
-	if strings.Contains(strings.ToLower(secondResp.Error.Error()), "busy") {
-		t.Fatalf("retry error = %v, want a fresh bounded resolver failure after busy state was released", secondResp.Error)
-	}
-
-	// The third episode's prompt proves the resolver's own earlier
-	// home-directory lookup failure (reached before any catalog lookup)
-	// fails exactly as safely: unset both home-directory environment
-	// variables only for this call.
-	t.Setenv("HOME", "")
-	t.Setenv("USERPROFILE", "")
-	thirdResp := sendSessionPrompt(t, server, thirdSessionID, "a prompt with no resolvable home directory")
-	thirdErrorData := assertBoundedDependencyError(t, thirdResp, "missing-home prompt")
-	if thirdErrorData != firstErrorData {
-		t.Fatalf("missing-home error data = %s, want the same bounded dependency error data %s", thirdErrorData, firstErrorData)
-	}
-
-	// The fourth episode's prompt proves the resolver's Operator Defaults
-	// resolution failure classifies the same safe way: restore a resolvable
-	// home directory and the installed Factory this episode's own target
-	// still needs to resolve past the earlier catalog-lookup branch, then
-	// corrupt only the persisted Operator Settings document.
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	if err := os.WriteFile(operatorsettings.DefaultConfigPath(home), []byte("not valid json"), 0o644); err != nil {
-		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
-	}
-	fourthResp := sendSessionPrompt(t, server, fourthSessionID, "a prompt with no resolvable Operator Defaults")
-	fourthErrorData := assertBoundedDependencyError(t, fourthResp, "corrupt-Operator-Settings prompt")
-	if fourthErrorData != firstErrorData {
-		t.Fatalf("corrupt-settings error data = %s, want the same bounded dependency error data %s", fourthErrorData, firstErrorData)
-	}
-	if got := runner.requestCount(); got != 0 {
-		t.Fatalf("provider command calls during resolver failures = %d, want 0 (all failures precede Factory execution)", got)
+	return unresolvableFactoryScenario{
+		home:            home,
+		server:          server,
+		runner:          runner,
+		sessionID:       sessionID,
+		thirdSessionID:  thirdSessionID,
+		fourthSessionID: fourthSessionID,
 	}
 }
 
