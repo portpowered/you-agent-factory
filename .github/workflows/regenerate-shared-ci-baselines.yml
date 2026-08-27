@@ -41,6 +41,8 @@ jobs:
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
       SOURCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}
+      SOURCE_EVENT: ${{ github.event.workflow_run.event }}
+      SOURCE_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
     steps:
       - name: Validate the completed source CI identity
         shell: bash
@@ -48,6 +50,14 @@ jobs:
           set -euo pipefail
           if [[ "${{ github.event.workflow_run.name }}" != "CI" ]]; then
             echo "::error title=Unexpected source workflow::Expected CI, received ${{ github.event.workflow_run.name }}" >&2
+            exit 1
+          fi
+          if [[ "$SOURCE_EVENT" != "push" ]]; then
+            echo "::error title=Unexpected source event::Expected a push-triggered CI run, received $SOURCE_EVENT" >&2
+            exit 1
+          fi
+          if [[ "$SOURCE_REPOSITORY" != "$REPOSITORY" ]]; then
+            echo "::error title=Unexpected source repository::Expected $REPOSITORY, received $SOURCE_REPOSITORY" >&2
             exit 1
           fi
           if [[ "${{ github.event.workflow_run.head_branch }}" != "$DEFAULT_BRANCH" ]]; then
