@@ -39,6 +39,7 @@ var (
 // invocations finish. Per-test t.Cleanup cannot own this process because it
 // would close the shared wiring before the next top-level test runs.
 func TestMain(m *testing.M) {
+	sharedDefinitionsProcess = sharedDefinitionsProcessForTest
 	code := m.Run()
 	if err := closeSharedDefinitionsServiceHosts(); err != nil {
 		fmt.Fprintf(os.Stderr, "close shared Factory Definitions service hosts: %v\n", err)
@@ -60,7 +61,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func sharedDefinitionsProcess(t testing.TB) support.ApplicationProcess {
+func sharedDefinitionsProcessForTest(t testing.TB) support.ApplicationProcess {
 	t.Helper()
 	sharedDefinitionsFixtureOnce.Do(func() {
 		sharedDefinitionsFixture, sharedDefinitionsFixtureErr = startSharedDefinitionsProcess()
@@ -90,13 +91,13 @@ func startSharedDefinitionsProcess() (*sharedDefinitionsProcessFixture, error) {
 
 func sharedDefinitionsProviderCallCount(t testing.TB) int {
 	t.Helper()
-	sharedDefinitionsProcess(t)
+	sharedDefinitionsProcessForTest(t)
 	return sharedDefinitionsFixture.providerEdge.CallCount()
 }
 
 func sharedDefinitionsProviderRunner(t testing.TB) *support.RecordingCommandRunner {
 	t.Helper()
-	sharedDefinitionsProcess(t)
+	sharedDefinitionsProcessForTest(t)
 	return sharedDefinitionsFixture.providerEdge
 }
 
@@ -105,7 +106,7 @@ func sharedDefinitionsProviderRunner(t testing.TB) *support.RecordingCommandRunn
 // validation operation can run sequentially on one root process without
 // crossing Current Factory or named-catalog state.
 func TestFactoryDefinitionsSharedProcessKeepsHomesAndCurrentFactoriesIsolated(t *testing.T) {
-	process := sharedDefinitionsProcess(t)
+	process := sharedDefinitionsProcessForTest(t)
 	providerCallsBefore := sharedDefinitionsProviderCallCount(t)
 
 	homeA, workingA, envA := sharedDefinitionsHome(t)
