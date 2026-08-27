@@ -1,3 +1,5 @@
+//go:build backendconformance || functionallong
+
 package backendconformance
 
 import (

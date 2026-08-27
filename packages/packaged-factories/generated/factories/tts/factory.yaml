@@ -40,7 +40,10 @@ workTypes:
         - name: failed
           type: FAILED
 workers:
-    - body: You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content.
+    - args:
+        - --grpc-endpoint
+        - http://127.0.0.1:50051
+      body: You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content.
       command: localai-vibevoice
       model: tts
       modelLocality: LOCAL
