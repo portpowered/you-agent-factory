@@ -49,16 +49,13 @@ func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "New request"}`))
 	testutil.WriteSeedFile(t, dir, "review", []byte(`{"title": "New review"}`))
 
-	validateRunner := support.NewRecordingCommandRunner("runtime must not execute during validate")
-	assertFactoryValidationAccepts(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: validateRunner},
-	)
-	if validateRunner.CallCount() != 0 {
+	providerCallsBefore := sharedDefinitionsProviderCallCount(t)
+	assertFactoryValidationAccepts(t, dir)
+	if providerCalls := sharedDefinitionsProviderCallCount(t); providerCalls != providerCallsBefore {
 		t.Fatalf(
-			"provider command runner calls during validate = %d, want 0",
-			validateRunner.CallCount(),
+			"provider command runner calls during validate = %d, want unchanged %d",
+			providerCalls,
+			providerCallsBefore,
 		)
 	}
 
@@ -102,10 +99,8 @@ func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
 // workstations, or routes before runtime execution and reports customer-visible
 // diagnostics through the CLI validate path.
 func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	process := buildDefinitionsProcess(t)
+	providerCallsBefore := sharedDefinitionsProviderCallCount(t)
 
 	t.Run("missing_worker", func(t *testing.T) {
 		dir := support.ScaffoldFactory(t, missingWorkerFactoryConfig())
@@ -144,8 +139,12 @@ func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) 
 		)
 	})
 
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 before validation succeeds", runner.CallCount())
+	if providerCalls := sharedDefinitionsProviderCallCount(t); providerCalls != providerCallsBefore {
+		t.Fatalf(
+			"provider command runner calls = %d, want unchanged %d before validation succeeds",
+			providerCalls,
+			providerCallsBefore,
+		)
 	}
 }
 
@@ -153,14 +152,12 @@ func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) 
 // Factory validation reports every independent actionable defect in one CLI
 // outcome instead of stopping after the first error.
 func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	providerCallsBefore := sharedDefinitionsProviderCallCount(t)
 
 	dir := support.ScaffoldFactory(t, multipleActionableDefectsFactoryConfig())
 	assertFactoryValidationRejects(
 		t,
 		dir,
-		edges,
 		"Blocking targets:",
 		validationCodeDuplicateIdentifier,
 		validationCodeDanglingWorkerReference,
@@ -173,8 +170,12 @@ func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
 		`references non-existent state "missing-state"`,
 	)
 
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 before validation fails", runner.CallCount())
+	if providerCalls := sharedDefinitionsProviderCallCount(t); providerCalls != providerCallsBefore {
+		t.Fatalf(
+			"provider command runner calls = %d, want unchanged %d before validation fails",
+			providerCalls,
+			providerCallsBefore,
+		)
 	}
 }
 
@@ -742,11 +743,9 @@ func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code 
 func assertFactoryValidationAccepts(
 	t *testing.T,
 	factoryDir string,
-	edges serviceedges.Edges,
 ) {
 	t.Helper()
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	process := buildDefinitionsProcess(t)
 	assertFactoryValidationAcceptsWithProcess(t, process, factoryDir)
 }
 
@@ -761,6 +760,7 @@ func assertFactoryValidationAcceptsWithProcess(
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "factory", "config", "validate", factoryPath,
 	})
+	inputs.Input.Env = isolatedHomeEnvironment(t)
 	inputs.Input.WorkingDirectory = factoryDir
 
 	err := process.Execute(inputs.Input)
@@ -782,12 +782,10 @@ func assertFactoryValidationAcceptsWithProcess(
 func assertFactoryValidationRejects(
 	t *testing.T,
 	factoryDir string,
-	edges serviceedges.Edges,
 	wants ...string,
 ) {
 	t.Helper()
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	process := buildDefinitionsProcess(t)
 	assertFactoryValidationRejectsWithProcess(t, process, factoryDir, wants...)
 }
 
@@ -803,6 +801,7 @@ func assertFactoryValidationRejectsWithProcess(
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "factory", "config", "validate", factoryPath,
 	})
+	inputs.Input.Env = isolatedHomeEnvironment(t)
 	inputs.Input.WorkingDirectory = factoryDir
 
 	err := process.Execute(inputs.Input)
