@@ -1,23 +1,15 @@
 package catalog
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -47,20 +39,17 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 		t.Fatal("packaged Factory matrix has no required-input cases")
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: sharedRequiredInputRunner,
-	})
-	support.CleanupProcess(t, process)
+	fixture := sharedCatalogProcess(t)
+	process := fixture.process
 
 	for _, testcase := range cases {
 		testcase := testcase
 		t.Run(testcase.factoryName, func(t *testing.T) {
 			runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-			sharedRequiredInputRunner.setDelegate(runner)
+			fixture.provider.setDelegate(runner)
 			run := runPackagedFactoryMissingRequiredInputInvocation(
 				t,
 				process,
-				runner,
 				testcase.factoryName,
 			)
 			assertPackagedFactoryMissingRequiredInputRejected(t, run, runner)
@@ -73,39 +62,6 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 		})
 	}
 }
-
-// swappingProviderCommandRunner is an immutable process edge whose per-row
-// provider-command recorder is swapped between sequential invocations on the
-// shared required-input process. Each row still observes its own zero-call
-// assertion without rebuilding the root graph.
-type swappingProviderCommandRunner struct {
-	mu       sync.Mutex
-	delegate platformprocess.CommandRunner
-}
-
-func newSwappingProviderCommandRunner() *swappingProviderCommandRunner {
-	return &swappingProviderCommandRunner{}
-}
-
-func (r *swappingProviderCommandRunner) setDelegate(delegate platformprocess.CommandRunner) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.delegate = delegate
-}
-
-func (r *swappingProviderCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	delegate := r.delegate
-	r.mu.Unlock()
-	if delegate == nil {
-		return platformprocess.CommandResult{}, errors.New("no provider command runner installed for this invocation")
-	}
-	return delegate.Run(ctx, req)
-}
-
-// sharedRequiredInputRunner is the immutable swapping edge shared by every
-// sequential missing-required-input invocation in this test.
-var sharedRequiredInputRunner = newSwappingProviderCommandRunner()
 
 func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredInputCase, error) {
 	inventory, err := packagedfactorycatalog.Discover(
@@ -142,19 +98,10 @@ func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredI
 func runPackagedFactoryMissingRequiredInputInvocation(
 	t *testing.T,
 	process support.Process,
-	runner *support.RecordingCommandRunner,
 	factoryName string,
 ) packagedFactoryMissingRequiredInputRun {
 	t.Helper()
-
-	if packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName) {
-		return runPackagedFactoryMissingRequiredInputHTTPInvocation(t, runner, factoryName)
-	}
 	return runPackagedFactoryMissingRequiredInputCLIInvocation(t, process, factoryName)
-}
-
-func packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName string) bool {
-	return false
 }
 
 func runPackagedFactoryMissingRequiredInputCLIInvocation(
@@ -193,62 +140,6 @@ func runPackagedFactoryMissingRequiredInputCLIInvocation(
 			t.Fatalf("decode ErrorResponse stderr: %v\nstderr:\n%s", decodeErr, stderr)
 		}
 	}
-	return run
-}
-
-func runPackagedFactoryMissingRequiredInputHTTPInvocation(
-	t *testing.T,
-	runner *support.RecordingCommandRunner,
-	factoryName string,
-) packagedFactoryMissingRequiredInputRun {
-	t.Helper()
-
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-
-	emptyArgs := map[string]any{}
-	requestBody, err := json.Marshal(factoryapi.InvocationRequest{
-		Args: &emptyArgs,
-	})
-	if err != nil {
-		t.Fatalf("marshal invocation request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(server.URL(), "/") +
-		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(requestBody))
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-
-	payload, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read invocation response: %v", err)
-	}
-
-	run := packagedFactoryMissingRequiredInputRun{}
-	if response.StatusCode == http.StatusOK {
-		if decodeErr := json.Unmarshal(payload, &run.response); decodeErr != nil {
-			t.Fatalf("decode invocation response: %v\npayload:\n%s", decodeErr, string(payload))
-		}
-		return run
-	}
-	if decodeErr := json.Unmarshal(payload, &run.errorResponse); decodeErr != nil {
-		run.execErr = fmt.Errorf(
-			"POST %s status = %d: %s",
-			endpoint,
-			response.StatusCode,
-			string(payload),
-		)
-		return run
-	}
-	run.execErr = fmt.Errorf("%s: %s", run.errorResponse.Code, run.errorResponse.Message)
 	return run
 }
 

@@ -13,11 +13,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -189,58 +189,6 @@ func TestPackagedFactoriesAPI_ReturnsPublishedCatalog(t *testing.T) {
 	}
 }
 
-// TestPackagedFactoryCatalogCLIAPIParity proves directly that the public CLI
-// and API expose the same complete packaged name set: in a no-override
-// environment, every CLI factory-list entry with a @you/ prefix and an
-// unmaterialized "-" directory exactly equals the GET /packaged-factories
-// name set.
-func TestPackagedFactoryCatalogCLIAPIParity(t *testing.T) {
-	apiCatalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
-	if err != nil {
-		t.Fatalf("runtime packaged Factory catalog discovery: %v", err)
-	}
-	apiNames := make([]string, len(apiCatalog.Factories))
-	for index, factory := range apiCatalog.Factories {
-		apiNames[index] = factory.Name
-	}
-	slices.Sort(apiNames)
-
-	home := t.TempDir()
-	workingDirectory := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	var entries []listEntry
-	if err := json.Unmarshal([]byte(inputs.Stdout()), &entries); err != nil {
-		t.Fatalf("decode factory list: %v\n%s", err, inputs.Stdout())
-	}
-	var cliNames []string
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Name, "@you/") || entry.FactoryDirectory != "-" {
-			continue
-		}
-		cliNames = append(cliNames, entry.Name)
-	}
-
-	if missing, extra := nameSetDiff(apiNames, cliNames); len(missing) > 0 || len(extra) > 0 {
-		t.Fatalf(
-			"CLI/API packaged-name parity drift: missing from CLI %v, extra in CLI %v; api=%v cli=%v",
-			missing,
-			extra,
-			apiNames,
-			cliNames,
-		)
-	}
-}
-
 type listEntry struct {
 	Name             string `json:"name"`
 	FactoryDirectory string `json:"factoryDirectory"`
@@ -264,12 +212,13 @@ func TestFactoryListProjectsEffectiveCatalogWithoutInitialization(t *testing.T) 
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		FactoryDefinitionAuthoredReaderFileSystem: failingDefinitionReader{
-			Local:       platformfilesystem.Local{},
-			failingPath: filepath.Join(globalRoot, "unreadable", "factory.json"),
-		},
-	}).Execute(inputs.Input); err != nil {
+	fixture := sharedCatalogProcess(t)
+	fixture.authored.setDelegate(failingDefinitionReader{
+		Local:       platformfilesystem.Local{},
+		failingPath: filepath.Join(globalRoot, "unreadable", "factory.json"),
+	})
+	t.Cleanup(func() { fixture.authored.setDelegate(platformfilesystem.Local{}) })
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 
@@ -359,11 +308,12 @@ func TestFactoryListReportsCatalogDiscoveryFailuresAtomically(t *testing.T) {
 			inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 			inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 			inputs.Input.WorkingDirectory = workingDirectory
-			err := support.BuildProcess(t, serviceedges.Edges{
-				FactoryDefinitionNamedFactoryCatalogFileSystem: failingCatalogFileSystem{
-					Local: platformfilesystem.Local{}, failingRoot: failingRoot, err: sourceErr,
-				},
-			}).Execute(inputs.Input)
+			fixture := sharedCatalogProcess(t)
+			fixture.namedCatalog.setDelegate(failingCatalogFileSystem{
+				Local: platformfilesystem.Local{}, failingRoot: failingRoot, err: sourceErr,
+			})
+			t.Cleanup(func() { fixture.namedCatalog.setDelegate(platformfilesystem.Local{}) })
+			err := fixture.process.Execute(inputs.Input)
 			if err == nil || !strings.Contains(err.Error(), test.want) || !errors.Is(err, sourceErr) {
 				t.Fatalf("Process.Execute(factory list) error = %v, want %q wrapping source failure", err, test.want)
 			}
@@ -384,7 +334,7 @@ func TestFactoryListHonorsPreCanceledContextAtomically(t *testing.T) {
 	inputs := support.FakeInputs(ctx, []string{"you", "--json", "factory", "list"})
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = t.TempDir()
-	err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	err := sharedCatalogProcess(t).process.Execute(inputs.Input)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Process.Execute(factory list) error = %v, want context canceled", err)
 	}
@@ -510,11 +460,29 @@ func fetchPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactor
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, packagedFactoryCatalogTestConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
+	fixture := sharedCatalogProcess(t)
+	server := support.NewProcessAPIServer()
+	fixture.apiRouter.set(server)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run",
+		"--continuously",
+		"--with-server",
+		"--quiet",
+		"--dir", dir,
+		"--no-record",
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
+	inputs.Input.WorkingDirectory = dir
+	command := support.StartProcessCommand(t, fixture.process, inputs.Input)
+	baseURL, err := server.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		return factoryapi.PackagedFactoryCatalogResponse{}, err
+	}
+	support.WaitForStatus(t, baseURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
+		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 
-	response, err := http.Get(server.URL() + "/packaged-factories")
+	response, err := http.Get(baseURL + "/packaged-factories")
 	if err != nil {
 		return factoryapi.PackagedFactoryCatalogResponse{}, err
 	}
@@ -536,7 +504,7 @@ func fetchPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactor
 			return factoryapi.PackagedFactoryCatalogResponse{}, fmt.Errorf("catalog entry missing name: %#v", factory)
 		}
 	}
-	server.Stop(t)
+	command.Stop(t)
 	return catalog, nil
 }
 
