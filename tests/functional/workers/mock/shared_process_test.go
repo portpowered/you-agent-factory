@@ -34,6 +34,12 @@ const (
 	sharedHostWorker      = "shared-workers-mock-host-worker"
 	sharedHostWorkstation = "shared-workers-mock-host-process"
 	sharedHostWorkType    = "shared-workers-mock-host-task"
+
+	gateTimeoutWorker      = "gate-timeout-worker"
+	gateTimeoutWorkstation = "gate-timeout-process"
+	gateTimeoutWorkType    = "gate-timeout-task"
+	gateTimeoutWorkID      = "gate-timeout-work"
+	gateTimeoutDuration    = 250 * time.Millisecond
 )
 
 // TestSharedProcessWorkersMock keeps the Workers mock selection/routing
@@ -83,6 +89,7 @@ type sharedWorkersMockFixture struct {
 	server               *support.FunctionalAPIServer
 	providerEdge         *sharedWorkersMockCommandRunner
 	scriptEdge           *sharedWorkersMockCommandRunner
+	gate                 *support.MockWorkerGate
 	runtimeLogDir        string
 	sessionIDGenerator   *sharedWorkersMockSessionIDGenerator
 	inputDirectoryWalker *sharedWorkersMockInputDirectoryWalker
@@ -232,10 +239,11 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 
 	providerEdge := newSharedWorkersMockCommandRunner()
 	scriptEdge := newSharedWorkersMockCommandRunner()
+	gate := support.NewMockWorkerGate(t)
 	sessionIDGenerator := &sharedWorkersMockSessionIDGenerator{}
 	inputDirectoryWalker := &sharedWorkersMockInputDirectoryWalker{}
 	runtimeLogDir := t.TempDir()
-	mockWorkersPath := writeSharedMockWorkersConfig(t)
+	mockWorkersPath := writeSharedMockWorkersConfig(t, gate)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                hostDir,
 		WaitForServiceModeRuntime: true,
@@ -256,6 +264,7 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 		server:               server,
 		providerEdge:         providerEdge,
 		scriptEdge:           scriptEdge,
+		gate:                 gate,
 		runtimeLogDir:        runtimeLogDir,
 		sessionIDGenerator:   sessionIDGenerator,
 		inputDirectoryWalker: inputDirectoryWalker,
@@ -458,7 +467,7 @@ func assertSharedWorkersMockEndpointStatus(
 	return response.StatusCode
 }
 
-func writeSharedMockWorkersConfig(t *testing.T) string {
+func writeSharedMockWorkersConfig(t *testing.T, gate *support.MockWorkerGate) string {
 	t.Helper()
 
 	payload := map[string]any{
@@ -544,6 +553,13 @@ func writeSharedMockWorkersConfig(t *testing.T) string {
 				"scriptConfig": map[string]any{
 					"command": liveCapacityBarrierCommand,
 				},
+			},
+			{
+				"id":              "shared-gate-timeout",
+				"workerName":      gateTimeoutWorker,
+				"workstationName": gateTimeoutWorkstation,
+				"runType":         "accept",
+				"gateConfig":      gate.Config(gateTimeoutDuration),
 			},
 		},
 		"futureTopLevel": true,

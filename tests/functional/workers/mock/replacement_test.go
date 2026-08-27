@@ -184,12 +184,19 @@ func testMockWorkerFailureReturnsStablePublicFailure(
 
 	fixture.useCommandRunners(runner, nil)
 	session := fixture.openSession(t, dir)
+	gateWaitStarted := time.Now()
+	fixture.gate.WaitForArrival(t, 5*time.Second)
 	listed, events := session.terminalObservations(t, 20*time.Second)
-	defer session.closeAndAssertGone(t)
+	if elapsed := time.Since(gateWaitStarted); elapsed < gateTimeoutDuration {
+		t.Fatalf("mock-worker gate completed after %s, want at least configured timeout %s", elapsed, gateTimeoutDuration)
+	}
 	for placeID, want := range map[string]int{
-		support.WorkCustomerLocation(rejectWorkType, "failed"): 1,
-		support.WorkCustomerLocation(rejectWorkType, "init"):   0,
-		support.WorkCustomerLocation(rejectWorkType, "done"):   0,
+		support.WorkCustomerLocation(rejectWorkType, "failed"):      1,
+		support.WorkCustomerLocation(rejectWorkType, "init"):        0,
+		support.WorkCustomerLocation(rejectWorkType, "done"):        0,
+		support.WorkCustomerLocation(gateTimeoutWorkType, "failed"): 1,
+		support.WorkCustomerLocation(gateTimeoutWorkType, "init"):   0,
+		support.WorkCustomerLocation(gateTimeoutWorkType, "done"):   0,
 	} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
@@ -203,12 +210,35 @@ func testMockWorkerFailureReturnsStablePublicFailure(
 		)
 	}
 
-	observation := dispatchObservationByTransition(
-		t,
-		support.ObserveDispatchEvents(t, events),
-		rejectWorkstationName,
-	)
-	assertStableMockRejectDispatch(t, observation)
+	observations := support.ObserveDispatchEvents(t, events)
+	var rejectDispatches, timeoutDispatches int
+	for _, observation := range observations {
+		switch observation.Request.TransitionId {
+		case rejectWorkstationName:
+			rejectDispatches++
+			assertStableMockRejectDispatch(t, observation)
+		case gateTimeoutWorkstation:
+			timeoutDispatches++
+			if !support.DispatchObservationIncludesWork(observation, gateTimeoutWorkID) {
+				t.Fatalf("gate-timeout dispatch = %#v, want work correlation %q", observation, gateTimeoutWorkID)
+			}
+			assertMockGateTimeoutDispatch(t, observation)
+		default:
+			t.Fatalf("unexpected mock failure dispatch transition = %q", observation.Request.TransitionId)
+		}
+	}
+	if rejectDispatches != 1 || timeoutDispatches == 0 {
+		t.Fatalf(
+			"mock failure dispatch counts = reject %d, gate-timeout %d; want one reject and at least one configured timeout",
+			rejectDispatches,
+			timeoutDispatches,
+		)
+	}
+
+	// The next table row opens a new explicit session and completes a normal
+	// mock dispatch. Closing this failed session first makes that subsequent
+	// success an observable shared-host usability proof.
+	session.closeAndAssertGone(t)
 }
 
 func executeRunWithMockWorkersExpectingFailure(
@@ -372,9 +402,11 @@ func scaffoldMockRejectFactory(t *testing.T) string {
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{
 			namedReplacementWorkType(rejectWorkType),
+			namedReplacementWorkType(gateTimeoutWorkType),
 		},
 		"workers": []map[string]string{
 			{"name": rejectWorkerName},
+			{"name": gateTimeoutWorker},
 		},
 		"workstations": []map[string]any{
 			{
@@ -384,17 +416,31 @@ func scaffoldMockRejectFactory(t *testing.T) string {
 				"outputs":   []map[string]string{{"workType": rejectWorkType, "state": "done"}},
 				"onFailure": []map[string]string{{"workType": rejectWorkType, "state": "failed"}},
 			},
+			{
+				"name":      gateTimeoutWorkstation,
+				"worker":    gateTimeoutWorker,
+				"inputs":    []map[string]string{{"workType": gateTimeoutWorkType, "state": "init"}},
+				"outputs":   []map[string]string{{"workType": gateTimeoutWorkType, "state": "done"}},
+				"onFailure": []map[string]string{{"workType": gateTimeoutWorkType, "state": "failed"}},
+			},
 		},
 	})
 
 	modelWorker := support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex")
 	support.WriteAgentConfig(t, dir, rejectWorkerName, modelWorker)
+	support.WriteAgentConfig(t, dir, gateTimeoutWorker, modelWorker)
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     rejectWorkID,
 		WorkTypeID: rejectWorkType,
 		TraceID:    "mock-reject-trace",
 		Payload:    []byte(`{"title":"configured mock reject"}`),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     gateTimeoutWorkID,
+		WorkTypeID: gateTimeoutWorkType,
+		TraceID:    gateTimeoutWorkID + "-trace",
+		Payload:    []byte(`{"title":"configured mock gate timeout"}`),
 	})
 	return dir
 }
