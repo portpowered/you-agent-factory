@@ -11,8 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -101,20 +99,6 @@ func newScriptSharedExecutionScenarios(t *testing.T) []scriptSharedScenario {
 			assertResult:            assertScriptSharedCancellation,
 		},
 	}
-}
-
-func failedScriptWorkID(t *testing.T, listed factoryapi.ListWorkResponse) string {
-	t.Helper()
-	for _, item := range listed.Results {
-		if item.State == nil || item.State.Name != "failed" {
-			continue
-		}
-		if id := support.StringPointerValue(item.WorkId); id != "" {
-			return id
-		}
-	}
-	t.Fatalf("failed script Work missing from listing: %#v", listed.Results)
-	return ""
 }
 
 func workByID(t *testing.T, listed factoryapi.ListWorkResponse, workID string) factoryapi.Work {
@@ -218,52 +202,6 @@ func assertScriptSharedCancellation(
 		)
 	}
 	assertScriptCancellationDispatchFailure(t, events)
-}
-
-func detachedScriptExecuteRequest() workerexecution.ExecuteRequest {
-	return workerexecution.ExecuteRequest{
-		Correlation: workerexecution.ExecutionCorrelation{
-			FactorySessionID: "detached-session",
-			RuntimeID:        "detached-runtime",
-			GenerationID:     "detached-generation",
-			DispatchID:       "detached-dispatch",
-			AttemptID:        "detached-attempt",
-			RequestID:        "detached-request",
-			TraceID:          "detached-trace",
-		},
-		Target: workerexecution.ExecutionTarget{
-			WorkerName:      "detached-script-worker",
-			WorkerType:      "SCRIPT_WORKER",
-			WorkstationName: "detached-workstation",
-			RunnerID:        "script",
-			Command:         "echo",
-			Args:            []string{"detached-output"},
-			Environment: workerexecution.EnvironmentPolicy{
-				Vars: map[string]string{"DETACHED_MODE": "functional"},
-			},
-		},
-		Input: workerexecution.ExecutionInput{
-			Dispatch: work.WorkDispatch{
-				DispatchID:  "detached-dispatch",
-				WorkerType:  "SCRIPT_WORKER",
-				ProjectID:   "detached-project",
-				InputTokens: []any{"detached-token"},
-				Execution: work.ExecutionMetadata{
-					RequestID: "detached-request",
-					TraceID:   "detached-trace",
-				},
-			},
-		},
-		Attempt: workerexecution.AttemptContext{Number: 1},
-	}
-}
-
-func executeOutputText(output workerexecution.ProposedOutput) string {
-	var builder strings.Builder
-	for _, part := range output.Primary {
-		builder.WriteString(part.Text)
-	}
-	return builder.String()
 }
 
 type blockingCancellationCommandRunner struct {
