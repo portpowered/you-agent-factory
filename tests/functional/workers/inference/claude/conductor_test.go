@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,6 +51,9 @@ func TestClaudeDefaultLaneSharedProcess(t *testing.T) {
 			fixture.runScenario(t, scenario)
 		})
 	}
+	t.Cleanup(func() {
+		fixture.assertSharedProcessCleanup(t)
+	})
 }
 
 // TestClaudeCommandRouterFailsClosed proves that the package-local command
@@ -88,15 +92,20 @@ func TestClaudeCommandRouterFailsClosed(t *testing.T) {
 }
 
 type claudeDefaultLaneFixture struct {
-	process    support.ApplicationProcess
-	api        *support.ProcessAPIServer
-	baseURL    string
-	router     *claudeCommandRouter
-	identities *claudeIdentityGenerator
-	apiStarts  *atomic.Int32
-	scenarios  []claudeScenario
-	opened     atomic.Int32
-	closed     atomic.Int32
+	process       support.ApplicationProcess
+	command       *support.ProcessCommand
+	api           *support.ProcessAPIServer
+	baseURL       string
+	hostDir       string
+	apiStopped    <-chan struct{}
+	router        *claudeCommandRouter
+	identities    *claudeIdentityGenerator
+	apiStarts     *atomic.Int32
+	scenarios     []claudeScenario
+	opened        atomic.Int32
+	closed        atomic.Int32
+	streamsOpened atomic.Int32
+	streamsClosed atomic.Int32
 
 	ledgerMu sync.Mutex
 	ledger   map[string]claudeScenarioObservation
@@ -298,11 +307,13 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 	}
 
 	api := support.NewProcessAPIServer()
+	apiStopped := make(chan struct{})
 	var apiStarts atomic.Int32
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: router,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
+			defer close(apiStopped)
 			return api.Start(ctx, request)
 		},
 		FactorySessionIDGenerator:                identities.nextSessionID,
@@ -335,7 +346,7 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 			t.Logf("daemon stdout:\n%s", stdout)
 		}
 	})
-	support.StartProcessCommand(t, process, inputs.Input)
+	command := support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := api.WaitForURL(t)
 	// The host's default session is only the server anchor. The four scenarios
 	// below always use the explicitly opened sessions returned by the API.
@@ -346,8 +357,11 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 
 	return &claudeDefaultLaneFixture{
 		process:    process,
+		command:    command,
 		api:        api,
 		baseURL:    baseURL,
+		hostDir:    hostDir,
+		apiStopped: apiStopped,
 		router:     router,
 		identities: identities,
 		apiStarts:  &apiStarts,
@@ -380,12 +394,23 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 	t.Cleanup(func() {
 		closeSession()
 	})
+	t.Cleanup(scenario.runner.Release)
 
+	responseStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(fixture.baseURL, sessionID),
+	)
+	fixture.streamsOpened.Add(1)
+	// Fast controlled outcomes, especially context.Canceled, can publish their
+	// terminal response event before a just-opened SSE subscription is attached.
+	// Release the external command edge only after the public stream is ready so
+	// the race suite observes the same event boundary on every schedule.
+	scenario.runner.Release()
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, claudeConductorRunTimeout)
 	session := getClaudeSession(t, fixture.baseURL, sessionID)
 	listed := listClaudeSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
-	responseEvents := support.GetFactoryResponseEventsAt(t, fixture.baseURL, sessionID)
+	responseEvents := readClaudeResponseEventsUntilTerminal(t, responseStream, claudeConductorRunTimeout)
 
 	assertClaudeWork(t, scenario, listed)
 	dispatchIDs := assertClaudeDispatch(t, scenario, sessionID, events)
@@ -396,6 +421,8 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 	assertClaudeGoldenScenario(t, scenario, events, responseEvents)
 
 	closeSession()
+	responseStream.WaitClosed(claudeConductorRunTimeout)
+	fixture.streamsClosed.Add(1)
 	assertClaudeSessionDeleted(t, fixture.baseURL, sessionID)
 	fixture.recordObservation(claudeScenarioObservation{
 		sessionID:         session.Id,
@@ -405,6 +432,54 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 		providerSessionID: providerSessionID,
 		responseEventIDs:  responseEventIDs,
 	})
+}
+
+func (fixture *claudeDefaultLaneFixture) assertSharedProcessCleanup(t *testing.T) {
+	t.Helper()
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), claudeConductorRunTimeout)
+	defer cancel()
+	fixture.command.Stop(t)
+	if err := fixture.process.Close(closeCtx); err != nil {
+		t.Fatalf("close shared Claude application process: %v", err)
+	}
+	select {
+	case <-fixture.apiStopped:
+	case <-time.After(claudeConductorRunTimeout):
+		t.Fatal("shared Claude API server did not close after process cleanup")
+	}
+
+	if got := fixture.opened.Load(); got != int32(len(fixture.scenarios)) {
+		t.Fatalf("opened Factory Sessions = %d, want %d", got, len(fixture.scenarios))
+	}
+	if got := fixture.closed.Load(); got != int32(len(fixture.scenarios)) {
+		t.Fatalf("closed Factory Sessions = %d, want %d", got, len(fixture.scenarios))
+	}
+	if got := fixture.streamsOpened.Load(); got != int32(len(fixture.scenarios)) {
+		t.Fatalf("opened response collectors = %d, want %d", got, len(fixture.scenarios))
+	}
+	if got := fixture.streamsClosed.Load(); got != int32(len(fixture.scenarios)) {
+		t.Fatalf("closed response collectors = %d, want %d", got, len(fixture.scenarios))
+	}
+	for _, scenario := range fixture.scenarios {
+		if got := scenario.runner.ActiveCallCount(); got != 0 {
+			t.Fatalf("%s active Claude command calls after process cleanup = %d, want 0", scenario.name, got)
+		}
+	}
+
+	ownedDirs := make([]string, 0, len(fixture.scenarios)+1)
+	ownedDirs = append(ownedDirs, fixture.hostDir)
+	for _, scenario := range fixture.scenarios {
+		ownedDirs = append(ownedDirs, scenario.factoryDir)
+	}
+	for _, path := range ownedDirs {
+		if err := os.RemoveAll(path); err != nil {
+			t.Fatalf("remove test-owned Factory directory %q: %v", path, err)
+		}
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("test-owned Factory directory %q still exists after cleanup: %v", path, err)
+		}
+	}
 }
 
 func (fixture *claudeDefaultLaneFixture) recordObservation(observation claudeScenarioObservation) {
@@ -699,6 +774,45 @@ func assertClaudeResponseEvents(
 	return ids
 }
 
+func readClaudeResponseEventsUntilTerminal(
+	t *testing.T,
+	stream *support.FactoryResponseEventStream,
+	timeout time.Duration,
+) []factoryapi.FactoryResponseEvent {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	events := make([]factoryapi.FactoryResponseEvent, 0, 8)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf("timed out waiting for terminal Claude response event after %s; got %d events", timeout, len(events))
+		}
+		result := stream.TryNextFrameResult(remaining)
+		if result.Outcome != support.FactoryResponseEventStreamOutcomeFrame {
+			t.Fatalf("Claude response stream ended before terminal event: %s", result.Diagnostic())
+		}
+		event := result.Frame.Event
+		events = append(events, event)
+		if isClaudeTerminalResponseEvent(event) {
+			return events
+		}
+	}
+}
+
+func isClaudeTerminalResponseEvent(event factoryapi.FactoryResponseEvent) bool {
+	if event.Kind == factoryapi.FactoryResponseEventKindRun {
+		switch event.Phase {
+		case factoryapi.FactoryResponseEventPhaseCompleted,
+			factoryapi.FactoryResponseEventPhaseFailed,
+			factoryapi.FactoryResponseEventPhaseCanceled:
+			return true
+		}
+	}
+	return event.Kind == factoryapi.FactoryResponseEventKindError &&
+		(event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled)
+}
+
 func assertClaudeGoldenScenario(
 	t *testing.T,
 	scenario claudeScenario,
@@ -871,9 +985,12 @@ func (router *claudeCommandRouter) callCount() int {
 type claudeScenarioCommandRunner struct {
 	results []platformprocess.CommandResult
 	err     error
+	release chan struct{}
+	once    sync.Once
 
 	mu       sync.Mutex
 	requests []platformprocess.CommandRequest
+	active   atomic.Int32
 }
 
 func newClaudeScenarioCommandRunner(
@@ -887,13 +1004,23 @@ func newClaudeScenarioCommandRunner(
 	return &claudeScenarioCommandRunner{
 		results: clonedResults,
 		err:     runErr,
+		release: make(chan struct{}),
 	}
 }
 
 func (runner *claudeScenarioCommandRunner) Run(
-	_ context.Context,
+	ctx context.Context,
 	request platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
+	runner.active.Add(1)
+	defer runner.active.Add(-1)
+	if runner.release != nil {
+		select {
+		case <-runner.release:
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	}
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, cloneClaudeCommandRequest(request))
 	resultIndex := len(runner.requests) - 1
@@ -910,6 +1037,13 @@ func (runner *claudeScenarioCommandRunner) Run(
 	return result, err
 }
 
+func (runner *claudeScenarioCommandRunner) Release() {
+	if runner == nil || runner.release == nil {
+		return
+	}
+	runner.once.Do(func() { close(runner.release) })
+}
+
 func (runner *claudeScenarioCommandRunner) Requests() []platformprocess.CommandRequest {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -924,6 +1058,10 @@ func (runner *claudeScenarioCommandRunner) CallCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return len(runner.requests)
+}
+
+func (runner *claudeScenarioCommandRunner) ActiveCallCount() int {
+	return int(runner.active.Load())
 }
 
 func cloneClaudeCommandRequest(request platformprocess.CommandRequest) platformprocess.CommandRequest {
