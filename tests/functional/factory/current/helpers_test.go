@@ -110,6 +110,30 @@ func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
 				"beta-isolation",
 				functionalNamedFactoryPayloadWithWorkType(t, "beta-isolation", "beta-isolation-task"),
 			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-prompt-contract",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-contract", "alpha-prompt-contract-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-prompt-invalid",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-invalid", "alpha-prompt-invalid-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-prompt-nonmutation",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-nonmutation", "alpha-prompt-nonmutation-task"),
+			)
 		}),
 	)
 	return fixture

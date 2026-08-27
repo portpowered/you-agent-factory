@@ -14,18 +14,18 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestAPIPromptTemplateContractAndValidationRoundTrip proves that a Factory Session
-// can fetch the workstation prompt-template contract for the Current Factory and
-// validate a draft prompt that references variables exposed by that contract.
-func TestAPIPromptTemplateContractAndValidationRoundTrip(t *testing.T) {
-	rootDir := t.TempDir()
-	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
-		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
-	}))
-	defer server.Stop(t)
-
-	const sessionID = "~default"
-	contract := getPromptTemplateContract(t, server.URL(), sessionID, defaultFunctionalWorkstationName)
+// testSharedPromptTemplateContractAndValidation proves that an explicit Factory
+// Session can fetch the workstation prompt-template contract for its Current
+// Factory and validate a draft prompt that references its available variables.
+func testSharedPromptTemplateContractAndValidation(t *testing.T, fixture *sharedCurrentFactoryAPI) {
+	fixture.requireServerRunning(t)
+	session := fixture.openSession(t, "alpha-prompt-contract")
+	current := getCurrentFactoryForSession(t, session.serverURL, session.id)
+	if current.Name != factoryapi.FactoryName("alpha-prompt-contract") {
+		t.Fatalf("prompt contract session current factory name = %q, want alpha-prompt-contract", current.Name)
+	}
+	assertFactoryWorkType(t, current, "alpha-prompt-contract-task", "prompt contract session current factory")
+	contract := getPromptTemplateContract(t, session.serverURL, session.id, defaultFunctionalWorkstationName)
 	if contract.InputCount != 1 {
 		t.Fatalf("contract input count = %d, want 1", contract.InputCount)
 	}
@@ -41,8 +41,8 @@ func TestAPIPromptTemplateContractAndValidationRoundTrip(t *testing.T) {
 
 	result := validatePromptTemplateForSession(
 		t,
-		server.URL(),
-		sessionID,
+		session.serverURL,
+		session.id,
 		defaultFunctionalWorkstationName,
 		`you submit --session {{ .Context.SessionID }} --work {{ (index .Inputs 0).Payload }}`,
 	)
@@ -52,29 +52,30 @@ func TestAPIPromptTemplateContractAndValidationRoundTrip(t *testing.T) {
 	if len(result.Diagnostics) != 0 {
 		t.Fatalf("validation diagnostics = %#v, want none", result.Diagnostics)
 	}
+	fixture.requireServerRunning(t)
 }
 
-// TestAPIInvalidPromptTemplateNamesMissingVariables proves that prompt-template
+// testSharedInvalidPromptTemplate proves that prompt-template
 // validation returns typed public diagnostics when a draft references an
 // unavailable input index or an unknown variable path on the Current Factory
 // workstation contract.
-func TestAPIInvalidPromptTemplateNamesMissingVariables(t *testing.T) {
-	rootDir := t.TempDir()
-	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
-		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
-	}))
-	defer server.Stop(t)
-
-	const sessionID = "~default"
-	contract := getPromptTemplateContract(t, server.URL(), sessionID, defaultFunctionalWorkstationName)
+func testSharedInvalidPromptTemplate(t *testing.T, fixture *sharedCurrentFactoryAPI) {
+	fixture.requireServerRunning(t)
+	session := fixture.openSession(t, "alpha-prompt-invalid")
+	current := getCurrentFactoryForSession(t, session.serverURL, session.id)
+	if current.Name != factoryapi.FactoryName("alpha-prompt-invalid") {
+		t.Fatalf("invalid prompt session current factory name = %q, want alpha-prompt-invalid", current.Name)
+	}
+	assertFactoryWorkType(t, current, "alpha-prompt-invalid-task", "invalid prompt session current factory")
+	contract := getPromptTemplateContract(t, session.serverURL, session.id, defaultFunctionalWorkstationName)
 	if contract.InputCount != 1 {
 		t.Fatalf("contract input count = %d, want 1", contract.InputCount)
 	}
 
 	unavailableResult := validatePromptTemplateForSession(
 		t,
-		server.URL(),
-		sessionID,
+		session.serverURL,
+		session.id,
 		defaultFunctionalWorkstationName,
 		`{{ (index .Inputs 1).Payload }}`,
 	)
@@ -94,8 +95,8 @@ func TestAPIInvalidPromptTemplateNamesMissingVariables(t *testing.T) {
 
 	invalidResult := validatePromptTemplateForSession(
 		t,
-		server.URL(),
-		sessionID,
+		session.serverURL,
+		session.id,
 		defaultFunctionalWorkstationName,
 		`{{ (index .Inputs 0).Unknown }}`,
 	)
@@ -112,29 +113,25 @@ func TestAPIInvalidPromptTemplateNamesMissingVariables(t *testing.T) {
 			factoryapi.INVALIDVARIABLE,
 		)
 	}
+	fixture.requireServerRunning(t)
 }
 
-// TestAPITemplateValidationDoesNotMutateCurrentFactory proves that prompt-template
+// testSharedTemplateValidationDoesNotMutate proves that prompt-template
 // validation leaves the Current Factory definition unchanged within the same
 // Factory Session when validating both valid and invalid workstation prompt drafts.
-func TestAPITemplateValidationDoesNotMutateCurrentFactory(t *testing.T) {
-	rootDir := t.TempDir()
-	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
-		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
-	}))
-	defer server.Stop(t)
-
-	const sessionID = "~default"
-	before := getCurrentFactoryForSession(t, server.URL(), sessionID)
+func testSharedTemplateValidationDoesNotMutate(t *testing.T, fixture *sharedCurrentFactoryAPI) {
+	fixture.requireServerRunning(t)
+	session := fixture.openSession(t, "alpha-prompt-nonmutation")
+	before := getCurrentFactoryForSession(t, session.serverURL, session.id)
 	if before.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata")
 	}
-	assertFactoryWorkType(t, before, "alpha-task", "current factory before validation")
+	assertFactoryWorkType(t, before, "alpha-prompt-nonmutation-task", "current factory before validation")
 
 	validResult := validatePromptTemplateForSession(
 		t,
-		server.URL(),
-		sessionID,
+		session.serverURL,
+		session.id,
 		defaultFunctionalWorkstationName,
 		`you submit --session {{ .Context.SessionID }} --work {{ (index .Inputs 0).Payload }}`,
 	)
@@ -144,8 +141,8 @@ func TestAPITemplateValidationDoesNotMutateCurrentFactory(t *testing.T) {
 
 	invalidResult := validatePromptTemplateForSession(
 		t,
-		server.URL(),
-		sessionID,
+		session.serverURL,
+		session.id,
 		defaultFunctionalWorkstationName,
 		`{{ (index .Inputs 1).Payload }}`,
 	)
@@ -153,10 +150,11 @@ func TestAPITemplateValidationDoesNotMutateCurrentFactory(t *testing.T) {
 		t.Fatalf("invalid prompt validation valid = true, diagnostics = %#v", invalidResult.Diagnostics)
 	}
 
-	after := getCurrentFactoryForSession(t, server.URL(), sessionID)
+	after := getCurrentFactoryForSession(t, session.serverURL, session.id)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("current factory after validation = %#v, want unchanged %#v", after, before)
 	}
+	fixture.requireServerRunning(t)
 }
 
 // TestProcessWorkNameMapsIntoPromptTemplate proves that a submitted Work name is

@@ -23,13 +23,28 @@ func TestSharedCurrentFactoryAPI(t *testing.T) {
 	t.Cleanup(func() { fixture.server.Stop(t) })
 
 	t.Run("GetAndSave", func(t *testing.T) {
+		t.Parallel()
 		testSharedCurrentFactoryGetAndSave(t, fixture)
 	})
 	t.Run("SaveValidates", func(t *testing.T) {
+		t.Parallel()
 		testSharedCurrentFactorySaveValidates(t, fixture)
 	})
 	t.Run("FactoriesRemainSessionScoped", func(t *testing.T) {
+		t.Parallel()
 		testSharedCurrentFactoriesRemainSessionScoped(t, fixture)
+	})
+	t.Run("PromptTemplateContractAndValidation", func(t *testing.T) {
+		t.Parallel()
+		testSharedPromptTemplateContractAndValidation(t, fixture)
+	})
+	t.Run("InvalidPromptTemplate", func(t *testing.T) {
+		t.Parallel()
+		testSharedInvalidPromptTemplate(t, fixture)
+	})
+	t.Run("TemplateValidationDoesNotMutate", func(t *testing.T) {
+		t.Parallel()
+		testSharedTemplateValidationDoesNotMutate(t, fixture)
 	})
 }
 
