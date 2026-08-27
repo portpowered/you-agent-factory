@@ -1,7 +1,6 @@
 package inference_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,12 +9,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -110,19 +107,6 @@ func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
 
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		WorkerRecordingWriter: probe,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	reader := process.WorkerRecordingReader()
-	if reader == nil {
-		t.Fatal("root-built process returned a nil Recordings reader")
-	}
-	support.CleanupProcess(t, process)
-
 	recordPath := filepath.Join(t.TempDir(), "wsr-ft-006 multi session.json")
 	t.Cleanup(func() {
 		if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -131,7 +115,14 @@ func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	})
 	queueWSRFT006ProviderResult(t, loaded, runner)
 	queueWSRFT006ProviderResult(t, loaded, runner)
-	executeWSRFT006FactoryWithWork(t, process, firstDir, recordPath, batchPath)
+	withSharedInferenceProcessAt(t, firstDir, sharedInferenceScenario{
+		commandRunner:         runner,
+		workerRecordingWriter: probe,
+		stopDaemonForExecute:  true,
+	}, func(process support.ApplicationProcess) {
+		executeWSRFT006FactoryWithWork(t, process, firstDir, recordPath, batchPath)
+	})
+	reader := recordings.WorkerRecordingReader(probe)
 	firstRecordingID, _ := probe.RecordingIdentity(t)
 	firstSnapshot, err := reader.LoadWorkerRecording(t.Context(), firstRecordingID)
 	if err != nil {
@@ -157,7 +148,13 @@ func TestWSRFT006PortableExportSelectsRootBuiltWorkerSession(t *testing.T) {
 	}
 
 	queueWSRFT006ProviderResult(t, loaded, runner)
-	executeWSRFT006Factory(t, process, secondDir, recordPath)
+	withSharedInferenceProcessAt(t, secondDir, sharedInferenceScenario{
+		commandRunner:         runner,
+		workerRecordingWriter: probe,
+		stopDaemonForExecute:  true,
+	}, func(process support.ApplicationProcess) {
+		executeWSRFT006Factory(t, process, secondDir, recordPath)
+	})
 	secondRecordingID, _ := probe.RecordingIdentity(t)
 	if secondRecordingID == firstRecordingID {
 		t.Fatalf("same-path recording identity = %q after second execution, want a fresh identity", secondRecordingID)
@@ -184,7 +181,7 @@ func runWSRFT006Case(t *testing.T, testCase wsrFT006Case) recordings.WorkerPorta
 	dir := wsrFT006Factory(t, testCase.provider, loaded)
 	probe := newWSRFT004RecordingProbe(t, false)
 	runner := newWSRFT004ProviderRunner(t, probe)
-	reader := runWSRFT006FactoryWithProcess(t, dir, loaded, runner, probe)
+	reader := runWSRFT006FactoryWithSharedProcess(t, dir, loaded, runner, probe)
 	if runner.CallCount() != 1 {
 		t.Fatalf("%s provider command calls = %d, want one", testCase.name, runner.CallCount())
 	}
@@ -221,6 +218,7 @@ func wsrFT006Factory(
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	config := support.BuildModelWorkerConfig(provider, loaded.Process.Model)
+	config = sharedInferenceWithExecutorProvider(config, strings.ToUpper(string(provider)))
 	if provider == modelprovider.ProviderClaude || provider == modelprovider.ProviderAntigravity {
 		config = strings.Replace(config, "stopToken: COMPLETE", "skipPermissions: true\nstopToken: COMPLETE", 1)
 	}
@@ -229,7 +227,7 @@ func wsrFT006Factory(
 	return dir
 }
 
-func runWSRFT006FactoryWithProcess(
+func runWSRFT006FactoryWithSharedProcess(
 	t *testing.T,
 	dir string,
 	loaded support.ProviderSessionCase,
@@ -238,36 +236,11 @@ func runWSRFT006FactoryWithProcess(
 ) recordings.WorkerRecordingReader {
 	t.Helper()
 	queueWSRFT006ProviderResult(t, loaded, runner)
-
-	processValue, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		WorkerRecordingWriter: probe,
-	})
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	process := processValue
-	reader := process.WorkerRecordingReader()
-	if reader == nil {
-		t.Fatal("root-built process returned a nil Recordings reader")
-	}
-	support.CleanupProcess(t, process)
-
-	recordPath := filepath.Join(t.TempDir(), fmt.Sprintf("wsr-ft-006 %d.json", time.Now().UnixNano()))
-	t.Cleanup(func() {
-		if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("remove temporary replay record %q: %v", recordPath, err)
-		}
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", dir, "--quiet", "--record",
-		recordPath,
-	})
-	inputs.Input.WorkingDirectory = dir
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("recorded factory Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-	return reader
+	runSharedInferenceFactory(t, dir, sharedInferenceScenario{
+		commandRunner:         runner,
+		workerRecordingWriter: probe,
+	}, sharedInferenceScenarioTimeout)
+	return probe
 }
 
 func queueWSRFT006ProviderResult(

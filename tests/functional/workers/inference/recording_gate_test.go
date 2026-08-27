@@ -33,10 +33,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
 
-		runWSRFT004Factory(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-			WorkerRecordingWriter: probe,
-		})
+		runWSRFT004FactoryShared(t, dir, runner, probe)
 
 		if got := runner.CallCount(); got != 1 {
 			t.Fatalf("provider command calls = %d, want exactly one call after durable opening", got)
@@ -50,10 +47,7 @@ func TestWSRFT004DurableOpeningGatesProviderHandoff(t *testing.T) {
 		runner := newWSRFT004ProviderRunner(t, probe)
 		dir := wsrFT004Factory(t)
 
-		runWSRFT004Factory(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-			WorkerRecordingWriter: probe,
-		})
+		runWSRFT004FactoryShared(t, dir, runner, probe)
 
 		if got := runner.CallCount(); got != 0 {
 			t.Fatalf("provider command calls = %d, want zero after opening durability failure", got)
@@ -75,10 +69,7 @@ func TestWSRFT005CompletedWorkerReplayParity(t *testing.T) {
 	runner := newWSRFT004ProviderRunner(t, probe)
 	dir := wsrFT004Factory(t)
 
-	reader := runWSRFT004FactoryWithProcess(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		WorkerRecordingWriter: probe,
-	})
+	reader := runWSRFT004FactoryShared(t, dir, runner, probe)
 
 	recordingID, workerSessionID := probe.RecordingIdentity(t)
 	live := probe.LiveProjection(t)
@@ -150,10 +141,12 @@ func TestWSRFT008PostHandoffRecordingLossPreservesExecutionTruth(t *testing.T) {
 			support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-008 recording loss"}`))
 
-			reader, execErr := runWSRFT008FactoryWithProcess(t, dir, runner, probe, test.exitCode)
-			if execErr != nil {
-				t.Fatalf("recorded factory Process.Execute error = %v", execErr)
-			}
+			queueWSRFT004ProviderResult(t, runner, test.exitCode, "injected execution result")
+			runSharedInferenceFactory(t, dir, sharedInferenceScenario{
+				commandRunner:         runner,
+				workerRecordingWriter: probe,
+			}, sharedInferenceScenarioTimeout)
+			reader := recordings.WorkerRecordingReader(probe)
 			recordingID, workerSessionID := probe.RecordingIdentity(t)
 			snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
 			if err != nil {
@@ -198,9 +191,23 @@ func wsrFT004Factory(t *testing.T) string {
 	return dir
 }
 
-func runWSRFT004Factory(t *testing.T, dir string, edges serviceedges.Edges) {
+func runWSRFT004FactoryShared(
+	t *testing.T,
+	dir string,
+	runner *wsrFT004ProviderRunner,
+	writer recordings.WorkerRecordingWriter,
+) recordings.WorkerRecordingReader {
 	t.Helper()
-	_ = runWSRFT004FactoryWithProcess(t, dir, edges)
+	queueWSRFT004ProviderResult(t, runner, 0)
+	runSharedInferenceFactory(t, dir, sharedInferenceScenario{
+		commandRunner:         runner,
+		workerRecordingWriter: writer,
+	}, sharedInferenceScenarioTimeout)
+	reader, ok := writer.(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		t.Fatalf("recording writer type %T does not expose a reader", writer)
+	}
+	return reader
 }
 
 func runWSRFT004FactoryWithProcess(
@@ -218,11 +225,7 @@ func runWSRFT004FactoryWithProcess(
 	if !ok {
 		t.Fatalf("provider runner type = %T, want WSR-FT-004 probe runner", edges.ProviderCommandRunner)
 	}
-	providerRunner.delegate.Queue(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
+	queueWSRFT004ProviderResult(t, providerRunner, exitCode)
 
 	processValue, err := support.BuildProcessWithContext(context.Background(), edges)
 	if err != nil {
@@ -245,37 +248,23 @@ func runWSRFT004FactoryWithProcess(
 	return reader
 }
 
-func runWSRFT008FactoryWithProcess(
+func queueWSRFT004ProviderResult(
 	t *testing.T,
-	dir string,
 	runner *wsrFT004ProviderRunner,
-	probe *wsrFT004RecordingProbe,
 	exitCode int,
-) (recordings.WorkerRecordingReader, error) {
+	stderr ...string,
+) {
 	t.Helper()
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
+	resultStderr := loaded.Stderr
+	if len(stderr) > 0 {
+		resultStderr = stderr[0]
+	}
 	runner.delegate.Queue(platformprocess.CommandResult{
 		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte("injected execution result"),
+		Stderr:   []byte(resultStderr),
 		ExitCode: exitCode,
 	})
-
-	processValue, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		WorkerRecordingWriter: probe,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("BuildProcess() error: %w", err)
-	}
-	process := processValue
-	reader := process.WorkerRecordingReader()
-	support.CleanupProcess(t, process)
-	recordPath := filepath.Join(t.TempDir(), "wsr-ft-008.json")
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", dir, "--quiet", "--record", recordPath,
-	})
-	inputs.Input.WorkingDirectory = dir
-	return reader, process.Execute(inputs.Input)
 }
 
 type wsrFT004RecordingProbe struct {

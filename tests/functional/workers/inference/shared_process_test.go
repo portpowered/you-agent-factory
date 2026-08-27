@@ -11,17 +11,22 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -50,18 +55,20 @@ type inferenceProcessGroup struct {
 	once     sync.Once
 	setupErr error
 
-	mu      sync.Mutex
-	process support.ApplicationProcess
-	server  *support.ProcessAPIServer
+	mu       sync.Mutex
+	process  support.ApplicationProcess
+	serverMu sync.RWMutex
+	server   *support.ProcessAPIServer
 
-	rootDir  string
-	hostDir  string
-	homeDir  string
-	baseURL  string
-	daemon   *inferenceDaemon
-	commands *inferenceCommandRouter
-	scripts  *inferenceCommandRouter
-	override *inferenceProviderOverride
+	rootDir          string
+	hostDir          string
+	homeDir          string
+	baseURL          string
+	daemon           *inferenceDaemon
+	commands         *inferenceCommandRouter
+	scripts          *inferenceCommandRouter
+	override         *inferenceProviderOverride
+	workerRecordings *inferenceWorkerRecordingRouter
 
 	externals map[string]*inferenceIntegrationRouter
 	sessions  map[string]struct{}
@@ -99,6 +106,15 @@ func (group *inferenceProcessGroup) setup() {
 	group.commands = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.scripts = &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
 	group.override = &inferenceProviderOverride{}
+	workerRecordingFallback, err := recordingswire.NewWorkerRecordingFileWriter(
+		platformreplay.NewLocal(runtime.GOOS),
+		filepath.Join(group.rootDir, "worker-recordings"),
+	)
+	if err != nil {
+		group.setupErr = fmt.Errorf("create shared Worker recording fallback: %w", err)
+		return
+	}
+	group.workerRecordings = &inferenceWorkerRecordingRouter{fallback: workerRecordingFallback}
 	group.externals = make(map[string]*inferenceIntegrationRouter)
 	providerDefinitions := []struct {
 		id    string
@@ -124,11 +140,23 @@ func (group *inferenceProcessGroup) setup() {
 			Integration: integration,
 		})
 	}
+	defaultProviders, err := providerswire.NewService(
+		providerswire.WithCommandRunner(group.commands),
+		providerswire.WithWorkersCommandRunner(group.commands),
+		providerswire.WithAgyCommandRunner(group.commands),
+		providerswire.WithRegistrations(registrations...),
+	)
+	if err != nil {
+		group.setupErr = fmt.Errorf("create shared default Providers service: %w", err)
+		return
+	}
+	group.override.defaultService = defaultProviders
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      group.server.Start,
+		APIServerStarter:      group.startAPIServer,
 		ProviderCommandRunner: group.commands,
 		ScriptCommandRunner:   group.scripts,
 		ProviderOverride:      group.override,
+		WorkerRecordingWriter: group.workerRecordings,
 		ProviderRegistrations: registrations,
 	})
 	if err != nil {
@@ -136,7 +164,14 @@ func (group *inferenceProcessGroup) setup() {
 		return
 	}
 	group.process = process
+	group.setupErr = group.startDaemon()
+}
 
+func (group *inferenceProcessGroup) startDaemon() error {
+	server := group.currentServer()
+	if server == nil {
+		return errors.New("shared inference API server is not configured")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	inputs := support.FakeInputs(ctx, []string{
 		"you", "run",
@@ -145,45 +180,45 @@ func (group *inferenceProcessGroup) setup() {
 		"--with-server",
 		"--server", "http://127.0.0.1:1",
 		"--quiet",
-		"--no-record",
 	})
 	inputs.Input.Env = sharedInferenceProcessEnvironment(group.homeDir)
 	inputs.Input.WorkingDirectory = group.hostDir
 	daemon := &inferenceDaemon{cancel: cancel, done: make(chan error, 1)}
 	group.daemon = daemon
 	go func() {
-		daemon.done <- process.Execute(inputs.Input)
+		daemon.done <- group.process.Execute(inputs.Input)
 	}()
 
-	group.baseURL, group.setupErr = group.server.WaitForBaseURL(15 * time.Second)
-	if group.setupErr != nil {
-		return
+	baseURL, err := server.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		cancel()
+		select {
+		case <-daemon.done:
+		case <-time.After(10 * time.Second):
+		}
+		group.daemon = nil
+		return err
 	}
 	select {
 	case err := <-daemon.done:
+		group.daemon = nil
 		if err == nil {
-			group.setupErr = errors.New("shared inference daemon exited before readiness")
+			return errors.New("shared inference daemon exited before readiness")
 		} else {
-			group.setupErr = fmt.Errorf("shared inference daemon exited before readiness: %w", err)
+			return fmt.Errorf("shared inference daemon exited before readiness: %w", err)
 		}
 	default:
 	}
+	group.baseURL = baseURL
+	return nil
 }
 
 func (group *inferenceProcessGroup) close() error {
 	if group.process == nil {
 		return nil
 	}
-	if group.daemon != nil {
-		group.daemon.cancel()
-		select {
-		case err := <-group.daemon.done:
-			if err != nil && !errors.Is(err, context.Canceled) {
-				return fmt.Errorf("stop shared inference daemon: %w", err)
-			}
-		case <-time.After(10 * time.Second):
-			return errors.New("timed out stopping shared inference daemon")
-		}
+	if err := group.stopDaemon(); err != nil {
+		return err
 	}
 	closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -194,14 +229,57 @@ func (group *inferenceProcessGroup) close() error {
 	return err
 }
 
+func (group *inferenceProcessGroup) stopDaemon() error {
+	daemon := group.daemon
+	if daemon == nil {
+		return nil
+	}
+	daemon.cancel()
+	select {
+	case err := <-daemon.done:
+		group.daemon = nil
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("stop shared inference daemon: %w", err)
+		}
+		return nil
+	case <-time.After(10 * time.Second):
+		return errors.New("timed out stopping shared inference daemon")
+	}
+}
+
+func (group *inferenceProcessGroup) currentServer() *support.ProcessAPIServer {
+	group.serverMu.RLock()
+	defer group.serverMu.RUnlock()
+	return group.server
+}
+
+func (group *inferenceProcessGroup) setServer(server *support.ProcessAPIServer) {
+	group.serverMu.Lock()
+	group.server = server
+	group.serverMu.Unlock()
+}
+
+func (group *inferenceProcessGroup) startAPIServer(
+	ctx context.Context,
+	request platformhttpserver.StartRequest,
+) error {
+	server := group.currentServer()
+	if server == nil {
+		return errors.New("shared inference API server is not configured")
+	}
+	return server.Start(ctx, request)
+}
+
 type sharedInferenceScenario struct {
 	commandRunner         platformprocess.CommandRunner
 	scriptRunner          platformprocess.CommandRunner
 	providerOverride      providers.Service
 	providerRegistrations []providerswire.Registration
+	workerRecordingWriter recordings.WorkerRecordingWriter
 	env                   []string
 	captureResponse       bool
 	captureWorkerEvents   bool
+	stopDaemonForExecute  bool
 }
 
 func runSharedInferenceFactoryToCompletion(
@@ -247,16 +325,30 @@ func runSharedInferenceFactory(
 	group.ensure(t)
 	group.mu.Lock()
 	defer group.mu.Unlock()
+	var responseRelease chan struct{}
+	responseReleased := false
+	if scenario.captureResponse && scenario.commandRunner != nil {
+		responseRelease = make(chan struct{})
+		scenario.commandRunner = &inferenceResponseCaptureRunner{
+			delegate: scenario.commandRunner,
+			release:  responseRelease,
+		}
+	}
 
 	group.commands.set(dir, scenario.commandRunner, scenario.env)
 	group.scripts.set(dir, scenario.scriptRunner, nil)
 	group.override.set(scenario.providerOverride)
+	group.workerRecordings.set(scenario.workerRecordingWriter)
 	group.setExternalRegistrations(scenario.providerRegistrations)
 	defer func() {
 		group.commands.clear(dir)
 		group.scripts.clear(dir)
 		group.override.set(nil)
+		group.workerRecordings.set(nil)
 		group.setExternalRegistrations(nil)
+		if responseRelease != nil && !responseReleased {
+			close(responseRelease)
+		}
 	}()
 
 	opened := support.OpenFactorySessionAt(t, group.baseURL, dir)
@@ -269,12 +361,24 @@ func runSharedInferenceFactory(
 	}
 	group.sessions[sessionID] = struct{}{}
 	defer support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+	var responseStream *support.FactoryResponseEventStream
+	if scenario.captureResponse {
+		responseStream = support.OpenFactoryResponseEventStreamAt(
+			t,
+			support.SessionResponseEventsURL(group.baseURL, sessionID),
+		)
+		defer responseStream.Close()
+	}
+	if responseRelease != nil {
+		close(responseRelease)
+		responseReleased = true
+	}
 
 	support.WaitForSessionTerminalStatus(t, group.baseURL, sessionID, timeout)
 
 	result := sharedInferenceFactoryResult{}
-	if scenario.captureResponse {
-		result.responseEvents = support.GetFactoryResponseEventsAt(t, group.baseURL, sessionID)
+	if responseStream != nil {
+		result.responseEvents = readSharedInferenceResponseEvents(t, responseStream, timeout)
 	}
 	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
 		t,
@@ -296,6 +400,46 @@ func runSharedInferenceFactory(
 	return result
 }
 
+func readSharedInferenceResponseEvents(
+	t *testing.T,
+	stream *support.FactoryResponseEventStream,
+	timeout time.Duration,
+) []factoryapi.FactoryResponseEvent {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	events := make([]factoryapi.FactoryResponseEvent, 0)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf("waiting for terminal Factory Response Event exceeded %s", timeout)
+		}
+		frame := stream.NextFrame(remaining)
+		events = append(events, frame.Event)
+		if sharedInferenceTerminalResponseEvent(frame.Event) {
+			break
+		}
+	}
+	for {
+		frame, ok := stream.TryNextFrame(100 * time.Millisecond)
+		if !ok {
+			break
+		}
+		events = append(events, frame.Event)
+	}
+	return events
+}
+
+func sharedInferenceTerminalResponseEvent(event factoryapi.FactoryResponseEvent) bool {
+	if event.Kind == factoryapi.FactoryResponseEventKindError {
+		return event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled
+	}
+	return event.Kind == factoryapi.FactoryResponseEventKindRun &&
+		(event.Phase == factoryapi.FactoryResponseEventPhaseCompleted ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled)
+}
+
 func withSharedInferenceProcess(
 	t *testing.T,
 	scenario sharedInferenceScenario,
@@ -307,10 +451,49 @@ func withSharedInferenceProcess(
 	group.mu.Lock()
 	defer group.mu.Unlock()
 	group.override.set(scenario.providerOverride)
+	group.workerRecordings.set(scenario.workerRecordingWriter)
 	group.setExternalRegistrations(scenario.providerRegistrations)
 	defer func() {
 		group.override.set(nil)
+		group.workerRecordings.set(nil)
 		group.setExternalRegistrations(nil)
+	}()
+	fn(group.process)
+}
+
+func withSharedInferenceProcessAt(
+	t *testing.T,
+	dir string,
+	scenario sharedInferenceScenario,
+	fn func(support.ApplicationProcess),
+) {
+	t.Helper()
+	group := sharedInferenceGroup
+	group.ensure(t)
+	group.mu.Lock()
+	defer group.mu.Unlock()
+	if scenario.stopDaemonForExecute {
+		if err := group.stopDaemon(); err != nil {
+			t.Fatalf("stop shared inference daemon for direct execution: %v", err)
+		}
+		group.setServer(support.NewProcessAPIServer())
+	}
+	group.commands.set(dir, scenario.commandRunner, scenario.env)
+	group.scripts.set(dir, scenario.scriptRunner, nil)
+	group.override.set(scenario.providerOverride)
+	group.workerRecordings.set(scenario.workerRecordingWriter)
+	group.setExternalRegistrations(scenario.providerRegistrations)
+	defer func() {
+		group.commands.clear(dir)
+		group.scripts.clear(dir)
+		group.override.set(nil)
+		group.workerRecordings.set(nil)
+		group.setExternalRegistrations(nil)
+		if scenario.stopDaemonForExecute {
+			if err := group.startDaemon(); err != nil {
+				t.Errorf("restart shared inference daemon after direct execution: %v", err)
+			}
+		}
 	}()
 	fn(group.process)
 }
@@ -426,9 +609,125 @@ type inferenceCommandRoute struct {
 	env    []string
 }
 
+type inferenceResponseCaptureRunner struct {
+	delegate platformprocess.CommandRunner
+	release  <-chan struct{}
+}
+
+func (runner *inferenceResponseCaptureRunner) wait(ctx context.Context) error {
+	select {
+	case <-runner.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (runner *inferenceResponseCaptureRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if err := runner.wait(ctx); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	return runner.delegate.Run(ctx, request)
+}
+
+func (runner *inferenceResponseCaptureRunner) RunStreaming(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	if err := runner.wait(ctx); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	streaming, ok := runner.delegate.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	})
+	if ok {
+		return streaming.RunStreaming(ctx, request, observer)
+	}
+	result, err := runner.delegate.Run(ctx, request)
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if len(result.Stderr) > 0 {
+			observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	return result, err
+}
+
 type inferenceCommandRouter struct {
 	mu     sync.Mutex
 	routes map[string]inferenceCommandRoute
+}
+
+// inferenceWorkerRecordingRouter keeps the root-built process's durable
+// recording port stable while allowing one serialized scenario to observe the
+// exact Worker records it produced. The fallback is intentionally real file
+// persistence so scenarios that do not inspect recordings still exercise the
+// production recording composition.
+type inferenceWorkerRecordingRouter struct {
+	mu       sync.RWMutex
+	fallback recordings.WorkerRecordingWriter
+	delegate recordings.WorkerRecordingWriter
+}
+
+func (router *inferenceWorkerRecordingRouter) set(delegate recordings.WorkerRecordingWriter) {
+	if router == nil {
+		return
+	}
+	router.mu.Lock()
+	router.delegate = delegate
+	router.mu.Unlock()
+}
+
+func (router *inferenceWorkerRecordingRouter) current() recordings.WorkerRecordingWriter {
+	if router == nil {
+		return nil
+	}
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	if router.delegate != nil {
+		return router.delegate
+	}
+	return router.fallback
+}
+
+func (router *inferenceWorkerRecordingRouter) PersistWorkerRecord(
+	ctx context.Context,
+	record recordings.WorkerRecordingRecord,
+) error {
+	writer := router.current()
+	if writer == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	return writer.PersistWorkerRecord(ctx, record)
+}
+
+func (router *inferenceWorkerRecordingRouter) PersistWorkerRecordingFailure(
+	ctx context.Context,
+	failure recordings.WorkerRecordingFailure,
+) error {
+	writer := router.current()
+	failureWriter, ok := writer.(recordings.WorkerRecordingFailureWriter)
+	if !ok || failureWriter == nil {
+		return recordings.ErrMissingWorkerRecordingWriter
+	}
+	return failureWriter.PersistWorkerRecordingFailure(ctx, failure)
+}
+
+func (router *inferenceWorkerRecordingRouter) LoadWorkerRecording(
+	ctx context.Context,
+	recordingID string,
+) (recordings.WorkerRecordingSnapshot, error) {
+	reader, ok := router.current().(recordings.WorkerRecordingReader)
+	if !ok || reader == nil {
+		return recordings.WorkerRecordingSnapshot{}, recordings.ErrMissingWorkerRecordingReader
+	}
+	return reader.LoadWorkerRecording(ctx, recordingID)
 }
 
 func (router *inferenceCommandRouter) set(dir string, runner platformprocess.CommandRunner, env []string) {
@@ -588,8 +887,9 @@ func (group *inferenceProcessGroup) setExternalRegistrations(registrations []pro
 }
 
 type inferenceProviderOverride struct {
-	mu       sync.RWMutex
-	delegate providers.Service
+	mu             sync.RWMutex
+	delegate       providers.Service
+	defaultService providers.Service
 }
 
 func (router *inferenceProviderOverride) set(delegate providers.Service) {
@@ -602,6 +902,9 @@ func (router *inferenceProviderOverride) current() (providers.Service, error) {
 	router.mu.RLock()
 	defer router.mu.RUnlock()
 	if router.delegate == nil {
+		if router.defaultService != nil {
+			return router.defaultService, nil
+		}
 		return nil, errors.New("shared inference provider override is not configured")
 	}
 	return router.delegate, nil
@@ -770,5 +1073,9 @@ func writeSharedInferenceHostFactory(dir string) error {
 }
 
 var _ platformprocess.CommandRunner = (*inferenceCommandRouter)(nil)
+var _ platformprocess.CommandRunner = (*inferenceResponseCaptureRunner)(nil)
+var _ recordings.WorkerRecordingWriter = (*inferenceWorkerRecordingRouter)(nil)
+var _ recordings.WorkerRecordingReader = (*inferenceWorkerRecordingRouter)(nil)
+var _ recordings.WorkerRecordingFailureWriter = (*inferenceWorkerRecordingRouter)(nil)
 var _ providerswire.Integration = (*inferenceIntegrationRouter)(nil)
 var _ providers.Service = (*inferenceProviderOverride)(nil)
