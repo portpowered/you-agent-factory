@@ -8,6 +8,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestTTSPackagedFactoryCharacterization(t *testing.T) {
@@ -29,6 +31,34 @@ func TestTTSPackagedFactoryCharacterization(t *testing.T) {
 			t.Parallel()
 			check.check(t, factory)
 		})
+	}
+}
+
+func TestPublishedTTSPackagedFactoryUsesBuiltInModelsBackend(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
+	}
+	definition, ok := catalog.Lookup(factorydefinitions.PackagedTTSFactoryName)
+	if !ok {
+		t.Fatalf("published catalog does not contain %s", factorydefinitions.PackagedTTSFactoryName)
+	}
+	factory, err := factorymapping.NewFactoryConfigMapper().Expand(definition.JSON)
+	if err != nil {
+		t.Fatalf("decode published %s: %v", factorydefinitions.PackagedTTSFactoryName, err)
+	}
+	if len(factory.Workers) != 1 {
+		t.Fatalf("published %s workers = %#v, want exactly one worker", factorydefinitions.PackagedTTSFactoryName, factory.Workers)
+	}
+	worker := factory.Workers[0]
+	ttsDefinition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor("tts")
+	if !ok {
+		t.Fatal("Models BuiltInCatalog does not contain the tts definition")
+	}
+	if worker.Command != ttsDefinition.Backend {
+		t.Fatalf("published %s worker command = %q, want Models catalog backend %q", factorydefinitions.PackagedTTSFactoryName, worker.Command, ttsDefinition.Backend)
 	}
 }
 
@@ -68,6 +98,9 @@ func assertTTSModelResource(t *testing.T, factory *factorydefinitions.FactoryCon
 
 func assertTTSModelWorker(t *testing.T, factory *factorydefinitions.FactoryConfig) {
 	t.Helper()
+	// Characterized, not endorsed: this preserves the current CODEX provider
+	// (canonicalized to the internal "codex" value) while dispatching through
+	// the registered LocalAI VibeVoice artifact identity.
 	if len(factory.Workers) != 1 {
 		t.Fatalf("workers = %#v, want exactly one worker", factory.Workers)
 	}
@@ -78,9 +111,11 @@ func assertTTSModelWorker(t *testing.T, factory *factorydefinitions.FactoryConfi
 		worker.ModelProvider != "codex" ||
 		factorydefinitions.PublicWorkerModelProviderFromInternalRuntime(worker.ModelProvider) != "CODEX" ||
 		worker.ModelLocality != factorydefinitions.ModelLocalityLocal ||
-		worker.Command != "vibevoice-cpp" ||
-		!reflect.DeepEqual(worker.Args, []string{"--grpc-endpoint", "http://127.0.0.1:50051"}) {
+		worker.Command != "localai-vibevoice" {
 		t.Fatalf("worker identity/runtime = %#v", worker)
+	}
+	if !reflect.DeepEqual(worker.Args, []string{"--grpc-endpoint", "http://127.0.0.1:50051"}) {
+		t.Fatalf("worker args = %#v, want LocalAI gRPC endpoint", worker.Args)
 	}
 	wantResources := []factorydefinitions.ResourceConfig{{Name: "tts-cache", Capacity: 1}}
 	if !reflect.DeepEqual(worker.Resources, wantResources) {

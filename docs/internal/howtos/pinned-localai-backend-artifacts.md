@@ -18,6 +18,7 @@ The file contains these input groups:
 | --- | --- | --- |
 | LocalAI source | `localaiRepository`, `localaiCommit` | Identifies the immutable LocalAI checkout. |
 | Protocol | `protocolPath`, `protocolRevision` | Identifies the pinned gRPC protocol blob. |
+| Packaging revision | `packagingRevision` | Separates immutable releases when artifact staging or startup behavior changes without changing upstream source pins. |
 | Backend sources | `backends[].sourceRepository`, `backends[].sourceCommit`, `backends[].sourcePinVariable` | Identifies each backend source and its LocalAI Makefile pin. |
 | Build tools | `grpcCommit`, `vcpkgCommit`, `toolchain`, `nodeVersion` | Identifies external build inputs and the validation runtime. |
 | Workflow and host pins | `workflowPins`, `hostToolchain` | Pins GitHub Actions revisions and the native package/tool versions used on each runner. |
@@ -61,7 +62,9 @@ artifact contract.
 3. Use immutable 40-character lowercase commits for source and dependency
    commit fields and immutable full-SHA GitHub Action revisions in
    `workflowPins`. Use exact numeric versions for toolchain and host package
-   fields. Use the protocol blob SHA for `protocolRevision`.
+   fields. Use the protocol blob SHA for `protocolRevision`. Increment
+   `packagingRevision` when packaging or startup behavior changes without
+   changing an upstream source pin.
 
 4. Keep the backend and target identifiers unchanged. Do not add a backend,
    target, runner, or accelerator in this procedure.
@@ -162,7 +165,7 @@ artifact contract.
    tampered file fails closed. Do not call a partial matrix a publication.
 
 10. Confirm the publication identity. The pin fingerprint covers the canonical
-   pin document. The release tag has this form:
+   pin document, including `packagingRevision`. The release tag has this form:
    `localai-backends-v1-<pinFingerprint>`.
 
    Archive names include the backend source commit and target. An existing

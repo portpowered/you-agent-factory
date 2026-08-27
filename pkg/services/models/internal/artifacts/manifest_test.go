@@ -164,6 +164,37 @@ func TestManifestAcceptsEveryRegisteredArtifactBackend(t *testing.T) {
 	}
 }
 
+func TestDecodePreservesPackagingRevision(t *testing.T) {
+	t.Parallel()
+
+	data := mutatedFixture(t, func(document map[string]any) {
+		document["publication"].(map[string]any)["packagingRevision"] = 2
+	})
+	manifest, err := artifacts.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	descriptor, err := manifest.Select(fixtureSelectionRequest())
+	if err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+	if descriptor.Publication.PackagingRevision != 2 {
+		t.Fatalf("PackagingRevision = %d, want 2", descriptor.Publication.PackagingRevision)
+	}
+}
+
+func TestDecodeRejectsNonPositivePackagingRevision(t *testing.T) {
+	t.Parallel()
+
+	data := mutatedFixture(t, func(document map[string]any) {
+		document["publication"].(map[string]any)["packagingRevision"] = 0
+	})
+	_, err := artifacts.Decode(data)
+	if !errors.Is(err, artifacts.ErrManifestMalformed) {
+		t.Fatalf("Decode error = %v, want ErrManifestMalformed", err)
+	}
+}
+
 func TestDecodeRejectsMalformedManifestFacts(t *testing.T) {
 	t.Parallel()
 

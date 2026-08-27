@@ -78,7 +78,7 @@
         "http://127.0.0.1:50051"
       ],
       "body": "You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content.",
-      "command": "vibevoice-cpp",
+      "command": "localai-vibevoice",
       "model": "tts",
       "modelLocality": "LOCAL",
       "modelProvider": "CODEX",

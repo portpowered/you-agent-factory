@@ -523,12 +523,8 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 
 	home := t.TempDir()
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
-	writeGenericBackendCache(t, home, "localai-llamacpp", serviceedges.ModelBackendArtifactSelection{
-		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-		Bytes:    28,
-		SHA256:   "9285e7ffc76aaadf4dfcc6b2de5e23c6b01d4e7068e8f2dd65673626cc5de4ed",
-	}, []byte("localai-llamacpp/linux-amd64"))
+	selection := genericLlamaBackendSelection()
+	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
@@ -536,7 +532,10 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	dir := support.ScaffoldFactory(t, multiOutputModelFactoryConfig(modelServer.URL))
 	process := support.BuildProcess(t, serviceedges.Edges{
-		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetHTTPClient: rejectingNetwork,
+		ModelResolveBackendArtifact: func(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			return selection, nil
+		},
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
 		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
@@ -672,7 +671,17 @@ func genericHTTPInvocationEdges(
 	modelServer *httptest.Server,
 ) serviceedges.Edges {
 	return serviceedges.Edges{
-		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetHTTPClient: rejectingNetwork,
+		ModelResolveBackendArtifact: func(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			switch request.Backend {
+			case "localai-llamacpp":
+				return genericLlamaBackendSelection(), nil
+			case "localai-vibevoice":
+				return pinnedTTSBackendSelection(), nil
+			default:
+				return serviceedges.ModelBackendArtifactSelection{}, fmt.Errorf("unexpected generic fixture backend %q", request.Backend)
+			}
+		},
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
 		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
