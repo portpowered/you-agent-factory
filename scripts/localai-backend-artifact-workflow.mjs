@@ -263,6 +263,9 @@ export function validateConfig(config) {
 	const errors = [];
 	if (!isPlainObject(config)) return { errors: ["configuration must be an object"], matrix: null };
 	if (config.schemaVersion !== 1) addError(errors, "schemaVersion must be 1");
+	if (!Number.isSafeInteger(config.packagingRevision) || config.packagingRevision < 1) {
+		addError(errors, "packagingRevision must be a positive safe integer");
+	}
 	validateVersion(errors, config.nodeVersion, "nodeVersion");
 	if (config.localaiRepository !== "https://github.com/mudler/LocalAI.git") {
 		addError(errors, "localaiRepository must be the repository-owned LocalAI upstream");
@@ -408,6 +411,7 @@ export function buildMetadata({ config, localaiRoot, backendId, targetId }) {
 		},
 		buildInputs: {
 			nodeVersion: config.nodeVersion,
+			packagingRevision: config.packagingRevision,
 			actionPins: { ...config.workflowPins },
 			hostToolchain: structuredClone(config.hostToolchain),
 		},
@@ -500,6 +504,7 @@ function canonicalPinDocument(config) {
 	return {
 		localaiRepository: config.localaiRepository,
 		localaiCommit: config.localaiCommit,
+		packagingRevision: config.packagingRevision,
 		protocolPath: config.protocolPath,
 		protocolRevision: config.protocolRevision,
 		grpcCommit: config.grpcCommit,
@@ -599,6 +604,7 @@ function validateMatrixMetadata(metadata, { config, backend, target, key }) {
 	assertMetadataField(metadata, "toolchain.grpcCommit", config.grpcCommit, `${key} metadata mismatch:`);
 	assertMetadataField(metadata, "toolchain.vcpkgCommit", config.vcpkgCommit, `${key} metadata mismatch:`);
 	assertMetadataField(metadata, "buildInputs.nodeVersion", config.nodeVersion, `${key} metadata mismatch:`);
+	assertMetadataField(metadata, "buildInputs.packagingRevision", config.packagingRevision, `${key} metadata mismatch:`);
 	assertMetadataField(metadata, "buildInputs.actionPins", config.workflowPins, `${key} metadata mismatch:`);
 	assertMetadataField(metadata, "buildInputs.hostToolchain", config.hostToolchain, `${key} metadata mismatch:`);
 }
@@ -710,6 +716,7 @@ export function createManifest({ config, artifactDirectory, repository }) {
 			releaseTag: identity.releaseTag,
 			repository,
 			pinFingerprint: identity.pinFingerprint,
+			packagingRevision: config.packagingRevision,
 			source: {
 				repository: config.localaiRepository,
 				commit: config.localaiCommit,

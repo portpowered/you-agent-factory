@@ -163,16 +163,25 @@ case "$TARGET_ID:$BACKEND_ID" in
 esac
 
 go_dynamic_loader="none"
+windows_library_name="none"
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	case "$BACKEND_ID" in
-		localai-whisper|localai-vibevoice)
+		localai-whisper)
 			# purego v0.10.0 intentionally exposes Dlopen only on Unix. The
 			# pinned LocalAI Go entrypoints use that API unconditionally, so the
 			# Windows build adds a small build-tagged loader shim below.
 			go_dynamic_loader="xsys-windows"
+			windows_library_name="libgowhisper.dll"
 			;;
-	esac
-fi
+		localai-vibevoice)
+			# The pinned Go backend uses purego's Unix-only Dlopen call and
+			# names its fallback shared object with a Unix suffix. Windows
+			# packages stage the CMake MODULE as this DLL instead.
+			go_dynamic_loader="xsys-windows"
+			windows_library_name="libgovibevoicecpp.dll"
+			;;
+		esac
+	fi
 
 # The pinned gRPC CMake project otherwise lets the Windows generator select
 # C++14, which Abseil rejects before any backend target can compile. The
@@ -214,6 +223,7 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_grpc_protobuf_source=""
 	plan_grpc_executable_suffix=""
 	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
+	plan_windows_library_name=""
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
@@ -222,9 +232,10 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 		plan_windows_target=" windows_minimum_target=$windows_minimum_target"
 		plan_grpc_protobuf_source=" grpc_protobuf_source=$grpc_protobuf_source"
 		plan_grpc_executable_suffix=" grpc_executable_suffix=$grpc_executable_suffix"
+		plan_windows_library_name=" windows_library_name=$windows_library_name"
 	fi
 	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_grpc_executable_suffix$plan_go_dynamic_loader$plan_grpc_dependency_mode"
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_grpc_executable_suffix$plan_go_dynamic_loader$plan_windows_library_name$plan_grpc_dependency_mode"
 	exit 0
 fi
 
@@ -446,34 +457,11 @@ patch_windows_go_loader() {
 		exit 1
 	fi
 
-	node - "$main_source" "$loader_source" <<'NODE'
-const { readFileSync, writeFileSync } = require("node:fs");
-
-const [mainPath, loaderPath] = process.argv.slice(2);
-const source = readFileSync(mainPath, "utf8");
-const needle = "purego.Dlopen(libName, purego.RTLD_NOW|purego.RTLD_GLOBAL)";
-const occurrences = source.split(needle).length - 1;
-if (occurrences !== 1) {
-	console.error(`expected one purego dynamic-loader call in ${mainPath}, found ${occurrences}`);
-	process.exit(1);
-}
-
-writeFileSync(mainPath, source.replace(needle, "loadBackendLibrary(libName)"));
-writeFileSync(
-	loaderPath,
-	`//go:build windows
-
-package main
-
-import "golang.org/x/sys/windows"
-
-func loadBackendLibrary(name string) (uintptr, error) {
-	handle, err := windows.LoadLibrary(name)
-	return uintptr(handle), err
-}
-`,
-);
-NODE
+	node "${repository_root}/scripts/localai-backend-windows-patch.mjs" \
+		"$main_source" \
+		"$loader_source" \
+		"$windows_library_name" \
+		"$BACKEND_ID"
 }
 
 stage_darwin_llama_package() {
@@ -589,6 +577,33 @@ stage_windows_runtime() {
 	done
 }
 
+run_windows_startup_smoke() {
+	if [[ "$TARGET_ID" != "windows-amd64" ]]; then
+		return
+	fi
+
+	local package_root="${backend_path}/package"
+	local binary_path="${package_root}/${binary}.exe"
+	local smoke_binary="$binary_path"
+	local smoke_workdir="$package_root"
+	if command -v cygpath >/dev/null 2>&1; then
+		smoke_binary="$(cygpath -w "$binary_path")"
+		smoke_workdir="$(cygpath -w "$package_root")"
+	fi
+
+	if [[ ! -s "$binary_path" ]]; then
+		echo "Windows backend startup smoke is missing ${binary_path}" >&2
+		exit 1
+	fi
+	echo "Starting packaged Windows backend for loopback health/protocol smoke: ${smoke_binary}"
+	(
+		cd "$repository_root"
+		go run ./scripts/localai-backend-startup-smoke.go \
+			--binary "$smoke_binary" \
+			--workdir "$smoke_workdir"
+	)
+}
+
 build_grpc_dependencies
 generate_go_protocol
 
@@ -665,6 +680,7 @@ case "$build_strategy" in
 esac
 
 package_root="${backend_path}/package"
+run_windows_startup_smoke
 node "$workflow_script" verify-payload \
 	--package-root "$package_root" \
 	--binary "$binary" \
