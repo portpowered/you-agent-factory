@@ -12,6 +12,7 @@ const laneNames = [
 	"Frontend",
 	"Backend",
 	"Backend Test Stability",
+	"Backend Unit Latency",
 	"Backend Lint",
 	"Workflow Lint",
 	"UI Backend Integration",
@@ -88,6 +89,26 @@ test("required Backend Lint fails the policy when its hosted job is skipped", ()
 
 		assert.equal(evaluation.ok, false, `${result} must fail the required policy lane`);
 		assert.ok(evaluation.failures.some((failure) => /Backend Lint was selected/.test(failure)));
+	}
+});
+
+test("required Backend Unit Latency fails closed for every incomplete hosted result", () => {
+	for (const result of ["skipped", "", "cancelled", "timed_out", "failure"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					...laneNames.filter((name) => name !== "Backend Unit Latency").map((name) => lane(name)),
+					lane("Backend Unit Latency", true, result, {
+						reason: "The canonical three-sample unit-lane latency budget is required on every pull request and push to main.",
+					}),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `${result || "missing"} must fail the required latency gate`);
+		assert.ok(
+			evaluation.failures.some((failure) => /Backend Unit Latency was selected/.test(failure)),
+		);
 	}
 });
 

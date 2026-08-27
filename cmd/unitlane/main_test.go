@@ -36,6 +36,27 @@ func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 	}
 }
 
+func TestDiscoverPackagesExcludesBuildConstrainedTestFiles(t *testing.T) {
+	root := t.TempDir()
+	writeTestPackageFile(t, root, "portable")
+	constrained := filepath.Join(root, "constrained", "build_constrained_test.go")
+	if err := os.MkdirAll(filepath.Dir(constrained), 0o755); err != nil {
+		t.Fatalf("create constrained package: %v", err)
+	}
+	if err := os.WriteFile(constrained, []byte("//go:build unitlane_never_enabled\n\npackage constrained\n"), 0o600); err != nil {
+		t.Fatalf("write constrained test: %v", err)
+	}
+
+	packages, err := discoverPackagesUnder(root, modulePath+"/pkg")
+	if err != nil {
+		t.Fatalf("discoverPackagesUnder() error = %v", err)
+	}
+	want := []string{modulePath + "/pkg/portable"}
+	if !slices.Equal(packages, want) {
+		t.Fatalf("discoverPackages() = %v, want %v", packages, want)
+	}
+}
+
 func TestDiscoverPackagesReportsListFailure(t *testing.T) {
 	_, err := discoverPackagesUnder(filepath.Join(t.TempDir(), "missing"), modulePath+"/pkg")
 	if err == nil {
@@ -146,6 +167,7 @@ func TestUnitlaneFakeGoProcess(t *testing.T) {
 					writeUnitLaneHelperEvent(goTestUnitTimingEvent{Action: "fail", Package: packageName, Elapsed: 0.4})
 					continue
 				}
+				writeUnitLaneHelperEvent(goTestUnitTimingEvent{Action: "pass", Package: packageName, Test: "TestHelper", Elapsed: 0.1})
 				if os.Getenv("UNITLANE_HELPER_TIMING_CACHED") == "1" {
 					writeUnitLaneHelperEvent(goTestUnitTimingEvent{Action: "output", Package: packageName, Output: "ok  \t" + packageName + "\t(cached)\n"})
 				} else {
