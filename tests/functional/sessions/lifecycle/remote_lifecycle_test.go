@@ -16,10 +16,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	placementSuccessFactoryName      = "session-parity-success"
+	placementFailureFactoryName      = "session-parity-domain-failure"
+	placementCancellationFactoryName = "session-parity-cancel"
+	placementTransportFactoryName    = "session-parity-transport-failure"
 )
 
 // TestCLIRemoteRunStartsDurableSessionOnSelectedServer proves the public
@@ -48,17 +54,23 @@ func TestCLIRemoteRunStartsDurableSessionOnSelectedServer(t *testing.T) {
 // Process.Execute boundary. The JavaScript Factory has no provider dependency,
 // so both placements exercise the same domain outcome and public JSON envelope.
 func TestCLILocalAndRemoteRunSuccessParityThroughRootProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	namedFactoryDir := scaffoldNamedPlacementFactory(
+	fixture := requireSharedPlacementFixture(t)
+	local := executePlacementRun(
 		t,
-		homeDir,
-		"session-parity-success",
-		`workflow.final("placement parity complete");`,
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementSuccessFactoryName,
+		"",
+		false,
 	)
-	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
-
-	local := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-success", "", false)
-	remote := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-success", server.URL(), true)
+	remote := executePlacementRun(
+		t,
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementSuccessFactoryName,
+		fixture.baseURL,
+		true,
+	)
 	assertPlacementSuccessParity(t, local, remote, "placement parity complete")
 }
 
@@ -66,17 +78,23 @@ func TestCLILocalAndRemoteRunSuccessParityThroughRootProcess(t *testing.T) {
 // same Factory-domain failure stays a failed invocation at both placements,
 // with terminal output on stdout and diagnostics on stderr.
 func TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	namedFactoryDir := scaffoldNamedPlacementFactory(
+	fixture := requireSharedPlacementFixture(t)
+	local := executePlacementRun(
 		t,
-		homeDir,
-		"session-parity-domain-failure",
-		`throw new Error("placement parity domain failure");`,
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementFailureFactoryName,
+		"",
+		false,
 	)
-	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
-
-	local := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-domain-failure", "", false)
-	remote := executePlacementRun(t, homeDir, namedFactoryDir, "session-parity-domain-failure", server.URL(), true)
+	remote := executePlacementRun(
+		t,
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementFailureFactoryName,
+		fixture.baseURL,
+		true,
+	)
 	assertPlacementFailureParity(t, local, remote, "INVOCATION_RUNTIME_FAILURE")
 }
 
@@ -84,34 +102,26 @@ func TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess(t *testing.T)
 // caller cancellation reaches both local and selected-server placements and
 // neither path reports a fabricated successful primary result.
 func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) {
-	// Keep independent public bootstraps from contending over server-owned
-	// packaged-Factory staging while this test exercises placement parity.
-	clientHomeDir := t.TempDir()
-	serverHomeDir := t.TempDir()
-	clientFactoryDir := scaffoldNamedPlacementFactory(
+	fixture := requireSharedPlacementFixture(t)
+	fixture.client.initializeCustomerHome(t, fixture.clientWorkingDir)
+	local := executePlacementRunWithContext(
+		t.Context(),
 		t,
-		clientHomeDir,
-		"session-parity-cancel",
-		`while (true) {}`,
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementCancellationFactoryName,
+		"",
+		false,
 	)
-	serverFactoryDir := scaffoldNamedPlacementFactory(
+	remote := executePlacementRunWithContext(
+		t.Context(),
 		t,
-		serverHomeDir,
-		"session-parity-cancel",
-		`while (true) {}`,
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementCancellationFactoryName,
+		fixture.baseURL,
+		true,
 	)
-	server := startRemotePlacementServer(t, serverHomeDir, serverFactoryDir)
-	// Finish the server lifecycle before testing.T begins removing the isolated
-	// home. Service-mode initialization owns packaged-Factory files under this
-	// directory, so letting TempDir cleanup race that final unwind can leave the
-	// factories root non-empty on a loaded runner.
-	defer func() {
-		server.Stop(t)
-		server.Close(t)
-	}()
-
-	local := executePlacementRunWithContext(t.Context(), t, clientHomeDir, clientFactoryDir, "session-parity-cancel", "", false)
-	remote := executePlacementRunWithContext(t.Context(), t, clientHomeDir, clientFactoryDir, "session-parity-cancel", server.URL(), true)
 	assertPlacementCancellationParity(t, local, remote)
 }
 
@@ -119,18 +129,12 @@ func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) 
 // selected-server transport failure does not leak a success payload onto
 // stdout and remains a non-nil Process.Execute failure with a diagnostic.
 func TestCLIRemoteRunTransportFailureKeepsStreamsAndExitObservable(t *testing.T) {
-	homeDir := t.TempDir()
-	namedFactoryDir := scaffoldNamedPlacementFactory(
-		t,
-		homeDir,
-		"session-parity-transport-failure",
-		`workflow.final("must not run");`,
-	)
+	fixture := requireSharedPlacementFixture(t)
 	observation := executePlacementRun(
 		t,
-		homeDir,
-		namedFactoryDir,
-		"session-parity-transport-failure",
+		fixture.client,
+		fixture.clientWorkingDir,
+		placementTransportFactoryName,
 		"http://127.0.0.1:1",
 		true,
 	)
@@ -148,41 +152,6 @@ func TestCLIRemoteRunTransportFailureKeepsStreamsAndExitObservable(t *testing.T)
 	}
 }
 
-func scaffoldNamedPlacementFactory(t *testing.T, homeDir, name, inlineSource string) string {
-	t.Helper()
-	sourceDir := support.ScaffoldFactory(t, map[string]any{
-		"name": name,
-		"invocationSignature": map[string]any{
-			"parameters": []any{map[string]any{
-				"name":     "prompt",
-				"required": true,
-				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
-			}},
-		},
-		"orchestrator": map[string]any{
-			"kind": "JAVASCRIPT",
-			"javascript": map[string]any{
-				"inlineSource": map[string]any{
-					"encoding": "utf-8",
-					"inline":   inlineSource,
-				},
-				"argsSchema": map[string]any{
-					"type":                 "object",
-					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
-					"additionalProperties": false,
-				},
-			},
-		},
-	})
-	return support.CreateNamedFactory(
-		t,
-		homeDir,
-		t.TempDir(),
-		name,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-}
-
 type placementRunObservation struct {
 	err    error
 	stdout string
@@ -191,68 +160,67 @@ type placementRunObservation struct {
 
 func executePlacementRun(
 	t *testing.T,
-	homeDir, workingDirectory, factoryName, serverURL string,
+	client *lifecycleClientProcess,
+	workingDirectory, factoryName, serverURL string,
 	remote bool,
 ) placementRunObservation {
 	t.Helper()
-	args := []string{"you"}
+	args := []string{}
 	if remote {
-		args = append(args, "--remote", "--server", serverURL)
+		args = append(args, "--remote")
 	}
 	args = append(args, "--json", "run", "--named", factoryName, "--no-record", "placement parity")
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
-	inputs.Input.WorkingDirectory = workingDirectory
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
-	return placementRunObservation{err: err, stdout: inputs.Stdout(), stderr: inputs.Stderr()}
+	inputs, command := client.startCLI(t, t.Context(), workingDirectory, serverURL, nil, args...)
+	<-command.Done()
+	if command.Err() != nil {
+		command.AcceptError()
+	}
+	observation := placementRunObservation{
+		err:    command.Err(),
+		stdout: inputs.Stdout(),
+		stderr: inputs.Stderr(),
+	}
+	registerPlacementResponseCleanup(t, serverURL, remote, observation.stdout)
+	return observation
 }
 
 func executePlacementRunWithContext(
 	parentContext context.Context,
 	t *testing.T,
-	homeDir, workingDirectory, factoryName, serverURL string,
+	client *lifecycleClientProcess,
+	workingDirectory, factoryName, serverURL string,
 	remote bool,
 ) placementRunObservation {
 	t.Helper()
 	if remote {
 		return executeRemotePlacementRunWithReadiness(
-			parentContext, t, homeDir, workingDirectory, factoryName, serverURL,
+			parentContext, t, client, workingDirectory, factoryName, serverURL,
 		)
 	}
 	return executeLocalPlacementRunWithReadiness(
-		parentContext, t, homeDir, workingDirectory, factoryName,
+		parentContext, t, client, workingDirectory, factoryName,
 	)
 }
 
 func executeLocalPlacementRunWithReadiness(
 	parentContext context.Context,
 	t *testing.T,
-	homeDir, workingDirectory, factoryName string,
+	client *lifecycleClientProcess,
+	workingDirectory, factoryName string,
 ) placementRunObservation {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	placementEnvironment := []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
-	// Complete public system initialization through the same process before the
-	// cancellation-controlled invocation. The invocation still waits for its
-	// observable response event before canceling.
-	support.InitializeCustomerHomeWithProcess(
-		t, process, placementEnvironment, workingDirectory,
-	)
 
 	runContext, cancel := context.WithCancel(parentContext)
 	defer cancel()
-	inputs := support.FakeInputs(runContext, []string{
-		"you", "--json", "run", "--named", factoryName, "--output", "response-stream", "--no-record", "placement parity",
-	})
 	readinessOutput := newLocalInvocationReadinessOutput()
-	inputs.Input.Stdout = readinessOutput
-	inputs.Input.Stderr = readinessOutput
-	inputs.Input.Env = placementEnvironment
-	inputs.Input.WorkingDirectory = workingDirectory
-	command := support.StartProcessCommand(t, process, inputs.Input)
+	_, command := client.startCLI(
+		t,
+		runContext,
+		workingDirectory,
+		"",
+		readinessOutput,
+		"--json", "run", "--named", factoryName, "--output", "response-stream", "--no-record", "placement parity",
+	)
 	select {
 	case <-readinessOutput.started:
 		// Stop uses the support command's existing bounded cancellation
@@ -274,31 +242,22 @@ func executeLocalPlacementRunWithReadiness(
 func executeRemotePlacementRunWithReadiness(
 	parentContext context.Context,
 	t *testing.T,
-	homeDir, workingDirectory, factoryName, serverURL string,
+	client *lifecycleClientProcess,
+	workingDirectory, factoryName, serverURL string,
 ) placementRunObservation {
 	t.Helper()
-	args := []string{"you"}
-	args = append(args, "--remote", "--server", serverURL, "--verbose")
-	args = append(args, "--json", "run", "--named", factoryName, "--no-record", "placement parity")
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	placementEnvironment := []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
-	// Complete public system initialization through the same process before the
-	// cancellation-controlled invocation. The invocation still waits for
-	// observable durable admission before canceling.
-	support.InitializeCustomerHomeWithProcess(
-		t, process, placementEnvironment, workingDirectory,
-	)
 
 	runContext, cancel := context.WithCancel(parentContext)
 	defer cancel()
-	inputs := support.FakeInputs(runContext, args)
 	admissionOutput := newRemoteAdmissionOutput()
-	inputs.Input.Stdout = admissionOutput
-	inputs.Input.Stderr = admissionOutput
-	inputs.Input.Env = placementEnvironment
-	inputs.Input.WorkingDirectory = workingDirectory
-	command := support.StartProcessCommand(t, process, inputs.Input)
+	_, command := client.startCLI(
+		t,
+		runContext,
+		workingDirectory,
+		serverURL,
+		admissionOutput,
+		"--remote", "--verbose", "--json", "run", "--named", factoryName, "--output", "response-stream", "--no-record", "placement parity",
+	)
 	select {
 	case <-admissionOutput.started:
 		// Stop uses the support command's existing bounded cancellation
@@ -315,10 +274,12 @@ func executeRemotePlacementRunWithReadiness(
 		t.Fatalf("remote run did not reach durable-admission readiness: %v\noutput:\n%s", parentContext.Err(), admissionOutput.String())
 	}
 	sessionID := remoteSessionIDFromAdmissionOutput(t, admissionOutput.String())
+	markSessionClean := registerLifecycleSessionCleanup(t, serverURL, sessionID)
 	defer func() {
 		if err := terminateRemoteFunctionalSession(serverURL, sessionID); err != nil {
 			t.Errorf("terminate cancellation parity durable session %s: %v", sessionID, err)
 		}
+		markSessionClean()
 	}()
 	return placementObservation(command, admissionOutput)
 }
@@ -429,95 +390,69 @@ func assertPlacementCancellationParity(
 	}
 }
 
-func scaffoldRemotePlacementFactory(t *testing.T, homeDir string) string {
+func requireSharedPlacementFixture(t *testing.T) *sharedLifecycleFixture {
 	t.Helper()
-	sourceDir := support.ScaffoldFactory(t, map[string]any{
-		"name": "remote-placement",
-		"invocationSignature": map[string]any{
-			"parameters": []any{map[string]any{
-				"name":     "prompt",
-				"required": true,
-				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
-			}},
-		},
-		"orchestrator": map[string]any{
-			"kind": "JAVASCRIPT",
-			"javascript": map[string]any{
-				"inlineSource": map[string]any{
-					"encoding": "utf-8",
-					"inline":   "var spin = 0; while (true) { spin += 1; }",
-				},
-				"argsSchema": map[string]any{
-					"type":                 "object",
-					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
-					"additionalProperties": false,
-				},
-			},
-		},
-	})
-	namedFactoryDir := support.CreateNamedFactory(
-		t,
-		homeDir,
-		sourceDir,
-		"remote-placement",
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-	workflowDir := filepath.Join(namedFactoryDir, ".claude", "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("create workflow directory: %v", err)
+	if lifecycleFixture == nil || lifecycleFixture.client == nil {
+		t.Fatal("shared lifecycle placement fixture is unavailable")
 	}
-	if err := os.WriteFile(filepath.Join(workflowDir, "remote-idempotency.js"), []byte("return 'idempotency complete';"), 0o600); err != nil {
-		t.Fatalf("write idempotency workflow: %v", err)
+	return lifecycleFixture
+}
+
+func registerPlacementResponseCleanup(
+	t *testing.T,
+	serverURL string,
+	remote bool,
+	stdout string,
+) {
+	t.Helper()
+	if !remote || strings.TrimSpace(serverURL) == "" {
+		return
 	}
-	return namedFactoryDir
+	var response factoryapi.InvocationResponse
+	if err := json.Unmarshal(bytesTrimSpace([]byte(stdout)), &response); err != nil || response.SessionId == nil {
+		return
+	}
+	sessionID := strings.TrimSpace(*response.SessionId)
+	if sessionID != "" {
+		registerLifecycleSessionCleanup(t, serverURL, sessionID)
+	}
 }
 
 // writeSharedRemoteLifecycleFactory authors the named JavaScript Factory and
 // workflow used by the durable witness before the package-scoped server starts.
 // The named Factory is placed in the same isolated global catalog used by the
-// shared client and server; the workflow file is project-relative to the
-// shared server Factory directory.
+// shared client and server; placement catalogs are immutable for the package
+// lifetime and are also authored here before the server starts.
 func writeSharedRemoteLifecycleFactory(homeDir, serverFactoryDir string) error {
-	namedFactoryDir := filepath.Join(
-		interfaces.NamedFactoriesRoot(homeDir),
-		"remote-placement",
-	)
-	if err := os.MkdirAll(namedFactoryDir, 0o755); err != nil {
-		return fmt.Errorf("create named Factory directory: %w", err)
-	}
-	rawConfig, err := json.Marshal(map[string]any{
-		"name": "remote-placement",
-		"invocationSignature": map[string]any{
-			"parameters": []any{map[string]any{
-				"name":     "prompt",
-				"required": true,
-				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
-			}},
+	placementFactories := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "remote-placement",
+			source: "var spin = 0; while (true) { spin += 1; }",
 		},
-		"orchestrator": map[string]any{
-			"kind": "JAVASCRIPT",
-			"javascript": map[string]any{
-				"inlineSource": map[string]any{
-					"encoding": "utf-8",
-					"inline":   "var spin = 0; while (true) { spin += 1; }",
-				},
-				"argsSchema": map[string]any{
-					"type":                 "object",
-					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
-					"additionalProperties": false,
-				},
-			},
+		{
+			name:   placementSuccessFactoryName,
+			source: `workflow.final("placement parity complete");`,
 		},
-	})
-	if err != nil {
-		return fmt.Errorf("marshal named Factory config: %w", err)
+		{
+			name:   placementFailureFactoryName,
+			source: `throw new Error("placement parity domain failure");`,
+		},
+		{
+			name:   placementCancellationFactoryName,
+			source: "while (true) {}",
+		},
+		{
+			name:   placementTransportFactoryName,
+			source: `workflow.final("must not run");`,
+		},
 	}
-	if err := os.WriteFile(
-		filepath.Join(namedFactoryDir, interfaces.FactoryConfigFile),
-		rawConfig,
-		0o644,
-	); err != nil {
-		return fmt.Errorf("write named Factory config: %w", err)
+	for _, factory := range placementFactories {
+		if err := writeSharedNamedPlacementFactory(homeDir, factory.name, factory.source); err != nil {
+			return err
+		}
 	}
 	workflowDir := filepath.Join(serverFactoryDir, ".claude", interfaces.WorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
@@ -533,20 +468,42 @@ func writeSharedRemoteLifecycleFactory(homeDir, serverFactoryDir string) error {
 	return nil
 }
 
-func startRemotePlacementServer(t *testing.T, homeDir, namedFactoryDir string) *support.FunctionalAPIServer {
-	t.Helper()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                namedFactoryDir,
-		WaitForServiceModeRuntime: true,
-		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
-		Edges: serviceedges.Edges{
-			FactoryRuntimeWorkflowHome: func() (string, error) {
-				return homeDir, nil
+func writeSharedNamedPlacementFactory(homeDir, name, source string) error {
+	namedFactoryDir := filepath.Join(interfaces.NamedFactoriesRoot(homeDir), name)
+	if err := os.MkdirAll(namedFactoryDir, 0o755); err != nil {
+		return fmt.Errorf("create named Factory %q directory: %w", name, err)
+	}
+	rawConfig, err := json.Marshal(map[string]any{
+		"name": name,
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name":     "prompt",
+				"required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"inlineSource": map[string]any{
+					"encoding": "utf-8",
+					"inline":   source,
+				},
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
 			},
 		},
 	})
-	t.Cleanup(func() { server.Stop(t) })
-	return server
+	if err != nil {
+		return fmt.Errorf("marshal named Factory %q: %w", name, err)
+	}
+	if err := os.WriteFile(filepath.Join(namedFactoryDir, interfaces.FactoryConfigFile), rawConfig, 0o644); err != nil {
+		return fmt.Errorf("write named Factory %q config: %w", name, err)
+	}
+	return nil
 }
 
 func runRemoteClientDisconnect(
@@ -677,6 +634,19 @@ func (client *lifecycleClientProcess) startCLI(
 		client.mu.Unlock()
 	}()
 	return inputs, command
+}
+
+func (client *lifecycleClientProcess) initializeCustomerHome(
+	t testing.TB,
+	workingDir string,
+) {
+	t.Helper()
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.process == nil {
+		t.Fatal("shared lifecycle client process is unavailable")
+	}
+	support.InitializeCustomerHomeWithProcess(t, client.process, client.env, workingDir)
 }
 
 type remoteAdmissionOutput struct {
