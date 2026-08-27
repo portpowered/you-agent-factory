@@ -36,93 +36,110 @@ func TestJavaScriptSharedProcessSpine(t *testing.T) {
 	fixture := newJavaScriptSharedProcessFixture(t)
 
 	t.Run("permission-matrix-cli-success", func(t *testing.T) {
-		runner := support.NewRecordingCommandRunner(sharedJavaScriptSuccessOutput)
-		if err := fixture.router.register(sharedJavaScriptSuccessPrompt, runner); err != nil {
-			t.Fatalf("register success route: %v", err)
-		}
-		t.Cleanup(func() {
-			if err := fixture.router.unregister(sharedJavaScriptSuccessPrompt); err != nil {
-				t.Errorf("unregister success route: %v", err)
-			}
-		})
-
-		before := fixture.persistentSessionIDs(t)
-		inputs, err := fixture.executeRemote(t, fixture.successFactoryName, sharedJavaScriptSuccessPrompt)
-		if err != nil {
-			t.Fatalf("shared remote success Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-		}
-		assertSharedRemoteCommandPlacement(t, inputs.Input.Args, fixture.baseURL)
-		if !strings.Contains(inputs.Stdout(), sharedJavaScriptSuccessOutput) {
-			t.Fatalf("shared remote success output = %q, want %q", inputs.Stdout(), sharedJavaScriptSuccessOutput)
-		}
-		if runner.CallCount() != 1 {
-			t.Fatalf("owning Codex runner calls = %d, want one", runner.CallCount())
-		}
-		requests := fixture.router.requestRecords()
-		if len(requests) != 1 {
-			t.Fatalf("shared provider requests = %d, want one; requests=%#v", len(requests), requests)
-		}
-		request := requests[0]
-		if request.Command != "codex" || !reflect.DeepEqual(request.Args, []string{"exec", "--json", "-"}) {
-			t.Fatalf("shared provider command = %q %#v, want codex %#v", request.Command, request.Args, []string{"exec", "--json", "-"})
-		}
-		if !bytes.Contains(request.Stdin, []byte(sharedJavaScriptSuccessPrompt)) {
-			t.Fatalf("shared provider stdin = %q, want owning request selector %q", request.Stdin, sharedJavaScriptSuccessPrompt)
-		}
-		if strings.TrimSpace(request.WorkDir) == "" {
-			t.Fatal("shared provider request has empty working directory")
-		}
-
-		after := fixture.persistentSessionIDs(t)
-		newSessions := differenceJavaScriptSessionIDs(before, after)
-		if len(newSessions) != 1 || strings.TrimSpace(newSessions[0]) == "" {
-			t.Fatalf("persisted session IDs before=%v after=%v new=%v, want one unique host-owned session", before, after, newSessions)
-		}
-		t.Logf("ROUTE-001 success: root_process_builds=1 api_server_starts=%d request_records=%d session_id=%s command=%s args=%v", fixture.apiStarter.starts.Load(), len(requests), newSessions[0], request.Command, request.Args)
+		runJavaScriptSharedSuccess(t, fixture)
 	})
 
 	t.Run("invalid-permission-pre-dispatch-failure", func(t *testing.T) {
-		beforeCalls := fixture.router.callCount()
-		beforeSessions := fixture.persistentSessionIDs(t)
-		inputs, err := fixture.executeRemote(t, fixture.failureFactoryName, "shared invalid permissions")
-		if err == nil {
-			t.Fatalf("shared remote invalid-permission Process.Execute() error = nil\nstdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
-		}
-		assertSharedRemoteCommandPlacement(t, inputs.Input.Args, fixture.baseURL)
-		var response factoryapi.InvocationResponse
-		if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-			t.Fatalf("decode shared invalid-permission invocation response: %v; stdout=%q", decodeErr, inputs.Stdout())
-		}
-		if response.SessionId == nil || strings.TrimSpace(*response.SessionId) == "" {
-			t.Fatalf("shared invalid-permission response = %#v, want failed session identity", response)
-		}
-		session := readJavaScriptSharedDurableSession(t, fixture.baseURL, *response.SessionId)
-		if session.FailureDetail == nil {
-			t.Fatalf("shared invalid-permission durable session = %#v, want failure detail", session)
-		}
-		diagnostic := strings.ToLower(strings.Join([]string{err.Error(), inputs.Stdout(), inputs.Stderr(), session.FailureDetail.Message}, "\n"))
-		if !strings.Contains(diagnostic, "permissions") {
-			t.Fatalf("shared invalid-permission diagnostic = %q, want permissions detail", diagnostic)
-		}
-		if strings.Contains(diagnostic, strings.ToLower(sharedJavaScriptSuccessOutput)) {
-			t.Fatalf("shared invalid-permission diagnostic cross-observed success output: %q", diagnostic)
-		}
-		if got := fixture.router.callCount(); got != beforeCalls {
-			t.Fatalf("provider command calls after invalid permission = %d, want unchanged %d", got, beforeCalls)
-		}
-		after := fixture.persistentSessionIDs(t)
-		if duplicate := duplicateJavaScriptSessionID(after); duplicate != "" {
-			t.Fatalf("persisted session ID %q was reused across shared cells: %v", duplicate, after)
-		}
-		if !containsJavaScriptSessionID(after, *response.SessionId) {
-			t.Fatalf("persisted session IDs after=%v omit failed session %q", after, *response.SessionId)
-		}
-		newSessions := differenceJavaScriptSessionIDs(beforeSessions, after)
-		if len(newSessions) != 1 || newSessions[0] != *response.SessionId {
-			t.Fatalf("persisted session IDs before=%v after=%v new=%v, want exactly the failed cell's unique session", beforeSessions, after, newSessions)
-		}
-		t.Logf("ROUTE-001 failure: request_records=%d provider_calls=%d persisted_session_ids=%v diagnostic_contains_permissions=true", fixture.router.callCount(), fixture.router.callCount(), after)
+		runJavaScriptSharedFailure(t, fixture)
 	})
+
+	t.Run("reverse-order", func(t *testing.T) {
+		reverseFixture := newJavaScriptSharedProcessFixture(t)
+		runJavaScriptSharedFailure(t, reverseFixture)
+		runJavaScriptSharedSuccess(t, reverseFixture)
+	})
+}
+
+func runJavaScriptSharedSuccess(t testing.TB, fixture *javascriptSharedProcessFixture) {
+	t.Helper()
+	runner := support.NewRecordingCommandRunner(sharedJavaScriptSuccessOutput)
+	if err := fixture.router.register(sharedJavaScriptSuccessPrompt, runner); err != nil {
+		t.Fatalf("register success route: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.router.unregister(sharedJavaScriptSuccessPrompt); err != nil {
+			t.Errorf("unregister success route: %v", err)
+		}
+	})
+
+	before := fixture.persistentSessionIDs(t)
+	beforeRecords := fixture.router.callCount()
+	inputs, err := fixture.executeRemote(t, fixture.successFactoryName, sharedJavaScriptSuccessPrompt)
+	if err != nil {
+		t.Fatalf("shared remote success Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	assertSharedRemoteCommandPlacement(t, inputs.Input.Args, fixture.baseURL)
+	if !strings.Contains(inputs.Stdout(), sharedJavaScriptSuccessOutput) {
+		t.Fatalf("shared remote success output = %q, want %q", inputs.Stdout(), sharedJavaScriptSuccessOutput)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("owning Codex runner calls = %d, want one", runner.CallCount())
+	}
+	requests := fixture.router.requestRecords()
+	if len(requests) != beforeRecords+1 {
+		t.Fatalf("shared provider requests = %d, want %d; requests=%#v", len(requests), beforeRecords+1, requests)
+	}
+	request := requests[len(requests)-1]
+	if request.Command != "codex" || !reflect.DeepEqual(request.Args, []string{"exec", "--json", "-"}) {
+		t.Fatalf("shared provider command = %q %#v, want codex %#v", request.Command, request.Args, []string{"exec", "--json", "-"})
+	}
+	if !bytes.Contains(request.Stdin, []byte(sharedJavaScriptSuccessPrompt)) {
+		t.Fatalf("shared provider stdin = %q, want owning request selector %q", request.Stdin, sharedJavaScriptSuccessPrompt)
+	}
+	if strings.TrimSpace(request.WorkDir) == "" {
+		t.Fatal("shared provider request has empty working directory")
+	}
+
+	after := fixture.persistentSessionIDs(t)
+	newSessions := differenceJavaScriptSessionIDs(before, after)
+	if len(newSessions) != 1 || strings.TrimSpace(newSessions[0]) == "" {
+		t.Fatalf("persisted session IDs before=%v after=%v new=%v, want one unique host-owned session", before, after, newSessions)
+	}
+	t.Logf("ROUTE-001 success: root_process_builds=1 api_server_starts=%d request_records=%d session_id=%s command=%s args=%v", fixture.apiStarter.starts.Load(), len(requests), newSessions[0], request.Command, request.Args)
+}
+
+func runJavaScriptSharedFailure(t testing.TB, fixture *javascriptSharedProcessFixture) {
+	t.Helper()
+	beforeCalls := fixture.router.callCount()
+	beforeSessions := fixture.persistentSessionIDs(t)
+	inputs, err := fixture.executeRemote(t, fixture.failureFactoryName, "shared invalid permissions")
+	if err == nil {
+		t.Fatalf("shared remote invalid-permission Process.Execute() error = nil\nstdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
+	}
+	assertSharedRemoteCommandPlacement(t, inputs.Input.Args, fixture.baseURL)
+	var response factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
+		t.Fatalf("decode shared invalid-permission invocation response: %v; stdout=%q", decodeErr, inputs.Stdout())
+	}
+	if response.SessionId == nil || strings.TrimSpace(*response.SessionId) == "" {
+		t.Fatalf("shared invalid-permission response = %#v, want failed session identity", response)
+	}
+	session := readJavaScriptSharedDurableSession(t, fixture.baseURL, *response.SessionId)
+	if session.FailureDetail == nil {
+		t.Fatalf("shared invalid-permission durable session = %#v, want failure detail", session)
+	}
+	diagnostic := strings.ToLower(strings.Join([]string{err.Error(), inputs.Stdout(), inputs.Stderr(), session.FailureDetail.Message}, "\n"))
+	if !strings.Contains(diagnostic, "permissions") {
+		t.Fatalf("shared invalid-permission diagnostic = %q, want permissions detail", diagnostic)
+	}
+	if strings.Contains(diagnostic, strings.ToLower(sharedJavaScriptSuccessOutput)) {
+		t.Fatalf("shared invalid-permission diagnostic cross-observed success output: %q", diagnostic)
+	}
+	if got := fixture.router.callCount(); got != beforeCalls {
+		t.Fatalf("provider command calls after invalid permission = %d, want unchanged %d", got, beforeCalls)
+	}
+	after := fixture.persistentSessionIDs(t)
+	if duplicate := duplicateJavaScriptSessionID(after); duplicate != "" {
+		t.Fatalf("persisted session ID %q was reused across shared cells: %v", duplicate, after)
+	}
+	if !containsJavaScriptSessionID(after, *response.SessionId) {
+		t.Fatalf("persisted session IDs after=%v omit failed session %q", after, *response.SessionId)
+	}
+	newSessions := differenceJavaScriptSessionIDs(beforeSessions, after)
+	if len(newSessions) != 1 || newSessions[0] != *response.SessionId {
+		t.Fatalf("persisted session IDs before=%v after=%v new=%v, want exactly the failed cell's unique session", beforeSessions, after, newSessions)
+	}
+	t.Logf("ROUTE-001 failure: request_records=%d provider_calls=%d persisted_session_ids=%v diagnostic_contains_permissions=true", fixture.router.callCount(), fixture.router.callCount(), after)
 }
 
 type javascriptSharedProcessFixture struct {
