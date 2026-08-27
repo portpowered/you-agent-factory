@@ -28,12 +28,10 @@ const (
 	routingSharedFixtureReadyTimeout = 15 * time.Second
 	routingProcessStopTimeout        = 10 * time.Second
 	// Shared runtime requests contend on the same service-mode process. Four
-	// concurrent scenarios preserve the package's throughput while keeping
-	// uncached elapsed-time samples stable on the supported local environment.
+	// fixed workers preserve package throughput while making scenario scheduling
+	// deterministic for uncached elapsed-time samples.
 	routingScenarioConcurrency = 4
 )
-
-var routingScenarioSlots = make(chan struct{}, routingScenarioConcurrency)
 
 // workRoutingPackageFixture owns the one root-built process and service-mode
 // API host shared by this package. Scenario Factory directories and command
@@ -107,13 +105,6 @@ func (command *workRoutingProcessCommand) stop() error {
 	case <-time.After(routingProcessStopTimeout):
 		return fmt.Errorf("timed out waiting for shared Work routing process command shutdown")
 	}
-}
-
-func withWorkRoutingScenarioSlot(t *testing.T, run func()) {
-	t.Helper()
-	routingScenarioSlots <- struct{}{}
-	defer func() { <-routingScenarioSlots }()
-	run()
 }
 
 func ensureWorkRoutingPackageFixture(t *testing.T) *workRoutingPackageFixture {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,11 @@ import (
 
 const logicalMoveRouterWorkstation = "router"
 
+type workRoutingScenarioCase struct {
+	name string
+	run  func(*testing.T)
+}
+
 // TestSharedProcessWorkRouting establishes the logical-move executable spine.
 // Independent top-level groups run concurrently after fixture construction;
 // each child owns one explicit Factory Session while the package fixture keeps
@@ -23,72 +29,76 @@ const logicalMoveRouterWorkstation = "router"
 func TestSharedProcessWorkRouting(t *testing.T) {
 	fixture := ensureWorkRoutingPackageFixture(t)
 
-	t.Run("LogicalMove/CompletesWithoutWorkerDispatch", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runLogicalMoveCompletesWithoutWorkerDispatch(t, fixture)
-		})
+	runWorkRoutingScenarioCases(t, []workRoutingScenarioCase{
+		{
+			name: "LogicalMove/CompletesWithoutWorkerDispatch",
+			run:  func(t *testing.T) { runLogicalMoveCompletesWithoutWorkerDispatch(t, fixture) },
+		},
+		{
+			name: "LogicalMove/PreservesWorkPayloadAndLineage",
+			run:  func(t *testing.T) { runLogicalMovePreservesWorkPayloadAndLineage(t, fixture) },
+		},
+		{
+			name: "LogicalMove/MultipleOutputsCreatesEveryExpectedWork",
+			run:  func(t *testing.T) { runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture) },
+		},
+		{
+			name: "ClassifierSuccess/RoutesEveryKnownDecision",
+			run:  func(t *testing.T) { runClassifierRoutesEveryKnownDecision(t, fixture) },
+		},
+		{
+			name: "ClassifierFanout/PreservesPayload",
+			run:  func(t *testing.T) { runClassifierMultiOutputPreservesPayload(t, fixture) },
+		},
+		{
+			name: "RoutingGuard/SelectorFailureClosesSession",
+			run:  func(t *testing.T) { runClassifierRoutingSelectorGuard(t, fixture) },
+		},
+		{
+			name: "ClassifierFailure/UnknownAndMalformedDecision",
+			run:  func(t *testing.T) { runClassifierUnknownAndMalformedDecisionFailures(t, fixture) },
+		},
+		{
+			name: "ClassifierFailure/ReworkFailureTerminatesWithoutCompletion",
+			run:  func(t *testing.T) { runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture) },
+		},
+		{
+			name: "ClassifierRejection/RoutesToFailedTerminal",
+			run:  func(t *testing.T) { runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture) },
+		},
+		{
+			name: "ClassifierRejection/RecordsDispatchFeedback",
+			run:  func(t *testing.T) { runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture) },
+		},
+		{
+			name: "ClassifierRejection/ReleasesResourcesForSubsequentWork",
+			run:  func(t *testing.T) { runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture) },
+		},
 	})
-	t.Run("LogicalMove/PreservesWorkPayloadAndLineage", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runLogicalMovePreservesWorkPayloadAndLineage(t, fixture)
-		})
-	})
-	t.Run("LogicalMove/MultipleOutputsCreatesEveryExpectedWork", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture)
-		})
-	})
-	t.Run("ClassifierSuccess/RoutesEveryKnownDecision", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierRoutesEveryKnownDecision(t, fixture)
-		})
-	})
-	t.Run("ClassifierFanout/PreservesPayload", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierMultiOutputPreservesPayload(t, fixture)
-		})
-	})
-	t.Run("RoutingGuard/SelectorFailureClosesSession", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierRoutingSelectorGuard(t, fixture)
-		})
-	})
-	t.Run("ClassifierFailure/UnknownAndMalformedDecision", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierUnknownAndMalformedDecisionFailures(t, fixture)
-		})
-	})
-	t.Run("ClassifierFailure/ReworkFailureTerminatesWithoutCompletion", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture)
-		})
-	})
-	t.Run("ClassifierRejection/RoutesToFailedTerminal", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture)
-		})
-	})
-	t.Run("ClassifierRejection/RecordsDispatchFeedback", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture)
-		})
-	})
-	t.Run("ClassifierRejection/ReleasesResourcesForSubsequentWork", func(t *testing.T) {
-		t.Parallel()
-		withWorkRoutingScenarioSlot(t, func() {
-			runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture)
-		})
-	})
+}
+
+func runWorkRoutingScenarioCases(t *testing.T, cases []workRoutingScenarioCase) {
+	t.Helper()
+	jobs := make(chan workRoutingScenarioCase)
+	var workers sync.WaitGroup
+	workerCount := routingScenarioConcurrency
+	if len(cases) < workerCount {
+		workerCount = len(cases)
+	}
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for scenario := range jobs {
+				t.Run(scenario.name, scenario.run)
+			}
+		}()
+	}
+	for _, scenario := range cases {
+		jobs <- scenario
+	}
+	close(jobs)
+	workers.Wait()
 }
 
 // runLogicalMoveCompletesWithoutWorkerDispatch proves that Work submitted into
