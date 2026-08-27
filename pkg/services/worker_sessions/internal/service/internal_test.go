@@ -3080,6 +3080,13 @@ func TestInvokeObservationProjectionUnavailableOutcomes(t *testing.T) {
 	if err != nil || !gotIdentity.ProviderSessionAvailable || gotIdentity.ProviderSession.ID != ref.ID {
 		t.Fatalf("GetObservationByWorkerSessionID(provider reference without projector) = %#v, %v", gotIdentity, err)
 	}
+	listResult, err := noProvider.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
+	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) || len(listResult.Observations) != 1 || listResult.Observations[0].WorkerSessionID != "worker-1" {
+		t.Fatalf("ListWorkerSessionObservations(provider reference without projector) = %#v, %v, want preserved base observation with optional projection error", listResult, err)
+	}
+	if listResult.Observations[0].State != workersessions.StateRunning || len(listResult.Observations[0].WorkIDs) != 1 || listResult.Observations[0].WorkIDs[0] != "work-1" {
+		t.Fatalf("ListWorkerSessionObservations preserved observation = %#v, want lifecycle and Work facts", listResult.Observations[0])
+	}
 	failed := newObservationRegistry(nil, nil)
 	failed.sessions["failed-worker"] = workersessions.Session{
 		ID:    "failed-worker",
