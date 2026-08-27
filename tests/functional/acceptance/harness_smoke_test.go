@@ -39,6 +39,27 @@ func executeSessionCommand(
 	return inputs, process.Execute(inputs.Input)
 }
 
+func requireSessionCommandSuccess(
+	t testing.TB,
+	process support.Process,
+	session *builtcliacceptance.Session,
+	scenario string,
+	args ...string,
+) *support.CapturedInputs {
+	t.Helper()
+	inputs, err := executeSessionCommand(t, process, session, args...)
+	if err != nil {
+		t.Fatalf(
+			"%s: Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s",
+			scenario,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	return inputs
+}
+
 func initializeConfig(
 	t testing.TB,
 	ctx context.Context,
@@ -208,46 +229,48 @@ func TestRootProcess_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
 func TestRootProcess_ConfigAndFactoryAuthoringUseAcceptedInputs(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	process := support.BuildProcess(t, harness.Edges)
+	support.CleanupProcess(t, process)
 
-	assertRootProcessInitContract(t, ctx, session)
+	assertRootProcessInitContract(t, process, session)
 	sourcePath := testutil.MustRepoPath(
 		t,
 		"tests/release/testdata/cli_smoke_factory/factory.json",
 	)
-	createdPath := assertRootProcessFactoryAuthoring(t, ctx, session, sourcePath)
-	assertRootProcessFactoryConfigTransforms(t, ctx, session, sourcePath, createdPath)
+	createdPath := assertRootProcessFactoryAuthoring(t, process, session, sourcePath)
+	assertRootProcessFactoryConfigTransforms(t, process, session, sourcePath, createdPath)
 }
 
 func assertRootProcessInitContract(
 	t *testing.T,
-	ctx context.Context,
+	process support.Process,
 	session *builtcliacceptance.Session,
 ) {
 	t.Helper()
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
-	removed, removedErr := session.Run(ctx, "init", "--dir", "legacy-factory")
+	removed, removedErr := executeSessionCommand(t, process, session, "init", "--dir", "legacy-factory")
 	if removedErr == nil {
 		t.Fatalf(
 			"init without packaged selection = (%v, stdout=%q, stderr=%q), want failure",
 			removedErr,
-			removed.Stdout,
-			removed.Stderr,
+			removed.Stdout(),
+			removed.Stderr(),
 		)
 	}
-	support.RequireSafeCLIDiagnostic(t, removed.Stderr)
+	support.RequireSafeCLIDiagnostic(t, removed.Stderr())
 	if _, err := os.Stat(configPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("removed init input config stat = %v, want not exist", err)
 	}
 
-	initResult, initErr := session.Run(
-		ctx,
+	requireSessionCommandSuccess(
+		t,
+		process,
+		session,
+		"non-interactive-init",
 		"init",
 		"--provider", "codex",
 		"--model", "gpt-5",
 	)
-	session.RequireSuccess(t, "non-interactive-init", initResult, initErr)
 	var configured struct {
 		Defaults struct {
 			WorkerModelProvider string `json:"workerModelProvider"`
@@ -269,65 +292,73 @@ func assertRootProcessInitContract(
 
 func assertRootProcessFactoryAuthoring(
 	t *testing.T,
-	ctx context.Context,
+	process support.Process,
 	session *builtcliacceptance.Session,
 	sourcePath string,
 ) string {
 	t.Helper()
 	factoryRoot := filepath.Join(session.WorkDir, "named-factories")
-	createResult, createErr := session.Run(
-		ctx,
+	createResult := requireSessionCommandSuccess(
+		t,
+		process,
+		session,
+		"factory-create",
 		"factory", "create", "acceptance",
 		"--from", sourcePath,
 		"--dir", factoryRoot,
 	)
-	session.RequireSuccess(t, "factory-create", createResult, createErr)
-	if !strings.Contains(createResult.Stdout, "Created factory acceptance") {
-		t.Fatalf("factory create stdout = %q", createResult.Stdout)
+	if !strings.Contains(createResult.Stdout(), "Created factory acceptance") {
+		t.Fatalf("factory create stdout = %q", createResult.Stdout())
 	}
 	createdPath := filepath.Join(factoryRoot, "acceptance", "factory.json")
 	if _, err := os.Stat(createdPath); err != nil {
 		t.Fatalf("created Factory config missing: %v", err)
 	}
 
-	updateResult, updateErr := session.Run(
-		ctx,
+	updateResult := requireSessionCommandSuccess(
+		t,
+		process,
+		session,
+		"factory-update",
 		"factory", "update", "acceptance",
 		"--from", sourcePath,
 		"--dir", factoryRoot,
 	)
-	session.RequireSuccess(t, "factory-update", updateResult, updateErr)
-	if !strings.Contains(updateResult.Stdout, "Updated factory acceptance") {
-		t.Fatalf("factory update stdout = %q", updateResult.Stdout)
+	if !strings.Contains(updateResult.Stdout(), "Updated factory acceptance") {
+		t.Fatalf("factory update stdout = %q", updateResult.Stdout())
 	}
 	return createdPath
 }
 
 func assertRootProcessFactoryConfigTransforms(
 	t *testing.T,
-	ctx context.Context,
+	process support.Process,
 	session *builtcliacceptance.Session,
 	sourcePath string,
 	createdPath string,
 ) {
 	t.Helper()
-	validateResult, validateErr := session.Run(
-		ctx,
+	validateResult := requireSessionCommandSuccess(
+		t,
+		process,
+		session,
+		"factory-config-validate",
 		"factory", "config", "validate", createdPath,
 	)
-	session.RequireSuccess(t, "factory-config-validate", validateResult, validateErr)
-	if !strings.Contains(validateResult.Stdout, "Factory validation passed.") {
-		t.Fatalf("factory validation stdout = %q", validateResult.Stdout)
+	if !strings.Contains(validateResult.Stdout(), "Factory validation passed.") {
+		t.Fatalf("factory validation stdout = %q", validateResult.Stdout())
 	}
 
-	flattenResult, flattenErr := session.Run(
-		ctx,
+	flattenResult := requireSessionCommandSuccess(
+		t,
+		process,
+		session,
+		"factory-config-flatten",
 		"factory", "config", "flatten", filepath.Dir(createdPath),
 	)
-	session.RequireSuccess(t, "factory-config-flatten", flattenResult, flattenErr)
 	var flattened map[string]any
-	if err := json.Unmarshal([]byte(flattenResult.Stdout), &flattened); err != nil {
-		t.Fatalf("flattened Factory output is not JSON: %v\n%s", err, flattenResult.Stdout)
+	if err := json.Unmarshal([]byte(flattenResult.Stdout()), &flattened); err != nil {
+		t.Fatalf("flattened Factory output is not JSON: %v\n%s", err, flattenResult.Stdout())
 	}
 
 	expandDir := filepath.Join(session.WorkDir, "expand-case")
@@ -342,13 +373,15 @@ func assertRootProcessFactoryConfigTransforms(
 	if err := os.WriteFile(expandSource, sourceData, 0o600); err != nil {
 		t.Fatalf("write expand source: %v", err)
 	}
-	expandResult, expandErr := session.Run(
-		ctx,
+	expandResult := requireSessionCommandSuccess(
+		t,
+		process,
+		session,
+		"factory-config-expand",
 		"factory", "config", "expand", expandSource,
 	)
-	session.RequireSuccess(t, "factory-config-expand", expandResult, expandErr)
-	if !strings.Contains(expandResult.Stdout, "Expanded factory config into "+expandDir) {
-		t.Fatalf("factory expand stdout = %q, want target %q", expandResult.Stdout, expandDir)
+	if !strings.Contains(expandResult.Stdout(), "Expanded factory config into "+expandDir) {
+		t.Fatalf("factory expand stdout = %q, want target %q", expandResult.Stdout(), expandDir)
 	}
 	if _, err := os.Stat(filepath.Join(expandDir, "workers", "worker-a", "AGENTS.md")); err != nil {
 		t.Fatalf("expanded worker instructions missing: %v", err)
