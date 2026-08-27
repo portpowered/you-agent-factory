@@ -588,6 +588,83 @@ func provideReplacement() directoryreplace.Local {
 	}
 }
 
+func TestRunEnforcesDirectoryReplacementSelectionBoundary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		filePath    string
+		packageName string
+		selection   string
+		wantError   bool
+		wantSymbol  string
+	}{
+		{
+			name:        "constructor in production helper is blocked",
+			filePath:    "pkg/services/factory_definitions/internal/testcomposition/composition.go",
+			packageName: "testcomposition",
+			selection:   `directoryreplace.NewLocal("linux")`,
+			wantError:   true,
+			wantSymbol:  repositoryImportPrefix + "pkg/platform/directoryreplace.NewLocal",
+		},
+		{
+			name:        "composite literal in production helper is blocked",
+			filePath:    "pkg/services/factory_definitions/internal/testcomposition/composition.go",
+			packageName: "testcomposition",
+			selection:   "directoryreplace.Local{}",
+			wantError:   true,
+			wantSymbol:  repositoryImportPrefix + "pkg/platform/directoryreplace.Local",
+		},
+		{
+			name:        "composite literal in Wire is allowed",
+			filePath:    "pkg/wire/factory_definitions.go",
+			packageName: "wire",
+			selection:   "directoryreplace.Local{}",
+		},
+		{
+			name:        "outer test selection is allowed",
+			filePath:    "pkg/services/factory_definitions/internal/testcomposition/composition_test.go",
+			packageName: "testcomposition",
+			selection:   "directoryreplace.Local{}",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, "pkg/platform/directoryreplace/replace.go", `package directoryreplace
+
+type Local struct{}
+func NewLocal(string) Local { return Local{} }
+`)
+			writeGoSourceFile(t, repoRoot, test.filePath, directoryReplacementSelectionSource(test.packageName, test.selection))
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if !test.wantError {
+				if err != nil {
+					t.Fatalf("run() error = %v, want selection allowed; stderr=%q", err, stderr.String())
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("run() error = nil, want production directory-replacement selection rejected")
+			}
+			wantDiagnostic := "hidden production platform-adapter-selection default: " + test.wantSymbol + " in package (" + test.filePath
+			if !strings.Contains(stderr.String(), wantDiagnostic) {
+				t.Fatalf("run() stderr = %q, want diagnostic %q", stderr.String(), wantDiagnostic)
+			}
+		})
+	}
+}
+
+func directoryReplacementSelectionSource(packageName, selection string) string {
+	return "package " + packageName + "\n\n" +
+		"import directoryreplace \"" + repositoryImportPrefix + "pkg/platform/directoryreplace\"\n\n" +
+		"var replacement = " + selection + "\n"
+}
+
 func TestPlatformAdapterSelectionIsRestrictedToWireAndOuterTests(t *testing.T) {
 	t.Parallel()
 
