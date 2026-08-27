@@ -50,6 +50,13 @@ func TestSharedProcessWorkersMock(t *testing.T) {
 		{name: "MockWorkerFailure", run: testMockWorkerFailureReturnsStablePublicFailure},
 		{name: "RootSelection", run: testMockWorkerSelectedThroughCustomerProcess},
 		{name: "ServiceConfigAlignment", run: testServiceConfigOverrideAlignmentCustomerProcess},
+		{name: "ExpectedArtifacts", run: testExpectedArtifactsEnforceThroughSharedProcess},
+		{name: "MockUsage", run: testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess},
+		{name: "JavaScriptLiveCapacity", run: testJavaScriptLiveResourceCapacityIncreaseWakesWaitingChildren},
+		{name: "LiveCapacityIncrease", run: testLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch},
+		{name: "LiveCapacitySafeReduction", run: testLiveResourceCapacityReductionPreservesActiveWork},
+		{name: "LiveCapacityUnsafeReduction", run: testLiveResourceCapacityRejectsReductionBelowActiveUse},
+		{name: "LiveCapacityRecording", run: testLiveResourceCapacityRecordingReplayAndCursor},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -105,6 +112,11 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 				{"name": "done", "type": "TERMINAL"},
 			},
 		}},
+		"resources": []map[string]any{{
+			"id":       liveCapacityResourceID,
+			"name":     liveCapacityResourceName,
+			"capacity": 1,
+		}},
 		"workers": []map[string]string{{"name": sharedHostWorker}},
 		"workstations": []map[string]any{{
 			"name":      sharedHostWorkstation,
@@ -126,6 +138,7 @@ func newSharedWorkersMockFixture(t *testing.T) *sharedWorkersMockFixture {
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                hostDir,
 		WaitForServiceModeRuntime: true,
+		Env:                       sharedWorkersMockEnvironment(t, writeSharedWorkersMockOperatorHome(t)),
 		Args: []string{
 			"--with-mock-workers", mockWorkersPath,
 			"--runtime-log-dir", runtimeLogDir,
@@ -182,6 +195,59 @@ func (session *sharedWorkersMockSession) terminalObservations(
 func (session *sharedWorkersMockSession) workURL() string {
 	return strings.TrimSuffix(session.fixture.server.URL(), "/") +
 		"/factory-sessions/" + url.PathEscape(session.id) + "/work"
+}
+
+func (session *sharedWorkersMockSession) current(t testing.TB) factoryapi.FactorySession {
+	t.Helper()
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		strings.TrimSuffix(session.fixture.server.URL(), "/")+
+			"/factory-sessions/"+url.PathEscape(session.id),
+	)
+	current, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode Factory Session %q: %v", session.id, err)
+	}
+	return current
+}
+
+func (session *sharedWorkersMockSession) events(t testing.TB) []factoryapi.FactoryEvent {
+	t.Helper()
+	return support.GetFactoryEventsForSessionAt(t, session.fixture.server.URL(), session.id)
+}
+
+func (session *sharedWorkersMockSession) eventsAfter(
+	t testing.TB,
+	cursor support.FactoryEventReadCursor,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return support.GetFactoryEventsAfterForSessionAt(t, session.fixture.server.URL(), session.id, cursor)
+}
+
+func (fixture *sharedWorkersMockFixture) trackSession(
+	t testing.TB,
+	sessionID string,
+) *sharedWorkersMockSession {
+	t.Helper()
+	if strings.TrimSpace(sessionID) == "" {
+		t.Fatal("Factory Session ID is empty")
+	}
+	session := &sharedWorkersMockSession{fixture: fixture, id: sessionID}
+	t.Cleanup(func() { session.close(t) })
+	return session
+}
+
+func (fixture *sharedWorkersMockFixture) executeCLI(
+	t testing.TB,
+	factoryDir string,
+	args ...string,
+) (*support.CapturedInputs, error) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
+	inputs.Input.WorkingDirectory = factoryDir
+	inputs.Input.Env = sharedWorkersMockEnvironment(t, t.TempDir())
+	err := fixture.server.Execute(t, inputs.Input)
+	return inputs, err
 }
 
 func (session *sharedWorkersMockSession) close(t testing.TB) {
@@ -292,6 +358,37 @@ func writeSharedMockWorkersConfig(t *testing.T) string {
 				"workstationName": rootMockWorkstation,
 				"runType":         "accept",
 			},
+			{
+				"id":              "shared-artifact-registry",
+				"workerName":      artifactRegistryWorker,
+				"workstationName": artifactRegistryWorkstation,
+				"runType":         "script",
+				"scriptConfig": map[string]any{
+					"command": artifactRegistryScript,
+				},
+			},
+			{
+				"id":              "shared-mock-usage",
+				"workstationName": "execute-story",
+				"runType":         "accept",
+				"usage": map[string]any{
+					"provider":              "codex",
+					"model":                 "gpt-5-codex",
+					"inputTokens":           1000000,
+					"cachedInputTokens":     400000,
+					"outputTokens":          500000,
+					"reasoningOutputTokens": 100000,
+				},
+			},
+			{
+				"id":              "shared-live-capacity-script",
+				"workerName":      liveCapacityWorker,
+				"workstationName": liveCapacityWorkstation,
+				"runType":         "script",
+				"scriptConfig": map[string]any{
+					"command": liveCapacityBarrierCommand,
+				},
+			},
 		},
 		"futureTopLevel": true,
 	}
@@ -304,6 +401,37 @@ func writeSharedMockWorkersConfig(t *testing.T) string {
 		t.Fatalf("write shared mock workers config: %v", err)
 	}
 	return path
+}
+
+func writeSharedWorkersMockOperatorHome(t *testing.T) string {
+	t.Helper()
+	homeDir := t.TempDir()
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("create shared workers mock operator config directory: %v", err)
+	}
+	config := []byte(`{
+  "defaults": {"workerModelProvider": "codex", "workerModel": "gpt-5-codex"},
+  "workerPresets": [{"id": "javascript-capacity-worker", "modelProvider": "codex", "model": "mock-capacity-model"}]
+}`)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
+		t.Fatalf("write shared workers mock operator config: %v", err)
+	}
+	return homeDir
+}
+
+func sharedWorkersMockEnvironment(t testing.TB, homeDir string) []string {
+	t.Helper()
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		name := strings.SplitN(entry, "=", 2)[0]
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	environment = append(environment, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	return environment
 }
 
 func requireSharedWorkersMockRuntimeLogRecord(

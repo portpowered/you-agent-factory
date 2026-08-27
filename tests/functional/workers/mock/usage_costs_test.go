@@ -2,16 +2,14 @@ package mock
 
 import (
 	"encoding/json"
-	"os"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -19,11 +17,13 @@ import (
 
 const mockUsageWorkID = "mock-usage-costs"
 
-// TestMockWorkerUsageIsVisibleAndPriceableThroughPublicCLI proves the
+// testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess proves the
 // documented mock-worker path produces one correlated, priceable usage row
 // without invoking a live provider or reading a recording fixture.
-func TestMockWorkerUsageIsVisibleAndPriceableThroughPublicCLI(t *testing.T) {
-	t.Parallel()
+func testMockWorkerUsageIsVisibleAndPriceableThroughSharedProcess(
+	t *testing.T,
+	fixture *sharedWorkersMockFixture,
+) {
 	factoryDir := testutil.CopyFixtureDir(t, support.AgentFactoryPath(t, "examples/simple-tasks"))
 	support.WriteAgentConfig(t, factoryDir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	support.ClearSeedInputs(t, factoryDir)
@@ -35,66 +35,41 @@ func TestMockWorkerUsageIsVisibleAndPriceableThroughPublicCLI(t *testing.T) {
 		Payload:    []byte(`{"title":"price mock usage"}`),
 	})
 
-	homeDir := t.TempDir()
-	environment := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:        factoryDir,
-		MockWorkersConfig: mockUsageWorkersConfig(),
-		Args:              []string{"--provider", "codex", "--model", "gpt-5-codex"},
-		Env:               environment,
-	})
-	defer server.Stop(t)
+	fixture.useCommandRunners(nil, nil)
+	session := fixture.openSession(t, factoryDir)
+	listed, _ := session.terminalObservations(t, 15*time.Second)
+	defer session.closeAndAssertGone(t)
+	workItem := singleMockUsageWork(t, listed)
+	workerSessionID, observation := usageWorkerSession(t, fixture.server.URL(), session.id, workItem)
 
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
-	workItem := singleMockUsageWork(t, server.URL())
-	workerSessionID := usageWorkerSessionID(t, server.URL(), workItem)
+	listOutput := executeMockUsageCLI(t, fixture, factoryDir,
+		"--server", fixture.server.URL(), "worker-sessions", "list", "--session", session.id,
+		"--work-id", *workItem.WorkId)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	showOutput := executeMockUsageCLI(t, process, environment, factoryDir,
-		"--server", server.URL(), "worker-sessions", "show", "--worker-session-id", workerSessionID)
-
-	costOutput := executeMockUsageCLI(t, process, environment, factoryDir,
-		"--server", server.URL(), "metrics", "costs")
-	assertMockUsageShowOutput(t, showOutput)
+	costOutput := executeMockUsageCLI(t, fixture, factoryDir,
+		"--server", fixture.server.URL(), "metrics", "costs", "--session", session.id)
+	assertMockUsageListOutput(t, listOutput, workerSessionID)
+	assertMockUsageObservation(t, observation, workerSessionID, session.id, workItem)
 	assertMockUsageCostOutput(t, costOutput)
 
-	costJSON := executeMockUsageCLI(t, process, environment, factoryDir,
-		"--json", "--server", server.URL(), "metrics", "costs")
+	costJSON := executeMockUsageCLI(t, fixture, factoryDir,
+		"--json", "--server", fixture.server.URL(), "metrics", "costs", "--session", session.id)
 	assertMockUsageCostReport(t, costJSON, workerSessionID, workItem)
 }
 
-func mockUsageWorkersConfig() *workers.MockWorkersConfig {
-	return &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkstationName: "execute-story",
-			RunType:         workers.MockWorkerRunTypeAccept,
-			Usage: &workers.MockWorkerUsageConfig{
-				Provider:              "codex",
-				Model:                 "gpt-5-codex",
-				InputTokens:           mockUsageInt64(1_000_000),
-				CachedInputTokens:     mockUsageInt64(400_000),
-				OutputTokens:          mockUsageInt64(500_000),
-				ReasoningOutputTokens: mockUsageInt64(100_000),
-			},
-		}},
-	}
-}
-
-func mockUsageInt64(value int64) *int64 {
-	return &value
-}
-
-func singleMockUsageWork(t testing.TB, baseURL string) factoryapi.Work {
+func singleMockUsageWork(t testing.TB, listed factoryapi.ListWorkResponse) factoryapi.Work {
 	t.Helper()
-	listed := support.ListDefaultSessionWork(t, baseURL)
 	if len(listed.Results) != 1 {
 		t.Fatalf("mock usage Work count = %d, want one: %#v", len(listed.Results), listed.Results)
 	}
 	return listed.Results[0]
 }
 
-func usageWorkerSessionID(t testing.TB, baseURL string, workItem factoryapi.Work) string {
+func usageWorkerSession(
+	t testing.TB,
+	baseURL, sessionID string,
+	workItem factoryapi.Work,
+) (string, factoryapi.WorkerSessionObservation) {
 	t.Helper()
 	if workItem.WorkId == nil || strings.TrimSpace(*workItem.WorkId) == "" {
 		t.Fatalf("mock usage Work has no Work ID: %#v", workItem)
@@ -102,61 +77,88 @@ func usageWorkerSessionID(t testing.TB, baseURL string, workItem factoryapi.Work
 	sessions, err := support.WaitForObservation(
 		2*time.Second,
 		func() (factoryapi.ListWorkerSessionsResponse, error) {
-			return support.ListDefaultSessionWorkerSessions(t, baseURL, *workItem.WorkId), nil
+			endpoint := strings.TrimSuffix(baseURL, "/") +
+				"/factory-sessions/" + url.PathEscape(sessionID) +
+				"/worker-sessions?workId=" + url.QueryEscape(*workItem.WorkId)
+			return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint), nil
 		},
 		func(value factoryapi.ListWorkerSessionsResponse) bool {
-			return usageWorkerSessionIDFromResponse(value) != ""
+			return usageWorkerSessionObservationFromResponse(value).WorkerSessionId != ""
 		},
 	)
 	if err != nil {
 		t.Fatalf("waiting for usage-bearing Worker Session: %v", err)
 	}
-	return usageWorkerSessionIDFromResponse(sessions)
+	observation := usageWorkerSessionObservationFromResponse(sessions)
+	return observation.WorkerSessionId, observation
 }
 
-func usageWorkerSessionIDFromResponse(sessions factoryapi.ListWorkerSessionsResponse) string {
-	var usageSessionID string
+func usageWorkerSessionObservationFromResponse(sessions factoryapi.ListWorkerSessionsResponse) factoryapi.WorkerSessionObservation {
+	var usageObservation factoryapi.WorkerSessionObservation
 	usageCount := 0
 	for _, session := range sessions.Sessions {
 		if session.TokenUsage == nil {
 			continue
 		}
-		usageSessionID = session.WorkerSessionId
+		usageObservation = session
 		usageCount++
 	}
 	if usageCount == 1 {
-		return usageSessionID
+		return usageObservation
 	}
-	return ""
+	return factoryapi.WorkerSessionObservation{}
 }
 
 func executeMockUsageCLI(
 	t testing.TB,
-	process support.Process,
-	environment []string,
+	fixture *sharedWorkersMockFixture,
 	workingDirectory string,
 	args ...string,
 ) string {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
-	inputs.Input.Env = append([]string(nil), environment...)
-	inputs.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(inputs.Input); err != nil {
+	inputs, err := fixture.executeCLI(t, workingDirectory, args...)
+	if err != nil {
 		t.Fatalf("execute public CLI %v: %v\nstdout=%s\nstderr=%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	return inputs.Stdout()
 }
 
-func assertMockUsageShowOutput(t testing.TB, output string) {
+func assertMockUsageListOutput(t testing.TB, output, workerSessionID string) {
 	t.Helper()
 	for _, expected := range []string{
-		"Provider:\tcodex",
-		"Model:\tgpt-5-codex",
-		"Token usage:\tinput=1000000 cached-input=400000 cache-write=- output=500000 reasoning=100000 total=1500000",
+		"WORKER SESSION ID",
+		workerSessionID,
 	} {
 		if !strings.Contains(output, expected) {
-			t.Fatalf("worker-sessions show output missing %q:\n%s", expected, output)
+			t.Fatalf("worker-sessions list output missing %q:\n%s", expected, output)
 		}
+	}
+}
+
+func assertMockUsageObservation(
+	t testing.TB,
+	observation factoryapi.WorkerSessionObservation,
+	workerSessionID, sessionID string,
+	workItem factoryapi.Work,
+) {
+	t.Helper()
+	if observation.WorkerSessionId != workerSessionID || observation.FactorySessionId == nil ||
+		*observation.FactorySessionId != sessionID || observation.WorkId == nil || workItem.WorkId == nil ||
+		*observation.WorkId != *workItem.WorkId || observation.Model == nil || *observation.Model != "gpt-5-codex" ||
+		observation.TokenUsage == nil {
+		t.Fatalf("Worker Session observation = %#v, want correlated session/work/model/usage", observation)
+	}
+	usage := observation.TokenUsage
+	assertMockUsageObservationToken(t, usage.InputTokens, 1_000_000, "input")
+	assertMockUsageObservationToken(t, usage.CachedInputTokens, 400_000, "cached input")
+	assertMockUsageObservationToken(t, usage.OutputTokens, 500_000, "output")
+	assertMockUsageObservationToken(t, usage.ReasoningOutputTokens, 100_000, "reasoning output")
+}
+
+func assertMockUsageObservationToken(t testing.TB, got *int, want int, name string) {
+	t.Helper()
+	if got == nil || *got != want {
+		t.Fatalf("Worker Session %s tokens = %v, want %d", name, got, want)
 	}
 }
 
