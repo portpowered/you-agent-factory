@@ -42,7 +42,7 @@ func TestCLIFactoryInitValidateAndShow(t *testing.T) {
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	processHarness := newRootProcessHarness(t)
+	processHarness := newLocalReusableProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -90,7 +90,8 @@ func TestCLIFactoryInitValidateAndShow(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	queryCmd := processHarness.CommandContext(ctx,
+	remoteProcessHarness := newRootProcessHarness(t)
+	queryCmd := remoteProcessHarness.CommandContext(ctx,
 		"--server", server.URL(),
 		"factory", "show",
 	)
@@ -127,7 +128,7 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 		t.Fatalf("write factory.json: %v", err)
 	}
 
-	processHarness := newRootProcessHarness(t)
+	processHarness := newLocalReusableProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -176,7 +177,7 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	processHarness := newRootProcessHarness(t)
+	processHarness := newLocalReusableProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -191,7 +192,8 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	preReplace := queryFactoryViaCLIJSON(t, ctx, processHarness, server.URL(), factoryDir)
+	remoteProcessHarness := newRootProcessHarness(t)
+	preReplace := queryFactoryViaCLIJSON(t, ctx, remoteProcessHarness, server.URL(), factoryDir)
 	if preReplace.Id == nil || *preReplace.Id != factoryReplaceCurrentName {
 		t.Fatalf("pre-replace factory id = %#v, want %q", preReplace.Id, factoryReplaceCurrentName)
 	}
@@ -200,7 +202,7 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 	}
 	preReplaceLogical := preReplace.Version.Logical.Int64()
 
-	replaceCmd := processHarness.CommandContext(ctx,
+	replaceCmd := remoteProcessHarness.CommandContext(ctx,
 		"--server", server.URL(),
 		"factory", "replace-current",
 	)
@@ -214,7 +216,7 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 		t.Fatalf("replace-current output missing success marker %q:\n%s", factoryReplaceSuccessMarker, replaceOutput)
 	}
 
-	postReplace := queryFactoryViaCLIJSON(t, ctx, processHarness, server.URL(), factoryDir)
+	postReplace := queryFactoryViaCLIJSON(t, ctx, remoteProcessHarness, server.URL(), factoryDir)
 	if postReplace.Id == nil || *postReplace.Id != factoryReplaceCurrentName {
 		t.Fatalf("post-replace factory id = %#v, want %q", postReplace.Id, factoryReplaceCurrentName)
 	}

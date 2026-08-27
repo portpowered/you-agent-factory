@@ -231,7 +231,7 @@ func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
 // the same dependency graph for a fixed batch input across repeated CLI invocations.
 func TestCLIWorkRenderProducesDeterministicGraph(t *testing.T) {
 	workingDir := t.TempDir()
-	processHarness := newRootProcessHarness(t)
+	processHarness := newLocalReusableProcessHarness(t)
 	batchPath := writeWorkWiringVisualizeBatchFile(t, workingDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
