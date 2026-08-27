@@ -8,6 +8,46 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Story 001 characterization map (reconciled against the recovered P022
+// inventory):
+//
+//   - TestPackagedReviewApprovalCompletes,
+//     TestPackagedReviewRejectionCarriesFeedback,
+//     TestPackagedReviewThreeCleanRejectionsDoNotTripFailureBreaker, and
+//     TestPackagedReviewRejectionHonorsMaterializedAndFlaggedProviderSettings
+//     -> CLI terminal response/primary result, controlled provider call count
+//     and prompt feedback, and provider/model selection. Eligible for
+//     packaged-review-public-outcomes; fidelity is local-real root composition
+//     and test-owned filesystem with a controlled ProviderCommandRunner. The
+//     settings test has three eligible configuration cells.
+//   - TestPackagedReviewMalformedDecisionEnvelopeUsesCanonicalFailurePath ->
+//     failed CLI response and reviewable-work:failed Work state for non-JSON
+//     and unsupported decision output. Retained as isolated-with-reason in
+//     packaged-review-envelope-validation because malformed provider output is
+//     the edge under test; fidelity is a controlled runner over local-real root
+//     composition.
+//   - TestPackagedReviewDecisionEnvelopeValidatesRecordedOutputWork -> failed
+//     CLI response for an invalid recorded_output_work state. Retained as
+//     isolated-with-reason in packaged-review-envelope-validation because
+//     envelope validation is the edge under test; fidelity is controlled
+//     ProviderCommandRunner output over local-real root composition.
+//   - TestPackagedReviewRetryExhaustionFails -> failed CLI response,
+//     reviewable-work:failed Work state, and no completed primary result.
+//     Retained as isolated-with-reason in packaged-review-command-failure
+//     because the command-runner failure is the injected failure witness.
+//
+// Current baseline identity/resource ownership: each invocation creates its
+// own root.BuildProcess, uses the implicit default Factory Session route, and
+// supplies a t.TempDir home and working directory. No current default row
+// opens or closes an explicit session, selector, or durable runtime identity,
+// and no row directly asserts Factory Event or replay history. The eligible
+// migration must allocate unique Work/request/selector/home/workspace/
+// Factory/runtime identities; retained rows keep their failure fidelity. The
+// testing package owns every temporary path, and story 004 owns the direct
+// process/session/runtime census. Existing assertions are characterization and
+// must remain intact. The functionallong TestCodeReviewLoop is mapped in its
+// own file and is excluded from this seven-row default inventory.
+
 // TestPackagedReviewApprovalCompletes proves packaged @you/review invocation
 // completes through the public CLI under edge-mocked Codex providers when the
 // independent reviewer accepts on the first pass, dispatches work then review,
@@ -164,6 +204,11 @@ func TestPackagedReviewRejectionHonorsMaterializedAndFlaggedProviderSettings(t *
 // returns a failed public terminal outcome with no completed success primary
 // result when the edge-mocked provider cannot satisfy the packaged approval gate,
 // for example because work dispatch fails before review can approve output.
+//
+// Retained-edge fidelity: the controlled command failure is the property under
+// test, so this remains an isolated root-built cell with no fallback to a
+// successful provider result. Its t.TempDir home and working directory own
+// cleanup.
 func TestPackagedReviewRetryExhaustionFails(t *testing.T) {
 	submitted := "customer request"
 	runner := packagedReviewFailingCommandRunner{}

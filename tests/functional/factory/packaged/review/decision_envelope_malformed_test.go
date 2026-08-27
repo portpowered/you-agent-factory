@@ -21,6 +21,11 @@ import (
 // classification is pinned at the seam by
 // TestExecuteKeepsCanonicalMalformedDecisionEnvelopeFailure in
 // pkg/services/workers/internal/services/runners/internal/services/agent/internal/service.
+//
+// Retained-edge fidelity: malformed and unsupported reviewer output is the
+// injected input edge, so these cells remain isolated and use the controlled
+// ProviderCommandRunner only to deliver the exact invalid bytes. Each cell's
+// t.TempDir home/working directory owns cleanup.
 func TestPackagedReviewMalformedDecisionEnvelopeUsesCanonicalFailurePath(t *testing.T) {
 	tests := []struct {
 		name     string

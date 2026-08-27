@@ -27,10 +27,61 @@ const (
 
 var packagedFixPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.json`)
 
+// Story 001 characterization map (reconciled against the recovered P012
+// inventory):
+//
+//   - TestPackagedFixUsesNamedWorktreeAndIndependentReview -> CLI terminal
+//     response, provider role/order/model prompts, real checkout existence and
+//     preservation of an unrelated Git worktree, durable plan. Retained as
+//     isolated-with-reason in packaged-fix-real-git-worktree; its fidelity is
+//     local-real Git/filesystem plus a controlled ProviderCommandRunner.
+//   - TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted,
+//     TestPackagedFixCarriesIndependentRejectionFeedback, and
+//     TestPackagedFixUsesConfiguredAndExplicitRoleModels -> CLI response and
+//     exact controlled provider requests (including defaults, feedback, role
+//     order, and model/provider selection). Eligible for
+//     packaged-fix-public-outcomes; fidelity is local-real root composition and
+//     test-owned filesystem with a controlled ProviderCommandRunner. The model
+//     test has two eligible configuration cells.
+//   - TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution
+//     -> public Execute error and zero provider calls. Retained as
+//     isolated-with-reason in packaged-fix-worktree-validation because path
+//     validation is the property under test; fidelity is local-real path
+//     validation with a controlled runner that must remain unused.
+//   - TestPackagedFixWorktreeCreationFailureIsStable -> failed CLI response,
+//     fix:failed Work state, and zero provider calls. Retained as
+//     isolated-with-reason in packaged-fix-real-filesystem-failure because a
+//     valid name is deliberately run from a non-repository; fidelity is
+//     local-real Git/filesystem failure plus a controlled runner.
+//   - TestPackagedFixWorkerFailureIsStable -> failed CLI response, fix:failed
+//     Work state, and planner-plus-failed-iterator request count. Retained as
+//     isolated-with-reason in packaged-fix-command-failure because the command
+//     runner error is the injected failure witness; fidelity is a controlled
+//     ProviderCommandRunner over local-real root composition.
+//   - TestPackagedFixReviewLoopExhaustionIsStable -> failed CLI response,
+//     fix:failed Work state, eight reviewer visits, and 18 total requests.
+//     Eligible for packaged-fix-public-outcomes because bounded rejection is a
+//     controlled workflow outcome, not a command/process failure.
+//
+// Current baseline identity/resource ownership: each invocation creates its
+// own root.BuildProcess, uses the implicit default Factory Session route, and
+// supplies a t.TempDir home plus a test-owned workspace. No current row opens
+// or closes an explicit session, selector, or durable runtime identity, and no
+// row directly asserts Factory Event or replay history. The eligible migration
+// must allocate unique Work/request/selector/worktree/workspace/plan/home/
+// Factory/runtime identities; retained rows keep their local-real edge. The
+// testing package owns every temporary path; story 004 owns the direct census
+// of process, session, worktree, and runtime cleanup. Existing assertions are
+// characterization and must remain intact.
+
 // TestPackagedFixUsesNamedWorktreeAndIndependentReview proves the public named
 // route prepares the requested checkout before any provider call, preserves
 // unrelated worktrees, repeats the Ralph iterator, and returns only after the
 // independent reviewer approves the completed plan.
+//
+// Retained-edge fidelity: this is an isolated local-real Git/worktree witness,
+// not a controlled worktree substitute. The t.TempDir-owned repository and
+// worktrees are its cleanup boundary.
 func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 	workspace := initPackagedFixGitRepository(t)
 	unrelated := createPackagedFixWorktree(t, workspace, "unrelated-work")
@@ -251,6 +302,10 @@ func TestPackagedFixUsesConfiguredAndExplicitRoleModels(t *testing.T) {
 // TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution
 // proves required and path-traversing names fail at the public boundary without
 // launching planner work.
+//
+// Retained-edge fidelity: path validation is the property under test, so this
+// scenario remains isolated with the controlled runner only observing that no
+// provider command is attempted. Its t.TempDir workspace owns cleanup.
 func TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution(t *testing.T) {
 	tests := []struct {
 		name string
@@ -279,6 +334,10 @@ func TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution(
 
 // TestPackagedFixWorktreeCreationFailureIsStable proves a valid name still
 // fails before provider execution when the caller directory is not a Git repo.
+//
+// Retained-edge fidelity: the non-repository Git/filesystem failure is a
+// local-real witness and must not be replaced by a mocked worktree result. The
+// t.TempDir workspace owns the failed-attempt cleanup.
 func TestPackagedFixWorktreeCreationFailureIsStable(t *testing.T) {
 	workspace := t.TempDir()
 	runner := &packagedFixCommandRunner{}
@@ -306,6 +365,10 @@ func TestPackagedFixWorktreeCreationFailureIsStable(t *testing.T) {
 
 // TestPackagedFixWorkerFailureIsStable proves a provider failure routes the
 // public invocation to the failed terminal state rather than approval.
+//
+// Retained-edge fidelity: the command-runner error is the failure property, so
+// this remains an isolated root-built cell with a controlled
+// ProviderCommandRunner and t.TempDir-owned filesystem.
 func TestPackagedFixWorkerFailureIsStable(t *testing.T) {
 	workspace := initPackagedFixGitRepository(t)
 	runner := &packagedFixCommandRunner{failRole: "iterator"}

@@ -15,6 +15,10 @@ import (
 // never authors (its reviewable-work states are init, in-review, approved, and
 // failed). Runtime must reject that recorded work instead of silently
 // completing the invocation as if the reviewer had recorded nothing.
+//
+// Retained-edge fidelity: invalid recorded_output_work is a malformed decision
+// envelope witness, not a normal shared outcome. Keep the exact controlled
+// ProviderCommandRunner bytes and the isolated t.TempDir cleanup boundary.
 func TestPackagedReviewDecisionEnvelopeValidatesRecordedOutputWork(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("candidate work")},
