@@ -134,6 +134,11 @@ func (runner *codexScenarioCommandRunner) Reset() {
 	defer runner.mu.Unlock()
 	runner.results = cloneCodexCommandResults(runner.initialResults)
 	runner.requests = nil
+	// Go -count reuses the package fixture and therefore reuses each runner.
+	// Re-arm the per-group release gate so a later repetition cannot begin
+	// provider execution before its public response stream is attached.
+	runner.release = make(chan struct{})
+	runner.once = sync.Once{}
 }
 
 func (runner *codexScenarioCommandRunner) Run(
