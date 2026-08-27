@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -305,16 +303,16 @@ func assertClassifierRoutingAmbiguousSelector(
 	}
 }
 
-// TestClassifierUnknownAndMalformedDecisionFailDistinctly proves unknown classifier
-// labels and malformed decision payloads each fail with distinct customer-visible
-// non-success outcomes at task:failed, without routing Work to successful terminal
-// completion or reporting classifier routing as accepted success.
-func TestClassifierUnknownAndMalformedDecisionFailDistinctly(t *testing.T) {
-	cases := []struct {
-		name              string
-		providerOutput    string
-		wantErrorContains string
-	}{
+// classifierRoutingFailureCase describes one invalid classifier result and the
+// public failure marker it must produce.
+type classifierRoutingFailureCase struct {
+	name              string
+	providerOutput    string
+	wantErrorContains string
+}
+
+func classifierRoutingFailureCases() []classifierRoutingFailureCase {
+	return []classifierRoutingFailureCase{
 		{
 			name:              "unknown_classifier_label",
 			providerOutput:    "MAYBE",
@@ -322,40 +320,52 @@ func TestClassifierUnknownAndMalformedDecisionFailDistinctly(t *testing.T) {
 		},
 		{
 			name:              "malformed_structured_decision_payload",
-			providerOutput:    `{"decision":"MAYBE","feedback":"unknown structured decision"}`,
+			providerOutput:    "{\"decision\":\"MAYBE\",\"feedback\":\"unknown structured decision\"}",
 			wantErrorContains: "classifier output invalid",
 		},
 		{
 			name:              "malformed_json_object_label",
-			providerOutput:    `{"label":"accepted"}`,
+			providerOutput:    "{\"label\":\"accepted\"}",
 			wantErrorContains: "classifier output invalid",
 		},
 	}
+}
 
+// runClassifierUnknownAndMalformedDecisionFailures proves the three invalid
+// classifier forms through unique explicit sessions on the shared process.
+func runClassifierUnknownAndMalformedDecisionFailures(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	cases := classifierRoutingFailureCases()
 	signatures := make(map[string]string, len(cases))
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "classifier_routing_dir"))
-			testutil.WriteSeedFile(t, dir, "task", []byte("classifier-failure-payload"))
-
-			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-				Stdout: support.CodexSuccessStdout(tc.providerOutput),
-			})
-			session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-				t,
-				dir,
-				serviceedges.Edges{ProviderCommandRunner: runner},
-				20*time.Second,
+		if !t.Run(tc.name, func(t *testing.T) {
+			workID := "classifier-failure-" + tc.name
+			payload := workID + "-payload"
+			runner := newWorkRoutingScenarioCommandRunner(
+				workID,
+				[]platformprocess.CommandResult{{Stdout: support.CodexSuccessStdout(tc.providerOutput)}},
+				nil,
 			)
+			scenario := fixture.newScenario(t, workID, "classifier_routing_dir", runner)
+			writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
+			scenario.open(t)
 
+			session, listed, events := scenario.observe(t, 20*time.Second)
 			assertClassifierRoutingFailedTerminal(t, session, listed)
+			assertClassifierRoutingFailedPublicWork(t, scenario, events, workID, payload)
 			dispatch := assertClassifierRoutingFailedDispatch(
 				t,
 				support.ObserveDispatchEvents(t, events),
 				tc.wantErrorContains,
 			)
 			signatures[tc.name] = classifierRoutingFailureSignature(dispatch)
-		})
+			assertClassifierRoutingCommandRequests(t, scenario, runner, 1)
+		}) {
+			continue
+		}
 	}
 
 	for _, left := range cases {
@@ -363,141 +373,190 @@ func TestClassifierUnknownAndMalformedDecisionFailDistinctly(t *testing.T) {
 			if left.name >= right.name {
 				continue
 			}
-			if signatures[left.name] == signatures[right.name] {
+			leftSignature, leftRan := signatures[left.name]
+			rightSignature, rightRan := signatures[right.name]
+			if !leftRan || !rightRan {
+				continue
+			}
+			if leftSignature == rightSignature {
 				t.Fatalf(
 					"failure signatures for %q and %q are identical (%q); want distinct customer-visible classifier failure markers",
 					left.name,
 					right.name,
-					signatures[left.name],
+					leftSignature,
 				)
 			}
 		}
 	}
 }
 
-// TestClassifierReworkFailureTerminatesWithoutCompletion proves that when a
-// classifier routes Work into rework and the rework workstation fails, Work
-// terminates at task:failed without reaching task:done.
-func TestClassifierReworkFailureTerminatesWithoutCompletion(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "classifier_routing_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("classifier-rework-failure-payload"))
-
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("needs_changes")},
-		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("rework failed")},
+// runClassifierReworkFailureTerminatesWithoutCompletion proves that a
+// needs_changes route followed by a failed rework command leaves Work failed.
+func runClassifierReworkFailureTerminatesWithoutCompletion(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const (
+		workID  = "classifier-rework-failure-work"
+		payload = "classifier-rework-failure-payload"
 	)
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
+	runner := newWorkRoutingScenarioCommandRunner(
+		"classifier-rework-failure",
+		[]platformprocess.CommandResult{
+			{Stdout: support.CodexSuccessStdout("needs_changes")},
+			{ExitCode: 1, Stderr: []byte("rework failed")},
+		},
+		nil,
 	)
+	scenario := fixture.newScenario(t, "classifier-rework-failure", "classifier_routing_dir", runner)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
+	scenario.open(t)
 
+	session, listed, events := scenario.observe(t, 20*time.Second)
 	assertClassifierRoutingFailedTerminal(t, session, listed)
+	assertClassifierRoutingFailedPublicWork(t, scenario, events, workID, payload)
+	dispatches := support.ObserveDispatchEvents(t, events)
 	assertClassifierRoutingWorkstationDispatches(
 		t,
-		support.ObserveDispatchEvents(t, events),
+		dispatches,
 		classifierRoutingWorkstation,
 		1,
 		[]string{"needs_changes"},
 	)
+	assertClassifierRoutingFailedWorkstationDispatch(t, dispatches, "rework")
+	assertClassifierRoutingCommandRequests(t, scenario, runner, 2)
 }
 
-// TestClassifierRejectionWithoutArcsRoutesToFailedTerminal proves that when a
-// worker returns a rejection outcome and the factory has no rejection routing
-// arcs, Work terminates at task:failed without reaching task:done.
-func TestClassifierRejectionWithoutArcsRoutesToFailedTerminal(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("work payload"))
-
-	provider := testutil.NewMockProvider(support.RejectedProviderResponse("not good enough"))
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
+// runClassifierRejectionWithoutArcsRoutesToFailedTerminal proves that a
+// rejected command result with no rejection arcs leaves Work failed.
+func runClassifierRejectionWithoutArcsRoutesToFailedTerminal(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const (
+		workID  = "classifier-rejection-terminal-work"
+		payload = "classifier-rejection-terminal-payload"
 	)
+	runner := newWorkRoutingScenarioCommandRunner(
+		"classifier-rejection-terminal",
+		[]platformprocess.CommandResult{{Stdout: support.CodexSuccessStdout("not good enough")}},
+		nil,
+	)
+	scenario := fixture.newScenario(t, "classifier-rejection-terminal", "rejection_no_arcs", runner)
+	configureCommandEdgeWorker(t, scenario.factoryDir, "worker")
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
+	scenario.open(t)
 
-	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 1 {
-		t.Fatalf("task:failed work count = %d, want 1; listed=%#v", got, listed)
-	}
-	for _, state := range []string{"init", "done"} {
-		location := support.WorkCustomerLocation("task", state)
-		if got := support.CountWorkAtCustomerState(listed, location); got != 0 {
-			t.Fatalf("%s work count = %d, want 0 after rejection without arcs; listed=%#v", location, got, listed)
-		}
-	}
+	session, listed, events := scenario.observe(t, 20*time.Second)
+	assertClassifierRoutingFailedTerminal(t, session, listed)
+	assertClassifierRoutingFailedPublicWork(t, scenario, events, workID, payload)
+	assertClassifierRoutingRejectedDispatch(
+		t,
+		support.ObserveDispatchEvents(t, events),
+		workID,
+		"not good enough",
+	)
+	assertClassifierRoutingCommandRequests(t, scenario, runner, 1)
 }
 
-// TestClassifierRejectionWithoutArcsRecordsDispatchFeedback proves rejection
-// feedback is recorded on the public dispatch response event when no rejection
-// routing arcs are configured.
-func TestClassifierRejectionWithoutArcsRecordsDispatchFeedback(t *testing.T) {
-	const wantFeedback = "missing tests"
+// runClassifierRejectionWithoutArcsRecordsDispatchFeedback proves that the
+// rejected provider output is retained as public dispatch feedback.
+func runClassifierRejectionWithoutArcsRecordsDispatchFeedback(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const (
+		workID       = "classifier-rejection-feedback-work"
+		payload      = "classifier-rejection-feedback-payload"
+		wantFeedback = "missing tests"
+	)
+	runner := newWorkRoutingScenarioCommandRunner(
+		"classifier-rejection-feedback",
+		[]platformprocess.CommandResult{{Stdout: support.CodexSuccessStdout(wantFeedback)}},
+		nil,
+	)
+	scenario := fixture.newScenario(t, "classifier-rejection-feedback", "rejection_no_arcs", runner)
+	configureCommandEdgeWorker(t, scenario.factoryDir, "worker")
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
+	scenario.open(t)
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("work"))
+	session, listed, events := scenario.observe(t, 20*time.Second)
+	assertClassifierRoutingFailedTerminal(t, session, listed)
+	assertClassifierRoutingFailedPublicWork(t, scenario, events, workID, payload)
+	assertClassifierRoutingRejectedDispatch(
+		t,
+		support.ObserveDispatchEvents(t, events),
+		workID,
+		wantFeedback,
+	)
+	assertClassifierRoutingCommandRequests(t, scenario, runner, 1)
+}
 
-	provider := testutil.NewMockProvider(support.RejectedProviderResponse(wantFeedback))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
+// runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork proves
+// that a rejected Work releases a capacity-one resource for the next Work.
+func runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const (
+		firstWorkID   = "classifier-rejection-resource-first-work"
+		secondWorkID  = "classifier-rejection-resource-second-work"
+		firstPayload  = "classifier-rejection-resource-first-payload"
+		secondPayload = "classifier-rejection-resource-second-payload"
+	)
+	runner := newWorkRoutingScenarioCommandRunner(
+		"classifier-rejection-resources",
+		[]platformprocess.CommandResult{
+			{Stdout: support.CodexSuccessStdout("not good enough")},
+			{Stdout: support.CodexSuccessStdout("accepted COMPLETE")},
 		},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
-
-	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 1 {
-		t.Fatalf("task:failed work count = %d, want 1; listed=%#v", got, listed)
-	}
-	for _, event := range server.GetFactoryEvents(t) {
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode dispatch response: %v", err)
-		}
-		if payload.Outcome != factoryapi.WorkOutcomeRejected ||
-			payload.Output == nil ||
-			*payload.Output != wantFeedback {
-			t.Fatalf("dispatch response = %#v, want recorded rejection feedback %q", payload, wantFeedback)
-		}
-		server.Stop(t)
-		return
-	}
-	t.Fatal("Factory Event history has no dispatch response")
-}
-
-// TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork proves
-// that after a rejection without routing arcs fails one Work item, constrained
-// resources are released so a subsequent Work item can complete.
-func TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs_resources"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("first item"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("second item"))
-
-	provider := testutil.NewMockProvider(
-		support.RejectedProviderResponse("not good enough"),
-		support.AcceptedProviderResponse(),
+		nil,
 	)
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		20*time.Second,
-	)
+	scenario := fixture.newScenario(t, "classifier-rejection-resources", "rejection_no_arcs_resources", runner)
+	configureCommandEdgeWorker(t, scenario.factoryDir, "worker")
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, firstWorkID, firstPayload)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, secondWorkID, secondPayload)
+	scenario.open(t)
 
+	session, listed, events := scenario.observe(t, 20*time.Second)
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 1 {
+		t.Fatalf(
+			"resource rejection session progress categories = %+v, want one terminal and one failed Work",
+			session.Runtime.Progress.Categories,
+		)
+	}
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 1 {
 		t.Fatalf("task:failed work count = %d, want 1; listed=%#v", got, listed)
 	}
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "done")); got != 1 {
-		t.Fatalf("task:done work count = %d, want 1; listed=%#v", got, listed)
+		t.Fatalf("task:done work count = %d, want 1 after resource release; listed=%#v", got, listed)
 	}
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
 		t.Fatalf("task:init work count = %d, want 0; listed=%#v", got, listed)
 	}
+	assertClassifierRoutingFailedPublicWork(t, scenario, events, firstWorkID, firstPayload)
+	assertClassifierRoutingPublicWork(t, scenario, listed, events, secondWorkID, secondPayload, "accepted COMPLETE")
+	dispatches := support.ObserveDispatchEvents(t, events)
+	assertClassifierRoutingRejectedDispatch(t, dispatches, firstWorkID, "not good enough")
+	assertClassifierRoutingAcceptedWorkDispatch(t, dispatches, secondWorkID)
+	assertClassifierRoutingCommandRequests(t, scenario, runner, 2)
+}
+
+func configureCommandEdgeWorker(t *testing.T, dir, workerName string) {
+	t.Helper()
+	support.WriteAgentConfig(t, dir, workerName,
+		"---\n"+
+			"type: MODEL_WORKER\n"+
+			"model: gpt-5-codex\n"+
+			"modelProvider: codex\n"+
+			"stopToken: COMPLETE\n"+
+			"---\n\n"+
+			"Process the task.\n",
+	)
 }
 
 func newClassifierRoutingCommandRunner(
@@ -719,6 +778,145 @@ func assertClassifierRoutingFailedTerminal(
 			t.Fatalf("%s work count = %d, want 0 after classifier failure; listed=%#v", location, got, listed)
 		}
 	}
+}
+
+func assertClassifierRoutingFailedPublicWork(
+	t *testing.T,
+	scenario *workRoutingScenario,
+	events []factoryapi.FactoryEvent,
+	workID, wantPayload string,
+) {
+	t.Helper()
+
+	admitted := workRoutingAdmissionWork(t, events, workID)
+	if got := workRoutingPublicWorkText(admitted); got != wantPayload {
+		t.Fatalf("failed WORK_REQUEST payload = %q, want %q", got, wantPayload)
+	}
+	publicWork := getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, workID)
+	if got := support.StringPointerValue(publicWork.WorkId); got != workID {
+		t.Fatalf("failed public Work ID = %q, want %q", got, workID)
+	}
+	if got := support.StringPointerValue(publicWork.RequestId); got != workID+"-request" {
+		t.Fatalf("failed public Work request ID = %q, want %q", got, workID+"-request")
+	}
+	if got := support.StringPointerValue(publicWork.TraceId); got != workID+"-trace" {
+		t.Fatalf("failed public Work trace ID = %q, want %q", got, workID+"-trace")
+	}
+	if got := workRoutingPublicWorkText(publicWork); got != wantPayload {
+		t.Fatalf("failed public Work payload = %q, want %q", got, wantPayload)
+	}
+}
+
+func assertClassifierRoutingFailedWorkstationDispatch(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workstation string,
+) support.DispatchEventObservation {
+	t.Helper()
+
+	failed := filterWorkstationDispatches(dispatches, workstation)
+	if len(failed) != 1 {
+		t.Fatalf(
+			"%s dispatch count = %d, want 1; dispatches=%#v",
+			workstation,
+			len(failed),
+			failed,
+		)
+	}
+	dispatch := failed[0]
+	if dispatch.Response == nil {
+		t.Fatalf("%s dispatch %q missing response payload", workstation, dispatch.DispatchID)
+	}
+	if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf(
+			"%s dispatch %q outcome = %s, want FAILED",
+			workstation,
+			dispatch.DispatchID,
+			dispatch.Response.Outcome,
+		)
+	}
+	return dispatch
+}
+
+func assertClassifierRoutingRejectedDispatch(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID, wantFeedback string,
+) support.DispatchEventObservation {
+	t.Helper()
+
+	processDispatches := filterWorkstationDispatches(dispatches, "process")
+	matching := make([]support.DispatchEventObservation, 0, len(processDispatches))
+	for _, dispatch := range processDispatches {
+		if workID == "" || support.DispatchObservationIncludesWork(dispatch, workID) {
+			matching = append(matching, dispatch)
+		}
+	}
+	if len(matching) != 1 {
+		t.Fatalf(
+			"rejected process dispatch count for Work %q = %d, want 1; dispatches=%#v",
+			workID,
+			len(matching),
+			processDispatches,
+		)
+	}
+	dispatch := matching[0]
+	if dispatch.Response == nil {
+		t.Fatalf("rejected process dispatch %q missing response payload", dispatch.DispatchID)
+	}
+	if dispatch.Response.Outcome != factoryapi.WorkOutcomeRejected {
+		t.Fatalf(
+			"rejected process dispatch %q outcome = %s, want REJECTED",
+			dispatch.DispatchID,
+			dispatch.Response.Outcome,
+		)
+	}
+	if dispatch.Response.Output == nil || *dispatch.Response.Output != wantFeedback {
+		t.Fatalf(
+			"rejected process dispatch %q output = %#v, want feedback %q",
+			dispatch.DispatchID,
+			dispatch.Response.Output,
+			wantFeedback,
+		)
+	}
+	return dispatch
+}
+
+func assertClassifierRoutingAcceptedWorkDispatch(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID string,
+) support.DispatchEventObservation {
+	t.Helper()
+
+	processDispatches := filterWorkstationDispatches(dispatches, "process")
+	matching := make([]support.DispatchEventObservation, 0, len(processDispatches))
+	for _, dispatch := range processDispatches {
+		if support.DispatchObservationIncludesWork(dispatch, workID) {
+			matching = append(matching, dispatch)
+		}
+	}
+	if len(matching) != 1 {
+		t.Fatalf(
+			"accepted process dispatch count for Work %q = %d, want 1; dispatches=%#v",
+			workID,
+			len(matching),
+			processDispatches,
+		)
+	}
+	dispatch := matching[0]
+	if dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+		var outcome factoryapi.WorkOutcome
+		if dispatch.Response != nil {
+			outcome = dispatch.Response.Outcome
+		}
+		t.Fatalf(
+			"accepted process dispatch %q outcome = %s, want ACCEPTED",
+			dispatch.DispatchID,
+			outcome,
+		)
+	}
+	return dispatch
 }
 
 func assertClassifierRoutingFailedDispatch(

@@ -40,6 +40,21 @@ func TestSharedProcessWorkRouting(t *testing.T) {
 	t.Run("RoutingGuard/SelectorFailureClosesSession", func(t *testing.T) {
 		runClassifierRoutingSelectorGuard(t, fixture)
 	})
+	t.Run("ClassifierFailure/UnknownAndMalformedDecision", func(t *testing.T) {
+		runClassifierUnknownAndMalformedDecisionFailures(t, fixture)
+	})
+	t.Run("ClassifierFailure/ReworkFailureTerminatesWithoutCompletion", func(t *testing.T) {
+		runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture)
+	})
+	t.Run("ClassifierRejection/RoutesToFailedTerminal", func(t *testing.T) {
+		runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture)
+	})
+	t.Run("ClassifierRejection/RecordsDispatchFeedback", func(t *testing.T) {
+		runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture)
+	})
+	t.Run("ClassifierRejection/ReleasesResourcesForSubsequentWork", func(t *testing.T) {
+		runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture)
+	})
 }
 
 // runLogicalMoveCompletesWithoutWorkerDispatch proves that Work submitted into
