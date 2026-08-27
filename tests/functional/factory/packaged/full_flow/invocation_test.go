@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -141,24 +142,33 @@ func assertFullFlowReplay(t *testing.T, server *support.FunctionalAPIServer) {
 	}
 }
 
-func TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t *testing.T) {
-	repository := initializeFullFlowRepository(t)
-	home := t.TempDir()
-	support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
-	runner := &fullFlowRunner{repository: repository, stallImplementation: true}
-	args := []string{
-		"you", "--json", "run", "--named", factorydefinitions.PackagedFullFlowFactoryName,
-		"--provider", "CODEX", "--model", "gpt-5", "--base-branch", "main",
-		"--max-cycles", "3", "--max-tasks-per-cycle", "2", "--no-record",
-		"--to", "Exercise the implementation bound",
-	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = repository
-	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err == nil {
-		t.Fatalf("full-flow invocation unexpectedly succeeded\nstdout:\n%s", inputs.Stdout())
-	}
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+func TestPackagedFullFlow(t *testing.T) {
+	fixture := newFullFlowSharedFixture(t)
+	t.Run("TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject", func(t *testing.T) {
+		testPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t, fixture)
+	})
+	t.Run("TestPackagedFullFlowEnforcesCallerSelectedTaskBound", func(t *testing.T) {
+		testPackagedFullFlowEnforcesCallerSelectedTaskBound(t, fixture)
+	})
+	t.Run("TestPackagedFullFlowEnforcesCallerSelectedCycleBound", func(t *testing.T) {
+		testPackagedFullFlowEnforcesCallerSelectedCycleBound(t, fixture)
+	})
+}
+
+func testPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(
+	t *testing.T,
+	fixture *fullFlowSharedFixture,
+) {
+	runner := &fullFlowRunner{stallImplementation: true}
+	scenario := fixture.newScenario(t, runner)
+	runner.repository = scenario.repository
+	scenario.open(t)
+	response := invokeFullFlowSession(t, scenario, map[string]any{
+		"request":          "Exercise the implementation bound",
+		"baseBranch":       "main",
+		"maxCycles":        "3",
+		"maxTasksPerCycle": "2",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.WorkState == nil || !strings.HasSuffix(*response.WorkState, ":failed") {
 		t.Fatalf("response = %#v, want bounded project failure", response)
 	}
@@ -171,18 +181,15 @@ func TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t *test
 	}
 }
 
-func TestPackagedFullFlowEnforcesCallerSelectedTaskBound(t *testing.T) {
-	repository := initializeFullFlowRepository(t)
-	home := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
-	runner := &fullFlowRunner{repository: repository}
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WorkingDirectory: repository, WaitForServiceModeRuntime: true,
-		Args:  []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-
-	response := invokeFullFlow(t, server, map[string]any{
+func testPackagedFullFlowEnforcesCallerSelectedTaskBound(
+	t *testing.T,
+	fixture *fullFlowSharedFixture,
+) {
+	runner := &fullFlowRunner{}
+	scenario := fixture.newScenario(t, runner)
+	runner.repository = scenario.repository
+	scenario.open(t)
+	response := invokeFullFlowSession(t, scenario, map[string]any{
 		"request": "Reject a planner wave above the caller bound", "baseBranch": "main",
 		"maxCycles": "3", "maxTasksPerCycle": "1",
 	})
@@ -195,18 +202,15 @@ func TestPackagedFullFlowEnforcesCallerSelectedTaskBound(t *testing.T) {
 	}
 }
 
-func TestPackagedFullFlowEnforcesCallerSelectedCycleBound(t *testing.T) {
-	repository := initializeFullFlowRepository(t)
-	home := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
-	runner := &fullFlowRunner{repository: repository}
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WorkingDirectory: repository, WaitForServiceModeRuntime: true,
-		Args:  []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-
-	response := invokeFullFlow(t, server, map[string]any{
+func testPackagedFullFlowEnforcesCallerSelectedCycleBound(
+	t *testing.T,
+	fixture *fullFlowSharedFixture,
+) {
+	runner := &fullFlowRunner{}
+	scenario := fixture.newScenario(t, runner)
+	runner.repository = scenario.repository
+	scenario.open(t)
+	response := invokeFullFlowSession(t, scenario, map[string]any{
 		"request": "Stop after one incomplete delivery cycle", "baseBranch": "main",
 		"maxCycles": "1", "maxTasksPerCycle": "2",
 	})
@@ -217,6 +221,34 @@ func TestPackagedFullFlowEnforcesCallerSelectedCycleBound(t *testing.T) {
 	if planners != 1 || len(merges) != 2 {
 		t.Fatalf("observations = planners %d merges %v, want one completed wave and no second plan", planners, merges)
 	}
+}
+
+func invokeFullFlowSession(
+	t *testing.T,
+	scenario *fullFlowScenario,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	requestID := fmt.Sprintf("full-flow-shared-%d", scenario.fixture.nextRequestID())
+	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
+	if err != nil {
+		t.Fatalf("marshal shared full-flow invocation: %v", err)
+	}
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST shared full-flow invocation: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST shared full-flow invocation status = %d", response.StatusCode)
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode shared full-flow invocation: %v", err)
+	}
+	return decoded
 }
 
 type fullFlowRunner struct {
@@ -356,7 +388,11 @@ func (runner *fullFlowRunner) Observations() (int, int, []string, int) {
 
 func initializeFullFlowRepository(t *testing.T) string {
 	t.Helper()
-	repository := t.TempDir()
+	return initializeFullFlowRepositoryAt(t, t.TempDir())
+}
+
+func initializeFullFlowRepositoryAt(t *testing.T, repository string) string {
+	t.Helper()
 	for _, args := range [][]string{{"init", "-b", "main"}, {"config", "user.email", "factory@example.test"}, {"config", "user.name", "Factory Test"}} {
 		if _, err := fullFlowGit(repository, args...); err != nil {
 			t.Fatalf("git %s: %v", strings.Join(args, " "), err)

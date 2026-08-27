@@ -14,30 +14,29 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T) {
-	start := time.Date(2026, time.July, 29, 20, 0, 0, 0, time.UTC)
-	fakeClock := newLoopSchedulerClockAt(start)
-	runner := newBlockingLoopRunner()
-	submissions := make(chan work.FactorySubmissionRecord, 16)
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedLoopFactoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
-		Args: []string{"--provider", "CODEX", "--model", "operator-model"},
-		Edges: serviceedges.Edges{
-			Clock: fakeClock, ProviderCommandRunner: runner,
-			SubmissionRecorder: func(record work.FactorySubmissionRecord) { submissions <- record },
-		},
+func TestPackagedLoop(t *testing.T) {
+	fixture := newLoopSharedFixture(t)
+	t.Run("TestPackagedLoopUsesInvocationDurationAndSkipsOverlap", func(t *testing.T) {
+		testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t, fixture)
 	})
+	t.Run("TestPackagedLoopRejectsInvalidDurationBeforeWorkAdmission", func(t *testing.T) {
+		testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t, fixture)
+	})
+}
 
-	response := invokeLoop(t, server, map[string]any{
+func testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T, fixture *loopSharedFixture) {
+	start := fixture.clock.Now()
+	runner := newBlockingLoopRunner()
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+
+	response := invokeLoop(t, scenario, map[string]any{
 		"request": "check dependency updates", "every": "1m",
 		"triggerAtStart": "true", "maxConsecutiveFailures": "0",
 	})
@@ -45,7 +44,7 @@ func TestPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T) {
 		t.Fatalf("invocation status = %q, want TIMED_OUT for long-lived controller", response.Status)
 	}
 
-	first := waitForLoopSubmission(t, submissions, "scheduled-execution")
+	first := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
 	assertLoopSubmission(t, first, "init", "SCHEDULED", "1", start, start)
 	select {
 	case <-runner.started:
@@ -53,37 +52,32 @@ func TestPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T) {
 		t.Fatal("loop executor did not begin trigger-at-start execution")
 	}
 
-	waitForLoopSchedulerTimer(t, fakeClock)
-	fakeClock.Advance(time.Minute)
-	skipped := waitForLoopSubmission(t, submissions, "scheduled-execution")
+	waitForLoopSchedulerTimer(t, fixture.clock)
+	fixture.clock.Advance(time.Minute)
+	skipped := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
 	assertLoopSubmission(t, skipped, "skipped", "SKIPPED_OVERLAP", "2", start.Add(time.Minute), start.Add(time.Minute))
 	if runner.calls() != 1 {
 		t.Fatalf("overlapping executor calls = %d, want 1", runner.calls())
 	}
 
 	close(runner.release)
-	waitForLoopDispatchCompletion(t, server)
-	waitForLoopSchedulerTimer(t, fakeClock)
-	fakeClock.Advance(time.Minute)
-	recovered := waitForLoopSubmission(t, submissions, "scheduled-execution")
+	waitForLoopDispatchCompletion(t, scenario)
+	waitForLoopSchedulerTimer(t, fixture.clock)
+	fixture.clock.Advance(time.Minute)
+	recovered := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
 	assertLoopSubmission(t, recovered, "init", "SCHEDULED", "3", start.Add(2*time.Minute), start.Add(2*time.Minute))
 }
 
-func TestPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t *testing.T) {
-	submissions := make(chan work.FactorySubmissionRecord, 2)
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedLoopFactoryName)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
-		UseMockWorkers: true,
-		Edges:          serviceedges.Edges{SubmissionRecorder: func(record work.FactorySubmissionRecord) { submissions <- record }},
-	})
+func testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t *testing.T, fixture *loopSharedFixture) {
+	scenario := fixture.newScenario(t, support.NewRecordingCommandRunner("unused"))
+	scenario.open(t)
 
-	status := postLoopInvocation(t, server, map[string]any{"request": "check", "every": "tomorrow"}, nil)
+	status := postLoopInvocation(t, scenario, map[string]any{"request": "check", "every": "tomorrow"}, nil)
 	if status != http.StatusBadRequest {
 		t.Fatalf("invalid duration status = %d, want 400", status)
 	}
 	select {
-	case record := <-submissions:
+	case record := <-fixture.submissions:
 		t.Fatalf("invalid duration admitted Work = %#v", record)
 	default:
 	}
@@ -162,11 +156,11 @@ func (runner *blockingLoopRunner) calls() int {
 	return runner.count
 }
 
-func invokeLoop(t *testing.T, server *support.FunctionalAPIServer, args map[string]any) factoryapi.InvocationResponse {
+func invokeLoop(t *testing.T, scenario *loopScenario, args map[string]any) factoryapi.InvocationResponse {
 	t.Helper()
 	timeoutMillis := int64(20)
 	var response factoryapi.InvocationResponse
-	status := postLoopInvocation(t, server, args, func(decoded factoryapi.InvocationResponse) { response = decoded }, &timeoutMillis)
+	status := postLoopInvocation(t, scenario, args, func(decoded factoryapi.InvocationResponse) { response = decoded }, &timeoutMillis)
 	if status != http.StatusOK {
 		t.Fatalf("loop invocation status = %d, want 200", status)
 	}
@@ -175,7 +169,7 @@ func invokeLoop(t *testing.T, server *support.FunctionalAPIServer, args map[stri
 
 func postLoopInvocation(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	scenario *loopScenario,
 	args map[string]any,
 	decode func(factoryapi.InvocationResponse),
 	timeout ...*int64,
@@ -190,7 +184,8 @@ func postLoopInvocation(
 	if err != nil {
 		t.Fatalf("marshal loop invocation: %v", err)
 	}
-	response, err := http.Post(server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations", "application/json", bytes.NewReader(payload))
+	endpoint := scenario.fixture.baseURL + "/factory-sessions/" + scenario.sessionID + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("POST loop invocation: %v", err)
 	}
@@ -249,11 +244,12 @@ func waitForLoopSchedulerTimer(t *testing.T, clock *loopSchedulerClock) {
 	}
 }
 
-func waitForLoopDispatchCompletion(t *testing.T, server *support.FunctionalAPIServer) {
+func waitForLoopDispatchCompletion(t *testing.T, scenario *loopScenario) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+		events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+		dispatches := support.ObserveDispatchEvents(t, events)
 		if len(dispatches) > 0 && dispatches[len(dispatches)-1].Response != nil {
 			return
 		}

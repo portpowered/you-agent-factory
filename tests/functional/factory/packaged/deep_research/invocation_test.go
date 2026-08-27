@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,28 +16,108 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
+func TestPackagedDeepResearch(t *testing.T) {
+	fixture := newDeepResearchSharedFixture(t)
+	t.Run("TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess", func(t *testing.T) {
+		testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess(t, fixture)
+	})
+	t.Run("TestPackagedDeepResearchRequiredInputCompletes", func(t *testing.T) {
+		testPackagedDeepResearchRequiredInputCompletes(t, fixture)
+	})
+	t.Run("TestPackagedDeepResearchOptionalInputsReachWorkers", func(t *testing.T) {
+		testPackagedDeepResearchOptionalInputsReachWorkers(t, fixture)
+	})
+	t.Run("TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis", func(t *testing.T) {
+		testPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(t, fixture)
+	})
+	t.Run("TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome", func(t *testing.T) {
+		testPackagedDeepResearchWorkerFailureReturnsFailedOutcome(t, fixture)
+	})
+}
+
+// testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 // proves the automatic upgrade route at the customer boundary. The stale
 // definition is deliberately written after the first initialization, so the
-// second Process.Execute must reconcile it before named-command composition.
-func TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess(t *testing.T) {
-	fixture := prepareStaleDeepResearchFixture(t)
-	assertDeepResearchExternalNames(t, fixture.stalePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+// customer-facing named invocation must reconcile it before composition.
+func testPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+) {
+	provider := testutil.NewProviderCommandRunner(
+		providerResult(support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`)),
+		providerResult(support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`)),
+	)
+	scenario := fixture.newScenario(t, provider)
+	factoryPath := filepath.Join(scenario.factoryDir, factorydefinitions.FactoryConfigFile)
+	stalePayload := prepareStaleDeepResearchMaterialization(t, factoryPath)
+	commandArgs, inputs, invocationErr := runDeepResearchRefreshInvocation(t, fixture, scenario)
 
+	activePayload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read refreshed deep-research materialization: %v", err)
+	}
+	assertDeepResearchExternalNames(t, activePayload, "research-model-provider", "research-model", "research-depth", "max-subagents")
+	assertDeepResearchExternalNamesAbsent(t, activePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+
+	backupPath := assertDeepResearchRefreshBackup(t, scenario, stalePayload)
+	structuredInputs, structuredResponse, structuredArgs := runDeepResearchStructuredInvocation(t, fixture, scenario)
+	scenario.open(t)
+	if provider.CallCount() != 2 {
+		t.Fatalf("provider calls = %d, want one lead synthesis for each named CLI invocation", provider.CallCount())
+	}
+	request := provider.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	if !strings.Contains(string(request.Stdin), "What is a Petri net?") {
+		t.Fatalf("provider prompt = %q, want the exact customer topic", string(request.Stdin))
+	}
+	t.Logf(
+		"customer command %q refreshed %s; backup=%s; invocation_error=%v; stdout=%q; stderr=%q; structured_command=%q; structured_status=%q; structured_provider_result=%t",
+		strings.Join(commandArgs, " "),
+		scenario.factoryDir,
+		backupPath,
+		invocationErr,
+		inputs.Stdout(),
+		inputs.Stderr(),
+		strings.Join(structuredArgs, " "),
+		structuredResponse.Status,
+		strings.Contains(structuredInputs.Stdout(), "deep research provider reached"),
+	)
+}
+
+func prepareStaleDeepResearchMaterialization(t *testing.T, factoryPath string) []byte {
+	t.Helper()
+	currentPayload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read current deep-research materialization: %v", err)
+	}
+	stalePayload := staleDeepResearchPayload(currentPayload)
+	if err := os.WriteFile(factoryPath, stalePayload, 0o600); err != nil {
+		t.Fatalf("write stale deep-research materialization: %v", err)
+	}
+	assertDeepResearchExternalNames(t, stalePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+	return stalePayload
+}
+
+func runDeepResearchRefreshInvocation(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+	scenario *deepResearchScenario,
+) ([]string, *support.CapturedInputs, error) {
+	t.Helper()
 	commandArgs := []string{
 		"you", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName,
 		"--maxSubagents", "0", "What is a Petri net?",
 	}
 	inputs := support.FakeInputs(t.Context(), commandArgs)
-	inputs.Input.Env = fixture.environment
-	inputs.Input.WorkingDirectory = fixture.workingDirectory
+	inputs.Input.Env = scenario.environment
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
 	invocationErr := fixture.process.Execute(inputs.Input)
 	if invocationErr != nil && strings.Contains(invocationErr.Error(), "cli.composition.long-name-collision") {
 		t.Fatalf(
@@ -46,15 +127,47 @@ func TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 			inputs.Stderr(),
 		)
 	}
-
-	activePayload, err := os.ReadFile(fixture.factoryPath)
-	if err != nil {
-		t.Fatalf("read refreshed deep-research materialization: %v", err)
+	if strings.TrimSpace(inputs.Stdout()) == "" {
+		t.Fatalf("refreshed named deep-research invocation produced no customer result; error=%v\nstderr:\n%s", invocationErr, inputs.Stderr())
 	}
-	assertDeepResearchExternalNames(t, activePayload, "research-model-provider", "research-model", "research-depth", "max-subagents")
-	assertDeepResearchExternalNamesAbsent(t, activePayload, "model-provider", "model", "researchDepth", "maxSubagents")
+	return commandArgs, inputs, invocationErr
+}
 
-	backupRoot := filepath.Join(filepath.Dir(filepath.Dir(fixture.factoryDir)), ".you-packaged-backups")
+func runDeepResearchStructuredInvocation(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+	scenario *deepResearchScenario,
+) (*support.CapturedInputs, factoryapi.InvocationResponse, []string) {
+	t.Helper()
+	commandArgs := []string{
+		"you", "--json", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName,
+		"--maxSubagents", "0", "What is a Petri net?",
+	}
+	inputs := support.FakeInputs(t.Context(), commandArgs)
+	inputs.Input.Env = scenario.environment
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"structured refreshed named deep-research invocation error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("structured refreshed invocation status = %q, want COMPLETED", response.Status)
+	}
+	return inputs, response, commandArgs
+}
+
+func assertDeepResearchRefreshBackup(
+	t *testing.T,
+	scenario *deepResearchScenario,
+	stalePayload []byte,
+) string {
+	t.Helper()
+	backupRoot := filepath.Join(filepath.Dir(filepath.Dir(scenario.factoryDir)), ".you-packaged-backups")
 	backupEntries, err := os.ReadDir(backupRoot)
 	if err != nil {
 		t.Fatalf("read packaged Factory backup root %s: %v", backupRoot, err)
@@ -72,106 +185,13 @@ func TestPackagedDeepResearchStaleNamedInvocationRefreshesThroughCustomerProcess
 	if err != nil {
 		t.Fatalf("read preserved stale deep-research backup: %v", err)
 	}
-	if !bytes.Equal(backupPayload, fixture.stalePayload) {
+	if !bytes.Equal(backupPayload, stalePayload) {
 		t.Fatalf("preserved stale backup differs from the complete pre-refresh factory.json")
 	}
-	if filepath.Clean(backupDirs[0]) == filepath.Clean(fixture.factoryDir) {
+	if filepath.Clean(backupDirs[0]) == filepath.Clean(scenario.factoryDir) {
 		t.Fatalf("backup path %s is still the active Factory path", backupDirs[0])
 	}
-	structuredArgs := []string{
-		"you", "--json", "run", "--named", factorydefinitions.PackagedDeepResearchFactoryName,
-		"--maxSubagents", "0", "What is a Petri net?",
-	}
-	structuredInputs := support.FakeInputs(t.Context(), structuredArgs)
-	structuredInputs.Input.Env = fixture.environment
-	structuredInputs.Input.WorkingDirectory = fixture.workingDirectory
-	if err := fixture.process.Execute(structuredInputs.Input); err != nil {
-		t.Fatalf(
-			"structured refreshed named deep-research invocation error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			structuredInputs.Stdout(),
-			structuredInputs.Stderr(),
-		)
-	}
-	structuredResponse := support.DecodeInvocationResponseJSON(t, structuredInputs.Stdout())
-	if structuredResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("structured refreshed invocation status = %q, want COMPLETED", structuredResponse.Status)
-	}
-	if fixture.provider.CallCount() != 2 {
-		t.Fatalf("provider calls = %d, want one lead synthesis for each command after --maxSubagents 0", fixture.provider.CallCount())
-	}
-	request := fixture.provider.LastRequest()
-	if request.Command != "codex" {
-		t.Fatalf("provider command = %q, want codex", request.Command)
-	}
-	if !strings.Contains(string(request.Stdin), "What is a Petri net?") {
-		t.Fatalf("provider prompt = %q, want the exact customer topic", string(request.Stdin))
-	}
-	t.Logf(
-		"customer command %q refreshed %s and reached provider; backup=%s; invocation_error=%v; stdout=%q; stderr=%q; structured_command=%q; structured_status=%q; structured_provider_result=%t",
-		strings.Join(commandArgs, " "),
-		fixture.factoryPath,
-		backupDirs[0],
-		invocationErr,
-		inputs.Stdout(),
-		inputs.Stderr(),
-		strings.Join(structuredArgs, " "),
-		structuredResponse.Status,
-		strings.Contains(structuredInputs.Stdout(), "deep research provider reached"),
-	)
-}
-
-type staleDeepResearchFixture struct {
-	process          support.Process
-	provider         *testutil.ProviderCommandRunner
-	environment      []string
-	workingDirectory string
-	factoryDir       string
-	factoryPath      string
-	stalePayload     []byte
-}
-
-func prepareStaleDeepResearchFixture(t *testing.T) staleDeepResearchFixture {
-	t.Helper()
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	providerResult := platformprocess.CommandResult{
-		Stdout: support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`),
-	}
-	provider := testutil.NewProviderCommandRunner(providerResult, providerResult)
-	process, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{
-		ProviderCommandRunner: provider,
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
-	environment := deepResearchCustomerEnvironment(homeDir)
-	factoryDir := support.InstallPackagedFactoryWithProcess(
-		t,
-		process,
-		environment,
-		workingDirectory,
-		factorydefinitions.PackagedDeepResearchFactoryName,
-	)
-	factoryPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
-	currentPayload, err := os.ReadFile(factoryPath)
-	if err != nil {
-		t.Fatalf("read current deep-research materialization: %v", err)
-	}
-	stalePayload := staleDeepResearchPayload(currentPayload)
-	if err := os.WriteFile(factoryPath, stalePayload, 0o600); err != nil {
-		t.Fatalf("write stale deep-research materialization: %v", err)
-	}
-	return staleDeepResearchFixture{
-		process:          process,
-		provider:         provider,
-		environment:      environment,
-		workingDirectory: workingDirectory,
-		factoryDir:       factoryDir,
-		factoryPath:      factoryPath,
-		stalePayload:     stalePayload,
-	}
+	return backupDirs[0]
 }
 
 func deepResearchCustomerEnvironment(homeDir string) []string {
@@ -233,45 +253,37 @@ func assertDeepResearchExternalNamesAbsent(t testing.TB, payload []byte, names .
 // completes through structured provider responses, runs the expected specialist-and-lead dispatch
 // sequence for a delegating topic shape, and returns a primary synthesis that
 // reflects the submitted topic.
-func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
+func testPackagedDeepResearchRequiredInputCompletes(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+) {
 	topic := fmt.Sprintf(
 		"functional packaged deep research required topic %d with enough breadth for specialist delegation",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedDeepResearchFactoryName,
-	)
 	runner := testutil.NewProviderCommandRunner(
 		providerResult(support.CodexSuccessStdout(`{"evidence":"technical specialist evidence"}`)),
 		providerResult(support.CodexSuccessStdout(`{"evidence":"tradeoff specialist evidence"}`)),
 		providerResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: synthesized specialist evidence"}`)),
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
 	args := map[string]any{"topic": topic}
 	response := startPackagedDeepResearchInvocation(
 		t,
-		server,
-		factoryDir,
-		"packaged-deep-research-required-input",
+		scenario,
+		"deep-research-required-input",
 		args,
 	)
-	assertRequiredDeepResearchOutcome(t, server.URL(), response, runner, topic)
+	assertRequiredDeepResearchOutcome(t, scenario.fixture.baseURL, scenario.sessionID, response, runner, topic)
 }
 
 func assertRequiredDeepResearchOutcome(
 	t *testing.T,
 	serverURL string,
+	explicitSessionID string,
 	response factoryapi.FactorySessionSyncExecutionResponse,
 	runner *testutil.ProviderCommandRunner,
 	topic string,
@@ -283,13 +295,16 @@ func assertRequiredDeepResearchOutcome(
 		sessionJSON, _ := json.Marshal(session)
 		dispatches := listFactorySessionDispatches(t, serverURL, response.SessionId)
 		dispatchJSON, _ := json.Marshal(dispatches)
-		t.Fatalf("session status = %q, want SUCCEEDED; result = %s; session = %s; dispatches = %s; response = %#v", response.Status, resultJSON, sessionJSON, dispatchJSON, response)
+		t.Fatalf("session status = %q, want SUCCEEDED; result = %s; session = %s; dispatches = %s; explicit_session = %q; response = %#v", response.Status, resultJSON, sessionJSON, dispatchJSON, explicitSessionID, response)
 	}
 	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want one synthesized result part", response.Result)
 	}
 	if strings.TrimSpace(response.SessionId) == "" {
-		t.Fatal("sessionId is empty, want durable JavaScript session ID")
+		t.Fatal("sessionId is empty, want durable Factory Session ID")
+	}
+	if response.SessionId == explicitSessionID {
+		t.Fatalf("durable response reused explicit live session %q", explicitSessionID)
 	}
 	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
 	if err != nil {
@@ -351,29 +366,21 @@ func assertRequiredDeepResearchDispatches(t *testing.T, serverURL, sessionID str
 // deep-research overrides such as research depth, specialist cap, and approved
 // model execution selection reach structured provider workers and are observable on dispatch
 // execution selection and the primary synthesis result.
-func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
+func testPackagedDeepResearchOptionalInputsReachWorkers(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+) {
 	topic := fmt.Sprintf(
 		"functional packaged deep research optional overrides %d with enough breadth for specialist delegation",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedDeepResearchFactoryName,
-	)
 	runner := testutil.NewProviderCommandRunner(
 		providerResult(support.CodexSuccessStdout(`{"evidence":"optional specialist evidence"}`)),
 		providerResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: optional synthesized evidence"}`)),
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
 	args := map[string]any{
 		"topic":           topic,
@@ -385,17 +392,17 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 	}
 	response := startPackagedDeepResearchInvocation(
 		t,
-		server,
-		factoryDir,
-		"packaged-deep-research-optional-inputs",
+		scenario,
+		"deep-research-optional-inputs",
 		args,
 	)
-	assertOptionalDeepResearchOutcome(t, server.URL(), response, runner, topic)
+	assertOptionalDeepResearchOutcome(t, scenario.fixture.baseURL, scenario.sessionID, response, runner, topic)
 }
 
 func assertOptionalDeepResearchOutcome(
 	t *testing.T,
 	serverURL string,
+	explicitSessionID string,
 	response factoryapi.FactorySessionSyncExecutionResponse,
 	runner *testutil.ProviderCommandRunner,
 	topic string,
@@ -408,7 +415,10 @@ func assertOptionalDeepResearchOutcome(
 		t.Fatalf("primary result = %#v, want one synthesized result part", response.Result)
 	}
 	if strings.TrimSpace(response.SessionId) == "" {
-		t.Fatal("sessionId is empty, want durable JavaScript session ID")
+		t.Fatal("sessionId is empty, want durable Factory Session ID")
+	}
+	if response.SessionId == explicitSessionID {
+		t.Fatalf("durable response reused explicit live session %q", explicitSessionID)
 	}
 	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
 	if err != nil {
@@ -474,41 +484,35 @@ func assertOptionalDeepResearchDispatches(t *testing.T, serverURL, sessionID str
 // TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis proves that a
 // completed provider response with the wrong structured shape is retried once
 // before its validated evidence is passed to lead synthesis.
-func TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(t *testing.T) {
+func testPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+) {
 	topic := fmt.Sprintf(
 		"functional packaged deep research schema retry %d with enough breadth for specialist delegation",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedDeepResearchFactoryName,
-	)
 	runner := testutil.NewProviderCommandRunner(
 		providerResult(support.CodexSuccessStdout(`{"wrong":"not evidence"}`)),
 		providerResult(support.CodexSuccessStdout(`{"evidence":"recovered specialist evidence"}`)),
 		providerResult(support.CodexSuccessStdout(`{"answer":"recovered evidence synthesis"}`)),
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
 
 	response := startPackagedDeepResearchInvocation(
 		t,
-		server,
-		factoryDir,
-		"packaged-deep-research-schema-retry",
+		scenario,
+		"deep-research-schema-retry",
 		map[string]any{"topic": topic, "maxSubagents": 1},
 	)
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		resultJSON, _ := json.Marshal(response.Result)
-		t.Fatalf("session status = %q, want SUCCEEDED; result = %s; response = %#v", response.Status, resultJSON, response)
+		t.Fatalf("session status = %q, want COMPLETED; result = %s; response = %#v", response.Status, resultJSON, response)
+	}
+	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) == 0 {
+		t.Fatalf("primary result = %#v, want recovered synthesis", response.Result)
 	}
 	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
 	if err != nil {
@@ -526,7 +530,7 @@ func TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(t *testing.T) 
 		t.Fatalf("lead request evidence = %s, want only the recovered validated evidence", leadInput)
 	}
 
-	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+	dispatches := listFactorySessionDispatches(t, scenario.fixture.baseURL, response.SessionId)
 	if len(dispatches.Dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want initial specialist, bounded retry, and lead synthesis", len(dispatches.Dispatches))
 	}
@@ -548,30 +552,20 @@ func TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(t *testing.T) 
 }
 
 // TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome proves that a
-// configured mock-worker rejection during packaged @you/deep-research invocation
+// provider-command failure during packaged @you/deep-research invocation
 // returns a failed public terminal outcome without a completed success primary
 // result attributable to the failing run.
-func TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome(t *testing.T) {
+func testPackagedDeepResearchWorkerFailureReturnsFailedOutcome(
+	t *testing.T,
+	fixture *deepResearchSharedFixture,
+) {
 	topic := fmt.Sprintf(
 		"functional packaged deep research worker failure %d",
 		time.Now().UnixNano(),
 	)
 
-	factoryDir := support.InstallPackagedFactory(
-		t,
-		t.TempDir(),
-		factorydefinitions.PackagedDeepResearchFactoryName,
-	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		MockWorkersConfig:         packagedDeepResearchRejectingMockWorkersConfig(),
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: packagedDeepResearchFailingCommandRunner{},
-		},
-	})
+	scenario := fixture.newScenario(t, packagedDeepResearchFailingCommandRunner{})
+	scenario.open(t)
 
 	args := map[string]any{
 		"topic":        topic,
@@ -579,9 +573,8 @@ func TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome(t *testing.T) {
 	}
 	response := startPackagedDeepResearchInvocation(
 		t,
-		server,
-		factoryDir,
-		"packaged-deep-research-worker-failure",
+		scenario,
+		"deep-research-worker-failure",
 		args,
 	)
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
@@ -591,10 +584,13 @@ func TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome(t *testing.T) {
 		t.Fatalf("primary result = %#v, want no completed success primary result after worker failure", response.Result)
 	}
 	if strings.TrimSpace(response.SessionId) == "" {
-		t.Fatal("sessionId is empty, want durable JavaScript session ID")
+		t.Fatal("sessionId is empty, want durable Factory Session ID")
+	}
+	if response.SessionId == scenario.sessionID {
+		t.Fatalf("durable response reused explicit live session %q", scenario.sessionID)
 	}
 
-	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+	dispatches := listFactorySessionDispatches(t, scenario.fixture.baseURL, response.SessionId)
 	if len(dispatches.Dispatches) != 1 {
 		t.Fatalf(
 			"dispatch count = %d, want one lead synthesis dispatch when maxSubagents is 0",
@@ -622,35 +618,26 @@ func (packagedDeepResearchFailingCommandRunner) Run(
 	return platformprocess.CommandResult{}, errors.New("packaged deep research provider failure")
 }
 
-func packagedDeepResearchRejectingMockWorkersConfig() *workers.MockWorkersConfig {
-	exitCode := 7
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			RunType: workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stderr:   "packaged deep research mock worker failure",
-				ExitCode: &exitCode,
-			},
-		}},
-	}
-}
-
 func startPackagedDeepResearchInvocation(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
-	factoryDir string,
+	scenario *deepResearchScenario,
 	requestID string,
 	args map[string]any,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
-	_ = factoryDir
+	factory := support.GetJSON[factoryapi.Factory](
+		t,
+		strings.TrimSuffix(scenario.fixture.baseURL, "/")+
+			"/factory-sessions/"+url.PathEscape(scenario.sessionID)+"/factory",
+	)
+	if factory.Orchestrator == nil || factory.Orchestrator.Javascript == nil ||
+		factory.Orchestrator.Javascript.InlineSource == nil {
+		t.Fatalf("opened Deep Research factory does not carry inline JavaScript source")
+	}
 	javascript := factory.Orchestrator.Javascript
 	return postJSON[factoryapi.FactorySessionSyncExecutionResponse](
 		t,
-		server.URL()+"/factory-sessions/sync",
+		strings.TrimSuffix(scenario.fixture.baseURL, "/")+"/factory-sessions/sync",
 		factoryapi.FactorySessionExecutionRequest{
 			RequestId: requestID,
 			Source: factoryapi.FactorySessionExecutionSource{

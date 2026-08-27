@@ -1,20 +1,23 @@
 package ralph
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -30,26 +33,35 @@ var packagedRalphPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.js
 // customer-facing named route preserves the request, materializes a durable
 // plan, repeats an incomplete iteration, and returns the final iterator output
 // only after the plan's story is marked complete.
-func TestPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t *testing.T) {
-	home := t.TempDir()
-	workspace := t.TempDir()
-	support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
-	runner := &packagedRalphCommandRunner{workspace: workspace}
+func TestPackagedRalph(t *testing.T) {
+	fixture := newRalphSharedFixture(t)
+	t.Run("TestPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI", func(t *testing.T) {
+		testPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t, fixture)
+	})
+	t.Run("TestPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted", func(t *testing.T) {
+		testPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t, fixture)
+	})
+	t.Run("TestPackagedRalphUsesConfiguredAndRoleOverrideModels", func(t *testing.T) {
+		testPackagedRalphUsesConfiguredAndRoleOverrideModels(t, fixture)
+	})
+	t.Run("TestPackagedRalphFailsOnIteratorWorkerFailure", func(t *testing.T) {
+		testPackagedRalphFailsOnIteratorWorkerFailure(t, fixture)
+	})
+	t.Run("TestPackagedRalphFailsAfterBoundedIncompleteIterations", func(t *testing.T) {
+		testPackagedRalphFailsAfterBoundedIncompleteIterations(t, fixture)
+	})
+}
 
-	response, stderr, err := runPackagedRalphCLI(
-		t,
-		runner,
-		home,
-		workspace,
-		"--provider", "CODEX", "--model", "operator-default-model",
-		"--to", "deliver the named Ralph request",
-	)
-	if err != nil {
-		t.Fatalf("Process.Execute(@you/ralph) error = %v\nstdout response = %#v\nstderr = %q", err, response, stderr)
-	}
-	if stderr != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", stderr)
-	}
+func testPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t *testing.T, fixture *ralphSharedFixture) {
+	runner := &packagedRalphCommandRunner{workspace: t.TempDir()}
+	scenario := fixture.newScenario(t, runner, packagedRalphFactoryName)
+	scenario.open(t)
+
+	response := postPackagedRalphInvocation(t, scenario, map[string]any{
+		"request":         "deliver the named Ralph request",
+		"plannerProvider": "CODEX", "plannerModel": "operator-default-model",
+		"iteratorProvider": "CODEX", "iteratorModel": "operator-default-model",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
 	}
@@ -91,24 +103,13 @@ func TestPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t *testing.T)
 // TestPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted
 // proves the named route remains invocable with only its required request and
 // resolves the operator provider/model defaults for every worker role.
-func TestPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t *testing.T) {
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "CODEX")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "operator-configured-model")
-	home := t.TempDir()
-	workspace := t.TempDir()
-	support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
-	runner := &packagedRalphCommandRunner{workspace: workspace}
-
-	response, stderr, err := runPackagedRalphCLI(
-		t,
-		runner,
-		home,
-		workspace,
-		"--to", "complete Ralph with operator defaults",
-	)
-	if err != nil {
-		t.Fatalf("Process.Execute(@you/ralph) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
-	}
+func testPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t *testing.T, fixture *ralphSharedFixture) {
+	runner := &packagedRalphCommandRunner{workspace: t.TempDir()}
+	scenario := fixture.newScenario(t, runner, packagedRalphFactoryName)
+	scenario.open(t)
+	response := postPackagedRalphInvocation(t, scenario, map[string]any{
+		"request": "complete Ralph with operator defaults",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
 	}
@@ -122,11 +123,11 @@ func TestPackagedRalphUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t
 // TestPackagedRalphUsesConfiguredAndRoleOverrideModels proves authored worker
 // configuration is honored when role flags are omitted and that explicit
 // planner/iterator flags take precedence over those configured values.
-func TestPackagedRalphUsesConfiguredAndRoleOverrideModels(t *testing.T) {
+func testPackagedRalphUsesConfiguredAndRoleOverrideModels(t *testing.T, fixture *ralphSharedFixture) {
 	tests := []struct {
 		name             string
 		configure        func(*testing.T, string)
-		args             []string
+		invocationArgs   map[string]any
 		plannerModel     string
 		iteratorModel    string
 		plannerProvider  string
@@ -147,11 +148,11 @@ func TestPackagedRalphUsesConfiguredAndRoleOverrideModels(t *testing.T) {
 		},
 		{
 			name: "explicit role flags",
-			args: []string{
-				"--planner-provider", "CODEX",
-				"--planner-model", "flag-planner-model",
-				"--iterator-provider", "CODEX",
-				"--iterator-model", "flag-iterator-model",
+			invocationArgs: map[string]any{
+				"plannerProvider":  "CODEX",
+				"plannerModel":     "flag-planner-model",
+				"iteratorProvider": "CODEX",
+				"iteratorModel":    "flag-iterator-model",
 			},
 			plannerModel:     "flag-planner-model",
 			iteratorModel:    "flag-iterator-model",
@@ -162,28 +163,21 @@ func TestPackagedRalphUsesConfiguredAndRoleOverrideModels(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			home := t.TempDir()
-			workspace := t.TempDir()
-			factoryDir := support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
 			factoryName := packagedRalphFactoryName
 			if test.configure != nil {
-				test.configure(t, factoryDir)
-				factoryDir = support.CopyFactoryAsNamed(t, factoryDir, home, configuredPackagedRalphFactoryName)
 				factoryName = configuredPackagedRalphFactoryName
 			}
-			runner := &packagedRalphCommandRunner{workspace: workspace}
-
-			response, stderr, err := runPackagedRalphCLIAs(
-				t,
-				runner,
-				home,
-				workspace,
-				factoryName,
-				append(test.args, "--to", "complete a configured Ralph request")...,
-			)
-			if err != nil {
-				t.Fatalf("Process.Execute(@you/ralph) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
+			runner := &packagedRalphCommandRunner{workspace: t.TempDir()}
+			scenario := fixture.newScenario(t, runner, factoryName)
+			if test.configure != nil {
+				test.configure(t, scenario.factoryDir)
 			}
+			scenario.open(t)
+			args := map[string]any{"request": "complete a configured Ralph request"}
+			for key, value := range test.invocationArgs {
+				args[key] = value
+			}
+			response := postPackagedRalphInvocation(t, scenario, args)
 			if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 				t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
 			}
@@ -209,23 +203,15 @@ func TestPackagedRalphUsesConfiguredAndRoleOverrideModels(t *testing.T) {
 // TestPackagedRalphFailsOnIteratorWorkerFailure proves provider failure is a
 // failed public invocation and never a successful completion with partial
 // iterator output.
-func TestPackagedRalphFailsOnIteratorWorkerFailure(t *testing.T) {
-	home := t.TempDir()
-	workspace := t.TempDir()
-	support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
-	runner := &packagedRalphCommandRunner{workspace: workspace, failIterator: true}
-
-	response, _, err := runPackagedRalphCLI(
-		t,
-		runner,
-		home,
-		workspace,
-		"--provider", "CODEX", "--model", "failure-model",
-		"--to", "fail the Ralph iterator",
-	)
-	if err == nil {
-		t.Fatal("Process.Execute error = nil, want worker failure")
-	}
+func testPackagedRalphFailsOnIteratorWorkerFailure(t *testing.T, fixture *ralphSharedFixture) {
+	runner := &packagedRalphCommandRunner{workspace: t.TempDir(), failIterator: true}
+	scenario := fixture.newScenario(t, runner, packagedRalphFactoryName)
+	scenario.open(t)
+	response := postPackagedRalphInvocation(t, scenario, map[string]any{
+		"request":         "fail the Ralph iterator",
+		"plannerProvider": "CODEX", "plannerModel": "failure-model",
+		"iteratorProvider": "CODEX", "iteratorModel": "failure-model",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
 	}
@@ -243,23 +229,15 @@ func TestPackagedRalphFailsOnIteratorWorkerFailure(t *testing.T) {
 // TestPackagedRalphFailsAfterBoundedIncompleteIterations proves explicit
 // continuation cannot run forever and the logical breaker returns ralph:failed
 // without launching an extra iterator visit.
-func TestPackagedRalphFailsAfterBoundedIncompleteIterations(t *testing.T) {
-	home := t.TempDir()
-	workspace := t.TempDir()
-	support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
-	runner := &packagedRalphCommandRunner{workspace: workspace, alwaysContinue: true}
-
-	response, _, err := runPackagedRalphCLI(
-		t,
-		runner,
-		home,
-		workspace,
-		"--provider", "CODEX", "--model", "bounded-model",
-		"--to", "keep iterating this Ralph request",
-	)
-	if err == nil {
-		t.Fatal("Process.Execute error = nil, want bounded failure")
-	}
+func testPackagedRalphFailsAfterBoundedIncompleteIterations(t *testing.T, fixture *ralphSharedFixture) {
+	runner := &packagedRalphCommandRunner{workspace: t.TempDir(), alwaysContinue: true}
+	scenario := fixture.newScenario(t, runner, packagedRalphFactoryName)
+	scenario.open(t)
+	response := postPackagedRalphInvocation(t, scenario, map[string]any{
+		"request":         "keep iterating this Ralph request",
+		"plannerProvider": "CODEX", "plannerModel": "bounded-model",
+		"iteratorProvider": "CODEX", "iteratorModel": "bounded-model",
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
 	}
@@ -361,34 +339,36 @@ func (runner *packagedRalphCommandRunner) Run(
 	}
 }
 
-func runPackagedRalphCLI(
+func postPackagedRalphInvocation(
 	t *testing.T,
-	runner platformprocess.CommandRunner,
-	home, workspace string,
-	args ...string,
-) (factoryapi.InvocationResponse, string, error) {
-	return runPackagedRalphCLIAs(t, runner, home, workspace, packagedRalphFactoryName, args...)
-}
-
-func runPackagedRalphCLIAs(
-	t *testing.T,
-	runner platformprocess.CommandRunner,
-	home, workspace, factoryName string,
-	args ...string,
-) (factoryapi.InvocationResponse, string, error) {
+	scenario *ralphScenario,
+	args map[string]any,
+) factoryapi.InvocationResponse {
 	t.Helper()
-	inputArgs := []string{"you", "--json", "run", "--named", factoryName, "--no-record"}
-	inputArgs = append(inputArgs, args...)
-	inputs := support.FakeInputs(t.Context(), inputArgs)
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	inputs.Input.WorkingDirectory = workspace
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	err := process.Execute(inputs.Input)
-	var response factoryapi.InvocationResponse
-	if strings.TrimSpace(inputs.Stdout()) != "" {
-		response = support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	requestID := fmt.Sprintf("packaged-ralph-%d", time.Now().UnixNano())
+	payload, err := json.Marshal(factoryapi.InvocationRequest{
+		RequestId: &requestID,
+		Args:      &args,
+	})
+	if err != nil {
+		t.Fatalf("marshal Ralph invocation: %v", err)
 	}
-	return response, inputs.Stderr(), err
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST Ralph invocation: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST Ralph invocation status = %d, want 200: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode Ralph invocation: %v", err)
+	}
+	return decoded
 }
 
 func configurePackagedRalphWorkerModels(t *testing.T, factoryDir string, models map[string]string) {

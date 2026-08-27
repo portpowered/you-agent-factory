@@ -8,16 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -26,12 +23,39 @@ const parallelDAG = `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name"
 
 const planParallelFanInChildCount = 10
 
-func TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(t *testing.T) {
+func TestPackagedPlanParallel(t *testing.T) {
+	fixture := newPlanParallelSharedFixture(t)
+	t.Run("TestPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult", func(t *testing.T) {
+		testPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(t, fixture)
+	})
+	t.Run("TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges", func(t *testing.T) {
+		testPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t, fixture)
+	})
+	t.Run("TestPackagedPlanParallelExecutorEffortCanBeOverridden", func(t *testing.T) {
+		testPackagedPlanParallelExecutorEffortCanBeOverridden(t, fixture)
+	})
+	t.Run("TestPackagedPlanParallelRejectsUnsupportedEffortBeforeExecutorProviderExecution", func(t *testing.T) {
+		testPackagedPlanParallelRejectsUnsupportedEffortBeforeExecutorProviderExecution(t, fixture)
+	})
+	t.Run("TestPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically", func(t *testing.T) {
+		testPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically(t, fixture)
+	})
+	t.Run("TestPackagedPlanParallelChildFailureFansInWithoutMerge", func(t *testing.T) {
+		testPackagedPlanParallelChildFailureFansInWithoutMerge(t, fixture)
+	})
+}
+
+func testPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
 	const originalRequest = "FANIN_ORIGINAL_REQUEST_MARKER"
 	runner := newPlanParallelFanInRunner(planParallelFanInDAG())
-	response, err := runPlanParallelCLI(t, runner, "--to", originalRequest)
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response, err := runPlanParallelInvocation(t, scenario, map[string]any{"request": originalRequest})
 	if err != nil {
-		t.Fatalf("plan-parallel CLI invocation: %v", err)
+		t.Fatalf("plan-parallel invocation: %v", err)
 	}
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed fan-in invocation", response)
@@ -97,12 +121,16 @@ func planParallelFanInChildResult(index int) string {
 	return fmt.Sprintf("FANIN_CHILD_RESULT_%02d", index)
 }
 
-func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T) {
+func testPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
 	// This cell intentionally uses the public API because it owns retained
 	// Factory Event and reconnect/replay assertions below.
 	runner := newPlanParallelRunner(parallelDAG)
-	server := startPlanParallelServer(t, runner)
-	response := invokePlanParallel(t, server, map[string]any{
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := invokePlanParallel(t, scenario, map[string]any{
 		"request":       "implement three dependent tasks",
 		"executorModel": "gpt-5.6-luna",
 	})
@@ -118,7 +146,7 @@ func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T)
 			args = append(args, request.Args)
 		}
 		errors := make([]string, 0)
-		for _, event := range server.GetFactoryEvents(t) {
+		for _, event := range support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID) {
 			if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 				continue
 			}
@@ -144,25 +172,30 @@ func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T)
 	assertPlanParallelPromptsContainInputs(t, runner.requestsSnapshot())
 	assertPlanParallelProviderSelection(t, runner.requestsSnapshot())
 
-	events := server.GetFactoryEvents(t)
+	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
 	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) != 5 || dispatches[0].Request.TransitionId != "plan-parallel-work" ||
 		dispatches[len(dispatches)-1].Request.TransitionId != "merge-plan-results" {
 		t.Fatalf("dispatches = %#v, want planner, three tasks, and terminal merger", dispatches)
 	}
 	assertPlanParallelGeneratedDAGEvent(t, events)
-	assertPlanParallelRetainedReplay(t, server, events)
+	assertPlanParallelRetainedReplay(t, scenario, events)
 }
 
-func TestPackagedPlanParallelExecutorEffortCanBeOverridden(t *testing.T) {
+func testPackagedPlanParallelExecutorEffortCanBeOverridden(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
 	runner := newPlanParallelRunner(parallelDAG)
-	response, err := runPlanParallelCLI(t, runner,
-		"--executor-model", "gpt-5.6-luna",
-		"--executor-reasoning-effort", "low",
-		"--to", "implement three dependent tasks",
-	)
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response, err := runPlanParallelInvocation(t, scenario, map[string]any{
+		"request":                 "implement three dependent tasks",
+		"executorModel":           "gpt-5.6-luna",
+		"executorReasoningEffort": "low",
+	})
 	if err != nil {
-		t.Fatalf("plan-parallel CLI invocation: %v", err)
+		t.Fatalf("plan-parallel invocation: %v", err)
 	}
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response = %#v, want completed low-effort override", response)
@@ -184,14 +217,22 @@ func TestPackagedPlanParallelExecutorEffortCanBeOverridden(t *testing.T) {
 	}
 }
 
-func TestPackagedPlanParallelRejectsUnsupportedEffortBeforeExecutorProviderExecution(t *testing.T) {
+func testPackagedPlanParallelRejectsUnsupportedEffortBeforeExecutorProviderExecution(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
 	runner := newPlanParallelRunner(parallelDAG)
-	_, err := runPlanParallelCLI(t, runner,
-		"--executor-reasoning-effort", "extreme",
-		"--to", "implement three dependent tasks",
-	)
-	if err == nil {
-		t.Fatal("plan-parallel CLI invocation error = nil, want invalid resolved effort failure")
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response, err := runPlanParallelInvocation(t, scenario, map[string]any{
+		"request":                 "implement three dependent tasks",
+		"executorReasoningEffort": "extreme",
+	})
+	if err != nil {
+		t.Fatalf("plan-parallel invocation: %v", err)
+	}
+	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
+		t.Fatalf("response = %#v, want failed invocation without primary result", response)
 	}
 	requests := runner.requestsSnapshot()
 	if len(requests) != 1 || !strings.Contains(string(requests[0].Stdin), "Plan an executable Work DAG") {
@@ -323,7 +364,7 @@ func assertPlanParallelGeneratedDAGEvent(t *testing.T, events []factoryapi.Facto
 
 func assertPlanParallelRetainedReplay(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	scenario *planParallelScenario,
 	events []factoryapi.FactoryEvent,
 ) {
 	t.Helper()
@@ -331,7 +372,7 @@ func assertPlanParallelRetainedReplay(
 		t.Fatalf("events = %d, want retained history", len(events))
 	}
 	sequence := support.ReconnectSequenceForFactoryEvent(events[0])
-	replayed := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+	replayed := support.GetFactoryEventsAfterForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID, support.FactoryEventReadCursor{
 		AfterEventID:  events[0].Id,
 		AfterSequence: &sequence,
 	})
@@ -345,14 +386,18 @@ func assertPlanParallelRetainedReplay(
 	}
 }
 
-func TestPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically(t *testing.T) {
+func testPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
 	works := make([]string, 13)
 	for index := range works {
 		works[index] = fmt.Sprintf(`{"name":"task-%02d","workTypeName":"planned-task"}`, index+1)
 	}
 	runner := newPlanParallelRunner(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[` + strings.Join(works, ",") + `]}}`)
-	server := startPlanParallelServer(t, runner)
-	response := invokePlanParallel(t, server, map[string]any{"request": "produce too many tasks"})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := invokePlanParallel(t, scenario, map[string]any{"request": "produce too many tasks"})
 
 	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
 		t.Fatalf("response = %#v, want failed invocation without primary result", response)
@@ -362,11 +407,15 @@ func TestPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically(t *testin
 	}
 }
 
-func TestPackagedPlanParallelChildFailureFansInWithoutMerge(t *testing.T) {
+func testPackagedPlanParallelChildFailureFansInWithoutMerge(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
 	runner := newPlanParallelRunner(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"failing-task","workTypeName":"planned-task"}]}}`)
 	runner.failExecutors = true
-	server := startPlanParallelServer(t, runner)
-	response := invokePlanParallel(t, server, map[string]any{"request": "surface a child failure"})
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := invokePlanParallel(t, scenario, map[string]any{"request": "surface a child failure"})
 
 	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
 		t.Fatalf("response = %#v, want failed invocation without primary result", response)
@@ -503,47 +552,30 @@ func (runner *planParallelRunner) mergeCount() int {
 	return runner.merges
 }
 
-func startPlanParallelServer(t *testing.T, runner platformprocess.CommandRunner) *support.FunctionalAPIServer {
-	t.Helper()
-	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedPlanParallelFactoryName)
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
-		Args:  []string{"--provider", "CODEX", "--model", "operator-model"},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-}
-
-func runPlanParallelCLI(
+func runPlanParallelInvocation(
 	t *testing.T,
-	runner platformprocess.CommandRunner,
-	factoryArgs ...string,
+	scenario *planParallelScenario,
+	args map[string]any,
 ) (factoryapi.InvocationResponse, error) {
 	t.Helper()
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedPlanParallelFactoryName)
-	args := []string{
-		"you", "--json", "run",
-		"--named", factorydefinitions.PackagedPlanParallelFactoryName,
-		"--provider", "CODEX", "--model", "operator-model",
-		"--no-record",
+	statusCode, responseBody := postPlanParallel(t, scenario, args)
+	if statusCode != http.StatusOK {
+		return factoryapi.InvocationResponse{}, fmt.Errorf(
+			"POST plan-parallel invocation status = %d: %s",
+			statusCode,
+			strings.TrimSpace(string(responseBody)),
+		)
 	}
-	args = append(args, factoryArgs...)
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
-	if err != nil {
-		return factoryapi.InvocationResponse{}, err
+	var decoded factoryapi.InvocationResponse
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		return factoryapi.InvocationResponse{}, fmt.Errorf("decode plan-parallel invocation: %w", err)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
-	}
-	return support.DecodeInvocationResponseJSON(t, inputs.Stdout()), nil
+	return decoded, nil
 }
 
-func invokePlanParallel(t *testing.T, server *support.FunctionalAPIServer, args map[string]any) factoryapi.InvocationResponse {
+func invokePlanParallel(t *testing.T, scenario *planParallelScenario, args map[string]any) factoryapi.InvocationResponse {
 	t.Helper()
-	statusCode, responseBody := postPlanParallel(t, server, args)
+	statusCode, responseBody := postPlanParallel(t, scenario, args)
 	if statusCode != http.StatusOK {
 		t.Fatalf("POST invocation status = %d; body = %s", statusCode, responseBody)
 	}
@@ -556,7 +588,7 @@ func invokePlanParallel(t *testing.T, server *support.FunctionalAPIServer, args 
 
 func postPlanParallel(
 	t *testing.T,
-	server *support.FunctionalAPIServer,
+	scenario *planParallelScenario,
 	args map[string]any,
 ) (int, []byte) {
 	t.Helper()
@@ -565,7 +597,9 @@ func postPlanParallel(
 	if err != nil {
 		t.Fatalf("marshal invocation: %v", err)
 	}
-	response, err := http.Post(server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations", "application/json", bytes.NewReader(payload))
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatalf("POST invocation: %v", err)
 	}
