@@ -22,7 +22,29 @@ type configInitOutcome struct {
 	SystemConfigOutcome string
 }
 
-func initializeConfig(t testing.TB, ctx context.Context, session *builtcliacceptance.Session, scenario string) (builtcliacceptance.RunResult, configInitOutcome) {
+func executeSessionCommand(
+	t testing.TB,
+	process support.Process,
+	session *builtcliacceptance.Session,
+	args ...string,
+) (*support.CapturedInputs, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+
+	inputs := support.FakeInputs(ctx, append([]string{"you"}, args...))
+	inputs.Input.Env = append([]string(nil), session.ProcessEnv()...)
+	inputs.Input.Stdin = strings.NewReader("")
+	inputs.Input.WorkingDirectory = session.WorkDir
+	return inputs, process.Execute(inputs.Input)
+}
+
+func initializeConfig(
+	t testing.TB,
+	ctx context.Context,
+	session *builtcliacceptance.Session,
+	scenario string,
+) (builtcliacceptance.RunResult, configInitOutcome) {
 	t.Helper()
 
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
@@ -48,6 +70,37 @@ func initializeConfig(t testing.TB, ctx context.Context, session *builtcliaccept
 	}
 }
 
+func initializeConfigWithProcess(
+	t testing.TB,
+	process support.Process,
+	session *builtcliacceptance.Session,
+	scenario string,
+) (*support.CapturedInputs, configInitOutcome) {
+	t.Helper()
+
+	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
+	namedFactoriesRoot := filepath.Join(session.HomeDir, ".you-agent-factory", "factories")
+	outcome := "skipped"
+	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+		outcome = "created"
+	}
+	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
+	result, err := executeSessionCommand(t, process, session, "run", "--factory", missingFactory)
+	if err == nil {
+		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout(), result.Stderr())
+	}
+	support.RequireSafeCLIDiagnostic(t, result.Stderr())
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
+	}
+	return result, configInitOutcome{
+		HomeDir:             session.HomeDir,
+		ConfigPath:          configPath,
+		NamedFactoriesRoot:  namedFactoriesRoot,
+		SystemConfigOutcome: outcome,
+	}
+}
+
 func TestRootProcessHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.T) {
 	t.Parallel()
 
@@ -55,17 +108,16 @@ func TestRootProcessHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testi
 
 	first := harness.NewSession(t)
 	second := harness.NewSession(t)
+	process := support.BuildProcess(t, harness.Edges)
+	support.CleanupProcess(t, process)
 
 	if first.HomeDir == second.HomeDir || first.LogDir == second.LogDir {
 		t.Fatalf("sessions share paths: first home=%q log=%q second home=%q log=%q",
 			first.HomeDir, first.LogDir, second.HomeDir, second.LogDir)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	firstResult, firstInit := initializeConfig(t, ctx, first, "first-config-init")
-	_, secondInit := initializeConfig(t, ctx, second, "second-config-init")
+	firstResult, firstInit := initializeConfigWithProcess(t, process, first, "first-config-init")
+	secondResult, secondInit := initializeConfigWithProcess(t, process, second, "second-config-init")
 
 	firstConfig := firstInit.ConfigPath
 	secondConfig := secondInit.ConfigPath
@@ -78,9 +130,13 @@ func TestRootProcessHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testi
 		}
 	}
 
-	if strings.Contains(firstResult.Stdout+firstResult.Stderr, second.HomeDir) {
+	if strings.Contains(firstResult.Stdout()+firstResult.Stderr(), second.HomeDir) {
 		t.Fatalf("first session output leaked second home %q:\nstdout=%q\nstderr=%q",
-			second.HomeDir, firstResult.Stdout, firstResult.Stderr)
+			second.HomeDir, firstResult.Stdout(), firstResult.Stderr())
+	}
+	if strings.Contains(secondResult.Stdout()+secondResult.Stderr(), first.HomeDir) {
+		t.Fatalf("second session output leaked first home %q:\nstdout=%q\nstderr=%q",
+			first.HomeDir, secondResult.Stdout(), secondResult.Stderr())
 	}
 	if _, err := os.Stat(first.LogDir); err != nil {
 		t.Fatalf("first log dir %q: %v", first.LogDir, err)
