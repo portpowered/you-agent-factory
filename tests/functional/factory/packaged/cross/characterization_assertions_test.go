@@ -363,30 +363,7 @@ func assertPackagedGoalEventOrder(
 	wantTerminalState string,
 ) {
 	t.Helper()
-	if len(events) == 0 {
-		t.Fatalf("Factory Events for session %q are empty, want admission and terminal witnesses", sessionID)
-	}
-
-	seenIDs := make(map[string]struct{}, len(events))
-	ordered := make([]factoryapi.FactoryEvent, 0, len(events))
-	for index, event := range events {
-		if strings.TrimSpace(event.Id) == "" {
-			t.Fatalf("Factory Event[%d] ID is empty", index)
-		}
-		if _, exists := seenIDs[event.Id]; exists {
-			t.Fatalf("Factory Event ID %q is duplicated", event.Id)
-		}
-		seenIDs[event.Id] = struct{}{}
-		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
-			t.Fatalf("Factory Event[%d] type=%q session ID = %q, want %q", index, event.Type, *event.Context.SessionId, sessionID)
-		}
-		if event.Context.SessionId != nil {
-			ordered = append(ordered, event)
-		}
-	}
-	if len(ordered) == 0 {
-		t.Fatalf("Factory Events for session %q have no session-scoped records", sessionID)
-	}
+	ordered := collectPackagedGoalSessionEvents(t, events, sessionID)
 	previousSequence := -1
 	admissionSequence := -1
 	terminalSequence := -1
@@ -455,6 +432,39 @@ func assertPackagedGoalEventOrder(
 	if admissionSequence >= terminalSequence {
 		t.Fatalf("Work %q admission sequence=%d terminal sequence=%d, want admission first", workID, admissionSequence, terminalSequence)
 	}
+}
+
+func collectPackagedGoalSessionEvents(
+	t testing.TB,
+	events []factoryapi.FactoryEvent,
+	sessionID string,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	if len(events) == 0 {
+		t.Fatalf("Factory Events for session %q are empty, want admission and terminal witnesses", sessionID)
+	}
+
+	seenIDs := make(map[string]struct{}, len(events))
+	ordered := make([]factoryapi.FactoryEvent, 0, len(events))
+	for index, event := range events {
+		if strings.TrimSpace(event.Id) == "" {
+			t.Fatalf("Factory Event[%d] ID is empty", index)
+		}
+		if _, exists := seenIDs[event.Id]; exists {
+			t.Fatalf("Factory Event ID %q is duplicated", event.Id)
+		}
+		seenIDs[event.Id] = struct{}{}
+		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
+			t.Fatalf("Factory Event[%d] type=%q session ID = %q, want %q", index, event.Type, *event.Context.SessionId, sessionID)
+		}
+		if event.Context.SessionId != nil {
+			ordered = append(ordered, event)
+		}
+	}
+	if len(ordered) == 0 {
+		t.Fatalf("Factory Events for session %q have no session-scoped records", sessionID)
+	}
+	return ordered
 }
 
 func crossEventContainsWorkID(event factoryapi.FactoryEvent, workID string) bool {
