@@ -35,10 +35,18 @@ func (r *registry) ListWorkerSessionObservations(
 	pageIDs := observationListPage(ids, query.limit)
 	projectionStartedAt := r.clock.Now()
 	observations, err := r.projectObservationList(ctx, pageIDs)
-	if err != nil {
-		return workersessions.ListWorkerSessionObservationsResult{}, err
-	}
 	nextToken := observationListNextToken(ids, pageIDs)
+	result := workersessions.ListWorkerSessionObservationsResult{
+		Observations: observations,
+		MaxResults:   query.limit,
+		NextToken:    nextToken,
+	}
+	if err != nil {
+		if errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+			r.logger.Info("worker session top-level observation list degraded", "scope", string(query.scope), "state_count", len(req.States), "result_count", len(observations), "optional_projection", "unavailable")
+		}
+		return result, err
+	}
 	r.logger.Debug(
 		"worker session top-level observation list phases",
 		"scope", string(query.scope),
@@ -120,14 +128,20 @@ func observationListPage(ids []string, limit int) []string {
 
 func (r *registry) projectObservationList(ctx context.Context, ids []string) ([]workersessions.Observation, error) {
 	observations := make([]workersessions.Observation, 0, len(ids))
+	var optionalProjectionErr error
 	for _, id := range ids {
 		projected, err := r.projectObservation(ctx, id)
+		if errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+			observations = append(observations, projected)
+			optionalProjectionErr = workersessions.ErrObservationProjectionUnavailable
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
 		observations = append(observations, projected)
 	}
-	return observations, nil
+	return observations, optionalProjectionErr
 }
 
 func observationListNextToken(allIDs, pageIDs []string) string {
@@ -633,7 +647,7 @@ func int64PointerToInt(value *int64) *int {
 // reference.
 func (r *registry) enrichWithProviderSessionsProjection(ctx context.Context, projected workersessions.Observation) (workersessions.Observation, error) {
 	if r.providerSessions == nil {
-		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+		return projected, workersessions.ErrObservationProjectionUnavailable
 	}
 	result, err := r.providerSessions.Project(providersessions.ProjectRequest{
 		Session: projected.ProviderSession.Clone(),
@@ -643,7 +657,7 @@ func (r *registry) enrichWithProviderSessionsProjection(ctx context.Context, pro
 		if errors.Is(err, context.Canceled) || errors.Is(err, providersessions.ErrOperationCanceled) {
 			return workersessions.Observation{}, workersessions.ErrObservationCanceled
 		}
-		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+		return projected, workersessions.ErrObservationProjectionUnavailable
 	}
 	projected.Transcript = workersessions.TranscriptAvailabilityAvailable
 	if usage := observationTokenUsage(result.Detail.Parse.TokenUsage); usage != nil {
