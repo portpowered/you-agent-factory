@@ -23,7 +23,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const packagedGoalSharedFixtureShutdownTimeout = 15 * time.Second
+const (
+	packagedGoalSharedFixtureShutdownTimeout = 15 * time.Second
+	packagedGoalSharedHostModel              = "goal-shared-host-model"
+)
 
 var packagedGoalSelectorSequence uint64
 
@@ -34,30 +37,167 @@ func TestPackagedGoalSharedScenarios(t *testing.T) {
 	fixture := newPackagedGoalSharedFixture(t)
 	t.Cleanup(func() { fixture.ledger.assertClean(t) })
 
-	t.Run("AcceptCompletesWithSummary", func(t *testing.T) {
-		runner := newPackagedGoalAcceptedProviderRunner(t)
-		scenario := fixture.openScenario(t, "accept", runner)
-		response := postPackagedGoalScenarioInvocation(t, scenario, "customer goal request text")
-		assertPackagedGoalCompletedWithSummary(t, response, packagedGoalMockWorkerAcceptedSummary)
-		if primaryResultText(t, response) == "customer goal request text" {
-			t.Fatal("primaryResult echoed submitted goal text")
-		}
-		if got := runner.CallCount(); got != 1 {
-			t.Fatalf("accepted provider invocation count = %d, want 1", got)
-		}
-		assertPackagedGoalScenarioWitnesses(t, scenario, response, "complete")
-	})
+	for _, test := range []struct {
+		name string
+		run  func(*testing.T, *packagedGoalSharedFixture)
+	}{
+		{"AcceptCompletesWithSummary", runPackagedGoalAcceptScenario},
+		{"UnknownDecisionFails", runPackagedGoalFailureScenario},
+		{"ContinueRepeatsThenCompletes", runPackagedGoalContinueScenario},
+		{"ContinueExhaustsAtVisitBound", runPackagedGoalVisitBoundScenario},
+		{"NeedsChangesRepeatsThenCompletes", runPackagedGoalNeedsChangesScenario},
+		{"BlockedDecisionStopsInInspectableBlockedState", runPackagedGoalBlockedScenario},
+		{"PausedSubmissionResumes", runPackagedGoalPausedScenario},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) { test.run(t, fixture) })
+	}
+}
 
-	t.Run("UnknownDecisionFails", func(t *testing.T) {
-		runner := newPackagedGoalFailingProviderRunner(t)
-		scenario := fixture.openScenario(t, "failure", runner)
-		response := postPackagedGoalScenarioInvocation(t, scenario, "invoke packaged goal with failing worker")
-		assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
-		if got := runner.CallCount(); got != 1 {
-			t.Fatalf("failing provider invocation count = %d, want 1", got)
-		}
-		assertPackagedGoalScenarioWitnesses(t, scenario, response, "failed")
+func runPackagedGoalAcceptScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	runner := newPackagedGoalAcceptedProviderRunner(t)
+	scenario := fixture.openScenario(t, "accept", runner)
+	response := postPackagedGoalScenarioInvocation(t, scenario, "customer goal request text")
+	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalMockWorkerAcceptedSummary)
+	if primaryResultText(t, response) == "customer goal request text" {
+		t.Fatal("primaryResult echoed submitted goal text")
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("accepted provider invocation count = %d, want 1", got)
+	}
+	assertPackagedGoalScenarioWitnesses(t, scenario, response, "complete")
+}
+
+func runPackagedGoalFailureScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	runner := newPackagedGoalFailingProviderRunner(t)
+	scenario := fixture.openScenario(t, "failure", runner)
+	response := postPackagedGoalScenarioInvocation(t, scenario, "invoke packaged goal with failing worker")
+	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("failing provider invocation count = %d, want 1", got)
+	}
+	assertPackagedGoalScenarioWitnesses(t, scenario, response, "failed")
+}
+
+func runPackagedGoalContinueScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("needs_changes", "continue with verification", "ordinary partial progress"))},
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("accepted", "", packagedGoalContinueThenCompleteSummary))},
+	)
+	scenario := fixture.openScenario(t, "continue", runner)
+	response := postPackagedGoalScenarioInvocation(t, scenario, "invoke packaged goal after continue")
+	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalContinueThenCompleteSummary)
+	if got := runner.CallCount(); got != 2 {
+		t.Fatalf("continue provider invocation count = %d, want 2", got)
+	}
+	assertPackagedGoalSecondAttemptPreservesContext(t, runner, "ordinary partial progress")
+	assertPackagedGoalScenarioWitnessesWithDispatches(t, scenario, response, "complete", 2)
+}
+
+func runPackagedGoalVisitBoundScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	results := make([]platformprocess.CommandResult, 12)
+	for index := range results {
+		results[index] = platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope(
+			"needs_changes",
+			"continue toward the visit bound",
+			fmt.Sprintf("partial progress %d", index+1),
+		))}
+	}
+	runner := support.NewShapedProviderCommandRunner(results...)
+	scenario := fixture.openScenario(t, "visit-bound", runner)
+	response := postPackagedGoalScenarioInvocation(t, scenario, "invoke packaged goal through visit exhaustion")
+	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
+	if got := runner.CallCount(); got != 12 {
+		t.Fatalf("visit-bound provider invocation count = %d, want exactly 12", got)
+	}
+	transitions := make([]string, 12)
+	for index := range transitions {
+		transitions[index] = "execute-goal"
+	}
+	transitions = append(transitions, "goal-loop-breaker")
+	assertPackagedGoalScenarioWitnessesWithExpectedTransitions(t, scenario, response, "failed", transitions)
+}
+
+func runPackagedGoalNeedsChangesScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("needs_changes", "finish the remaining work", "goal is not complete yet"))},
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("accepted", "", packagedGoalRejectThenCompleteSummary))},
+	)
+	scenario := fixture.openScenario(t, "needs-changes", runner)
+	response := postPackagedGoalScenarioInvocation(t, scenario, "invoke packaged goal after reject")
+	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalRejectThenCompleteSummary)
+	if got := runner.CallCount(); got != 2 {
+		t.Fatalf("needs-changes provider invocation count = %d, want 2", got)
+	}
+	assertPackagedGoalSecondAttemptPreservesContext(t, runner, "goal is not complete yet")
+	assertPackagedGoalScenarioWitnessesWithDispatches(t, scenario, response, "complete", 2)
+}
+
+func runPackagedGoalBlockedScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte(goalDecisionEnvelope("blocked", "requires operator credentials", "progress saved before blocker")),
 	})
+	scenario := fixture.openScenario(t, "blocked", runner)
+	response := postPackagedGoalScenarioInvocation(t, scenario, "invoke blocked packaged goal")
+	assertPackagedGoalBlockedResponse(t, response)
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("blocked provider invocation count = %d, want 1", got)
+	}
+	assertPackagedGoalScenarioWitnessesWithDispatches(t, scenario, response, "blocked", 1)
+}
+
+func runPackagedGoalPausedScenario(t *testing.T, fixture *packagedGoalSharedFixture) {
+	runner := newPackagedGoalAcceptedProviderRunner(t)
+	scenario := fixture.openScenario(t, "paused", runner)
+	if err := fixture.provider.setDefaultForWorkSubmission(runner); err != nil {
+		t.Fatal(err)
+	}
+	sessionPath := "/factory-sessions/" + url.PathEscape(scenario.session)
+	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "pause", factoryapi.FactorySessionLifecycleControlKindPause, "pause")
+	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "pause", factoryapi.FactorySessionLifecycleControlKindPause, "repeat pause")
+	work := submitPackagedGoalWorkToSession(t, scenario.fixture.baseURL, scenario.session, scenario.selector+"-work", "customer goal request text")
+	workID := support.StringPointerValue(work.WorkId)
+	listed := listPackagedGoalSessionWork(t, scenario.fixture.baseURL, scenario.session)
+	if support.HasWorkAtCustomerState(listed, workID, "goal:init") || support.HasWorkAtCustomerState(listed, workID, "goal:complete") {
+		t.Fatalf("paused Goal Work %q advanced before resume: %#v", workID, listed.Results)
+	}
+	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "resume", factoryapi.FactorySessionLifecycleControlKindResume, "resume")
+	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "resume", factoryapi.FactorySessionLifecycleControlKindResume, "repeat resume")
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.session, packagedGoalSharedFixtureShutdownTimeout)
+	completed := listPackagedGoalSessionWork(t, scenario.fixture.baseURL, scenario.session)
+	listedWork := findPackagedGoalWorkByID(t, completed, workID)
+	if packagedGoalWorkStateName(listedWork.State) != "complete" {
+		t.Fatalf("resumed Goal Work = %#v, want complete", listedWork)
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("resumed provider invocation count = %d, want 1", got)
+	}
+	fixture.ledger.recordWork(scenario.session, workID)
+	assertPackagedGoalScenarioPublicWitnesses(t, scenario, workID, 1)
+}
+
+func assertPackagedGoalLifecycleControl(
+	t *testing.T,
+	scenario *packagedGoalScenario,
+	sessionPath string,
+	operation string,
+	wantOperation factoryapi.FactorySessionLifecycleControlKind,
+	label string,
+) {
+	t.Helper()
+	response := postPackagedGoalJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		scenario.fixture.baseURL+sessionPath+"/"+operation,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+		label+" packaged Goal session",
+	)
+	wantOutcome := factoryapi.FactorySessionLifecycleControlOutcomeAccepted
+	if strings.HasPrefix(label, "repeat ") {
+		wantOutcome = factoryapi.FactorySessionLifecycleControlOutcomeNoOp
+	}
+	if response.Operation != wantOperation || response.Outcome != wantOutcome {
+		t.Fatalf("%s response = %#v, want operation %q and outcome %q", label, response, wantOperation, wantOutcome)
+	}
 }
 
 type packagedGoalSharedFixture struct {
@@ -70,8 +210,9 @@ type packagedGoalSharedFixture struct {
 }
 
 type packagedGoalSelectorRouter struct {
-	mu     sync.RWMutex
-	routes map[string]platformprocess.CommandRunner
+	mu            sync.RWMutex
+	routes        map[string]platformprocess.CommandRunner
+	defaultRunner platformprocess.CommandRunner
 }
 
 func newPackagedGoalSelectorRouter() *packagedGoalSelectorRouter {
@@ -95,6 +236,22 @@ func (router *packagedGoalSelectorRouter) register(
 	return nil
 }
 
+// setDefaultForWorkSubmission covers the public Work submit shape, which has
+// no invocation signature argument map and therefore resolves the host's
+// default model. Signature-backed scenarios always use immutable selectors.
+func (router *packagedGoalSelectorRouter) setDefaultForWorkSubmission(runner platformprocess.CommandRunner) error {
+	if runner == nil {
+		return errors.New("Goal default provider runner is required")
+	}
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	if router.defaultRunner != nil {
+		return errors.New("Goal default provider runner is already registered")
+	}
+	router.defaultRunner = runner
+	return nil
+}
+
 func (router *packagedGoalSelectorRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -102,6 +259,9 @@ func (router *packagedGoalSelectorRouter) Run(
 	selector := packagedGoalModelSelector(request.Args)
 	router.mu.RLock()
 	runner := router.routes[selector]
+	if runner == nil && selector == packagedGoalSharedHostModel {
+		runner = router.defaultRunner
+	}
 	router.mu.RUnlock()
 	if runner == nil {
 		return platformprocess.CommandResult{}, fmt.Errorf("no Goal provider outcome registered for selector %q", selector)
@@ -159,7 +319,7 @@ func newPackagedGoalSharedFixture(t *testing.T) *packagedGoalSharedFixture {
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run", "--dir", factoryDir,
 		"--continuously", "--with-server", "--quiet", "--no-record",
-		"--provider", "CODEX", "--model", "goal-shared-host-model",
+		"--provider", "CODEX", "--model", packagedGoalSharedHostModel,
 	})
 	inputs.Input.Env = environment
 	inputs.Input.WorkingDirectory = factoryDir
@@ -420,10 +580,33 @@ func assertPackagedGoalScenarioWitnesses(
 	wantState string,
 ) {
 	t.Helper()
-	listed := support.GetJSON[factoryapi.ListWorkResponse](
-		t,
-		strings.TrimSuffix(scenario.fixture.baseURL, "/")+"/factory-sessions/"+url.PathEscape(scenario.session)+"/work",
-	)
+	assertPackagedGoalScenarioWitnessesWithDispatches(t, scenario, response, wantState, 1)
+}
+
+func assertPackagedGoalScenarioWitnessesWithDispatches(
+	t *testing.T,
+	scenario *packagedGoalScenario,
+	response factoryapi.InvocationResponse,
+	wantState string,
+	wantDispatches int,
+) {
+	t.Helper()
+	transitions := make([]string, wantDispatches)
+	for index := range transitions {
+		transitions[index] = "execute-goal"
+	}
+	assertPackagedGoalScenarioWitnessesWithExpectedTransitions(t, scenario, response, wantState, transitions)
+}
+
+func assertPackagedGoalScenarioWitnessesWithExpectedTransitions(
+	t *testing.T,
+	scenario *packagedGoalScenario,
+	response factoryapi.InvocationResponse,
+	wantState string,
+	wantTransitions []string,
+) {
+	t.Helper()
+	listed := listPackagedGoalSessionWork(t, scenario.fixture.baseURL, scenario.session)
 	work := findPackagedGoalWork(t, listed, scenario.request)
 	if work.WorkId == nil || strings.TrimSpace(*work.WorkId) == "" {
 		t.Fatalf("%s Goal listed WorkId = %#v, want unique Work identity", scenario.name, work.WorkId)
@@ -439,24 +622,109 @@ func assertPackagedGoalScenarioWitnesses(
 	if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
 		t.Fatalf("%s Goal Work type = %#v, want goal", scenario.name, work.WorkTypeName)
 	}
-	if work.WorkId == nil || *work.WorkId != workID {
-		t.Fatalf("%s Goal listed WorkId = %#v, want response WorkId %q", scenario.name, work.WorkId, workID)
-	}
+	assertPackagedGoalScenarioPublicWitnessesWithTransitions(t, scenario, workID, wantTransitions)
+	t.Logf("GOAL-SPINE-001 scenario=%s selector=%s session=%s work=%s state=%s events=%d dispatches=%d", scenario.name, scenario.selector, scenario.session, workID, wantState, len(support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.session)), len(wantTransitions))
+}
 
+func assertPackagedGoalScenarioPublicWitnesses(
+	t *testing.T,
+	scenario *packagedGoalScenario,
+	workID string,
+	wantDispatches int,
+) {
+	t.Helper()
+	transitions := make([]string, wantDispatches)
+	for index := range transitions {
+		transitions[index] = "execute-goal"
+	}
+	assertPackagedGoalScenarioPublicWitnessesWithTransitions(t, scenario, workID, transitions)
+}
+
+func assertPackagedGoalScenarioPublicWitnessesWithTransitions(
+	t *testing.T,
+	scenario *packagedGoalScenario,
+	workID string,
+	wantTransitions []string,
+) {
+	t.Helper()
 	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.session)
 	assertPackagedGoalEventScope(t, scenario, events, workID)
 	dispatches := support.ObserveDispatchEvents(t, events)
-	if len(dispatches) != 1 || dispatches[0].Request.TransitionId != "execute-goal" {
-		t.Fatalf("%s Goal dispatches = %#v, want one execute-goal dispatch", scenario.name, dispatches)
+	if len(dispatches) != len(wantTransitions) {
+		t.Fatalf("%s Goal dispatches = %#v, want transitions %v", scenario.name, dispatches, wantTransitions)
 	}
-	if !support.DispatchObservationIncludesWork(dispatches[0], workID) {
-		t.Fatalf("%s Goal dispatch = %#v, want WorkId %q", scenario.name, dispatches[0], workID)
-	}
-	if dispatches[0].Response == nil {
-		t.Fatalf("%s Goal dispatch has no public response event", scenario.name)
+	for index, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != wantTransitions[index] {
+			t.Fatalf("%s Goal dispatch[%d] transition = %q, want %q", scenario.name, index, dispatch.Request.TransitionId, wantTransitions[index])
+		}
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			t.Fatalf("%s Goal dispatch[%d] = %#v, want WorkId %q", scenario.name, index, dispatch, workID)
+		}
+		if dispatch.Response == nil {
+			t.Fatalf("%s Goal dispatch[%d] has no public response event", scenario.name, index)
+		}
 	}
 	assertPackagedGoalRetainedReplay(t, scenario, events)
-	t.Logf("GOAL-SPINE-001 scenario=%s selector=%s session=%s work=%s state=%s events=%d dispatches=%d", scenario.name, scenario.selector, scenario.session, workID, wantState, len(events), len(dispatches))
+}
+
+func listPackagedGoalSessionWork(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+) factoryapi.ListWorkResponse {
+	t.Helper()
+	return support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/work",
+	)
+}
+
+func findPackagedGoalWorkByID(
+	t testing.TB,
+	listed factoryapi.ListWorkResponse,
+	workID string,
+) factoryapi.Work {
+	t.Helper()
+	for _, work := range listed.Results {
+		if work.WorkId != nil && *work.WorkId == workID {
+			return work
+		}
+	}
+	t.Fatalf("Goal Work %q is absent from explicit-session listing %#v", workID, listed.Results)
+	return factoryapi.Work{}
+}
+
+func assertPackagedGoalSecondAttemptPreservesContext(
+	t testing.TB,
+	runner *support.ShapedProviderCommandRunner,
+	wantOutput string,
+) {
+	t.Helper()
+	requests := runner.Requests()
+	if len(requests) < 2 {
+		t.Fatalf("Goal provider requests = %d, want at least 2", len(requests))
+	}
+	secondPrompt := string(requests[1].Stdin) + " " + strings.Join(requests[1].Args, " ")
+	if !strings.Contains(secondPrompt, "state file's unchanged `objective` as authoritative") ||
+		!strings.Contains(secondPrompt, wantOutput) {
+		t.Fatalf("second Goal attempt prompt does not preserve the durable objective contract and prior output: %s", secondPrompt)
+	}
+}
+
+func assertPackagedGoalBlockedResponse(t testing.TB, response factoryapi.InvocationResponse) {
+	t.Helper()
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("blocked Goal invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_BLOCKED") {
+		t.Fatalf("blocked Goal invocation errorCode = %#v, want INVOCATION_BLOCKED", response.ErrorCode)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:blocked" {
+		t.Fatalf("blocked Goal invocation workState = %#v, want goal:blocked", response.WorkState)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("blocked Goal invocation primaryResult = %#v, want nil", response.PrimaryResult)
+	}
 }
 
 func findPackagedGoalWork(
@@ -472,6 +740,45 @@ func findPackagedGoalWork(
 	}
 	t.Fatalf("Goal Work request %q is absent from explicit-session listing %#v", requestID, listed.Results)
 	return factoryapi.Work{}
+}
+
+func submitPackagedGoalWorkToSession(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	name string,
+	text string,
+) factoryapi.SubmitWorkResponse {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"name":         name,
+		"workTypeName": "goal",
+		"items": []map[string]any{{
+			"type": "text",
+			"text": text,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal packaged Goal submit request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
+	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s Goal submit: %v", endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST %s Goal submit status = %d, want 201: %s", endpoint, resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode Goal submit response: %v", err)
+	}
+	if strings.TrimSpace(support.StringPointerValue(submitted.WorkId)) == "" {
+		t.Fatalf("Goal submit response = %#v, want Work ID", submitted)
+	}
+	return submitted
 }
 
 func assertPackagedGoalEventScope(
