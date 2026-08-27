@@ -39,26 +39,20 @@ type rpcMessage struct {
 // Process.ACPServer() -- the production ACP stdio server -- observing the
 // real Chat Sessions authority root.BuildProcess composed.
 func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
-
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	server := process.ACPServer()
-	if server == nil {
-		t.Fatal("Process.ACPServer() returned a nil acp.Server")
-	}
-
-	cwd := t.TempDir()
+	controlledACPHome(t)
+	server := controlledACPServer(t)
+	cwd := controlledACPWorkingDirectory(t, "canonical-server")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
+	}
+	secondCWD := controlledACPWorkingDirectory(t, "canonical-server-second")
+	secondSessionID := assertSessionNewReturnsDefaultTarget(t, server, secondCWD, "factory:@you/goal")
+	if secondSessionID == "" {
+		t.Fatal("second session/new returned a blank sessionId")
+	}
+	if secondSessionID == sessionID {
+		t.Fatalf("two ACP connections reused Chat Session identity %q, want unique session IDs", sessionID)
 	}
 }
 

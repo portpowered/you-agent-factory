@@ -1,6 +1,7 @@
 package root_composition_test
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,12 +9,6 @@ import (
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
-
-	"github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-
-	"bufio"
 )
 
 // TestACPSessionAnswersEachTurnWithThatTurnsOwnResult proves the property a
@@ -41,12 +36,6 @@ func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
-
 	turns := []struct {
 		id     string
 		prompt string
@@ -57,17 +46,9 @@ func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 		{id: "turn-3", prompt: "pursue the third goal", answer: "third turn answer"},
 	}
 
-	results := make([]process.CommandResult, 0, len(turns))
-	for _, turn := range turns {
-		results = append(results, process.CommandResult{
-			Stdout: []byte(fmt.Sprintf(
-				`{"decision":"accepted","feedback":"","output":%q}`, turn.answer)),
-		})
-	}
-	runner := support.NewShapedProviderCommandRunner(results...)
-
-	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+	cohort := newControlledACPCohort(t, "multi-turn")
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "multi-turn")
+	stdin, stdout := startControlledServeACPHarness(t, cohort, cwd)
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")

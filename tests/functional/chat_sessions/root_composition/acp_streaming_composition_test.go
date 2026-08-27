@@ -14,7 +14,6 @@ import (
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
-	"github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -106,25 +105,11 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
-	home := t.TempDir()
-	// Process.ACPServer()'s factory target catalog resolves the home
-	// directory from the real process environment at request time (the same
-	// way acp_server_composition_test.go/acp_prompt_delegation_test.go set
-	// it up), independently of the per-invocation Input.Env this test also
-	// supplies to Process.Execute for the CLI command layer itself.
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
+	cohort := newControlledACPCohort(t, "streaming-composition")
 
 	const wantPrimaryResultText = "goal genuinely completed through you server acp"
-	rawEnvelopeStdout := fmt.Appendf(nil, `{"decision":"accepted","feedback":"","output":%q}`, wantPrimaryResultText)
-	runner := support.NewShapedProviderCommandRunner(process.CommandResult{
-		Stdout: rawEnvelopeStdout,
-	})
-
-	cwd := t.TempDir()
-	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "streaming-composition")
+	stdin, stdout := startControlledServeACPHarness(t, cohort, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
 	if sessionID == "" {
@@ -166,6 +151,26 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
 	closeProcessCleanly(t, buildProcess)
+	return startServeACPProcess(t, buildProcess, home, cwd)
+}
+
+// startControlledServeACPHarness runs a fresh customer-facing ACP command
+// invocation on a scenario-scoped fixed-profile process. The invocation's
+// pipes and context are owned by the calling test; the process is closed by
+// that scenario's cleanup.
+func startControlledServeACPHarness(t *testing.T, cohort *controlledACPCohort, cwd string) (*os.File, *bufio.Reader) {
+	t.Helper()
+	t.Setenv("HOME", cohort.home)
+	t.Setenv("USERPROFILE", cohort.home)
+	return startServeACPProcess(t, cohort.process, cohort.home, cwd)
+}
+
+func startServeACPProcess(
+	t *testing.T,
+	buildProcess support.ApplicationProcess,
+	home, cwd string,
+) (*os.File, *bufio.Reader) {
+	t.Helper()
 
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {

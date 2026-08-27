@@ -9,18 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -48,78 +44,30 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
-
-	// ProviderOverride (an in-process execute-shaped Providers fake) is used here
-	// instead of the standards-preferred ProviderCommandRunner
-	// (platformprocess.CommandRunner, a subprocess-launch-shaped fake).
-	// ProviderCommandRunner *can* drive this exact @you/goal fixture --
-	// tests/functional/cli/named_invocation/named_invocation_test.go already
-	// does, via testutil.NewProviderCommandRunner -- so the substitution here
-	// is not technical necessity, it is the simplest edge that satisfies
-	// @you/goal's own decision-envelope contract on every dispatch round this
-	// test's several turns produce. Swapping to ProviderCommandRunner would
-	// require queuing the exact raw subprocess Stdout bytes this Factory's
-	// execution adapter expects for each of those rounds, coupling this test
-	// to that adapter's wire format for no additional coverage of the
-	// on-demand-activation behavior this test exists to prove;
-	// ProviderOverride's higher-level providers.ExecuteResult shape
-	// isolates this test from that coupling. Both edges are equally real
-	// external-effect ports serviceedges.Edges accepts.
-	provider := newAcceptedGoalProvider()
-	// Factory Session runtime activations are counted through the shared
-	// FactorySessionIDGenerator edge. That generator is also consumed for
-	// other identifiers the opened runtime mints internally while
-	// dispatching (e.g. child work/dispatch IDs), so its count is not a
-	// clean absolute "one activation" signal on its own -- but a second,
-	// independent runtime activation for the second turn would consume the
-	// generator again for that same internal bookkeeping, so the count
-	// staying exactly unchanged across the second turn still proves no
-	// second activation happened.
-	var factorySessionIDCalls atomic.Int32
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderOverride: provider,
-		FactorySessionIDGenerator: func() string {
-			n := factorySessionIDCalls.Add(1)
-			return fmt.Sprintf("acp-factory-session-id-%d", n)
-		},
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	closeProcessCleanly(t, process)
-	server := process.ACPServer()
-	if server == nil {
-		t.Fatal("Process.ACPServer() returned a nil acp.Server")
-	}
-
-	cwd := t.TempDir()
+	cohort := newControlledACPCohort(t, "delegation-reuse")
+	server := controlledACPServerForCohort(t, cohort)
+	callsBeforeFirstTurn := cohort.factorySessionIDCalls.Load()
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-reuse")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-
-	firstResp := sendSessionPrompt(t, server, sessionID, "please help with this goal")
+	firstResp := sendSessionPrompt(t, server, sessionID, "please help with this goal [cohort-reuse]")
 	if firstResp.Error != nil {
 		t.Fatalf("first session/prompt response error = %+v, want a successful final result", firstResp.Error)
 	}
 	assertPromptResponseStopReason(t, firstResp, acpsdk.StopReasonEndTurn)
-	callsAfterFirstTurn := factorySessionIDCalls.Load()
-	if callsAfterFirstTurn == 0 {
+	callsAfterFirstTurn := cohort.factorySessionIDCalls.Load()
+	if callsAfterFirstTurn <= callsBeforeFirstTurn {
 		t.Fatal("Factory Session ID generator was never called after the first (unbound) turn, want at least one Factory Session activation")
 	}
 
-	secondResp := sendSessionPrompt(t, server, sessionID, "a follow-up message in the same episode")
+	secondResp := sendSessionPrompt(t, server, sessionID, "a follow-up message in the same episode [cohort-reuse]")
 	if secondResp.Error != nil {
 		t.Fatalf("second session/prompt response error = %+v, want a successful final result", secondResp.Error)
 	}
 	assertPromptResponseStopReason(t, secondResp, acpsdk.StopReasonEndTurn)
-	if got := factorySessionIDCalls.Load(); got != callsAfterFirstTurn {
+	if got := cohort.factorySessionIDCalls.Load(); got != callsAfterFirstTurn {
 		t.Fatalf("Factory Session ID generator calls after the second (already-bound) turn = %d, want unchanged from %d (no second Factory Session activation)", got, callsAfterFirstTurn)
 	}
 }
@@ -149,37 +97,14 @@ func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
-
-	// An exhausted MockProvider answers every inference with unparseable
-	// filler, which @you/goal's decision-envelope executor cannot classify.
-	// Its authored `onFailure` routes that to the `failed` FAILED state, so
-	// the invocation publishes a genuine FAILED terminal status -- a real
-	// downstream Factory failure produced by the Factory's own workflow,
-	// not an injected one.
-	provider := testutil.NewMockProvider()
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{ProviderOverride: provider})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	closeProcessCleanly(t, process)
-	server := process.ACPServer()
-	if server == nil {
-		t.Fatal("Process.ACPServer() returned a nil acp.Server")
-	}
-
-	cwd := t.TempDir()
+	cohort := newControlledACPCohort(t, "delegation-failure")
+	server := controlledACPServerForCohort(t, cohort)
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-failure")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-
-	resp := sendSessionPrompt(t, server, sessionID, "please help with this goal")
+	resp := sendSessionPrompt(t, server, sessionID, "please help with this goal [cohort-failure]")
 	if resp.Error == nil {
 		t.Fatalf("session/prompt response error = nil with result %s, want a JSON-RPC error for a FAILED Factory invocation", resp.Result)
 	}
@@ -208,7 +133,7 @@ func TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError(t *testing.
 	// A failed invocation must release the session's busy state like any
 	// other terminal outcome: the next prompt is still admitted and reaches
 	// its own dispatch rather than being rejected as busy.
-	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the failed invocation")
+	secondResp := sendSessionPrompt(t, server, sessionID, "a retry after the failed invocation [cohort-failure]")
 	if secondResp.Error == nil {
 		t.Fatal("second session/prompt response error = nil, want the same bounded failure, not a fabricated success")
 	}
@@ -379,21 +304,28 @@ func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *te
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	// A single delivery's own Factory Session ID generator call count is the
-	// baseline: if a redelivered duplicate on the same connection dispatched
-	// a second time, sending it twice would produce a strictly larger count
-	// than sending it once, since each real activation consumes this
-	// generator at least once (see the sibling test's own comment on why
-	// this shared edge is an indirect but sufficient activation-count proxy).
-	singleDeliveryCalls := runPromptDeliveries(t, "single-delivery", 1)
-	if singleDeliveryCalls == 0 {
+	// A single delivery's Factory Session ID and provider request counts are
+	// the baseline: if a redelivered duplicate on the same connection
+	// dispatched a second time, sending it twice would increase both observed
+	// effects. The provider request count is the direct edge witness; the
+	// generator count remains a separate activation guard because each real
+	// activation consumes that generator at least once.
+	singleDelivery := runPromptDeliveries(t, "single-delivery", 1)
+	if singleDelivery.factorySessionIDCalls == 0 {
 		t.Fatal("Factory Session ID generator was never called for a single delivery, want at least one Factory Session activation")
 	}
+	if singleDelivery.providerRequests == 0 {
+		t.Fatal("controlled provider received no request for a single delivery, want one provider effect")
+	}
 
-	duplicateDeliveryCalls := runPromptDeliveries(t, "duplicate-delivery", 2)
-	if duplicateDeliveryCalls != singleDeliveryCalls {
+	duplicateDelivery := runPromptDeliveries(t, "duplicate-delivery", 2)
+	if duplicateDelivery.factorySessionIDCalls != singleDelivery.factorySessionIDCalls {
 		t.Fatalf("Factory Session ID generator calls after a redelivered duplicate = %d, want unchanged from the single-delivery baseline %d (no second Factory Session activation)",
-			duplicateDeliveryCalls, singleDeliveryCalls)
+			duplicateDelivery.factorySessionIDCalls, singleDelivery.factorySessionIDCalls)
+	}
+	if duplicateDelivery.providerRequests != singleDelivery.providerRequests {
+		t.Fatalf("controlled provider requests after a redelivered duplicate = %d, want unchanged from the single-delivery baseline %d (no second provider effect)",
+			duplicateDelivery.providerRequests, singleDelivery.providerRequests)
 	}
 }
 
@@ -401,42 +333,20 @@ func TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch(t *te
 // composition, creates one session, then sends copies of the identical
 // "session/prompt" request (same wire id, same connection) within a single
 // Serve call, asserting every resulting response is successful. It returns
-// the final Factory Session ID generator call count, so a caller can compare
-// counts across a different number of identical deliveries.
-func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 {
+// Factory Session ID and provider request counts, so a caller can compare
+// effects across a different number of identical deliveries.
+func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) promptDeliveryObservation {
 	t.Helper()
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	cohort := newControlledACPCohort(t, "redelivery-"+homePrefix)
+	server := controlledACPServerForCohort(t, cohort)
+	callsBeforeDelivery := cohort.factorySessionIDCalls.Load()
 
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
-
-	provider := newAcceptedGoalProvider()
-	var factorySessionIDCalls atomic.Int32
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderOverride: provider,
-		FactorySessionIDGenerator: func() string {
-			n := factorySessionIDCalls.Add(1)
-			return fmt.Sprintf("acp-%s-factory-session-id-%d", homePrefix, n)
-		},
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	closeProcessCleanly(t, process)
-	server := process.ACPServer()
-	if server == nil {
-		t.Fatal("Process.ACPServer() returned a nil acp.Server")
-	}
-
-	cwd := t.TempDir()
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "redelivery-"+homePrefix)
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-
 	// Every delivered line carries the exact same wire id (2) on one Serve
 	// call, so every one resolves to the identical connection-scoped
 	// RequestIdentity -- a true redelivery, not distinct requests that merely
@@ -444,7 +354,7 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 
 	// already keeps distinct on purpose).
 	params, err := json.Marshal(map[string]any{
 		"sessionId": sessionID,
-		"prompt":    []map[string]any{{"type": "text", "text": "please help with this goal"}},
+		"prompt":    []map[string]any{{"type": "text", "text": "please help with this goal [cohort-redelivery]"}},
 	})
 	if err != nil {
 		t.Fatalf("marshal session/prompt params: %v", err)
@@ -467,8 +377,15 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) int32 
 		}
 		assertPromptResponseStopReason(t, resp, acpsdk.StopReasonEndTurn)
 	}
+	return promptDeliveryObservation{
+		factorySessionIDCalls: cohort.factorySessionIDCalls.Load() - callsBeforeDelivery,
+		providerRequests:      cohort.runner.requestCount(),
+	}
+}
 
-	return factorySessionIDCalls.Load()
+type promptDeliveryObservation struct {
+	factorySessionIDCalls int32
+	providerRequests      int
 }
 
 // responseLinesOnly splits out into complete newline-terminated lines and
@@ -570,60 +487,6 @@ func responseLinesOnlyErr(out *bytes.Buffer) []rpcMessage {
 	return responses
 }
 
-// acceptedGoalProvider is an execute-shaped provider that answers every attempt
-// with the one decision envelope the seeded @you/goal packaged Factory's
-// `outcomeFormat: decision-envelope` executor contract accepts as complete,
-// so its goal loop reaches its authored `complete` terminal state.
-//
-// It answers *every* call rather than a fixed queue on purpose: the tests
-// using it drive several turns, and each turn's dispatch runs @you/goal's own
-// REPEATER workstation, so the number of inferences is a property of that
-// Factory's workflow rather than something a test should have to predict. A
-// queue that ran dry would fall back to unparseable filler, route through
-// `onFailure`, and fail the invocation -- turning a delegation test red for a
-// reason that has nothing to do with delegation.
-type acceptedGoalProvider struct {
-	testutil.NativeProvider
-}
-
-func newAcceptedGoalProvider() acceptedGoalProvider {
-	provider := acceptedGoalProvider{}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (acceptedGoalProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	return providers.ExecuteResult{
-		Content: `{"decision":"accepted","feedback":"","output":"goal reached over ACP"}`,
-	}, nil
-}
-
-// blockingProvider wraps an execute-shaped provider and blocks its first Execute call
-// until release is closed, closing started exactly once when that call
-// begins. A test uses this to deterministically observe that a Factory
-// dispatch's own inference call is genuinely in flight -- proving the
-// admitted turn is actually RUNNING, not merely scheduled on a goroutine --
-// before sending a concurrent request, with no sleep-based synchronization.
-type blockingProvider struct {
-	testutil.NativeProvider
-	inner   providers.Service
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
-}
-
-func newBlockingProvider(inner providers.Service) *blockingProvider {
-	provider := &blockingProvider{inner: inner, started: make(chan struct{}), release: make(chan struct{})}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (b *blockingProvider) Execute(ctx context.Context, req providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	b.once.Do(func() { close(b.started) })
-	<-b.release
-	return b.inner.Execute(ctx, req)
-}
-
 // TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch
 // proves, through the same real root.BuildProcess composition, that a second
 // "session/prompt" call arriving while the first is genuinely still
@@ -641,41 +504,20 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
 	}
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	cohort := newControlledACPCohort(t, "delegation-busy")
+	server := controlledACPServerForCohort(t, cohort)
+	started, releaseBusy := cohort.runner.armBusy()
+	t.Cleanup(releaseBusy)
 
-	seedInstalledPackagedFactory(t, home, "@you/goal")
-	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
-
-	provider := newBlockingProvider(newAcceptedGoalProvider())
-	var factorySessionIDCalls atomic.Int32
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		ProviderOverride: provider,
-		FactorySessionIDGenerator: func() string {
-			n := factorySessionIDCalls.Add(1)
-			return fmt.Sprintf("acp-busy-factory-session-id-%d", n)
-		},
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	closeProcessCleanly(t, process)
-	server := process.ACPServer()
-	if server == nil {
-		t.Fatal("Process.ACPServer() returned a nil acp.Server")
-	}
-
-	cwd := t.TempDir()
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-busy")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
-
 	firstDone := make(chan rpcMessage, 1)
 	firstErr := make(chan error, 1)
 	go func() {
-		msg, err := doSessionPrompt(server, sessionID, "please help with this goal")
+		msg, err := doSessionPrompt(server, sessionID, "please help with this goal [cohort-busy]")
 		if err != nil {
 			firstErr <- err
 			return
@@ -684,7 +526,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	}()
 
 	select {
-	case <-provider.started:
+	case <-started:
 	case err := <-firstErr:
 		t.Fatalf("first session/prompt failed before its dispatch began: %v", err)
 	}
@@ -696,24 +538,24 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 	// this same generator for its own internal bookkeeping once unblocked
 	// below, so "unchanged across the whole test" is not the right
 	// invariant -- "unchanged across exactly the concurrent busy request" is.
-	callsBeforeConcurrent := factorySessionIDCalls.Load()
+	callsBeforeConcurrent := cohort.factorySessionIDCalls.Load()
 	if callsBeforeConcurrent == 0 {
 		t.Fatal("Factory Session ID generator was never called for the in-flight first turn")
 	}
 
-	concurrentResp, err := doSessionPrompt(server, sessionID, "a concurrent prompt while the turn is busy")
+	concurrentResp, err := doSessionPrompt(server, sessionID, "a concurrent prompt while the turn is busy [cohort-busy-concurrent]")
 	if err != nil {
 		t.Fatalf("concurrent session/prompt: %v", err)
 	}
 	if concurrentResp.Error == nil {
 		t.Fatal("concurrent session/prompt response error = nil, want a bounded rejection for a busy session")
 	}
-	if got := factorySessionIDCalls.Load(); got != callsBeforeConcurrent {
+	if got := cohort.factorySessionIDCalls.Load(); got != callsBeforeConcurrent {
 		t.Fatalf("Factory Session ID generator calls changed by %d during the concurrent busy request, want unchanged from %d (the busy rejection must make zero Factory effect)",
 			got-callsBeforeConcurrent, callsBeforeConcurrent)
 	}
 
-	close(provider.release)
+	releaseBusy()
 
 	select {
 	case firstResp := <-firstDone:
@@ -727,7 +569,7 @@ func TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch(t
 
 	// The busy rejection must not have stranded the session: a later, wholly
 	// distinct prompt is still admitted and completes normally.
-	laterResp := sendSessionPrompt(t, server, sessionID, "a later prompt after the busy rejection resolved")
+	laterResp := sendSessionPrompt(t, server, sessionID, "a later prompt after the busy rejection resolved [cohort-busy-later]")
 	if laterResp.Error != nil {
 		t.Fatalf("later session/prompt response error = %+v, want a successful final result", laterResp.Error)
 	}
