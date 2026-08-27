@@ -25,47 +25,69 @@ func TestSharedProcessWorkRouting(t *testing.T) {
 
 	t.Run("LogicalMove/CompletesWithoutWorkerDispatch", func(t *testing.T) {
 		t.Parallel()
-		runLogicalMoveCompletesWithoutWorkerDispatch(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runLogicalMoveCompletesWithoutWorkerDispatch(t, fixture)
+		})
 	})
 	t.Run("LogicalMove/PreservesWorkPayloadAndLineage", func(t *testing.T) {
 		t.Parallel()
-		runLogicalMovePreservesWorkPayloadAndLineage(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runLogicalMovePreservesWorkPayloadAndLineage(t, fixture)
+		})
 	})
 	t.Run("LogicalMove/MultipleOutputsCreatesEveryExpectedWork", func(t *testing.T) {
 		t.Parallel()
-		runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture)
+		})
 	})
 	t.Run("ClassifierSuccess/RoutesEveryKnownDecision", func(t *testing.T) {
 		t.Parallel()
-		runClassifierRoutesEveryKnownDecision(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierRoutesEveryKnownDecision(t, fixture)
+		})
 	})
 	t.Run("ClassifierFanout/PreservesPayload", func(t *testing.T) {
 		t.Parallel()
-		runClassifierMultiOutputPreservesPayload(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierMultiOutputPreservesPayload(t, fixture)
+		})
 	})
 	t.Run("RoutingGuard/SelectorFailureClosesSession", func(t *testing.T) {
 		t.Parallel()
-		runClassifierRoutingSelectorGuard(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierRoutingSelectorGuard(t, fixture)
+		})
 	})
 	t.Run("ClassifierFailure/UnknownAndMalformedDecision", func(t *testing.T) {
 		t.Parallel()
-		runClassifierUnknownAndMalformedDecisionFailures(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierUnknownAndMalformedDecisionFailures(t, fixture)
+		})
 	})
 	t.Run("ClassifierFailure/ReworkFailureTerminatesWithoutCompletion", func(t *testing.T) {
 		t.Parallel()
-		runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture)
+		})
 	})
 	t.Run("ClassifierRejection/RoutesToFailedTerminal", func(t *testing.T) {
 		t.Parallel()
-		runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture)
+		})
 	})
 	t.Run("ClassifierRejection/RecordsDispatchFeedback", func(t *testing.T) {
 		t.Parallel()
-		runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture)
+		})
 	})
 	t.Run("ClassifierRejection/ReleasesResourcesForSubsequentWork", func(t *testing.T) {
 		t.Parallel()
-		runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture)
+		withWorkRoutingScenarioSlot(t, func() {
+			runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture)
+		})
 	})
 }
 

@@ -519,9 +519,11 @@ func runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(
 	scenario := fixture.newScenario(t, "classifier-rejection-resources", "rejection_no_arcs_resources", runner)
 	configureCommandEdgeWorker(t, scenario.factoryDir, "worker")
 	writeLogicalMoveSeedRequest(t, scenario.factoryDir, firstWorkID, firstPayload)
-	writeLogicalMoveSeedRequest(t, scenario.factoryDir, secondWorkID, secondPayload)
 	scenario.open(t)
 
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, 20*time.Second)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, secondWorkID, secondPayload)
+	waitForWorkRoutingWorkCount(t, scenario.fixture.baseURL, scenario.sessionID, 2, 20*time.Second)
 	session, listed, events := scenario.observe(t, 20*time.Second)
 	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 1 {
 		t.Fatalf(

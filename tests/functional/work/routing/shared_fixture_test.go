@@ -27,7 +27,13 @@ import (
 const (
 	routingSharedFixtureReadyTimeout = 15 * time.Second
 	routingProcessStopTimeout        = 10 * time.Second
+	// Shared runtime requests contend on the same service-mode process. Four
+	// concurrent scenarios preserve the package's throughput while keeping
+	// uncached elapsed-time samples stable on the supported local environment.
+	routingScenarioConcurrency = 4
 )
+
+var routingScenarioSlots = make(chan struct{}, routingScenarioConcurrency)
 
 // workRoutingPackageFixture owns the one root-built process and service-mode
 // API host shared by this package. Scenario Factory directories and command
@@ -101,6 +107,13 @@ func (command *workRoutingProcessCommand) stop() error {
 	case <-time.After(routingProcessStopTimeout):
 		return fmt.Errorf("timed out waiting for shared Work routing process command shutdown")
 	}
+}
+
+func withWorkRoutingScenarioSlot(t *testing.T, run func()) {
+	t.Helper()
+	routingScenarioSlots <- struct{}{}
+	defer func() { <-routingScenarioSlots }()
+	run()
 }
 
 func ensureWorkRoutingPackageFixture(t *testing.T) *workRoutingPackageFixture {
@@ -687,6 +700,38 @@ func (scenario *workRoutingScenario) observe(
 	return getWorkRoutingSession(t, scenario.fixture.baseURL, scenario.sessionID),
 		listWorkRoutingSession(t, scenario.fixture.baseURL, scenario.sessionID),
 		support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+}
+
+func waitForWorkRoutingWorkCount(
+	t testing.TB,
+	baseURL, sessionID string,
+	want int,
+	timeout time.Duration,
+) {
+	// The file watcher admits the second seed asynchronously after the session
+	// returns idle; observe the public Work listing instead of adding a fixed
+	// delay that would hide scheduling variance.
+	t.Helper()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		listed := listWorkRoutingSession(t, baseURL, sessionID)
+		if len(listed.Results) >= want {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out waiting for %d Work items in Factory Session %q; listed=%#v",
+				want,
+				sessionID,
+				listed,
+			)
+		}
+	}
 }
 
 func workRoutingPathKey(path string) string {
