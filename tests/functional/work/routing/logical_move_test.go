@@ -31,6 +31,15 @@ func TestSharedProcessWorkRouting(t *testing.T) {
 	t.Run("LogicalMove/MultipleOutputsCreatesEveryExpectedWork", func(t *testing.T) {
 		runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture)
 	})
+	t.Run("ClassifierSuccess/RoutesEveryKnownDecision", func(t *testing.T) {
+		runClassifierRoutesEveryKnownDecision(t, fixture)
+	})
+	t.Run("ClassifierFanout/PreservesPayload", func(t *testing.T) {
+		runClassifierMultiOutputPreservesPayload(t, fixture)
+	})
+	t.Run("RoutingGuard/SelectorFailureClosesSession", func(t *testing.T) {
+		runClassifierRoutingSelectorGuard(t, fixture)
+	})
 }
 
 // runLogicalMoveCompletesWithoutWorkerDispatch proves that Work submitted into

@@ -1,7 +1,8 @@
 package routing
 
 import (
-	"os"
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,21 +16,19 @@ import (
 
 const classifierRoutingWorkstation = "classifier"
 
-// TestClassifierRoutesEveryKnownDecision proves that each authored classifier
-// label routes Work to its documented public workType:state outcome through the
-// customer process boundary, including accepted completion, approve-first
-// completion, rework loop-back followed by completion, and rejection-path
-// retry followed by completion.
-func TestClassifierRoutesEveryKnownDecision(t *testing.T) {
-	cases := []struct {
-		name              string
-		providerLabels    []string
-		reworkResponses   []string
-		wantTerminalState string
-		wantClassifier    int
-		wantRework        int
-		wantLabels        []string
-	}{
+type classifierRoutingSuccessCase struct {
+	name              string
+	providerLabels    []string
+	reworkResponses   []string
+	wantTerminalState string
+	wantClassifier    int
+	wantRework        int
+	wantLabels        []string
+	wantFinalPayload  string
+}
+
+func classifierRoutingSuccessCases() []classifierRoutingSuccessCase {
+	return []classifierRoutingSuccessCase{
 		{
 			name:              "accepted_completes",
 			providerLabels:    []string{"accepted"},
@@ -52,6 +51,7 @@ func TestClassifierRoutesEveryKnownDecision(t *testing.T) {
 			wantClassifier:    2,
 			wantRework:        1,
 			wantLabels:        []string{"needs_changes", "accepted"},
+			wantFinalPayload:  "rework applied COMPLETE",
 		},
 		{
 			name:              "rejection_path_retries_then_completes",
@@ -61,63 +61,104 @@ func TestClassifierRoutesEveryKnownDecision(t *testing.T) {
 			wantLabels:        []string{"rejected", "accepted"},
 		},
 	}
+}
 
-	for _, tc := range cases {
+// runClassifierRoutesEveryKnownDecision proves that each authored classifier
+// label routes Work to its documented public workType:state outcome through the
+// customer process boundary, including accepted completion, approve-first
+// completion, rework loop-back followed by completion, and rejection-path
+// retry followed by completion.
+func runClassifierRoutesEveryKnownDecision(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	for _, tc := range classifierRoutingSuccessCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "classifier_routing_dir"))
-			testutil.WriteSeedFile(t, dir, "task", []byte("classifier-routing-payload"))
-
-			runner := newClassifierRoutingCommandRunner(tc.providerLabels, tc.reworkResponses)
-			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-				t,
-				dir,
-				serviceedges.Edges{ProviderCommandRunner: runner},
-				20*time.Second,
-			)
-
-			assertClassifierRoutingTerminalState(t, listed, tc.wantTerminalState)
-			assertClassifierRoutingWorkstationDispatches(
-				t,
-				support.ObserveDispatchEvents(t, events),
-				classifierRoutingWorkstation,
-				tc.wantClassifier,
-				tc.wantLabels,
-			)
-			if got := countWorkstationDispatches(
-				support.ObserveDispatchEvents(t, events),
-				"rework",
-			); got != tc.wantRework {
-				t.Fatalf("rework dispatch count = %d, want %d", got, tc.wantRework)
-			}
+			runClassifierRoutingSuccessCase(t, fixture, tc)
 		})
 	}
 }
 
-// TestClassifierMultiOutputPreservesPayload proves that when one classifier route
+func runClassifierRoutingSuccessCase(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+	tc classifierRoutingSuccessCase,
+) {
+	t.Helper()
+	workID := "classifier-routing-" + tc.name
+	payload := workID + "-payload"
+	wantFinalPayload := tc.wantFinalPayload
+	if wantFinalPayload == "" {
+		wantFinalPayload = payload
+	}
+	runner := newClassifierRoutingCommandRunner(tc.name, tc.providerLabels, tc.reworkResponses)
+	scenario := fixture.newScenario(t, "classifier-success-"+tc.name, "classifier_routing_dir", runner)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
+	scenario.open(t)
+
+	session, listed, events := scenario.observe(t, 10*time.Second)
+	assertClassifierRoutingTerminalState(t, listed, tc.wantTerminalState)
+	assertClassifierRoutingSuccessfulSession(t, session, 1)
+	assertClassifierRoutingPublicWork(
+		t,
+		scenario,
+		listed,
+		events,
+		workID,
+		payload,
+		wantFinalPayload,
+	)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	assertClassifierRoutingWorkstationDispatches(
+		t,
+		dispatches,
+		classifierRoutingWorkstation,
+		tc.wantClassifier,
+		tc.wantLabels,
+	)
+	if got := countWorkstationDispatches(dispatches, "rework"); got != tc.wantRework {
+		t.Fatalf("rework dispatch count = %d, want %d", got, tc.wantRework)
+	}
+	assertClassifierRoutingCommandRequests(t, scenario, runner, tc.wantClassifier+tc.wantRework)
+}
+
+// runClassifierMultiOutputPreservesPayload proves that when one classifier route
 // fans out to multiple authored outputs, every expected branch retains the same
 // customer payload on every expected branch at the next observable public Work read
 // surface.
-func TestClassifierMultiOutputPreservesPayload(t *testing.T) {
+func runClassifierMultiOutputPreservesPayload(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
 	const wantPayload = "classifier-multi-output-payload"
+	const wantWorkID = "classifier-multi-output-work"
 	wantBranches := []string{
 		support.WorkCustomerLocation("task", "done"),
 		support.WorkCustomerLocation("branch-a", "done"),
 		support.WorkCustomerLocation("branch-b", "done"),
 	}
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "classifier_multi_output_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(wantPayload))
-
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("fanout")},
-		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")},
-		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")},
+	runner := newWorkRoutingScenarioCommandRunner(
+		"classifier-multi-output",
+		[]platformprocess.CommandResult{
+			{Stdout: support.CodexSuccessStdout("fanout")},
+			{Stdout: support.CodexSuccessStdout("COMPLETE")},
+			{Stdout: support.CodexSuccessStdout("COMPLETE")},
+		},
+		nil,
 	)
-	listed, events, workByID := runClassifierRoutingFactoryWithWorkReads(
+	scenario := fixture.newScenario(
 		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
+		"classifier-fanout",
+		"classifier_multi_output_dir",
+		runner,
 	)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, wantWorkID, wantPayload)
+	scenario.open(t)
+
+	session, listed, events := scenario.observe(t, 10*time.Second)
 
 	for _, location := range wantBranches {
 		if got := support.CountWorkAtCustomerState(listed, location); got != 1 {
@@ -130,15 +171,18 @@ func TestClassifierMultiOutputPreservesPayload(t *testing.T) {
 			t.Fatalf("%s work count = %d, want 0 after classifier fan-out; listed=%#v", location, got, listed)
 		}
 	}
+	assertClassifierRoutingSuccessfulSession(t, session, 3)
 	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) == 0 {
 		t.Fatal("no dispatch events observed")
 	}
-	assertClassifierRoutingPrimaryBranchWorkPayload(
+	assertClassifierRoutingPublicWork(
 		t,
+		scenario,
 		listed,
-		workByID,
-		support.WorkCustomerLocation("task", "done"),
+		events,
+		wantWorkID,
+		wantPayload,
 		wantPayload,
 	)
 	assertClassifierRoutingBranchProviderPayloads(t, runner, wantPayload, 2)
@@ -159,6 +203,106 @@ func TestClassifierMultiOutputPreservesPayload(t *testing.T) {
 		1,
 		[]string{"fanout"},
 	)
+	assertClassifierRoutingCommandRequests(t, scenario, runner, 3)
+}
+
+func runClassifierRoutingSelectorGuard(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const (
+		workID  = "classifier-selector-guard-work"
+		payload = "classifier-selector-guard-payload"
+	)
+
+	runner := newWorkRoutingScenarioCommandRunner(
+		"classifier-selector-guard",
+		[]platformprocess.CommandResult{{Stdout: support.CodexSuccessStdout("accepted")}},
+		nil,
+	)
+	scenario := fixture.newScenario(
+		t,
+		"classifier-selector-guard",
+		"classifier_routing_dir",
+		runner,
+	)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
+	fixture.provider.unregister(scenario.id)
+	scenario.open(t)
+
+	session, listed, events := scenario.observe(t, 10*time.Second)
+	assertClassifierRoutingFailedTerminal(t, session, listed)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	dispatch := assertClassifierRoutingFailedDispatch(
+		t,
+		dispatches,
+		"provider execution failed",
+	)
+	if dispatch.Response == nil {
+		t.Fatal("selector guard dispatch response is nil")
+	}
+	if strings.Contains(classifierRoutingDispatchErrorText(dispatch.Response), payload) {
+		t.Fatalf("selector guard failure leaked payload %q", payload)
+	}
+	assertClassifierRoutingUnmatchedSelector(t, fixture)
+	assertClassifierRoutingAmbiguousSelector(t, fixture)
+}
+
+func assertClassifierRoutingUnmatchedSelector(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const requestContent = "sensitive-selector-request"
+	_, err := fixture.provider.Run(context.Background(), platformprocess.CommandRequest{
+		WorkDir: fixture.rootDir,
+		Args:    []string{requestContent},
+		Stdin:   []byte(requestContent),
+	})
+	if err == nil {
+		t.Fatal("unmatched provider selector unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "matched 0 scenarios") {
+		t.Fatalf("unmatched selector error = %q, want matched-0 diagnostic", err)
+	}
+	if strings.Contains(err.Error(), requestContent) {
+		t.Fatalf("unmatched selector error leaked request content: %q", err)
+	}
+}
+
+func assertClassifierRoutingAmbiguousSelector(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const requestContent = "sensitive-selector-request"
+	first := newWorkRoutingScenarioCommandRunner("ambiguous-first", nil, nil)
+	second := newWorkRoutingScenarioCommandRunner("ambiguous-second", nil, nil)
+	ambiguousWorkDir := filepath.Join(fixture.rootDir, "ambiguous-work")
+	if err := fixture.provider.register("ambiguous-first", []string{fixture.rootDir}, first); err != nil {
+		t.Fatalf("register first ambiguous selector: %v", err)
+	}
+	if err := fixture.provider.register("ambiguous-second", []string{ambiguousWorkDir}, second); err != nil {
+		fixture.provider.unregister("ambiguous-first")
+		t.Fatalf("register second ambiguous selector: %v", err)
+	}
+	_, err := fixture.provider.Run(context.Background(), platformprocess.CommandRequest{
+		WorkDir: ambiguousWorkDir,
+		Args:    []string{requestContent},
+		Stdin:   []byte(requestContent),
+	})
+	fixture.provider.unregister("ambiguous-first")
+	fixture.provider.unregister("ambiguous-second")
+	if err == nil {
+		t.Fatal("ambiguous provider selector unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "matched 2 scenarios") {
+		t.Fatalf("ambiguous selector error = %q, want matched-2 diagnostic", err)
+	}
+	if strings.Contains(err.Error(), requestContent) {
+		t.Fatalf("ambiguous selector error leaked request content: %q", err)
+	}
 }
 
 // TestClassifierUnknownAndMalformedDecisionFailDistinctly proves unknown classifier
@@ -357,9 +501,10 @@ func TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t *tes
 }
 
 func newClassifierRoutingCommandRunner(
+	name string,
 	labels []string,
 	reworkResponses []string,
-) *testutil.ProviderCommandRunner {
+) *workRoutingScenarioCommandRunner {
 	results := make([]platformprocess.CommandResult, 0, len(labels)+len(reworkResponses))
 	labelIndex := 0
 	reworkIndex := 0
@@ -380,7 +525,7 @@ func newClassifierRoutingCommandRunner(
 			Stdout: support.CodexSuccessStdout(reworkResponses[reworkIndex]),
 		})
 	}
-	return testutil.NewProviderCommandRunner(results...)
+	return newWorkRoutingScenarioCommandRunner(name, results, nil)
 }
 
 func assertClassifierRoutingTerminalState(
@@ -402,6 +547,88 @@ func assertClassifierRoutingTerminalState(
 		if got := support.CountWorkAtCustomerState(listed, other); got != 0 {
 			t.Fatalf("%s work count = %d, want 0 while terminal is %s; listed=%#v", other, got, terminalState, listed)
 		}
+	}
+}
+
+func assertClassifierRoutingSuccessfulSession(
+	t *testing.T,
+	session factoryapi.FactorySession,
+	wantTerminal int,
+) {
+	t.Helper()
+
+	if session.Runtime.Progress.Categories.Terminal != wantTerminal || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf(
+			"successful classifier session progress categories = %+v, want %d terminal and zero failed",
+			session.Runtime.Progress.Categories,
+			wantTerminal,
+		)
+	}
+}
+
+func assertClassifierRoutingCommandRequests(
+	t *testing.T,
+	scenario *workRoutingScenario,
+	runner *workRoutingScenarioCommandRunner,
+	wantCalls int,
+) {
+	t.Helper()
+
+	requests := runner.requestsSnapshot()
+	if len(requests) != wantCalls {
+		t.Fatalf(
+			"scenario %q provider command count = %d, want %d; requests=%#v",
+			scenario.id,
+			len(requests),
+			wantCalls,
+			requests,
+		)
+	}
+	for index, request := range requests {
+		if !workRoutingPathContains(scenario.rootDir, request.WorkDir) {
+			t.Fatalf(
+				"scenario %q provider request %d work directory %q escaped scenario root %q",
+				scenario.id,
+				index,
+				request.WorkDir,
+				scenario.rootDir,
+			)
+		}
+	}
+}
+
+func assertClassifierRoutingPublicWork(
+	t *testing.T,
+	scenario *workRoutingScenario,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+	workID, wantPayload, wantFinalPayload string,
+) {
+	t.Helper()
+
+	admitted := workRoutingAdmissionWork(t, events, workID)
+	if got := workRoutingPublicWorkText(admitted); got != wantPayload {
+		t.Fatalf("WORK_REQUEST payload = %q, want %q", got, wantPayload)
+	}
+	publicWork := getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, workID)
+	if got := support.StringPointerValue(publicWork.WorkId); got != workID {
+		t.Fatalf("public Work ID = %q, want %q", got, workID)
+	}
+	if got := support.StringPointerValue(publicWork.RequestId); got != workID+"-request" {
+		t.Fatalf("public Work request ID = %q, want %q", got, workID+"-request")
+	}
+	if got := support.StringPointerValue(publicWork.TraceId); got != workID+"-trace" {
+		t.Fatalf("public Work trace ID = %q, want %q", got, workID+"-trace")
+	}
+	if got := workRoutingPublicWorkText(publicWork); got != wantFinalPayload {
+		t.Fatalf("public Work payload = %q, want %q", got, wantFinalPayload)
+	}
+	if !support.HasWorkAtCustomerState(
+		listed,
+		workID,
+		support.WorkCustomerLocation("task", "done"),
+	) {
+		t.Fatalf("listed Work %q missing at task:done; listed=%#v", workID, listed)
 	}
 }
 
@@ -553,99 +780,17 @@ func classifierRoutingDispatchErrorText(response *factoryapi.DispatchResponseEve
 	return ""
 }
 
-func runClassifierRoutingFactoryWithWorkReads(
-	t *testing.T,
-	dir string,
-	overrides serviceedges.Edges,
-) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, map[string]factoryapi.Work) {
-	t.Helper()
-
-	server := support.NewProcessAPIServer()
-	overrides.APIServerStarter = server.Start
-	process := support.BuildProcess(t, overrides)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", dir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-	t.Cleanup(func() {
-		if !t.Failed() {
-			return
-		}
-		if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
-			t.Logf("daemon stderr:\n%s", stderr)
-		}
-		if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
-			t.Logf("daemon stdout:\n%s", stdout)
-		}
-	})
-	daemon := support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := server.WaitForURL(t)
-	support.WaitForTerminalStatus(t, baseURL, 20*time.Second)
-
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	events := support.GetFactoryEventsAt(t, baseURL)
-	workByID := make(map[string]factoryapi.Work, len(listed.Results))
-	for _, item := range listed.Results {
-		workID := support.StringPointerValue(item.WorkId)
-		if workID == "" {
-			continue
-		}
-		workByID[workID] = support.GetDefaultSessionWorkByID(t, baseURL, workID)
-	}
-	daemon.Stop(t)
-	return listed, events, workByID
-}
-
-func assertClassifierRoutingPrimaryBranchWorkPayload(
-	t *testing.T,
-	listed factoryapi.ListWorkResponse,
-	workByID map[string]factoryapi.Work,
-	location string,
-	want string,
-) {
-	t.Helper()
-
-	for _, item := range listed.Results {
-		if support.WorkItemCustomerLocation(item) != location {
-			continue
-		}
-		workID := support.StringPointerValue(item.WorkId)
-		detail, ok := workByID[workID]
-		if !ok {
-			t.Fatalf("missing GET /work/%s detail for branch %s", workID, location)
-		}
-		if got := classifierRoutingPublicWorkText(detail); got != want {
-			t.Fatalf(
-				"%s payload = %q, want %q preserved across classifier fan-out",
-				location,
-				got,
-				want,
-			)
-		}
-		return
-	}
-	t.Fatalf("listed Work missing branch %s", location)
-}
-
 func assertClassifierRoutingBranchProviderPayloads(
 	t *testing.T,
-	runner *testutil.ProviderCommandRunner,
+	runner *workRoutingScenarioCommandRunner,
 	want string,
 	wantBranchCalls int,
 ) {
 	t.Helper()
 
-	requests := runner.Requests()
-	if len(requests) < 1+wantBranchCalls {
-		t.Fatalf("provider command count = %d, want at least %d", len(requests), 1+wantBranchCalls)
+	requests := runner.requestsSnapshot()
+	if len(requests) != 1+wantBranchCalls {
+		t.Fatalf("provider command count = %d, want %d", len(requests), 1+wantBranchCalls)
 	}
 	branchRequests := requests[len(requests)-wantBranchCalls:]
 	for index, request := range branchRequests {
@@ -700,7 +845,7 @@ func assertClassifierRoutingOutputWorkBranches(
 			continue
 		}
 		seen[location] = true
-		if got := classifierRoutingPublicWorkText(item); got != wantPayload {
+		if got := workRoutingPublicWorkText(item); got != wantPayload {
 			t.Fatalf(
 				"classifier outputWork branch %s payload = %q, want %q preserved across fan-out",
 				location,
@@ -713,22 +858,6 @@ func assertClassifierRoutingOutputWorkBranches(
 		if !seen[location] {
 			t.Fatalf("classifier outputWork missing branch %s; seen=%#v", location, seen)
 		}
-	}
-}
-
-func classifierRoutingPublicWorkText(item factoryapi.Work) string {
-	if item.Content != nil && len(*item.Content) > 0 {
-		if part, err := (*item.Content)[0].AsWorkTextContentPart(); err == nil {
-			return part.Text
-		}
-	}
-	switch payload := item.Payload.(type) {
-	case string:
-		return payload
-	case []byte:
-		return string(payload)
-	default:
-		return ""
 	}
 }
 
