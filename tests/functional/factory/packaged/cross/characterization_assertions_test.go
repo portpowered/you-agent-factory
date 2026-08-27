@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -388,9 +387,6 @@ func assertPackagedGoalEventOrder(
 	if len(ordered) == 0 {
 		t.Fatalf("Factory Events for session %q have no session-scoped records", sessionID)
 	}
-	sort.SliceStable(ordered, func(i, j int) bool {
-		return crossEventSessionSequence(ordered[i]) < crossEventSessionSequence(ordered[j])
-	})
 	previousSequence := -1
 	admissionSequence := -1
 	terminalSequence := -1
@@ -491,13 +487,6 @@ func summarizeCrossFactoryEvents(events []factoryapi.FactoryEvent) []string {
 		summaries = append(summaries, fmt.Sprintf("%s/%s seq=%s request=%s work=%s", event.Type, event.Id, sequence, requestID, workIDs))
 	}
 	return summaries
-}
-
-func crossEventSessionSequence(event factoryapi.FactoryEvent) int {
-	if event.Context.SessionSequence == nil {
-		return -1
-	}
-	return *event.Context.SessionSequence
 }
 
 func removeCrossOwnedPath(t testing.TB, label, path string) {

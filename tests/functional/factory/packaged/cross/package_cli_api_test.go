@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -23,13 +22,14 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	wantPackagedGoalPrimaryResult   = "mock worker accepted"
+	wantPackagedGoalPrimaryResult      = "mock worker accepted"
+	packagedGoalAcceptedProviderOutput = `{"decision":"accepted","output":"` + wantPackagedGoalPrimaryResult + `"}`
+	packagedGoalProviderModel          = "gpt-5-codex"
 	// Race instrumentation and concurrent CI lanes can delay production wiring
 	// before listener binding; readiness returns immediately once it is bound.
 	crossPackagedServerReadyTimeout = 90 * time.Second
@@ -47,7 +47,6 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	fixture := sharedCrossProcess(t)
 	homeDir, factoryDir := installSharedPackagedGoal(t)
 	factoryPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
-	mockWorkersPath := writePackagedGoalSharedMockWorkersConfig(t)
 	goalText := fmt.Sprintf(
 		"functional-packaged-cross-cli-api-inspect-%d",
 		time.Now().UnixNano(),
@@ -78,7 +77,8 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		"--factory", factoryPath,
 		"--with-server",
 		"--server", requestedURL,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--provider", "CODEX",
+		"--model", packagedGoalProviderModel,
 		"--no-record",
 		goalText,
 	})
@@ -238,7 +238,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 	}
 
 	fixture := sharedCrossProcess(t)
-	mockWorkersPath := writePackagedGoalSharedMockWorkersConfig(t)
 	namedHomeDir := t.TempDir()
 	namedFactoryDir := support.InstallPackagedFactoryWithProcess(
 		t,
@@ -247,7 +246,7 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		t.TempDir(),
 		factorydefinitions.PackagedGoalFactoryName,
 	)
-	apiServer := startPackagedGoalParityAPIServer(t, fixture.factoryDir, mockWorkersPath)
+	apiServer := startPackagedGoalParityAPIServer(t, fixture.factoryDir)
 	t.Cleanup(func() { assertPackagedGoalParityAPIServerHealthy(t, apiServer) })
 
 	t.Run("positional success", func(t *testing.T) {
@@ -264,7 +263,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			t,
 			dir,
 			factoryPath,
-			mockWorkersPath,
 			isolatedHomeEnvironment(t.TempDir()),
 			nil,
 			goalText,
@@ -296,7 +294,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			t,
 			dir,
 			factoryPath,
-			mockWorkersPath,
 			isolatedHomeEnvironment(t.TempDir()),
 			strings.NewReader(goalText),
 		)
@@ -326,7 +323,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 		cliResponse, _, stderr, err := runPackagedGoalNamedInvocationCLIJSON(
 			t,
 			homeDir,
-			mockWorkersPath,
 			goalText,
 		)
 		if err != nil {
@@ -358,7 +354,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			t,
 			dir,
 			factoryPath,
-			mockWorkersPath,
 			isolatedHomeEnvironment(t.TempDir()),
 			nil,
 			"   ",
@@ -383,7 +378,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			t,
 			dir,
 			factoryPath,
-			mockWorkersPath,
 			isolatedHomeEnvironment(t.TempDir()),
 			strings.NewReader("from stdin"),
 			"from positional",
@@ -432,7 +426,6 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 			t,
 			dir,
 			factoryPath,
-			mockWorkersPath,
 			isolatedHomeEnvironment(t.TempDir()),
 			nil,
 			goalText,
@@ -1030,60 +1023,6 @@ func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationRes
 	return part.Text
 }
 
-func writePackagedGoalSharedMockWorkersConfig(t *testing.T) string {
-	t.Helper()
-
-	checkerCommand, checkerArgs := mockWorkerEchoCommand("plain")
-	reviewerCommand, reviewerArgs := mockWorkerEchoCommand("accepted")
-	cfg := workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{
-			{
-				WorkerName:      "goal-planner",
-				WorkstationName: "plan-goal",
-				RunType:         workers.MockWorkerRunTypeAccept,
-			},
-			{
-				WorkerName:      "goal-executor",
-				WorkstationName: "execute-goal",
-				RunType:         workers.MockWorkerRunTypeAccept,
-			},
-			{
-				WorkerName:      "goal-checker",
-				WorkstationName: "check-goal",
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: checkerCommand,
-					Args:    checkerArgs,
-				},
-			},
-			{
-				WorkerName:      "goal-reviewer",
-				WorkstationName: "review-goal",
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: reviewerCommand,
-					Args:    reviewerArgs,
-				},
-			},
-		},
-	}
-	return support.WriteMockWorkersConfig(t, &cfg)
-}
-
-func mockWorkerEchoCommand(output string) (string, []string) {
-	if runtime.GOOS == "windows" {
-		literal := strings.ReplaceAll(output, "'", "''")
-		return "powershell.exe", []string{
-			"-NoProfile",
-			"-NonInteractive",
-			"-Command",
-			"[Console]::Out.Write('" + literal + "')",
-		}
-	}
-	return "/bin/echo", []string{output}
-}
-
 func waitForSessionWorkEndpoint(ctx context.Context, baseURL string, timeout time.Duration) error {
 	client := &http.Client{Timeout: 2 * time.Second}
 	deadline := time.Now().Add(timeout)
@@ -1216,10 +1155,16 @@ func packagedGoalInvocationFactoryConfig() map[string]any {
 		"workers": []map[string]string{{"name": "goal-executor"}},
 		"workstations": []map[string]any{
 			{
-				"name":      "execute-goal",
-				"worker":    "goal-executor",
-				"inputs":    []map[string]string{{"workType": "goal", "state": "init"}},
-				"outputs":   []map[string]string{{"workType": "goal", "state": "complete"}},
+				"name":          "execute-goal",
+				"worker":        "goal-executor",
+				"outcomeFormat": "decision-envelope",
+				"inputs":        []map[string]string{{"workType": "goal", "state": "init"}},
+				"classificationRoutes": []map[string]any{
+					{
+						"label":   "accepted",
+						"outputs": []map[string]string{{"workType": "goal", "state": "complete"}},
+					},
+				},
 				"onFailure": []map[string]string{{"workType": "goal", "state": "failed"}},
 			},
 		},
@@ -1443,7 +1388,6 @@ func openPackagedGoalParitySession(
 func startPackagedGoalParityAPIServer(
 	t *testing.T,
 	factoryDir string,
-	mockWorkersPath string,
 ) *packagedGoalParityAPIServer {
 	t.Helper()
 
@@ -1458,7 +1402,8 @@ func startPackagedGoalParityAPIServer(
 		"--quiet",
 		"--dir", factoryDir,
 		"--no-record",
-		"--with-mock-workers=" + mockWorkersPath,
+		"--provider", "CODEX",
+		"--model", packagedGoalProviderModel,
 	})
 	inputs.Input.Env = isolatedHomeEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
@@ -1504,7 +1449,6 @@ func runPackagedGoalInvocationCLIJSON(
 	t *testing.T,
 	factoryDir string,
 	factoryPath string,
-	mockWorkersPath string,
 	env []string,
 	stdin io.Reader,
 	args ...string,
@@ -1514,7 +1458,6 @@ func runPackagedGoalInvocationCLIJSON(
 		t,
 		factoryDir,
 		[]string{"--factory", factoryPath},
-		mockWorkersPath,
 		env,
 		stdin,
 		true,
@@ -1525,7 +1468,6 @@ func runPackagedGoalInvocationCLIJSON(
 func runPackagedGoalNamedInvocationCLIJSON(
 	t *testing.T,
 	homeDir string,
-	mockWorkersPath string,
 	goalText string,
 ) (factoryapi.InvocationResponse, string, string, error) {
 	t.Helper()
@@ -1533,7 +1475,6 @@ func runPackagedGoalNamedInvocationCLIJSON(
 		t,
 		t.TempDir(),
 		[]string{"--named", factorydefinitions.PackagedGoalFactoryName},
-		mockWorkersPath,
 		isolatedHomeEnvironment(homeDir),
 		nil,
 		true,
@@ -1545,7 +1486,6 @@ func runPackagedGoalInvocationCLI(
 	t *testing.T,
 	factoryDir string,
 	factoryPath string,
-	mockWorkersPath string,
 	env []string,
 	stdin io.Reader,
 	args ...string,
@@ -1555,7 +1495,6 @@ func runPackagedGoalInvocationCLI(
 		t,
 		factoryDir,
 		[]string{"--factory", factoryPath},
-		mockWorkersPath,
 		env,
 		stdin,
 		false,
@@ -1567,7 +1506,6 @@ func runPackagedGoalInvocationCLIWithMode(
 	t *testing.T,
 	workingDirectory string,
 	sourceArgs []string,
-	mockWorkersPath string,
 	env []string,
 	stdin io.Reader,
 	jsonMode bool,
@@ -1592,9 +1530,10 @@ func runPackagedGoalInvocationCLIWithMode(
 	cmdArgs = append(cmdArgs, sourceArgs...)
 	cmdArgs = append(
 		cmdArgs,
-		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
+		"--provider", "CODEX",
+		"--model", packagedGoalProviderModel,
 	)
 	if jsonMode {
 		cmdArgs = append(cmdArgs, "--output", "primary")
@@ -1610,7 +1549,9 @@ func runPackagedGoalInvocationCLIWithMode(
 		inputs.Input.StdinIsTTY = &stdinIsTTY
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(packagedGoalAcceptedProviderOutput),
+	})
 	support.CleanupProcess(t, process)
 	crossCharacterization.recordRootStart("parity-cli")
 	runErr := process.Execute(inputs.Input)

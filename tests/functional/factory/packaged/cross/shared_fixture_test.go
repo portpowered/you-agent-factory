@@ -120,7 +120,8 @@ func startCrossSharedProcessFixture() (*crossSharedProcessFixture, error) {
 
 	router := &crossAPIServerRouter{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter: router.start,
+		APIServerStarter:      router.start,
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(packagedGoalAcceptedProviderOutput),
 	})
 	if err != nil {
 		cleanupRoot()
