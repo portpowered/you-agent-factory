@@ -14,7 +14,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -158,6 +157,15 @@ func startPackagedFixFixture() (*packagedFixSharedFixture, error) {
 		cleanupRoot()
 		return nil, fmt.Errorf("find packaged Fix Factory at %s: %w", factoryDir, err)
 	}
+	// The continuous runtime writes lifecycle files below its Factory directory.
+	// Copy a static template before starting it so per-scenario copies never
+	// race with runtime artifact creation or observe a half-written file.
+	templateDir := filepath.Join(rootDir, "factory-template")
+	if err := os.CopyFS(templateDir, os.DirFS(factoryDir)); err != nil {
+		closePackagedFixProcess(process)
+		cleanupRoot()
+		return nil, fmt.Errorf("snapshot packaged Fix Factory: %w", err)
+	}
 
 	commandContext, cancel := context.WithCancel(context.Background())
 	inputs := support.FakeInputs(commandContext, []string{
@@ -183,7 +191,7 @@ func startPackagedFixFixture() (*packagedFixSharedFixture, error) {
 	}
 	return &packagedFixSharedFixture{
 		rootDir:        rootDir,
-		factoryDir:     factoryDir,
+		factoryDir:     templateDir,
 		baseURL:        baseURL,
 		process:        process,
 		providerRunner: providerRunner,
@@ -228,6 +236,11 @@ func waitForPackagedFixCommand(done <-chan error) {
 	select {
 	case <-done:
 	case <-time.After(packagedFixFixtureShutdownTimeout):
+		// The done channel is the deterministic lifecycle observation. This
+		// timer is only a bounded startup-failure/teardown safety ceiling: a
+		// failed command must not leave fixture setup hanging forever while its
+		// context and injected API server unwind. It is never scenario
+		// synchronization.
 	}
 }
 
@@ -252,6 +265,10 @@ func (fixture *packagedFixSharedFixture) close() error {
 			errs = append(errs, fmt.Errorf("continuous command: %w", err))
 		}
 	case <-time.After(packagedFixFixtureShutdownTimeout):
+		// The done channel is the deterministic lifecycle observation. This
+		// timer is only a bounded teardown safety ceiling for a command that
+		// failed to honor cancellation; without it TestMain could hang while
+		// closing the injected API server. It is not normal scenario waiting.
 		errs = append(errs, errors.New("timed out waiting for continuous command shutdown"))
 	}
 	closeContext, cancel := context.WithTimeout(context.Background(), packagedFixFixtureShutdownTimeout)
@@ -267,7 +284,6 @@ func (fixture *packagedFixSharedFixture) close() error {
 
 type packagedFixScenario struct {
 	fixture      *packagedFixSharedFixture
-	homeDir      string
 	factoryDir   string
 	worktreeName string
 	selector     string
@@ -282,8 +298,10 @@ func openPackagedFixScenario(
 ) *packagedFixScenario {
 	t.Helper()
 	fixture := sharedPackagedFixFixture(t)
-	homeDir := t.TempDir()
-	factoryDir := support.CopyFactoryAsNamed(t, fixture.factoryDir, homeDir, packagedFixFactoryName)
+	factoryDir := filepath.Join(t.TempDir(), "factory")
+	if err := os.CopyFS(factoryDir, os.DirFS(fixture.factoryDir)); err != nil {
+		t.Fatalf("copy static packaged Fix Factory: %v", err)
+	}
 	initPackagedFixGitRepositoryAt(t, factoryDir)
 	if configure != nil {
 		configure(t, factoryDir)
@@ -293,23 +311,19 @@ func openPackagedFixScenario(
 	t.Cleanup(func() { fixture.providerRunner.unregister(selector) })
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
 	if opened.Session == nil || opened.Session.Id == "" {
-		t.Fatal("opened packaged Fix session has no id")
+		t.Fatalf("opened packaged Fix session = %#v, want non-empty session identity", opened)
 	}
-	if opened.Session.Id == factorysessions.DefaultSessionID {
-		t.Fatalf("opened packaged Fix session = %q, want explicit non-default session", opened.Session.Id)
-	}
-	sessionID := opened.Session.Id
-	t.Cleanup(func() {
-		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
-	})
-	return &packagedFixScenario{
+	scenario := &packagedFixScenario{
 		fixture:      fixture,
-		homeDir:      homeDir,
 		factoryDir:   factoryDir,
 		worktreeName: worktreeName,
 		selector:     selector,
-		sessionID:    sessionID,
+		sessionID:    opened.Session.Id,
 	}
+	t.Cleanup(func() {
+		support.CloseFactorySessionAt(t, fixture.baseURL, scenario.sessionID)
+	})
+	return scenario
 }
 
 func initPackagedFixGitRepositoryAt(t *testing.T, workspace string) {

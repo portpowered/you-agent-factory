@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -65,16 +66,15 @@ var packagedFixPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.json
 //     Eligible for packaged-fix-public-outcomes because bounded rejection is a
 //     controlled workflow outcome, not a command/process failure.
 //
-// Current baseline identity/resource ownership: each invocation creates its
-// own root.BuildProcess, uses the implicit default Factory Session route, and
-// supplies a t.TempDir home plus a test-owned workspace. No current row opens
-// or closes an explicit session, selector, or durable runtime identity, and no
-// row directly asserts Factory Event or replay history. The eligible migration
-// must allocate unique Work/request/selector/worktree/workspace/plan/home/
-// Factory/runtime identities; retained rows keep their local-real edge. The
-// testing package owns every temporary path; story 004 owns the direct census
-// of process, session, worktree, and runtime cleanup. Existing assertions are
-// characterization and must remain intact.
+// Resource ownership: retained rows keep one root-built process per local-real
+// edge and the testing package owns their temporary paths. Eligible rows share
+// one continuous root-built host process, while each scenario owns a copied
+// Factory, explicit Factory Session, selector, worktree, plan, and request
+// identity. The CLI parity cell uses the existing root-built local CLI helper
+// because a local CLI invocation cannot bind the host process's already-owned
+// default runtime. Story 004 owns the direct census of process, session,
+// worktree, and runtime cleanup. Existing assertions are characterization and
+// must remain intact.
 
 // TestPackagedFixUsesNamedWorktreeAndIndependentReview proves the public named
 // route prepares the requested checkout before any provider call, preserves
@@ -155,6 +155,8 @@ func TestPackagedFixSharedProcess(t *testing.T) {
 	t.Run("UsesConfiguredAndExplicitRoleModels", testPackagedFixConfiguredAndExplicitRoleModels)
 
 	t.Run("ReviewLoopExhaustionIsStable", testPackagedFixReviewLoopExhaustion)
+
+	t.Run("CLIResponseMatchesExplicitSession", testPackagedFixCLIResponseParity)
 }
 
 func testPackagedFixOperatorDefaults(t *testing.T) {
@@ -322,30 +324,85 @@ func testPackagedFixReviewLoopExhaustion(t *testing.T) {
 	assertPackagedFixSharedEvidence(t, scenario, runner, "failed")
 }
 
+func testPackagedFixCLIResponseParity(t *testing.T) {
+	t.Parallel()
+	request := "prove the packaged Fix CLI response"
+
+	apiRunner := &packagedFixCommandRunner{}
+	apiWorktreeName := "shared-cli-api-parity-fix"
+	apiScenario := openPackagedFixScenario(t, apiRunner, apiWorktreeName, nil)
+	apiResponse := invokePackagedFixSession(t, apiScenario, map[string]any{
+		"request":      request,
+		"worktreeName": apiWorktreeName,
+	})
+	if apiResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("explicit-session response status = %q, want COMPLETED: %#v", apiResponse.Status, apiResponse)
+	}
+
+	cliRunner := &packagedFixCommandRunner{}
+	cliWorkspace := initPackagedFixGitRepository(t)
+	cliWorktreeName := "cli-parity-fix"
+	cliResponse, stderr, err := runPackagedFixCLI(
+		t,
+		cliRunner,
+		cliWorkspace,
+		"--provider", "CODEX", "--model", "operator-configured-model",
+		"--to", request,
+		"--worktree-name", cliWorktreeName,
+	)
+	if err != nil {
+		t.Fatalf("root-built customer CLI error = %v\nresponse = %#v\nstderr = %q", err, cliResponse, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("root-built customer CLI stderr = %q, want empty successful-run stderr", stderr)
+	}
+	if cliResponse.Status != apiResponse.Status {
+		t.Fatalf("customer CLI status = %q, explicit-session status = %q", cliResponse.Status, apiResponse.Status)
+	}
+	if got, want := packagedFixPrimaryResultText(t, cliResponse), packagedFixPrimaryResultText(t, apiResponse); got != want {
+		t.Fatalf("customer CLI primary result = %q, explicit-session primary result = %q", got, want)
+	}
+	if got := strings.Join(cliRunner.Roles(), ","); got != "planner,iterator,reviewer" {
+		t.Fatalf("customer CLI stage order = %q, want planner,iterator,reviewer", got)
+	}
+}
+
 func invokePackagedFixSession(
 	t *testing.T,
 	scenario *packagedFixScenario,
 	args map[string]any,
 ) factoryapi.InvocationResponse {
 	t.Helper()
+	// The packaged Petri Factory must run inside this already-open explicit
+	// session so the assertions below can observe its canonical Work, Event,
+	// dispatch, and replay history. The public run CLI has no session-target
+	// flag, and its remote durable source only resolves JavaScript workflow
+	// factories, so this is the narrowly scoped CLI-plus-API parity exception.
+	// TestPackagedFixSharedProcess/CLIResponseMatchesExplicitSession still
+	// executes the same invocation through the root-built customer CLI and
+	// compares its terminal response with this explicit-session API path.
 	requestID := "packaged-fix-" + scenario.worktreeName
-	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
+	payload, err := json.Marshal(factoryapi.InvocationRequest{
+		RequestId: &requestID,
+		Args:      &args,
+	})
 	if err != nil {
-		t.Fatalf("marshal packaged Fix invocation: %v", err)
+		t.Fatalf("marshal Fix invocation request: %v", err)
 	}
 	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
 		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
 	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
 	if err != nil {
-		t.Fatalf("POST packaged Fix invocation: %v", err)
+		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST packaged Fix invocation status = %d, want 200", response.StatusCode)
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var decoded factoryapi.InvocationResponse
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode packaged Fix invocation: %v", err)
+		t.Fatalf("decode POST %s: %v", endpoint, err)
 	}
 	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, packagedFixFixtureShutdownTimeout)
 	return decoded
