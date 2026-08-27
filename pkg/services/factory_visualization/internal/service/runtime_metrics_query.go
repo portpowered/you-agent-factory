@@ -7,6 +7,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -293,6 +294,25 @@ func metricNamesForProjection(includeUsage bool) map[string]struct{} {
 		names[factoryruntime.RuntimeProviderReasoningOutputTokens] = struct{}{}
 	}
 	return names
+}
+
+func runtimeMetricsStreamSelection(
+	root string,
+	sessionID string,
+	runtimeID string,
+	startTimeUTC time.Time,
+	endTimeUTC time.Time,
+	projection metricsProjection,
+) (platformmetrics.StreamSelection, error) {
+	return runtimeMetricsStreamSelectionForSessions(
+		root,
+		sessionID,
+		nil,
+		runtimeID,
+		startTimeUTC,
+		endTimeUTC,
+		projection,
+	)
 }
 
 type metricsAccumulator struct {

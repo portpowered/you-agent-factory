@@ -12,25 +12,6 @@ import (
 
 var runtimeMetricsBackupSuffixPattern = regexp.MustCompile(`-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}\.[0-9]{3}(?:-[0-9]+)?\.log(?:\.gz)?$`)
 
-func runtimeMetricsStreamSelection(
-	root string,
-	sessionID string,
-	runtimeID string,
-	startTimeUTC time.Time,
-	endTimeUTC time.Time,
-	projection metricsProjection,
-) (platformmetrics.StreamSelection, error) {
-	return runtimeMetricsStreamSelectionForSessions(
-		root,
-		sessionID,
-		nil,
-		runtimeID,
-		startTimeUTC,
-		endTimeUTC,
-		projection,
-	)
-}
-
 func runtimeMetricsStreamSelectionForSessions(
 	root string,
 	sessionID string,
