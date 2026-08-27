@@ -255,7 +255,10 @@ func buildGenericCLIProcess(
 	config := configFactory(modelServer.URL)
 	directory := support.ScaffoldFactory(t, config)
 	edges := serviceedges.Edges{
-		ModelAssetHTTPClient:           &rejectingModelAssetHTTP{},
+		ModelAssetHTTPClient: &rejectingModelAssetHTTP{},
+		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			return selection, nil
+		},
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
 		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,

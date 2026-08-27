@@ -1,3 +1,5 @@
+//go:build backendconformance
+
 // Package backendconformance owns the pure release invariant that connects
 // customer-reachable inference backends to an installable Models backend.
 package backendconformance

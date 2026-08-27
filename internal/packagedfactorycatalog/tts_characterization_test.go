@@ -114,6 +114,9 @@ func assertTTSModelWorker(t *testing.T, factory *factorydefinitions.FactoryConfi
 		worker.Command != "localai-vibevoice" {
 		t.Fatalf("worker identity/runtime = %#v", worker)
 	}
+	if !reflect.DeepEqual(worker.Args, []string{"--grpc-endpoint", "http://127.0.0.1:50051"}) {
+		t.Fatalf("worker args = %#v, want LocalAI gRPC endpoint", worker.Args)
+	}
 	wantResources := []factorydefinitions.ResourceConfig{{Name: "tts-cache", Capacity: 1}}
 	if !reflect.DeepEqual(worker.Resources, wantResources) {
 		t.Fatalf("worker resources = %#v, want %#v", worker.Resources, wantResources)

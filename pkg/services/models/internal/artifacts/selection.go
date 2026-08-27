@@ -105,17 +105,6 @@ func (manifest Manifest) ArtifactCount() int {
 	return len(manifest.entries)
 }
 
-// Artifacts returns detached descriptors for every validated publication
-// entry in stable manifest order. Callers receive the same validated facts
-// used by Select without access to the manifest's private wire representation.
-func (manifest Manifest) Artifacts() []ArtifactDescriptor {
-	artifacts := make([]ArtifactDescriptor, len(manifest.entries))
-	for index, entry := range manifest.entries {
-		artifacts[index] = descriptorFromEntry(entry, manifest.publication)
-	}
-	return artifacts
-}
-
 // ProtocolRevision returns the immutable protocol revision shared by every
 // artifact in the validated publication.
 func (manifest Manifest) ProtocolRevision() string {
