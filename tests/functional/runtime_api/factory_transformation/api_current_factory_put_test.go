@@ -178,6 +178,9 @@ func (fixture *sharedFactoryTransformationFixture) cleanup() error {
 		}
 		cancelClose()
 	}
+	if err := sharedFactoryTransformationListenerClosed(fixture.baseURL); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
+	}
 	if fixture.factoryDir != "" {
 		if err := os.RemoveAll(fixture.factoryDir); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("remove Factory root %s: %w", fixture.factoryDir, err))
@@ -203,7 +206,38 @@ func (fixture *sharedFactoryTransformationFixture) stop() error {
 			fixture.scriptRunner.CallCount(),
 		)
 	}
-	return fixture.cleanup()
+	err := fixture.cleanup()
+	if err == nil {
+		fmt.Fprintln(os.Stdout, "CLEAN-004: shared process, listener, Factory root, and operator home cleanup passed")
+	}
+	return err
+}
+
+// sharedFactoryTransformationListenerClosed probes the public listener after
+// Execute has joined and Process.Close has returned. A failed connection is
+// the expected observable result; a successful response proves teardown left
+// the package-owned listener reachable and therefore fails cleanup.
+func sharedFactoryTransformationListenerClosed(baseURL string) error {
+	if strings.TrimSpace(baseURL) == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sharedFactoryTransformationShutdownTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		strings.TrimSuffix(baseURL, "/")+"/status",
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("build listener cleanup probe: %w", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil
+	}
+	defer response.Body.Close()
+	return fmt.Errorf("shared HTTP listener remained reachable after shutdown with status %d", response.StatusCode)
 }
 
 func waitForSharedFactoryTransformationProcess(done <-chan error) error {
