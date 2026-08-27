@@ -64,14 +64,16 @@ The checked-in `go-unit-lane-latency-budget.v1.json` and its schema remain
 retained audit inputs. The v2 policy in
 `go-unit-lane-latency-budget.v2.json` records the unchanged historical
 distribution of 239.612 seconds over 444 packages and 18,122 tests, plus the
-reviewed candidate expectation of 444 packages and 18,154 tests. The reviewed
+reconciled candidate expectation of 444 packages and 18,156 tests. The
 candidate inventory SHA-256 is
-`19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677`.
+`451f3276fb95d5998dcba67cf65b039c0791351d15bdbe505c27a160a8bb6ede`.
 Reference-CI is pinned to commit
-`ba8ef900ee29347295ac7657742fd1aab42f064c` and the historical/candidate
-inventories use the exact hashes recorded in the v2 policy. This is the
-declared `exact-with-reviewed-diff` reconciliation; the checker never rewrites
-the budget, schemas, or retained historical files.
+`9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff`, while the measurement-only
+`ba8ef900ee29347295ac7657742fd1aab42f064c` identity remains retained in the
+historical audit files. The historical/candidate inventories use the exact
+hashes recorded in the v2 policy. This is the declared
+`exact-with-reviewed-diff` reconciliation; the checker never rewrites the
+budget, schemas, or retained historical files.
 
 The retained baseline ledger records all three complete uncached captures and
 the first incomplete attempt. The incomplete attempt remains separate from the

@@ -42,8 +42,14 @@ func TestCommittedBudgetV2SchemaAndInstancePassDraft202012Compiler(t *testing.T)
 	if budget.HistoricalReference.PackageCount != 444 || budget.HistoricalReference.TestCount != 18122 || budget.HistoricalReference.MedianWallSeconds != 239.612 {
 		t.Fatalf("historical reference = %+v, want 444/18122/239.612", budget.HistoricalReference)
 	}
-	if budget.Candidate.PackageCount != 444 || budget.Candidate.TestCount != 18154 || budget.Candidate.InventorySHA256 != "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677" {
-		t.Fatalf("candidate expectation = %+v, want reviewed 444/18154 inventory", budget.Candidate)
+	if budget.ReferenceCI.Commit != "9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff" {
+		t.Fatalf("reference-CI expectation = %+v, want reachable historical base commit", budget.ReferenceCI)
+	}
+	if budget.HistoricalReference.MeasurementCommit != "ba8ef900ee29347295ac7657742fd1aab42f064c" {
+		t.Fatalf("historical measurement commit = %q, want retained audit commit", budget.HistoricalReference.MeasurementCommit)
+	}
+	if budget.Candidate.PackageCount != 444 || budget.Candidate.TestCount != 18156 || budget.Candidate.InventorySHA256 != "451f3276fb95d5998dcba67cf65b039c0791351d15bdbe505c27a160a8bb6ede" {
+		t.Fatalf("candidate expectation = %+v, want reconciled 444/18156 inventory", budget.Candidate)
 	}
 }
 

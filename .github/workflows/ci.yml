@@ -540,7 +540,7 @@ jobs:
       YOU_LOGICAL_CPUS: "4"
       YOU_EXPECTED_CONCURRENT_LANES: "4"
       UNIT_DEFAULT_JOBS: "2"
-      UNIT_REFERENCE_COMMIT: ba8ef900ee29347295ac7657742fd1aab42f064c
+      UNIT_REFERENCE_COMMIT: 9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff
       UNIT_CANDIDATE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       UNIT_RUNNER_PROVIDER: github-actions
       UNIT_RUNNER_IMAGE: ubuntu-24.04

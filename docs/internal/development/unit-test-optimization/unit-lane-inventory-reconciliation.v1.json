@@ -94,8 +94,8 @@
       ],
       "allComplete": true,
       "packageCount": 444,
-      "testCount": 18154,
-      "inventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677",
+      "testCount": 18156,
+      "inventorySha256": "451f3276fb95d5998dcba67cf65b039c0791351d15bdbe505c27a160a8bb6ede",
       "allThreeInventoriesEqual": true
     }
   },
@@ -107,15 +107,15 @@
     },
     "final": {
       "packageCount": 444,
-      "testCount": 18154,
-      "inventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677"
+      "testCount": 18156,
+      "inventorySha256": "451f3276fb95d5998dcba67cf65b039c0791351d15bdbe505c27a160a8bb6ede"
     },
     "rawSetDelta": {
-      "finalOnly": 33,
+      "finalOnly": 35,
       "baselineOnly": 1,
-      "net": 32
+      "net": 34
     },
-    "finalOnlyIdentitiesRecorded": 33,
+    "finalOnlyIdentitiesRecorded": 35,
     "finalOnlyIdentities": [
       "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestCommitRollsBackWhenStagingIsMissing",
       "github.com/portpowered/infinite-you/pkg/platform/directoryreplace::TestReplaceWatchedDirectoryContentsReplacesContentAndCleansUp",
@@ -141,6 +141,8 @@
       "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresCompletedWorkFromCanonicalDispatchOutputWhenOccupancyIsMissing",
       "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresFailedDispatchReferencesWithoutDroppingFailedWork",
       "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestNew_RestoresOtherWorkWhenCompletedCronWorkHasNoOccupancy",
+      "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts::TestDecodePreservesPackagingRevision",
+      "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts::TestDecodeRejectsNonPositivePackagingRevision",
       "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests::TestReconstructFactoryWorldState_CompletesCronWorkWithoutRetainingOccupancy",
       "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServiceMergesAndPagesSources",
       "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire::TestFleetObservationServicePreservesOptionalProjectionFacts",
@@ -326,6 +328,20 @@
       },
       {
         "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts::TestDecodePreservesPackagingRevision",
+        "owner": "Models/artifacts",
+        "classification": "base-owned current-head witness",
+        "explanation": "This identity is present in the fresh current-head cohort but is owned by the base tree rather than introduced by this PR."
+      },
+      {
+        "side": "finalOnly",
+        "identity": "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts::TestDecodeRejectsNonPositivePackagingRevision",
+        "owner": "Models/artifacts",
+        "classification": "base-owned current-head witness",
+        "explanation": "This identity is present in the fresh current-head cohort but is owned by the base tree rather than introduced by this PR."
+      },
+      {
+        "side": "finalOnly",
         "identity": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/projectiontests::TestReconstructFactoryWorldState_CompletesCronWorkWithoutRetainingOccupancy",
         "owner": "Recordings projection",
         "classification": "added projection witness",
@@ -426,6 +442,18 @@
         "baselineOnlyIdentities": []
       },
       {
+        "owner": "Models/artifacts",
+        "finalOnly": 2,
+        "baselineOnly": 0,
+        "net": 2,
+        "explanation": "Two model-artifact identities are present in the fresh current-head cohort; both are base-owned and are not PR regressions.",
+        "finalOnlyIdentities": [
+          "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts::TestDecodePreservesPackagingRevision",
+          "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts::TestDecodeRejectsNonPositivePackagingRevision"
+        ],
+        "baselineOnlyIdentities": []
+      },
+      {
         "owner": "Recordings projection",
         "finalOnly": 1,
         "baselineOnly": 0,
@@ -488,14 +516,14 @@
       "formula": "final = (accepted - baselineOnly) union finalOnly",
       "acceptedSetSize": 18122,
       "baselineOnlyRemoved": 1,
-      "finalOnlyAdded": 33,
-      "reconstructedSetSize": 18154,
-      "reconstructedInventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677",
+      "finalOnlyAdded": 35,
+      "reconstructedSetSize": 18156,
+      "reconstructedInventorySha256": "451f3276fb95d5998dcba67cf65b039c0791351d15bdbe505c27a160a8bb6ede",
       "matchesFinalSet": true,
-      "countEquation": "18154 = 18122 - 1 + 33",
-      "groupNetEquation": "19 + 1 + 4 + 6 + 2 = 32"
+      "countEquation": "18156 = 18122 - 1 + 35",
+      "groupNetEquation": "19 + 2 + 1 + 4 + 6 + 2 = 34"
     },
-    "equation": "final = (accepted - baselineOnly) union finalOnly; 18154 = 18122 - 1 + 33"
+    "equation": "final = (accepted - baselineOnly) union finalOnly; 18156 = 18122 - 1 + 35"
   },
   "historyContinuity": {
     "criterion": "HIST-001",
@@ -563,7 +591,7 @@
       "accepted and final canonical inventory hashes and counts match comparison",
       "all final-only and baseline-only identities are unique and fully mapped",
       "set reconstruction and count equations are exact",
-      "group net totals are 19/1/4/6/2 and sum to 32",
+      "group net totals are 19/2/1/4/6/2 and sum to 34",
       "history continuity proves zero real behavioral removals"
     ]
   }

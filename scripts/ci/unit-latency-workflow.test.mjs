@@ -42,7 +42,7 @@ test("the unit-latency job captures ordered reference and candidate cohorts", ()
 	assert.match(job, /runs-on: ubuntu-24\.04/);
 	assert.match(job, /timeout-minutes: 45/);
 	assert.match(job, /UNIT_DEFAULT_JOBS: "2"/);
-	assert.match(job, /UNIT_REFERENCE_COMMIT: ba8ef900ee29347295ac7657742fd1aab42f064c/);
+	assert.match(job, /UNIT_REFERENCE_COMMIT: 9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff/);
 	assert.match(job, /UNIT_CANDIDATE_COMMIT: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 	assert.match(job, /UNIT_RUNNER_PROVIDER: github-actions/);
 	assert.match(job, /UNIT_RUNNER_IMAGE: ubuntu-24\.04/);

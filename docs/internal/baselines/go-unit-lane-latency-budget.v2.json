@@ -27,7 +27,7 @@
     "inventorySha256": "508aabd7976efa0fdd16d322a24a0da3f18d6b9fed1725ea3773f4e99da01897"
   },
   "referenceCI": {
-    "commit": "ba8ef900ee29347295ac7657742fd1aab42f064c",
+    "commit": "9e19e26e0fb6df47cfdd4c4d4469ce712aae04ff",
     "packageCount": 444,
     "testCount": 18122,
     "inventorySha256": "508aabd7976efa0fdd16d322a24a0da3f18d6b9fed1725ea3773f4e99da01897"
@@ -35,8 +35,8 @@
   "candidate": {
     "inventorySource": "docs/internal/development/unit-test-optimization/unit-lane-inventory-reconciliation.v1.json",
     "packageCount": 444,
-    "testCount": 18154,
-    "inventorySha256": "19b437b4925c799b2b3ac928dd3f070c1846ed0c588ab65a1b722c05827a1677"
+    "testCount": 18156,
+    "inventorySha256": "451f3276fb95d5998dcba67cf65b039c0791351d15bdbe505c27a160a8bb6ede"
   },
   "policy": {
     "requiredConsecutiveSamples": 3,
