@@ -19,14 +19,14 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestPetriSingleWorkerRunCompletesAtQuiescence proves a simple Petri Factory
+// TestPetriSharedDispatchSuccess proves a simple Petri Factory
 // started through the customer process reaches quiescence with submitted Work
 // at the expected success terminal locations. Subtests absorb cold-start,
 // preseeded and late-submit admission, archive-terminal completion, config-driven
 // and scaffolded service-pipeline happy paths, noop fallback, multi-item
 // completion, single- and two-stage pipelines, and ideation happy-path coverage
 // without inspecting internal Petri markings.
-func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
+func TestPetriSharedDispatchSuccess(t *testing.T) {
 	t.Run("simple_single_worker_pipeline_completes", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
@@ -37,12 +37,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			Payload:    []byte(`{"title":"single-worker smoke"}`),
 		})
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -52,8 +47,8 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
 		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount() != 1 {
-			t.Errorf("provider call count = %d, want 1", provider.CallCount())
+		if calls := sharedPetriProcess(t).router.callsFor(dir); calls != 1 {
+			t.Errorf("provider command call count = %d, want 1", calls)
 		}
 	})
 
@@ -64,21 +59,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "logging"}`))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "metrics"}`))
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"swe": {
-				{Content: "Done. COMPLETE"},
-				{Content: "Done. COMPLETE"},
-				{Content: "Done. COMPLETE"},
-			},
-			"reviewer": {
-				{Content: "Done. COMPLETE"},
-				{Content: "Done. COMPLETE"},
-				{Content: "Done. COMPLETE"},
-			},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 15*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("code-change", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -88,9 +69,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			support.WorkCustomerLocation("code-change", "failed"):    0,
 		})
 		assertQuiescentSession(t, session, 3, 0)
-		if provider.CallCount("swe") != 3 {
-			t.Errorf("swe call count = %d, want 3", provider.CallCount("swe"))
-		}
+		assertSharedPetriCommandCalls(t, dir, 6)
 	})
 
 	t.Run("mixed_preseeded_and_late_submit_completes", func(t *testing.T) {
@@ -99,13 +78,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "pre-existing"}`))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "new-arrival"}`))
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"swe":      {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
-			"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 15*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("code-change", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -114,6 +87,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			support.WorkCustomerLocation("code-change", "in-review"): 0,
 		})
 		assertQuiescentSession(t, session, 2, 0)
+		assertSharedPetriProviderCalls(t, dir, 4)
 	})
 
 	t.Run("archive_terminal_work_completes_without_refire", func(t *testing.T) {
@@ -121,13 +95,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "settings page"}`))
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"swe":      {{Content: "Done. COMPLETE"}},
-			"reviewer": {{Content: "Approved. COMPLETE"}},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("code-change", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -136,13 +104,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			support.WorkCustomerLocation("code-change", "in-review"): 0,
 		})
 		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount("swe") != 1 || provider.CallCount("reviewer") != 1 {
-			t.Errorf(
-				"provider calls = swe:%d reviewer:%d, want swe:1 reviewer:1",
-				provider.CallCount("swe"),
-				provider.CallCount("reviewer"),
-			)
-		}
+		assertSharedPetriCommandCalls(t, dir, 2)
 	})
 
 	t.Run("two_stage_pipeline_reaches_terminal", func(t *testing.T) {
@@ -150,13 +112,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"two-stage pipeline"}`))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
-		)
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -171,9 +127,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			assertPublicDispatchEvents(t, events, 2),
 			[]string{"step-one", "step-two"},
 		)
-		if provider.CallCount() != 2 {
-			t.Errorf("provider call count = %d, want 2", provider.CallCount())
-		}
+		assertSharedPetriCommandCalls(t, dir, 2)
 	})
 
 	t.Run("scaffolded_simple_pipeline_completes_one_task", func(t *testing.T) {
@@ -182,12 +136,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"scaffolded simple pipeline"}`))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Simple pipeline done. COMPLETE"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -196,6 +145,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			support.WorkCustomerLocation("task", "failed"): 0,
 		})
 		assertQuiescentSession(t, session, 1, 0)
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
 	t.Run("ideation_happy_path_reaches_story_complete", func(t *testing.T) {
@@ -208,14 +158,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			Payload:    []byte(`{"title":"search bar on docs"}`),
 		})
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 15*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("story", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -228,9 +171,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{originTraceID})
 		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount() != 3 {
-			t.Errorf("provider call count = %d, want 3", provider.CallCount())
-		}
+		assertSharedPetriCommandCalls(t, dir, 3)
 	})
 
 	t.Run("dispatcher_workflow_single_idea_reaches_prd_complete", func(t *testing.T) {
@@ -239,10 +180,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		traceID := "trace-dispatcher-single"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -252,6 +190,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
 		assertQuiescentSession(t, session, 1, 0)
+		assertSharedPetriCommandCalls(t, dir, 3)
 	})
 
 	t.Run("dispatcher_lifecycle_idea_reaches_archived_terminal", func(t *testing.T) {
@@ -264,15 +203,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			Payload:    []byte(`{"title":"improve onboarding flow"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"planner":  {{Content: "success<COMPLETE>"}},
-			"executor": {{Content: "success<COMPLETE>"}},
-			"reviewer": {{Content: "success<COMPLETE>"}},
-			"archiver": {{Content: "success<COMPLETE>"}},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 30*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 30*time.Second)
 
 		terminal := support.WorkCustomerLocation("code-change", "archived")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -287,11 +218,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertListedWorkStateTrace(t, listed, "code-change", "archived", originTraceID)
 		assertQuiescentSession(t, session, 1, 0)
-		for _, workerType := range []string{"reviewer", "planner", "executor", "archiver"} {
-			if provider.CallCount(workerType) != 1 {
-				t.Errorf("%s call count = %d, want 1", workerType, provider.CallCount(workerType))
-			}
-		}
+		assertSharedPetriCommandCalls(t, dir, 4)
 	})
 
 	t.Run("ideation_rejection_loop_reaches_story_complete", func(t *testing.T) {
@@ -353,15 +280,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
-		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner":   {{Content: "Task processed successfully.\n<COMPLETE>\n"}},
-			"processor": {{Content: "Task execution succeeded.\n<COMPLETE>\n"}},
-			"reviewer":  {{Content: "Task review accepted.\n<COMPLETE>\n"}},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride:    provider,
-			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("script-output-ok"),
-		}, 15*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("idea", "complete"): 1,
@@ -373,9 +292,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			support.WorkCustomerLocation("task", "failed"):   0,
 		})
 		assertQuiescentSession(t, session, 3, 0)
-		if provider.CallCount("planner") != 1 {
-			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
-		}
+		assertSharedPetriProviderCalls(t, dir, 3)
 	})
 
 	t.Run("idea_to_prd_multiple_ideas_each_reach_terminal", func(t *testing.T) {
@@ -394,13 +311,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			Payload:    []byte(`{"title":"idea two"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"planner":       {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
-			"prd-processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
-		})
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -409,6 +320,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{trace1, trace2})
 		assertQuiescentSession(t, session, 2, 0)
+		assertSharedPetriProviderCalls(t, dir, 2)
 	})
 
 	t.Run("config_driven_happy_path_two_stage_completes", func(t *testing.T) {
@@ -416,20 +328,12 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Config-driven happy path"}`))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
 		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount() != 2 {
-			t.Errorf("provider call count = %d, want 2", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 2)
 	})
 
 	t.Run("noop_pipeline_completes_without_provider", func(t *testing.T) {
@@ -437,7 +341,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "noop_pipeline"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "noop fallback test"}`))
 
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(
 			t,
 			dir,
 			serviceedges.Edges{},
@@ -447,6 +351,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
 		assertQuiescentSession(t, session, 1, 0)
+		assertSharedPetriProviderCalls(t, dir, 0)
 	})
 
 	t.Run("service_simple_multiple_work_items_complete", func(t *testing.T) {
@@ -455,22 +360,12 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-1"}`))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-2"}`))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
 		assertQuiescentSession(t, session, 2, 0)
-		if provider.CallCount() != 4 {
-			t.Errorf("provider call count = %d, want 4", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 4)
 	})
 
 	t.Run("scaffolded_multiple_work_items_complete_independently", func(t *testing.T) {
@@ -486,18 +381,12 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			})
 		}
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 3})
 		assertQuiescentSession(t, session, 3, 0)
+		assertSharedPetriProviderCalls(t, dir, 3)
 	})
 
 	t.Run("scaffolded_two_stage_service_pipeline_completes", func(t *testing.T) {
@@ -507,21 +396,15 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		writeServicePipelineWorkerConfig(t, dir, "worker-b")
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"two-stage service pipeline"}`))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
-			workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
-		)
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
 		assertQuiescentSession(t, session, 1, 0)
-		if provider.CallCount() != 2 {
-			t.Errorf("provider call count = %d, want 2", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 2)
 	})
+
+	runSharedPetriInvocationMapping(t)
 }
 
 // TestPetriWorkerErrorReturnsFailedTerminalOutcome proves worker or provider
@@ -1034,36 +917,26 @@ func (r *recordingProviderCommandRunner) callCount() int {
 	return len(r.requests)
 }
 
-// TestPetriInvocationInputAndOutputMapping proves submitted Work payload and
+// runSharedPetriInvocationMapping proves submitted Work payload and
 // Trace identity map into worker invocation inputs at the external-effect edge
 // and that public Work projections and Factory Events keep outputs and lineage
 // attributable to the originating Work identity without inspecting internal
 // Petri structures.
-func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
+func runSharedPetriInvocationMapping(t *testing.T) {
 	t.Run("factory_model_maps_to_provider_invocation", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"model mapping probe"}`))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
-		if provider.CallCount() != 1 {
-			t.Fatalf("provider call count = %d, want 1", provider.CallCount())
-		}
-
-		call := provider.LastCall()
-		if call.Model != "test-model" {
-			t.Errorf("provider model = %q, want test-model", call.Model)
-		}
-		if call.SystemPrompt == "" {
-			t.Error("provider system prompt is empty, want Factory worker prompt content")
+		assertSharedPetriProviderCalls(t, dir, 1)
+		request := sharedPetriProviderRequest(t, dir)
+		support.AssertArgsContainSequence(t, request.Args, []string{"--model", "test-model"})
+		if len(request.Stdin) == 0 {
+			t.Error("provider command stdin is empty, want rendered Factory worker prompt content")
 		}
 	})
 
@@ -1074,17 +947,13 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 		testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
-		)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
 		assertCompletedWorkName(t, listed, "task", "architecture-review")
-		userMessage := provider.LastCall().UserMessage
+		assertSharedPetriProviderCalls(t, dir, 1)
+		userMessage := string(sharedPetriProviderRequest(t, dir).Stdin)
 		if !strings.Contains(userMessage, markdownNeedle) {
 			t.Errorf(
 				"provider user message = %q, want markdown payload needle %q",
@@ -1112,16 +981,12 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 			Payload:    []byte(`review the design document`),
 		})
 
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
-		)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
-		userMessage := provider.LastCall().UserMessage
+		assertSharedPetriProviderCalls(t, dir, 1)
+		userMessage := string(sharedPetriProviderRequest(t, dir).Stdin)
 		if !strings.Contains(userMessage, "Task Name: "+workName) {
 			t.Errorf(
 				"provider user message = %q, want rendered prompt to contain Task Name: %s",
@@ -1141,13 +1006,7 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 			Payload:    []byte(`{"title":"search bar on docs"}`),
 		})
 
-		provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
-			"planner":       {{Content: "Done. COMPLETE"}},
-			"prd-processor": {{Content: "Done. COMPLETE"}},
-		})
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
@@ -1155,11 +1014,32 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 			support.WorkCustomerLocation("idea", "init"): 0,
 		})
 		assertListedWorkStateTrace(t, listed, "prd", "complete", originTraceID)
-		if provider.CallCount("planner") != 1 {
-			t.Errorf("planner call count = %d, want 1", provider.CallCount("planner"))
-		}
+		assertSharedPetriProviderCalls(t, dir, 1)
 	})
 
+	t.Run("dispatch_events_reference_terminal_work_identity", func(t *testing.T) {
+		t.Parallel()
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
+		traceID := "trace-dispatch-event-mapping"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"dispatch event mapping"}`),
+		})
+
+		_, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
+		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, []string{traceID})
+		assertSharedPetriProviderCalls(t, dir, 1)
+	})
+}
+
+// TestPetriInvocationInputAndOutputMapping retains the failed-lineage witness
+// on the isolated edge until the failure-migration story supplies its
+// deterministic shared failure router.
+func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 	t.Run("failed_terminal_preserves_origin_trace_lineage", func(t *testing.T) {
 		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
@@ -1195,31 +1075,6 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 		assertListedWorkStateTrace(t, listed, "idea", "complete", originTraceID)
 		assertListedWorkStateTrace(t, listed, "plan", "complete", originTraceID)
 		assertListedWorkStateTrace(t, listed, "task", "failed", originTraceID)
-	})
-
-	t.Run("dispatch_events_reference_terminal_work_identity", func(t *testing.T) {
-		t.Parallel()
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
-		traceID := "trace-dispatch-event-mapping"
-		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-			WorkTypeID: "task",
-			TraceID:    traceID,
-			Payload:    []byte(`{"title":"dispatch event mapping"}`),
-		})
-
-		provider := testutil.NewMockProvider(
-			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
-		)
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-			t,
-			dir,
-			serviceedges.Edges{ProviderOverride: provider},
-			10*time.Second,
-		)
-
-		terminal := support.WorkCustomerLocation("task", "complete")
-		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
-		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, []string{traceID})
 	})
 }
 

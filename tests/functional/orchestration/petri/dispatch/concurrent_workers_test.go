@@ -11,7 +11,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -28,17 +27,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
-		var responses []workerexecution.InferenceResponse
-		for range 15 {
-			responses = append(responses, workerexecution.InferenceResponse{
-				Content: "Done. COMPLETE ACCEPTED",
-			})
-		}
-		provider := testutil.NewMockProvider(responses...)
-
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("story", "complete"):  3,
@@ -49,10 +38,8 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		})
 		assertCompletedStoryTraces(t, listed, traceIDs)
 
-		if provider.CallCount() != 9 {
-			t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
-		}
-		dispatches := assertPublicDispatchEvents(t, events, provider.CallCount())
+		assertSharedPetriProviderCalls(t, dir, 9)
+		dispatches := assertPublicDispatchEvents(t, events, 9)
 		assertDispatchTransitionOutcomeCount(t, dispatches, "plan-idea", factoryapi.WorkOutcomeAccepted, 3)
 		assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 3)
 		assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 3)
@@ -65,17 +52,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "serial_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
-		var responses []workerexecution.InferenceResponse
-		for range 15 {
-			responses = append(responses, workerexecution.InferenceResponse{
-				Content: "Done. COMPLETE ACCEPTED",
-			})
-		}
-		provider := testutil.NewMockProvider(responses...)
-
-		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 30*time.Second)
+		session, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 30*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("story", "complete"):  3,
@@ -86,10 +63,8 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		})
 		assertCompletedStoryTraces(t, listed, traceIDs)
 
-		if provider.CallCount() != 9 {
-			t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
-		}
-		dispatches := assertPublicDispatchEvents(t, events, provider.CallCount())
+		assertSharedPetriProviderCalls(t, dir, 9)
+		dispatches := assertPublicDispatchEvents(t, events, 9)
 		assertDispatchTransitionOutcomeCount(t, dispatches, "plan-idea", factoryapi.WorkOutcomeAccepted, 3)
 		assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 3)
 		assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 3)
@@ -116,14 +91,12 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 		traceID := "trace-single-seed"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
+		assertSharedPetriProviderCalls(t, dir, 3)
 	})
 
 	t.Run("two_concurrent_seeds_each_reach_terminal_work", func(t *testing.T) {
@@ -134,15 +107,13 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 			{traceID: "trace-beta", title: "feature-beta"},
 		})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(6)...)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, traceIDs)
 		assertDistinctTerminalWorkIDs(t, listed, terminal, 2)
+		assertSharedPetriProviderCalls(t, dir, 6)
 	})
 
 	t.Run("multi_seed_completions_remain_distinct", func(t *testing.T) {
@@ -158,15 +129,13 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 		}
 		traceIDs := seedIdeas(t, dir, ideas)
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(n * 3)...)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 15*time.Second)
+		_, listed := runSharedPetriFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: n})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, traceIDs)
 		assertDistinctTerminalWorkIDs(t, listed, terminal, n)
+		assertSharedPetriProviderCalls(t, dir, n*3)
 	})
 
 	t.Run("concurrent_execution_pool_keeps_distinct_work_identities", func(t *testing.T) {
@@ -177,23 +146,14 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 			{traceID: "trace-iso-2", title: "file-2"},
 		})
 
-		var responses []workerexecution.InferenceResponse
-		for range 10 {
-			responses = append(responses, workerexecution.InferenceResponse{
-				Content: "Done. COMPLETE ACCEPTED",
-			})
-		}
-		provider := testutil.NewMockProvider(responses...)
-
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		_, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("story", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, traceIDs)
 		assertDistinctTerminalWorkIDs(t, listed, terminal, 2)
 		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, traceIDs)
+		assertSharedPetriProviderCalls(t, dir, 6)
 	})
 }
 
