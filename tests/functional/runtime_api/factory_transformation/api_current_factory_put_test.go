@@ -3,6 +3,7 @@ package factory_transformation
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,14 +12,282 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// sharedFactoryTransformationFixture owns the one package-scoped application
+// process used by the migrated document scenarios. Scenario roots and session
+// identities remain per-test; only immutable process wiring and the HTTP
+// transport are shared.
+type sharedFactoryTransformationFixture struct {
+	baseURL    string
+	factoryDir string
+	homeDir    string
+	cancel     context.CancelFunc
+	done       chan error
+	process    support.ApplicationProcess
+
+	mu             sync.Mutex
+	seenSessionIDs map[string]struct{}
+}
+
+var factoryTransformationFixture *sharedFactoryTransformationFixture
+
+func TestMain(m *testing.M) {
+	fixture, err := startSharedFactoryTransformationFixture()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "start shared factory transformation server: %v\n", err)
+		os.Exit(1)
+	}
+	factoryTransformationFixture = fixture
+
+	exitCode := m.Run()
+	fixture.stop()
+	os.Exit(exitCode)
+}
+
+func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixture, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	fixture := &sharedFactoryTransformationFixture{
+		cancel:         cancel,
+		seenSessionIDs: make(map[string]struct{}),
+	}
+	cleanup := func() {
+		cancel()
+		if fixture.done != nil {
+			select {
+			case <-fixture.done:
+			case <-time.After(5 * time.Second):
+			}
+		}
+		if fixture.process != nil {
+			closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = fixture.process.Close(closeCtx)
+			cancelClose()
+		}
+		if fixture.factoryDir != "" {
+			_ = os.RemoveAll(fixture.factoryDir)
+		}
+		if fixture.homeDir != "" {
+			_ = os.RemoveAll(fixture.homeDir)
+		}
+	}
+
+	var err error
+	fixture.factoryDir, err = os.MkdirTemp("", "factory-transformation-shared-root-")
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("create shared Factory root: %w", err)
+	}
+	fixture.homeDir, err = os.MkdirTemp("", "factory-transformation-shared-home-")
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("create shared operator home: %w", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(fixture.factoryDir, interfaces.FactoryConfigFile),
+		[]byte(functionalNamedFactoryPayloadJSON("shared-runtime", "shared-task")),
+		0o644,
+	); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("write shared Factory config: %w", err)
+	}
+
+	api := support.NewProcessAPIServer()
+	fixture.process, err = support.BuildProcessWithContext(ctx, serviceedges.Edges{
+		APIServerStarter: api.Start,
+	})
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("build shared root process: %w", err)
+	}
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "run", "--continuously", "--with-server", "--quiet",
+		"--dir", fixture.factoryDir, "--no-record",
+	})
+	inputs.Input.Env = []string{
+		"HOME=" + fixture.homeDir,
+		"USERPROFILE=" + fixture.homeDir,
+	}
+	inputs.Input.WorkingDirectory = fixture.factoryDir
+	fixture.done = make(chan error, 1)
+	go func() { fixture.done <- fixture.process.Execute(inputs.Input) }()
+
+	fixture.baseURL, err = api.WaitForBaseURL(15 * time.Second)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("wait for shared server base URL: %w", err)
+	}
+	return fixture, nil
+}
+
+func (fixture *sharedFactoryTransformationFixture) stop() {
+	if fixture == nil {
+		return
+	}
+	fixture.cancel()
+	if fixture.done != nil {
+		select {
+		case <-fixture.done:
+		case <-time.After(5 * time.Second):
+			fmt.Fprintln(os.Stderr, "timed out waiting for shared factory transformation process")
+		}
+	}
+	if fixture.process != nil {
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := fixture.process.Close(closeCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "close shared factory transformation process: %v\n", err)
+		}
+		cancelClose()
+	}
+	if err := os.RemoveAll(fixture.factoryDir); err != nil {
+		fmt.Fprintf(os.Stderr, "remove shared Factory root %s: %v\n", fixture.factoryDir, err)
+	}
+	if err := os.RemoveAll(fixture.homeDir); err != nil {
+		fmt.Fprintf(os.Stderr, "remove shared operator home %s: %v\n", fixture.homeDir, err)
+	}
+}
+
+type documentTransformationServer struct {
+	fixture   *sharedFactoryTransformationFixture
+	baseURL   string
+	sessionID string
+}
+
+func startDocumentTransformationServer(
+	t *testing.T,
+	rootDir string,
+	targetName string,
+) *documentTransformationServer {
+	t.Helper()
+	fixture := factoryTransformationFixture
+	if fixture == nil {
+		t.Fatal("shared factory transformation fixture is unavailable")
+	}
+	sessionID := openFactoryTransformationSession(t, fixture.baseURL, rootDir, targetName)
+	fixture.mu.Lock()
+	if _, exists := fixture.seenSessionIDs[sessionID]; exists {
+		fixture.mu.Unlock()
+		t.Fatalf("Factory Session ID %q was reused", sessionID)
+	}
+	fixture.seenSessionIDs[sessionID] = struct{}{}
+	fixture.mu.Unlock()
+	t.Logf("DOC-001: package process start count=1; explicit Factory Session ID=%s target=%q", sessionID, targetName)
+
+	server := &documentTransformationServer{
+		baseURL:   fixture.baseURL,
+		sessionID: sessionID,
+	}
+	t.Cleanup(func() {
+		support.CloseFactorySessionAt(t, server.baseURL, server.sessionID)
+		t.Logf("DOC-001: closed explicit Factory Session ID=%s", server.sessionID)
+	})
+	return server
+}
+
+func (server *documentTransformationServer) URL() string {
+	if server == nil {
+		return ""
+	}
+	return server.baseURL
+}
+
+func (server *documentTransformationServer) SessionID() string {
+	if server == nil {
+		return ""
+	}
+	return server.sessionID
+}
+
+func (server *documentTransformationServer) FactoryURL() string {
+	if server == nil {
+		return ""
+	}
+	return sessionFactoryURL(server.baseURL, server.sessionID)
+}
+
+func (server *documentTransformationServer) GetFactoryEvents(t testing.TB) []factoryapi.FactoryEvent {
+	t.Helper()
+	return support.GetFactoryEventsForSessionAt(t, server.baseURL, server.sessionID)
+}
+
+func seedDocumentNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
+	t.Helper()
+	fixture := factoryTransformationFixture
+	if fixture == nil {
+		t.Fatal("shared factory transformation fixture is unavailable")
+	}
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithWorkType(t, name, workType), 0o600); err != nil {
+		t.Fatalf("write customer Factory source %s: %v", name, err)
+	}
+	env := []string{"HOME=" + fixture.homeDir, "USERPROFILE=" + fixture.homeDir}
+	support.CreateAndActivateNamedFactoryAtRootWithProcess(
+		t,
+		fixture.process,
+		env,
+		sourceDir,
+		rootDir,
+		name,
+		sourcePath,
+	)
+}
+
+func openFactoryTransformationSession(t *testing.T, serverURL, folderPath, targetName string) string {
+	t.Helper()
+	var target *factoryapi.FactorySessionTargetRef
+	if targetName != "" {
+		target = &factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKindNamed,
+			Name: &targetName,
+		}
+	} else {
+		target = &factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKindDefault,
+		}
+	}
+	body, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
+		FolderPath: folderPath,
+		Target:     target,
+	})
+	if err != nil {
+		t.Fatalf("marshal open Factory Session request: %v", err)
+	}
+	resp, err := http.Post(serverURL+"/factory-sessions", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /factory-sessions: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("POST /factory-sessions status = %d, want 200: %s", resp.StatusCode, payload)
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	decodeJSONResponse(t, resp, &opened, "decode open Factory Session response")
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("open Factory Session response = %#v, want session id", opened)
+	}
+	if opened.Session.Id == "~default" || opened.Session.IsDefault {
+		t.Fatalf("opened document Factory Session = %#v, want explicit non-default session", opened.Session)
+	}
+	wantKind := factoryapi.FactorySessionTargetRefKindDefault
+	if targetName != "" {
+		wantKind = factoryapi.FactorySessionTargetRefKindNamed
+	}
+	if opened.Session.Target.Kind != wantKind {
+		t.Fatalf("opened Factory Session target kind = %q, want %q", opened.Session.Target.Kind, wantKind)
+	}
+	return opened.Session.Id
+}
 
 func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent(t *testing.T) {
 	rootDir := t.TempDir()
@@ -829,6 +1098,45 @@ func saveCurrentFactoryForSession(t *testing.T, serverURL, sessionID, body strin
 	var saved factoryapi.Factory
 	decodeJSONResponse(t, resp, &saved, "decode session current factory save response")
 	return saved
+}
+
+func saveCurrentFactoryForSessionWithClient(
+	t *testing.T,
+	client *http.Client,
+	serverURL,
+	sessionID,
+	body string,
+) factoryapi.Factory {
+	t.Helper()
+	resp := putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		client,
+		serverURL,
+		"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
+		saveFactoryForSessionRequestBody(body),
+		http.StatusOK,
+	)
+	var saved factoryapi.Factory
+	decodeJSONResponse(t, resp, &saved, "decode session current factory save response")
+	return saved
+}
+
+func saveCurrentFactoryForSessionExpectStatus(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	body string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
+		saveFactoryForSessionRequestBody(body),
+		wantStatus,
+	)
 }
 
 func sessionFactoryURL(serverURL, sessionID string) string {
