@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -22,6 +23,8 @@ import (
 
 const pprofPath = "/debug/pprof/"
 
+type pprofDurationWaiter func(context.Context, time.Duration) error
+
 // HandlerWithPprof adds the standard Go pprof routes to one HTTP handler when
 // explicitly requested. The private mux keeps this server's registration
 // local; the serving path does not use the process-wide DefaultServeMux.
@@ -31,55 +34,72 @@ const pprofPath = "/debug/pprof/"
 // the same standard runtime profile and trace implementations while keeping
 // every HTTP route scoped to this server's mux.
 func HandlerWithPprof(handler http.Handler, enabled bool, commandLineReader CommandLineReader) http.Handler {
+	return handlerWithPprof(handler, enabled, commandLineReader, waitPprofDuration)
+}
+
+func handlerWithPprof(
+	handler http.Handler,
+	enabled bool,
+	commandLineReader CommandLineReader,
+	waiter pprofDurationWaiter,
+) http.Handler {
 	if !enabled || handler == nil {
 		return handler
 	}
+	if waiter == nil {
+		waiter = waitPprofDuration
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(pprofPath, pprofIndex)
+	mux.HandleFunc(pprofPath, pprofIndexWithWaiter(waiter))
 	mux.HandleFunc(pprofPath+"cmdline", pprofCmdline(commandLineReader))
-	mux.HandleFunc(pprofPath+"profile", pprofCPU)
+	mux.HandleFunc(pprofPath+"profile", pprofCPUWithWaiter(waiter))
 	mux.HandleFunc(pprofPath+"symbol", pprofSymbol)
-	mux.HandleFunc(pprofPath+"trace", pprofTrace)
+	mux.HandleFunc(pprofPath+"trace", pprofTraceWithWaiter(waiter))
 	for _, profile := range []string{
 		"allocs", "block", "goroutine", "heap", "mutex", "threadcreate",
 	} {
-		mux.Handle(pprofPath+profile, pprofNamed(profile))
+		mux.Handle(pprofPath+profile, pprofNamedWithWaiter(profile, waiter))
 	}
 	mux.Handle("/", handler)
 	return mux
 }
 
-func pprofIndex(writer http.ResponseWriter, request *http.Request) {
-	if name, found := strings.CutPrefix(request.URL.Path, pprofPath); found && name != "" {
-		pprofNamed(name).ServeHTTP(writer, request)
-		return
+func pprofIndexWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
+	if waiter == nil {
+		waiter = waitPprofDuration
 	}
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if name, found := strings.CutPrefix(request.URL.Path, pprofPath); found && name != "" {
+			pprofNamedWithWaiter(name, waiter).ServeHTTP(writer, request)
+			return
+		}
 
-	writer.Header().Set("X-Content-Type-Options", "nosniff")
-	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		writer.Header().Set("X-Content-Type-Options", "nosniff")
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	profiles := make([]pprofEntry, 0, len(runtimepprof.Profiles())+4)
-	for _, profile := range runtimepprof.Profiles() {
-		name := profile.Name()
-		profiles = append(profiles, pprofEntry{
-			Name:  name,
-			Href:  name,
-			Desc:  pprofDescriptions[name],
-			Count: profile.Count(),
-		})
-	}
-	for _, name := range []string{"cmdline", "profile", "symbol", "trace"} {
-		profiles = append(profiles, pprofEntry{
-			Name: name,
-			Href: name,
-			Desc: pprofDescriptions[name],
-		})
-	}
-	sort.Slice(profiles, func(i, j int) bool { return profiles[i].Name < profiles[j].Name })
+		profiles := make([]pprofEntry, 0, len(runtimepprof.Profiles())+4)
+		for _, profile := range runtimepprof.Profiles() {
+			name := profile.Name()
+			profiles = append(profiles, pprofEntry{
+				Name:  name,
+				Href:  name,
+				Desc:  pprofDescriptions[name],
+				Count: profile.Count(),
+			})
+		}
+		for _, name := range []string{"cmdline", "profile", "symbol", "trace"} {
+			profiles = append(profiles, pprofEntry{
+				Name: name,
+				Href: name,
+				Desc: pprofDescriptions[name],
+			})
+		}
+		sort.Slice(profiles, func(i, j int) bool { return profiles[i].Name < profiles[j].Name })
 
-	if err := writePprofIndex(writer, profiles); err != nil {
-		return
+		if err := writePprofIndex(writer, profiles); err != nil {
+			return
+		}
 	}
 }
 
@@ -159,7 +179,10 @@ Profile Descriptions:
 	return err
 }
 
-func pprofNamed(name string) http.Handler {
+func pprofNamedWithWaiter(name string, waiter pprofDurationWaiter) http.Handler {
+	if waiter == nil {
+		waiter = waitPprofDuration
+	}
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("X-Content-Type-Options", "nosniff")
 		profile := runtimepprof.Lookup(name)
@@ -168,7 +191,7 @@ func pprofNamed(name string) http.Handler {
 			return
 		}
 		if seconds := request.FormValue("seconds"); seconds != "" {
-			servePprofDeltaProfile(writer, request, name, profile, seconds)
+			servePprofDeltaProfileWithWaiter(writer, request, name, profile, seconds, waiter)
 			return
 		}
 
@@ -189,13 +212,17 @@ func pprofNamed(name string) http.Handler {
 	})
 }
 
-func servePprofDeltaProfile(
+func servePprofDeltaProfileWithWaiter(
 	writer http.ResponseWriter,
 	request *http.Request,
 	name string,
 	profile *runtimepprof.Profile,
 	secondsValue string,
+	waiter pprofDurationWaiter,
 ) {
+	if waiter == nil {
+		waiter = waitPprofDuration
+	}
 	seconds, err := strconv.ParseInt(secondsValue, 10, 64)
 	if err != nil || seconds <= 0 {
 		pprofError(writer, http.StatusBadRequest, `invalid value for "seconds" - must be a positive integer`)
@@ -217,17 +244,13 @@ func servePprofDeltaProfile(
 		return
 	}
 
-	timer := time.NewTimer(time.Duration(seconds) * time.Second)
-	defer timer.Stop()
-	select {
-	case <-request.Context().Done():
-		if request.Context().Err() == context.DeadlineExceeded {
-			pprofError(writer, http.StatusRequestTimeout, request.Context().Err().Error())
-		} else {
-			pprofError(writer, http.StatusInternalServerError, request.Context().Err().Error())
+	if err := waiter(request.Context(), time.Duration(seconds)*time.Second); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, context.DeadlineExceeded) {
+			status = http.StatusRequestTimeout
 		}
+		pprofError(writer, status, err.Error())
 		return
-	case <-timer.C:
 	}
 
 	after, err := collectPprofProfile(profile)
@@ -279,44 +302,59 @@ func pprofCmdline(commandLineReader CommandLineReader) http.HandlerFunc {
 	}
 }
 
-func pprofCPU(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("X-Content-Type-Options", "nosniff")
-	seconds, err := strconv.ParseInt(request.FormValue("seconds"), 10, 64)
-	if seconds <= 0 || err != nil {
-		seconds = 30
+func pprofCPUWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
+	if waiter == nil {
+		waiter = waitPprofDuration
 	}
-	writer.Header().Set("Content-Type", "application/octet-stream")
-	writer.Header().Set("Content-Disposition", `attachment; filename="profile"`)
-	if err := runtimepprof.StartCPUProfile(writer); err != nil {
-		pprofError(writer, http.StatusInternalServerError, fmt.Sprintf("Could not enable CPU profiling: %s", err))
-		return
+	return func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("X-Content-Type-Options", "nosniff")
+		seconds, err := strconv.ParseInt(request.FormValue("seconds"), 10, 64)
+		if seconds <= 0 || err != nil {
+			seconds = 30
+		}
+		writer.Header().Set("Content-Type", "application/octet-stream")
+		writer.Header().Set("Content-Disposition", `attachment; filename="profile"`)
+		if err := runtimepprof.StartCPUProfile(writer); err != nil {
+			pprofError(writer, http.StatusInternalServerError, fmt.Sprintf("Could not enable CPU profiling: %s", err))
+			return
+		}
+		defer runtimepprof.StopCPUProfile()
+		_ = waiter(request.Context(), time.Duration(seconds)*time.Second)
 	}
-	defer runtimepprof.StopCPUProfile()
-	waitPprofDuration(request, time.Duration(seconds)*time.Second)
 }
 
-func pprofTrace(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("X-Content-Type-Options", "nosniff")
-	seconds, err := strconv.ParseFloat(request.FormValue("seconds"), 64)
-	if seconds <= 0 || err != nil {
-		seconds = 1
+func pprofTraceWithWaiter(waiter pprofDurationWaiter) http.HandlerFunc {
+	if waiter == nil {
+		waiter = waitPprofDuration
 	}
-	writer.Header().Set("Content-Type", "application/octet-stream")
-	writer.Header().Set("Content-Disposition", `attachment; filename="trace"`)
-	if err := runtimetrace.Start(writer); err != nil {
-		pprofError(writer, http.StatusInternalServerError, fmt.Sprintf("Could not enable tracing: %s", err))
-		return
+	return func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("X-Content-Type-Options", "nosniff")
+		seconds, err := strconv.ParseFloat(request.FormValue("seconds"), 64)
+		if seconds <= 0 || err != nil {
+			seconds = 1
+		}
+		writer.Header().Set("Content-Type", "application/octet-stream")
+		writer.Header().Set("Content-Disposition", `attachment; filename="trace"`)
+		if err := runtimetrace.Start(writer); err != nil {
+			pprofError(writer, http.StatusInternalServerError, fmt.Sprintf("Could not enable tracing: %s", err))
+			return
+		}
+		defer runtimetrace.Stop()
+		_ = waiter(request.Context(), time.Duration(seconds*float64(time.Second)))
 	}
-	defer runtimetrace.Stop()
-	waitPprofDuration(request, time.Duration(seconds*float64(time.Second)))
 }
 
-func waitPprofDuration(request *http.Request, duration time.Duration) {
+func waitPprofDuration(ctx context.Context, duration time.Duration) error {
+	if ctx == nil {
+		return errors.New("pprof duration wait: context is required")
+	}
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
-	case <-request.Context().Done():
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
