@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -28,11 +29,18 @@ import (
 // proves request-id replay and conflict behavior without a fabricated HTTP
 // responder.
 func TestCLIRemoteRunStartsDurableSessionOnSelectedServer(t *testing.T) {
-	homeDir := t.TempDir()
-	namedFactoryDir := scaffoldRemotePlacementFactory(t, homeDir)
-	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
-	runRemoteClientDisconnect(t, homeDir, namedFactoryDir, server.URL())
-	assertRemoteRequestIDBehavior(t, server.URL())
+	if lifecycleFixture == nil || lifecycleFixture.client == nil {
+		t.Fatal("shared lifecycle fixture is unavailable")
+	}
+	scenarioID := uuid.NewString()
+	runRemoteClientDisconnect(
+		t,
+		lifecycleFixture.client,
+		lifecycleFixture.clientWorkingDir,
+		lifecycleFixture.baseURL,
+		"same request "+scenarioID,
+	)
+	assertRemoteRequestIDBehavior(t, lifecycleFixture.baseURL, "functional-remote-retry-"+scenarioID)
 }
 
 // TestCLILocalAndRemoteRunSuccessParityThroughRootProcess proves equivalent
@@ -464,6 +472,67 @@ func scaffoldRemotePlacementFactory(t *testing.T, homeDir string) string {
 	return namedFactoryDir
 }
 
+// writeSharedRemoteLifecycleFactory authors the named JavaScript Factory and
+// workflow used by the durable witness before the package-scoped server starts.
+// The named Factory is placed in the same isolated global catalog used by the
+// shared client and server; the workflow file is project-relative to the
+// shared server Factory directory.
+func writeSharedRemoteLifecycleFactory(homeDir, serverFactoryDir string) error {
+	namedFactoryDir := filepath.Join(
+		interfaces.NamedFactoriesRoot(homeDir),
+		"remote-placement",
+	)
+	if err := os.MkdirAll(namedFactoryDir, 0o755); err != nil {
+		return fmt.Errorf("create named Factory directory: %w", err)
+	}
+	rawConfig, err := json.Marshal(map[string]any{
+		"name": "remote-placement",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name":     "prompt",
+				"required": true,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"inlineSource": map[string]any{
+					"encoding": "utf-8",
+					"inline":   "var spin = 0; while (true) { spin += 1; }",
+				},
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("marshal named Factory config: %w", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(namedFactoryDir, interfaces.FactoryConfigFile),
+		rawConfig,
+		0o644,
+	); err != nil {
+		return fmt.Errorf("write named Factory config: %w", err)
+	}
+	workflowDir := filepath.Join(serverFactoryDir, ".claude", interfaces.WorkflowsDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		return fmt.Errorf("create server workflow directory: %w", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(workflowDir, "remote-idempotency.js"),
+		[]byte("return 'idempotency complete';"),
+		0o600,
+	); err != nil {
+		return fmt.Errorf("write server idempotency workflow: %w", err)
+	}
+	return nil
+}
+
 func startRemotePlacementServer(t *testing.T, homeDir, namedFactoryDir string) *support.FunctionalAPIServer {
 	t.Helper()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -480,45 +549,40 @@ func startRemotePlacementServer(t *testing.T, homeDir, namedFactoryDir string) *
 	return server
 }
 
-func runRemoteClientDisconnect(t *testing.T, homeDir, namedFactoryDir, serverURL string) {
+func runRemoteClientDisconnect(
+	t *testing.T,
+	client *lifecycleClientProcess,
+	workingDir, serverURL string,
+	prompt string,
+) {
 	t.Helper()
 	args := []string{
-		"you", "--remote", "--server", serverURL, "--verbose", "run",
-		"--named", "remote-placement", "--json", "--output", "response-stream", "--no-record", "same request",
+		"--remote", "--verbose", "run",
+		"--named", "remote-placement", "--json", "--output", "response-stream", "--no-record", prompt,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	inputs := support.FakeInputs(ctx, args)
-	inputs.Input.WorkingDirectory = namedFactoryDir
-	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
 	admissionOutput := newRemoteAdmissionOutput()
-	inputs.Input.Stdout = admissionOutput
-	inputs.Input.Stderr = admissionOutput
-	clientProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, clientProcess)
-	clientDone := make(chan error, 1)
-	go func() { clientDone <- clientProcess.Execute(inputs.Input) }()
+	_, command := client.startCLI(t, ctx, workingDir, serverURL, admissionOutput, args...)
 	select {
 	case <-admissionOutput.started:
 	case <-time.After(10 * time.Second):
-		cancel()
-		select {
-		case clientErr := <-clientDone:
-			t.Fatalf("remote client did not observe durable admission: client error=%v\nadmission output:\n%s", clientErr, admissionOutput.String())
-		case <-time.After(10 * time.Second):
-			t.Fatalf("remote client did not observe durable admission\nadmission output:\n%s", admissionOutput.String())
-		}
+		command.Stop(t)
+		t.Fatalf("remote client did not observe durable admission: client error=%v\nadmission output:\n%s", command.Err(), admissionOutput.String())
 	}
 	cancel()
 	select {
-	case clientErr := <-clientDone:
-		if clientErr == nil {
+	case <-command.Done():
+		command.AcceptError()
+		if command.Err() == nil {
 			t.Fatal("remote client returned nil after submitting-client disconnect")
 		}
 	case <-time.After(10 * time.Second):
+		command.Stop(t)
 		t.Fatal("remote client did not return after submitting connection cancellation")
 	}
 	sessionID := remoteSessionIDFromAdmissionOutput(t, admissionOutput.String())
+	markSessionClean := registerLifecycleSessionCleanup(t, serverURL, sessionID)
 	inspection := support.GetJSON[factoryapi.FactorySessionGetResponse](
 		t,
 		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID,
@@ -531,28 +595,36 @@ func runRemoteClientDisconnect(t *testing.T, homeDir, namedFactoryDir, serverURL
 		t.Fatalf("durable session id = %q, want returned %q", durable.SessionId, sessionID)
 	}
 	if durable.Status != factoryapi.FactorySessionDurableLifecycleStatusQueued && durable.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("durable session status after client disconnect = %q, want QUEUED or RUNNING", durable.Status)
+		t.Fatalf("durable session status after client disconnect = %q, want QUEUED or RUNNING\nadmission output:\n%s", durable.Status, admissionOutput.String())
 	}
 	if err := terminateRemoteFunctionalSession(serverURL, sessionID); err != nil {
 		t.Fatalf("terminate disconnected durable session %s: %v", sessionID, err)
 	}
+	markSessionClean()
 	if strings.Contains(admissionOutput.String(), "http://127.0.0.1:1/") {
 		t.Fatalf("remote output leaked a local fallback endpoint: %s", admissionOutput.String())
 	}
 }
 
-func assertRemoteRequestIDBehavior(t *testing.T, serverURL string) {
+func assertRemoteRequestIDBehavior(t *testing.T, serverURL, requestID string) {
 	t.Helper()
 	retryWorkflow := "remote-idempotency"
 	request := factoryapi.FactorySessionExecutionRequest{
-		RequestId: "functional-remote-retry-001",
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 			WorkflowName: &retryWorkflow,
 		},
 	}
 	first := postRemoteFunctionalExecution(t, serverURL, request)
+	var markSessionClean func()
+	if first.SessionId != "" {
+		markSessionClean = registerLifecycleSessionCleanup(t, serverURL, first.SessionId)
+	}
 	replay := postRemoteFunctionalExecution(t, serverURL, request)
+	if replay.SessionId != "" && replay.SessionId != first.SessionId {
+		registerLifecycleSessionCleanup(t, serverURL, replay.SessionId)
+	}
 	if first.SessionId == "" || replay.SessionId != first.SessionId {
 		t.Fatalf("request-id replay sessions = %q/%q, want one server-owned identity", first.SessionId, replay.SessionId)
 	}
@@ -565,6 +637,46 @@ func assertRemoteRequestIDBehavior(t *testing.T, serverURL string) {
 	if err := terminateRemoteFunctionalSession(serverURL, first.SessionId); err != nil {
 		t.Fatalf("terminate replayed durable session %s: %v", first.SessionId, err)
 	}
+	if markSessionClean != nil {
+		markSessionClean()
+	}
+}
+
+// startCLI serializes one asynchronous invocation on the shared root-built
+// client. The lock remains held until Process.Execute joins so another test
+// cannot reuse invocation-owned streams while this command is disconnecting.
+func (client *lifecycleClientProcess) startCLI(
+	t *testing.T,
+	ctx context.Context,
+	workingDir string,
+	serverURL string,
+	output io.Writer,
+	args ...string,
+) (*support.CapturedInputs, *support.ProcessCommand) {
+	t.Helper()
+	client.mu.Lock()
+	if client.process == nil {
+		client.mu.Unlock()
+		t.Fatal("shared lifecycle client process is unavailable")
+	}
+	cmdArgs := []string{"you"}
+	if strings.TrimSpace(serverURL) != "" {
+		cmdArgs = append(cmdArgs, "--server", serverURL)
+	}
+	cmdArgs = append(cmdArgs, args...)
+	inputs := support.FakeInputs(ctx, cmdArgs)
+	inputs.Input.Env = append([]string(nil), client.env...)
+	inputs.Input.WorkingDirectory = workingDir
+	if output != nil {
+		inputs.Input.Stdout = output
+		inputs.Input.Stderr = output
+	}
+	command := support.StartProcessCommand(t, client.process, inputs.Input)
+	go func() {
+		<-command.Done()
+		client.mu.Unlock()
+	}()
+	return inputs, command
 }
 
 type remoteAdmissionOutput struct {

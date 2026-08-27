@@ -94,6 +94,11 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 			return nil, fmt.Errorf("write shared %s factory: %w", name, err)
 		}
 	}
+	if err := writeSharedRemoteLifecycleFactory(homeDir, factoryDir); err != nil {
+		cleanupRoot()
+		cancel()
+		return nil, fmt.Errorf("write shared remote lifecycle factory: %w", err)
+	}
 
 	api := support.NewProcessAPIServer()
 	resolveHome := func() (string, error) { return homeDir, nil }
@@ -101,6 +106,7 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		BrowserOpener:                      func(context.Context, string) error { return nil },
 		APIServerStarter:                   api.Start,
 		FactorySessionResolveHomeDirectory: resolveHome,
+		FactoryRuntimeWorkflowHome:         resolveHome,
 	})
 	if err != nil {
 		stopFailedFixture(cancel, rootDir, process, nil)
@@ -121,6 +127,7 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 	clientProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		BrowserOpener:                      func(context.Context, string) error { return nil },
 		FactorySessionResolveHomeDirectory: resolveHome,
+		FactoryRuntimeWorkflowHome:         resolveHome,
 	})
 	if err != nil {
 		stopFailedFixture(cancel, rootDir, process, done)
