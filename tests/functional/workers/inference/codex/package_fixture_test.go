@@ -38,6 +38,14 @@ type codexPackageFixture struct {
 	groupsSeen         map[string]bool
 }
 
+type codexPackageProcess struct {
+	process    support.ApplicationProcess
+	command    *codexPackageProcessCommand
+	apiStopped <-chan struct{}
+	apiStarts  *atomic.Int32
+	baseURL    string
+}
+
 // The test runner invokes top-level tests serially. The mutex protects the
 // package fixture from future parallel test registration and lets TestMain
 // close the fixture after m.Run without relying on a test's t.Cleanup order.
@@ -142,6 +150,45 @@ func newCodexPackageFixture(t *testing.T) *codexPackageFixture {
 	goldenScenarios := newCodexGoldenScenariosAt(t, rootDir)
 	worktreeScenarios := newCodexWorktreeScenariosAt(t, rootDir)
 	hostDir := newCodexHostDirAt(t, rootDir)
+	routes, runners := newCodexPackageRoutes(
+		t,
+		conductorScenarios,
+		goldenScenarios,
+		worktreeScenarios,
+	)
+	router, err := newCodexCommandRouter(routes)
+	if err != nil {
+		t.Fatalf("new shared Codex command router: %v", err)
+	}
+	identities := &codexIdentityGenerator{}
+	running := newCodexPackageProcess(t, rootDir, hostDir, router, identities)
+
+	keepRoot = true
+	return &codexPackageFixture{
+		rootDir:            rootDir,
+		hostDir:            hostDir,
+		baseURL:            running.baseURL,
+		process:            running.process,
+		command:            running.command,
+		apiStopped:         running.apiStopped,
+		apiStarts:          running.apiStarts,
+		router:             router,
+		identities:         identities,
+		conductorScenarios: conductorScenarios,
+		goldenScenarios:    goldenScenarios,
+		worktreeScenarios:  worktreeScenarios,
+		runners:            runners,
+		groupsSeen:         make(map[string]bool, 3),
+	}
+}
+
+func newCodexPackageRoutes(
+	t *testing.T,
+	conductorScenarios []codexConductorScenario,
+	goldenScenarios []codexGoldenScenario,
+	worktreeScenarios []codexWorktreeScenario,
+) ([]codexCommandRoute, []*codexScenarioCommandRunner) {
+	t.Helper()
 
 	routes := make([]codexCommandRoute, 0,
 		len(conductorScenarios)+len(goldenScenarios)+len(worktreeScenarios),
@@ -171,12 +218,18 @@ func newCodexPackageFixture(t *testing.T) *codexPackageFixture {
 		})
 		runners = append(runners, scenario.runner)
 	}
-	router, err := newCodexCommandRouter(routes)
-	if err != nil {
-		t.Fatalf("new shared Codex command router: %v", err)
-	}
+	return routes, runners
+}
 
-	identities := &codexIdentityGenerator{}
+func newCodexPackageProcess(
+	t *testing.T,
+	rootDir string,
+	hostDir string,
+	router *codexCommandRouter,
+	identities *codexIdentityGenerator,
+) codexPackageProcess {
+	t.Helper()
+
 	api := support.NewProcessAPIServer()
 	apiStopped := make(chan struct{})
 	var apiStopOnce sync.Once
@@ -208,23 +261,12 @@ func newCodexPackageFixture(t *testing.T) *codexPackageFixture {
 	command := startCodexPackageProcess(process, inputs)
 	baseURL := api.WaitForURL(t)
 	assertCodexHostDefaultSession(t, baseURL)
-
-	keepRoot = true
-	return &codexPackageFixture{
-		rootDir:            rootDir,
-		hostDir:            hostDir,
-		baseURL:            baseURL,
-		process:            process,
-		command:            command,
-		apiStopped:         apiStopped,
-		apiStarts:          apiStarts,
-		router:             router,
-		identities:         identities,
-		conductorScenarios: conductorScenarios,
-		goldenScenarios:    goldenScenarios,
-		worktreeScenarios:  worktreeScenarios,
-		runners:            runners,
-		groupsSeen:         make(map[string]bool, 3),
+	return codexPackageProcess{
+		process:    process,
+		command:    command,
+		apiStopped: apiStopped,
+		apiStarts:  apiStarts,
+		baseURL:    baseURL,
 	}
 }
 
