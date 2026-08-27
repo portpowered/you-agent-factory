@@ -2,10 +2,11 @@
   "schemaVersion": 1,
   "kind": "localai-backend-artifacts",
   "publication": {
-    "id": "localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c",
-    "releaseTag": "localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c",
+    "id": "localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106",
+    "releaseTag": "localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106",
     "repository": "portpowered/you-agent-factory",
-    "pinFingerprint": "cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c",
+    "pinFingerprint": "17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106",
+    "packagingRevision": 2,
     "source": {
       "repository": "https://github.com/mudler/LocalAI.git",
       "commit": "b224c96db6f4b87306a33a808650bfce63b12588"
@@ -53,9 +54,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-        "sizeBytes": 9045415,
-        "sha256": "2abf14913f9290f20e0db4fc78f0ac8d6dc1310626b5ce2d7e57134a9a58d616"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+        "sizeBytes": 9045426,
+        "sha256": "11241b6d91e45d825eb73776f5062cc95e39b8be23456e1b7ee4e9d17472f68f"
       }
     },
     {
@@ -87,9 +88,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
-        "sizeBytes": 21129318,
-        "sha256": "169f7eea504143f7f5d7e8480302098545091b5abb695b23589d372f7ffd543f"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+        "sizeBytes": 21128381,
+        "sha256": "9abd2a435b62506a92f76beeae80f476caa5cf20302754b72ede157789d68346"
       }
     },
     {
@@ -121,9 +122,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
-        "sizeBytes": 12679357,
-        "sha256": "efbf8731d37dffc5b0dff13e4a7d5e142e87af8d8d995b0bd17a2e1267fe2ee1"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
+        "sizeBytes": 12679368,
+        "sha256": "35db2fc78f3e3520b48918e97938b5da424466fb50d9630ab7a82f226af65cdf"
       }
     },
     {
@@ -155,9 +156,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
-        "sizeBytes": 10410566,
-        "sha256": "fda99cca0a0b2a35e2ce0ec051593e0fc9aabb7f30f278d7eb6de747448984fb"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+        "sizeBytes": 10410569,
+        "sha256": "ac06ab7be3493356719a34d60fcee959db7f000f95718e251d1e1d2cdf66bb41"
       }
     },
     {
@@ -189,9 +190,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
-        "sizeBytes": 16112850,
-        "sha256": "9edcd6c87885565b4c442cf11d24ea313b5e6fed6c91fefbf5809138ceb15abe"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+        "sizeBytes": 16112807,
+        "sha256": "d41d81acffbe6f1a4e4fa317604f5a96878c9653b63cf347d7b82dfaf1bca5ab"
       }
     },
     {
@@ -223,9 +224,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
-        "sizeBytes": 11935517,
-        "sha256": "56eb82a5efb3c1e42641120b76210c973efffb33efd5a1ebe8f42989cd522fb9"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
+        "sizeBytes": 11935463,
+        "sha256": "6956415b4b47b14346e0eacc1c5fa34b15a0c8cf9e7c4e7a3436b8b9e96b63c3"
       }
     },
     {
@@ -257,9 +258,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-        "sizeBytes": 9200256,
-        "sha256": "ac9efd4d2d3b7ac8d5fc8b376d48d8f4bf9439c77a2d8139b9b4fa6e3b2d618b"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "sizeBytes": 9200265,
+        "sha256": "624385483a7c67804ff546ed8649e35c4e7122b833f318ff4d1cf2d44d9f2752"
       }
     },
     {
@@ -291,9 +292,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-        "sizeBytes": 14976662,
-        "sha256": "94df7dcaad8d5efff92cf40e049a5fc1c866b569b2afe7171a33888c0ec06f98"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "sizeBytes": 14976678,
+        "sha256": "8a8ae6b816e4eb4b7088a7e5c7ef291dbd657f6f38f930b5471b9a73fb056bcb"
       }
     },
     {
@@ -325,9 +326,9 @@
       },
       "artifact": {
         "name": "localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-cbe7baa587f6ac911a35ca9591fd003ee32073dedbf7c7a860e1a4a34340677c/localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
-        "sizeBytes": 10757979,
-        "sha256": "3723eb9742837a9e1bf50bf81dad93baefe969b0afa7dae2213f4f6685de7ef3"
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
+        "sizeBytes": 10757902,
+        "sha256": "8f3c14212948be34c930e9a790af7757460cb2f6bb6a0de80d5b9f95b71e8646"
       }
     }
   ]

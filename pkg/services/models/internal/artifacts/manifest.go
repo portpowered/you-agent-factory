@@ -100,10 +100,11 @@ type ArtifactIdentity struct {
 // PublicationIdentity preserves the immutable release identity that owns the
 // selected archive.
 type PublicationIdentity struct {
-	ID             string
-	ReleaseTag     string
-	Repository     string
-	PinFingerprint string
+	ID                string
+	ReleaseTag        string
+	Repository        string
+	PinFingerprint    string
+	PackagingRevision int
 }
 
 // ArtifactDescriptor is one detached, provider-neutral selection result.
@@ -149,13 +150,14 @@ type wireManifest struct {
 }
 
 type wirePublication struct {
-	ID             string        `json:"id"`
-	ReleaseTag     string        `json:"releaseTag"`
-	Repository     string        `json:"repository"`
-	PinFingerprint string        `json:"pinFingerprint"`
-	Source         wireSource    `json:"source"`
-	Protocol       wireProtocol  `json:"protocol"`
-	Toolchain      wireToolchain `json:"toolchain"`
+	ID                string        `json:"id"`
+	ReleaseTag        string        `json:"releaseTag"`
+	Repository        string        `json:"repository"`
+	PinFingerprint    string        `json:"pinFingerprint"`
+	PackagingRevision *int          `json:"packagingRevision"`
+	Source            wireSource    `json:"source"`
+	Protocol          wireProtocol  `json:"protocol"`
+	Toolchain         wireToolchain `json:"toolchain"`
 }
 
 type wireToolchain struct {
@@ -284,6 +286,13 @@ func validatePublication(raw wirePublication) (publication, error) {
 	if !digestPattern.MatchString(raw.PinFingerprint) {
 		return publication{}, failure(FailureMalformedManifest, "publication.pinFingerprint", raw.PinFingerprint, "must be a lowercase 64-character SHA-256")
 	}
+	packagingRevision := 0
+	if raw.PackagingRevision != nil {
+		if *raw.PackagingRevision <= 0 {
+			return publication{}, failure(FailureMalformedManifest, "publication.packagingRevision", strconv.Itoa(*raw.PackagingRevision), "must be a positive integer")
+		}
+		packagingRevision = *raw.PackagingRevision
+	}
 	source, err := validateSource(raw.Source, "publication.source", false)
 	if err != nil {
 		return publication{}, err
@@ -298,7 +307,7 @@ func validatePublication(raw wirePublication) (publication, error) {
 	return publication{
 		identity: PublicationIdentity{
 			ID: raw.ID, ReleaseTag: raw.ReleaseTag, Repository: raw.Repository,
-			PinFingerprint: raw.PinFingerprint,
+			PinFingerprint: raw.PinFingerprint, PackagingRevision: packagingRevision,
 		},
 		repository: raw.Repository, releaseTag: raw.ReleaseTag, source: source, protocol: protocol,
 	}, nil
