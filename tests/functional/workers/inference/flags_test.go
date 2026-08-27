@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -35,7 +34,7 @@ func TestProviderPermissionWorktreeAndModelFlagsMapToCommand(t *testing.T) {
 	})
 
 	workerConfig := strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderClaude, flagsTestModel),
+		sharedInferenceWithExecutorProvider(support.BuildModelWorkerConfig(modelprovider.ProviderClaude, flagsTestModel), "CLAUDE"),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -46,12 +45,9 @@ func TestProviderPermissionWorktreeAndModelFlagsMapToCommand(t *testing.T) {
 		platformprocess.CommandResult{Stdout: []byte(claudeFlagsSuccessStdout)},
 	)
 
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
-	)
+	_, listed, _ := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		commandRunner: runner,
+	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("completed work tokens = %d, want 1; listed=%#v", got, listed)
@@ -80,9 +76,12 @@ func TestProviderPermissionWorktreeAndModelFlagsMapToCommand(t *testing.T) {
 func TestUnsupportedProviderFlagReturnsCapabilityError(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderClaude,
-		"claude-test-model",
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(
+			modelprovider.ProviderClaude,
+			"claude-test-model",
+		),
+		"CLAUDE",
 	))
 	support.WriteWorkstationConfig(t, dir, "process", `---
 type: MODEL_WORKSTATION
@@ -96,12 +95,9 @@ Test workstation.
 		Stdout: []byte("provider must not run"),
 	})
 
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
-	)
+	_, listed, _ := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		commandRunner: runner,
+	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work tokens = %d, want 1 unsupported-capability failure; listed=%#v", got, listed)

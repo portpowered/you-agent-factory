@@ -8,7 +8,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -36,9 +35,12 @@ const (
 // Event and Provider Session diagnostics, without hanging or reporting success.
 func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCodex,
-		"cursor-test-model",
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(
+			modelprovider.ProviderCodex,
+			"cursor-test-model",
+		),
+		"CODEX",
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider non-zero exit"}`))
 
@@ -51,8 +53,8 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 		Stderr: []byte("provider process crashed unexpectedly"),
 	})
 
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
+	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		commandRunner: runner,
 	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -93,19 +95,19 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 // completion evidence.
 func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCodex,
-		"gpt-5-codex",
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(
+			modelprovider.ProviderCodex,
+			"gpt-5-codex",
+		),
+		"SCRIPT_WRAP",
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider missing completion evidence"}`))
 
 	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{})
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		20*time.Second,
-	)
+	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		providerOverride: provider,
+	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
@@ -138,9 +140,12 @@ func TestProviderMissingCompletionEvidenceMapsToPublicFailure(t *testing.T) {
 // in for an authoritative final provider response.
 func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCodex,
-		"gpt-5-codex",
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(
+			modelprovider.ProviderCodex,
+			"gpt-5-codex",
+		),
+		"SCRIPT_WRAP",
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider contradictory completion"}`))
 
@@ -156,12 +161,9 @@ func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
 			},
 		},
 	})
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		20*time.Second,
-	)
+	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		providerOverride: provider,
+	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
@@ -229,9 +231,12 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-			support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-				modelprovider.ProviderCodex,
-				"gpt-5-codex",
+			support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+				support.BuildModelWorkerConfig(
+					modelprovider.ProviderCodex,
+					"gpt-5-codex",
+				),
+				"CODEX",
 			))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"`+tc.name+`"}`))
 
@@ -243,12 +248,9 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 				})
 				runner.Queue(repeatedCodexTimeoutCommandResults(12)...)
 			}
-			session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-				t,
-				dir,
-				serviceedges.Edges{ProviderCommandRunner: runner},
-				20*time.Second,
-			)
+			session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+				commandRunner: runner,
+			}, 20*time.Second)
 
 			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 				t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
@@ -292,9 +294,12 @@ func TestProviderFailureRedactsPromptEnvironmentAndCredentials(t *testing.T) {
 	t.Setenv(failureRedactionCredentialEnvKey, failureRedactionCredentialNeedle)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCodex,
-		"gpt-5-codex",
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(
+			modelprovider.ProviderCodex,
+			"gpt-5-codex",
+		),
+		"CODEX",
 	))
 	support.WriteWorkstationConfig(t, dir, "process", `---
 type: MODEL_WORKSTATION
@@ -309,12 +314,10 @@ Test workstation with private prompt `+failureRedactionPromptNeedle+`.
 		ExitCode: 1,
 		Stderr:   []byte(codexAuthFailureStderr),
 	})
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
-	)
+	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		commandRunner: runner,
+		env:           []string{failureRedactionCredentialEnvKey + "=" + failureRedactionCredentialNeedle},
+	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)

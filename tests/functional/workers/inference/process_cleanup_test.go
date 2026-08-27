@@ -114,12 +114,9 @@ func TestProcessGoneReconciliationThroughRootProcess(t *testing.T) {
 		Payload:    []byte("deterministic process gone reconciliation"),
 	})
 
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ScriptCommandRunner: processGoneFunctionalCommandRunner{}},
-		20*time.Second,
-	)
+	session, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		scriptRunner: processGoneFunctionalCommandRunner{},
+	}, 20*time.Second)
 
 	assertProcessCleanupListedWorkIdentity(t, listed, "failed", workID, "task", traceID, nil)
 	if session.Runtime.Progress.Categories.Failed != 1 || session.Runtime.Progress.Categories.Terminal != 0 {
@@ -180,43 +177,42 @@ func assertDirectProcessGoneWorkerSession(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderOverride: processGoneFunctionalProvider{},
-	})
-	support.CleanupProcess(t, process)
-
-	homeDir := t.TempDir()
-	inputs := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "invoke",
-		"--request-id", "process-gone-direct-request",
-		"--worker-session-id", "process-gone-direct-session",
-		"--dispatch-id", "process-gone-direct-dispatch",
-		"--workstation", "direct",
-		"--worker-type", "direct-worker",
-		"--runner", "codex",
-		"--provider", "codex",
-		"--model", "functional-model",
-		"--user-message", "reconcile the gone process",
-	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := process.Execute(inputs.Input); err == nil {
-		t.Fatal("direct Worker Session process-gone invocation succeeded, want terminal failure")
-	}
-
-	var response factoryapi.ErrorResponse
-	for _, output := range []string{inputs.Stderr(), inputs.Stdout()} {
-		if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &response); err == nil && response.Code != "" {
-			if response.Code != factoryapi.ErrorResponseCode("WORKER_SESSION_FAILED") {
-				t.Fatalf("direct process-gone Worker Session code = %q, want WORKER_SESSION_FAILED; stderr=%s stdout=%s", response.Code, inputs.Stderr(), inputs.Stdout())
-			}
-			if !strings.Contains(strings.ToLower(response.Message), "process exited") {
-				t.Fatalf("direct process-gone Worker Session message = %q, want process-exited diagnostic", response.Message)
-			}
-			return
+	withSharedInferenceProcess(t, sharedInferenceScenario{
+		providerOverride: processGoneFunctionalProvider{},
+	}, func(process support.ApplicationProcess) {
+		homeDir := t.TempDir()
+		inputs := support.FakeInputs(ctx, []string{
+			"you", "--json", "worker-sessions", "invoke",
+			"--request-id", "process-gone-direct-request",
+			"--worker-session-id", "process-gone-direct-session",
+			"--dispatch-id", "process-gone-direct-dispatch",
+			"--workstation", "direct",
+			"--worker-type", "direct-worker",
+			"--runner", "codex",
+			"--provider", "codex",
+			"--model", "functional-model",
+			"--user-message", "reconcile the gone process",
+		})
+		inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+		inputs.Input.WorkingDirectory = t.TempDir()
+		if err := process.Execute(inputs.Input); err == nil {
+			t.Fatal("direct Worker Session process-gone invocation succeeded, want terminal failure")
 		}
-	}
-	t.Fatalf("direct process-gone Worker Session emitted no typed failure; stderr=%s stdout=%s", inputs.Stderr(), inputs.Stdout())
+
+		var response factoryapi.ErrorResponse
+		for _, output := range []string{inputs.Stderr(), inputs.Stdout()} {
+			if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &response); err == nil && response.Code != "" {
+				if response.Code != factoryapi.ErrorResponseCode("WORKER_SESSION_FAILED") {
+					t.Fatalf("direct process-gone Worker Session code = %q, want WORKER_SESSION_FAILED; stderr=%s stdout=%s", response.Code, inputs.Stderr(), inputs.Stdout())
+				}
+				if !strings.Contains(strings.ToLower(response.Message), "process exited") {
+					t.Fatalf("direct process-gone Worker Session message = %q, want process-exited diagnostic", response.Message)
+				}
+				return
+			}
+		}
+		t.Fatalf("direct process-gone Worker Session emitted no typed failure; stderr=%s stdout=%s", inputs.Stderr(), inputs.Stdout())
+	})
 }
 
 // TestProviderTimeoutTerminatesChildProcessTree proves a timed-out script-worker

@@ -8,7 +8,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -36,7 +35,7 @@ func TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderClaude, loaded.Process.Model),
+		sharedInferenceWithExecutorProvider(support.BuildModelWorkerConfig(modelprovider.ProviderClaude, loaded.Process.Model), "CLAUDE"),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -53,10 +52,10 @@ func TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully(t *testing.T) {
 		ExitCode: exitCode,
 	})
 
-	_, listed, _, responseEvents, workerEvents := support.RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
+	_, listed, _, responseEvents, workerEvents := runSharedInferenceFactoryWithStreams(
 		t,
 		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
+		sharedInferenceScenario{commandRunner: runner},
 		20*time.Second,
 	)
 
@@ -90,7 +89,10 @@ func TestProviderPartialStreamDoesNotFabricateMissingDeltas(t *testing.T) {
 	}
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
+		"CODEX",
+	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider partial stream fidelity"}`))
 
 	exitCode := 0
@@ -103,10 +105,10 @@ func TestProviderPartialStreamDoesNotFabricateMissingDeltas(t *testing.T) {
 		ExitCode: exitCode,
 	})
 
-	_, listed, factoryEvents, responseEvents, workerEvents := support.RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
+	_, listed, factoryEvents, responseEvents, workerEvents := runSharedInferenceFactoryWithStreams(
 		t,
 		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
+		sharedInferenceScenario{commandRunner: runner},
 		20*time.Second,
 	)
 

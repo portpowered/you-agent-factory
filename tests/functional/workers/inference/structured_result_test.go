@@ -2,15 +2,11 @@ package inference_test
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -107,37 +103,20 @@ func runDetachedStructuredResult(
 	support.WriteAgentConfig(t, factoryDir, "worker-a", detachedStructuredWorkerConfig())
 	testutil.WriteSeedRequest(t, factoryDir, workSubmitRequest())
 
-	recordPath := filepath.Join(t.TempDir(), "structured-result.replay.json")
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: support.CodexSuccessStdout(output),
 	})
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--record", recordPath},
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	publicEvents := server.GetFactoryEvents(t)
+	_, _, publicEvents := runSharedInferenceFactoryToCompletion(t, factoryDir, sharedInferenceScenario{
+		commandRunner: runner,
+	}, sharedInferenceScenarioTimeout)
 	publicEvent := findDispatchResponseEvent(t, publicEvents)
-	server.Stop(t)
-
-	artifact := testutil.LoadReplayArtifact(t, recordPath)
 	var payload workerexecution.DispatchResponseEventPayload
-	count := 0
-	for _, event := range artifact.Events {
-		if event.Type != interfaces.FactoryEventTypeDispatchResponse {
-			continue
-		}
-		count++
-		if err := event.DecodePayload(&payload); err != nil {
-			t.Fatalf("decode recorded dispatch response: %v", err)
-		}
+	encoded, err := json.Marshal(publicEvent.Payload)
+	if err != nil {
+		t.Fatalf("marshal public dispatch response payload: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("recorded dispatch response count = %d, want one", count)
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode public dispatch response payload for detached assertion: %v", err)
 	}
 	return detachedStructuredResultFixture{payload: payload, publicEvent: publicEvent}
 }
@@ -177,6 +156,7 @@ func workSubmitRequest() work.SubmitRequest {
 
 func detachedStructuredWorkerConfig() string {
 	return "---\n" +
+		"executorProvider: CODEX\n" +
 		"type: MODEL_WORKER\n" +
 		"model: gpt-5-codex\n" +
 		"modelProvider: CODEX\n" +
