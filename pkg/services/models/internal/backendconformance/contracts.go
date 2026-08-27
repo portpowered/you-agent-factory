@@ -10,10 +10,6 @@ import (
 	"strings"
 )
 
-// MinimumPinnedArtifactSizeBytes is the lower bound for a published backend
-// archive. Placeholder-sized manifest values must not satisfy conformance.
-const MinimumPinnedArtifactSizeBytes int64 = 1 << 20
-
 const (
 	TargetDarwinArm64  = "darwin-arm64"
 	TargetLinuxAmd64   = "linux-amd64"
