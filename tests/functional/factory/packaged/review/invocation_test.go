@@ -44,159 +44,166 @@ import (
 // share one root-built process while retaining explicit unique Factory Sessions,
 // workspace selectors, and public Work/Event/replay evidence for each run.
 func TestPackagedReviewSharedProcess(t *testing.T) {
-	t.Run("ApprovalCompletes", func(t *testing.T) {
-		t.Parallel()
-		submitted := "customer request"
-		runner := &packagedReviewCommandRunner{acceptedOutput: "approved candidate work"}
-		scenario := openPackagedReviewScenario(t, runner, "shared-approval-review", nil)
-		response := invokePackagedReviewSession(t, scenario, map[string]any{"input": submitted})
-		assertPackagedReviewCompletedWithText(t, response, "approved candidate work")
-		if invocationPrimaryResultText(t, response) == submitted {
-			t.Fatal("primaryResult echoed submitted request text")
-		}
-		if got := len(runner.Requests()); got != 2 {
-			t.Fatalf("provider invocation count = %d, want work then review", got)
-		}
-		assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
-	})
+	t.Run("ApprovalCompletes", testPackagedReviewApprovalCompletes)
+	t.Run("RejectionCarriesFeedback", testPackagedReviewRejectionCarriesFeedback)
+	t.Run("ThreeCleanRejectionsDoNotTripFailureBreaker", testPackagedReviewThreeCleanRejections)
+	t.Run("MalformedDecisionEnvelopeUsesCanonicalFailurePath", testPackagedReviewMalformedDecisionEnvelope)
+	t.Run("DecisionEnvelopeValidatesRecordedOutputWork", testPackagedReviewRecordedOutputWork)
+	t.Run("RejectionHonorsMaterializedAndFlaggedProviderSettings", testPackagedReviewProviderSettings)
+}
 
-	t.Run("RejectionCarriesFeedback", func(t *testing.T) {
-		t.Parallel()
-		submitted := "write release notes"
-		runner := &packagedReviewCommandRunner{
-			rejectReviews:      1,
-			rejectionFeedbacks: []string{"add the missing release date"},
-			acceptedOutput:     "approved revised candidate",
-		}
-		scenario := openPackagedReviewScenario(t, runner, "shared-feedback-review", nil)
-		response := invokePackagedReviewSession(t, scenario, map[string]any{"input": submitted})
-		assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
-		if invocationPrimaryResultText(t, response) == submitted {
-			t.Fatal("primaryResult echoed submitted request text")
-		}
-		if got := len(runner.Requests()); got != 4 {
-			t.Fatalf("recorded provider requests = %d, want work, review, revised work, review", got)
-		}
-		secondWorkPrompt := providerCommandPrompt(runner.Requests()[2])
-		if !strings.Contains(secondWorkPrompt, submitted) ||
-			!strings.Contains(secondWorkPrompt, "first candidate") ||
-			!strings.Contains(secondWorkPrompt, "add the missing release date") {
-			t.Fatalf(
-				"revised work prompt = %q, want request, rejected candidate, and review feedback",
-				secondWorkPrompt,
-			)
-		}
-		assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
-	})
+func testPackagedReviewApprovalCompletes(t *testing.T) {
+	t.Parallel()
+	submitted := "customer request"
+	runner := &packagedReviewCommandRunner{acceptedOutput: "approved candidate work"}
+	scenario := openPackagedReviewScenario(t, runner, "shared-approval-review", nil)
+	response := invokePackagedReviewSession(t, scenario, map[string]any{"input": submitted})
+	assertPackagedReviewCompletedWithText(t, response, "approved candidate work")
+	if invocationPrimaryResultText(t, response) == submitted {
+		t.Fatal("primaryResult echoed submitted request text")
+	}
+	if got := len(runner.Requests()); got != 2 {
+		t.Fatalf("provider invocation count = %d, want work then review", got)
+	}
+	assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
+}
 
-	t.Run("ThreeCleanRejectionsDoNotTripFailureBreaker", func(t *testing.T) {
-		t.Parallel()
-		runner := &packagedReviewCommandRunner{
-			rejectReviews: 3,
-			rejectionFeedbacks: []string{
-				"add the release date",
-				"add the owner",
-				"add the rollback plan",
-			},
-			acceptedOutput: "approved fourth candidate",
-		}
-		scenario := openPackagedReviewScenario(
-			t,
-			runner,
-			"shared-clean-rejections-review",
-			configurePackagedReviewRejectionClassification,
+func testPackagedReviewRejectionCarriesFeedback(t *testing.T) {
+	t.Parallel()
+	submitted := "write release notes"
+	runner := &packagedReviewCommandRunner{
+		rejectReviews:      1,
+		rejectionFeedbacks: []string{"add the missing release date"},
+		acceptedOutput:     "approved revised candidate",
+	}
+	scenario := openPackagedReviewScenario(t, runner, "shared-feedback-review", nil)
+	response := invokePackagedReviewSession(t, scenario, map[string]any{"input": submitted})
+	assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
+	if invocationPrimaryResultText(t, response) == submitted {
+		t.Fatal("primaryResult echoed submitted request text")
+	}
+	if got := len(runner.Requests()); got != 4 {
+		t.Fatalf("recorded provider requests = %d, want work, review, revised work, review", got)
+	}
+	secondWorkPrompt := providerCommandPrompt(runner.Requests()[2])
+	if !strings.Contains(secondWorkPrompt, submitted) ||
+		!strings.Contains(secondWorkPrompt, "first candidate") ||
+		!strings.Contains(secondWorkPrompt, "add the missing release date") {
+		t.Fatalf(
+			"revised work prompt = %q, want request, rejected candidate, and review feedback",
+			secondWorkPrompt,
 		)
-		response := invokePackagedReviewSession(t, scenario, map[string]any{"input": "write the release notes"})
-		assertPackagedReviewCompletedWithText(t, response, "approved fourth candidate")
-		if got := runner.ReviewerCalls(); got != 4 {
-			t.Fatalf("reviewer call count = %d, want four clean review decisions", got)
+	}
+	assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
+}
+
+func testPackagedReviewThreeCleanRejections(t *testing.T) {
+	t.Parallel()
+	runner := &packagedReviewCommandRunner{
+		rejectReviews: 3,
+		rejectionFeedbacks: []string{
+			"add the release date",
+			"add the owner",
+			"add the rollback plan",
+		},
+		acceptedOutput: "approved fourth candidate",
+	}
+	scenario := openPackagedReviewScenario(
+		t,
+		runner,
+		"shared-clean-rejections-review",
+		configurePackagedReviewRejectionClassification,
+	)
+	response := invokePackagedReviewSession(t, scenario, map[string]any{"input": "write the release notes"})
+	assertPackagedReviewCompletedWithText(t, response, "approved fourth candidate")
+	if got := runner.ReviewerCalls(); got != 4 {
+		t.Fatalf("reviewer call count = %d, want four clean review decisions", got)
+	}
+	requests := runner.Requests()
+	if got := len(requests); got != 8 {
+		t.Fatalf("provider invocation count = %d, want four work/review round trips", got)
+	}
+	for index, wantFeedback := range map[int]string{
+		2: "add the release date",
+		4: "add the owner",
+		6: "add the rollback plan",
+	} {
+		if prompt := providerCommandPrompt(requests[index]); !strings.Contains(prompt, wantFeedback) {
+			t.Fatalf("work prompt %d = %q, want reviewer feedback %q", index, prompt, wantFeedback)
 		}
-		requests := runner.Requests()
-		if got := len(requests); got != 8 {
-			t.Fatalf("provider invocation count = %d, want four work/review round trips", got)
-		}
-		for index, wantFeedback := range map[int]string{
-			2: "add the release date",
-			4: "add the owner",
-			6: "add the rollback plan",
-		} {
-			if prompt := providerCommandPrompt(requests[index]); !strings.Contains(prompt, wantFeedback) {
-				t.Fatalf("work prompt %d = %q, want reviewer feedback %q", index, prompt, wantFeedback)
+	}
+	assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
+}
+
+func testPackagedReviewMalformedDecisionEnvelope(t *testing.T) {
+	t.Parallel()
+	exercisePackagedReviewMalformedDecisionEnvelope(t)
+}
+
+func testPackagedReviewRecordedOutputWork(t *testing.T) {
+	t.Parallel()
+	exercisePackagedReviewRecordedOutputWorkValidation(t)
+}
+
+func testPackagedReviewProviderSettings(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name             string
+		configure        func(t *testing.T, factoryDir string)
+		invocationArgs   map[string]any
+		expectedProvider string
+		expectedModel    string
+	}{
+		{
+			name:             "defaults",
+			expectedProvider: "codex",
+			expectedModel:    "operator-configured-model",
+		},
+		{
+			name:             "materialized_configuration",
+			expectedProvider: "codex",
+			expectedModel:    "configured-codex-model",
+			configure: func(t *testing.T, factoryDir string) {
+				setPackagedReviewWorkerModel(t, factoryDir, "configured-codex-model")
+			},
+		},
+		{
+			name: "run_provider_model_flags",
+			invocationArgs: map[string]any{
+				"writerProvider":   "CODEX",
+				"writerModel":      "flag-codex-model",
+				"reviewerProvider": "CODEX",
+				"reviewerModel":    "flag-codex-model",
+			},
+			expectedProvider: "codex",
+			expectedModel:    "flag-codex-model",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &packagedReviewCommandRunner{
+				rejectReviews:      1,
+				rejectionFeedbacks: []string{"add the missing release date"},
+				acceptedOutput:     "approved revised candidate",
 			}
-		}
-		assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
-	})
-
-	t.Run("MalformedDecisionEnvelopeUsesCanonicalFailurePath", func(t *testing.T) {
-		t.Parallel()
-		exercisePackagedReviewMalformedDecisionEnvelope(t)
-	})
-
-	t.Run("DecisionEnvelopeValidatesRecordedOutputWork", func(t *testing.T) {
-		t.Parallel()
-		exercisePackagedReviewRecordedOutputWorkValidation(t)
-	})
-
-	t.Run("RejectionHonorsMaterializedAndFlaggedProviderSettings", func(t *testing.T) {
-		t.Parallel()
-		for _, tc := range []struct {
-			name             string
-			configure        func(t *testing.T, factoryDir string)
-			invocationArgs   map[string]any
-			expectedProvider string
-			expectedModel    string
-		}{
-			{
-				name:             "defaults",
-				expectedProvider: "codex",
-				expectedModel:    "operator-configured-model",
-			},
-			{
-				name:             "materialized_configuration",
-				expectedProvider: "codex",
-				expectedModel:    "configured-codex-model",
-				configure: func(t *testing.T, factoryDir string) {
-					setPackagedReviewWorkerModel(t, factoryDir, "configured-codex-model")
-				},
-			},
-			{
-				name: "run_provider_model_flags",
-				invocationArgs: map[string]any{
-					"writerProvider":   "CODEX",
-					"writerModel":      "flag-codex-model",
-					"reviewerProvider": "CODEX",
-					"reviewerModel":    "flag-codex-model",
-				},
-				expectedProvider: "codex",
-				expectedModel:    "flag-codex-model",
-			},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				runner := &packagedReviewCommandRunner{
-					rejectReviews:      1,
-					rejectionFeedbacks: []string{"add the missing release date"},
-					acceptedOutput:     "approved revised candidate",
-				}
-				scenario := openPackagedReviewScenario(
-					t,
-					runner,
-					"shared-settings-review-"+strings.ReplaceAll(tc.name, "_", "-"),
-					tc.configure,
-				)
-				args := map[string]any{"input": "write the release notes"}
-				for key, value := range tc.invocationArgs {
-					args[key] = value
-				}
-				response := invokePackagedReviewSession(t, scenario, args)
-				assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
-				if got := len(runner.Requests()); got != 4 {
-					t.Fatalf("provider invocation count = %d, want work/review followed by revised work/review", got)
-				}
-				assertPackagedReviewProviderInvocations(t, runner.Requests(), tc.expectedProvider, tc.expectedModel)
-				assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
-			})
-		}
-	})
+			scenario := openPackagedReviewScenario(
+				t,
+				runner,
+				"shared-settings-review-"+strings.ReplaceAll(tc.name, "_", "-"),
+				tc.configure,
+			)
+			args := map[string]any{"input": "write the release notes"}
+			for key, value := range tc.invocationArgs {
+				args[key] = value
+			}
+			response := invokePackagedReviewSession(t, scenario, args)
+			assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
+			if got := len(runner.Requests()); got != 4 {
+				t.Fatalf("provider invocation count = %d, want work/review followed by revised work/review", got)
+			}
+			assertPackagedReviewProviderInvocations(t, runner.Requests(), tc.expectedProvider, tc.expectedModel)
+			assertPackagedReviewSharedEvidence(t, scenario, runner, "approved")
+		})
+	}
 }
 
 // TestPackagedReviewRetryExhaustionFails proves packaged @you/review invocation
