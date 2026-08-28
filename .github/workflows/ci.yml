@@ -4,6 +4,17 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      functional_jobs:
+        description: Temporary hosted functional concurrency measurement value
+        required: true
+        default: "2"
+        type: choice
+        options:
+          - "2"
+          - "8"
+          - "16"
 
 permissions:
   contents: read
@@ -258,33 +269,44 @@ jobs:
         shell: bash
         run: |
           runner_cpus="$(nproc 2>/dev/null || true)"
-          case "$runner_cpus" in
-            ''|*[!0-9]*) runner_cpus=0 ;;
-          esac
-          if [ "$runner_cpus" -lt 4 ]; then
-            functional_jobs=2
+          requested_jobs="${{ inputs.functional_jobs || '' }}"
+          if [ -n "$requested_jobs" ]; then
+            case "$requested_jobs" in
+              2|8|16) functional_jobs="$requested_jobs" ;;
+              *) echo "Unsupported functional_jobs=$requested_jobs" >&2; exit 1 ;;
+            esac
+            artifact_root=".artifacts/functional-test-viz/jobs-$functional_jobs"
           else
-            functional_jobs="$((runner_cpus / 2))"
-            if [ "$functional_jobs" -gt 4 ]; then
-              functional_jobs=4
+            case "$runner_cpus" in
+              ''|*[!0-9]*) runner_cpus=0 ;;
+            esac
+            if [ "$runner_cpus" -lt 4 ]; then
+              functional_jobs=2
+            else
+              functional_jobs="$((runner_cpus / 2))"
+              if [ "$functional_jobs" -gt 4 ]; then
+                functional_jobs=4
+              fi
             fi
+            artifact_root=".artifacts/functional-test-viz"
           fi
           echo "Functional CI runner: logical_cpus=$runner_cpus jobs=$functional_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
+          echo "artifact_root=$artifact_root" >> "$GITHUB_OUTPUT"
       - name: Verify quarantined package inventory on Linux
         if: matrix.suite == 'functional'
         run: bash scripts/ci/verify-functional-quarantine-packages.sh
         env:
           FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+          FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: ${{ steps.functional-parallelism.outputs.artifact_root }}/quarantine-package-evidence.txt
           FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
       - name: Upload Linux quarantine package evidence
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
         with:
           name: functional-quarantine-package-evidence
-          path: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+          path: ${{ steps.functional-parallelism.outputs.artifact_root }}/quarantine-package-evidence.txt
           if-no-files-found: error
           retention-days: 14
       - name: Run backend coverage
@@ -398,19 +420,21 @@ jobs:
       - name: Run complete Linux functional coverage and inventory
         if: matrix.suite == 'functional'
         timeout-minutes: 75
-        run: make functional-test-viz
+        run: |
+          mkdir -p "${{ steps.functional-parallelism.outputs.artifact_root }}"
+          /usr/bin/time -v -o "${{ steps.functional-parallelism.outputs.artifact_root }}/resource-usage.txt" make functional-test-viz
         env:
-          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+          FUNCTIONAL_TEST_VIZ_DIR: ${{ steps.functional-parallelism.outputs.artifact_root }}
           FUNCTIONAL_TEST_TIER: "merge-full"
           FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
           FUNCTIONAL_TEST_BUDGET: "75m"
           FUNCTIONAL_SHORT: "false"
           FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
-          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
-          FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
+          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: ${{ steps.functional-parallelism.outputs.artifact_root }}/gocoveragecheck-exit-code.txt
+          FUNCTIONAL_COVERAGE_VERDICT_FILE: ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-coverage-verdict.txt
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
-          INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
+          INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/${{ steps.functional-parallelism.outputs.artifact_root }}/real-acpx-evidence.json
       # Ordinary test and coverage-gate failures are deferred by the runner so
       # this step is the only failing log for those outcomes. Timeout and
       # infrastructure failures keep the full run step failed instead.
@@ -418,25 +442,26 @@ jobs:
         if: always() && matrix.suite == 'functional'
         run: bash scripts/ci/publish-functional-coverage-verdict.sh
         env:
-          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
-          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
-          FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
+          FUNCTIONAL_TEST_VIZ_DIR: ${{ steps.functional-parallelism.outputs.artifact_root }}
+          FUNCTIONAL_GOCOVERAGE_EXIT_FILE: ${{ steps.functional-parallelism.outputs.artifact_root }}/gocoveragecheck-exit-code.txt
+          FUNCTIONAL_COVERAGE_VERDICT_FILE: ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-coverage-verdict.txt
       - name: Upload functional test diagnostics
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
         with:
           name: functional-test-diagnostics
           path: |
-            .artifacts/functional-test-viz/functional-tests.md
-            .artifacts/functional-test-viz/functional-timing-summary.json
-            .artifacts/functional-test-viz/coverage-summary.json
-            .artifacts/functional-test-viz/coverage.out
-            .artifacts/functional-test-viz/command.log
-            .artifacts/functional-test-viz/quarantine-package-evidence.txt
-            .artifacts/functional-test-viz/diagnostic-status.txt
-            .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
-            .artifacts/functional-test-viz/functional-coverage-verdict.txt
-            .artifacts/functional-test-viz/real-acpx-evidence.json
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-tests.md
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-timing-summary.json
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/coverage-summary.json
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/coverage.out
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/command.log
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/quarantine-package-evidence.txt
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/diagnostic-status.txt
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/gocoveragecheck-exit-code.txt
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-coverage-verdict.txt
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/real-acpx-evidence.json
+            ${{ steps.functional-parallelism.outputs.artifact_root }}/resource-usage.txt
           if-no-files-found: ignore
           retention-days: 14
       - name: Require pinned real ACP evidence artifact
@@ -444,7 +469,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pinned-real-acp-evidence
-          path: .artifacts/functional-test-viz/real-acpx-evidence.json
+          path: ${{ steps.functional-parallelism.outputs.artifact_root }}/real-acpx-evidence.json
           if-no-files-found: error
           retention-days: 14
       # Reporting only. Both steps below are fail-open: a missing or malformed
@@ -455,17 +480,17 @@ jobs:
         continue-on-error: true
         run: bash scripts/ci/publish-functional-coverage-comment.sh
         env:
-          FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
-          FUNCTIONAL_TEST_VIZ_TIMING: .artifacts/functional-test-viz/functional-timing-summary.json
-          FUNCTIONAL_TEST_VIZ_JSON: .artifacts/functional-test-viz/coverage-summary.json
-          FUNCTIONAL_COVERAGE_COMMENT_FILE: .artifacts/functional-test-viz/functional-coverage-comment.md
+          FUNCTIONAL_TEST_VIZ_DIR: ${{ steps.functional-parallelism.outputs.artifact_root }}
+          FUNCTIONAL_TEST_VIZ_TIMING: ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-timing-summary.json
+          FUNCTIONAL_TEST_VIZ_JSON: ${{ steps.functional-parallelism.outputs.artifact_root }}/coverage-summary.json
+          FUNCTIONAL_COVERAGE_COMMENT_FILE: ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-coverage-comment.md
           FUNCTIONAL_COVERAGE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Publish functional coverage inventory to the pull request
         if: always() && matrix.suite == 'functional' && github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v7
         env:
-          FUNCTIONAL_COVERAGE_COMMENT_FILE: .artifacts/functional-test-viz/functional-coverage-comment.md
+          FUNCTIONAL_COVERAGE_COMMENT_FILE: ${{ steps.functional-parallelism.outputs.artifact_root }}/functional-coverage-comment.md
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
