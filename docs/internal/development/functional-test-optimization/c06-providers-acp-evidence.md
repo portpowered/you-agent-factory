@@ -60,7 +60,86 @@ connection/process lifecycle behavior (`LIFE-004`), repeat or race freedom,
 direct before/after topology reduction (`TOPO-007`), PR timing
 (`PR-CI-008`), or clean-room validation (`CLEAN-009`).
 
-## Discovery and baseline run
+## Witness-eligible migration
+
+- Story: `functional-test-optimization-c06-providers-acp-003`
+- Gates: `PARITY-003/TOPO-007`
+- Recorded: `2026-08-28` against migration commit `429a50b32`
+- Scope: eligible ACP catalog, compatibility, prompt, content, event, failure,
+  JavaScript, and mixed-routing witnesses; retained process/connection,
+  negotiation, stderr, crash, shutdown, golden-wire, and bidirectional-RPC
+  witnesses remain isolated. Root-free catalog assets remain root-free.
+- Dependency fidelity: one local-real `root.BuildProcess`/continuous
+  `Process.Execute` spine, public explicit Factory Sessions, and controlled ACP
+  stdio peers through `edges.Edges`.
+
+Exact verification procedures and observed results:
+
+```text
+go test -count=1 -timeout=15m ./tests/functional/providers/acp
+exit 0; package reported ok in 55.124s
+
+go test -json -count=1 -timeout=15m ./tests/functional/providers/acp
+exit 0; 25 top-level pass records, 50 child pass records, 75 executed pass records; package elapsed=60.618s
+
+go test -list '^Test' ./tests/functional/providers/acp
+exit 0; 25 top-level test identities printed
+
+rg -n "RunFactoryToCompletion|BuildProcess\\(" tests/functional/providers/acp --glob '*_test.go'
+13 root-build call sites; child expansion executes 15 root constructions
+```
+
+The migrated behavior is now driven by
+`tests/functional/providers/acp/eligible_shared_behavior_test.go` from the
+single fixture in `shared_process_test.go`. Twenty scenario subtests cover the
+success/failure baseline, executor and legacy compatibility, configured ACP,
+self-cancellation, response and Worker Session history, partial failure,
+authentication, model and resource inputs, BTRC success/failure parity,
+content forwarding, invalid/catalog/init command behavior, JavaScript ACP and
+MockWorkers, and mixed ACP/SCRIPT_WRAP routing. The exact existing assertions
+remain at their public boundaries: terminal Work state, Factory Events and
+ordering, Provider Session identity, response-event ordering and provenance,
+Worker Session replay, typed authentication/generic/cancellation errors,
+resource-link input, catalog output/persistence, JavaScript output, and route
+call/start counters.
+
+The shared fixture opened 20 explicit non-default Factory Sessions across the
+scenario matrix; its synchronized topology assertion verified every opened ID
+was deleted and `GET /factory-sessions/{id}` returned `404`. The process close
+path joined the continuous `Process.Execute`, closed the application, and
+verified the loopback listener was unreachable. Each subtest receives its own
+fixture directory and restores its provider-mode environment through
+`t.Setenv`; CLI/catalog cases use separate temporary operator homes, and the
+fixture cleanup removes the configured integration. The controlled command
+factory observed 17 ACP peer starts: catalog-only and MockWorkers cases
+correctly contributed zero, while each live ACP witness contributed its
+expected peer. The injected legacy provider counter remained unchanged for
+ACP-only cases and increased exactly once for the mixed route case.
+
+TOPO-007 comparison:
+
+| Measure | Story 001 pre-migration | Story 003 after migration | Evidence |
+| --- | ---: | ---: | --- |
+| Top-level test identities | 43 | 25 | `go test -list` |
+| Executed Go test records | 74 | 75 | uncached `go test -json` pass records |
+| Root constructions | 42 | 15 | source call-site audit plus child expansion |
+| ACP peer starts | 36 | 38 accounted | 21 retained isolated starts unchanged; shared fixture observed 17 |
+
+The root-construction count falls from 42 to 15 (27 fewer, approximately
+64%). The peer total is intentionally not treated as the optimization target:
+the 21 retained isolated peer witnesses preserve their prior process,
+connection, negotiation, crash, shutdown, stderr, golden-wire, and
+bidirectional-RPC boundaries; the shared matrix adds the two-session spine
+from Story 002 and the 15 migrated live-peer witnesses. The larger executed
+record count reflects the nested shared behavior matrix, not duplicated root
+construction.
+
+This gate proves the migrated public behavior and material root reduction. It
+does not prove direct repeated-run cleanup, race freedom, retained isolated
+lifecycle cleanup under every early assertion, PR CI timing, or clean-room
+behavior; those remain later gates.
+
+## Discovery and pre-migration baseline run
 
 | Property | Observation |
 | --- | --- |
@@ -148,11 +227,11 @@ The c01 P028 inventory recorded most ACP rows as a generic
 coarse label with the actual witness below. No row is left without one of the
 three classifications or an explicit conditional/inherited disposition.
 
-## Go test identity and expansion map
+## Pre-migration Go test identity and expansion map
 
-The following table accounts for every top-level identity. The child list is
-also the exact 31-record expansion observed in JSON output; a top-level row
-with no child list has one parent execution record.
+The following table accounts for every pre-migration top-level identity. The
+child list is also the exact 31-record expansion observed in the baseline JSON
+output; a top-level row with no child list has one parent execution record.
 
 | # | Top-level identity (source) | Child / matrix accounting | Actual dependency witness | Classification and disposition |
 | ---: | --- | --- | --- | --- |
