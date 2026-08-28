@@ -10,15 +10,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -38,53 +34,15 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.ClearSeedInputs(t, factoryDir)
-	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
-	writeWorkerSessionRouteWorkstation(t, factoryDir)
-
-	homeDir := t.TempDir()
-	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
-	successRollout := readProviderFixture(t, "codex", "success", "rollout.jsonl")
-	failureStdout := readProviderFixture(t, "codex", "structured-failure", "stdout.jsonl")
-	writeCodexRollout(t, homeDir, workerSessionsCodexSuccessID, successRollout)
-	failureRollout := bytes.ReplaceAll(successRollout, []byte(workerSessionsCodexSuccessID), []byte(workerSessionsCodexFailureID))
-	failureRollout = bytes.ReplaceAll(failureRollout, []byte("Codex fixture answer COMPLETE"), []byte("Codex authentication failed."))
-	writeCodexRollout(t, homeDir, workerSessionsCodexFailureID, failureRollout)
-
-	runner := newProviderCommandRouteRunner(map[string]platformprocess.CommandResult{
-		"worker-session-cli-success": {Stdout: successStdout},
-		"worker-session-cli-failure": {Stdout: failureStdout, ExitCode: 1},
-	}, nil)
-	api := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:                    api.Start,
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
-	})
-	support.CleanupProcess(t, process)
-
-	env := functionalEnvironment(homeDir)
-	recordPath := filepath.Join(t.TempDir(), "worker-session-recording.json")
-	serverInputs := support.FakeInputs(ctx, []string{
-		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet", "--record", recordPath,
-	})
-	serverInputs.Input.Env = env
-	serverInputs.Input.WorkingDirectory = factoryDir
-	server := support.StartProcessCommand(t, process, serverInputs.Input)
-	baseURL := api.WaitForURL(t)
-	successFactorySessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
-	failureFactorySessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
-	defer func() {
-		support.CloseFactorySessionAt(t, baseURL, failureFactorySessionID)
-		assertFactorySessionAbsent(t, baseURL, failureFactorySessionID, factoryDir)
-		support.CloseFactorySessionAt(t, baseURL, successFactorySessionID)
-		assertFactorySessionAbsent(t, baseURL, successFactorySessionID, factoryDir)
-		server.Stop(t)
-		if err := server.Err(); err != nil {
-			t.Errorf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
-		}
-	}()
+	caseFixture := newWorkerSessionsCLICase(t)
+	fixture := caseFixture.fixture
+	process := fixture.process
+	factoryDir := caseFixture.factoryDir
+	env := functionalEnvironment(fixture.homeDir)
+	baseURL := fixture.baseURL
+	routeStart := fixture.runner.CallCount()
+	successFactorySessionID := caseFixture.openSession(t)
+	failureFactorySessionID := caseFixture.openSession(t)
 
 	assertWorkerSessionsCLIHelp(t, ctx, process, env, factoryDir)
 
@@ -110,10 +68,11 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID)
 	assertMissingWorkerSessionInputs(t, ctx, process, env, factoryDir, baseURL)
 
-	assertProviderCommandRoutes(t, runner, map[string]struct{}{
+	assertProviderCommandRoutesSince(t, fixture.runner, routeStart, map[string]struct{}{
 		"worker-session-cli-success": {},
 		"worker-session-cli-failure": {},
 	})
+	recordPath := fixture.recordPath
 	if _, err := os.Stat(recordPath); err != nil {
 		t.Fatalf("recorded worker activity missing at %s: %v", recordPath, err)
 	}
@@ -182,13 +141,12 @@ func TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON(t *testing.T) {
 
 	contents, diagnostics := runBuiltWorkerSessionReplay(t, ctx, fixture)
 	assertWorkerSessionReplayCapture(t, contents, diagnostics)
-	assertProviderCommandRoutes(t, fixture.runner, map[string]struct{}{fixture.requestID: {}})
+	assertProviderCommandRoutesSince(t, fixture.runner, fixture.routeStart, map[string]struct{}{fixture.requestID: {}})
 }
 
 type workerSessionReplayFixture struct {
+	caseFixture       *workerSessionsCLICase
 	process           support.Process
-	server            *support.ProcessCommand
-	serverInputs      *support.CapturedInputs
 	factoryDir        string
 	env               []string
 	baseURL           string
@@ -196,6 +154,7 @@ type workerSessionReplayFixture struct {
 	requestID         string
 	providerSessionID string
 	runner            *providerCommandRouteRunner
+	routeStart        int
 }
 
 // TestWSRFT001OpeningRecordPrecedesProviderOutput exercises the customer
@@ -218,7 +177,7 @@ func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
 	assertScopedWorkerSessionList(t, listWorkerSessionsForFactorySession(t, fixture.baseURL, fixture.sessionID, workID), fixture.sessionID, fixture.providerSessionID, workID)
 	frames := replayWorkerSessionFrames(t, ctx, fixture)
 	assertWSRWorkerSessionHistory(t, frames, fixture.sessionID, workID, "COMPLETED")
-	assertProviderCommandRoutes(t, fixture.runner, map[string]struct{}{fixture.requestID: {}})
+	assertProviderCommandRoutesSince(t, fixture.runner, fixture.routeStart, map[string]struct{}{fixture.requestID: {}})
 }
 
 // TestWSRFT002LiveAndReplayCorrelationRemainStable compares the public live
@@ -243,7 +202,7 @@ func TestWSRFT002LiveAndReplayCorrelationRemainStable(t *testing.T) {
 	assertScopedWorkerSessionList(t, live, fixture.sessionID, fixture.providerSessionID, workID)
 	frames := replayWorkerSessionFrames(t, ctx, fixture)
 	assertWSRLiveReplayCorrelation(t, live.Sessions[0], frames, fixture.sessionID, workID)
-	assertProviderCommandRoutes(t, fixture.runner, map[string]struct{}{fixture.requestID: {}})
+	assertProviderCommandRoutesSince(t, fixture.runner, fixture.routeStart, map[string]struct{}{fixture.requestID: {}})
 }
 
 func replayWorkerSessionFrames(
@@ -433,51 +392,23 @@ func providerValue(payload map[string]interface{}) string {
 
 func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context, requestID, providerSessionID string) workerSessionReplayFixture {
 	t.Helper()
-	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.ClearSeedInputs(t, factoryDir)
-	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
-	writeWorkerSessionRouteWorkstation(t, factoryDir)
-	homeDir := t.TempDir()
-	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
-	successRollout := readProviderFixture(t, "codex", "success", "rollout.jsonl")
-	successStdout = bytes.ReplaceAll(successStdout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
-	successRollout = bytes.ReplaceAll(successRollout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
-	writeCodexRollout(t, homeDir, providerSessionID, successRollout)
-	runner := newProviderCommandRouteRunner(map[string]platformprocess.CommandResult{
-		requestID: {Stdout: successStdout},
-	}, nil)
-	api := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:                    api.Start,
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
-	})
-	support.CleanupProcess(t, process)
-	env := functionalEnvironment(homeDir)
-	serverInputs := support.FakeInputs(ctx, []string{
-		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet", "--no-record",
-	})
-	serverInputs.Input.Env = env
-	serverInputs.Input.WorkingDirectory = factoryDir
-	server := support.StartProcessCommand(t, process, serverInputs.Input)
-	baseURL := api.WaitForURL(t)
-	sessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
+	caseFixture := newWorkerSessionsCLICase(t)
+	shared := caseFixture.fixture
+	routeStart := shared.runner.CallCount()
+	sessionID := caseFixture.openSession(t)
 	return workerSessionReplayFixture{
-		process: process, server: server, serverInputs: serverInputs,
-		factoryDir: factoryDir, env: env, baseURL: baseURL,
+		caseFixture: caseFixture,
+		process:     shared.process,
+		factoryDir:  caseFixture.factoryDir,
+		env:         functionalEnvironment(shared.homeDir), baseURL: shared.baseURL,
 		sessionID: sessionID, requestID: requestID, providerSessionID: providerSessionID,
-		runner: runner,
+		runner: shared.runner, routeStart: routeStart,
 	}
 }
 
 func (fixture workerSessionReplayFixture) stop(t *testing.T) {
 	t.Helper()
-	support.CloseFactorySessionAt(t, fixture.baseURL, fixture.sessionID)
-	assertFactorySessionAbsent(t, fixture.baseURL, fixture.sessionID, fixture.factoryDir)
-	fixture.server.Stop(t)
-	if err := fixture.server.Err(); err != nil {
-		t.Fatalf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, fixture.serverInputs.Stdout(), fixture.serverInputs.Stderr())
-	}
+	fixture.caseFixture.cleanup(t)
 }
 
 func runBuiltWorkerSessionReplay(t *testing.T, ctx context.Context, fixture workerSessionReplayFixture) ([]byte, string) {
@@ -1005,17 +936,7 @@ func functionalEnvironment(homeDir string) []string {
 
 func buildWorkerSessionsCLIBinary(t *testing.T) string {
 	t.Helper()
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build Worker Sessions CLI binary: %v\n%s", err, output)
-	}
-	return binaryPath
+	return cachedWorkerSessionsCLIBinary(t)
 }
 
 func nonEmptyLines(contents string) []string {

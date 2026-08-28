@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -27,13 +26,12 @@ func TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess(t *te
 	streamServer := newAbortedWorkerSessionStreamServer(t, workerSessionID)
 	defer streamServer.Close()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	fixture := workerSessionsCLIProcess(t)
 	inputs := support.FakeInputs(t.Context(), workerSessionAbortArgs(streamServer.URL, "provider-session-root-abort"))
-	inputs.Input.Env = functionalEnvironment(t.TempDir())
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = functionalEnvironment(fixture.homeDir)
+	inputs.Input.WorkingDirectory = fixture.hostFactory
 
-	err := process.Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	var typed *workersessionscli.CLIError
 	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_STREAM_CLOSED" {
 		t.Fatalf("Process.Execute() error = %v, want typed WORKER_SESSION_STREAM_CLOSED", err)

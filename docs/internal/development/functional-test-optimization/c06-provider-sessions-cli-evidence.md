@@ -1,7 +1,7 @@
 # C06 Provider Sessions CLI evidence
 
-Status: TASK-001 baseline and explicit-identity characterization complete; the
-package remains on the per-test process topology pending TASK-002.
+Status: TASK-001 baseline/identity characterization and TASK-002 shared-process
+migration complete; TASK-003 clean-room validation and PR handoff remain.
 
 ## Baseline identity
 
@@ -124,3 +124,59 @@ that frame-level field remains an explicitly unproven implementation edge.
 Remaining TASK-002/TASK-003 edges are one shared root/API process, reduced
 build count, repeat/race stability, clean final-artifact reconciliation,
 PR-host timing, terminal CI, conflict resolution, and merge.
+
+## TASK-002 shared-process verification
+
+The delivered TASK-002 source commit is the working-tree head after the
+identity characterization commit. The package now owns one lazy shared
+production-composed `root.BuildProcess` fixture, one API-host starter, one
+immutable Work-marker provider route ledger, one package-cached built `you`
+artifact, and fresh child processes for executable/redirection/exit/signal
+rows. Each hosted case still creates a separate case Factory directory and
+explicit Factory Session; its cleanup closes the session, verifies the public
+absence boundary, and removes the case path before the next case.
+
+Verbose topology ledger from the full package run:
+
+```text
+C06 TASK-002 topology: root-builds=1 api-host-starts=1 cli-builds=1
+```
+
+Required TASK-002 commands:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+```
+
+Observed: `PASS`, exit code `0`; package time `8.159s`; measured PowerShell
+wall time `00:00:10.1117087`. The verbose confirmation run also passed all
+seven selected runtime tests on this Windows host and emitted the topology
+ledger above. The package's `-list '^Test'` denominator remains the eight-test
+baseline; the Windows-only interrupt test is explicitly skipped.
+
+```text
+go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
+```
+
+Observed: `PASS`, exit code `0`; package time `17.148s`. This gate initially
+exposed a real repeat defect when the fleet synchronization channel was closed
+after the first repetition; the bounded fix made only that synchronization
+gate resettable per repetition, after which the complete three-run gate passed.
+
+```text
+go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
+```
+
+Observed: `PASS`, exit code `0`; package time `3.648s`; no race report. The
+fleet gate retained concurrent RUNNING observations before release and
+terminal CLI/HTTP parity after release.
+
+TASK-002 proves the complete package once, repeated identity isolation, the
+focused fleet race path, one root/API topology, one cached CLI build, fresh
+real child processes for the three OS-boundary rows, route attribution without
+arrival-order assignment, explicit session cleanup, case-directory cleanup,
+shared-listener shutdown, and preserved CLI/transcript/stream/error/order
+witnesses. It does not prove a clean final checkout, PR-host package timing,
+remote provider behavior, Unix interrupt behavior on this Windows host,
+terminal CI, conflict resolution, or merge; those remain TASK-003/review-owned
+edges.

@@ -23,25 +23,71 @@ const workerSessionRoutePrefix = "worker-session-route="
 // identity as a deterministic request marker. Calls may arrive concurrently
 // and are never assigned a result by arrival order.
 type providerCommandRouteRunner struct {
-	mu       sync.Mutex
-	routes   map[string]platformprocess.CommandResult
-	requests []platformprocess.CommandRequest
-	calls    chan struct{}
-	gate     <-chan struct{}
+	mu           sync.Mutex
+	routes       map[string]platformprocess.CommandResult
+	dynamicGates map[string]*providerCommandRouteGate
+	requests     []platformprocess.CommandRequest
+	calls        chan struct{}
+	active       int
 }
 
-func newProviderCommandRouteRunner(
+type providerCommandRouteGate struct {
+	mu       sync.Mutex
+	channel  chan struct{}
+	released bool
+}
+
+func newProviderCommandRouteGate() *providerCommandRouteGate {
+	return &providerCommandRouteGate{channel: make(chan struct{})}
+}
+
+func (gate *providerCommandRouteGate) reset() {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if !gate.released {
+		close(gate.channel)
+	}
+	gate.channel = make(chan struct{})
+	gate.released = false
+}
+
+func (gate *providerCommandRouteGate) release() {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.released {
+		return
+	}
+	close(gate.channel)
+	gate.released = true
+}
+
+func (gate *providerCommandRouteGate) wait(ctx context.Context) error {
+	gate.mu.Lock()
+	channel := gate.channel
+	gate.mu.Unlock()
+	select {
+	case <-channel:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func newProviderCommandRouteRunnerWithDynamicGates(
 	routes map[string]platformprocess.CommandResult,
-	gate <-chan struct{},
+	gates map[string]*providerCommandRouteGate,
 ) *providerCommandRouteRunner {
 	cloned := make(map[string]platformprocess.CommandResult, len(routes))
 	for key, result := range routes {
 		cloned[key] = cloneCommandResult(result)
 	}
+	clonedGates := make(map[string]*providerCommandRouteGate, len(gates))
+	for key, gate := range gates {
+		clonedGates[key] = gate
+	}
 	return &providerCommandRouteRunner{
-		routes: cloned,
-		calls:  make(chan struct{}, len(routes)+8),
-		gate:   gate,
+		routes: cloned, dynamicGates: clonedGates,
+		calls: make(chan struct{}, len(routes)+8),
 	}
 }
 
@@ -53,7 +99,18 @@ func (runner *providerCommandRouteRunner) Run(
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, cloneCommandRequest(request))
 	result, ok := runner.routes[key]
+	dynamicGate := runner.dynamicGates[key]
+	if ok {
+		runner.active++
+	}
 	runner.mu.Unlock()
+	if ok {
+		defer func() {
+			runner.mu.Lock()
+			runner.active--
+			runner.mu.Unlock()
+		}()
+	}
 	select {
 	case runner.calls <- struct{}{}:
 	default:
@@ -65,11 +122,9 @@ func (runner *providerCommandRouteRunner) Run(
 			string(request.Stdin),
 		)
 	}
-	if runner.gate != nil {
-		select {
-		case <-runner.gate:
-		case <-ctx.Done():
-			return platformprocess.CommandResult{}, ctx.Err()
+	if dynamicGate != nil {
+		if err := dynamicGate.wait(ctx); err != nil {
+			return platformprocess.CommandResult{}, err
 		}
 	}
 	return cloneCommandResult(result), nil
@@ -94,19 +149,31 @@ func (runner *providerCommandRouteRunner) WaitForCalls(ctx context.Context, want
 	}
 }
 
-func (runner *providerCommandRouteRunner) Requests() []platformprocess.CommandRequest {
+func (runner *providerCommandRouteRunner) RequestsSince(start int) []platformprocess.CommandRequest {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	requests := make([]platformprocess.CommandRequest, len(runner.requests))
-	for index, request := range runner.requests {
+	if start < 0 {
+		start = 0
+	}
+	if start > len(runner.requests) {
+		start = len(runner.requests)
+	}
+	requests := make([]platformprocess.CommandRequest, len(runner.requests)-start)
+	for index, request := range runner.requests[start:] {
 		requests[index] = cloneCommandRequest(request)
 	}
 	return requests
 }
 
-func assertProviderCommandRoutes(t *testing.T, runner *providerCommandRouteRunner, want map[string]struct{}) {
+func (runner *providerCommandRouteRunner) ActiveCallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.active
+}
+
+func assertProviderCommandRoutesSince(t *testing.T, runner *providerCommandRouteRunner, start int, want map[string]struct{}) {
 	t.Helper()
-	requests := runner.Requests()
+	requests := runner.RequestsSince(start)
 	if len(requests) != len(want) {
 		t.Fatalf("provider command route count = %d, want %d: %#v", len(requests), len(want), requests)
 	}

@@ -1,20 +1,14 @@
 package cli_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,73 +21,39 @@ func TestWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.ClearSeedInputs(t, factoryDir)
-	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
-	writeWorkerSessionRouteWorkstation(t, factoryDir)
-	homeDir := t.TempDir()
-	gate := make(chan struct{})
-	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
-	successRollout := readProviderFixture(t, "codex", "success", "rollout.jsonl")
+	caseFixture := newWorkerSessionsCLICase(t)
+	fixture := caseFixture.fixture
+	process := fixture.process
+	factoryDir := caseFixture.factoryDir
+	env := functionalEnvironment(fixture.homeDir)
+	baseURL := fixture.baseURL
+	routeStart := fixture.runner.CallCount()
+	fixture.resetFleetGate()
+	defer fixture.releaseFleetGate()
 	fleetProviderSessionIDs := map[string]string{
 		"worker-session-fleet-alpha": "session_fixture_codex_fleet_alpha",
 		"worker-session-fleet-beta":  "session_fixture_codex_fleet_beta",
 		"worker-session-fleet-gamma": "session_fixture_codex_fleet_gamma",
 	}
-	routes := make(map[string]platformprocess.CommandResult, len(fleetProviderSessionIDs))
-	for workName, providerSessionID := range fleetProviderSessionIDs {
-		stdout := bytes.ReplaceAll(successStdout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
-		rollout := bytes.ReplaceAll(successRollout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
-		writeCodexRollout(t, homeDir, providerSessionID, rollout)
-		routes[workName] = platformprocess.CommandResult{Stdout: stdout}
-	}
-	runner := newProviderCommandRouteRunner(routes, gate)
-	api := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:                    api.Start,
-		ProviderCommandRunner:               runner,
-		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
-	})
-	support.CleanupProcess(t, process)
-
-	env := functionalEnvironment(homeDir)
-	serverInputs := support.FakeInputs(ctx, []string{
-		"you", "run", "--dir", factoryDir, "--continuously", "--with-server", "--quiet",
-	})
-	serverInputs.Input.Env = env
-	serverInputs.Input.WorkingDirectory = factoryDir
-	server := support.StartProcessCommand(t, process, serverInputs.Input)
-	baseURL := api.WaitForURL(t)
-	factorySessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
-	var releaseGate sync.Once
-	release := func() { releaseGate.Do(func() { close(gate) }) }
-	defer func() {
-		release()
-		support.CloseFactorySessionAt(t, baseURL, factorySessionID)
-		assertFactorySessionAbsent(t, baseURL, factorySessionID, factoryDir)
-		server.Stop(t)
-		if err := server.Err(); err != nil {
-			t.Errorf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
-		}
-	}()
+	factorySessionID := caseFixture.openSession(t)
 
 	expectedWorks := submitFleetWorks(t, ctx, process, env, factoryDir, baseURL, factorySessionID)
 	providerIDs := make(map[string]string, len(expectedWorks))
 	for workID, workName := range expectedWorks {
 		providerIDs[workID] = fleetProviderSessionIDs[workName]
 	}
-	if err := runner.WaitForCalls(ctx, len(expectedWorks)); err != nil {
+	if err := fixture.runner.WaitForCalls(ctx, routeStart+len(expectedWorks)); err != nil {
 		t.Fatalf("wait for fleet provider dispatches: %v", err)
 	}
 	assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "RUNNING", len(expectedWorks)), expectedWorks, factorySessionID, providerIDs, "RUNNING")
-	release()
+	fixture.releaseFleetGate()
 	assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "COMPLETED", len(expectedWorks)), expectedWorks, factorySessionID, providerIDs, "COMPLETED")
 	factorySessionIDs := make(map[string]string, len(expectedWorks))
 	for workID := range expectedWorks {
 		factorySessionIDs[workID] = factorySessionID
 	}
 	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, factorySessionIDs, expectedWorks, providerIDs, true)
-	assertProviderCommandRoutes(t, runner, map[string]struct{}{
+	assertProviderCommandRoutesSince(t, fixture.runner, routeStart, map[string]struct{}{
 		"worker-session-fleet-alpha": {},
 		"worker-session-fleet-beta":  {},
 		"worker-session-fleet-gamma": {},
