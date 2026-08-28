@@ -89,8 +89,8 @@ func failDefinitionsForcedUnwindAfterAssertion(t *testing.T) {
 		definitionsForcedUnwind.workspaceRoot,
 	)
 	t.Cleanup(func() {
-		support.CloseFactorySessionAt(t, definitionsForcedUnwind.sessionBaseURL, definitionsForcedUnwind.sessionID)
-		definitionsForcedUnwind.sessionClosed = definitionsFactorySessionDeleted(
+		definitionsForcedUnwind.sessionClosed = closeDefinitionsFactorySession(
+			t,
 			definitionsForcedUnwind.sessionBaseURL,
 			definitionsForcedUnwind.sessionID,
 		)
@@ -169,6 +169,20 @@ func definitionsFactorySessionDeleted(baseURL, sessionID string) bool {
 	}
 	defer response.Body.Close()
 	return response.StatusCode == http.StatusNotFound
+}
+
+// closeDefinitionsFactorySession proves that the public delete response is
+// followed by an absent-session readback. It is used by ordinary init tests as
+// well as the forced-unwind characterization so session cleanup stays an
+// executable package-local invariant.
+func closeDefinitionsFactorySession(t testing.TB, baseURL, sessionID string) bool {
+	t.Helper()
+	support.CloseFactorySessionAt(t, baseURL, sessionID)
+	if deleted := definitionsFactorySessionDeleted(baseURL, sessionID); !deleted {
+		t.Errorf("Factory Definitions session %q remains after cleanup", sessionID)
+		return false
+	}
+	return true
 }
 
 func definitionsListenerClosed(baseURL string) bool {

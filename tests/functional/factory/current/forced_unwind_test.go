@@ -19,6 +19,7 @@ const (
 
 type currentFactoryForcedUnwindReport struct {
 	ProcessInvocationStopped bool   `json:"process_invocation_stopped"`
+	ProcessClosed            bool   `json:"process_closed"`
 	ListenerURL              string `json:"listener_url,omitempty"`
 	ListenerClosed           bool   `json:"listener_closed"`
 	RootDir                  string `json:"root_dir,omitempty"`
@@ -85,6 +86,7 @@ func writeCurrentFactoryForcedUnwindReport() error {
 		report.RootDir = fixture.rootDir
 		report.RootAbsent = currentFactoryPathAbsent(fixture.rootDir)
 		report.ProcessInvocationStopped = currentFactoryChannelClosed(fixture.server.Done())
+		report.ProcessClosed = fixture.processClosed
 	}
 	if session := currentFactoryForcedUnwindSession; session != nil {
 		report.SessionID = session.id

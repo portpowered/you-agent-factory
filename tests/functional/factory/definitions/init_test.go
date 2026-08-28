@@ -31,7 +31,7 @@ func TestFactoryInitCreatesRunnablePortableScaffold(t *testing.T) {
 	}
 
 	sessionID := initFactoryViaSessionCreate(t, server.baseURL, workspaceDir)
-	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, sessionID) })
+	t.Cleanup(func() { closeDefinitionsFactorySession(t, server.baseURL, sessionID) })
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	assertPortableInitScaffoldLayout(t, factoryRoot)
@@ -70,7 +70,7 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 
 	process := sharedDefinitionsInitProcess(t)
 	firstSessionID := initFactoryViaSessionCreateWithProcess(t, process, server.baseURL, workspaceDir)
-	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, firstSessionID) })
+	t.Cleanup(func() { closeDefinitionsFactorySession(t, server.baseURL, firstSessionID) })
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	customPath := filepath.Join(factoryRoot, "workers", "processor", "AGENTS.md")
@@ -85,7 +85,7 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 	}
 
 	secondSessionID := initFactoryViaSessionCreateWithProcess(t, process, server.baseURL, workspaceDir)
-	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, secondSessionID) })
+	t.Cleanup(func() { closeDefinitionsFactorySession(t, server.baseURL, secondSessionID) })
 
 	got, err := os.ReadFile(customPath)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestFactoryInitFailureRoutingProducesFailedWork(t *testing.T) {
 	}
 
 	sessionID := initFactoryViaSessionCreate(t, server.baseURL, workspaceDir)
-	t.Cleanup(func() { support.CloseFactorySessionAt(t, server.baseURL, sessionID) })
+	t.Cleanup(func() { closeDefinitionsFactorySession(t, server.baseURL, sessionID) })
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	assertPortableInitScaffoldLayout(t, factoryRoot)
