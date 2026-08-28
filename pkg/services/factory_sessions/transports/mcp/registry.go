@@ -72,6 +72,31 @@ func MarshalToolInventoryJSON(inventory ToolInventory) ([]byte, error) {
 	return json.Marshal(inventory)
 }
 
+// GenerateToolInventoryJSON projects and verifies the canonical MCP registry
+// before returning the deterministic S-11 JSON payload. Filesystem persistence
+// remains the responsibility of the maintenance command and artifact store.
+func GenerateToolInventoryJSON() ([]byte, error) {
+	inventory, err := ProjectToolInventory()
+	if err != nil {
+		return nil, fmt.Errorf("project MCP tool inventory: %w", err)
+	}
+	return MarshalVerifiedToolInventoryJSON(inventory)
+}
+
+// MarshalVerifiedToolInventoryJSON verifies one projected inventory before
+// serializing it. The value-only form keeps handler verification testable
+// without introducing another registry or persistence boundary.
+func MarshalVerifiedToolInventoryJSON(inventory ToolInventory) ([]byte, error) {
+	if err := VerifyToolInventory(inventory); err != nil {
+		return nil, fmt.Errorf("verify MCP tool inventory: %w", err)
+	}
+	payload, err := MarshalToolInventoryJSON(inventory)
+	if err != nil {
+		return nil, fmt.Errorf("marshal MCP tool inventory: %w", err)
+	}
+	return payload, nil
+}
+
 // VerifyProjectedToolInventory projects the canonical inventory and fails when
 // any discovered tool lacks a registered handler or a compatibility alias
 // appears as a canonical inventory entry.

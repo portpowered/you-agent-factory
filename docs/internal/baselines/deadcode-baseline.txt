@@ -1224,7 +1224,6 @@ pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable fu
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: decodeStrictJSON
 pkg/services/factory_sessions/transports/http/handlers_events.go: unreachable func: ReconnectCursorFromParams
 pkg/services/factory_sessions/transports/http/root_binding.go: unreachable func: NewHandlerFromRoot
-pkg/services/factory_sessions/transports/mcp/client.go: unreachable func: IsCanonicalToolHandlerRegistered
 pkg/services/factory_sessions/transports/mcp/discoverygen/verify.go: unreachable func: VerifyDiscoveryToolIdentityCompleteness
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: EncodeSuccessCallToolResult
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: MarshalResultPolicyInventoryJSON
@@ -1245,14 +1244,9 @@ pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable 
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: verifyResultPolicySuccessFixtures
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: verifySuccessCallToolResultFixture
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: verifySuccessTransportPolicy
-pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: MarshalToolInventoryJSON
-pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: ProjectToolInventory
-pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: ProjectToolInventoryFromDiscovered
 pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: ToolByName
 pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: ToolNames
 pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: VerifyProjectedToolInventory
-pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: VerifyToolInventory
-pkg/services/factory_sessions/transports/mcp/registry.go: unreachable func: deriveToolIDCandidate
 pkg/services/factory_sessions/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
 pkg/services/factory_visualization/internal/service/runtime_metrics_query.go: unreachable func: runtimeMetricsStreamSelection
 pkg/services/factory_visualization/internal/services/live_view_projection/service.go: unreachable func: SinkFunc.PresentFactoryView
