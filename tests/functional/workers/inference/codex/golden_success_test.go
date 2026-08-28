@@ -3,33 +3,52 @@ package codex
 import (
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-type codexGoldenReplayResult struct {
-	Loaded         support.ProviderSessionCase
-	Listed         factoryapi.ListWorkResponse
-	FactoryEvents  []factoryapi.FactoryEvent
-	ResponseEvents []factoryapi.FactoryResponseEvent
-	Runner         *testutil.ProviderCommandRunner
+// TestCodexGoldenSharedProcess replays the three sanitized Codex golden
+// scenarios through one root-built process. The two historical success
+// anchors share one explicit session because they assert different views of
+// the same transcript and must not duplicate its Provider Session identity.
+func TestCodexGoldenSharedProcess(t *testing.T) {
+	fixture := newCodexGoldenFixture(t)
+	t.Cleanup(func() {
+		fixture.assertSharedIdentityLedger(t)
+	})
+	for _, scenario := range fixture.scenarios {
+		scenario := scenario
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			replay := fixture.runScenario(t, scenario)
+			switch scenario.name {
+			case "Success":
+				t.Run("TestCodexGoldenTextAndToolSuccess", func(t *testing.T) {
+					assertCodexGoldenTextAndToolSuccessOutcome(t, replay)
+				})
+				t.Run("TestCodexGoldenDerivesProviderSessionAndResponseEvents", func(t *testing.T) {
+					assertCodexGoldenSuccessGoldens(t, replay)
+				})
+			case "StructuredFailure":
+				assertCodexGoldenStructuredFailureOutcome(t, replay)
+			case "Timeout":
+				assertCodexGoldenTimeoutOutcome(t, replay)
+			}
+		})
+	}
+	t.Cleanup(func() {
+		fixture.assertSharedProcessCleanup(t)
+	})
 }
 
-// TestCodexGoldenTextAndToolSuccess replays the sanitized Codex message-tool-success
-// transcript through the public process boundary and proves public text and tool success.
-// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
-func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
-	replay := runCodexGoldenSuccessReplay(t)
-
+func assertCodexGoldenTextAndToolSuccessOutcome(
+	t *testing.T,
+	replay codexGoldenReplayResult,
+) {
+	t.Helper()
 	if got := support.CountWorkAtCustomerState(replay.Listed, "task:done"); got != 1 {
 		t.Fatalf("completed work = %d, want 1; listed=%#v", got, replay.Listed)
 	}
@@ -39,7 +58,8 @@ func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 	if replay.Runner.CallCount() != 1 {
 		t.Fatalf("provider command runner calls = %d, want 1", replay.Runner.CallCount())
 	}
-	if got := string(replay.Runner.LastRequest().Stdin); got == "" {
+	requests := replay.Runner.Requests()
+	if len(requests) != 1 || len(requests[0].Stdin) == 0 {
 		t.Fatal("provider command runner stdin is empty, want rendered prompt")
 	}
 	if !goldenStdoutContainsToolLifecycle(replay.Loaded, "tool_fixture_1") {
@@ -55,78 +75,24 @@ func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 	)
 }
 
-// TestCodexGoldenDerivesProviderSessionAndResponseEvents replays the sanitized
-// Codex message-tool-success transcript and proves public Provider Session,
-// FactoryResponseEvent, and invocation-result metadata match the golden contract.
-// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
-func TestCodexGoldenDerivesProviderSessionAndResponseEvents(t *testing.T) {
-	replay := runCodexGoldenSuccessReplay(t)
-
-	if got := support.CountWorkAtCustomerState(replay.Listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
-	}
-
+func assertCodexGoldenSuccessGoldens(t *testing.T, replay codexGoldenReplayResult) {
+	t.Helper()
 	observed := observeCodexProviderSessionGoldens(t, replay)
-	if err := support.CompareOrUpdateProviderSessionGoldens(replay.Loaded, observed); err != nil {
+	assertCodexGoldenGoldensMatch(t, replay.Loaded, observed)
+}
+
+func assertCodexGoldenGoldensMatch(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+	observed support.ProviderSessionObservedGoldens,
+) {
+	t.Helper()
+	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
 		if errors.As(err, &updated) {
 			t.Fatalf("golden files rewritten under %s: %v", support.ProviderSessionUpdateFunctionalGoldensEnv, err)
 		}
 		t.Fatalf("CompareOrUpdateProviderSessionGoldens: %v", err)
-	}
-}
-
-func runCodexGoldenSuccessReplay(t *testing.T) codexGoldenReplayResult {
-	t.Helper()
-
-	repoRoot := testutil.MustRepoRoot(t)
-	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))
-
-	loaded, err := support.LoadProviderSessionCase(caseDir)
-	if err != nil {
-		t.Fatalf("LoadProviderSessionCase: %v", err)
-	}
-	if loaded.Manifest.ID != "codex-message-tool-success" {
-		t.Fatalf("manifest.ID = %q, want codex-message-tool-success", loaded.Manifest.ID)
-	}
-
-	var request struct {
-		Model string `json:"model"`
-	}
-	if err := json.Unmarshal(loaded.Request, &request); err != nil {
-		t.Fatalf("decode request.json: %v", err)
-	}
-	if request.Model == "" {
-		t.Fatal("request.model must be non-empty")
-	}
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, request.Model))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"codex golden success"}`))
-
-	exitCode := 0
-	if loaded.Process.ExitCode != nil {
-		exitCode = *loaded.Process.ExitCode
-	}
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
-
-	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
-	)
-
-	return codexGoldenReplayResult{
-		Loaded:         loaded,
-		Listed:         listed,
-		FactoryEvents:  events,
-		ResponseEvents: responseEvents,
-		Runner:         runner,
 	}
 }
 
