@@ -134,6 +134,12 @@ func (router *catalogAPIServerRouter) set(server *support.ProcessAPIServer) {
 	router.server = server
 }
 
+func (router *catalogAPIServerRouter) current() *support.ProcessAPIServer {
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	return router.server
+}
+
 func (router *catalogAPIServerRouter) start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
@@ -155,12 +161,20 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	var closeErr error
 	if catalogFixture != nil {
-		if err := catalogFixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared catalog process: %v\n", err)
+		closeErr = catalogFixture.close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close shared catalog process: %v\n", closeErr)
 			if code == 0 {
 				code = 1
 			}
+		}
+	}
+	if err := writeCatalogForcedUnwindReport(catalogFixture, closeErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write catalog forced-unwind report: %v\n", err)
+		if code == 0 {
+			code = 1
 		}
 	}
 	os.Exit(code)

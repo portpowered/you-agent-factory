@@ -40,6 +40,8 @@ func TestPackagedClassifyRoutesSmallMediumAndLarge(t *testing.T) {
 			}
 		})
 	}
+
+	failClassifyForcedUnwindAfterAssertion(t)
 }
 
 func TestPackagedClassifyInvalidLabelFailsWithoutExecutingLane(t *testing.T) {

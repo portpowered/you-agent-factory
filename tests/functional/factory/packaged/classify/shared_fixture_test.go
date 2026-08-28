@@ -67,12 +67,20 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	var closeErr error
 	if classifyFixture != nil {
-		if err := classifyFixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared classify fixture: %v\n", err)
+		closeErr = classifyFixture.close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close shared classify fixture: %v\n", closeErr)
 			if code == 0 {
 				code = 1
 			}
+		}
+	}
+	if err := writeClassifyForcedUnwindReport(classifyFixture, closeErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write classify forced-unwind report: %v\n", err)
+		if code == 0 {
+			code = 1
 		}
 	}
 	os.Exit(code)
