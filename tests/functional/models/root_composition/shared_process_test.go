@@ -28,15 +28,19 @@ import (
 const (
 	sharedModelsProcessTimeout = 30 * time.Second
 	sharedModelsHTTPTimeout    = 5 * time.Second
+
+	sharedModelsCatalogSessionFactoryName = "models-shared-catalog-session"
+	sharedModelsUnknownSessionFactoryName = "models-shared-unknown-session"
 )
 
 // sharedModelsFixture owns the one root-built process and API transport for
 // the identical rich-catalog scenarios. Each scenario still opens and closes
-// its own explicit Factory Session; only immutable process wiring and the
+// its own explicit Factory Session in a distinct test-owned Factory directory;
+// the session-scoped current-Factory route proves those two routed inputs stay
+// distinct while the scenarios overlap. Only immutable process wiring and the
 // read-only catalog fixture are shared. The public Models routes are bound to
-// the process runtime and have no session selector, so the explicit session is
-// a lifecycle-isolation witness while the original process-level model routes
-// remain the behavior witness.
+// the process runtime and have no session selector, so they intentionally remain
+// the behavior witness for the original process-level model contract.
 type sharedModelsFixture struct {
 	rootDir  string
 	homeDir  string
@@ -52,6 +56,9 @@ type sharedModelsFixture struct {
 	scenarioMu    sync.Mutex
 	sessionIDs    map[string]string
 	activeSession map[string]string
+	sessionNames  map[string]string
+	sessionPaths  map[string]string
+	sessionDirs   []string
 	rootBuilds    atomic.Int64
 	apiStarts     atomic.Int64
 	opens         atomic.Int64
@@ -68,14 +75,21 @@ type sharedModelsProcessCommand struct {
 // observations. It has no timeout because the test context is the lifecycle
 // signal and the package test command owns the outer test deadline.
 type sharedModelsSessionBarrier struct {
-	want     int32
-	arrivals atomic.Int32
-	release  chan struct{}
-	once     sync.Once
+	want         int32
+	arrivals     atomic.Int32
+	completions  atomic.Int32
+	release      chan struct{}
+	complete     chan struct{}
+	releaseOnce  sync.Once
+	completeOnce sync.Once
 }
 
 func newSharedModelsSessionBarrier(want int32) *sharedModelsSessionBarrier {
-	return &sharedModelsSessionBarrier{want: want, release: make(chan struct{})}
+	return &sharedModelsSessionBarrier{
+		want:     want,
+		release:  make(chan struct{}),
+		complete: make(chan struct{}),
+	}
 }
 
 func (barrier *sharedModelsSessionBarrier) wait(t *testing.T) {
@@ -84,12 +98,33 @@ func (barrier *sharedModelsSessionBarrier) wait(t *testing.T) {
 		return
 	}
 	if barrier.arrivals.Add(1) == barrier.want {
-		barrier.once.Do(func() { close(barrier.release) })
+		barrier.releaseOnce.Do(func() { close(barrier.release) })
 	}
 	select {
 	case <-barrier.release:
 	case <-t.Context().Done():
 		t.Fatalf("shared Models session barrier canceled before both scenarios overlapped")
+	}
+}
+
+func (barrier *sharedModelsSessionBarrier) completeScenario() {
+	if barrier == nil {
+		return
+	}
+	if barrier.completions.Add(1) == barrier.want {
+		barrier.completeOnce.Do(func() { close(barrier.complete) })
+	}
+}
+
+func (barrier *sharedModelsSessionBarrier) waitForScenarios(t *testing.T) {
+	t.Helper()
+	if barrier == nil {
+		return
+	}
+	select {
+	case <-barrier.complete:
+	case <-t.Context().Done():
+		t.Fatalf("shared Models scenarios did not complete while sessions were live")
 	}
 }
 
@@ -113,47 +148,49 @@ func TestModelsSharedProcessEligibleScenarios(t *testing.T) {
 		{
 			name: "catalog discovery projects worker capabilities and Factory precedence",
 			run: func(t *testing.T) {
-				runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(t, barrier)
+				runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(
+					t, barrier, sharedModelsCatalogSessionFactoryName,
+				)
 			},
 		},
 		{
 			name: "unknown detail keeps the public not-found contract",
 			run: func(t *testing.T) {
-				runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(t, barrier)
+				runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
+					t, barrier, sharedModelsUnknownSessionFactoryName,
+				)
 			},
 		},
 	}
-	var scenariosDone sync.WaitGroup
-	scenariosDone.Add(len(scenarios))
+	t.Cleanup(func() {
+		if got := fixture.rootBuilds.Load(); got != 1 {
+			t.Errorf("shared Models root builds = %d, want exactly one", got)
+		}
+		if got := fixture.apiStarts.Load(); got != 1 {
+			t.Errorf("shared Models API starts = %d, want exactly one", got)
+		}
+		if got := sharedModelsEnvironmentValue(fixture.env, runcli.ModelCacheDirEnvironment); got != fixture.cacheDir {
+			t.Errorf("shared Models cache selector = %q, want fixture-owned cache %q", got, fixture.cacheDir)
+		}
+		if _, err := os.Stat(filepath.Join(fixture.cacheDir, "OMNIVOICE_Q4_K_M", ".managed-cache.json")); err != nil {
+			t.Errorf("shared Models fixture cache is not available at %q: %v", fixture.cacheDir, err)
+		}
+		if got, want := fixture.opens.Load(), fixture.closes.Load(); got != want {
+			t.Errorf("shared Models Factory Session opens = %d, closes = %d", got, want)
+		}
+		fixture.scenarioMu.Lock()
+		uniqueSessions := len(fixture.sessionIDs)
+		fixture.scenarioMu.Unlock()
+		if got := uniqueSessions; got != int(fixture.opens.Load()) {
+			t.Errorf("shared Models unique Factory Session IDs = %d, want %d", got, fixture.opens.Load())
+		}
+	})
 	for _, scenario := range scenarios {
 		scenario := scenario
-		go func() {
-			defer scenariosDone.Done()
-			t.Run(scenario.name, scenario.run)
-		}()
-	}
-	scenariosDone.Wait()
-
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		t.Fatalf("shared Models root builds = %d, want exactly one", got)
-	}
-	if got := fixture.apiStarts.Load(); got != 1 {
-		t.Fatalf("shared Models API starts = %d, want exactly one", got)
-	}
-	if got := sharedModelsEnvironmentValue(fixture.env, runcli.ModelCacheDirEnvironment); got != fixture.cacheDir {
-		t.Fatalf("shared Models cache selector = %q, want fixture-owned cache %q", got, fixture.cacheDir)
-	}
-	if _, err := os.Stat(filepath.Join(fixture.cacheDir, "OMNIVOICE_Q4_K_M", ".managed-cache.json")); err != nil {
-		t.Fatalf("shared Models fixture cache is not available at %q: %v", fixture.cacheDir, err)
-	}
-	if got, want := fixture.opens.Load(), fixture.closes.Load(); got != want {
-		t.Fatalf("shared Models Factory Session opens = %d, closes = %d", got, want)
-	}
-	fixture.scenarioMu.Lock()
-	uniqueSessions := len(fixture.sessionIDs)
-	fixture.scenarioMu.Unlock()
-	if got := uniqueSessions; got != int(fixture.opens.Load()) {
-		t.Fatalf("shared Models unique Factory Session IDs = %d, want %d", got, fixture.opens.Load())
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			scenario.run(t)
+		})
 	}
 }
 
@@ -178,6 +215,8 @@ func newSharedModelsFixture(t *testing.T) (_ *sharedModelsFixture, err error) {
 		rootDir:       rootDir,
 		sessionIDs:    make(map[string]string),
 		activeSession: make(map[string]string),
+		sessionNames:  make(map[string]string),
+		sessionPaths:  make(map[string]string),
 		apiStopped:    make(chan struct{}),
 	}
 	defer func() {
@@ -274,6 +313,24 @@ func sharedModelsEnvironmentValue(environment []string, name string) string {
 	return ""
 }
 
+func (fixture *sharedModelsFixture) createSessionFactory(t *testing.T, name string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "c06-models-shared-session-")
+	if err != nil {
+		t.Fatalf("create shared Models session Factory %q: %v", name, err)
+	}
+	fixture.scenarioMu.Lock()
+	fixture.sessionDirs = append(fixture.sessionDirs, dir)
+	fixture.scenarioMu.Unlock()
+	c06Ledger.factoryRoots.Add(1)
+	config := richCatalogFactoryConfig()
+	config["name"] = name
+	if err := writeSharedModelsFactory(dir, config); err != nil {
+		t.Fatalf("write shared Models session Factory %q: %v", name, err)
+	}
+	return dir
+}
+
 func startSharedModelsProcess(
 	process support.ApplicationProcess,
 	inputs *support.CapturedInputs,
@@ -314,11 +371,13 @@ func (command *sharedModelsProcessCommand) stop(ctx context.Context) error {
 func (fixture *sharedModelsFixture) withSession(
 	t *testing.T,
 	label string,
-	observe func(string),
+	factoryName string,
+	observe func(string, string),
 ) {
 	t.Helper()
 
-	opened := support.OpenFactorySessionAt(t, fixture.baseURL, fixture.rootDir)
+	factoryDir := fixture.createSessionFactory(t, factoryName)
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
 	sessionID := opened.Session.Id
 	if sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("shared Models scenario %q opened the default Factory Session", label)
@@ -330,6 +389,8 @@ func (fixture *sharedModelsFixture) withSession(
 	if !exists {
 		fixture.sessionIDs[sessionID] = label
 		fixture.activeSession[sessionID] = label
+		fixture.sessionNames[sessionID] = factoryName
+		fixture.sessionPaths[sessionID] = factoryDir
 	}
 	fixture.scenarioMu.Unlock()
 	if exists {
@@ -353,7 +414,88 @@ func (fixture *sharedModelsFixture) withSession(
 		}
 	}()
 
-	observe(sessionID)
+	observe(sessionID, factoryDir)
+}
+
+func (fixture *sharedModelsFixture) activeOtherSession(currentID string) (sessionID, factoryName, factoryDir string, ok bool) {
+	fixture.scenarioMu.Lock()
+	defer fixture.scenarioMu.Unlock()
+	for candidateID := range fixture.activeSession {
+		if candidateID == currentID {
+			continue
+		}
+		return candidateID, fixture.sessionNames[candidateID], fixture.sessionPaths[candidateID], true
+	}
+	return "", "", "", false
+}
+
+func assertSharedModelsSessionRoute(
+	t testing.TB,
+	baseURL, sessionID, expectedFactoryDir string,
+) {
+	t.Helper()
+	session := getSharedModelsSession(t, baseURL, sessionID)
+	if session.Id != sessionID || session.IsDefault {
+		t.Fatalf("shared Models Factory Session identity = %#v, want non-default %q", session, sessionID)
+	}
+	if session.FolderPath != expectedFactoryDir {
+		t.Fatalf("shared Models Factory Session %q folder path = %q, want %q", sessionID, session.FolderPath, expectedFactoryDir)
+	}
+	factory := support.GetJSON[factoryapi.Factory](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
+	)
+	if factory.Name != factoryapi.FactoryName(factorysessions.CurrentFactoryName) {
+		t.Fatalf(
+			"shared Models Factory Session %q current Factory name=%q directory=%q source=%q metadata=%v, want current-factory name %q",
+			sessionID, factory.Name, sharedModelsStringPointerValue(factory.FactoryDirectory), sharedModelsStringPointerValue(factory.SourceDirectory), factory.Metadata, factorysessions.CurrentFactoryName,
+		)
+	}
+	if sharedModelsStringPointerValue(factory.FactoryDirectory) != expectedFactoryDir ||
+		sharedModelsStringPointerValue(factory.SourceDirectory) != expectedFactoryDir {
+		t.Fatalf(
+			"shared Models Factory Session %q current Factory directories = (%q, %q), want session Factory directory %q",
+			sessionID, sharedModelsStringPointerValue(factory.FactoryDirectory), sharedModelsStringPointerValue(factory.SourceDirectory), expectedFactoryDir,
+		)
+	}
+}
+
+func sharedModelsStringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func assertSharedModelsSessionRouteIsolation(
+	t testing.TB,
+	fixture *sharedModelsFixture,
+	sessionID, expectedFactoryDir string,
+) {
+	t.Helper()
+	fixture.scenarioMu.Lock()
+	ownName, ownNameOK := fixture.sessionNames[sessionID]
+	registeredFactoryDir, pathOK := fixture.sessionPaths[sessionID]
+	fixture.scenarioMu.Unlock()
+	if !ownNameOK || !pathOK {
+		t.Fatalf("shared Models session %q has no registered Factory route", sessionID)
+	}
+	if registeredFactoryDir != expectedFactoryDir {
+		t.Fatalf("shared Models session %q Factory directory = %q, want %q", sessionID, registeredFactoryDir, expectedFactoryDir)
+	}
+	assertSharedModelsSessionRoute(t, fixture.baseURL, sessionID, expectedFactoryDir)
+
+	otherID, otherName, otherDir, ok := fixture.activeOtherSession(sessionID)
+	if !ok {
+		t.Fatalf("shared Models session %q has no overlapping peer session", sessionID)
+	}
+	if otherName == ownName || otherDir == expectedFactoryDir {
+		t.Fatalf(
+			"shared Models session routes are not unique: own=(%q,%q,%q), other=(%q,%q,%q)",
+			sessionID, ownName, expectedFactoryDir, otherID, otherName, otherDir,
+		)
+	}
+	assertSharedModelsSessionRoute(t, fixture.baseURL, otherID, otherDir)
 }
 
 func assertSharedModelsSessionDeleted(t *testing.T, baseURL, sessionID string) {
@@ -476,6 +618,16 @@ func (fixture *sharedModelsFixture) close() error {
 			errs = append(errs, fmt.Errorf("remove shared Models home %q: %w", fixture.homeDir, err))
 		} else if _, err := os.Stat(fixture.homeDir); !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, fmt.Errorf("shared Models home %q remains after cleanup: %v", fixture.homeDir, err))
+		}
+	}
+	fixture.scenarioMu.Lock()
+	sessionDirs := append([]string(nil), fixture.sessionDirs...)
+	fixture.scenarioMu.Unlock()
+	for _, sessionDir := range sessionDirs {
+		if err := os.RemoveAll(sessionDir); err != nil {
+			errs = append(errs, fmt.Errorf("remove shared Models session Factory %q: %w", sessionDir, err))
+		} else if _, err := os.Stat(sessionDir); !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("shared Models session Factory %q remains after cleanup: %v", sessionDir, err))
 		}
 	}
 	return errors.Join(errs...)

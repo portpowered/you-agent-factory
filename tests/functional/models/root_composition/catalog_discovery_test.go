@@ -230,17 +230,27 @@ func TestModelsRootCompositionModelScenarios(t *testing.T) {
 // keeping a Factory declaration ahead of the built-in definition with the same
 // model name.
 func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
-	runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(t, nil)
+	runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(t, nil, sharedModelsCatalogSessionFactoryName)
 }
 
 func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(
 	t *testing.T,
 	barrier *sharedModelsSessionBarrier,
+	expectedFactoryName string,
 ) {
 	fixture := ensureSharedModelsFixture(t)
-	fixture.withSession(t, "catalog capability and Factory precedence", func(sessionID string) {
-		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
+	fixture.withSession(t, "catalog capability and Factory precedence", expectedFactoryName, func(sessionID, factoryDir string) {
 		barrier.wait(t)
+		scenarioComplete := false
+		defer func() {
+			if !scenarioComplete {
+				barrier.completeScenario()
+			}
+		}()
+		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
+		if barrier != nil {
+			assertSharedModelsSessionRouteIsolation(t, fixture, sessionID, factoryDir)
+		}
 		listed := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.baseURL+"/models")
 		catalogModel := findCatalogModel(t, listed.Results, "OMNIVOICE_Q4_K_M", "GET /models")
 		if catalogModel.ProviderLocality != factoryapi.WorkerModelLocalityLocal ||
@@ -297,6 +307,9 @@ func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWith
 		if unsupported.StatusCode != http.StatusBadRequest {
 			t.Fatalf("unsupported Factory-owned model invocation status = %d, want 400", unsupported.StatusCode)
 		}
+		barrier.completeScenario()
+		scenarioComplete = true
+		barrier.waitForScenarios(t)
 	})
 }
 
@@ -316,17 +329,27 @@ func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 }
 
 func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
-	runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(t, nil)
+	runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(t, nil, sharedModelsUnknownSessionFactoryName)
 }
 
 func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
 	t *testing.T,
 	barrier *sharedModelsSessionBarrier,
+	expectedFactoryName string,
 ) {
 	fixture := ensureSharedModelsFixture(t)
-	fixture.withSession(t, "unknown model detail", func(sessionID string) {
-		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
+	fixture.withSession(t, "unknown model detail", expectedFactoryName, func(sessionID, factoryDir string) {
 		barrier.wait(t)
+		scenarioComplete := false
+		defer func() {
+			if !scenarioComplete {
+				barrier.completeScenario()
+			}
+		}()
+		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
+		if barrier != nil {
+			assertSharedModelsSessionRouteIsolation(t, fixture, sessionID, factoryDir)
+		}
 		endpoint := fixture.baseURL + "/models/missing-catalog-model"
 		response, err := http.Get(endpoint)
 		if err != nil {
@@ -369,6 +392,9 @@ func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
 		if err := fixture.process.Execute(inputs.Input); err == nil {
 			t.Fatal("Process.Execute(models inspect) error = nil, want unknown model")
 		}
+		barrier.completeScenario()
+		scenarioComplete = true
+		barrier.waitForScenarios(t)
 	})
 }
 
