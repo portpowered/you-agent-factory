@@ -157,6 +157,9 @@ function runFakeRegeneration({ failAt = "", failExit = 17 } = {}) {
 function createControlledCommandEdge({
 	currentMainSha = MAIN_SHA,
 	remotePaths = [],
+	remoteBaseSha = MAIN_SHA,
+	remoteParentSha = remoteBaseSha,
+	remoteHeadSha = BOT_BRANCH_SHA,
 	matchingPaths = SHARED_BASELINE_PATHS,
 	stagedPaths = remotePaths,
 	pullRequestLists = [[]],
@@ -203,8 +206,20 @@ function createControlledCommandEdge({
 			if (args[0] === "rev-parse" && args[1] === "origin/main") {
 				return { status: 0, stdout: `${resolveCurrentMain()}\n` };
 			}
+			if (args[0] === "rev-parse" && args[1] === "origin/" + SHARED_BASELINE_BOT_BRANCH) {
+				return { status: 0, stdout: `${remoteHeadSha}\n` };
+			}
+			if (args[0] === "rev-parse" && args[1] === "origin/" + SHARED_BASELINE_BOT_BRANCH + "^") {
+				return { status: 0, stdout: `${remoteParentSha}\n` };
+			}
+			if (args[0] === "merge-base") {
+				return { status: 0, stdout: `${remoteBaseSha}\n` };
+			}
 			if (args[0] === "rev-parse" && args[1] === "HEAD") {
 				return { status: 0, stdout: `${generatedSha}\n` };
+			}
+			if (args[0] === "rev-parse" && args[1] === "HEAD^") {
+				return { status: 0, stdout: `${MAIN_SHA}\n` };
 			}
 			if (args[0] === "diff" && args[1] === "--name-only") {
 				const paths = args[3]?.startsWith("origin/") ? remotePaths : stagedPaths;
@@ -292,8 +307,10 @@ function createLocalGitFixture({ botBase = "stale", onTemporaryDirectory } = {})
 		requireLocalGit(temporaryDirectory, ["init", sourceDirectory]);
 		requireLocalGit(sourceDirectory, ["config", "user.name", "shared-baseline-test"]);
 		requireLocalGit(sourceDirectory, ["config", "user.email", "shared-baseline-test@example.invalid"]);
-		writeLocalGitFile(sourceDirectory, LOCAL_GIT_SNAPSHOT_PATH, "baseline snapshot\n");
-		requireLocalGit(sourceDirectory, ["add", "--", LOCAL_GIT_SNAPSHOT_PATH]);
+		for (const path of SHARED_BASELINE_PATHS) {
+			writeLocalGitFile(sourceDirectory, path, `baseline ${path}\n`);
+		}
+		requireLocalGit(sourceDirectory, ["add", "--", ...SHARED_BASELINE_PATHS]);
 		requireLocalGit(sourceDirectory, ["commit", "-m", "base snapshot"]);
 		requireLocalGit(sourceDirectory, ["branch", "-M", "main"]);
 		requireLocalGit(sourceDirectory, ["remote", "add", "origin", originDirectory]);
@@ -327,10 +344,12 @@ function createLocalGitFixture({ botBase = "stale", onTemporaryDirectory } = {})
 		const botBranchSha = requireLocalGit(sourceDirectory, ["rev-parse", `origin/${SHARED_BASELINE_BOT_BRANCH}`]);
 		requireLocalGit(temporaryDirectory, ["clone", "--branch", "main", originDirectory, runnerDirectory]);
 		requireLocalGit(runnerDirectory, ["checkout", "--detach", mainSha]);
+		requireLocalGit(runnerDirectory, ["switch", "-C", SHARED_BASELINE_BOT_BRANCH, mainSha]);
 		writeLocalGitFile(runnerDirectory, LOCAL_GIT_SNAPSHOT_PATH, "generated snapshot\n");
 
 		return {
 			temporaryDirectory,
+			sourceDirectory,
 			runnerDirectory,
 			baseSha,
 			mainSha,
@@ -363,6 +382,13 @@ function createLocalGitCommandEdge({
 		files: changedPaths.map((path) => ({ path })),
 		...metadata,
 	};
+	if (Array.isArray(pullRequestMetadata.files)) {
+		pullRequestMetadata.files = pullRequestMetadata.files.map((file) =>
+			typeof file === "string" ? { path: file } : file,
+		);
+	}
+	const hasExplicitHeadRefOid = Object.prototype.hasOwnProperty.call(metadata, "headRefOid");
+	let generatedCandidateCommitted = false;
 
 	function run(command, args, options = {}) {
 		const call = { command, args: [...args], options: { ...options } };
@@ -375,7 +401,11 @@ function createLocalGitCommandEdge({
 				stderr: "simulated command failure",
 			};
 		}
-		if (command === "git") return runLocalGit(cwd, args);
+		if (command === "git") {
+			const result = runLocalGit(cwd, args);
+			if (args[0] === "commit" && result.status === 0) generatedCandidateCommitted = true;
+			return result;
+		}
 		if (command !== "gh") return { status: 0, stdout: "" };
 		if (args[0] === "auth" && args[1] === "setup-git") return { status: 0, stdout: "" };
 		if (args[0] === "pr" && args[1] === "list") {
@@ -390,7 +420,12 @@ function createLocalGitCommandEdge({
 			return { status: 0, stdout: "42\n" };
 		}
 		if (args[0] === "pr" && args[1] === "view") {
-			return { status: 0, stdout: JSON.stringify(pullRequestMetadata) };
+			const headRefOid = hasExplicitHeadRefOid
+				? pullRequestMetadata.headRefOid
+				: generatedCandidateCommitted
+					? requireLocalGit(cwd, ["rev-parse", "HEAD"])
+					: botBranchSha;
+			return { status: 0, stdout: JSON.stringify({ ...pullRequestMetadata, headRefOid }) };
 		}
 		return { status: 0, stdout: "" };
 	}
@@ -406,7 +441,7 @@ function captureLocalRepositoryState(cwd) {
 	};
 }
 
-test("TASK-001 local-real Git characterizes stale bot ancestry before publication", () => {
+test("TASK-001 local-real Git characterizes stale bot ancestry without treating newer main paths as branch changes", () => {
 	const developerState = captureLocalRepositoryState(repositoryRoot);
 	const fixture = createLocalGitFixture({ botBase: "stale" });
 	try {
@@ -424,12 +459,95 @@ test("TASK-001 local-real Git characterizes stale bot ancestry before publicatio
 			.split(/\r?\n/)
 			.filter(Boolean);
 		assert.deepEqual(remotePaths.sort(), [LOCAL_GIT_MAIN_ONLY_PATH, LOCAL_GIT_SNAPSHOT_PATH].sort());
+	} finally {
+		fixture.cleanup();
+	}
+	assert.equal(existsSync(fixture.temporaryDirectory), false);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+});
 
+test("TASK-002 local-real Git reconstructs a stale bot branch from exact main and reuses its PR", () => {
+	const developerState = captureLocalRepositoryState(repositoryRoot);
+	const fixture = createLocalGitFixture({ botBase: "stale" });
+	try {
 		const edge = createLocalGitCommandEdge({
 			cwd: fixture.runnerDirectory,
 			botBranchSha: fixture.botBranchSha,
 			changedPaths: [LOCAL_GIT_SNAPSHOT_PATH],
+			pullRequestLists: [[{ number: 42, url: "https://github.example/pull/42" }], [{ number: 42, url: "https://github.example/pull/42" }]],
+			metadata: { files: [LOCAL_GIT_SNAPSHOT_PATH] },
 		});
+		const result = reconcileBotCandidate({
+			repository: REPOSITORY,
+			mainSha: fixture.mainSha,
+			botBranchExists: true,
+			botBranchSha: fixture.botBranchSha,
+			changedPaths: [LOCAL_GIT_SNAPSHOT_PATH],
+			sourceRunUrl: SOURCE_RUN_URL,
+			commandRunner: edge.run,
+		});
+
+		assert.equal(result.action, "merge-requested");
+		assert.deepEqual(result.remotePaths, [LOCAL_GIT_SNAPSHOT_PATH]);
+		const pushCall = edge.calls.find((call) => call.command === "git" && call.args[0] === "push");
+		assert.deepEqual(pushCall.args, [
+			"push",
+			`--force-with-lease=refs/heads/${SHARED_BASELINE_BOT_BRANCH}:${fixture.botBranchSha}`,
+			"origin",
+			`${SHARED_BASELINE_BOT_BRANCH}:${SHARED_BASELINE_BOT_BRANCH}`,
+		]);
+		assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[1] === "edit").length, 1);
+		const mergeCall = edge.calls.find((call) => call.command === "gh" && call.args[1] === "merge");
+		assert.deepEqual(mergeCall.args.slice(-2), ["--match-head-commit", result.commitSha]);
+
+		requireLocalGit(fixture.runnerDirectory, [
+			"fetch",
+			"--force",
+			"origin",
+			`refs/heads/${SHARED_BASELINE_BOT_BRANCH}:refs/remotes/origin/${SHARED_BASELINE_BOT_BRANCH}`,
+		]);
+		assert.equal(
+			requireLocalGit(fixture.runnerDirectory, ["rev-parse", `origin/${SHARED_BASELINE_BOT_BRANCH}^`]),
+			fixture.mainSha,
+		);
+		assert.deepEqual(
+			requireLocalGit(fixture.runnerDirectory, [
+				"diff",
+				"--name-only",
+				fixture.mainSha,
+				`origin/${SHARED_BASELINE_BOT_BRANCH}`,
+			])
+				.split(/\r?\n/)
+				.filter(Boolean),
+			[LOCAL_GIT_SNAPSHOT_PATH],
+		);
+	} finally {
+		fixture.cleanup();
+	}
+	assert.equal(existsSync(fixture.temporaryDirectory), false);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+});
+
+test("TASK-002 local-real Git force-with-lease preserves a concurrent bot update", () => {
+	const fixture = createLocalGitFixture({ botBase: "stale" });
+	let concurrentSha = "";
+	try {
+		const edge = createLocalGitCommandEdge({
+			cwd: fixture.runnerDirectory,
+			botBranchSha: fixture.botBranchSha,
+			changedPaths: [LOCAL_GIT_SNAPSHOT_PATH],
+			failWhen: (call) => {
+				if (call.command !== "git" || call.args[0] !== "push" || concurrentSha) return undefined;
+				requireLocalGit(fixture.sourceDirectory, ["checkout", "-B", "concurrent-bot", fixture.botBranchSha]);
+				writeLocalGitFile(fixture.sourceDirectory, LOCAL_GIT_SNAPSHOT_PATH, "concurrent snapshot\n");
+				requireLocalGit(fixture.sourceDirectory, ["add", "--", LOCAL_GIT_SNAPSHOT_PATH]);
+				requireLocalGit(fixture.sourceDirectory, ["commit", "-m", "concurrent bot update"]);
+				concurrentSha = requireLocalGit(fixture.sourceDirectory, ["rev-parse", "HEAD"]);
+				requireLocalGit(fixture.sourceDirectory, ["push", "--force", "origin", `HEAD:${SHARED_BASELINE_BOT_BRANCH}`]);
+				return undefined;
+			},
+		});
+
 		assert.throws(
 			() => reconcileBotCandidate({
 				repository: REPOSITORY,
@@ -440,18 +558,23 @@ test("TASK-001 local-real Git characterizes stale bot ancestry before publicatio
 				sourceRunUrl: SOURCE_RUN_URL,
 				commandRunner: edge.run,
 			}),
-			/unexpected path\(s\).*newer-main-only\.txt/,
+			/git command failed with exit code 1/,
 		);
-		assert.equal(callsMatching(edge.calls, (call) => call.command === "gh").length, 0);
+		assert.notEqual(concurrentSha, "");
+		assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && ["create", "edit", "merge"].includes(call.args[1])).length, 0);
+		requireLocalGit(fixture.runnerDirectory, [
+			"fetch",
+			"--force",
+			"origin",
+			`refs/heads/${SHARED_BASELINE_BOT_BRANCH}:refs/remotes/origin/${SHARED_BASELINE_BOT_BRANCH}`,
+		]);
 		assert.equal(
-			callsMatching(edge.calls, (call) => call.command === "git" && ["commit", "push"].includes(call.args[0])).length,
-			0,
+			requireLocalGit(fixture.runnerDirectory, ["rev-parse", `origin/${SHARED_BASELINE_BOT_BRANCH}`]),
+			concurrentSha,
 		);
 	} finally {
 		fixture.cleanup();
 	}
-	assert.equal(existsSync(fixture.temporaryDirectory), false);
-	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
 });
 
 test("TASK-001 local-real Git preserves the current-main exact-candidate characterization", () => {
@@ -951,7 +1074,7 @@ test("F-05 rejects invalid candidate and remote paths before any later publicati
 	);
 	assert.equal(candidateEdge.calls.length, 0);
 
-	const remoteEdge = createControlledCommandEdge({ remotePaths: [invalidPath] });
+	const remoteEdge = createControlledCommandEdge({ remotePaths: [invalidPath], stagedPaths: [] });
 	assert.throws(
 		() => reconcileBotCandidate({
 			repository: REPOSITORY,
@@ -1018,6 +1141,23 @@ test("F-16 and F-17 stop before auto-merge for invalid metadata or a failed muta
 		/does not target main/,
 	);
 	assert.equal(callsMatching(invalidMetadataEdge.calls, (call) => call.command === "gh" && ["ready", "merge"].includes(call.args[1])).length, 0);
+
+	const mismatchedFilesEdge = createControlledCommandEdge({
+		pullRequestLists: [[], []],
+		stagedPaths: [SHARED_BASELINE_PATHS[0]],
+		metadata: { files: [SHARED_BASELINE_PATHS[0], SHARED_BASELINE_PATHS[1]] },
+	});
+	assert.throws(
+		() => reconcileBotCandidate({
+			repository: REPOSITORY,
+			mainSha: MAIN_SHA,
+			changedPaths: [SHARED_BASELINE_PATHS[0]],
+			sourceRunUrl: "https://github.example/actions/runs/42",
+			commandRunner: mismatchedFilesEdge.run,
+		}),
+		/pull request files do not match generated candidate/,
+	);
+	assert.equal(callsMatching(mismatchedFilesEdge.calls, (call) => call.command === "gh" && ["ready", "merge"].includes(call.args[1])).length, 0);
 
 	const failedPushEdge = createControlledCommandEdge({
 		stagedPaths: [SHARED_BASELINE_PATHS[0]],
