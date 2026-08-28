@@ -310,8 +310,10 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 	// another cell until Factory release/reopen is publicly supported.
 	home, cwd := seedACPWorkerChildHome(t, name, stages)
 	var starts atomic.Int32
+	peerOwner := "ACP worker child peer " + t.Name()
+	trackChatPeerOwner(t, peerOwner)
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpWorkerChildCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpWorkerChildCommandFactory(&starts, peerOwner),
 		ProvidersExecutableLocator:    acpWorkerChildExecutableLocator{},
 	})
 
@@ -340,7 +342,7 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 func seedACPWorkerChildHome(t *testing.T, name string, stages int) (home, cwd string) {
 	t.Helper()
 
-	home = t.TempDir()
+	home = chatTempDir(t, "ACP worker child "+name, "worker-child-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv(acpWorkerChildPeerEnvironment, "1")
@@ -351,6 +353,7 @@ func seedACPWorkerChildHome(t *testing.T, name string, stages int) (home, cwd st
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
 	}
 	dir := filepath.Join(root, "@acp-child-test", name)
+	registerChatFactoryPath(t, dir)
 	writeACPWorkerChildFile(t, dir, "factory.json", acpWorkerChildFactoryJSON(name, stages))
 	for stage := 1; stage <= stages; stage++ {
 		worker := fmt.Sprintf("worker%d", stage)
@@ -360,7 +363,7 @@ func seedACPWorkerChildHome(t *testing.T, name string, stages int) (home, cwd st
 	}
 	support.SeedACPAgentProfile(t, home, "factory:"+factoryName, []string{"factory:" + factoryName})
 
-	return home, t.TempDir()
+	return home, chatTempDir(t, "ACP worker child "+name+" working directory", "worker-child-cwd-")
 }
 
 func writeACPWorkerChildFile(t *testing.T, dir, name, content string) {
@@ -448,10 +451,11 @@ const acpWorkerChildWorkstationAgents = "---\n" +
 // acpWorkerChildCommandFactory intercepts the built-in cursor-acp integration's
 // own command and re-execs this test binary as the scripted peer, matching the
 // pattern in acp_streaming_usage_composition_test.go.
-func acpWorkerChildCommandFactory(starts *atomic.Int32) platformprocess.CommandFactory {
+func acpWorkerChildCommandFactory(starts *atomic.Int32, peerOwner string) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if name == "cursor-agent" && len(args) == 1 && args[0] == "acp" {
 			starts.Add(1)
+			beginChatPeer(peerOwner)
 			return exec.Command(os.Args[0], "-test.run=^TestACPWorkerChildPeerProcess$")
 		}
 		return exec.Command(name, args...)
@@ -514,7 +518,7 @@ func TestJavaScriptFactoryChildrenAreVisibleAsWorkers(t *testing.T) {
 	// activation remains retained under the process-scoped ~default binding.
 	// Sharing it with another activation-owning witness would change that
 	// production lifecycle edge, not merely reuse immutable wiring.
-	home := t.TempDir()
+	home := chatTempDir(t, "JavaScript worker child", "javascript-child-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
@@ -523,7 +527,7 @@ func TestJavaScriptFactoryChildrenAreVisibleAsWorkers(t *testing.T) {
 	support.SeedACPAgentProfile(t, home, "factory:@you/spawn", []string{"factory:@you/spawn"})
 
 	runner := &spawnACPRunner{}
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "JavaScript worker child working directory", "javascript-child-cwd-")
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{ProviderCommandRunner: runner})
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)

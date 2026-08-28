@@ -228,14 +228,14 @@ func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 	// both home-directory variables, and corrupts Operator Settings after
 	// admission. Those destructive inputs are the filesystem and resolver
 	// properties under test and cannot be shared with another ACP session.
-	home := t.TempDir()
+	home := chatTempDir(t, "unresolvable Factory", "unresolvable-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	runner := &controlledACPCommandRunner{}
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	process, err := buildChatProcess(t, "unresolvable Factory", serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
 	if err != nil {
@@ -247,7 +247,7 @@ func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
 
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "unresolvable Factory working directory", "unresolvable-cwd-")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	fourthSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
@@ -310,18 +310,16 @@ func assertBoundedDependencyError(t *testing.T, resp rpcMessage, operation strin
 // test if that close reports an error. On-demand Factory Sessions activation
 // (see pkg/wire's compositeProcessLifecycle) keeps an opened Factory target
 // runtime's own log file handle open until Process.Close tears it down; this
-// runs before t.TempDir()'s own automatic cleanup (t.Cleanup callbacks run
-// LIFO, and this is always registered after the test's own t.TempDir() calls),
+// runs before chatTempDir's cleanup for the owning home (t.Cleanup callbacks
+// run LIFO, and the process cleanup is registered after that home is made),
 // so the runtime is closed before its home directory is removed -- proving
 // this story's reachable close path actually works, not merely compiling,
-// instead of masking an unclosed runtime with a manually managed,
-// error-tolerant temp directory.
-func closeProcessCleanly(t *testing.T, process interface {
-	Close(context.Context) error
-}) {
+// instead of masking an unclosed runtime with an error-tolerant temp
+// directory.
+func closeProcessCleanly(t *testing.T, process support.ApplicationProcess) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := process.Close(context.Background()); err != nil {
+		if err := closeChatProcess(process); err != nil {
 			t.Errorf("Process.Close() error = %v, want clean teardown", err)
 		}
 	})
@@ -416,7 +414,18 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) prompt
 	input := strings.Repeat(promptLine, deliveries)
 
 	var out bytes.Buffer
-	if err := server.Serve(context.Background(), strings.NewReader(input), &out); err != nil {
+	turnIDs := make([]string, deliveries)
+	for index := range turnIDs {
+		turnIDs[index] = beginChatTurn(sessionID, "redelivery")
+	}
+	defer func() {
+		for _, turnID := range turnIDs {
+			if err := closeChatTurn(turnID); err != nil {
+				chatCensus.recordViolation(err)
+			}
+		}
+	}()
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(input), &out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
 
@@ -501,9 +510,15 @@ func doSessionPrompt(server acp.Server, sessionID, text string) (rpcMessage, err
 		return rpcMessage{}, fmt.Errorf("marshal session/prompt params: %w", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
+	turnID := beginChatTurn(sessionID, "one-shot session/prompt")
+	defer func() {
+		if err := closeChatTurn(turnID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 
 	var out bytes.Buffer
-	if err := server.Serve(context.Background(), strings.NewReader(line), &out); err != nil {
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(line), &out); err != nil {
 		return rpcMessage{}, fmt.Errorf("Serve(session/prompt): %w", err)
 	}
 	responses := responseLinesOnlyErr(&out)

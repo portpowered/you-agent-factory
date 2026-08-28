@@ -121,6 +121,12 @@ func driveIdentifiedSessionPrompt(
 		t.Fatalf("marshal session/prompt params: %v", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":%q,"method":"session/prompt","params":%s}`, requestID, params) + "\n"
+	turnID := beginChatTurn(sessionID, "ACP multi-turn session/prompt")
+	defer func() {
+		if err := closeChatTurn(turnID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	if _, err := stdin.Write([]byte(line)); err != nil {
 		t.Fatalf("write session/prompt request: %v", err)
 	}
