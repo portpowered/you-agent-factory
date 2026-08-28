@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -166,8 +167,40 @@ func modelsInvocationDiagnostic(class modelinference.InvocationFailureClass) (st
 		return "MODEL_INFERENCE_TIMEOUT", factoryapi.ErrorFamilyInternalServerError
 	case modelinference.InvocationFailureClassConfiguration:
 		return "MODEL_CONFIGURATION_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassAssetPreparation:
+		return "MODEL_ASSET_PREPARATION_FAILED", factoryapi.ErrorFamilyInternalServerError
 	default:
 		return "MODEL_INFERENCE_RUNTIME_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	}
+}
+
+func assetPreflightInvocationError(modelName, operation string, err error) error {
+	if err == nil {
+		return err
+	}
+	class := modelinference.InvocationFailureClassAssetPreparation
+	message := "model asset preparation failed"
+	switch {
+	case errors.Is(err, context.Canceled), errors.Is(err, modelinference.ErrAssetCancelled):
+		class = modelinference.InvocationFailureClassCancellation
+		message = "model asset preparation was cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		class = modelinference.InvocationFailureClassTimeout
+		message = "model asset preparation timed out"
+	case errors.Is(err, modelinference.ErrAssetBackendNotReady):
+		class = modelinference.InvocationFailureClassBackendReadiness
+		message = "managed model backend is unavailable"
+	case errors.Is(err, modelinference.ErrAssetOffline):
+		class = modelinference.InvocationFailureClassOfflineCache
+		message = "required model assets are unavailable offline"
+	case errors.Is(err, modelinference.ErrModelRevisionUnresolved):
+		class = modelinference.InvocationFailureClassRevisionResolution
+		message = "model source revision could not be resolved to an immutable commit"
+	}
+	return &modelinference.InvocationFailure{
+		Class: class, Message: message,
+		Model:     modelinference.ModelReference{NameOrURI: strings.TrimSpace(modelName)},
+		Operation: strings.TrimSpace(operation), Cause: err,
 	}
 }
 

@@ -26,6 +26,13 @@ const (
 
 // Scoped asset lifecycle is contract-only until the Models implementation
 // packet owns runtime-scope registration, asset inspection, and removal.
+func (s *Service) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (s *Service) PrepareModelAssets(
 	context.Context,
 	models.PrepareModelAssetsRequest,
@@ -114,11 +121,33 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 	if runtimeConfig == nil {
 		return models.PullResult{}, models.ErrUnavailable
 	}
-	puller, err := localmodels.NewScopedAssetPuller(o.assets, request.Scope)
+	resolved := resolution.Resolved.Clone()
+	puller, err := localmodels.NewScopedAssetPullerWithPreparation(
+		o.assets,
+		request.Scope,
+		func(ctx context.Context, modelName string, scope models.RuntimeScopeRef) (models.PrepareModelAssetsRequest, error) {
+			var backendArtifact modelseffects.BackendArtifactSelection
+			if o.resolveBackendArtifact != nil && isJoinedPinnedBackend(resolved.Definition.Backend) {
+				var resolveErr error
+				backendArtifact, resolveErr = o.resolveJoinedBackendArtifact(ctx, resolved.Definition)
+				if resolveErr != nil {
+					return models.PrepareModelAssetsRequest{}, resolveErr
+				}
+			}
+			return joinedAssetPreparationRequestWithBackend(
+				models.InvokeModelRequest{
+					Scope: scope,
+					Model: models.ModelReference{NameOrURI: modelName},
+				},
+				modelName,
+				resolved,
+				backendArtifact,
+			), nil
+		},
+	)
 	if err != nil {
 		return models.PullResult{}, err
 	}
-	resolved := resolution.Resolved.Clone()
 	return localmodels.PullModelWithOptions(
 		puller,
 		ctx,

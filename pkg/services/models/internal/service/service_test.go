@@ -389,6 +389,13 @@ type preparationAssetService struct {
 	result  models.PrepareModelAssetsResult
 }
 
+func (*preparationAssetService) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, nil
+}
+
 func (service *preparationAssetService) PrepareModelAssets(
 	_ context.Context,
 	request models.PrepareModelAssetsRequest,

@@ -738,10 +738,23 @@ func TestGenericCLIInvocationRequestWithoutBindingsUsesCatalogTextSlot(t *testin
 
 type genericCLIModelsService struct {
 	modelinference.Service
-	catalog   modelinference.Detail
-	readiness modelinference.Runtime
-	request   modelinference.InvokeModelRequest
-	invokeErr error
+	catalog         modelinference.Detail
+	readiness       modelinference.Runtime
+	request         modelinference.InvokeModelRequest
+	invokeErr       error
+	preflightResult modelinference.PreflightModelAssetsResult
+	preflightErr    error
+	events          *[]string
+}
+
+func (service *genericCLIModelsService) PreflightModelAssets(
+	context.Context,
+	modelinference.PrepareModelAssetsRequest,
+) (modelinference.PreflightModelAssetsResult, error) {
+	if service.events != nil {
+		*service.events = append(*service.events, "preflight")
+	}
+	return service.preflightResult, service.preflightErr
 }
 
 func (service *genericCLIModelsService) GetCatalogModel(
@@ -759,6 +772,9 @@ func (service *genericCLIModelsService) GetModelReadiness(
 func (service *genericCLIModelsService) InvokeModel(
 	_ context.Context, request modelinference.InvokeModelRequest,
 ) (modelinference.InvokeModelResult, error) {
+	if service.events != nil {
+		*service.events = append(*service.events, "invoke")
+	}
 	service.request = request
 	if service.invokeErr != nil {
 		return modelinference.InvokeModelResult{}, service.invokeErr

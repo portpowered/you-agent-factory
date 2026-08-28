@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -169,5 +170,46 @@ func TestWriteGenericCLIOutputPathRejectsInvalidResults(t *testing.T) {
 				t.Fatalf("writeGenericCLIOutputPath error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestInvokeGenericEmitsMissingAssetEstimateBeforeInvocation(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("asset-estimate:test-scope")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	catalog := modelinference.Detail{Summary: modelinference.Summary{
+		Name: "model",
+		Operations: []modelinference.Operation{{
+			Name:    modelinference.OperationOMNI,
+			Inputs:  []modelinference.OperationSlot{{Name: "prompt", Modality: modelinference.ModalityText}},
+			Outputs: []modelinference.OperationSlot{{Name: "text", Modality: modelinference.ModalityText}},
+		}},
+	}}
+	events := []string{}
+	root := &genericCLIModelsService{
+		catalog: catalog,
+		preflightResult: modelinference.PreflightModelAssetsResult{
+			ModelName: "model", BackendBytes: 25, ModelBytes: 206, TotalBytes: 231,
+			BackendDownloadRequired: true, ModelDownloadRequired: true,
+		},
+		events: &events,
+	}
+	service := &rootService{models: root}
+	var diagnostics bytes.Buffer
+	handled, err := service.invokeGenericInScope(
+		InvokeConfig{Context: context.Background(), Output: io.Discard, JSON: true, Diagnostics: &diagnostics},
+		scope, "model", modelinference.OperationOMNI, "hello", catalog,
+	)
+	if err != nil || !handled {
+		t.Fatalf("invokeGenericInScope = handled:%v error:%v, want handled success", handled, err)
+	}
+	if got, want := diagnostics.String(), "models asset estimate modelName=\"model\" backendBytes=25 modelBytes=206 totalBytes=231\n"; got != want {
+		t.Fatalf("asset estimate = %q, want %q", got, want)
+	}
+	if !reflect.DeepEqual(events, []string{"preflight", "invoke"}) {
+		t.Fatalf("Models effects = %#v, want preflight before invoke", events)
 	}
 }

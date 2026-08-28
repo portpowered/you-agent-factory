@@ -13186,6 +13186,21 @@
           "id": "you.models.invoke.output.json",
           "channel": "stdout",
           "format": "json"
+        },
+        "you.models.invoke.output.asset-estimate": {
+          "id": "you.models.invoke.output.asset-estimate",
+          "channel": "stderr",
+          "format": "text"
+        }
+      },
+      "errors": {
+        "you.models.invoke.error.backend-not-ready": {
+          "id": "you.models.invoke.error.backend-not-ready",
+          "code": "MODEL_BACKEND_NOT_READY"
+        },
+        "you.models.invoke.error.asset-preparation-failed": {
+          "id": "you.models.invoke.error.asset-preparation-failed",
+          "code": "MODEL_ASSET_PREPARATION_FAILED"
         }
       },
       "exits": {
@@ -13767,6 +13782,17 @@
           "id": "you.models.pull.output.json",
           "channel": "stdout",
           "format": "json"
+        },
+        "you.models.pull.output.asset-estimate": {
+          "id": "you.models.pull.output.asset-estimate",
+          "channel": "stderr",
+          "format": "text"
+        }
+      },
+      "errors": {
+        "you.models.pull.error.failed": {
+          "id": "you.models.pull.error.failed",
+          "code": "CLI_MODEL_PULL_FAILED"
         }
       },
       "exits": {

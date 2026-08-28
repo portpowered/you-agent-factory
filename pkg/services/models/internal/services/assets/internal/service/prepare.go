@@ -689,9 +689,15 @@ func (s *service) doWithRetry(request *http.Request) (*http.Response, error) {
 		}
 		response, err := s.client.Do(request.Clone(request.Context()))
 		if err == nil {
+			if response == nil {
+				return nil, fmt.Errorf("empty asset source response")
+			}
+			if response.Body == nil {
+				response.Body = http.NoBody
+			}
 			if shouldRetryResponse(response) && attempt < assetSourceMaxAttempts {
 				lastErr = fmt.Errorf("unexpected status %d", response.StatusCode)
-				response.Body.Close()
+				_ = response.Body.Close()
 				continue
 			}
 			return response, nil

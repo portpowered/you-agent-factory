@@ -63,6 +63,7 @@ const (
 	InvocationFailureClassConfiguration         InvocationFailureClass = "CONFIGURATION"
 	InvocationFailureClassOfflineCache          InvocationFailureClass = "OFFLINE_CACHE"
 	InvocationFailureClassArtifact              InvocationFailureClass = "ARTIFACT"
+	InvocationFailureClassAssetPreparation      InvocationFailureClass = "ASSET_PREPARATION"
 	InvocationFailureClassBackendReadiness      InvocationFailureClass = "BACKEND_READINESS"
 	InvocationFailureClassBackendProtocol       InvocationFailureClass = "BACKEND_PROTOCOL"
 	InvocationFailureClassCancellation          InvocationFailureClass = "CANCELLATION"
@@ -83,6 +84,7 @@ const (
 	InvocationFailureConfiguration         = InvocationFailureClassConfiguration
 	InvocationFailureOfflineCache          = InvocationFailureClassOfflineCache
 	InvocationFailureArtifact              = InvocationFailureClassArtifact
+	InvocationFailureAssetPreparation      = InvocationFailureClassAssetPreparation
 	InvocationFailureBackendReadiness      = InvocationFailureClassBackendReadiness
 	InvocationFailureBackendProtocol       = InvocationFailureClassBackendProtocol
 	InvocationFailureCancellation          = InvocationFailureClassCancellation

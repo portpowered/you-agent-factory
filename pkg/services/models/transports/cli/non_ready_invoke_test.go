@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -237,5 +238,39 @@ func readinessFailureClass(readiness factoryapi.ManagedRuntimeReadinessState) ma
 		return managedruntime.InferenceFailureClassLoadingModel
 	default:
 		return managedruntime.InferenceFailureClassRuntimeFailure
+	}
+}
+
+func TestInvokeGenericMapsBackendPreflightFailure(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (managedruntime.RuntimeScopeRef{}).Parse("asset-estimate:failure")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	catalog := managedruntime.Detail{Summary: managedruntime.Summary{
+		Operations: []managedruntime.Operation{{
+			Name:    managedruntime.OperationOMNI,
+			Outputs: []managedruntime.OperationSlot{{Name: "text", Modality: managedruntime.ModalityText}},
+		}},
+	}}
+	root := &genericCLIModelsService{
+		catalog:      catalog,
+		preflightErr: fmt.Errorf("controlled HEAD failed: %w", managedruntime.ErrAssetBackendNotReady),
+	}
+	service := &rootService{models: root}
+	handled, err := service.invokeGenericInScope(
+		InvokeConfig{Context: context.Background(), Output: io.Discard, JSON: true},
+		scope, "model", managedruntime.OperationOMNI, "hello", catalog,
+	)
+	if !handled || err == nil {
+		t.Fatalf("invokeGenericInScope = handled:%v error:%v, want typed failure", handled, err)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorMessage() string
+	}
+	if !errors.As(err, &coded) || coded.CLIErrorCode() != "MODEL_BACKEND_NOT_READY" || coded.CLIErrorMessage() != "managed model backend is unavailable" {
+		t.Fatalf("mapped preflight error = %v, want backend readiness diagnostic", err)
 	}
 }

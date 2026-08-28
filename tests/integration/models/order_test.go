@@ -7,10 +7,9 @@ import (
 	"testing"
 )
 
-// TestStory001CharacterizesAssetOrderAndBodyBytes records the current
-// delivered joined-invoke acquisition sequence. It deliberately preserves the
-// pre-fix order as an executable baseline for the next story to replace.
-func TestStory001CharacterizesAssetOrderAndBodyBytes(t *testing.T) {
+// TestStory002ProvesAssetPreflightAndBodyOrder records the delivered
+// joined-invoke acquisition sequence after the cost-safe acquisition fix.
+func TestStory002ProvesAssetPreflightAndBodyOrder(t *testing.T) {
 	origin := newCharacterizationOrigin(t, characterizationOriginOptions{})
 	binaryPath := buildStory001Binary(t)
 	workDir := t.TempDir()
@@ -31,7 +30,7 @@ func TestStory001CharacterizesAssetOrderAndBodyBytes(t *testing.T) {
 	if len(assets) < 3 {
 		t.Fatalf("controlled asset exchange count = %d, want manifest, model, and backend observations: %s", len(assets), compactJSON(assets))
 	}
-	modelIndex, backendIndex := -1, -1
+	modelIndex, backendHeadIndex, backendContentIndex := -1, -1, -1
 	modelBytes, backendBytes := int64(0), int64(0)
 	for index, exchange := range assets {
 		if exchange.StatusCode != http.StatusOK {
@@ -44,27 +43,33 @@ func TestStory001CharacterizesAssetOrderAndBodyBytes(t *testing.T) {
 			}
 			modelBytes += exchange.ResponseBodyBytes
 		case strings.HasSuffix(exchange.Path, "/"+story001BackendAsset):
-			if backendIndex < 0 {
-				backendIndex = index
+			if exchange.Method == http.MethodHead && backendHeadIndex < 0 {
+				backendHeadIndex = index
 			}
-			backendBytes += exchange.ResponseBodyBytes
+			if exchange.Method == http.MethodGet && backendContentIndex < 0 {
+				backendContentIndex = index
+				backendBytes += exchange.ResponseBodyBytes
+			}
 		}
 	}
-	if modelIndex < 0 || backendIndex < 0 {
+	if modelIndex < 0 || backendHeadIndex < 0 || backendContentIndex < 0 {
 		t.Fatalf("controlled asset ledger omitted model or backend content: %s", compactJSON(assets))
 	}
-	if modelIndex > backendIndex {
-		t.Fatalf("current baseline order changed unexpectedly: modelIndex=%d backendIndex=%d ledger=%s", modelIndex, backendIndex, compactJSON(assets))
+	if backendHeadIndex > modelIndex || backendContentIndex > modelIndex {
+		t.Fatalf("backend preflight/content followed model content: head=%d backend=%d model=%d ledger=%s", backendHeadIndex, backendContentIndex, modelIndex, compactJSON(assets))
 	}
 	if modelBytes <= 0 || backendBytes <= 0 {
 		t.Fatalf("controlled response body bytes model=%d backend=%d, want both positive: %s", modelBytes, backendBytes, compactJSON(assets))
+	}
+	if !strings.Contains(string(result.stderr), `models asset estimate modelName="embed" backendBytes=25 modelBytes=23 totalBytes=48`) {
+		t.Fatalf("asset estimate stderr = %q, want exact missing-byte estimate", result.stderr)
 	}
 	explicitCache := inspectStory001Cache(t, cacheDir)
 	homeCache := inspectStory001Cache(t, homeDir)
 	workSnapshot := inspectStory001Cache(t, workDir)
 
 	t.Logf(
-		"STORY-001-EVIDENCE acceptance=asset-order probe=delivered joined invoke command=%q assetLedger=%s modelResponseBytes=%d backendResponseBytes=%d streams=%s explicitCache=%s homeCache=%s workTree=%s",
+		"STORY-002-EVIDENCE acceptance=asset-preflight-and-order probe=delivered joined invoke command=%q assetLedger=%s modelResponseBytes=%d backendResponseBytes=%d streams=%s explicitCache=%s homeCache=%s workTree=%s",
 		"you models invoke embed --input text=<redacted>", compactJSON(assets), modelBytes, backendBytes, summarizeProcess(result), compactJSON(explicitCache), compactJSON(homeCache), compactJSON(workSnapshot),
 	)
 	if strings.HasSuffix(origin.URL(), ":7438") || strings.Contains(compactJSON(origin.exchangesSnapshot()), ":7438") {

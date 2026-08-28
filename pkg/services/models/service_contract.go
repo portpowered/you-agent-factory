@@ -40,6 +40,9 @@ type Service interface {
 	// PullModelForScope preserves the established pull result contract while
 	// requiring the caller to identify the opened runtime scope explicitly.
 	PullModelForScope(context.Context, PullModelRequest) (PullResult, error)
+	// PreflightModelAssets resolves cache-aware download requirements and byte
+	// estimates without downloading asset content.
+	PreflightModelAssets(context.Context, PrepareModelAssetsRequest) (PreflightModelAssetsResult, error)
 	// PrepareModelAssets makes configured assets available for one scoped model
 	// and distinguishes already-available assets from newly prepared assets.
 	// Missing/unsupported sources, interrupted preparation, integrity failure,

@@ -580,10 +580,14 @@ func (o *Root) prepareJoinedInvocation(
 	if err != nil {
 		return plan, "resolve_backend", err
 	}
-	if _, err := o.PrepareModelAssets(ctx, joinedAssetPreparationRequestWithBackend(
+	assetRequest := joinedAssetPreparationRequestWithBackend(
 		request, plan.modelName, resolved, backendArtifact,
-	)); err != nil {
-		return plan, "acquire_assets", err
+	)
+	if _, err := o.PreflightModelAssets(ctx, assetRequest); err != nil {
+		return plan, "preflight_assets", joinedInvocationAssetError(request, err)
+	}
+	if _, err := o.PrepareModelAssets(ctx, assetRequest); err != nil {
+		return plan, "acquire_assets", joinedInvocationAssetError(request, err)
 	}
 	if _, err := o.EnsureModelHost(ctx, models.EnsureModelHostRequest{
 		Scope: request.Scope,

@@ -45,6 +45,14 @@ var (
 	// ErrAssetOffline reports that an offline preparation request could not
 	// satisfy every requested artifact from the ordered local caches.
 	ErrAssetOffline = errors.New("model assets are missing while offline")
+	// ErrAssetBackendNotReady reports that a backend artifact could not be
+	// proven reachable during the zero-body preflight. It is deliberately
+	// distinct from a model-source failure so invocation transports can publish
+	// the stable backend-not-ready classification.
+	ErrAssetBackendNotReady = errors.New("model backend is not ready")
+	// ErrAssetEstimateOverflow reports that the requested asset sizes cannot be
+	// represented by the Models byte-total contract without wrapping int64.
+	ErrAssetEstimateOverflow = errors.New("model asset estimate exceeds int64")
 	// ErrModelCacheNotFound reports that the selected model has no managed
 	// cache revision that can be removed.
 	ErrModelCacheNotFound = errors.New("managed model cache not found")
@@ -557,6 +565,19 @@ func validateAssetRequirements(requirements []AssetRequirement) error {
 type PrepareModelAssetsResult struct {
 	Asset   AssetSnapshot
 	Outcome AssetPreparationOutcome
+}
+
+// PreflightModelAssetsResult reports cache-aware download requirements without
+// downloading artifact content. Metadata and zero-body reachability checks may
+// be performed by the implementation; the byte totals describe only assets
+// that are still required after the cache inspection.
+type PreflightModelAssetsResult struct {
+	ModelName               string
+	BackendBytes            int64
+	ModelBytes              int64
+	TotalBytes              int64
+	BackendDownloadRequired bool
+	ModelDownloadRequired   bool
 }
 
 // InspectModelAssetsRequest asks Models to inspect one scoped model's assets.

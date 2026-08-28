@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -78,6 +80,17 @@ func (service *rootService) Pull(cfg PullConfig) error {
 		return service.pullRemote(cfg)
 	}
 	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+		// Preserve the established catalog boundary before resolving generic
+		// asset sources. A built-in definition can be resolvable without being
+		// present in the selected Factory's customer-facing model catalog.
+		if _, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
+			Scope: scope, Name: modelName,
+		}); err != nil && errors.Is(err, modelinference.ErrNotFound) {
+			return mapModelsRootError(err)
+		}
+		if err := service.emitAssetEstimate(cfg.Context, scope, modelName, cfg.Diagnostics); err != nil {
+			return mapModelsRootError(assetPreflightPullError(modelName, err))
+		}
 		result, err := service.models.PullModelForScope(cfg.Context, modelinference.PullModelRequest{
 			Scope: scope, Name: modelName,
 		})
@@ -95,6 +108,73 @@ func (service *rootService) Pull(cfg PullConfig) error {
 		}
 		return renderPull(response, cfg.Output)
 	})
+}
+
+func assetPreflightPullError(modelName string, err error) error {
+	if err == nil {
+		return err
+	}
+	stage := pullsupport.PullStageForError(err)
+	if stage == "" {
+		stage = modelinference.PullStageAssembly
+	}
+	outcome := "ASSET_PREPARATION_FAILED"
+	if errors.Is(err, context.Canceled) || errors.Is(err, modelinference.ErrAssetCancelled) {
+		outcome = "CANCELLED"
+	} else if errors.Is(err, context.DeadlineExceeded) {
+		outcome = "TIMED_OUT"
+	}
+	diagnostics := pullsupport.PullDiagnosticsFromError(err).WithDefaults(
+		modelName, "", "", "", "preflight model assets",
+	)
+	return &modelinference.PullError{
+		Result: modelinference.PullResult{
+			ModelName:          strings.TrimSpace(modelName),
+			Outcome:            "FAILED",
+			ManagedPullOutcome: outcome,
+			ReadinessState:     "FAILED",
+			LifecycleState:     "NOT_INSTALLED",
+			FailureStage:       stage,
+			PullDiagnostics:    diagnostics,
+		},
+		Cause: err,
+	}
+}
+
+func (service *rootService) emitAssetEstimate(
+	ctx context.Context,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	diagnostics io.Writer,
+) error {
+	result, err := service.models.PreflightModelAssets(ctx, modelinference.PrepareModelAssetsRequest{
+		Scope: scope,
+		Name:  modelName,
+	})
+	if err != nil {
+		// Lightweight embedded Models roots may implement the older operation
+		// set. They remain usable; a real root owns the additive preflight.
+		if errors.Is(err, modelinference.ErrUnsupportedOperation) {
+			return nil
+		}
+		return err
+	}
+	if !result.BackendDownloadRequired && !result.ModelDownloadRequired {
+		return nil
+	}
+	name := strings.TrimSpace(result.ModelName)
+	if name == "" {
+		name = strings.TrimSpace(modelName)
+	}
+	if diagnostics == nil {
+		return nil
+	}
+	_, err = fmt.Fprintf(
+		diagnostics,
+		"models asset estimate modelName=%q backendBytes=%d modelBytes=%d totalBytes=%d\n",
+		name, result.BackendBytes, result.ModelBytes, result.TotalBytes,
+	)
+	return err
 }
 
 func (service *rootService) Remove(cfg RemoveConfig) error {

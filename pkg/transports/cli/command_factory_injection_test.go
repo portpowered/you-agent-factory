@@ -769,6 +769,10 @@ func (compositionModelsRootForFactoryTest) ResolveModelReference(context.Context
 	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (compositionModelsRootForFactoryTest) PreflightModelAssets(context.Context, modelinference.PrepareModelAssetsRequest) (modelinference.PreflightModelAssetsResult, error) {
+	return modelinference.PreflightModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (compositionModelsRootForFactoryTest) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
 }

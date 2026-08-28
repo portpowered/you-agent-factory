@@ -20,6 +20,10 @@ type ConstructionOptions struct {
 // reports detached cache facts. Pulling, verification, and publication remain
 // private implementation details.
 type Service interface {
+	PreflightModelAssets(
+		context.Context,
+		models.PrepareModelAssetsRequest,
+	) (models.PreflightModelAssetsResult, error)
 	PrepareModelAssets(
 		context.Context,
 		models.PrepareModelAssetsRequest,

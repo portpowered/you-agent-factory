@@ -142,6 +142,13 @@ func newSealedPeerService() *sealedPeerService {
 	}
 }
 
+func (*sealedPeerService) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (s *sealedPeerService) ListCatalog(
 	_ context.Context,
 	request models.ListModelsRequest,

@@ -505,6 +505,13 @@ func (inferenceRecordingAssetsService) PrepareModelAssets(
 	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
+func (inferenceRecordingAssetsService) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (inferenceRecordingAssetsService) InspectModelAssets(
 	context.Context,
 	models.InspectModelAssetsRequest,
@@ -545,7 +552,7 @@ func TestRootInvokeModelJoinsStagesAndDoesNotDoubleRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeModel: %v", err)
 	}
-	if got, want := events, []string{"resolve", "assets", "host", "lease", "invoke", "primitive-release"}; !reflect.DeepEqual(got, want) {
+	if got, want := events, []string{"resolve", "preflight", "assets", "host", "lease", "invoke", "primitive-release"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("stage events = %#v, want %#v", got, want)
 	}
 	if result.Status != models.ModelInvocationStatusCompleted ||
@@ -593,7 +600,7 @@ func TestRootInvokeModelReleasesAndClearsPartialOutputOnInvocationFailure(t *tes
 	if result.LeaseDisposition != models.InvocationLeaseReleased {
 		t.Fatalf("failed lease disposition = %q, want RELEASED", result.LeaseDisposition)
 	}
-	if got, want := events, []string{"resolve", "assets", "host", "lease", "invoke", "release"}; !reflect.DeepEqual(got, want) {
+	if got, want := events, []string{"resolve", "preflight", "assets", "host", "lease", "invoke", "release"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("failure stage events = %#v, want %#v", got, want)
 	}
 }
@@ -812,6 +819,14 @@ func (scopes *joinedRecordingScopes) Close(ref runtimescopes.Reference) error {
 
 type joinedAssetsService struct {
 	events *[]string
+}
+
+func (assets *joinedAssetsService) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	*assets.events = append(*assets.events, "preflight")
+	return models.PreflightModelAssetsResult{}, nil
 }
 
 func (assets *joinedAssetsService) PrepareModelAssets(

@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -190,4 +193,84 @@ func normalizeTestInvocationConfig(cfg *testModelRuntimeSelections) *testModelRu
 	normalized.RuntimeMode = interfaces.RuntimeModeService
 	normalized.WorkFile = ""
 	return &normalized
+}
+
+func TestPullEmitsMissingAssetEstimateBeforePull(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("asset-estimate:pull")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	events := []string{}
+	root := &pullCLIModelsService{
+		catalog: modelinference.Detail{Summary: modelinference.Summary{Name: "model"}},
+		preflightResult: modelinference.PreflightModelAssetsResult{
+			ModelName: "model", BackendBytes: 25, ModelBytes: 206, TotalBytes: 231,
+			BackendDownloadRequired: true, ModelDownloadRequired: true,
+		},
+		pullResult: modelinference.PullResult{ModelName: "model", Outcome: "PULLED"},
+		events:     &events,
+	}
+	service := NewService(Config{
+		Models: root,
+		OpenCatalogScope: func(context.Context) (InvokeRuntimeScope, error) {
+			return InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+	var diagnostics bytes.Buffer
+	var output bytes.Buffer
+	if err := service.Pull(PullConfig{
+		Context: context.Background(), ModelName: "model", JSON: true,
+		Output: &output, Diagnostics: &diagnostics,
+	}); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	if got, want := diagnostics.String(), "models asset estimate modelName=\"model\" backendBytes=25 modelBytes=206 totalBytes=231\n"; got != want {
+		t.Fatalf("asset estimate = %q, want %q", got, want)
+	}
+	if !reflect.DeepEqual(events, []string{"preflight", "pull"}) {
+		t.Fatalf("Models effects = %#v, want preflight before pull", events)
+	}
+	var response map[string]any
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("pull JSON = %q: %v", output.String(), err)
+	}
+}
+
+type pullCLIModelsService struct {
+	modelinference.Service
+	catalog         modelinference.Detail
+	preflightResult modelinference.PreflightModelAssetsResult
+	preflightErr    error
+	pullResult      modelinference.PullResult
+	pullErr         error
+	events          *[]string
+}
+
+func (service *pullCLIModelsService) GetCatalogModel(
+	context.Context,
+	modelinference.GetModelRequest,
+) (modelinference.GetModelResult, error) {
+	return modelinference.GetModelResult{Model: service.catalog.Clone()}, nil
+}
+
+func (service *pullCLIModelsService) PreflightModelAssets(
+	context.Context,
+	modelinference.PrepareModelAssetsRequest,
+) (modelinference.PreflightModelAssetsResult, error) {
+	if service.events != nil {
+		*service.events = append(*service.events, "preflight")
+	}
+	return service.preflightResult, service.preflightErr
+}
+
+func (service *pullCLIModelsService) PullModelForScope(
+	context.Context,
+	modelinference.PullModelRequest,
+) (modelinference.PullResult, error) {
+	if service.events != nil {
+		*service.events = append(*service.events, "pull")
+	}
+	return service.pullResult, service.pullErr
 }

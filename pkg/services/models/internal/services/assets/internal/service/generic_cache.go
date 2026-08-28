@@ -104,7 +104,7 @@ func (s *service) acquireGenericCacheOnce(
 			Missing: missingArtifactNames(missing),
 		}
 	}
-	if source.kind == genericSourceHF {
+	if source.kind == genericSourceHF && genericArtifactsNeedManifest(artifacts) {
 		manifest, err := s.fetchGenericManifest(ctx, source)
 		if err != nil {
 			return cacheResultFromPaths(artifactKind, artifacts, cached), err
