@@ -456,3 +456,312 @@ three rows. No output-package code or shared support was changed; the
 package-level result is retained as the primary characterization result and
 the aggregate failure is recorded as compute/scheduling contamination rather
 than a c07 Transport characterization regression.
+
+## Story 003 — Runtime API and Orchestration characterization
+
+### Scope and disposition
+
+Story `functional-test-optimization-c07-cleanup-transport-runtime-orchestration-003`
+is the pre-repair census for `tests/functional/runtime_api/**` and
+`tests/functional/orchestration/**`. It records the package, top-level test,
+named nested scenario, process, session, stream, route, listener, temporary
+root, and discovery-ledger boundaries without changing production code, shared
+support, public behavior, or the internal orchestration engine. The repair of
+the confirmed discovery gap and any additional package-local cleanup probes is
+owned by story 004.
+
+The characterization ran from commit `0e0748a33023268570f13f9c2e4dbf12e8e25a0e`
+on Windows `amd64` with Go `1.25.0`. It found no confirmed resource residue in
+the Runtime API, JavaScript, or full Petri execution paths. It retained one
+package-local discovery failure: Petri dispatch lists all eight top-level tests
+but exits 1 because its empty runtime ledger is incorrectly treated as a full
+execution. This is a failing pre-repair witness, not a repair in this story.
+
+### Discovery and execution evidence
+
+The exact package census command was:
+
+```text
+go list ./tests/functional/runtime_api/... ./tests/functional/orchestration/...
+```
+
+It resolved these eleven packages. The per-package discovery command was
+`go test <package> -list '^Test'`; all packages exited 0 except the retained
+Petri dispatch witness described below.
+
+| Package | Top-level tests | Runtime `=== RUN` rows | Nested rows | `-list` |
+| --- | ---: | ---: | ---: | --- |
+| `runtime_api` | 25 | 43 | 18 | 0 |
+| `runtime_api/factory_transformation` | 39 | 55 | 16 | 0 |
+| `orchestration/javascript/composition` | 14 | 14 | 0 | 0 |
+| `orchestration/javascript/contracts` | 8 | 8 | 0 | 0 |
+| `orchestration/javascript/durability` | 3 | 3 | 0 | 0 |
+| `orchestration/javascript/loading` | 11 | 11 | 0 | 0 |
+| `orchestration/javascript/policy` | 2 | 2 | 0 | 0 |
+| `orchestration/javascript/workers` | 1 | 27 | 26 | 0 |
+| `orchestration/petri/cross` | 2 | 2 | 0 | 0 |
+| `orchestration/petri/dispatch` | 8 | 50 | 42 | 1 (witness) |
+| `orchestration/petri/guards` | 4 | 4 | 0 | 0 |
+| **Total** | **117** | **219** | **102** | **10 pass, 1 witness** |
+
+The complete package execution was:
+
+```text
+foreach package in (go list ./tests/functional/runtime_api/... ./tests/functional/orchestration/...)
+    go test $package -count=1 -timeout=10m -v
+```
+
+All eleven package commands exited 0. The run retained all 117 top-level
+identities, produced 219 runtime rows including 102 named nested rows, and
+reported no test failures or skips. The full Petri dispatch run emitted 44
+scenario rows. Its matrix contained one isolated executor-panic process and
+one shared package process; each process started and stopped once, and every
+scenario recorded both session-opened and session-closed.
+
+The exact pre-repair Petri discovery witness was:
+
+```text
+go test ./tests/functional/orchestration/petri/dispatch -list '^Test'
+```
+
+The command listed all eight dispatch tests, emitted
+`PETRI_DISPATCH_RUNTIME_MATRIX {"processes":[],"scenarios":[]}`, then exited
+1 with:
+
+```text
+emit Petri dispatch runtime matrix: full Petri dispatch run recorded 0 scenarios, want 44
+```
+
+No process or session was started in list mode. The package's `TestMain`
+emits the ledger for discovery, while `isFullPetriDispatchRun` only inspects
+the empty `test.run` value and therefore applies the full-execution cardinality
+assertion to an empty discovery ledger. Story 004 owns the discovery-safe
+classification; full execution must continue to require all 44 rows.
+
+The focused characterization selectors covered the public Runtime API,
+factory transformation, JavaScript composition/contracts/durability/loading/
+policy/shared-worker paths, and Petri cross/guards/dispatch paths for
+`CASE-R01` through `CASE-R10` and `CASE-O01` through `CASE-O09`. Every focused
+command used `-count=1 -timeout=10m`; every selected command exited 0 and kept
+its existing public assertions. No focused selector was used as a substitute
+for the complete package census.
+
+One additional discovery observation was recorded for
+`runtime_api/factory_transformation`: its package `TestMain` starts the shared
+runtime fixture before `m.Run`, so `go test ... -list '^Test'` also starts and
+tears down one process, listener, Factory root, and operator home. The output
+included `FULL-003: controlled worker edge calls provider=0 script=0` and
+`CLEAN-004: shared process, listener, Factory root, and operator home cleanup
+passed`. This is measured setup topology rather than a confirmed leak; the
+fixture is closed. Story 004 may optimize it only within its package-owned
+cleanup scope.
+
+### Resource and ownership census
+
+| Surface | Opened or tracked resources | Characterized close/cleanup observation |
+| --- | --- | --- |
+| Runtime API shared fixture | One production root process, one real API listener, one isolated Factory root, one isolated operator home, explicit Factory Sessions, event streams, and provider/script/command routes | Session termination and deletion are registered before opening; stream closure is tracked with `sync.Once`; process execution is joined before `Process.Close`; listener refusal, route counts, ledger state, temp-root removal, and log absence are checked. |
+| Runtime API factory transformation | One shared process/listener plus per-test named/default session and document/home roots | `TestMain` teardown cancels and joins execution, closes the process, probes listener refusal, removes Factory/home roots, and reports `CLEAN-004`; session closes are once-only and public. |
+| JavaScript per-test fixtures | Functional API servers or root processes, real listeners where the scenario crosses HTTP, temporary Factory roots, and controlled command/provider/script edges | `t.Cleanup` closes servers/processes and removes `t.TempDir` roots; public result/event/session assertions remain in place. |
+| JavaScript shared worker | One root process, one real API listener, one isolated root/home, selector routes, and tracked sessions | Routes unregister once after public session termination; the cleanup assertion checks route count zero, exactly one API start, every tracked session closed, and listener unreachability after process close. |
+| Petri dispatch shared fixture | One lazy shared process, one real API listener, isolated root/home, path-keyed dispatch routes, session open/close records, and bounded concurrency slots | Every scenario registers a route before opening a public session and schedules once-only close/unregister; full TestMain closes command/process, records process stop, removes the root, and validates all opened sessions closed. The matrix does not yet expose active route count or post-removal root stat; those are repair-scope gaps for story 004. |
+| Petri isolated panic path | One separately composed process for the panic executor case | Panic is routed to a failed terminal and the isolated process is recorded as started and stopped without contaminating the shared process. |
+
+No shared-support-owned defect was found. `tests/functional/internal/support/**`
+was read for ownership and used as-is; no support file changed. The only
+confirmed failing witness is the Petri dispatch discovery ledger. The eager
+factory-transformation discovery setup and the Petri matrix's missing active
+route/root observations are recorded for repair planning, not claimed as
+already repaired.
+
+### Characterization case reconciliation
+
+| Case family | Characterized public/runtime paths | Result before repair |
+| --- | --- | --- |
+| `CASE-R01` | Runtime API cleanup smoke, event replay/session projection, named invocation, structured invocation, and factory transformation readback | Existing public state and terminal assertions pass; fixture close/listener/temp checks pass. |
+| `CASE-R02` | Canonical-only config rejection, policy rejection, whitespace/unsupported-operation rejection, invalid document targets and stale save versions | Typed/public rejection assertions pass with no observed dispatch residue. |
+| `CASE-R03` | Functional server overrides, service-mode startup, model transport configuration, and factory transformation startup | Startup/override assertions pass; owned fixture teardown closes process/listener and isolated roots. |
+| `CASE-R04` | API event/replay streams, service-mode idle lifecycle, observability, and shared fixture shutdown | Stream/session/runtime shutdown assertions pass; no package hang or listener residue observed. |
+| `CASE-R05` | Canceled primary-result resolution and runtime invocation boundaries | Cancellation assertions pass; no later success or surviving tracked stream was observed. |
+| `CASE-R06` | Provider-error isolation and multi-lane runtime work | Failure remains isolated and public status/event facts pass. |
+| `CASE-R07` | Multiple runtime Work items, JS shared-worker concurrency, Petri capacity/serial concurrency, and concurrent result correlation | Identity/correlation assertions pass; bounded shared fixtures close their tracked resources. |
+| `CASE-R08` | Canonical event replay/projection and JavaScript durability/resume | Replay/resume assertions pass without reviving the predecessor fixture. |
+| `CASE-R09` | Live/replay event timeline, response/event ordering, and named stage/parallel ordering | Ordered public assertions pass; stream ownership remains explicit. |
+| `CASE-R10` | Duplicate document targets, repeated cleanup paths, empty JS stages/collections, duplicate-dispatch cases, and Petri discovery | Boundary assertions pass except the pre-repair Petri `-list` ledger witness, which exits 1 before repair. |
+| `CASE-O01` | JavaScript success, Petri success, shared-worker success, and multi-stage pipelines | Results/events/dispatch assertions pass; session/route/process cleanup is observed. |
+| `CASE-O02` | Missing imports/inputs, syntax/type diagnostics, denied policy operations, invalid permissions | Authored/public diagnostics and no-dispatch assertions pass. |
+| `CASE-O03` | Petri executor panic, worker/provider/command failures, and failure-terminal routing | Failed-terminal/public failure assertions pass; isolated panic process closes. |
+| `CASE-O04` | Interrupted JavaScript durability/resume and failure boundaries | No false success or repeated completed child observed; cleanup closes. |
+| `CASE-O05` | JavaScript partial failure and Petri failure routing | Documented partial/failure semantics pass; later unauthorized dispatch is absent. |
+| `CASE-O06` | JavaScript parallel composition and Petri concurrent dispatch | Correlation and declared ordering pass under bounded concurrency. |
+| `CASE-O07` | JavaScript checkpoint persistence and interrupted-session resume | Completed children are not repeated and final result restores. |
+| `CASE-O08` | Named JavaScript stages, parallel result ordering, and Petri terminal routing | Declared order and one terminal outcome pass. |
+| `CASE-O09` | Empty stage/collection, duplicate dispatch, repeated close, and Petri `go test -list` | Empty/duplicate/cleanup assertions pass; discovery retains the one failing ledger witness. |
+
+### Complete executable identity census
+
+The 117 top-level identities below are the planning-baseline census. Nested
+identities are recorded after it so a later repair can prove parity without
+silently removing, skipping, or weakening a scenario.
+
+#### Runtime API (25)
+
+```text
+TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces
+TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline
+TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride
+TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact
+TestNamedJavaScriptFactoryRunResolvesInvocationInputThroughCLI
+TestJavaScriptSyncExecutionResolvesStructuredInvocationInput
+TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork
+TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned
+TestSubmitMultipleRuntimeWorkItemsCompletes
+TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
+TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases
+TestFunctionalAPIServer_UsesProductionRuntimeFileLoggingDefault
+TestFunctionalAPIServer_RuntimeLogDirectoryIsAProcessInput
+TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner
+TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled
+TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions
+TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature
+TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline
+TestWorkRootPolicySlicesRejectUnsupportedOperations
+TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext
+TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText
+TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs
+TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess
+TestWorkServiceApplicationSlicesExerciseFunctionalLane
+TestDashboard_EngineStateSnapshot_EndToEnd
+```
+
+#### Runtime API factory transformation (39)
+
+```text
+TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent
+TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip
+TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion
+TestCurrentFactoryPUT_RejectsInvalidDocTargets
+TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths
+TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid
+TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryChange
+TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution
+TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetadata
+TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize
+TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode
+TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode
+TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath
+TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize
+TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithOneWaypoint
+TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithMultipleWaypoints
+TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize
+TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles
+TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent
+TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave
+TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacement
+TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument
+TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns
+TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated
+TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets
+TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets
+TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFactory
+TestCurrentFactoryPUT_RequiresAdvancedSaveVersion
+TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout
+TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughActivationAndReadback
+TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout
+TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface
+TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract
+TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget
+TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets
+TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent
+TestSessionFactoryPUT_UpsertCreateAllowsOmittedVersion
+TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion
+TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists
+```
+
+#### JavaScript and Petri top-level identities (53)
+
+```text
+TestJavaScriptParallelDispatchesChildrenConcurrently
+TestJavaScriptParallelPreservesDeclaredResultOrdering
+TestJavaScriptParallelPartialFailureUsesDocumentedPolicy
+TestJavaScriptNamedStagesExposeOrderedProgress
+TestJavaScriptEmptyStageProducesDocumentedResult
+TestJavaScriptPipelinePassesStageOutputToNextStage
+TestJavaScriptPipelineStopsAfterStageFailure
+TestJavaScriptForEachDispatchesEveryInputOnce
+TestJavaScriptForEachPreservesInputResultCorrelation
+TestJavaScriptForEachEmptyInputDoesNotDispatch
+TestJavaScriptAgentReturnsUnaryResult
+TestJavaScriptAgentFailureReturnsStableFailureRecord
+TestJavaScriptNestedPipelineParallelCompositionCompletes
+TestJavaScriptNestedFailureNamesChildAndStage
+TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs
+TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch
+TestJavaScriptReturnValueMapsToPrimaryInvocationResult
+TestJavaScriptStructuredArtifactsMapToPublicResult
+TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails
+TestJavaScriptChildProgressPublishesCanonicalResponseEvents
+TestJavaScriptTerminalResultFollowsFinalResponseEvent
+TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents
+TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren
+TestJavaScriptResumeRestoresCheckpointAndFinalResult
+TestJavaScriptDurabilityPersistsSnapshotsByDefault
+TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot
+TestJavaScriptFactoryMissingImportFailsActionably
+TestInlineJavaScriptFactoryRunsFromCLI
+TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline
+TestInlineJavaScriptSyntaxErrorReturnsSourceLocation
+TestTypeScriptFactoryTranspilesAndRuns
+TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic
+TestTypeScriptSourceMapReportsAuthoredLocation
+TestNamedJavaScriptFactoryRunsThroughStandardCLI
+TestNamedJavaScriptFactoryRunsThroughAPIInvocation
+TestNamedJavaScriptFactoryUsesSameFactorySessionControls
+TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic
+TestJavaScriptPolicyFailureDoesNotDispatchExternalWork
+TestJavaScriptSharedWorkerBehavior
+TestPetriAndJavaScriptSessionsShareLifecycleControls
+TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts
+TestLogicalRoundTripFactoryBoundaryProvesProductiveRejectionsSurvive
+TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute
+TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection
+TestDependsOnSecondaryJoinedInput
+TestPetriIndependentWorkDispatchesConcurrently
+TestPetriConcurrentResultsCorrelateToOriginalWork
+TestPetriConcurrentFailureDoesNotDuplicateDispatch
+TestPetriExecutorPanicRoutesToFailedTerminal
+TestPetriSharedDispatchSuccess
+TestPetriWorkerErrorReturnsFailedTerminalOutcome
+TestPetriExecutorDispatchTerminalRouting
+TestPetriInvocationInputAndOutputMapping
+```
+
+### Nested scenario census and handoff
+
+The 102 nested runtime identities are grouped by their parent top-level test:
+
+```text
+TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride/{StartFunctionalServerMockWorkersCompletes,ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime}
+TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExecutionAndRejectsRetiredAliases/{canonical_split_factory_stays_aligned_across_flatten_replay_and_execution,generated_factory_json_rejects_retired_worker_provider_alias,generated_factory_json_rejects_retired_workstation_resource_usage_alias,split_worker_frontmatter_rejects_retired_model_provider_alias,split_workstation_frontmatter_rejects_retired_runtime_type_alias,split_workstation_frontmatter_rejects_retired_cron_trigger_at_start_alias}
+TestWorkRootPolicySlicesRejectUnsupportedOperations/{policy_admission,policy_content_staging,materialization_admission_prep,materialization_state_access,materialization_content_staging,materialization_invocation_policy,admission_materialization,admission_invocation_input,admission_primary_result,admission_state_access}
+TestCurrentFactoryPUT_RejectsInvalidDocTargets/{outside_docs_root,non_canonical_path,escaping_path}
+TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated/{alpha,beta}
+TestCurrentFactoryPUT_RequiresAdvancedSaveVersion/{lower_logical_lower_physical_fails,same_logical_equal_physical_fails,lower_logical_greater_physical_fails,same_logical_greater_physical_fails,missing_version_fails,missing_logical_fails,missing_physical_fails,greater_logical_and_physical_passes,listener_cleanup_probe_classification}
+TestCurrentFactoryPUT_RequiresAdvancedSaveVersion/listener_cleanup_probe_classification/{reachable_response_fails_cleanup,accepted_but_unresponsive_listener_fails_cleanup}
+TestJavaScriptSharedWorkerBehavior/{spine/permission-matrix-cli-success,spine/invalid-permission-pre-dispatch-failure,spine/reverse-order,permissions/command-shaping,permissions/command-shaping/permissions-omitted,permissions/command-shaping/permissions-default,permissions/command-shaping/permissions-skip,permissions/disallowed,antigravity/model-embedded-effort,antigravity/model-embedded-effort/executorProvider=,antigravity/model-embedded-effort/executorProvider=SCRIPT_WRAP,antigravity/typed-rejection,providers/live-command-edge,providers/permission-flags,providers/permission-flags/permissions_default_dynamic,providers/permission-flags/permissions_skip_dynamic,providers/permission-flags/permissions_default_static,providers/permission-flags/permissions_skip_static,providers/permission-flags/neither,providers/invalid-permissions,providers/invalid-permissions/invalid-enum,providers/invalid-permissions/invalid-type,providers/distinct-provider-model,mock-workers/partial-passthrough,overrides/unknown-provider,isolation/concurrent-success-failure}
+TestPetriIndependentWorkDispatchesConcurrently/{capacity_limited_concurrency_completes_all_work,serial_concurrency_limit_completes_all_work}
+TestPetriConcurrentResultsCorrelateToOriginalWork/{single_seed_correlates_to_terminal_work,two_concurrent_seeds_each_reach_terminal_work,multi_seed_completions_remain_distinct,concurrent_execution_pool_keeps_distinct_work_identities}
+TestPetriSharedDispatchSuccess/{simple_single_worker_pipeline_completes,preseeded_work_reaches_success_terminal,mixed_preseeded_and_late_submit_completes,archive_terminal_work_completes_without_refire,two_stage_pipeline_reaches_terminal,scaffolded_simple_pipeline_completes_one_task,ideation_happy_path_reaches_story_complete,dispatcher_workflow_single_idea_reaches_prd_complete,dispatcher_lifecycle_idea_reaches_archived_terminal,ideation_rejection_loop_reaches_story_complete,idea_plan_execute_review_reaches_task_complete,idea_to_prd_multiple_ideas_each_reach_terminal,config_driven_happy_path_two_stage_completes,noop_pipeline_completes_without_provider,service_simple_multiple_work_items_complete,scaffolded_multiple_work_items_complete_independently,scaffolded_two_stage_service_pipeline_completes,factory_model_maps_to_provider_invocation,work_payload_maps_into_provider_user_message,work_name_maps_into_invocation_prompt,cross_work_type_terminal_preserves_origin_trace,dispatch_events_reference_terminal_work_identity}
+TestPetriWorkerErrorReturnsFailedTerminalOutcome/{mock_provider_error_routes_to_failed_terminal,provider_command_exit_routes_to_failed_terminal,rejected_worker_outcome_routes_to_failed_terminal,planner_failure_routes_idea_to_failed,executor_failure_routes_prd_to_failed,idea_to_prd_planner_command_failure_routes_idea_to_failed,idea_plan_execute_review_script_failure_routes_plan_to_failed,idea_plan_execute_review_planner_failure_routes_idea_to_failed,idea_plan_execute_review_processor_exhaustion_routes_task_to_failed}
+TestPetriExecutorDispatchTerminalRouting/{provider_process_failure_without_failure_arcs_routes_to_failed,provider_nonzero_exit_without_failure_arcs_routes_to_failed,provider_failure_with_failure_arcs_routes_to_failed_not_done,provider_success_leaves_work_at_authored_done_place}
+TestPetriInvocationInputAndOutputMapping/failed_terminal_preserves_origin_trace_lineage
+```
+
+The nested grouping is an identity ledger, not a source scan or meta-test. The
+discovery failure is isolated to Petri `TestMain` ledger classification; the
+full execution ledger is healthy. Story 004's smallest plan delta is to make
+discovery mode skip runtime-cardinality assertions while retaining the full
+44-row execution assertion, then add only the package-local route/root probes
+needed to make the already observed cleanup ownership explicit. Repeat, race,
+platform, clean-room, final lane, CI, and merge evidence remain for later
+stories.
