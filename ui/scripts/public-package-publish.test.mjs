@@ -1,6 +1,9 @@
+import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -30,6 +33,33 @@ function createVirtualClock() {
       return elapsedMs;
     },
   };
+}
+
+function runNodeScript(source) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", source],
+      {
+        cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (code === 0) return resolve({ stdout, stderr });
+      reject(
+        new Error(
+          `node subprocess failed with ${code === null ? `signal ${signal}` : `exit code ${code}`}\n${stderr}`,
+        ),
+      );
+    });
+  });
 }
 
 describe("public package structure", () => {
@@ -223,6 +253,39 @@ describe("registry version visibility", () => {
     expect(lookups).toBe(1);
     expect(clock.scheduledDelays).toEqual([]);
     expect(logs).toEqual([]);
+  });
+
+  test("keeps CLI success JSON on stdout while default retry logs use stderr", async () => {
+    const { stdout, stderr } = await runNodeScript(`
+      import { verifyRegistryVersion } from "./scripts/public-package-publish.mjs";
+
+      let elapsedMs = 0;
+      let lookupCount = 0;
+      const expectedShasum = "a".repeat(40);
+      await verifyRegistryVersion(
+        "@you-agent-factory/client",
+        "1.2.3",
+        expectedShasum,
+        {
+          lookup: async () => {
+            lookupCount += 1;
+            return lookupCount === 1 ? null : expectedShasum;
+          },
+          now: () => elapsedMs,
+          sleep: async (delayMs) => {
+            elapsedMs += delayMs;
+          },
+        },
+      );
+      process.stdout.write(JSON.stringify({ elapsedMs, lookupCount }) + "\\n");
+    `);
+
+    expect(stdout).toBe('{"elapsedMs":5000,"lookupCount":2}\n');
+    expect(JSON.parse(stdout)).toEqual({ elapsedMs: 5_000, lookupCount: 2 });
+    expect(stderr).toContain(
+      "Registry version not visible for @you-agent-factory/client@1.2.3; retry attempt 1, elapsed 0ms, next delay 5000ms",
+    );
+    expect(stderr).not.toContain("a".repeat(40));
   });
 });
 

@@ -283,7 +283,7 @@ export async function verifyRegistryVersion(
     lookup = registryShasum,
     sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
     now = Date.now,
-    log = console.log,
+    log = (message) => console.error(message),
     policy = registryVisibilityPolicy,
   } = {},
 ) {
