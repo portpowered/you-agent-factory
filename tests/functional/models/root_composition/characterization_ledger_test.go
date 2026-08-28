@@ -21,21 +21,28 @@ import (
 var c06Ledger = &c06CharacterizationLedger{}
 
 type c06CharacterizationLedger struct {
-	rootBuilds      atomic.Int64
-	apiServers      atomic.Int64
-	httptestServers atomic.Int64
-	localAIStarts   atomic.Int64
-	tcpListeners    atomic.Int64
-	factoryRoots    atomic.Int64
-	tempDirs        atomic.Int64
-	hostStarts      atomic.Int64
-	assetHTTPCalls  atomic.Int64
-	hostHTTPCalls   atomic.Int64
-	localHTTPCalls  atomic.Int64
+	rootBuilds          atomic.Int64
+	apiServers          atomic.Int64
+	httptestServers     atomic.Int64
+	localAIStarts       atomic.Int64
+	tcpListeners        atomic.Int64
+	factoryRoots        atomic.Int64
+	tempDirs            atomic.Int64
+	hostStarts          atomic.Int64
+	assetHTTPCalls      atomic.Int64
+	hostHTTPCalls       atomic.Int64
+	localHTTPCalls      atomic.Int64
+	sharedSessionOpens  atomic.Int64
+	sharedSessionCloses atomic.Int64
 }
 
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
+	if err := closeSharedModelsFixture(); err != nil {
+		fmt.Fprintf(os.Stderr, "C06-002 shared Models fixture cleanup failed: %v\n", err)
+		exitCode = 1
+	}
+	sharedRootBuilds, sharedAPIStarts, sharedSessionOpens, sharedSessionCloses := sharedModelsFixtureCounters()
 	fmt.Fprintf(
 		os.Stderr,
 		"CHAR-001 ledger root_builds=%d api_servers=%d httptest_servers=%d localai_starts=%d tcp_listeners=%d factory_roots=%d temp_dirs=%d host_starts=%d asset_http_calls=%d host_http_calls=%d local_http_calls=%d\n",
@@ -50,6 +57,14 @@ func TestMain(m *testing.M) {
 		c06Ledger.assetHTTPCalls.Load(),
 		c06Ledger.hostHTTPCalls.Load(),
 		c06Ledger.localHTTPCalls.Load(),
+	)
+	fmt.Fprintf(
+		os.Stderr,
+		"C06-002 shared_models_root_builds=%d shared_models_api_starts=%d shared_models_session_opens=%d shared_models_session_closes=%d\n",
+		sharedRootBuilds,
+		sharedAPIStarts,
+		sharedSessionOpens,
+		sharedSessionCloses,
 	)
 	os.Exit(exitCode)
 }
