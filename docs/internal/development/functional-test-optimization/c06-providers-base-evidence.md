@@ -150,9 +150,9 @@ stories.
 | --- | --- | --- | --- |
 | CLEAN-001 | Successful shared scenario completes -> scenario cleanup runs -> session is deleted, route removed, and temporary Factory/worktree paths are absent. | story 002 | PASS: shared topology and known-good recovery scenarios delete sessions, remove routes, and verify owned paths absent. |
 | CLEAN-002 | Provider or runtime failure completes -> cleanup runs -> session/route/path census is zero and the process remains healthy. | story 002 | PASS: invalid-template, dependency-failure, timeout, cancellation, and unknown-route scenarios clean up before the next known-good session succeeds. |
-| CLEAN-003 | Controlled or real timeout returns -> cleanup runs -> active execution is zero, child PID is gone, and session/route/path are removed. | story 003 | Not yet exercised; retained-process proof. |
+| CLEAN-003 | Controlled or real timeout returns -> cleanup runs -> active execution is zero, child PID is gone, and session/route/path are removed. | story 003 | PASS on Windows: the retained real process-tree timeout selector observed the descendant exit and failed Work; deferred server teardown completed on both timeout cases. |
 | CLEAN-004 | Context cancellation is observed -> cleanup runs -> no active execution/session/route/path remains and the next scenario succeeds. | story 002 | PASS: shared adverse-recovery cancellation subcase is followed by a known-good session; final fixture census is empty. |
-| CLEAN-005 | Helper subtest intentionally fails after acquiring process/session/route/temp resources -> parent observes non-zero child exit -> cleanup callbacks run and listener/PID/session/route/path/worktree census is empty. | story 003 | Not yet exercised; forced-assertion-failure proof. |
+| CLEAN-005 | Helper subtest intentionally fails after acquiring process/session/route/temp resources -> parent observes non-zero child exit -> cleanup callbacks run and listener/PID/session/route/path/worktree census is empty. | story 003 | PASS on Windows: the parent observed the intentional non-zero child exit and the child report proved Process.Execute completion, closed listener, one opened/deleted session, zero routes, and absent root/Factory/WorkDir/replay/runtime-log/worktree paths. |
 
 ## Before-migration process topology
 
@@ -197,6 +197,20 @@ The same command was rerun for this characterization on `go1.25.0`
 - Interpretation: the mismatch is retained unchanged and is not a
   characterization pass or a timing threshold. The local duration is
   diagnostic only; PR package CI owns the later directional timing result.
+
+The declared package command was rerun after the shared fixture and retained
+cleanup changes on `go1.25.0` `windows/amd64`:
+
+- Observed result: exit `1`, package duration `40.797s`.
+- Observed failure: the same unchanged `unknown` versus
+  `permanent_bad_request` assertion in
+  `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials`.
+- A focused rerun of that selector exited `1` in `1.898s` and reported
+  `reject-process failure reason = "unknown"`, while the assertion still
+  requires `permanent_bad_request`.
+- Interpretation: the story-003 cleanup changes did not repair, weaken, or
+  reclassify the retained baseline mismatch. `PROV-REPEAT-004` remains
+  BLOCKED by this declared conflict.
 
 No credentials, remote provider calls, customer data, or paid calls were used.
 Temporary test paths were test-owned and were managed by the existing test
@@ -292,3 +306,57 @@ calls, customer data, or paid calls were used.
   baseline disposition -> `PROV-REPEAT-004`; tagged long parity ->
   `PROV-LONG-005`; PR timing -> `PR-CI-006`; final clean-room report ->
   `VAL-007`.
+
+## PROV-ISO-003 evidence record
+
+Story 003 retained every process-sensitive row listed in the isolation table
+with an inline source comment naming the exact property that sharing would
+weaken. The comments cover malformed startup and CLI-global configuration,
+real executable selection and exit mapping, descendant/process-tree behavior,
+record/replay mode, process environment and startup logging policy, and the
+direct telemetry artifact boundary. The retained source assertions remain
+unchanged.
+
+Verification procedures and observations:
+
+1. Retained process and cleanup selectors:
+   `go test -count=1 -timeout=10m ./tests/functional/providers -run
+   '^(TestScriptExecutor_MissingCommandFailsStartup|TestIntegrationSmoke_(TimeoutCancelsProcessTreeAndClearsActiveExecution|TimeoutRequeuesWorkAndSucceedsOnLaterAttempt|ProcessTreeHelper)|TestMockWorkers_(AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary|ScriptRejectConfigWithZeroExitCodeStillRoutesFailure|ScriptConfigExecutesCommandRunnerSideEffect|ScriptHelper)|TestPackagedScriptRuntime_(FreshInstallExecutesFactoryRelativeScript|NonZeroExitUsesStandardFailureOutcome)|TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies|TestProviders_ForcedAssertionFailureCleansOwnedResources)$' -v`
+   exited `0` in `18.851s` on `go1.25.0` `windows/amd64`. All selected
+   non-Unix cases passed. The two packaged shebang cases skipped before
+   construction with `executable shebang scripts are not supported on
+   Windows`; Linux PR CI owns those real Unix cells.
+2. Forced assertion cleanup:
+   `TestProviders_ForcedAssertionFailureCleansOwnedResources` starts a child
+   test binary, builds the production root/listener, opens one explicit Factory
+   Session, registers one immutable WorkDir route, creates Factory/WorkDir,
+   worktree, replay, and runtime-log paths, then intentionally calls `t.Fatal`.
+   The parent observed a non-zero child exit. The child cleanup report asserted
+   the child PID identity, completed `Process.Execute`, closed listener,
+   opened/deleted session equality, zero active routes, and absence of all six
+   owned path classes after teardown.
+3. Malformed-startup cleanup now registers `support.CleanupProcess` for
+   `TestScriptExecutor_MissingCommandFailsStartup`,
+   `TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary`,
+   and `TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure`.
+   The record/replay process and retained timeout servers also register teardown
+   before their assertions, so assertion failure still unwinds the owned
+   process.
+
+The retained process construction count remains `13` default Linux and `11`
+default Windows for the migrated behavior cohort (`1` package-shared root and
+the retained isolated scenario constructions described by the pre/post
+topology). The forced-assertion proof is a child-only cleanup harness rather
+than an additional behavior row; its one temporary root/listener exists solely
+inside that child and is closed before the parent reads the cleanup report.
+
+- Property proved: retained source reasons are explicit; malformed, real
+  executable, child, replay, environment/logging, timeout, and helper behavior
+  remains isolated; Windows cleanup is observed after timeout and forced
+  assertion failure with no owned process/listener/session/route/path residue.
+- Property not proved: Unix shebang/process behavior on this Windows host,
+  cross-run repeat cleanup, tagged-long parity, package success past the
+  retained baseline mismatch, PR CI timing, or remote provider behavior.
+- Remaining gates: repeat/package disposition -> `PROV-REPEAT-004`; tagged-long
+  parity -> `PROV-LONG-005`; PR timing -> `PR-CI-006`; integrated clean-room
+  report -> `VAL-007`.

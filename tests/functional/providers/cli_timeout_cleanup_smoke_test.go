@@ -17,6 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution is
+// isolated because its witness requires a real executable descendant, timeout
+// propagation, process-tree termination, and OS-level cleanup.
 func TestIntegrationSmoke_TimeoutCancelsProcessTreeAndClearsActiveExecution(t *testing.T) {
 	support.SkipLongFunctional(t, "slow timeout cleanup smoke")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -62,6 +65,7 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 	})
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir})
+	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 
 	childPID := readTimeoutCleanupPID(t, childPIDFile)
@@ -77,9 +81,11 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 	}, "execution timeout")
-	server.Stop(t)
 }
 
+// TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt is
+// isolated because the real child owns attempt state and must be terminated on
+// timeout before the later executable invocation can recover.
 func TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt(t *testing.T) {
 	support.SkipLongFunctional(t, "slow timeout retry smoke")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -110,6 +116,7 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 	})
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir})
+	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
@@ -118,9 +125,11 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 		factoryapi.WorkOutcomeFailed,
 		factoryapi.WorkOutcomeAccepted,
 	}, "execution timeout")
-	server.Stop(t)
 }
 
+// TestIntegrationSmoke_ProcessTreeHelper is isolated because it is the child
+// executable entrypoint for the process-tree and attempt-state witnesses; an
+// ordinary package invocation must remain inert.
 func TestIntegrationSmoke_ProcessTreeHelper(t *testing.T) {
 	if len(os.Args) < 2 {
 		return

@@ -58,6 +58,9 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 	}
 }
 
+// TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary
+// is isolated because the invalid CLI-global mock configuration must fail
+// before runtime activation and cannot be installed on the healthy shared host.
 func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject zero exit payload"))
@@ -68,6 +71,7 @@ func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBounda
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
 	})
+	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {
 		t.Fatalf("Process.Execute() error = %v, want public exit-code validation; stderr=%q", err, inputs.Stderr())

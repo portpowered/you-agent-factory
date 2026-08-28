@@ -39,6 +39,10 @@ func (r runtimeLoggingSmokeRunner) Run(_ context.Context, _ platformprocess.Comm
 	}, nil
 }
 
+// TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
+// owns a dedicated process cohort because environment capture, runtime-log and
+// recording destinations, and rolling policy are fixed at process startup.
+// It must not share the general provider cohort.
 func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies(t *testing.T) {
 	t.Setenv(runtimeLoggingSmokeEnvKey, "runtime-logging-smoke-value")
 
@@ -50,6 +54,8 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 	}
 
 	t.Run("SuccessSuppressesSystemOutputAndRecordsEnvDiagnostics", func(t *testing.T) {
+		// This remains in the dedicated logging cohort so process environment and
+		// startup rolling-policy witnesses are not inherited from another case.
 		result := runRuntimeLoggingSmoke(t, runtimeLoggingSmokeRunner{
 			stdout:   "success stdout payload",
 			stderr:   "success stderr payload",
@@ -80,6 +86,8 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 	})
 
 	t.Run("FailureSuppressesSystemOutputAndRecordsEnvDiagnostics", func(t *testing.T) {
+		// This remains in the dedicated logging cohort for the same process-level
+		// environment, destination, and startup-policy witness on failure.
 		result := runRuntimeLoggingSmoke(t, runtimeLoggingSmokeRunner{
 			stdout:   "failure stdout context",
 			stderr:   "failure stderr context",
@@ -113,6 +121,8 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 	})
 
 	t.Run("ExplicitTelemetryPolicyProducesStructuredArtifacts", func(t *testing.T) {
+		// This is a direct artifact boundary test; it intentionally does not
+		// construct a Factory application process.
 		assertExplicitRuntimeTelemetryArtifacts(t, rollingConfig)
 	})
 }

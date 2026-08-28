@@ -46,8 +46,9 @@ func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
 	server.stop(t)
 }
 
-// TestScriptExecutor_MissingCommandFailsStartup proves a missing provider
-// command fails explicitly before execution begins.
+// TestScriptExecutor_MissingCommandFailsStartup is isolated because it proves
+// malformed worker configuration is rejected during invocation startup, before
+// a healthy shared host could have activated runtime state.
 func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
@@ -62,9 +63,11 @@ func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	home := t.TempDir()
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = dir
-	err := support.BuildProcess(t, serviceedges.Edges{
+	process := support.BuildProcess(t, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("unused"),
-	}).Execute(inputs.Input)
+	})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
 	if err == nil ||
 		!strings.Contains(err.Error(), "construct script worker") ||
 		!strings.Contains(err.Error(), "misconfigured") {

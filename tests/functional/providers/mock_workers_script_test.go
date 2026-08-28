@@ -59,6 +59,9 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 	}
 }
 
+// TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure is
+// isolated because malformed CLI-global script mock configuration must be
+// rejected before runtime activation.
 func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker zero-exit rejection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -70,12 +73,16 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
 	})
+	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {
 		t.Fatalf("Process.Execute() error = %v, want public exit-code validation; stderr=%q", err, inputs.Stderr())
 	}
 }
 
+// TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect is isolated
+// because its witness requires a real configured child, filesystem side effect,
+// stdout, and child exit rather than an in-process command substitute.
 func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker command-runner side-effect sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -155,6 +162,9 @@ func assertScriptMockRejected(t *testing.T, scenario *sharedProviderScenario) {
 	t.Fatal("Factory Event history did not contain dispatch response")
 }
 
+// TestMockWorkers_ScriptHelper is isolated because it is the real child
+// executable entrypoint for write/emit/exit behavior and must be inert in the
+// parent package invocation.
 func TestMockWorkers_ScriptHelper(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker helper sweep")
 	if len(os.Args) < 4 {
