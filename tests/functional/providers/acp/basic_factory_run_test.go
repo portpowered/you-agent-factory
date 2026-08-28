@@ -382,7 +382,7 @@ func (p *legacyProvider) Continue(ctx context.Context, request providers.Continu
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" && mode != "shared-spine" {
 		return
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {

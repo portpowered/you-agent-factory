@@ -19,6 +19,47 @@ worktree. The checked-in `prd.json`, the c01 inventory, and the current test
 bodies were used as the available authority; the missing files are recorded so
 this lane does not silently claim parent-plan or prior-progress evidence.
 
+## Shared executable spine
+
+- Story: `functional-test-optimization-c06-providers-acp-002`
+- Gate: `SPINE-002`
+- Recorded: `2026-08-28` after the focused implementation run
+- Scope: one package-local `root.BuildProcess` construction, one continuous
+  `Process.Execute`, one loopback API server, and two explicit non-default
+  Factory Sessions; bulk migration and retained lifecycle cases remain out of
+  scope.
+- Dependency fidelity: local-real assembled process with the controlled ACP
+  peer injected through `edges.Edges`.
+
+Exact procedure and observed result:
+
+```text
+go test -count=1 -timeout=15m ./tests/functional/providers/acp -run '^TestACPSharedProcess'
+exit 0; package reported ok in 1.216s
+```
+
+The test observed one shared root construction, two distinct explicit Factory
+Session IDs, and two controlled ACP peer starts (one per session; the provider
+runtime does not promise cross-session connection reuse). The success session
+retained the existing 11-event Factory Event order, succeeded Provider Session,
+completed response terminal, completion output, and completed Work/session
+projection. The second session independently retained the same event shape,
+typed provider failure, failed response terminal, failed Work/session
+projection, and no success output from the prior scenario. Public response
+events and all request-scoped Factory Events carried the owning session ID;
+unscoped initialization records remained present as expected in each timeline.
+
+Teardown assertions passed for both opened explicit sessions (`GET` returned
+`404` after close), the cancelled `Process.Execute` joined, the application
+process closed, and one bounded `/status` probe could not reach the released
+listener. The controlled peer state was process-scoped and therefore had no
+route state left after session/process teardown.
+
+This gate does not prove complete eligible migration (`PARITY-003`), fresh
+connection/process lifecycle behavior (`LIFE-004`), repeat or race freedom,
+direct before/after topology reduction (`TOPO-007`), PR timing
+(`PR-CI-008`), or clean-room validation (`CLEAN-009`).
+
 ## Discovery and baseline run
 
 | Property | Observation |
