@@ -1,7 +1,8 @@
 # C06 Provider Sessions CLI evidence
 
-Status: TASK-001 baseline/identity characterization and TASK-002 shared-process
-migration complete; TASK-003 clean-room validation and PR handoff remain.
+Status: TASK-001 review-correction witnesses are now exercised on the shared
+fixture; TASK-002 route unregistration/close lifecycle and TASK-003 final
+clean-room validation and PR handoff remain.
 
 ## Baseline identity
 
@@ -56,7 +57,7 @@ signal witnesses.
 | Root stream abort | `Process.Execute` returns typed `WORKER_SESSION_STREAM_CLOSED`; one RECORD remains on stdout; no terminal or replay summary is synthesized. |
 | Built stream abort | Built `you` exits non-zero; one RECORD and one safe diagnostic remain separated across stdout/stderr. |
 | Built stream cancellation | On supported non-Windows hosts, the built child retains the RECORD and exits 130 after `os.Interrupt`; Windows keeps the explicit skip. |
-| Main CLI | Help, completion, unknown input, success and provider-failure list/show/read/stream, Work attribution, attempt/timing, 8/12/20 usage, transcript answer, failure diagnosis, missing Work/session errors, recording, and cleanup. |
+| Main CLI | Help/completion/unknown-input no-mutation, explicit empty-list isolation, duplicate-route fail-closed setup, success/provider-failure/recovery list/show/read/stream, repeated read/replay idempotence, Work attribution, attempt/timing, 8/12/20 usage, transcript answer, failure diagnosis, missing Work/session no-side-effect errors, recording, and cleanup. |
 | Replay redirection | Built CLI writes valid NDJSON to redirected stdout, strictly increasing positions, complete replay summary, and verbose diagnostics only to stderr. |
 | WSRFT001 | Opening lifecycle record precedes provider binding/output, positions increase, and exactly one terminal record is last. |
 | WSRFT002 | Live and replay Worker Session identity, Work attribution, opening timestamp, and attempt correlation agree. |
@@ -101,8 +102,8 @@ The identity topology now proves:
   route provider output by the immutable Work marker, and verify the scoped
   list contains exactly one matching Factory Session, Provider Session, and
   Work.
-- The fleet case uses one explicit Factory Session for its three concurrent
-  Works and three distinct immutable Work/provider route pairs. The gated
+- The fleet case uses three distinct explicit Factory Sessions for its three
+  concurrent Works and three distinct immutable Work/provider route pairs. The gated
   runner records every route and rejects missing, duplicate, or unexpected
   routes without relying on arrival order.
 - Root/built abort fixtures use distinct case-local Worker Session and Provider
@@ -125,7 +126,13 @@ Remaining TASK-002/TASK-003 edges are one shared root/API process, reduced
 build count, repeat/race stability, clean final-artifact reconciliation,
 PR-host timing, terminal CI, conflict resolution, and merge.
 
-## TASK-002 shared-process verification
+## TASK-002 shared-process verification (pre-review-correction record)
+
+The following TASK-002 measurements are retained historical evidence from
+before the review correction. The current source adds direct matrix witnesses,
+but provider-route unregistration and close-time route assertions are still
+unimplemented and must be completed in TASK-002 before this section can be
+treated as final.
 
 The delivered TASK-002 source commit is the working-tree head after the
 identity characterization commit. The package now owns one lazy shared
@@ -171,17 +178,22 @@ Observed: `PASS`, exit code `0`; package time `3.648s`; no race report. The
 fleet gate retained concurrent RUNNING observations before release and
 terminal CLI/HTTP parity after release.
 
-TASK-002 proves the complete package once, repeated identity isolation, the
-focused fleet race path, one root/API topology, one cached CLI build, fresh
-real child processes for the three OS-boundary rows, route attribution without
-arrival-order assignment, explicit session cleanup, case-directory cleanup,
-shared-listener shutdown, and preserved CLI/transcript/stream/error/order
-witnesses. It does not prove a clean final checkout, PR-host package timing,
-remote provider behavior, Unix interrupt behavior on this Windows host,
-terminal CI, conflict resolution, or merge; those remain TASK-003/review-owned
-edges.
+TASK-002 historically proved the complete package once, repeated identity
+isolation, the focused fleet race path, one root/API topology, one cached CLI
+build, fresh real child processes for the three OS-boundary rows, route
+attribution without arrival-order assignment, explicit session cleanup,
+case-directory cleanup, shared-listener shutdown, and preserved
+CLI/transcript/stream/error/order witnesses. It did not prove route
+unregistration, a clean final checkout after the review correction, PR-host
+package timing, remote provider behavior, Unix interrupt behavior on this
+Windows host, terminal CI, conflict resolution, or merge.
 
-## TASK-003 clean-room validation
+## TASK-003 clean-room validation (pre-review-correction record)
+
+This historical validation ran before the review correction and is not final
+evidence for the current head. It remains useful as the prior clean-room
+record; TASK-003 must rerun the declared gates after TASK-002 closes the route
+lifecycle gap.
 
 The clean-room validation checkout was a detached worktree at source commit
 `152ce11fccce39257bb9efef3add74902fe1b19e`. It was clean before and after the
@@ -219,9 +231,48 @@ characterization base found only the six package/evidence paths permitted by
 GATE-SCOPE.
 
 Local diagnostic timing improved from the baseline package result of `18.410s`
-to `8.365s` in the clean checkout. This is directional local evidence only;
+to `8.365s` in that historical clean checkout. This is directional local evidence only;
 the Backend Functional Coverage package row and its PR-host directional verdict
 remain review-owned. The canonical loopback report is emitted at
 `validation/functional-test-optimization-c06-provider-sessions-cli.md`; that
 directory is excluded from the PR diff by the repository validation-artifact
 convention.
+
+## Review-correction verification
+
+Source head: `52cae4b6f` (`test: add provider sessions CLI matrix witnesses`).
+This bounded correction remains package-owned test code; no production,
+shared-support, contract, generated, or out-of-package files changed.
+
+The main CLI test now executes direct witnesses for FT-B04 duplicate-route
+registration before Work/session admission, FT-H01 and FT-U01 no-mutation help
+and unknown input, FT-B01 explicit empty-list isolation, FT-R02 failure-to-next-
+success recovery, and FT-B05 repeated show/read/replay identity and history.
+Missing Work/show/read cases additionally snapshot public Factory Session/Work/
+Worker identities and provider-edge call count, require empty stdout, and
+assert no side effect. The fleet remains three distinct explicit Factory
+Sessions with ascending/stable CLI and HTTP order, and replay asserts complete
+Worker Session history.
+
+For FT-B01, the public session-scoped Worker Session HTTP resource requires a
+Work ID. The supported no-Work CLI list invocation therefore uses explicit
+`--session` against the top-level collection and asserts a non-nil empty
+`sessions` array; no unsupported endpoint contract is invented.
+
+Verification on the current source head:
+
+```text
+go test -run '^TestWorkerSessionsCLI$' -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; all direct review-correction subtests passed
+
+go test -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; package time 10.929s; exit code 0
+
+git diff --check
+PASS
+```
+
+The current evidence still does not prove FT-R01 provider-route
+unregistration/close-time route cleanup, the final clean-room artifact, PR
+package timing, or review-owned CI/merge. Those are the next bounded TASK-002
+and TASK-003 edges; no route-lifecycle claim is made by this correction.
