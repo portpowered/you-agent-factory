@@ -99,12 +99,20 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	var closeErr error
 	if packagedFixFixture != nil {
-		if err := packagedFixFixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared packaged Fix fixture: %v\n", err)
+		closeErr = packagedFixFixture.close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close shared packaged Fix fixture: %v\n", closeErr)
 			if code == 0 {
 				code = 1
 			}
+		}
+	}
+	if err := writePackagedFixForcedUnwindReport(packagedFixFixture, closeErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write packaged Fix forced-unwind report: %v\n", err)
+		if code == 0 {
+			code = 1
 		}
 	}
 	os.Exit(code)

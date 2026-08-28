@@ -161,6 +161,7 @@ func TestPackagedFixSharedProcess(t *testing.T) {
 	t.Cleanup(func() {
 		assertPackagedFixResourceCensus(t, sharedPackagedFixFixture(t))
 	})
+	failPackagedFixForcedUnwindAfterAssertion(t)
 }
 
 func testPackagedFixOperatorDefaults(t *testing.T) {
