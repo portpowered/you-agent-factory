@@ -516,11 +516,28 @@ func assertRepeatedWorkerSessionReads(
 	fixture *workerSessionsCLISharedFixture,
 ) {
 	t.Helper()
-	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	readiness, readinessErr := waitForFactoryTargetReadiness(
+		ctx,
+		sessionID,
+		"default",
+		15*time.Second,
+		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
+			return observeFactoryTargetReadiness(observeCtx, baseURL, sessionID, factoryDir)
+		},
+	)
+	if readinessErr != nil {
+		t.Fatalf("FT-RDY-01 public Factory-target readiness: %v", readinessErr)
+	}
+	assertFactoryTargetReadinessObservation(t, readiness, factoryDir)
 	showArgs := []string{
 		"--server", baseURL, "worker-sessions", "show", "--session", sessionID,
 		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
 	}
+	// Confirmation is a separate public durability condition for replay. Wait
+	// for it before the repeated diagnosis reads so no downstream replay gate
+	// can be the first observation of an unsettled recording.
+	waitForWorkerSessionConfirmation(t, ctx, process, env, factoryDir, showArgs)
+	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
 	firstShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
 	secondShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
 	if strings.TrimSpace(firstShow.Stdout()) != strings.TrimSpace(secondShow.Stdout()) {
@@ -546,7 +563,6 @@ func assertRepeatedWorkerSessionReads(
 		"--verbose", "--server", baseURL, "worker-sessions", "stream", "--session", sessionID,
 		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--replay-only", "--output", "json",
 	}
-	waitForWorkerSessionConfirmation(t, ctx, process, env, factoryDir, showArgs)
 	firstReplay := executeCLI(t, ctx, process, env, factoryDir, replayArgs...)
 	secondReplay := executeCLI(t, ctx, process, env, factoryDir, replayArgs...)
 	assertWorkerSessionReplayCapture(t, []byte(firstReplay.Stdout()), firstReplay.Stderr())
