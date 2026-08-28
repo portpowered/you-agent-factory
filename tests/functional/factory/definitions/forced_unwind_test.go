@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -132,7 +131,7 @@ func writeDefinitionsForcedUnwindReport(
 		report.WorkspaceRootAbsent = definitionsPathAbsent(state.workspaceRoot)
 		if state.validationHost != nil {
 			report.ValidationListenerURL = state.validationHost.baseURL
-			report.ValidationListenerClosed = definitionsListenerClosed(state.validationHost.baseURL)
+			report.ValidationListenerClosed = definitionsListenerClosed(state.validationHost.listenerDone)
 			report.ValidationFactoryDir = state.validationHost.factoryDir
 			report.ValidationFactoryAbsent = definitionsPathAbsent(state.validationHost.factoryDir)
 			report.ValidationHomeDir = state.validationHost.homeDir
@@ -140,7 +139,7 @@ func writeDefinitionsForcedUnwindReport(
 		}
 		if state.initHost != nil {
 			report.InitListenerURL = state.initHost.baseURL
-			report.InitListenerClosed = definitionsListenerClosed(state.initHost.baseURL)
+			report.InitListenerClosed = definitionsListenerClosed(state.initHost.listenerDone)
 			report.InitFactoryDir = state.initHost.factoryDir
 			report.InitFactoryAbsent = definitionsPathAbsent(state.initHost.factoryDir)
 			report.InitHomeDir = state.initHost.homeDir
@@ -185,17 +184,16 @@ func closeDefinitionsFactorySession(t testing.TB, baseURL, sessionID string) boo
 	return true
 }
 
-func definitionsListenerClosed(baseURL string) bool {
-	parsed, err := url.Parse(baseURL)
-	if err != nil || strings.TrimSpace(parsed.Host) == "" {
+func definitionsListenerClosed(done <-chan struct{}) bool {
+	if done == nil {
 		return false
 	}
-	connection, err := net.DialTimeout("tcp", parsed.Host, 250*time.Millisecond)
-	if err == nil {
-		_ = connection.Close()
+	select {
+	case <-done:
+		return true
+	default:
 		return false
 	}
-	return true
 }
 
 func definitionsPathAbsent(path string) bool {

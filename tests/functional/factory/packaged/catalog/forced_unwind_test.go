@@ -3,11 +3,9 @@ package catalog
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
 const (
@@ -45,7 +43,7 @@ func writeCatalogForcedUnwindReport(
 		if server != nil {
 			if baseURL, ok := server.BaseURL(); ok {
 				report.ListenerURL = baseURL
-				report.ListenerClosed = catalogListenerClosed(baseURL)
+				report.ListenerClosed = fixture.apiRouter.listenerClosed()
 			}
 		}
 	}
@@ -57,28 +55,4 @@ func writeCatalogForcedUnwindReport(
 		return fmt.Errorf("write %q: %w", path, err)
 	}
 	return nil
-}
-
-func catalogListenerClosed(baseURL string) bool {
-	return catalogListenerError(baseURL) == nil
-}
-
-func catalogListenerError(baseURL string) error {
-	if strings.TrimSpace(baseURL) == "" {
-		return fmt.Errorf("catalog API listener URL is empty")
-	}
-	client := http.Client{Timeout: time.Second}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
-	deadline := time.Now().Add(2 * time.Second)
-	lastStatus := 0
-	for time.Now().Before(deadline) {
-		response, err := client.Get(endpoint)
-		if err != nil {
-			return nil
-		}
-		lastStatus = response.StatusCode
-		_ = response.Body.Close()
-		time.Sleep(10 * time.Millisecond)
-	}
-	return fmt.Errorf("catalog API listener %s remained reachable with status %d", baseURL, lastStatus)
 }

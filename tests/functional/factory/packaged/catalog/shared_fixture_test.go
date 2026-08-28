@@ -124,8 +124,10 @@ func (filesystem *catalogSwitchingAuthoredReaderFileSystem) Stat(path string) (f
 }
 
 type catalogAPIServerRouter struct {
-	mu     sync.Mutex
-	server *support.ProcessAPIServer
+	mu        sync.Mutex
+	server    *support.ProcessAPIServer
+	closed    chan struct{}
+	closeOnce sync.Once
 }
 
 func (router *catalogAPIServerRouter) set(server *support.ProcessAPIServer) {
@@ -140,6 +142,18 @@ func (router *catalogAPIServerRouter) current() *support.ProcessAPIServer {
 	return router.server
 }
 
+func (router *catalogAPIServerRouter) listenerClosed() bool {
+	if router == nil || router.closed == nil {
+		return false
+	}
+	select {
+	case <-router.closed:
+		return true
+	default:
+		return false
+	}
+}
+
 func (router *catalogAPIServerRouter) start(
 	ctx context.Context,
 	request platformhttpserver.StartRequest,
@@ -150,6 +164,12 @@ func (router *catalogAPIServerRouter) start(
 	if server == nil {
 		return errors.New("catalog API server is not selected")
 	}
+	if router.closed == nil {
+		return errors.New("catalog API server shutdown signal is not configured")
+	}
+	// ProcessAPIServer.Start returns only after its httptest listener has been
+	// closed, so this signal is a deterministic listener-shutdown observation.
+	defer router.closeOnce.Do(func() { close(router.closed) })
 	return server.Start(ctx, request)
 }
 
@@ -198,7 +218,7 @@ func startCatalogSharedProcess() (*catalogSharedProcessFixture, error) {
 	provider := &catalogSwitchingProviderRunner{}
 	namedCatalog := newCatalogSwitchingNamedCatalogFileSystem()
 	authored := newCatalogSwitchingAuthoredReaderFileSystem()
-	apiRouter := &catalogAPIServerRouter{}
+	apiRouter := &catalogAPIServerRouter{closed: make(chan struct{})}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner:                          provider,
 		FactoryDefinitionNamedFactoryCatalogFileSystem: namedCatalog,
@@ -223,8 +243,8 @@ func (fixture *catalogSharedProcessFixture) close() error {
 	closeErr := fixture.process.Close(ctx)
 	if fixture.apiRouter != nil {
 		if server := fixture.apiRouter.current(); server != nil {
-			if baseURL, ok := server.BaseURL(); ok {
-				closeErr = errors.Join(closeErr, catalogListenerError(baseURL))
+			if !fixture.apiRouter.listenerClosed() {
+				closeErr = errors.Join(closeErr, errors.New("catalog API listener did not report shutdown"))
 			}
 		}
 	}

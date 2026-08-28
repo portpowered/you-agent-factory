@@ -2,6 +2,7 @@ package classify
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,7 +47,7 @@ func writeClassifyForcedUnwindReport(
 	}
 	if fixture != nil {
 		report.ListenerURL = fixture.baseURL
-		report.ListenerClosed = classifyListenerClosed(fixture.baseURL)
+		report.ListenerClosed = classifyListenerClosed(fixture.listenerDone)
 		report.RootDir = fixture.rootDir
 		report.RootAbsent = classifyPathAbsent(fixture.rootDir)
 	}
@@ -60,28 +61,23 @@ func writeClassifyForcedUnwindReport(
 	return nil
 }
 
-func classifyListenerClosed(baseURL string) bool {
-	return classifyListenerError(baseURL) == nil
+func classifyListenerClosed(done <-chan struct{}) bool {
+	if done == nil {
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
 }
 
-func classifyListenerError(baseURL string) error {
-	if strings.TrimSpace(baseURL) == "" {
-		return fmt.Errorf("classify API listener URL is empty")
+func classifyListenerError(done <-chan struct{}) error {
+	if !classifyListenerClosed(done) {
+		return errors.New("classify API listener did not report shutdown")
 	}
-	client := http.Client{Timeout: time.Second}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
-	deadline := time.Now().Add(2 * time.Second)
-	lastStatus := 0
-	for time.Now().Before(deadline) {
-		response, err := client.Get(endpoint)
-		if err != nil {
-			return nil
-		}
-		lastStatus = response.StatusCode
-		_ = response.Body.Close()
-		time.Sleep(10 * time.Millisecond)
-	}
-	return fmt.Errorf("classify API listener %s remained reachable with status %d", baseURL, lastStatus)
+	return nil
 }
 
 func classifyPathAbsent(path string) bool {

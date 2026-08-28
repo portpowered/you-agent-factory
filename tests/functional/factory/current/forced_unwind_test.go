@@ -4,12 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
-	"time"
 )
 
 const (
@@ -82,7 +79,11 @@ func writeCurrentFactoryForcedUnwindReport() error {
 	report := currentFactoryForcedUnwindReport{}
 	if fixture := currentFactoryForcedUnwindFixture; fixture != nil {
 		report.ListenerURL = fixture.server.URL()
-		report.ListenerClosed = currentFactoryListenerClosed(report.ListenerURL)
+		// FunctionalAPIServer.Done closes after Process.Execute returns, and
+		// Process.Execute cannot return before the injected API starter returns
+		// after closing its listener. Pairing it with the root Close result keeps
+		// this observation deterministic without a network probe or polling.
+		report.ListenerClosed = fixture.processClosed && currentFactoryChannelClosed(fixture.server.Done())
 		report.RootDir = fixture.rootDir
 		report.RootAbsent = currentFactoryPathAbsent(fixture.rootDir)
 		report.ProcessInvocationStopped = currentFactoryChannelClosed(fixture.server.Done())
@@ -100,19 +101,6 @@ func writeCurrentFactoryForcedUnwindReport() error {
 		return fmt.Errorf("write %q: %w", path, err)
 	}
 	return nil
-}
-
-func currentFactoryListenerClosed(baseURL string) bool {
-	parsed, err := url.Parse(baseURL)
-	if err != nil || strings.TrimSpace(parsed.Host) == "" {
-		return false
-	}
-	connection, err := net.DialTimeout("tcp", parsed.Host, 250*time.Millisecond)
-	if err == nil {
-		_ = connection.Close()
-		return false
-	}
-	return true
 }
 
 func currentFactoryPathAbsent(path string) bool {

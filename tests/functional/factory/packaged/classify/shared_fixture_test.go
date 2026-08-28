@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -31,6 +32,7 @@ type classifySharedFixture struct {
 	baseURL        string
 	process        support.ApplicationProcess
 	providerRunner *classifySwitchingProviderRunner
+	listenerDone   <-chan struct{}
 	cancel         context.CancelFunc
 	done           chan error
 }
@@ -121,9 +123,16 @@ func startClassifyFixture() (*classifySharedFixture, error) {
 	}
 
 	api := support.NewProcessAPIServer()
+	listenerDone := make(chan struct{})
+	apiStarter := func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		// ProcessAPIServer.Start returns only after its httptest listener has
+		// been closed, so the completed starter is a deterministic observation.
+		defer close(listenerDone)
+		return api.Start(ctx, request)
+	}
 	providerRunner := &classifySwitchingProviderRunner{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      api.Start,
+		APIServerStarter:      apiStarter,
 		ProviderCommandRunner: providerRunner,
 	})
 	if err != nil {
@@ -179,6 +188,7 @@ func startClassifyFixture() (*classifySharedFixture, error) {
 		baseURL:        baseURL,
 		process:        process,
 		providerRunner: providerRunner,
+		listenerDone:   listenerDone,
 		cancel:         cancel,
 		done:           done,
 	}, nil
@@ -246,7 +256,7 @@ func (fixture *classifySharedFixture) close() error {
 		errs = append(errs, fmt.Errorf("close root process: %w", err))
 	}
 	cancel()
-	if err := classifyListenerError(fixture.baseURL); err != nil {
+	if err := classifyListenerError(fixture.listenerDone); err != nil {
 		errs = append(errs, err)
 	}
 	if err := os.RemoveAll(fixture.rootDir); err != nil {

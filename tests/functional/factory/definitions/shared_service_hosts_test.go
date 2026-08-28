@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -25,14 +26,15 @@ const sharedDefinitionsServiceHostShutdownTimeout = 15 * time.Second
 // the same public service boundary; each scenario still owns its project,
 // HOME, session, request payload, and captured streams.
 type sharedDefinitionsServiceHost struct {
-	process    support.ApplicationProcess
-	baseURL    string
-	factoryDir string
-	homeDir    string
-	env        []string
-	provider   *support.RecordingCommandRunner
-	cancel     context.CancelFunc
-	done       <-chan error
+	process      support.ApplicationProcess
+	baseURL      string
+	factoryDir   string
+	homeDir      string
+	env          []string
+	provider     *support.RecordingCommandRunner
+	listenerDone <-chan struct{}
+	cancel       context.CancelFunc
+	done         <-chan error
 }
 
 var (
@@ -135,9 +137,16 @@ func startSharedDefinitionsServiceHost(
 
 	provider := support.NewRecordingCommandRunner(providerError)
 	api := support.NewProcessAPIServer()
+	listenerDone := make(chan struct{})
+	apiStarter := func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		// ProcessAPIServer.Start returns only after its httptest listener has
+		// been closed, so the completed starter is a deterministic observation.
+		defer close(listenerDone)
+		return api.Start(ctx, request)
+	}
 	processContext, cancel := context.WithCancel(context.Background())
 	process, err := support.BuildProcessWithContext(processContext, serviceedges.Edges{
-		APIServerStarter:      api.Start,
+		APIServerStarter:      apiStarter,
 		ProviderCommandRunner: provider,
 	})
 	if err != nil {
@@ -167,14 +176,15 @@ func startSharedDefinitionsServiceHost(
 	}
 
 	return &sharedDefinitionsServiceHost{
-		process:    process,
-		baseURL:    baseURL,
-		factoryDir: factoryDir,
-		homeDir:    homeDir,
-		env:        append([]string(nil), inputs.Input.Env...),
-		provider:   provider,
-		cancel:     cancel,
-		done:       done,
+		process:      process,
+		baseURL:      baseURL,
+		factoryDir:   factoryDir,
+		homeDir:      homeDir,
+		env:          append([]string(nil), inputs.Input.Env...),
+		provider:     provider,
+		listenerDone: listenerDone,
+		cancel:       cancel,
+		done:         done,
 	}, nil
 }
 
@@ -268,6 +278,9 @@ func stopSharedDefinitionsServiceHost(host *sharedDefinitionsServiceHost) error 
 			failures = append(failures, fmt.Sprintf("close process: %v", err))
 		}
 		cancel()
+	}
+	if host.listenerDone != nil && !definitionsListenerClosed(host.listenerDone) {
+		failures = append(failures, "API listener did not report shutdown")
 	}
 	if err := os.RemoveAll(host.factoryDir); err != nil {
 		failures = append(failures, fmt.Sprintf("remove Factory directory: %v", err))
