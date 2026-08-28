@@ -141,8 +141,8 @@ it is still mapped so migration cannot silently lose it.
 | CASE-10 | `TestGeneratedClientDecodesRepresentativeStructuredError` | Missing session produces generated-client typed 404, `NOT_FOUND`, `RESPONSE_EVENT_SESSION_NOT_FOUND`, and message | Shareable — covered |
 | CASE-11 | `TestGeneratedClientStatusAndSessionRoundTrip` cancellation subcases | In-flight and pre-canceled generated-client calls return cancellation without a typed response | Shareable — covered; direct call/stream ledger deferred |
 | CASE-12 | `TestGeneratedClientAndServerSchemaStayAligned` recovery subcase | Completed Work/status is typed; stale cursor recovery returns `CURSOR_STALE` and retry omits the stale cursor | Controlled edge — covered on shared process with explicit session |
-| CASE-13 | `TestAPIConcurrentSessionRequestsRemainIsolated` | Overlapping requests return the correct session identities and non-empty state for two sessions | Controlled edge — covered in separate processes; one shared-process proof deferred |
-| CASE-14 | `TestAPICancelledRequestDoesNotCancelUnrelatedSession` | Canceling one blocking request does not change the unrelated session identity/status | Controlled edge — covered in separate processes; shared-session cleanup deferred |
+| CASE-13 | `TestAPIConcurrentSessionRequestsRemainIsolated` | Overlapping requests return the correct session identities and non-empty state for two sessions | Controlled edge — covered on the shared process with selector-scoped runner and explicit sessions |
+| CASE-14 | `TestAPICancelledRequestDoesNotCancelUnrelatedSession` | Canceling one blocking request does not change the unrelated session identity/status | Controlled edge — covered on the shared process with selector-scoped runner and explicit sessions |
 | CASE-15 | `TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary/terminal success keeps ordered typed parts` | One terminal/zero failed; list/detail retain text then JSON type, payload, and order; correlated `DISPATCH_RESPONSE` is `ACCEPTED` in a unique explicit session | Controlled edge — covered on shared process |
 | CASE-16 | `TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary/terminal failure is not reported as success` | One failed/zero terminal; Work is FAILED; content remains readable/ordered; correlated `DISPATCH_RESPONSE` is `FAILED` in a unique explicit session | Controlled edge — covered on shared process |
 | CASE-17 | `TestAPIServerPprofIsOptInThroughThePublicRunPath` default subcase | Pprof/debug probes are absent or typed 404; status/runtime and metrics remain available; process stops | Isolated diagnostics mode — covered |
@@ -151,9 +151,9 @@ it is still mapped so migration cannot silently lose it.
 | CASE-20 | `TestAPIServerShutdownClosesListenerAndActiveStreams` | Public stop joins process, closes active request/stream, refuses listener probes, and permits rebind | Isolated shutdown — covered |
 | CASE-21 | `TestAPIServerUsesPlatformStarterThroughRootProcess`; production diagnostics subtests | Root-built process reaches real platform loopback listener; status and opt-in diagnostics work; listener closes | Isolated real-listener fidelity — covered |
 | CASE-22 | `TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle` | Independent public stop prints confirmation; serve command returns; response stream closes; listener-stop observer succeeds | Isolated graceful shutdown — covered |
-| CASE-23 | `TestAPIServerBindFailureUnwindsStartedLifecycleRoles` | Requested/fallback addresses are rejected exactly; structured `SERVER_BIND_FAILED`; no readiness/browser effects; requested port rebinds and `/status` is unreachable | Isolated bind failure — covered; direct process-close assertion deferred |
-| CASE-24 | `TestListenerStopObserverReportsBoundedOpenListenerOutcomes` | Open real listener distinguishes `DeadlineExceeded` from `Canceled`; deferred listener, connections, and accept goroutine cleanup | Isolated listener observer, no application process — covered |
-| CASE-25 | Package `t.Cleanup`, `server.Stop`, `support.CleanupProcess`, and existing session teardown paths | Existing tests release their process/server fixtures through test cleanup; no package-wide runtime ledger, zero-count assertion, or three-repeat proof exists yet | Cross-cutting — partial; GATE-CLEAN/GATE-REPEAT owned by Stories 002–004 |
+| CASE-23 | `TestAPIServerBindFailureUnwindsStartedLifecycleRoles` | Requested/fallback addresses are rejected exactly; structured `SERVER_BIND_FAILED`; no readiness/browser effects; requested port rebinds and `/status` is unreachable | Isolated bind failure — covered with direct process close, exact rejection count, and port rebind |
+| CASE-24 | `TestListenerStopObserverReportsBoundedOpenListenerOutcomes` | Open real listener distinguishes `DeadlineExceeded` from `Canceled`; cleanup closes listener, connections, and accept goroutine | Isolated listener observer, no application process — covered with direct close and rebind |
+| CASE-25 | Package `t.Cleanup`, explicit server/process close, and existing session teardown paths | Shared sessions are absent after cleanup; controlled registrations/calls/streams and isolated processes/listeners/roots reach zero residue; three repeats do not reuse uncleared rows | Cross-cutting — covered by the package cleanup ledgers and repeat gate |
 
 ## Pre-migration runtime topology
 
@@ -199,6 +199,84 @@ routing is owned by Stories 002 and 003.
 No process or listener construction is unclassified. These counts are a
 pre-change inventory, not a target or a post-migration result.
 
+## Story 004 final lifecycle and topology evidence
+
+The isolated cells retain inline reasons at their construction sites. The
+package-owned lifecycle ledger records every process-scoped witness, direct
+listener bind/close, rejected bind attempt, port rebind, and temporary-root
+removal. Shared stateful cells continue to use the package fixture's scenario
+ledger, which checks explicit non-default session absence, provider route and
+active-call zero, response-stream zero, and Factory-root removal.
+
+Final single-run topology, observed after Story 004:
+
+| Runtime group | Process constructions | Direct lifecycle result |
+| --- | ---: | --- |
+| Package-owned shared HTTP fixture | 1 | One root-built process; package cleanup stopped its command, closed its listener, and asserted no active routes/calls remained |
+| Isolated process witnesses | 11 | 11 constructed, 10 hosted, 11 joined, 11 directly closed; 10 successful listener binds closed and released, plus 2 rejected bind attempts |
+| Isolated listener-only observer | 0 | One open OS listener, accept goroutine, and accepted-connection set directly closed and rebound |
+| **Total** | **12** | **24 → 12 root-built process constructions (50% reduction); zero unclassified process rows** |
+
+The final ledger summary was
+`process_constructions=11 process_hosts=10 process_joined=11
+process_closed=11 successful_listener_binds=10 listener_closed=10
+port_releases=11 rejected_bind_attempts=2 isolated_rows=12` with every
+isolated temporary root removed. The shared fixture ledger reported exactly
+one shared process start, zero provider routes/active calls and response
+streams, and every tracked Factory Session absent after teardown.
+
+Required Story 004 procedures, observed on 2026-08-28 on the shared Windows
+workstation:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/transport/http/server -run 'Test(APIServer|ListenerStop)'
+go test -count=1 -timeout=10m ./tests/functional/transport/http/server
+go test -count=3 -timeout=30m ./tests/functional/transport/http/server
+go test -race -count=1 -timeout=15m ./tests/functional/transport/http/server
+```
+
+All four commands exited 0. The focused lifecycle run took 10.833 s, the
+assembled package run took 21.433 s, the three-repeat run took 69.292 s, and
+the race run took 62.365 s. The focused and assembled runs prove the public
+HTTP behavior together with direct listener/process/port/stream/session/runner
+cleanup; the repeat run proves completed ledger rows are reusable only after
+cleanup; the race run proves the shared fixture, routing, streams, and ledgers
+are race-safe on this supported host.
+
+## VAL-001 clean-room validation
+
+The validation loopback was run from a fresh detached worktree at the final
+Story 004 commit, with no implementation edits or defect repair in that
+worktree. It used the full CASE-01 through CASE-25 package matrix, including
+the local real-listener diagnostics, graceful shutdown, bind-failure, and
+listener-observer cells.
+
+| Criterion | Result | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Assembled HTTP behavior and cleanup | PASS | Clean-worktree `go test -count=1 -timeout=10m ./tests/functional/transport/http/server` exited 0 | Remote deployment and untouched packages |
+| Local real-listener lifecycle | PASS | Same clean-worktree run passed production loopback bind/Serve/stop, active stream drain, exact bind rejection, port rebind, and observer deadline/cancellation witnesses | OS/network behavior outside this Windows host |
+| Topology and residue | PASS | Final ledger summary above; shared process count 1; isolated roots removed; no active routes/calls/streams or unclosed tracked sessions | Global c01 inventory ingestion |
+| Dependency and artifact fidelity | PASS | Production composition with controlled local command/provider edges; generated HTTP boundary exercised; validation worktree remained clean | Remote providers and terminal CI timing |
+
+Customer journey: start the public `you run --with-server` path, exercise the
+generated/public HTTP routes and Work/Event/session behavior, start the
+diagnostics and configured-listener variants, request graceful or destructive
+shutdown, and verify status refusal plus port reuse after teardown. The clean
+checkout observed the same behavior and direct cleanup evidence.
+
+Cross-task integration and usability: documentation discoverability is
+represented by this package-owned evidence artifact; permission, error,
+session, persistence, response-stream, and operational diagnostics witnesses
+remain covered by the existing package tests. Browser/screenshot verification
+is not applicable to this backend functional lane.
+
+Verdict: PASS.
+
+The remaining edges are the governing suite-wide target, global inventory
+ingestion, terminal CI/merge, and remote deployment behavior; they are outside
+this implementation-stage lane and remain owned by the PR/review or project
+level described in the PRD.
+
 ## Cleanup and remaining evidence ownership
 
 Already observed:
@@ -211,15 +289,8 @@ Already observed:
 - Terminal success/failure cases prove correlated public Factory Event outcome,
   Work state, and ordered typed content.
 
-Not yet proved by this staged migration and intentionally left for later
-stories:
-
-- local real-listener and process lifecycle cleanup ledgers, including the
-  bind-failure process path;
-- package-wide three-repeat isolation, race execution, final post-migration
-  topology, and PR CI package timing;
-- clean-room VAL-001 assembly.
-
-The smallest next step is Story 004: retain and directly prove the isolated
-local listener/process lifecycle witnesses, then run the repeat, race, CI, and
-clean-room validation gates.
+Story 004 closes the previously deferred local lifecycle, repeat, race, final
+topology, and clean-room edges. PR CI package timing is intentionally recorded
+in the PR conversation after the final head is pushed; terminal CI, merge, the
+governing suite-wide target, and global inventory ingestion remain review or
+project-level responsibilities.

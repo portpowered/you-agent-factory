@@ -22,7 +22,6 @@ import (
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -30,18 +29,22 @@ import (
 // TestAPIServerPprofIsOptInThroughThePublicRunPath proves the diagnostics
 // routes are absent by default and that --pprof exposes a live heap profile on
 // the same loopback API server built through root.BuildProcess.
+//
+// This case is isolated because the diagnostics flag changes process startup
+// configuration; the default and opt-in servers cannot share one invocation.
 func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
 	edges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("pprof diagnostics"), nil)
 	metricsDir := t.TempDir()
-	defaultServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-		Args:                      []string{"--runtime-metrics-dir", metricsDir},
-	})
+	defaultServer := startC06IsolatedHTTPServer(
+		t,
+		"c06-pprof-disabled",
+		"diagnostics mode changes process startup configuration",
+		factory.factoryDir,
+		[]string{"--runtime-metrics-dir", metricsDir},
+		edges,
+	)
 	for _, path := range []string{
 		"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/profile",
 		"/debug/pprof/trace", "/debug/pprof/goroutine", "/debug/pprof/cmdline",
@@ -78,22 +81,23 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	}
 	assertRuntimeDiagnosticsRejectsInvalidMethod(t, defaultServer.URL())
 	assertApplicationStatusRemainsAvailable(t, defaultServer.URL())
-	defaultServer.Stop(t)
+	defaultServer.stop(t)
 	assertRuntimeMemoryMetrics(t, metricsDir)
 
-	enabledServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-		Args:                      []string{"--pprof"},
-	})
-	assertEnabledPprofServer(t, enabledServer)
-	enabledServer.Stop(t)
+	enabledServer := startC06IsolatedHTTPServer(
+		t,
+		"c06-pprof-enabled",
+		"diagnostics opt-in requires a separate process startup mode",
+		factory.factoryDir,
+		[]string{"--pprof"},
+		edges,
+	)
+	assertEnabledPprofServer(t, enabledServer.URL())
+	enabledServer.stop(t)
 }
 
-func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPIServer) {
+func assertEnabledPprofServer(t *testing.T, baseURL string) {
 	t.Helper()
-	baseURL := enabledServer.URL()
 	assertPprofIndex(t, baseURL)
 	assertPprofHeap(t, baseURL)
 	assertPprofNamedProfiles(t, baseURL)
@@ -386,15 +390,21 @@ func isRuntimeMemoryMetric(name string) bool {
 // server becomes reachable on its configured loopback listener and serves a
 // non-empty readiness status observation after start.
 func TestAPIServerStartsOnConfiguredListenerAndServesStatus(t *testing.T) {
+	// The configured-listener argument is a startup/configuration witness; keep
+	// it isolated from the package fixture so its listener selection is observed
+	// on a process with no prior server lifecycle.
 	configuredURL := reserveConfiguredLoopbackURL(t)
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--server", configuredURL},
-	})
-	defer server.Stop(t)
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("configured listener"), nil)
+	server := startC06IsolatedHTTPServer(
+		t,
+		"c06-configured-listener",
+		"configured listener selection is a process-startup property",
+		factory.factoryDir,
+		[]string{"--server", configuredURL},
+		edges,
+	)
 
 	listenerURL := server.URL()
 	if listenerURL == "" {
@@ -421,109 +431,46 @@ func TestAPIServerStartsOnConfiguredListenerAndServesStatus(t *testing.T) {
 	if status.RuntimeStatus == "" {
 		t.Fatal("GET /status returned empty runtimeStatus")
 	}
+	server.stop(t)
 }
 
 // TestAPIServerUsesPlatformStarterThroughRootProcess proves the customer run
 // path can use the real loopback listener and Serve lifecycle through the
 // replaceable API-server edge, rather than only an httptest transport.
 func TestAPIServerUsesPlatformStarterThroughRootProcess(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	configuredURL := reserveConfiguredLoopbackURL(t)
-	parsed, err := url.Parse(configuredURL)
-	if err != nil {
-		t.Fatalf("parse configured listener URL %q: %v", configuredURL, err)
-	}
-
-	platformStarter, err := platformhttpserver.NewStarter(net.Listen, nil, nil)
-	if err != nil {
-		t.Fatalf("NewStarter() error = %v", err)
-	}
-	bound := make(chan platformhttpserver.Binding, 1)
-	edges := serviceedges.Edges{
-		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			originalOnBound := request.OnBound
-			request.OnBound = func(binding platformhttpserver.Binding) {
-				bound <- binding
-				if originalOnBound != nil {
-					originalOnBound(binding)
-				}
-			}
-			return platformStarter(ctx, request)
-		},
-		BrowserOpener: func(context.Context, string) error { return nil },
-	}
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	home := t.TempDir()
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", dir,
-		"--continuously", "--with-server", "--quiet", "--no-record",
-		"--listen", parsed.Host, "--pprof",
-	})
-	inputs.Input.WorkingDirectory = dir
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-	command := support.StartProcessCommand(t, process, inputs.Input)
-
-	var binding platformhttpserver.Binding
-	select {
-	case binding = <-bound:
-	case <-command.Done():
-		t.Fatalf("Process.Execute ended before listener binding: %v\nstdout=%s\nstderr=%s", command.Err(), inputs.Stdout(), inputs.Stderr())
-	case <-time.After(15 * time.Second):
-		t.Fatal("timed out waiting for the root-built platform listener binding")
-	}
-	if binding.Host != parsed.Hostname() || binding.Port <= 0 {
-		t.Fatalf("platform listener binding = %+v, want %s and a positive port", binding, parsed.Hostname())
-	}
-	listenerURL := "http://" + net.JoinHostPort(binding.Host, strconv.Itoa(binding.Port))
-
-	statusResponse, err := (&http.Client{Timeout: 5 * time.Second}).Get(listenerURL + "/status")
-	if err != nil {
-		t.Fatalf("GET real platform listener status: %v", err)
-	}
-	statusBody, err := io.ReadAll(statusResponse.Body)
-	_ = statusResponse.Body.Close()
-	if err != nil {
-		t.Fatalf("read real platform listener status: %v", err)
-	}
-	if statusResponse.StatusCode != http.StatusOK || len(statusBody) == 0 {
-		t.Fatalf("real platform listener status = (%d, body=%q), want non-empty HTTP 200 response", statusResponse.StatusCode, statusBody)
-	}
-
-	pprofResponse, err := (&http.Client{Timeout: 5 * time.Second}).Get(listenerURL + "/debug/pprof/")
-	if err != nil {
-		t.Fatalf("GET real platform listener pprof index: %v", err)
-	}
-	pprofBody, err := io.ReadAll(pprofResponse.Body)
-	_ = pprofResponse.Body.Close()
-	if err != nil {
-		t.Fatalf("read real platform listener pprof index: %v", err)
-	}
-	if pprofResponse.StatusCode != http.StatusOK || len(pprofBody) == 0 {
-		t.Fatalf("real platform listener pprof index = (%d, body length=%d), want non-empty HTTP 200 response", pprofResponse.StatusCode, len(pprofBody))
-	}
-
-	command.Stop(t)
-	select {
-	case <-command.Done():
-	default:
-		t.Fatal("root-built Process.Execute did not join after cancellation")
-	}
-	assertListenerRefused(t, parsed.Host, listenerURL)
+	// The real platform starter owns an OS listener and its Serve/join path;
+	// retain this process-isolated witness instead of sharing an httptest host.
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
+	server := startProductionLoopbackServerWithID(
+		t,
+		factory.factoryDir,
+		true,
+		"c06-platform-starter",
+		"the production starter owns a real OS listener and Serve lifecycle",
+	)
+	assertLiveStatusAndRuntimeDiagnostics(t, server.url)
+	assertLivePprofHeap(t, server.url)
+	server.close(t)
 }
 
 // TestAPIServerShutdownClosesListenerAndActiveStreams proves shutdown through the
 // public API server lifecycle closes the listener and terminates active public streams.
 func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
-	dir := scaffoldConcurrentRequestsFactory(t)
+	// Shutdown is destructive and must terminate active streams and its listener;
+	// it therefore cannot run on the package-owned shared process.
+	factory := scaffoldC06IsolatedFactory(t, concurrentRequestsTestConfig())
+	dir := factory.factoryDir
 	blocking := newBlockingInvocationRunner()
 	edges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(t, &edges, blocking, nil)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
+	server := startC06IsolatedHTTPServer(
+		t,
+		"c06-active-stream-shutdown",
+		"shutdown closes active streams and terminates the owning HTTP process",
+		dir,
+		nil,
+		edges,
+	)
 
 	listenerURL := server.URL()
 	parsed, err := url.Parse(listenerURL)
@@ -548,7 +495,7 @@ func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
 		)
 	}
 
-	server.Stop(t)
+	server.stop(t)
 	select {
 	case <-server.Done():
 	default:
@@ -562,11 +509,16 @@ func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
 // the public API server lifecycle reports a documented failure and leaves no
 // leaked listeners or readiness side effects.
 func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	// Bind failure is isolated because it exercises the starter's rejected-port
+	// fallback and process unwind rather than a serving listener.
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
+	dir := factory.factoryDir
 	requestedURL := "http://127.0.0.1:65534"
 
 	var attempts []string
+	const lifecycleID = "c06-bind-failure"
 	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
+		c06IsolatedLifecycle.rejectedBind(lifecycleID)
 		attempts = append(attempts, address)
 		return nil, errors.New("address unavailable")
 	}, nil, nil)
@@ -585,7 +537,14 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 			readinessCalls.Add(1)
 		},
 	}
-	process := support.BuildProcess(t, edges)
+	edges.APIServerStarter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		c06IsolatedLifecycle.processHosted(lifecycleID)
+		return starter(ctx, request)
+	}
+	process := c06BuildIsolatedProcess(t, lifecycleID, "bind failure exercises rejected ports and process unwind", c06IsolationExpectation{
+		portRelease:   true,
+		rejectedBinds: 2,
+	}, edges)
 
 	home := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -596,7 +555,10 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	inputs.Input.WorkingDirectory = dir
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
-	if err := process.Execute(inputs.Input); err == nil {
+	executeErr := process.Execute(inputs.Input)
+	process.markJoined()
+	process.close(t)
+	if executeErr == nil {
 		t.Fatalf(
 			"Process.Execute(run with bind failure) error = nil; stdout=%q stderr=%q",
 			inputs.Stdout(),
@@ -637,11 +599,10 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse requested listener URL %q: %v", requestedURL, err)
 	}
-	rebound, err := net.Listen("tcp4", parsed.Host)
-	if err != nil {
+	if err := rebindC06Listener(parsed.Host); err != nil {
 		t.Fatalf("requested listener address %s remained unavailable after bind failure: %v", parsed.Host, err)
 	}
-	_ = rebound.Close()
+	c06IsolatedLifecycle.portReleased(lifecycleID)
 
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	statusResponse, err := client.Get(requestedURL + "/status")

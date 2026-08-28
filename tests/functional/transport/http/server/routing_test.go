@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -90,15 +91,20 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 		t.Fatal("OpenAPI operation inventory does not contain shutdownServer")
 	}
 
-	// shutdownServer is process-mutating: keep its lifecycle witness isolated so
-	// it cannot terminate the package-owned server needed by later cases.
-	shutdownDir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	shutdownServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                shutdownDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer shutdownServer.Stop(t)
+	// shutdownServer is process-mutating: it terminates the server, so this
+	// lifecycle witness cannot share the package-owned server needed by the
+	// remaining routing and HTTP cases.
+	shutdownFactory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
+	shutdownEdges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &shutdownEdges, support.NewStaticSuccessCommandRunner("route shutdown"), nil)
+	shutdownServer := startC06IsolatedHTTPServer(
+		t,
+		"c06-routing-shutdown",
+		"shutdownServer terminates its owning HTTP process",
+		shutdownFactory.factoryDir,
+		nil,
+		shutdownEdges,
+	)
 	shutdownContext := *ctx
 	shutdownContext.baseURL = shutdownServer.URL()
 
@@ -126,6 +132,7 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 			t.Fatal("shutdownServer acknowledged but functional server did not stop")
 		}
 	})
+	shutdownServer.stop(t)
 }
 
 func assertModelCacheNotFoundResponse(t *testing.T, response *http.Response) {

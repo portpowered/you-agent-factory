@@ -58,6 +58,11 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "c06 shared HTTP fixture cleanup failed: %v\n", err)
 		exitCode = 1
 	}
+	if err := c06AssertIsolatedLifecycleClean(); err != nil {
+		fmt.Fprintf(os.Stderr, "c06 isolated lifecycle cleanup failed: %v\n", err)
+		exitCode = 1
+	}
+	fmt.Fprintf(os.Stderr, "%s\n", c06IsolatedLifecycle.summary())
 	os.Exit(exitCode)
 }
 
@@ -623,8 +628,13 @@ func (ledger *c06SharedHTTPLedger) registerScenario(id string, factoryDirs []str
 	if strings.TrimSpace(id) == "" {
 		return errors.New("c06 scenario ID is required")
 	}
-	if _, exists := ledger.scenarios[id]; exists {
-		return fmt.Errorf("c06 scenario %q is already registered", id)
+	if existing, exists := ledger.scenarios[id]; exists {
+		if !existing.closed || !existing.rootRemoved {
+			return fmt.Errorf("c06 scenario %q is already registered", id)
+		}
+		// go test -count=N repeats the package in one test process. Reuse an
+		// ID only after the prior iteration proved its scenario cleanup.
+		delete(ledger.scenarios, id)
 	}
 	if len(factoryDirs) == 0 {
 		return fmt.Errorf("c06 scenario %q has no Factory roots", id)
