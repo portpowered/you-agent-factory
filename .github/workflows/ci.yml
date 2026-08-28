@@ -417,12 +417,28 @@ jobs:
       # ./tests/functional/... once, subtracts only the versioned quarantine,
       # and writes package plus top-level test outcomes before the coverage
       # gate returns, including on failure.
+      - name: Prepare temporary functional resource measurement
+        if: matrix.suite == 'functional'
+        shell: bash
+        run: |
+          artifact_root="${{ steps.functional-parallelism.outputs.artifact_root }}"
+          wrapper_dir="$artifact_root/measurement-bin"
+          mkdir -p "$wrapper_dir"
+          cat > "$wrapper_dir/make" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [ "${1:-}" = "functional-test-viz" ] && [ "$#" -eq 1 ]; then
+            exec /usr/bin/time -v -o "${FUNCTIONAL_RESOURCE_USAGE_OUTPUT:?}" /usr/bin/make "$@"
+          fi
+          exec /usr/bin/make "$@"
+          SCRIPT
+          chmod +x "$wrapper_dir/make"
+          echo "FUNCTIONAL_RESOURCE_USAGE_OUTPUT=$artifact_root/resource-usage.txt" >> "$GITHUB_ENV"
+          echo "$GITHUB_WORKSPACE/$wrapper_dir" >> "$GITHUB_PATH"
       - name: Run complete Linux functional coverage and inventory
         if: matrix.suite == 'functional'
         timeout-minutes: 75
-        run: |
-          mkdir -p "${{ steps.functional-parallelism.outputs.artifact_root }}"
-          /usr/bin/time -v -o "${{ steps.functional-parallelism.outputs.artifact_root }}/resource-usage.txt" make functional-test-viz
+        run: make functional-test-viz
         env:
           FUNCTIONAL_TEST_VIZ_DIR: ${{ steps.functional-parallelism.outputs.artifact_root }}
           FUNCTIONAL_TEST_TIER: "merge-full"
