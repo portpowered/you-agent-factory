@@ -46,9 +46,10 @@ var (
 	sharedDefinitionsInitHostErr  error
 	sharedDefinitionsInitReady    sync.Once
 
-	sharedDefinitionsInitClientOnce sync.Once
-	sharedDefinitionsInitClient     support.ApplicationProcess
-	sharedDefinitionsInitClientErr  error
+	sharedDefinitionsInitClientOnce     sync.Once
+	sharedDefinitionsInitClient         support.ApplicationProcess
+	sharedDefinitionsInitClientErr      error
+	sharedDefinitionsInitClientCloseErr error
 )
 
 func sharedDefinitionsValidationServer(t testing.TB) *sharedDefinitionsServiceHost {
@@ -219,6 +220,7 @@ func writeSharedDefinitionsFactory(cfg map[string]any) (string, error) {
 }
 
 func closeSharedDefinitionsServiceHosts() error {
+	sharedDefinitionsInitClientCloseErr = nil
 	var failures []string
 	for name, host := range map[string]*sharedDefinitionsServiceHost{
 		"validation": sharedDefinitionsValidationHost,
@@ -230,8 +232,9 @@ func closeSharedDefinitionsServiceHosts() error {
 	}
 	if sharedDefinitionsInitClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), sharedDefinitionsServiceHostShutdownTimeout)
-		if err := sharedDefinitionsInitClient.Close(ctx); err != nil {
-			failures = append(failures, fmt.Sprintf("init client: %v", err))
+		sharedDefinitionsInitClientCloseErr = sharedDefinitionsInitClient.Close(ctx)
+		if sharedDefinitionsInitClientCloseErr != nil {
+			failures = append(failures, fmt.Sprintf("init client: %v", sharedDefinitionsInitClientCloseErr))
 		}
 		cancel()
 	}
