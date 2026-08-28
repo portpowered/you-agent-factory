@@ -83,10 +83,10 @@ export function selectSourceWorkflowRun({
 			reason: `workflow head branch ${headBranch || "(unknown)"} is not ${defaultBranch}`,
 		};
 	}
-	if (["cancelled", "timed_out", "action_required", "stale"].includes(conclusion)) {
+	if (conclusion !== "success" && conclusion !== "failure") {
 		return {
 			selected: false,
-			reason: `source CI conclusion is ${conclusion || "(unknown)"}; a completed run with unavailable evidence cannot be used`,
+			reason: `source CI conclusion is ${conclusion || "(unknown)"}; only success or failure runs may reach checkout, generation, or publication`,
 		};
 	}
 	return {
