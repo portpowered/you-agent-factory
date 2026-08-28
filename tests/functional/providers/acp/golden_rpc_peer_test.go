@@ -41,6 +41,8 @@ func goldenACPCommandFactory(starts *atomic.Int32) platformprocess.CommandFactor
 	}
 }
 
+// Isolation: isolated-with-reason - helper-process boundary; this child only
+// serves a parent-selected golden mode and owns no standalone product proof.
 func TestACPGoldenRPCPeerProcess(t *testing.T) {
 	mode := os.Getenv(goldenACPModeEnvironment)
 	if mode == "" {

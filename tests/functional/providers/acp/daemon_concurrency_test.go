@@ -11,6 +11,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+// Isolation: isolated-with-reason - connection serialization; two concurrent
+// prompts must contend for one real ACP stdio connection and one peer.
 func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "serialize")
 	signals := t.TempDir()

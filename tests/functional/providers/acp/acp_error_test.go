@@ -22,6 +22,8 @@ import (
 // command name no PATH entry can resolve), proving the observable,
 // caller-visible outcome the daemon's cmd.Start() failure path maps to: the
 // run fails with a dependency-kind error rather than hanging or panicking.
+// Isolation: isolated-with-reason - OS start failure; sharing would replace
+// the refused real command boundary with an already-started peer.
 func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
@@ -52,6 +54,8 @@ func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 	t.Fatalf("ACP response stream had no FAILED error event for the command start failure: %#v", responseEvents)
 }
 
+// Isolation: isolated-with-reason - subprocess stderr; sharing would make the
+// configured secret and peer-owned diagnostic stream non-independent.
 func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP stderr redaction"}`))
@@ -88,59 +92,16 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	t.Fatalf("ACP response stream omitted redacted stderr diagnostic: %#v", responseEvents)
 }
 
-// TestACPAgentSelfReportedCancellationMapsToCanceledFailure keeps a
-// root.BuildProcess cell for an ACP agent that honors a turn by returning
-// StopReasonCancelled from session/prompt itself (a real, spec-legal
-// response an agent can send independent of any session/cancel notification
-// from this system). Providers.ControlAttempt's own cancel-delivery seam has
-// no wired transport yet and is proven at the package-integration layer
-// instead (see acp/internal/service/cancel_test.go); this cell instead
-// proves the observable, caller-visible outcome of that same StopReason
-// mapping: the run fails, and the surfaced error reflects a canceled
-// attempt rather than a generic failure.
-func TestACPAgentSelfReportedCancellationMapsToCanceledFailure(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP self-reported cancellation"}`))
-	writeACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, "cancelled-response")
-
-	var starts atomic.Int32
-	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second)
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed work = %d, want 1", got)
-	}
-	if starts.Load() == 0 {
-		t.Fatal("ACP self-cancellation did not start the Agent process")
-	}
-	for _, event := range responseEvents {
-		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
-			continue
-		}
-		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
-		if err != nil {
-			t.Fatalf("decode ACP error response: %v", err)
-		}
-		if strings.Contains(payload.Message, "canceled") {
-			return
-		}
-	}
-	t.Fatalf("ACP response stream omitted the canceled attempt failure: %#v", responseEvents)
-}
-
-// TestACPProtocolFailuresMapToStableWorkerFailureClasses keeps two representative
-// root.BuildProcess cells for misconfigured vs unknown ACP protocol failures.
-// The exhaustive mode matrix lives in
-// pkg/services/providers/internal/services/acp/internal/service.
+// Isolation: isolated-with-reason - ACP initialization negotiation; the
+// retained version branch must observe a real incompatible peer response at
+// the stdio boundary. The generic protocol-failure branch is migrated to the
+// shared behavior matrix.
 func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 	for _, test := range []struct {
 		mode string
 		want factoryapi.WorkFailureType
 	}{
 		{mode: "version", want: factoryapi.WorkFailureTypeMisconfigured},
-		{mode: "fail", want: factoryapi.WorkFailureTypeUnknown},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -164,6 +125,8 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 	}
 }
 
+// Isolation: isolated-with-reason - executable lookup; sharing would remove
+// the zero-start proof that lookup fails before the ACP process boundary.
 func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"missing ACP executable"}`))

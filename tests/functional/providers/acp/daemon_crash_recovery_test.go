@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - crash and replacement; the failed first
+// child and successful second child must remain distinct real ACP processes.
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "crash-once")
 	marker := filepath.Join(t.TempDir(), "crashed")
@@ -31,6 +33,8 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 	}
 }
 
+// Isolation: isolated-with-reason - connection retirement; a live child closes
+// stdout and a replacement must be selected rather than reusing stale stdio.
 func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "disconnect-once")
 	dir := t.TempDir()

@@ -8,6 +8,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+// Isolation: isolated-with-reason - process and connection identity; two
+// sequential executions must use one retained real OS peer and stdio stream.
 func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "persistent")
 	var starts atomic.Int32
@@ -25,6 +27,8 @@ func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing
 	}
 }
 
+// Isolation: isolated-with-reason - initialization negotiation; the durable
+// execution must observe an incompatible version from a fresh stdio peer.
 func TestProvidersACPRejectsIncompatibleProtocolVersionAtStdioBoundary(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "version")
 	var starts atomic.Int32

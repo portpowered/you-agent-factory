@@ -44,6 +44,9 @@ type packagedACPInitializeFixture struct {
 // normalized response fidelity for every package-owned command. Attachment
 // mapping remains covered by the focused cursor ACP resource fixture because
 // the other packaged profiles conservatively declare image input unsupported.
+// Isolation: isolated-with-reason - packaged command projection; the runtime
+// portion must launch the exact allowlisted executable boundary. The profile
+// fixture checks remain root-free shareable asset evidence.
 func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 	var catalog packagedACPConformanceCatalog
 	if err := json.Unmarshal(modelproviders.RuntimeACPJSON(), &catalog); err != nil {
@@ -232,4 +235,6 @@ func sameStringSlice(left, right []string) bool {
 	return true
 }
 
+// Isolation: isolated-with-reason - helper/process command boundary; this
+// child is an inert guard for an unexpected packaged executable projection.
 func TestPackagedACPUnexpectedCommand(t *testing.T) {}

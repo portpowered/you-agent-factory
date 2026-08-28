@@ -122,6 +122,9 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
+			if err := holdACPHelperUntilReleased(); err != nil {
+				return err
+			}
 			if p.mode == "package-conformance" {
 				return waitForPackageConformanceRelease()
 			}
@@ -301,6 +304,12 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	if handled, err := p.respondToPackagedPrompt(request); handled {
 		return err
 	}
+	if p.mode == "shared-spine" && sharedSpineFailurePrompt(request) {
+		if err := p.update(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"partial shared-spine answer"}}`); err != nil {
+			return err
+		}
+		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "shared ACP protocol failure"})
+	}
 	if p.mode == "crash-once" {
 		marker := os.Getenv("YOU_TEST_ACP_CRASH_MARKER")
 		if _, err := os.Stat(marker); os.IsNotExist(err) {
@@ -385,6 +394,23 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+}
+
+func sharedSpineFailurePrompt(request rpcEnvelope) bool {
+	var params struct {
+		Prompt []struct {
+			Text string `json:"text"`
+		} `json:"prompt"`
+	}
+	if err := json.Unmarshal(request.Params, &params); err != nil {
+		return false
+	}
+	for _, block := range params.Prompt {
+		if strings.Contains(block.Text, "shared ACP failure") {
+			return true
+		}
+	}
+	return false
 }
 
 func holdFailedRetryPeer() error {

@@ -2,7 +2,6 @@ package acp_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,36 +28,10 @@ const (
 	acpDisconnectReadyEnvironment           = "YOU_TEST_ACP_DISCONNECT_READY"
 	acpDisconnectReleaseEnvironment         = "YOU_TEST_ACP_DISCONNECT_RELEASE"
 	acpPackageConformanceReleaseEnvironment = "YOU_TEST_ACP_PACKAGE_CONFORMANCE_RELEASE"
+	acpHelperStartMarkerEnvironment         = "YOU_TEST_ACP_HELPER_START_MARKER"
+	acpHelperExitMarkerEnvironment          = "YOU_TEST_ACP_HELPER_EXIT_MARKER"
+	acpHelperReadyMarkerEnvironment         = "YOU_TEST_ACP_HELPER_READY_MARKER"
 )
-
-func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP vertical slice"}`))
-	writeACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, "1")
-
-	var processStarts atomic.Int32
-	fallback := &legacyProvider{err: errors.New("legacy provider route was unexpectedly invoked")}
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-		ProviderOverride:              fallback,
-	}, 20*time.Second)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0", got)
-	}
-	if got := processStarts.Load(); got != 1 {
-		t.Fatalf("ACP process starts = %d, want 1", got)
-	}
-	if got := fallback.calls.Load(); got != 0 {
-		t.Fatalf("legacy provider calls = %d, want 0; ACP must be selected by executorProvider", got)
-	}
-	assertACPProviderSession(t, events)
-}
 
 // TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
 // Factory execution path through an ACP server error. The helper accepts a
@@ -69,6 +42,8 @@ func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 // configured ACP integration because packaged ACP profiles may truthfully omit
 // session resume; packaged behavior is covered by the package conformance
 // matrix and capability tests.
+// Isolation: isolated-with-reason - restart and session continuation; the two
+// real ACP process identities and exact opaque session load are the witness.
 func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	const sessionID = "acp-session-retry-resume"
 	const providerID = "retry-acp"
@@ -112,55 +87,6 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	assertProviderSessionID(t, events, providerID, sessionID)
 }
 
-func TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"legacy ACP spelling"}`))
-	writeLegacyACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, "1")
-
-	var processStarts atomic.Int32
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second)
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
-	}
-	if got := processStarts.Load(); got != 1 {
-		t.Fatalf("ACP process starts = %d, want 1", got)
-	}
-}
-
-func TestFactoryRunProjectsOperatorConfiguredACPIntegrationIntoInvocationCatalog(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"configured ACP provider"}`))
-	writeACPWorker(t, dir, "custom-acp")
-	t.Setenv(acpHelperEnvironment, "1")
-
-	var processStarts atomic.Int32
-	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second, func(home string) {
-		configDir := filepath.Join(home, ".you-agent-factory")
-		if err := os.MkdirAll(configDir, 0o700); err != nil {
-			t.Fatalf("create operator config directory: %v", err)
-		}
-		config := []byte(`{"workers":{"acp":{"integrations":[{"id":"entry-1","name":"custom-acp","transport":"stdio","command":"custom-agent acp"}]}}}`)
-		if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
-			t.Fatalf("write operator config: %v", err)
-		}
-	})
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
-	}
-	if got := processStarts.Load(); got != 1 {
-		t.Fatalf("configured ACP process starts = %d, want 1", got)
-	}
-	assertProviderSession(t, events, "custom-acp")
-}
-
 func assertACPProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
 	assertProviderSession(t, events, "cursor-acp")
 }
@@ -190,6 +116,9 @@ func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, pro
 	t.Fatal("Factory events omitted the ACP Provider Session reference")
 }
 
+// Isolation: isolated-with-reason - startup boundary; only root construction
+// is allowed, so any shared command execution would destroy the zero-start
+// assertion.
 func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 	var processStarts atomic.Int32
 	_ = support.BuildProcess(t, serviceedges.Edges{
@@ -200,6 +129,8 @@ func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 	}
 }
 
+// Isolation: isolated-with-reason - pre-start provider selection; the unknown
+// provider must fail before either ACP or fallback process/effect starts.
 func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unknown ACP provider"}`))
@@ -220,29 +151,6 @@ func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	}
 	if got := fallback.calls.Load(); got != 0 {
 		t.Fatalf("legacy provider calls for unknown ACP provider = %d, want 0", got)
-	}
-}
-
-func TestScriptWrapExecutorProviderRetainsLegacyProviderRoute(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"script wrap compatibility"}`))
-	writeLegacyACPWorker(t, dir, "SCRIPT_WRAP")
-
-	var processStarts atomic.Int32
-	fallback := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProviderOverride:              fallback,
-	}, 20*time.Second)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
-	}
-	if got := fallback.calls.Load(); got != 1 {
-		t.Fatalf("legacy provider calls = %d, want 1", got)
-	}
-	if got := processStarts.Load(); got != 0 {
-		t.Fatalf("ACP process starts for SCRIPT_WRAP = %d, want 0", got)
 	}
 }
 
@@ -380,14 +288,82 @@ func (p *legacyProvider) Continue(ctx context.Context, request providers.Continu
 	}, nil
 }
 
+// Isolation: isolated-with-reason - helper-process boundary; this child is an
+// inert target unless a parent deliberately supplies a recognized mode, while
+// parent tests own all ACP protocol assertions.
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" && mode != "shared-spine" {
 		return
 	}
+	recordACPHelperPID(acpHelperStartMarkerEnvironment)
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
+		recordACPHelperPID(acpHelperExitMarkerEnvironment)
 		os.Exit(2)
 	}
+	recordACPHelperPID(acpHelperExitMarkerEnvironment)
 	os.Exit(0)
+}
+
+// recordACPHelperPID is enabled only by the shared-process witness. Its
+// append-only marker gives the parent the child identity needed to observe the
+// actual OS process boundary before reusing the provider integration.
+func recordACPHelperPID(environment string) {
+	marker := strings.TrimSpace(os.Getenv(environment))
+	if marker == "" {
+		return
+	}
+	file, err := os.OpenFile(marker, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "record ACP helper exit: %v\n", err)
+		return
+	}
+	_, _ = file.WriteString(strconv.Itoa(os.Getpid()) + "\n")
+	_ = file.Close()
+}
+
+// holdACPHelperUntilReleased keeps a shared one-shot peer alive after it has
+// flushed a prompt response. The parent observes the terminal Work result,
+// then releases this exact helper before it waits for process exit.
+// Without this checkpoint, the child can exit while the ACP SDK is still
+// draining the prompt's notifications and turn a valid response into a
+// transport failure.
+func holdACPHelperUntilReleased() error {
+	readyMarker := strings.TrimSpace(os.Getenv(acpHelperReadyMarkerEnvironment))
+	if strings.TrimSpace(os.Getenv(acpHelperExitMarkerEnvironment)) == "" || readyMarker == "" {
+		return nil
+	}
+
+	pid := strconv.Itoa(os.Getpid())
+	token := fmt.Sprintf("%s-%d", pid, time.Now().UnixNano())
+	file, err := os.OpenFile(readyMarker, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("record ACP helper readiness: %w", err)
+	}
+	if _, err := fmt.Fprintf(file, "%s %s\n", token, pid); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("record ACP helper readiness: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close ACP helper readiness marker: %w", err)
+	}
+
+	releaseLine := "release " + token
+	for {
+		data, err := os.ReadFile(readyMarker)
+		if os.IsNotExist(err) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect ACP helper release: %w", err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(line) == releaseLine {
+				return nil
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

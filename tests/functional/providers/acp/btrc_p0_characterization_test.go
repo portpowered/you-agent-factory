@@ -3,14 +3,9 @@ package acp_test
 import (
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 var btrcACPEventOrder = []factoryapi.FactoryEventType{
@@ -25,62 +20,6 @@ var btrcACPEventOrder = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeModelResponse,
 	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
-}
-
-const btrcACPCompletionCeiling = 20 * time.Second
-
-func TestBTRCP0ACPTargetSuccessCharacterization(t *testing.T) {
-	run := runBTRCP0ACPTarget(t, "1")
-	if run.starts != 1 {
-		t.Fatalf("ACP process starts = %d, want exactly one", run.starts)
-	}
-	assertBTRCACPEventOrder(t, run.events)
-	workID, dispatchID := assertBTRCACPDispatch(t, run.events, factoryapi.WorkOutcomeAccepted, "done")
-	assertBTRCACPProviderSession(t, run.events, factoryapi.InferenceOutcomeSucceeded)
-	assertBTRCACPResponseTerminal(t, run.responseEvents, "COMPLETED")
-	assertBTRCACPCompletedTarget(t, run.session, run.listed, workID, dispatchID)
-}
-
-func TestBTRCP0ACPTargetProtocolFailureCharacterization(t *testing.T) {
-	run := runBTRCP0ACPTarget(t, "fail")
-	if run.starts != 1 {
-		t.Fatalf("ACP process starts = %d, want exactly one", run.starts)
-	}
-	assertBTRCACPEventOrder(t, run.events)
-	workID, dispatchID := assertBTRCACPDispatch(t, run.events, factoryapi.WorkOutcomeFailed, "failed")
-	assertBTRCACPProviderSession(t, run.events, factoryapi.InferenceOutcomeFailed)
-	assertBTRCACPFailureDetail(t, run.events)
-	assertBTRCACPResponseTerminal(t, run.responseEvents, "FAILED")
-	assertBTRCACPFailedTarget(t, run.session, run.listed, workID, dispatchID)
-}
-
-type btrcACPTargetRun struct {
-	session        factoryapi.FactorySession
-	listed         factoryapi.ListWorkResponse
-	events         []factoryapi.FactoryEvent
-	responseEvents []factoryapi.FactoryResponseEvent
-	starts         int32
-}
-
-func runBTRCP0ACPTarget(t *testing.T, mode string) btrcACPTargetRun {
-	t.Helper()
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP target characterization"}`))
-	writeACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, mode)
-
-	var starts atomic.Int32
-	// The helper ACP process is the injected command/protocol edge, so it has
-	// no in-process completion callback for this test to await. The root-built
-	// continuous process is positively synchronized by the public terminal
-	// Factory Session observation inside this helper; this ceiling is only a
-	// bounded failure guard for a broken helper or runtime, not a sleep/polling
-	// synchronization mechanism.
-	session, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, btrcACPCompletionCeiling)
-	return btrcACPTargetRun{session: session, listed: listed, events: events, responseEvents: responseEvents, starts: starts.Load()}
 }
 
 func assertBTRCACPEventOrder(t *testing.T, events []factoryapi.FactoryEvent) {
