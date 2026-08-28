@@ -19,13 +19,16 @@ direct inference operations.
 
 ## Discover And Inspect Models
 
-Start a Factory service before using discovery, inspection, or pull commands.
-They query its `/models` surface; use the global `--server` option when the
-service is not at the default address.
+Without an explicit `--server`, discovery, inspection, pull, and removal use
+the local Models composition. You do not need to start `you server` first.
+Set `--server` only to use a reachable running service at that address.
 
 ```bash
 you models list
-you models inspect OMNIVOICE_Q4_K_M
+you models inspect llm
+you models inspect asr
+you models inspect tts
+you models inspect embed
 ```
 
 `list` summarizes each model's provider locality, supported operations and
@@ -57,13 +60,32 @@ observed cache, active pull, and host facts:
 
 The service does not publish `READY` with `NOT_INSTALLED`.
 
+### Check Download Size Before Pulling
+
+The built-in names resolve to pinned model payloads. These approximate decimal
+sizes exclude the additional platform-specific backend and runtime files.
+
+| Name | Operation | Pinned model payload |
+| --- | --- | ---: |
+| `llm` | `OMNI` | 5.0 GB |
+| `asr` | `ASR` | 148 MB |
+| `tts` | `TTS` | 18.7 GB |
+| `embed` | `EMBED` | 1.21 GB |
+
+Run `you --json models inspect <name>` to confirm the pinned source before a
+pull. After installation, `cacheBytes` reports the exact managed cache size.
+
+Warning: Pulling `tts` downloads an approximately 18.7 GB pinned model
+payload. Backend and runtime files need additional disk space. Inspect `tts`
+before pulling or invoking it.
+
 ## Pull A Managed Local Model
 
 Pull supported local assets into the service's managed cache:
 
 ```bash
-you models pull OMNIVOICE_Q4_K_M
-you --json models pull OMNIVOICE_Q4_K_M
+you models pull llm
+you --json models pull embed
 ```
 
 The command is synchronous for managed local assets: it remains active until
@@ -100,9 +122,9 @@ Use discovery and inspection to account for installed files:
 
 ```bash
 you models list
-you models inspect OMNIVOICE_Q4_K_M
+you models inspect llm
 you --json models list
-you --json models inspect OMNIVOICE_Q4_K_M
+you --json models inspect llm
 ```
 
 `models list` reports the installed revision, exact `cacheBytes`, and a readable
@@ -116,8 +138,8 @@ does not follow symbolic links, and it does not count data outside that revision
 Remove one installed revision only when you no longer need its local files:
 
 ```bash
-you models remove OMNIVOICE_Q4_K_M
-you --json models remove OMNIVOICE_Q4_K_M
+you models remove llm
+you --json models remove embed
 ```
 
 Removal names the model, revision, and validated `cachePath`. It measures regular
@@ -129,18 +151,15 @@ Removal is always customer-initiated. The managed disk cache has no automatic
 eviction, time-to-live policy, or background cleanup. Runtime host unloading does
 not remove the managed files.
 
-### Managed Model Storage Finding
+### Managed Model Storage
 
 The managed model cache remains under `.agent-factory/models`. Operator Settings
 uses `~/.you-agent-factory/config.json`, Factory Definitions uses
 `~/.you-agent-factory/factories`, and Recordings uses
 `~/.you-agent-factory/recordings`.
 
-This separation matches the service ownership boundaries in the repository, but
-the repository does not explain the different directory names.
-
-The placement is therefore not proven intentional. This change keeps the existing
-cache root and does not move data. Track the storage decision in [issue #2201](https://github.com/portpowered/you-agent-factory/issues/2201).
+These directories keep model assets separate from settings, Factory Definitions,
+and Recordings.
 
 ## Invoke A Model Directly
 
