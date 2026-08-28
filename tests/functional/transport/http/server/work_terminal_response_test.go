@@ -7,6 +7,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -38,6 +39,7 @@ func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t
 		if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
 			t.Fatalf("status categories = %+v, want one terminal and zero failed", status.Categories)
 		}
+		assertTerminalWorkFactoryEvent(t, server.URL(), workID, factoryapi.WorkOutcomeAccepted)
 
 		listed := support.ListDefaultSessionWork(t, server.URL())
 		if len(listed.Results) != 1 {
@@ -65,6 +67,7 @@ func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t
 		if status.Categories.Failed != 1 || status.Categories.Terminal != 0 {
 			t.Fatalf("status categories = %+v, want one failed and zero terminal", status.Categories)
 		}
+		assertTerminalWorkFactoryEvent(t, server.URL(), workID, factoryapi.WorkOutcomeFailed)
 
 		failed := support.GetDefaultSessionWorkByID(t, server.URL(), workID)
 		if failed.State == nil || failed.State.Type != factoryapi.WorkStateTypeFAILED {
@@ -75,6 +78,38 @@ func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t
 		// than content loss.
 		assertOrderedTypedTerminalContent(t, failed.Content, "failed GET /work/{id} content")
 	})
+}
+
+func assertTerminalWorkFactoryEvent(t *testing.T, baseURL, workID string, targetOutcome factoryapi.WorkOutcome) {
+	t.Helper()
+
+	events := support.GetFactoryEventsAt(t, baseURL)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse ||
+			event.Context.SessionId == nil ||
+			*event.Context.SessionId != factorysessions.DefaultSessionID ||
+			event.Context.WorkIds == nil {
+			continue
+		}
+		containsWork := false
+		for _, eventWorkID := range *event.Context.WorkIds {
+			if eventWorkID == workID {
+				containsWork = true
+				break
+			}
+		}
+		if !containsWork {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode terminal DISPATCH_RESPONSE event %q: %v", event.Id, err)
+		}
+		if payload.Outcome == targetOutcome {
+			return
+		}
+	}
+	t.Fatalf("Factory Event stream has no %s DISPATCH_RESPONSE for Work %q in session %q", targetOutcome, workID, factorysessions.DefaultSessionID)
 }
 
 func assertOrderedTypedTerminalContent(t *testing.T, content *factoryapi.WorkContent, surface string) {
