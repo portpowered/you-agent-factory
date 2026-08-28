@@ -416,6 +416,9 @@ func registerPlacementResponseCleanup(
 	}
 	sessionID := strings.TrimSpace(*response.SessionId)
 	if sessionID != "" {
+		if lifecycleFixture != nil && lifecycleFixture.ledger != nil && lifecycleFixture.ledger.sessionClosed(sessionID) {
+			return
+		}
 		registerLifecycleSessionCleanup(t, serverURL, sessionID)
 	}
 }
@@ -632,6 +635,15 @@ func (client *lifecycleClientProcess) startCLI(
 	if output != nil {
 		inputs.Input.Stdout = output
 		inputs.Input.Stderr = output
+	}
+	var invocationID string
+	if lifecycleFixture != nil && lifecycleFixture.ledger != nil {
+		invocationID = lifecycleFixture.ledger.beginInvocation(t.Name() + " Process.Execute")
+		t.Cleanup(func() {
+			if err := lifecycleFixture.ledger.closeInvocation(invocationID); err != nil {
+				t.Errorf("record lifecycle invocation cleanup census: %v", err)
+			}
+		})
 	}
 	command := support.StartProcessCommand(t, client.process, inputs.Input)
 	go func() {

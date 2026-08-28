@@ -46,12 +46,18 @@ var workerSessionsCLIBinaryState struct {
 // they do not exercise, while the full package still observes one topology.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
-	if err := closeWorkerSessionsCLISharedFixture(); err != nil {
-		fmt.Fprintf(os.Stderr, "provider sessions CLI shared fixture cleanup failed: %v\n", err)
+	sharedFixtureErr := closeWorkerSessionsCLISharedFixture()
+	if sharedFixtureErr != nil {
+		fmt.Fprintf(os.Stderr, "provider sessions CLI shared fixture cleanup failed: %v\n", sharedFixtureErr)
 		exitCode = 1
 	}
-	if err := closeWorkerSessionsCLIBinary(); err != nil {
-		fmt.Fprintf(os.Stderr, "provider sessions CLI binary cleanup failed: %v\n", err)
+	binaryErr := closeWorkerSessionsCLIBinary()
+	if binaryErr != nil {
+		fmt.Fprintf(os.Stderr, "provider sessions CLI binary cleanup failed: %v\n", binaryErr)
+		exitCode = 1
+	}
+	if err := writeForcedProviderSessionsCleanupReport(sharedFixtureErr, binaryErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write forced Provider Sessions CLI cleanup report: %v\n", err)
 		exitCode = 1
 	}
 	os.Exit(exitCode)

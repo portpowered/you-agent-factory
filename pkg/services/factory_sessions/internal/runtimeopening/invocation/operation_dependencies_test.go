@@ -234,6 +234,7 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 	}
 	opened, active, err := concrete.open(t.Context(), roles.InvocationTarget{
 		FactoryDir: "factory", HomeDir: "home", RunnerID: "runner",
+		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 	})
 	if err != nil {
 		t.Fatalf("open invocation runtime: %v", err)
@@ -247,6 +248,7 @@ func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
 	}
 	if opening.request == nil || opening.request.FactoryDefinition.Directory != "factory" ||
 		opening.request.Workers.RunnerID != "runner" ||
+		opening.request.FactorySession.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" ||
 		opening.request.FactoryRuntime.LogDirectory != "logs" ||
 		opening.request.FactoryRuntime.MetricsDirectory != "metrics" {
 		t.Fatalf("invocation runtime request = %#v", opening.request)

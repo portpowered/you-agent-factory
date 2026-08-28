@@ -51,7 +51,7 @@ func (planner *liveRecordingTargetPlanner) PlanLiveRecordingTarget(
 	}
 	now := planner.clock.Now().UTC()
 	recordingsRoot := planner.join(homeDir, ".you-agent-factory", "recordings")
-	reservedPath, err := planner.reserve.ReserveNamed(recordingsRoot, now, canonicalID, ".jsonl")
+	reservedPath, err := planner.reserve.ReserveNamed(recordingsRoot, now, canonicalID, ".json")
 	if err != nil {
 		return recordings.LiveRecordingTarget{}, fmt.Errorf(
 			"reserve recording target for canonical Factory Session ID %q: %w",
@@ -64,7 +64,7 @@ func (planner *liveRecordingTargetPlanner) PlanLiveRecordingTarget(
 		now.Format("2006"),
 		now.Format("01"),
 		now.Format("02"),
-		canonicalID+".jsonl",
+		canonicalID+".json",
 	)
 	if reservedPath != wantPath {
 		return recordings.LiveRecordingTarget{}, fmt.Errorf(

@@ -979,46 +979,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_multi_turn_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_packaged_factory_prompt_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_server_composition_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_streaming_composition_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_streaming_usage_composition_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/acp_worker_child_events_test.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/chat_sessions/root_composition/doc.go",
-      "target": "chat_sessions"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/factory_run/output/failure_test.go",
       "target": "cli"
     },

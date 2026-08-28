@@ -56,8 +56,10 @@ type InvocationTarget struct {
 	RecordPath            string
 	ReplayPath            string
 	ResumePath            string
-	// CanonicalSessionID is the preallocated runtime identity used when a
-	// public default-session alias selects automatic recording.
+	// CanonicalSessionID is the preallocated runtime UUID for an automatic
+	// default-session recording. It remains separate from the public alias and
+	// prevents the reserved empty artifact from being treated as prior board
+	// history during one-shot startup.
 	CanonicalSessionID               string
 	RuntimeLogDir                    string
 	RuntimeLogConfig                 factoryruntime.RuntimeLogStorageConfig

@@ -155,7 +155,7 @@ func TestReserverReserveNamedWithCollisionReturnsNonCollisionFailures(t *testing
 			if err != nil {
 				t.Fatalf("NewReserver: %v", err)
 			}
-			_, err = reserver.ReserveNamed(t.TempDir(), time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC), "session", ".jsonl")
+			_, err = reserver.ReserveNamedWithCollision(t.TempDir(), time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC), "session", ".jsonl")
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("ReserveNamedWithCollision error = %v, want %v", err, test.wantErr)
 			}
@@ -209,7 +209,7 @@ func TestReserverReserveNamedWithCollisionSharesCalendarDirectoryWithLogsAndMetr
 		t.Fatalf("NewReserver: %v", err)
 	}
 
-	namedPath, err := reserver.ReserveNamed(root, at, "session", ".jsonl")
+	namedPath, err := reserver.ReserveNamedWithCollision(root, at, "session", ".jsonl")
 	if err != nil {
 		t.Fatalf("ReserveNamedWithCollision: %v", err)
 	}

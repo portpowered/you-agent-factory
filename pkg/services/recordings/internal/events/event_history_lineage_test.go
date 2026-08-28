@@ -887,3 +887,110 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 
 	assertFailedPreservesRequestContentResponse(t, generatedHistoryEvents(t, history))
 }
+
+func TestEventHistoryGeneratedHelpersMapInferencePayload(t *testing.T) {
+	t.Parallel()
+
+	request := &workerexecution.InferenceRequestEventPayload{InferenceRequestID: "request-1"}
+	response := &workerexecution.InferenceResponseEventPayload{InferenceRequestID: "request-1"}
+	if eventType, payload := inferenceFactoryEventPayload(workerexecution.InferenceEvent{
+		Kind: workerexecution.InferenceEventKindRequest, Request: request,
+	}); eventType != interfaces.FactoryEventTypeInferenceRequest || payload == nil {
+		t.Fatalf("request inference payload = (%q, %#v), want request event", eventType, payload)
+	}
+	if eventType, payload := inferenceFactoryEventPayload(workerexecution.InferenceEvent{
+		Kind: workerexecution.InferenceEventKindResponse, Response: response,
+	}); eventType != interfaces.FactoryEventTypeInferenceResponse || payload == nil {
+		t.Fatalf("response inference payload = (%q, %#v), want response event", eventType, payload)
+	}
+	if eventType, payload := inferenceFactoryEventPayload(workerexecution.InferenceEvent{
+		Kind: workerexecution.InferenceEventKindRequest, Request: request, Response: response,
+	}); eventType != "" || payload != nil {
+		t.Fatalf("ambiguous inference payload = (%q, %#v), want empty", eventType, payload)
+	}
+}
+
+func TestEventHistoryGeneratedHelpersFilterSecretPointers(t *testing.T) {
+	t.Parallel()
+
+	if got := inferenceSecretProvenance(workerexecution.InferenceEvent{Kind: workerexecution.InferenceEventKindResponse}); got != nil {
+		t.Fatalf("response secret provenance = %#v, want nil", got)
+	}
+	if got := recordingSecretsFromJSONPointers(nil); got != nil {
+		t.Fatalf("nil secret pointers = %#v, want nil", got)
+	}
+	if got := recordingSecretsFromJSONPointers([]string{"/factory/name"}); len(got) != 1 || got[0].JSONPointer != "/factory/name" {
+		t.Fatalf("secret pointers = %#v, want one declared pointer", got)
+	}
+}
+
+func TestEventHistoryGeneratedHelpersMapConsumedWorkRefs(t *testing.T) {
+	t.Parallel()
+
+	refs := dispatchConsumedWorkRefsFromTokens([]workerexecution.Token{
+		{ID: "resource", Color: workerexecution.Color{DataType: workerexecution.DataTypeResource}},
+		{ID: "token-fallback", Color: workerexecution.Color{DataType: workerexecution.DataTypeWork}},
+		{ID: "token-work", Color: workerexecution.Color{DataType: workerexecution.DataTypeWork, WorkID: "work-1"}},
+		{Color: workerexecution.Color{DataType: workerexecution.DataTypeWork}},
+	})
+	if len(refs) != 2 || refs[0].WorkID != "token-fallback" || refs[1].WorkID != "work-1" {
+		t.Fatalf("consumed work refs = %#v, want fallback and explicit work IDs", refs)
+	}
+}
+
+func TestEventHistoryGeneratedHelpersMapDispatchMetadata(t *testing.T) {
+	t.Parallel()
+
+	if dispatchRequestEventMetadataPtr("", workerexecution.ResolvedRunnerSelection{}) != nil {
+		t.Fatal("empty dispatch metadata returned non-nil value")
+	}
+	metadata := dispatchRequestEventMetadataPtr("replay-key", workerexecution.ResolvedRunnerSelection{
+		RunnerID: "runner-1", Source: workerexecution.RunnerSelectionSourceFactory,
+	})
+	if metadata == nil || metadata.ReplayKey == nil || *metadata.ReplayKey != "replay-key" || metadata.RunnerID == nil ||
+		*metadata.RunnerID != "runner-1" || metadata.RunnerSelectionSource == nil ||
+		*metadata.RunnerSelectionSource != workerexecution.RunnerSelectionSourceFactory {
+		t.Fatalf("dispatch metadata = %#v, want replay, runner, and source", metadata)
+	}
+}
+
+func TestEventHistoryGeneratedHelpersNormalizeEventRelation(t *testing.T) {
+	t.Parallel()
+
+	relation := eventRelation(work.FactoryRelation{Type: "blocks", SourceWorkName: "source", TargetWorkID: "target"})
+	if relation.TargetWorkName != "target" || relation.Type != work.WorkRelationType("blocks") {
+		t.Fatalf("event relation = %#v, want target ID fallback", relation)
+	}
+}
+
+func TestEventHistoryGeneratedHelpersProjectEventWorks(t *testing.T) {
+	t.Parallel()
+
+	items := eventWorks([]work.FactoryWorkItem{
+		{ID: "work-init", TraceID: "trace-init", State: "init"},
+		{ID: "work-done", DisplayName: "done", TraceID: "trace-done", State: "done"},
+		{ID: "work-failed", DisplayName: "failed", State: "failed"},
+		{ID: "work-processing", DisplayName: "processing", State: "queued"},
+		{ID: "work-empty", DisplayName: "empty", State: ""},
+	})
+	if len(items) != 5 || items[0].Name != "work-init" || items[0].CurrentChainingTraceID != "trace-init" ||
+		items[0].State == nil || items[0].State.Type != "INITIAL" || items[1].State == nil || items[1].State.Type != "TERMINAL" ||
+		items[2].State == nil || items[2].State.Type != "FAILED" || items[3].State == nil || items[3].State.Type != "PROCESSING" ||
+		items[4].State != nil {
+		t.Fatalf("event work projections = %#v, want state fallbacks", items)
+	}
+}
+
+func TestEventHistoryGeneratedHelpersFilterRequestEventContent(t *testing.T) {
+	t.Parallel()
+
+	content := requestEventContent([]work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "text"},
+		{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"valid":true}`)},
+		{Type: work.WorkContentPartTypeJSON, JSON: []byte("{")},
+		{Type: work.WorkContentPartType("unsupported")},
+	})
+	if len(content) != 2 || content[0].Text != "text" || string(content[1].JSON) != `{"valid":true}` {
+		t.Fatalf("request event content = %#v, want supported text and valid JSON only", content)
+	}
+}

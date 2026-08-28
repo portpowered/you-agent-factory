@@ -28,6 +28,7 @@ type workRoutingScenarioCase struct {
 // the root-built service-mode process and controlled command edge shared.
 func TestSharedProcessWorkRouting(t *testing.T) {
 	fixture := ensureWorkRoutingPackageFixture(t)
+	beginWorkRoutingScenarioRun(t, fixture)
 
 	runWorkRoutingScenarioCases(t, []workRoutingScenarioCase{
 		{
@@ -168,7 +169,9 @@ func runLogicalMovePreservesWorkPayloadAndLineage(
 	if got := workRoutingPublicWorkText(admittedWork); got != wantPayload {
 		t.Fatalf("WORK_REQUEST payload = %q, want %q preserved across logical move", got, wantPayload)
 	}
-	publicWork := getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, wantWorkID)
+	publicWork := workRoutingReadValue(t, scenario.fixture, scenario.id+"/work/"+wantWorkID, func() factoryapi.Work {
+		return getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, wantWorkID)
+	})
 	if got := support.StringPointerValue(publicWork.WorkId); got != wantWorkID {
 		t.Fatalf("public Work ID = %q, want %q preserved across logical move", got, wantWorkID)
 	}

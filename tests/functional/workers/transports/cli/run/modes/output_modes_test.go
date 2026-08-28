@@ -133,7 +133,9 @@ func executeSuccessfulRun(t *testing.T, globalArgs, runArgs []string) successful
 
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	return successfulRunResult{stdout: inputs.Stdout(), stderr: inputs.Stderr()}
@@ -169,7 +171,9 @@ func executeFailedRun(t *testing.T, globalArgs, runArgs []string) (failedRunResu
 
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
 	return failedRunResult{stdout: inputs.Stdout(), stderr: inputs.Stderr()}, err
 }
 
