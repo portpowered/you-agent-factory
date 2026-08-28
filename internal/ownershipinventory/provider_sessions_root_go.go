@@ -12,11 +12,57 @@ import (
 const (
 	ProviderSessionsRootGoInventoryRelativePath = "docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json"
 
-	ProviderSessionsRootGoThinContract            = "thin_root_contract"
-	ProviderSessionsRootGoThinContractTest      = "thin_root_contract_test"
-	ProviderSessionsRootGoFoldTargetConstruction  = "fold_target_construction_port"
-	ProviderSessionsRootGoFoldTargetImplTest      = "fold_target_implementation_test"
+	ProviderSessionsRootGoThinContract           = "thin_root_contract"
+	ProviderSessionsRootGoThinContractTest       = "thin_root_contract_test"
+	ProviderSessionsRootGoFoldTargetConstruction = "fold_target_construction_port"
+	ProviderSessionsRootGoFoldTargetImplTest     = "fold_target_implementation_test"
 )
+
+// ProviderSessionsThinRootContractFiles lists the committed peer-facing root
+// .go sources that remain at pkg/services/provider_sessions. The list is the
+// production classification source for the root-Go snapshot; it is not read
+// back from the generated JSON artifact.
+var ProviderSessionsThinRootContractFiles = []string{
+	"contracts.go",
+	"doc.go",
+}
+
+// ProviderSessionsRootContractFoldTarget names one future root contract fold
+// cluster. An empty list is the current accepted policy after the completed
+// Provider Sessions contract-root fold.
+type ProviderSessionsRootContractFoldTarget struct {
+	Cluster        string
+	Files          []string
+	Destination    string
+	Classification string
+}
+
+var ProviderSessionsExcessRootContractFolds = []ProviderSessionsRootContractFoldTarget{}
+
+// ClassifyProviderSessionsRootContractFile reports whether fileName belongs to
+// the committed thin root contract or an explicitly classified fold target.
+func ClassifyProviderSessionsRootContractFile(fileName string) (kind string, foldTarget ProviderSessionsRootContractFoldTarget, ok bool) {
+	if slices.Contains(ProviderSessionsThinRootContractFiles, fileName) {
+		return "thin_root_retain", ProviderSessionsRootContractFoldTarget{}, true
+	}
+	for _, target := range ProviderSessionsExcessRootContractFolds {
+		if slices.Contains(target.Files, fileName) {
+			return "excess_fold", target, true
+		}
+	}
+	return "", ProviderSessionsRootContractFoldTarget{}, false
+}
+
+// ProviderSessionsRootContractInventory returns the stable closed inventory of
+// live Provider Sessions root .go files from the production classification.
+func ProviderSessionsRootContractInventory() []string {
+	inventory := slices.Clone(ProviderSessionsThinRootContractFiles)
+	for _, target := range ProviderSessionsExcessRootContractFolds {
+		inventory = append(inventory, target.Files...)
+	}
+	slices.Sort(inventory)
+	return inventory
+}
 
 // ProviderSessionsRootGoFile records one committed root-level .go file
 // classification under pkg/services/provider_sessions/.
@@ -30,9 +76,9 @@ type ProviderSessionsRootGoFile struct {
 // ProviderSessionsRootGoInventory is the INV-PSES-TOPLEVEL root .go freeze for
 // Provider Sessions thin contract vs fold/consolidation targets.
 type ProviderSessionsRootGoInventory struct {
-	FormatVersion string                     `json:"formatVersion"`
-	OwnerPackage  string                     `json:"ownerPackage"`
-	SortKey       string                     `json:"sortKey"`
+	FormatVersion string                       `json:"formatVersion"`
+	OwnerPackage  string                       `json:"ownerPackage"`
+	SortKey       string                       `json:"sortKey"`
 	Files         []ProviderSessionsRootGoFile `json:"files"`
 }
 
@@ -108,6 +154,34 @@ func VerifyProviderSessionsRootGoInventory(root string) error {
 	if !slices.Equal(live, committed) {
 		return fmt.Errorf("provider sessions root .go files drift: live=%v committed=%v", live, committed)
 	}
+	if err := verifyProviderSessionsRootGoProductionPolicy(inventory); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyProviderSessionsRootGoProductionPolicy(inventory ProviderSessionsRootGoInventory) error {
+	for _, file := range inventory.Files {
+		kind, foldTarget, ok := ClassifyProviderSessionsRootContractFile(file.File)
+		if !ok {
+			return fmt.Errorf("provider sessions root go inventory file %q is unclassified by production ownership policy", file.File)
+		}
+		wantClassification, err := providerSessionsRootGoSnapshotClassification(file.File, kind, foldTarget)
+		if err != nil {
+			return err
+		}
+		if file.Classification != wantClassification {
+			return fmt.Errorf("provider sessions root go inventory file %q classification %q disagrees with production ownership policy classification %q", file.File, file.Classification, wantClassification)
+		}
+		if kind == "excess_fold" && file.FoldDestination != foldTarget.Destination {
+			return fmt.Errorf("provider sessions root go inventory file %q foldDestination = %q, want production policy destination %q", file.File, file.FoldDestination, foldTarget.Destination)
+		}
+	}
+	committed := providerSessionsRootGoFileNames(inventory.Files)
+	want := ProviderSessionsRootContractInventory()
+	if !slices.Equal(committed, want) {
+		return fmt.Errorf("provider sessions root contract inventory drift: json=%v go=%v", committed, want)
+	}
 	return nil
 }
 
@@ -117,6 +191,9 @@ func validateProviderSessionsRootGoInventory(inventory ProviderSessionsRootGoInv
 	}
 	if inventory.OwnerPackage != ProviderSessionsOwnerPackagePath {
 		return fmt.Errorf("provider sessions root go inventory ownerPackage = %q, want %s", inventory.OwnerPackage, ProviderSessionsOwnerPackagePath)
+	}
+	if inventory.SortKey != rootGoFileSortKeyDescription {
+		return fmt.Errorf("provider sessions root go inventory sortKey = %q, want %s", inventory.SortKey, rootGoFileSortKeyDescription)
 	}
 	if len(inventory.Files) == 0 {
 		return fmt.Errorf("provider sessions root go inventory has no files")

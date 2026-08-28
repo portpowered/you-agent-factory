@@ -12,15 +12,15 @@ import (
 const (
 	OperatorSettingsRootGoInventoryRelativePath = "docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json"
 
-	OperatorSettingsRootGoThinContract              = "thin_root_contract"
-	OperatorSettingsRootGoThinContractTest          = "thin_root_contract_test"
-	OperatorSettingsRootGoFoldTargetConstruction    = "fold_target_construction_port"
-	OperatorSettingsRootGoFoldTargetDocument        = "fold_target_document"
-	OperatorSettingsRootGoFoldTargetResolution      = "fold_target_resolution"
-	OperatorSettingsRootGoFoldTargetIdentity          = "fold_target_identity"
+	OperatorSettingsRootGoThinContract                 = "thin_root_contract"
+	OperatorSettingsRootGoThinContractTest             = "thin_root_contract_test"
+	OperatorSettingsRootGoFoldTargetConstruction       = "fold_target_construction_port"
+	OperatorSettingsRootGoFoldTargetDocument           = "fold_target_document"
+	OperatorSettingsRootGoFoldTargetResolution         = "fold_target_resolution"
+	OperatorSettingsRootGoFoldTargetIdentity           = "fold_target_identity"
 	OperatorSettingsRootGoFoldTargetProvidersConstruct = "fold_target_providers_construct"
-	OperatorSettingsRootGoFoldTargetImplementation    = "fold_target_implementation"
-	OperatorSettingsRootGoFoldTargetImplTest          = "fold_target_implementation_test"
+	OperatorSettingsRootGoFoldTargetImplementation     = "fold_target_implementation"
+	OperatorSettingsRootGoFoldTargetImplTest           = "fold_target_implementation_test"
 )
 
 // OperatorSettingsRootGoCluster records one excess root contract/helper cluster
@@ -44,11 +44,11 @@ type OperatorSettingsRootGoFile struct {
 // OperatorSettingsRootGoInventory is the INV-SET-TOPLEVEL root .go freeze for
 // Operator Settings thin contract vs fold/consolidation targets.
 type OperatorSettingsRootGoInventory struct {
-	FormatVersion string                        `json:"formatVersion"`
-	OwnerPackage  string                        `json:"ownerPackage"`
-	SortKey       string                        `json:"sortKey"`
+	FormatVersion string                          `json:"formatVersion"`
+	OwnerPackage  string                          `json:"ownerPackage"`
+	SortKey       string                          `json:"sortKey"`
 	Clusters      []OperatorSettingsRootGoCluster `json:"clusters"`
-	Files         []OperatorSettingsRootGoFile  `json:"files"`
+	Files         []OperatorSettingsRootGoFile    `json:"files"`
 }
 
 // LoadOperatorSettingsRootGoInventory reads the committed Operator Settings
@@ -123,6 +123,39 @@ func VerifyOperatorSettingsRootGoInventory(root string) error {
 	if !slices.Equal(live, committed) {
 		return fmt.Errorf("operator settings root .go files drift: live=%v committed=%v", live, committed)
 	}
+	if err := verifyOperatorSettingsRootGoProductionPolicy(inventory); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyOperatorSettingsRootGoProductionPolicy(inventory OperatorSettingsRootGoInventory) error {
+	for _, file := range inventory.Files {
+		kind, foldTarget, ok := ClassifyOperatorSettingsRootContractFile(file.File)
+		if !ok {
+			return fmt.Errorf("operator settings root go inventory file %q is unclassified by production ownership policy", file.File)
+		}
+		wantClassification, err := operatorSettingsRootGoSnapshotClassification(file.File, kind, foldTarget)
+		if err != nil {
+			return err
+		}
+		if file.Classification != wantClassification {
+			return fmt.Errorf("operator settings root go inventory file %q classification %q disagrees with production ownership policy classification %q", file.File, file.Classification, wantClassification)
+		}
+		if kind == "excess_fold" {
+			if file.FoldDestination != foldTarget.Destination {
+				return fmt.Errorf("operator settings root go inventory file %q foldDestination = %q, want production policy destination %q", file.File, file.FoldDestination, foldTarget.Destination)
+			}
+			if file.Cluster != foldTarget.Cluster {
+				return fmt.Errorf("operator settings root go inventory file %q cluster = %q, want production policy cluster %q", file.File, file.Cluster, foldTarget.Cluster)
+			}
+		}
+	}
+	committed := operatorSettingsRootGoFileNames(inventory.Files)
+	want := OperatorSettingsRootContractInventory()
+	if !slices.Equal(committed, want) {
+		return fmt.Errorf("operator settings root contract inventory drift: json=%v go=%v", committed, want)
+	}
 	return nil
 }
 
@@ -132,6 +165,9 @@ func validateOperatorSettingsRootGoInventory(inventory OperatorSettingsRootGoInv
 	}
 	if inventory.OwnerPackage != OperatorSettingsOwnerPackagePath {
 		return fmt.Errorf("operator settings root go inventory ownerPackage = %q, want %s", inventory.OwnerPackage, OperatorSettingsOwnerPackagePath)
+	}
+	if inventory.SortKey != rootGoFileSortKeyDescription {
+		return fmt.Errorf("operator settings root go inventory sortKey = %q, want %s", inventory.SortKey, rootGoFileSortKeyDescription)
 	}
 	if len(inventory.Files) == 0 {
 		return fmt.Errorf("operator settings root go inventory has no files")

@@ -139,6 +139,15 @@ func VerifyOperatorSettingsTopLevelInventory(root string) error {
 	if err := validateOperatorSettingsTopLevelInventory(inventory); err != nil {
 		return err
 	}
+	for _, child := range inventory.Children {
+		wantClassification, ok := operatorSettingsTopLevelSnapshotClassification(child.Directory)
+		if !ok {
+			return fmt.Errorf("operator settings top-level inventory directory %q is unclassified by production ownership policy", child.Directory)
+		}
+		if child.Classification != wantClassification {
+			return fmt.Errorf("operator settings top-level inventory directory %q classification %q disagrees with production ownership policy classification %q", child.Directory, child.Classification, wantClassification)
+		}
+	}
 	live, err := ListOperatorSettingsTopLevelDirectories(root)
 	if err != nil {
 		return err
@@ -156,6 +165,9 @@ func validateOperatorSettingsTopLevelInventory(inventory OperatorSettingsTopLeve
 	}
 	if inventory.OwnerPackage != OperatorSettingsOwnerPackagePath {
 		return fmt.Errorf("operator settings top-level inventory ownerPackage = %q, want %s", inventory.OwnerPackage, OperatorSettingsOwnerPackagePath)
+	}
+	if inventory.SortKey != topLevelDirectorySortKeyDescription {
+		return fmt.Errorf("operator settings top-level inventory sortKey = %q, want %s", inventory.SortKey, topLevelDirectorySortKeyDescription)
 	}
 	if len(inventory.Children) == 0 {
 		return fmt.Errorf("operator settings top-level inventory has no children")

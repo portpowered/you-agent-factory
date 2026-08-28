@@ -1,9 +1,7 @@
 package ownershipinventory
 
 import (
-	"fmt"
 	"slices"
-	"strings"
 )
 
 // OperatorSettingsThinRootContractFiles lists committed peer-facing root .go sources
@@ -35,9 +33,10 @@ var OperatorSettingsThinRootContractFiles = []string{
 // OperatorSettingsRootContractFoldTarget names one excess root contract/helper cluster
 // for CLN-SET-CONTRACT-ROOTS without performing the fold in INV-SET-TOPLEVEL.
 type OperatorSettingsRootContractFoldTarget struct {
-	Cluster     string
-	Files       []string
-	Destination string
+	Cluster        string
+	Files          []string
+	Destination    string
+	Classification string
 }
 
 // OperatorSettingsExcessRootContractFolds inventories excess root contract/helper
@@ -83,45 +82,10 @@ func VerifyOperatorSettingsCommittedRootContractInventoryAlignment(root string) 
 	if err != nil {
 		return err
 	}
-	wantInventory := OperatorSettingsRootContractInventory()
-	committed := operatorSettingsRootGoFileNames(inventory.Files)
-	if !slices.Equal(committed, wantInventory) {
-		return fmt.Errorf("operator settings root contract inventory drift: json=%v go=%v", committed, wantInventory)
+	if err := validateOperatorSettingsRootGoInventory(inventory); err != nil {
+		return err
 	}
-	for _, file := range inventory.Files {
-		kind, foldTarget, ok := ClassifyOperatorSettingsRootContractFile(file.File)
-		if !ok {
-			return fmt.Errorf("operator settings root go inventory file %q missing from Go root contract inventory", file.File)
-		}
-		switch file.Classification {
-		case OperatorSettingsRootGoThinContract, OperatorSettingsRootGoThinContractTest:
-			if kind != "thin_root_retain" {
-				return fmt.Errorf("operator settings root go inventory file %q classification %q disagrees with Go kind %q", file.File, file.Classification, kind)
-			}
-			if strings.TrimSpace(file.FoldDestination) != "" || strings.TrimSpace(file.Cluster) != "" {
-				return fmt.Errorf("operator settings thin root file %q must not set foldDestination/cluster in JSON inventory", file.File)
-			}
-		case OperatorSettingsRootGoFoldTargetConstruction,
-			OperatorSettingsRootGoFoldTargetDocument,
-			OperatorSettingsRootGoFoldTargetResolution,
-			OperatorSettingsRootGoFoldTargetIdentity,
-			OperatorSettingsRootGoFoldTargetProvidersConstruct,
-			OperatorSettingsRootGoFoldTargetImplementation,
-			OperatorSettingsRootGoFoldTargetImplTest:
-			if kind != "excess_fold" {
-				return fmt.Errorf("operator settings root go inventory fold target %q disagrees with Go kind %q", file.File, kind)
-			}
-			if file.FoldDestination != foldTarget.Destination {
-				return fmt.Errorf("operator settings root go inventory file %q foldDestination = %q, Go fold target = %q", file.File, file.FoldDestination, foldTarget.Destination)
-			}
-			if file.Cluster != foldTarget.Cluster {
-				return fmt.Errorf("operator settings root go inventory file %q cluster = %q, Go fold cluster = %q", file.File, file.Cluster, foldTarget.Cluster)
-			}
-		default:
-			return fmt.Errorf("operator settings root go inventory file %q has unknown classification %q", file.File, file.Classification)
-		}
-	}
-	return nil
+	return verifyOperatorSettingsRootGoProductionPolicy(inventory)
 }
 
 // VerifyOperatorSettingsRootReconciliation locks CLN-SET-CONTRACT-ROOTS story-001
