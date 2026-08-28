@@ -11,7 +11,6 @@ const laneNames = [
 	"README",
 	"Frontend",
 	"Backend",
-	"Backend Test Stability",
 	"Backend Unit Latency",
 	"Backend Conformance",
 	"Backend Lint",
@@ -109,56 +108,6 @@ test("required Backend Unit Latency fails closed for every incomplete hosted res
 		assert.equal(evaluation.ok, false, `${result || "missing"} must fail the required latency gate`);
 		assert.ok(
 			evaluation.failures.some((failure) => /Backend Unit Latency was selected/.test(failure)),
-		);
-	}
-});
-
-test("changed-test stability passes when selected, accepts a classifier-driven skip, and fails incomplete outcomes", () => {
-	const selectedPass = evaluateVerificationPolicy(
-		policy({
-			lanes: [
-				...laneNames
-					.filter((name) => name !== "Backend Test Stability")
-					.map((name) => lane(name)),
-				lane("Backend Test Stability", true, "success", {
-					reason: "Backend changes select the merge-base stability gate.",
-				}),
-			],
-		}),
-	);
-	assert.deepEqual(selectedPass, { ok: true, failures: [] });
-
-	const validSkip = evaluateVerificationPolicy(
-		policy({
-			classification: "factory-content",
-			areas: "factory-content",
-			lanes: [
-				...laneNames
-					.filter((name) => name !== "Backend Test Stability")
-					.map((name) => lane(name)),
-				lane("Backend Test Stability", false, "skipped", {
-					reason: "Factory-only changes do not select backend verification.",
-				}),
-			],
-		}),
-	);
-	assert.deepEqual(validSkip, { ok: true, failures: [] });
-
-	for (const result of ["failure", "cancelled", "skipped", "", "incomplete"]) {
-		const evaluation = evaluateVerificationPolicy(
-			policy({
-				lanes: [
-					...laneNames
-						.filter((name) => name !== "Backend Test Stability")
-						.map((name) => lane(name)),
-					lane("Backend Test Stability", true, result),
-				],
-			}),
-		);
-
-		assert.equal(evaluation.ok, false, `${result || "missing"} must fail the required stability gate`);
-		assert.ok(
-			evaluation.failures.some((failure) => /Backend Test Stability was selected/.test(failure)),
 		);
 	}
 });
@@ -320,6 +269,7 @@ test("summary records touched areas, each decision, reason, and terminal result"
 	assert.match(summary, /Areas touched: `documentation-reference\+frontend`/);
 	assert.match(summary, /\| Docs Reference \| `run` \| Docs Reference: success \| docs\/reference paths select/);
 	assert.match(summary, /\| README \| `skip` \| README: skipped \|/);
+	assert.doesNotMatch(summary, /Backend Test Stability/);
 	assert.match(summary, /Verification Policy passed/);
 });
 
