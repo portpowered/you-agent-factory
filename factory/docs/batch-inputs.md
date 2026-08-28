@@ -43,7 +43,7 @@ When changing these factory-local docs or the checked-in example, run the
 narrow verification path from the repository root:
 
 ```sh
-go test ./pkg/services/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
+go test ./pkg/services/workers/internal/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
 go test ./pkg/services/work/transports/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
 ```
 

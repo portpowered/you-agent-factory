@@ -399,6 +399,11 @@
       "capacity": 1,
       "id": "concurrent-planners",
       "name": "concurrent-planners"
+    },
+    {
+      "capacity": 2,
+      "id": "concurrent-project-leads",
+      "name": "concurrent-project-leads"
     }
   ],
   "supportingFiles": {
@@ -423,6 +428,14 @@
         "content": {
           "encoding": "utf-8"
         },
+        "id": "factory/docs/projects.md",
+        "targetPath": "factory/docs/projects.md",
+        "type": "DOC"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
         "id": "factory/scripts/setup-workspace.py",
         "targetPath": "factory/scripts/setup-workspace.py",
         "type": "SCRIPT"
@@ -433,6 +446,14 @@
         },
         "id": "factory/scripts/ci-wait.py",
         "targetPath": "factory/scripts/ci-wait.py",
+        "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/scripts/decide-project-cycle.py",
+        "targetPath": "factory/scripts/decide-project-cycle.py",
         "type": "SCRIPT"
       }
     ]
@@ -459,6 +480,63 @@
         {
           "id": "failed",
           "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "project",
+      "name": "project",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "waiting",
+          "name": "waiting",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "blocked",
+          "name": "blocked",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "id": "project-cycle",
+      "name": "project-cycle",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "continue",
+          "name": "continue",
+          "type": "PROCESSING"
+        },
+        {
+          "id": "complete",
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        },
+        {
+          "id": "blocked",
+          "name": "blocked",
           "type": "FAILED"
         }
       ]
@@ -577,6 +655,26 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "high",
+      "id": "project-lead",
+      "name": "project-lead",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/decide-project-cycle.py",
+        "{{ (index .Inputs 0).Payload }}"
+      ],
+      "command": "python3",
+      "id": "project-cycle-decider",
+      "name": "project-cycle-decider",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
       "model": "gpt-5.6-luna",
       "reasoningEffort": "max",
       "name": "processor",
@@ -637,6 +735,223 @@
     }
   ],
   "workstations": [
+    {
+      "id": "project-lead",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "name": "project-lead",
+      "onFailure": [
+        {
+          "state": "blocked",
+          "workType": "project"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "waiting",
+          "workType": "project"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "concurrent-project-leads"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "project-lead",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "classificationRoutes": [
+        {
+          "label": "continue",
+          "outputs": [
+            {
+              "state": "continue",
+              "workType": "project-cycle"
+            }
+          ]
+        },
+        {
+          "label": "complete",
+          "outputs": [
+            {
+              "state": "complete",
+              "workType": "project-cycle"
+            }
+          ]
+        },
+        {
+          "label": "blocked",
+          "outputs": [
+            {
+              "state": "blocked",
+              "workType": "project-cycle"
+            }
+          ]
+        }
+      ],
+      "id": "decide-project-cycle",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "decide-project-cycle",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "project-cycle"
+        }
+      ],
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "project-cycle-decider"
+    },
+    {
+      "id": "continue-project",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "continue",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "continue-project",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "complete-project",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "complete",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "complete-project",
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "retry-project-after-cycle-failure",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "failed",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "retry-project-after-cycle-failure",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "block-project",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "project-cycle",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "blocked",
+          "workType": "project-cycle"
+        }
+      ],
+      "name": "block-project",
+      "outputs": [
+        {
+          "state": "blocked",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 12,
+          "type": "VISIT_COUNT",
+          "workstation": "project-lead"
+        }
+      ],
+      "id": "project-loop-breaker",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "name": "project-loop-breaker",
+      "outputs": [
+        {
+          "state": "blocked",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
     {
       "id": "ideafy",
       "inputs": [

@@ -176,6 +176,28 @@ Confirm that each implementation task produced its own direct behavioral
 evidence and preserved the parent lane's executable spine. Final integrated
 validation is confirmation, not a substitute for missing task-owned proof.
 
+When the PRD names a `context.sourcePlan`, confirm the delivered behavior and
+tests stay aligned with the referenced plan sections: stories carry
+`sourcePlanRef`, the diff implements what those sections describe, and any
+divergence is recorded as an explicit conflict rather than silently shipped. A
+PRD that weakens or reinterprets its source plan is a blocking finding.
+
+For PRs whose owned outcome includes measured test latency or performance,
+apply this performance policy before turning a generated numeric criterion into
+a blocker:
+
+- The package-level PR/CI latency result is authoritative performance feedback.
+  A directional improvement together with preserved observable behavior and a
+  credible reduction in expensive process/setup topology satisfies the latency
+  outcome unless the admitted customer contract explicitly requires a fixed
+  threshold.
+- Do not reject solely because saturated local runs missed an absolute number,
+  had high variance, lacked three clean samples, or could not obtain an idle
+  host. Preserve those measurements as non-blocking context.
+- If the package-level PR result does not improve, reject with one bounded
+  request for the next material optimization. Behavior regressions caused by
+  the diff, missing cleanup/isolation, and assertion weakening remain blocking.
+
 ### Step 4 — Apply the review rules in order
 
 Check the PR directly against the review rules above and confirm whether it
@@ -224,31 +246,16 @@ If you believe that the PR is complete and the CI passes, please merge the PR.
 
 If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
 
-#### Required-check and stale-head routing
-
-Before deciding to merge, never run `gh pr merge --admin` or use an
-administrative/bypass flag to force a merge past a failing required status
-check. A required status check is enforced by the repository ruleset, so an
-administrator cannot make a failing head eligible by bypassing it; the PR
-needs a new head on which the required checks pass.
-
-Classify a required-check failure as **stale-head-only** only when every
-failing required check is explained by commits merged since the PR head and
-there is no unresolved content-level blocker. Verify that condition against
-`origin/main` before routing it, using a behind-main merge-base and/or a
-failure signature that is already fixed on the current `origin/main` checks.
-Do not call a check stale merely because the PR is old, main has advanced, or
-one check happens to be green on main while another failure remains
-unexplained.
-
-When, and only when, every failing required check meets that stale-head-only
-test, post a PR conversation comment with this exact instruction:
+Never run `gh pr merge --admin` or any administrative/bypass flag past a failing
+required status check: required checks are enforced by the repository ruleset,
+so a bypass cannot make a failing head eligible — the PR needs a new head on
+which the required checks pass. When every failing required check is explained
+by commits merged to `origin/main` since the PR head (verify against
+`origin/main`; do not call a check stale merely because the PR is old), post
+this exact comment and end through the **REJECTED** route so process receives
+concrete work:
 
 > Rebase onto origin/main and push a new head -- git fetch origin && git rebase origin/main, resolve conflicts, then push. This is a stale-head issue, not a content defect.
-
-Then end through the **REJECTED** route so process receives concrete rebase
-and push work in the same iteration. Do not merely note staleness, hold,
-waive the check, or attempt the merge yourself.
 
 ### Step 7 - respond back
 

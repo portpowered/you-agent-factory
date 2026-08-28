@@ -7,12 +7,12 @@ acting on validation loopback results.
 
 This factory coordinates autonomous work for **you-agent-factory**: the Go,
 OpenAPI, and React system for scheduling and orchestrating concurrent AI workers
-through the `you` CLI, backend runtime, and dashboard. The **ideafy**
-workstation is the meta-planner. It inspects live factory state, submits batches
-of `idea` work, records planner state, and schedules a `thoughts` loopback so
-planning resumes after each batch completes. The **plan** workstation turns each
-idea into a PRD. **process** and **review** executors implement and gate work in
-isolated worktrees.
+through the `you` CLI, backend runtime, and dashboard. The **ideafy** workstation
+is the meta-planner: it supervises factory health, Project admission, and stalled
+Project Leads. Each **project-lead** owns one substantial outcome, generates
+ordinary `idea` Work as a dependency graph, and independently validates completion.
+The **plan** workstation still turns each idea into a PRD. **process**, **ci-wait**,
+and **review** still implement and gate work in isolated worktrees.
 
 ## Read First
 
@@ -25,6 +25,9 @@ Before submitting work, read:
   live planner state files (local, not checked in)
 * `factory/docs/batch-inputs.md`
 * `factory/docs/batch-input-example.json`
+* `factory/docs/projects.md`
+* `docs/temp/board-lessons.md` — operator-local board-shape admonitions
+  (repo-root only; not materialized into worktrees)
 * `factory/docs/decision-envelope.md`
 * `you docs agents`
 * `you docs batch-inputs`
@@ -36,17 +39,37 @@ Repository context that shapes planner batches:
   Session`, `Work`, `Work Request`)
 * `docs/reference/` — packaged `you docs <topic>` contracts
 
-## Planner Loop
+## Project and Planner Loops
 
-The meta-planner operates the work queue rather than implementing every feature
-directly:
+The preferred outer loop for substantial independent outcomes is:
 
-1. Read the customer ask, factory state, project docs, and codebase.
-2. Maintain direction in `docs/temp/*` state files.
-3. Submit a batch of concrete `idea` work items.
-4. Add a `thoughts` loopback item that depends on those ideas so ideafy runs
-   again after the batch completes.
-5. Append planner progress and update the checklist after submission.
+```txt
+project:init -> project-lead -> project:waiting
+                              + idea:init (all currently well-scoped Work)
+                              + project-cycle:init (depends on every idea:complete)
+
+project:waiting + project-cycle:continue -> project:init
+project:waiting + project-cycle:complete -> project:complete
+project:waiting + project-cycle:failed   -> project:init
+project:waiting + project-cycle:blocked  -> project:blocked
+```
+
+On first dispatch, the Project Lead bootstraps its working memory under
+`docs/temp/<project-name>/` from the Project payload and source plan. Admission
+never pre-creates that directory. The lead completes a Project only after blind
+clean-room probes pass. See `factory/docs/projects.md`.
+
+The meta-planner operates above Project Leads rather than implementing every
+feature directly:
+
+1. Check session, provider, resource, automation, and dispatch liveness.
+2. Admit Project Work with one dedicated Project root and acceptance contract.
+3. Inspect active Projects for stale leads, repeated failure, or shared-surface
+   contention without taking over their healthy child Work.
+4. Repair a recoverable blocked Project or factory-level fault once and record
+   the evidence.
+5. Retain `thoughts` loopbacks for small legacy/unowned work and periodic
+   supervision.
 
 Always dry-run a batch before real submission:
 
@@ -63,6 +86,8 @@ Configured work types:
 
 ```txt
 thoughts       meta-planner loopback work
+project        independently owned end-to-end outcome
+project-cycle  dependency-held Project Lead loopback/decision
 idea           product/implementation idea submitted by ideafy
 plan           PRD planning output from an idea
 task           executor/review implementation work
@@ -76,6 +101,10 @@ Use `thoughts`, plural, for ideafy loopback.
 
 ```txt
 thoughts:init -> ideafy -> thoughts:complete
+
+project:init -> project-lead -> project:waiting + idea:init + project-cycle:init
+project-cycle:init -> decide-project-cycle -> continue|complete|blocked
+project:waiting + same-name project-cycle -> project:init|complete|blocked
 
 idea:init -> plan -> idea:to-complete + plan:init
 plan:init -> setup-workspace -> plan:complete + task:init

@@ -154,6 +154,11 @@ every changed shape.>
 | Behavior/gate | Scope | Dependency fidelity | Cadence | Cost | Proves | Does not prove |
 | --- | --- | --- | --- | --- | --- | --- |
 
+### Functional test-case matrix [Required when functional tests change]
+
+| Case ID | Kind (happy/unhappy/boundary) | Given | When | Then (observable outcome) | Owning task |
+| --- | --- | --- | --- | --- | --- |
+
 ### Paid-validation budgets and evidence-reuse keys
 ### Remaining unproven edges and owning gates
 

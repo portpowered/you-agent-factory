@@ -12,6 +12,11 @@ scope growth, and hand work to review.
 
 1. Read the PRD at `prd.json` (in the current working directory)
 2. Read the progress log at `progress.txt`
+2.1. If `prd.json` contains an `operatorAmendment`, treat it as the newest
+operator-authorized scope and history decision. Finish only the retained lane,
+do not implement work explicitly listed as forked/delegated, and do not claim a
+delegated story's acceptance evidence merely because its routing disposition is
+recorded as `passes:true`.
 3. If there is task items that are not yet complete, please implement the task as much as possible. Then update the progress.txt/prd.json.
 4. If all tasks are done, please submit a PR via the gh CLI. Make named {{ (index .Inputs 0).Name }}. Set the description as the prd.json file that we used.
 5. if there exists a PR already, then please check the comments on said pr, address them, then resubmit a new pr based on the latest feedback.
@@ -37,6 +42,17 @@ scope growth, and hand work to review.
   the task, a prerequisite or authority is missing, or the smallest correct fix
   materially exceeds the story, record a structured blocker and smallest plan
   delta instead of silently broadening scope.
+- For lanes whose acceptance includes measured test latency or performance,
+  compute saturation and noisy local timings are expected. Continue when the change materially follows a proven
+  optimization pattern—such as fewer root builds, servers, subprocesses,
+  fixtures, or real workers—and preserves the owned package's observable
+  behavior. Do not wait for an idle host, a pristine pre-change baseline, a
+  fixed local wall-clock target, low sample variance, or repeated timing runs
+  before implementing and opening the PR. Record contaminated measurements and
+  environmental failures without repairing unrelated production/shared-host
+  problems. The PR's package-level latency result is the primary performance
+  verdict; if it does not improve, continue with the next bounded optimization.
+  Actual behavior regressions caused by the diff remain blocking.
 - Commit frequently
 - Keep CI green: fix failures your diff caused. If a required check fails on a
   test in a package your diff does not touch and it reproduces on the base
@@ -59,14 +75,6 @@ scope growth, and hand work to review.
 - Sync with origin/main ONLY immediately before your final push, when GitHub
   reports a real conflict, or when the reviewer asks. New commits on main are
   not by themselves a reason for another sync pass.
-- When review feedback says to "rebase onto origin/main" or identifies a
-  "stale head," treat that as an explicit reviewer-requested rebase. In the
-  same iteration, run `git fetch origin && git rebase origin/main`, resolve
-  every conflict and continue the rebase, then push the resulting new commit
-  SHA. Rerunning CI, posting a comment, waiting, or pushing an unchanged head
-  does not address this feedback. This is a concrete application of the
-  reviewer-request exception above and does not broaden routine synchronization
-  beyond the final-push, real-conflict, or reviewer-request cases.
 - prd.json and progress.txt are untracked worktree scaffolding and must NEVER
   appear in your PR diff. Never `git add -f` them. If your branch already
   tracks them from an old base, `git rm` them during your next rebase.
