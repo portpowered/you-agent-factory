@@ -131,7 +131,7 @@ gate” identifies a property that GATE-CHAR intentionally does not claim.
 | CASE-027 | `.../complete publication` | `12345\n` returns exact positive PID `12345` and `true`. | `shareable`/process-free. |
 | CASE-028 | Windows build-tag path plus the full package matrix | Current Windows gate passes with exactly the three Unix-only skips; `context_cancellation_process_windows_test.go` compiles the Windows handle-based join/termination helpers. The current gate does not prove Unix signal/`/bin/sh` behavior or post-change cleanup/start counts. | Mixed platform case; complementary GATE-UNIX/GATE-WINDOWS and GATE-FUNC. |
 
-## Current application-start ledger
+## Characterization baseline application-start ledger
 
 | Test | Windows starts | Unix starts | Accounting |
 | --- | ---: | ---: | --- |
@@ -152,10 +152,10 @@ gate” identifies a property that GATE-CHAR intentionally does not claim.
 | Unknown exit code | 1 | 1 | One invalid-command invocation. |
 | **Total** | **26** | **29** | Unix adds the three explicitly skipped Windows rows. |
 
-The baseline is therefore `26` Windows and `29` Unix application starts. The
-post-migration target is `25` Windows and `28` Unix after the two worker
-outcome tests share one root and the parser remains at zero starts. These are
-invocation ledger counts, not host process snapshots.
+The pre-change baseline is therefore `26` Windows and `29` Unix application
+starts. The post-migration target is `25` Windows and `28` Unix after the two
+worker outcome tests share one root and the parser remains at zero starts.
+These are invocation ledger counts, not host process snapshots.
 
 ## Timing diagnostics and evidence limits
 
@@ -175,6 +175,74 @@ invocation ledger counts, not host process snapshots.
   PR package timing, clean-room validation, or absence of every transient
   resource after the process exits.
 
-No tests, shared support, production CLI behavior, contracts, generated
-artifacts, baselines, CI workflows, adjacent packages, or excluded cleanup
-surfaces were changed for this characterization story.
+The characterization commit changed no shared support, production CLI
+behavior, contracts, generated artifacts, baselines, CI workflows, adjacent
+packages, or excluded cleanup surfaces.
+
+## GATE-FUNC — story 002 implementation result
+
+- Story: `functional-test-optimization-c06-transport-cli-process-002`
+- Tested implementation commit: `c30105bb9`
+- Platform: `windows/amd64` (`go1.25.0`)
+- Exact command: `go test -count=1 -timeout=10m ./tests/functional/transport/cli/process`
+- Result: `pass`, exit code `0`, package elapsed `20.118s`; 12 top-level tests
+  passed and the three documented Unix-only tests skipped.
+- Dependency fidelity: local-real production root and built `you` executable;
+  controlled `ProviderCommandRunner` for the two eligible worker outcomes;
+  real Windows child process, streams, environment, and process cleanup for
+  retained executable witnesses.
+
+### Topology and behavior result
+
+- `TestCLIWorkerFailureExitCode` and `TestCLISuccessExitCode` now execute
+  through one package-owned `support.ApplicationProcess`. Each call creates a
+  fresh factory, `root.Input`, context, isolated HOME/profile environment,
+  working directory, and captured streams. The synchronized route binds each
+  fresh factory directory to its controlled failure or success result; each
+  route observed exactly one provider call, and both existing typed
+  `Process.Execute`/stdout/stderr assertions passed.
+- The package builds one CLI artifact through a `sync.Once` cache and every
+  retained executable/OS invocation creates a fresh `exec.Command` child.
+  No live child, stream, environment, session, PID file, or route is shared.
+- ACP cancellation still constructs a dedicated root and the PID-readiness
+  table remains process-free. The Windows process helper file compiled; its
+  Unix-only callers retained their explicit skips.
+- Cleanup completed without timeout or teardown error: ordinary built-child
+  calls joined through `exec.Cmd.Wait`, cancellation cases joined their root
+  child and applied the existing attributable-descendant cleanup fallback,
+  the shared root closed in `TestMain`, and the package artifact directory was
+  removed after the test run.
+
+### Post-change application-start ledger
+
+The shared worker row represents two sequential `Process.Execute` calls on one
+root construction. All other rows retain one fresh child/root invocation per
+ledger entry. The parser remains at zero starts.
+
+| Test or shared fixture | Windows starts | Unix starts | Result |
+| --- | ---: | ---: | --- |
+| ACP cancellation | 1 | 1 | Dedicated root retained. |
+| External-work cancellation | 0 | 1 | Built child retained; Windows skip. |
+| Cancellation no-success | 0 | 1 | Built child retained; Windows skip. |
+| PID readiness parser | 0 | 0 | Process-free. |
+| Shared worker outcomes (failure + success) | 1 | 1 | One root, two isolated inputs, two routed calls. |
+| Interrupted response stream | 0 | 1 | Built child retained; Windows skip. |
+| Root help families | 4 | 4 | Fresh built child per invocation. |
+| Subcommand help | 2 | 2 | Fresh built child per invocation. |
+| Version | 1 | 1 | Fresh built child. |
+| Success stdout | 2 | 2 | Fresh built child per initialization/run. |
+| Failure stderr | 2 | 2 | Fresh built child per initialization/run. |
+| Quiet mode | 10 | 10 | Fresh built child per invocation. |
+| Unknown stderr | 1 | 1 | Fresh built child. |
+| Unknown exit code | 1 | 1 | Fresh built child. |
+| **Total** | **25** | **28** | **2 migrated, 1 already process-free, 12 retained.** |
+
+### Properties proved and remaining edges
+
+This gate proves the complete applicable current-platform matrix, shared-root
+failure-to-success recovery, one provider call per eligible scenario, fresh
+input/resource isolation, built-artifact parser/stream/exit fidelity, and the
+target current-platform ledger. It does not prove Unix signal and descendant
+reaping, three-repeat stability, PR package timing, or independent clean-room
+classification; those remain owned by GATE-REPEAT, GATE-UNIX/GATE-WINDOWS,
+GATE-PR-PERF, and VAL-001.
