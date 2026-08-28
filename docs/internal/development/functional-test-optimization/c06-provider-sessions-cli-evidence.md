@@ -1,7 +1,7 @@
 # C06 Provider Sessions CLI evidence
 
-Status: TASK-001 review-correction witnesses are now exercised on the shared
-fixture; TASK-002 route unregistration/close lifecycle and TASK-003 final
+Status: TASK-001 and TASK-002 review-correction witnesses are exercised on the
+shared fixture, including deterministic provider-route close; TASK-003 final
 clean-room validation and PR handoff remain.
 
 ## Baseline identity
@@ -75,8 +75,9 @@ them. Missing/invalid, empty, duplicate, repeated-read, failure, abrupt-close,
 and cleanup witnesses remain in scope; unsupported authorization, timeout, and
 maximum claims remain out of scope.
 
-TASK-002 remains unproven by this artifact: one shared root/API process,
-repeat/race stability, final cleanup ledgers, and PR-host package timing.
+At this identity-only checkpoint, TASK-002 remained unproven by this artifact:
+one shared root/API process, repeat/race stability, final cleanup ledgers, and
+PR-host package timing.
 
 ## TASK-001 post-identity verification
 
@@ -122,17 +123,18 @@ event frames omit the optional `factorySessionId` field; selector-scoped list,
 show, read, and replay assertions prove the requested session boundary while
 that frame-level field remains an explicitly unproven implementation edge.
 
-Remaining TASK-002/TASK-003 edges are one shared root/API process, reduced
-build count, repeat/race stability, clean final-artifact reconciliation,
-PR-host timing, terminal CI, conflict resolution, and merge.
+At this identity-only checkpoint, the remaining TASK-002/TASK-003 edges were
+one shared root/API process, reduced build count, repeat/race stability,
+clean final-artifact reconciliation, PR-host timing, terminal CI, conflict
+resolution, and merge.
 
 ## TASK-002 shared-process verification (pre-review-correction record)
 
 The following TASK-002 measurements are retained historical evidence from
-before the review correction. The current source adds direct matrix witnesses,
-but provider-route unregistration and close-time route assertions are still
-unimplemented and must be completed in TASK-002 before this section can be
-treated as final.
+before the review correction. At that checkpoint the current source had direct
+matrix witnesses, but provider-route unregistration and close-time route
+assertions were not yet implemented. The route-lifecycle correction is recorded
+in the current section below.
 
 The delivered TASK-002 source commit is the working-tree head after the
 identity characterization commit. The package now owns one lazy shared
@@ -183,10 +185,10 @@ isolation, the focused fleet race path, one root/API topology, one cached CLI
 build, fresh real child processes for the three OS-boundary rows, route
 attribution without arrival-order assignment, explicit session cleanup,
 case-directory cleanup, shared-listener shutdown, and preserved
-CLI/transcript/stream/error/order witnesses. It did not prove route
-unregistration, a clean final checkout after the review correction, PR-host
-package timing, remote provider behavior, Unix interrupt behavior on this
-Windows host, terminal CI, conflict resolution, or merge.
+CLI/transcript/stream/error/order witnesses. That historical run did not prove
+route unregistration, a clean final checkout after the review correction,
+PR-host package timing, remote provider behavior, Unix interrupt behavior on
+this Windows host, terminal CI, conflict resolution, or merge.
 
 ## TASK-003 clean-room validation (pre-review-correction record)
 
@@ -259,7 +261,7 @@ Work ID. The supported no-Work CLI list invocation therefore uses explicit
 `--session` against the top-level collection and asserts a non-nil empty
 `sessions` array; no unsupported endpoint contract is invented.
 
-Verification on the current source head:
+Verification on the prior review-correction source head:
 
 ```text
 go test -run '^TestWorkerSessionsCLI$' -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
@@ -272,7 +274,59 @@ git diff --check
 PASS
 ```
 
-The current evidence still does not prove FT-R01 provider-route
-unregistration/close-time route cleanup, the final clean-room artifact, PR
-package timing, or review-owned CI/merge. Those are the next bounded TASK-002
-and TASK-003 edges; no route-lifecycle claim is made by this correction.
+The route-lifecycle gap identified in review was still open at this historical
+checkpoint. The current TASK-002 correction below closes that gap; the final
+clean-room artifact, PR package timing, and review-owned CI/merge remain
+TASK-003 or review edges.
+
+## TASK-002 route-lifecycle correction
+
+Source head: `3c03b90368` (`test: close provider session CLI routes deterministically`).
+The source-only correction was tested immediately before this commit with no
+source changes between the test run and commit.
+
+The controlled provider edge now separates immutable route definitions from
+active case registrations. Registration fails closed for unknown or duplicate
+keys; each registration has an idempotent close handle; and unregister refuses
+to remove a route while its command call is active. Hosted cases register only
+their own Work-marker routes, close them after provider activity completes, and
+retain cleanup close handling for assertion-failure paths. Case cleanup checks
+the active route keys, and TestMain fails the package if active calls or route
+registrations survive shared-process shutdown.
+
+The direct route-lifecycle witnesses are:
+
+- Main success, failure, and recovery routes close after their respective
+  hosted observations; duplicate registration remains fail-closed.
+- Replay and WSRF cases close their route after provider execution and before
+  final replay inspection.
+- Fleet routes remain available through gated RUNNING/COMPLETED and CLI/HTTP
+  parity assertions, then all three close before case cleanup returns.
+- The root-process abrupt-stream-close witness verifies that no provider route
+  remains active at that boundary; built abort/cancellation cases use isolated
+  HTTP servers and do not register provider routes.
+
+Required TASK-002 commands on the current source:
+
+```text
+go test -v -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; package time 11.443s; exit code 0
+C06 TASK-002 topology: root-builds=1 api-host-starts=1 cli-builds=1
+C06 TASK-002 cleanup: active-provider-routes=0
+
+go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
+PASS; package time 24.298s; exit code 0
+
+go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
+PASS; package time 12.721s; exit code 0; no race report
+```
+
+Focused route-boundary confirmation also passed:
+`TestWorkerSessionsCLI` in `4.267s` and
+`TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess` in
+`1.136s`. `git diff --check` passed before the source commit. These runs prove
+the package-level behavior, one-root/API/cached-build topology, repeat/race
+cleanup, and route lifecycle on the local Windows host. They do not prove a
+fresh final checkout, PR-host package timing, remote provider behavior, the
+Unix interrupt edge unavailable on Windows, terminal CI, conflict resolution,
+or merge.
