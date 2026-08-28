@@ -2,7 +2,7 @@
 
 ## Environment and artifact
 
-- Validated source commit: `790f897e8dbfb6bec813bb4fcf79fdd9af19fb0e`; all
+- Validated source commit: `4c124e4d5566ad800380ebf20ae694165ba7f5e9`; all
   runtime checks below ran from a detached clean worktree at this exact code
   head. This report refresh is documentation-only and does not change that
   validated source.
@@ -23,12 +23,12 @@
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
 | Final executable denominator | PASS | Clean checkout `go test -list '^Test'` for lifecycle, routing, and chat reported 12 + 1 + 25 = 38 top-level tests. The exact names remain in the c07 characterization artifact. | Whole-project denominator and source-plan full-suite results remain governing-project work. |
-| Package behavior and cleanup | PASS | Clean checkout `go test -count=1 -timeout=30m` passed for all three packages: lifecycle `4.717s`, routing `1.625s`, and chat `23.981s`. The verbose count-one census reported zero residue for every owned resource class. | Remote provider behavior and crash/restart cleanup. |
-| Repeat-safe teardown | PASS | Clean checkout `go test -count=3 -timeout=30m` passed for lifecycle, routing, and chat at `26.647s/3.814s/70.280s`; all three package bodies completed on every repeat. | Host-wide resources outside the package-owned census. |
-| Supported race paths | PASS | Review-follow-up clean-room race commands passed for lifecycle `9.396s`, routing `3.068s`, and full supported chat `59.558s`. No source change was made for any bounded rerun. | Unsupported race-prohibitive paths and remote dependencies. |
+| Package behavior and cleanup | PASS | Clean checkout `go test -v -count=1 -timeout=30m` passed for all three packages: lifecycle `5.856s`, routing `1.460s`, and chat `24.801s`. The verbose count-one census reported zero residue for every owned resource class. | Remote provider behavior and crash/restart cleanup. |
+| Repeat-safe teardown | PASS | Clean checkout `go test -count=3 -timeout=30m` passed for lifecycle, routing, and chat at `33.944s/4.194s/168.651s`; all three package bodies completed on every repeat. | Host-wide resources outside the package-owned census. |
+| Supported race paths | PASS | Clean checkout race commands passed for lifecycle `7.852s`, routing `3.001s`, and full supported chat `82.540s`. No source change was made during validation. | Unsupported race-prohibitive paths and remote dependencies. |
 | Functional-test construction policy | PASS | Clean checkout `make test-lane-audit` passed and reported `contract=8 functional=140 integration=10 maintenance=106 release=1 stress=1 unit=446`. | CI-only policy enforcement on a future head. |
 | Diff hygiene | PASS | Clean detached checkout `git diff --check` passed; the final tracked diff is checked again before commit. | Review-owned merge/conflict state. |
-| Performance direction | PASS (directional) | Accepted topology remains measurable: lifecycle uses 2 root processes for 12 tests, routing uses 1 root process for 16 nested scenarios, and chat uses shared cohorts plus 24 owned processes for 25 top-level tests. Review-follow-up clean package results were lifecycle/routing/chat `4.717s/1.625s/23.981s` at count one and `26.647s/3.814s/70.280s` at count three. | Local Windows timing is noisy and has no portable threshold; REV-CI-001 must provide the same-head package timing verdict. |
+| Performance direction | PASS (directional) | Accepted topology remains measurable: lifecycle uses 2 root processes for 12 tests, routing uses 1 root process for 16 nested scenarios, and chat uses shared cohorts plus 24 owned processes for 25 top-level tests. Exact-head clean package results were lifecycle/routing/chat `5.856s/1.460s/24.801s` at count one and `33.944s/4.194s/168.651s` at count three. | Local Windows timing is noisy and has no portable threshold; REV-CI-001 must provide the same-head package timing verdict. |
 | VAL-001 clean-room journey | PASS | The detached clean worktree had empty status before removal; discovery, repeats, supported races, policy audit, diff check, public witnesses, final censuses, and the exact full-suite rerun passed. | Remote availability, paid behavior, and restart semantics. |
 | Implementation-stage delivery | PENDING HANDOFF | This report is the pre-push validation artifact. Final head push, open PR, required CI start, and review feedback state are recorded at handoff. | Review owns terminal CI, conflicts, and merge. |
 
@@ -61,14 +61,14 @@ and test behavior remained unchanged.
 
 1. A detached worktree at the validation head was created with `git worktree
    add --detach`; `git status --short --branch` reported only `## HEAD (no
-   branch)`, and the worktree was removed after each bounded validation pass.
+   branch)`, and the worktree was removed after the complete validation pass.
 2. The three public functional packages were discovered, then exercised with
    the exact count-one and count-three commands below. All exited `0`:
 
    ```text
-   go test -count=1 -timeout=30m ./tests/functional/sessions/lifecycle
-   go test -count=1 -timeout=30m ./tests/functional/work/routing
-   go test -count=1 -timeout=30m ./tests/functional/sessions/chat_sessions/root_composition
+   go test -v -count=1 -timeout=30m ./tests/functional/sessions/lifecycle
+   go test -v -count=1 -timeout=30m ./tests/functional/work/routing
+   go test -v -count=1 -timeout=30m ./tests/functional/sessions/chat_sessions/root_composition
    go test -count=3 -timeout=30m ./tests/functional/sessions/lifecycle
    go test -count=3 -timeout=30m ./tests/functional/work/routing
    go test -count=3 -timeout=30m ./tests/functional/sessions/chat_sessions/root_composition
@@ -87,11 +87,25 @@ and test behavior remained unchanged.
    lineage, dispatch, rejection, failure, capacity, ordering, and replay;
    and ACP Chat Session turns, target selection, errors, streams, usage,
    child attribution, duplicate suppression, and retained replay.
-5. The exact clean-room `make test` rerun exited `0` with 146 passing tests,
-   zero failures, and one supported environment skip. An earlier full-suite
-   attempt had one unrelated local-real Git fixture assertion; its focused
-   replay passed all 30 tests in that file, and the immediate exact rerun
-   passed. No source change was made for either rerun.
+5. The exact clean-room `make test` rerun exited `0` with the runner summary
+   `1..153`, `# tests 153`, `# pass 152`, `# fail 0`, `# skipped 1`, and
+   `# duration_ms 34431.658`. No source change was made during the run.
+6. The remaining clean-room gates all exited `0`:
+
+   ```text
+   make test-lane-audit -> contract=8 functional=140 integration=10 maintenance=106 release=1 stress=1 unit=446
+   make backend-size -> all owned Go backend files are within file limit 1000 and function limit 100
+   make pkg-structure -> service and functional package structure holds (532 deletion-only baseline entries remain)
+   git diff --check -> no output
+   ```
+
+   The supported race commands were:
+
+   ```text
+   go test -race -count=1 -timeout=30m -run '^(TestFactorySessionCleanupRunsAfterEarlySubtestExit|TestCLIRemoteRunStartsDurableSessionOnSelectedServer|TestCLILocalAndRemoteRunCancellationParityThroughRootProcess)$' ./tests/functional/sessions/lifecycle
+   go test -race -count=1 -timeout=30m -run '^TestSharedProcessWorkRouting$' ./tests/functional/work/routing
+   go test -race -count=1 -timeout=30m ./tests/functional/sessions/chat_sessions/root_composition
+   ```
 
 ## Cross-task integration and usability
 
@@ -111,9 +125,9 @@ and test behavior remained unchanged.
 
 ## Performance and optimization follow-up
 
-The local Go package times are directional only. The review-follow-up count-one
-package results were lifecycle `4.717s`, routing `1.625s`, and chat `23.981s`;
-count three reported `26.647s`, `3.814s`, and `70.280s`. These values do not
+The local Go package times are directional only. The exact-head count-one
+package results were lifecycle `5.856s`, routing `1.460s`, and chat `24.801s`;
+count three reported `33.944s`, `4.194s`, and `168.651s`. These values do not
 establish a portable timing threshold and are not used to overrule the accepted
 topology.
 
@@ -128,15 +142,15 @@ performance verdict.
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| C07-F001 | non-blocking, bounded rerun passed | `go test -race -count=1 -timeout=30m -run=^TestSharedProcessWorkRouting$ ./tests/functional/work/routing` from a clean detached worktree | The supported race path exits `0` and reports a clean census. | The first bounded attempt exited `1` with `race detected during execution of test`; its final census still closed 16/16 sessions, roots, paths, readers, and 18/18 routes with zero active calls. One immediate rerun of the same command exited `0` with no race diagnostic and the same clean behavior. No source was changed. | First attempt and rerun output; prior story-003 focused race evidence also passed. If CI reproduces the failure, review should treat it as blocking rather than infer a pass from this rerun. |
-| C07-F002 | informational | Package runs exercise fixture discovery against transient child directories. | Existing diagnostics may be emitted without changing customer-visible behavior. | Routing emitted the known `logicaltarget/discovery.go` missing-root diagnostics; all public assertions and cleanup censuses passed. No shared-support defect was localized and no protected support file was edited. | Existing characterization note and clean package output. |
-| C07-F003 | non-blocking, reproduced cleanly on rerun | Exact clean-room `make test` at the validated source commit | The repository suite exits `0`. | The first full attempt had one unrelated local-real Git fixture assertion; the focused replay passed all 30 tests in that file, and the immediate exact full-suite rerun exited `0` with 146 passes, 0 failures, and 1 supported skip. No source changed between runs. | Clean-room command output from the validated source commit; review should use the final rerun result. |
+| C07-F002 | informational | Package runs exercise fixture discovery against transient child directories. | Existing diagnostics may be emitted without changing customer-visible behavior. | The exact-head routing run retained the known discovery boundary; all public assertions and cleanup censuses passed. No shared-support defect was localized and no protected support file was edited. | Existing characterization note and exact-head clean package output. |
 
 ## Verdict
 
 PASS for VAL-001 local clean-room validation and the c07 implementation evidence.
-The implementation handoff remains review-stage work: push the final head, open
-the PR, start required CI, and stop without waiting for terminal CI.
+This report records the complete read-only validation from source commit
+`4c124e4d5566ad800380ebf20ae694165ba7f5e9`; the implementation handoff still
+requires the report refresh to be pushed and required CI to be started on that
+new head.
 
 ## Remaining unproven edges
 
