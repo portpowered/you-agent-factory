@@ -543,14 +543,11 @@ func configureGenericGroupCommand(command *cobra.Command) {
 			return nil
 		}
 		if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
-			return cmd.Help()
+			return nil
 		}
 		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
 	}
-	command.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := command.Args(cmd, args); err != nil {
-			return err
-		}
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
 		return cmd.Help()
 	}
 }

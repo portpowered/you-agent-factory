@@ -1,6 +1,7 @@
 package climanifestcobra
 
 import (
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -876,6 +877,84 @@ func TestWorkerConstructorGenericGroupBranches(t *testing.T) {
 	if err := group.Args(group, []string{"unknown"}); err == nil {
 		t.Fatal("configureGenericGroupCommand(unknown) error = nil")
 	}
+}
+
+func TestGenericGroupHelpCharacterization(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		wantUsage int
+		wantErr   string
+	}{
+		{name: "help", args: []string{"--help"}, wantUsage: 1},
+		{name: "short help", args: []string{"-h"}, wantUsage: 1},
+		{name: "bare", args: []string{}, wantUsage: 1},
+		{
+			name:    "unknown input",
+			args:    []string{"definitely-missing"},
+			wantErr: `unknown command "definitely-missing" for "forge"`,
+		},
+		{
+			name:    "multiple input",
+			args:    []string{"--help", "extra"},
+			wantErr: `unknown command "--help" for "forge"`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			productHandlerCalls := 0
+			group := &cobra.Command{
+				Use:   "forge",
+				Short: "Forge commands",
+				Long:  "Forge commands.",
+			}
+			configureGenericGroupCommand(group)
+			group.AddCommand(&cobra.Command{
+				Use: "run",
+				RunE: func(*cobra.Command, []string) error {
+					productHandlerCalls++
+					return nil
+				},
+			})
+
+			var stdout, stderr bytes.Buffer
+			group.SetOut(&stdout)
+			group.SetErr(&stderr)
+			group.SetArgs(test.args)
+			err := group.Execute()
+
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Execute() error = %v, want nil", err)
+				}
+				if stderr.Len() != 0 {
+					t.Fatalf("stderr = %q, want empty", stderr.String())
+				}
+			} else if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("Execute() error = %v, want error containing %q", err, test.wantErr)
+			}
+
+			if test.wantUsage > 0 {
+				if got := countExactOutputLines(stdout.String(), "Usage:"); got != test.wantUsage {
+					t.Fatalf("Usage: line count = %d, want %d; stdout:\n%s", got, test.wantUsage, stdout.String())
+				}
+			}
+			if productHandlerCalls != 0 {
+				t.Fatalf("product handler calls = %d, want 0", productHandlerCalls)
+			}
+		})
+	}
+}
+
+func countExactOutputLines(output, want string) int {
+	count := 0
+	for _, line := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
+		if line == want {
+			count++
+		}
+	}
+	return count
 }
 
 func workerCoverageManifest(t *testing.T) climanifest.Manifest {
