@@ -640,14 +640,14 @@ async function runLocalGitCredentialWitness(options = {}) {
 	}
 }
 
-test("AUTH-01 local-real Git records credential identity and characterizes checkout order dependency", async () => {
+test("AUTH-01/AUTH-02 local-real Git records App credential identity and characterizes checkout order dependency", async () => {
 	const retainedCheckout = await runLocalGitCredentialWitness({
 		checkoutToken: AUTH_DEFAULT_TOKEN,
 		helperOrder: ["app", "default"],
 	});
 	const appOnlyCheckout = await runLocalGitCredentialWitness({
 		checkoutToken: "",
-		helperOrder: ["app", "default"],
+		helperOrder: ["app"],
 	});
 
 	assert.notEqual(retainedCheckout.push.status, 0);
@@ -659,6 +659,7 @@ test("AUTH-01 local-real Git records credential identity and characterizes check
 	assert.ok(appOnlyCheckout.authenticatedLabels.length > 0);
 	assert.ok(appOnlyCheckout.authenticatedLabels.every((label) => label === "app"));
 	assert.deepEqual(appOnlyCheckout.helperLabels, ["app"]);
+	assert.doesNotMatch(appOnlyCheckout.helperLabels.join("\n"), /default/);
 	assert.doesNotMatch(
 		`${retainedCheckout.push.stdout}${retainedCheckout.push.stderr}${appOnlyCheckout.push.stdout}${appOnlyCheckout.push.stderr}`,
 		/default-fixture-token|app-fixture-token/,
@@ -1049,6 +1050,17 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 			workflow.indexOf("name: Check out the delivered main revision"),
 		"the source conclusion must be validated before checkout",
 	);
+	const checkoutStart = workflow.indexOf("      - name: Check out the delivered main revision");
+	const checkoutEnd = workflow.indexOf("\n      - name: ", checkoutStart + 1);
+	const checkoutStep = workflow.slice(checkoutStart, checkoutEnd === -1 ? workflow.length : checkoutEnd);
+	assert.match(checkoutStep, /token: \$\{\{ steps\.bot-token\.outputs\.token \}\}/);
+	assert.match(checkoutStep, /persist-credentials: false/);
+	assert.doesNotMatch(checkoutStep, /GITHUB_TOKEN|github\.token|secrets\.SHARED_BASELINE_BOT_TOKEN/);
+	assert.ok(
+		checkoutStep.indexOf("token: ${{ steps.bot-token.outputs.token }}") <
+			checkoutStep.indexOf("persist-credentials: false"),
+		"checkout must disable persistence for the explicitly selected App credential",
+	);
 });
 
 test("F-18/F-19 keep overlapping runs serialized and restart cancelled work from source main", () => {
@@ -1168,6 +1180,60 @@ test("F-13 empty App token fails before branch or pull-request mutation", () => 
 	}
 });
 
+test("AUTH-04/F-04 no-diff reconciliation is a no-op without branch or pull-request mutation", () => {
+	const edge = createControlledCommandEdge({ pullRequestLists: [[]] });
+	const result = reconcileBotCandidate({
+		repository: REPOSITORY,
+		mainSha: MAIN_SHA,
+		changedPaths: [],
+		commandRunner: edge.run,
+	});
+
+	assert.deepEqual(result, { action: "noop", publish: false, remotePaths: [] });
+	assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && call.args[0] === "pr" && call.args[1] === "list").length, 1);
+	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && call.args[0] === "push").length, 0);
+	assert.equal(
+		callsMatching(
+			edge.calls,
+			(call) => call.command === "gh" && ["close", "create", "edit", "ready", "merge"].includes(call.args[1]),
+		).length,
+		0,
+	);
+});
+
+test("AUTH-05 rejected App authentication fails before push or later pull-request mutation", () => {
+	const edge = createControlledCommandEdge({
+		stagedPaths: [SHARED_BASELINE_PATHS[0]],
+		failWhen: (call) =>
+			call.command === "gh" && call.args[0] === "auth" && call.args[1] === "setup-git" ? 29 : undefined,
+	});
+	assert.throws(
+		() =>
+			reconcileBotCandidate({
+				repository: REPOSITORY,
+				mainSha: MAIN_SHA,
+				changedPaths: [SHARED_BASELINE_PATHS[0]],
+				sourceRunUrl: SOURCE_RUN_URL,
+				commandRunner: edge.run,
+			}),
+		/gh command failed with exit code 29/,
+	);
+
+	const setupCalls = edge.calls.filter(
+		(call) => call.command === "gh" && call.args[0] === "auth" && call.args[1] === "setup-git",
+	);
+	assert.equal(setupCalls.length, 1);
+	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && call.args[0] === "push").length, 0);
+	assert.equal(
+		callsMatching(
+			edge.calls,
+			(call) => call.command === "gh" && ["close", "create", "edit", "ready", "merge"].includes(call.args[1]),
+		).length,
+		0,
+	);
+	assert.doesNotMatch(edge.calls.map(commandText).join("\n"), /default-fixture-token|app-fixture-token/);
+});
+
 test("plans drift publication, no-diff cleanup, and exact-candidate reuse", () => {
 	const common = { triggeringSha: SHA("a"), currentMainSha: SHA("a") };
 	assert.equal(
@@ -1223,6 +1289,11 @@ test("fails before publication for generation errors and invalid revisions", () 
 });
 
 test("F-05/F-15 parses status output and rejects every path outside the eleven-file allowlist", () => {
+	const duplicatedPaths = SHARED_BASELINE_PATHS
+		.slice()
+		.reverse()
+		.flatMap((path) => [path, path]);
+	assert.deepEqual(validateAllowlistedPaths(duplicatedPaths), SHARED_BASELINE_PATHS.slice().sort());
 	const status = [
 		...SHARED_BASELINE_PATHS.map((path) => ` M ${path}`),
 		`R  old.txt -> ${SHARED_BASELINE_PATHS[0]}`,
@@ -1397,7 +1468,7 @@ test("F-12 supersedes a candidate when main moves before publication", () => {
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && ["commit", "push"].includes(call.args[0])).length, 0);
 });
 
-test("F-14 rejects duplicate bot PRs before branch publication", () => {
+test("F-12 rejects duplicate bot PRs before branch publication", () => {
 	const edge = createControlledCommandEdge({
 		pullRequestLists: [[{ number: 1 }, { number: 2 }]],
 	});
@@ -1413,6 +1484,28 @@ test("F-14 rejects duplicate bot PRs before branch publication", () => {
 	);
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "git" && ["add", "commit", "push"].includes(call.args[0])).length, 0);
 	assert.equal(callsMatching(edge.calls, (call) => call.command === "gh" && ["create", "edit", "merge"].includes(call.args[1])).length, 0);
+});
+
+test("F-14 makes an exact draft PR ready before requesting exact-head auto-merge", () => {
+	const changedPath = SHARED_BASELINE_PATHS[0];
+	const edge = createControlledCommandEdge({
+		pullRequestLists: [[], []],
+		stagedPaths: [changedPath],
+		metadata: { files: [changedPath], isDraft: true },
+	});
+	const result = reconcileBotCandidate({
+		repository: REPOSITORY,
+		mainSha: MAIN_SHA,
+		changedPaths: [changedPath],
+		sourceRunUrl: SOURCE_RUN_URL,
+		commandRunner: edge.run,
+	});
+
+	assert.equal(result.action, "merge-requested");
+	const readyIndex = edge.calls.findIndex((call) => call.command === "gh" && call.args[1] === "ready");
+	const mergeIndex = edge.calls.findIndex((call) => call.command === "gh" && call.args[1] === "merge");
+	assert.ok(readyIndex >= 0);
+	assert.ok(mergeIndex > readyIndex);
 });
 
 test("F-16 and F-17 stop before auto-merge for invalid metadata or a failed mutation command", () => {
