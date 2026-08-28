@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -28,26 +29,9 @@ const acpSharedProcessTimeout = 20 * time.Second
 // each explicit Factory Session retains its own peer boundary.
 func TestACPSharedProcess(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "shared-spine")
+	t.Setenv("YOU_TEST_ACP_SESSION_ID", "")
 	fixture := newACPSharedProcessFixture(t)
-	success := fixture.openSession(t)
-	failure := fixture.openSession(t)
-
-	successRun := success.run(t, "shared-success", "shared ACP success")
-	assertACPSharedSuccess(t, successRun)
-
-	failureRun := failure.run(t, "shared-failure", "shared ACP failure")
-	assertACPSharedFailure(t, failureRun)
-	assertACPSharedSessionIsolation(t, success, failure, successRun, failureRun)
-
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		t.Fatalf("shared ACP root constructions = %d, want 1", got)
-	}
-	if got := fixture.peerStarts.Load(); got != 2 {
-		t.Fatalf("shared ACP peer starts = %d, want one controlled peer per explicit Factory Session", got)
-	}
-
-	failure.close(t)
-	success.close(t)
+	runACPSharedEligibleBehavior(t, fixture)
 }
 
 type acpSharedProcessFixture struct {
@@ -55,8 +39,13 @@ type acpSharedProcessFixture struct {
 	command    *support.ProcessCommand
 	api        *support.ProcessAPIServer
 	baseURL    string
+	homeDir    string
+	legacy     *legacyProvider
 	rootBuilds atomic.Int32
 	peerStarts atomic.Int32
+	sessionMu  sync.Mutex
+	opened     map[string]struct{}
+	closed     map[string]struct{}
 	closeOnce  sync.Once
 }
 
@@ -72,20 +61,30 @@ type acpSharedRun struct {
 	listed         factoryapi.ListWorkResponse
 	events         []factoryapi.FactoryEvent
 	responseEvents []factoryapi.FactoryResponseEvent
+	workerEvents   []factoryapi.WorkerSessionEvent
 }
 
 func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 	t.Helper()
 	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	homeDir := t.TempDir()
+	installSharedACPIntegration(t, homeDir)
 	api := support.NewProcessAPIServer()
-	fixture := &acpSharedProcessFixture{api: api}
+	legacy := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
+	fixture := &acpSharedProcessFixture{
+		api:     api,
+		homeDir: homeDir,
+		legacy:  legacy,
+		opened:  make(map[string]struct{}),
+		closed:  make(map[string]struct{}),
+	}
 
 	fixture.rootBuilds.Add(1)
 	fixture.process = support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:              api.Start,
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&fixture.peerStarts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
+		ProviderOverride:              legacy,
 	})
 
 	environment := append(os.Environ(),
@@ -107,9 +106,25 @@ func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 }
 
 func (fixture *acpSharedProcessFixture) openSession(t *testing.T) *acpSharedSession {
+	return fixture.openSessionWith(t, func(t *testing.T, dir string) {
+		writeACPWorker(t, dir, "cursor-acp")
+	})
+}
+
+func (fixture *acpSharedProcessFixture) openSessionWith(
+	t *testing.T,
+	configure func(*testing.T, string),
+) *acpSharedSession {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	writeACPWorker(t, dir, "cursor-acp")
+	if configure != nil {
+		configure(t, dir)
+	}
+	return fixture.openSessionDir(t, dir)
+}
+
+func (fixture *acpSharedProcessFixture) openSessionDir(t *testing.T, dir string) *acpSharedSession {
+	t.Helper()
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, dir)
 	if opened.Session == nil || opened.Session.Id == "" {
 		t.Fatalf("opened shared ACP Factory Session = %#v, want identity", opened)
@@ -118,28 +133,48 @@ func (fixture *acpSharedProcessFixture) openSession(t *testing.T) *acpSharedSess
 		t.Fatalf("shared ACP child session id = %q, want explicit non-default session", opened.Session.Id)
 	}
 	session := &acpSharedSession{fixture: fixture, id: opened.Session.Id}
+	fixture.sessionMu.Lock()
+	if _, exists := fixture.opened[session.id]; exists {
+		fixture.sessionMu.Unlock()
+		t.Fatalf("shared ACP Factory Session id %q was reused", session.id)
+	}
+	fixture.opened[session.id] = struct{}{}
+	fixture.sessionMu.Unlock()
 	t.Cleanup(func() { session.close(t) })
 	return session
 }
 
 func (session *acpSharedSession) run(t *testing.T, name, title string) acpSharedRun {
-	t.Helper()
-	submitted := support.SubmitSessionWorkAt(t, session.fixture.baseURL, session.id, factoryapi.SubmitWorkRequest{
+	return session.runRequest(t, factoryapi.SubmitWorkRequest{
 		Name:         &name,
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": title},
-	})
+	}, false)
+}
+
+func (session *acpSharedSession) runRequest(
+	t *testing.T,
+	request factoryapi.SubmitWorkRequest,
+	captureWorkerEvents bool,
+) acpSharedRun {
+	t.Helper()
+	submitted := support.SubmitSessionWorkAt(t, session.fixture.baseURL, session.id, request)
 	workID := support.StringPointerValue(submitted.WorkId)
 	if workID == "" {
-		t.Fatalf("shared ACP %q submission = %#v, want Work ID", name, submitted)
+		t.Fatalf("shared ACP submission = %#v, want Work ID", submitted)
 	}
 	support.WaitForSessionTerminalStatus(t, session.fixture.baseURL, session.id, acpSharedProcessTimeout)
+	var workerEvents []factoryapi.WorkerSessionEvent
+	if captureWorkerEvents {
+		workerEvents = getACPSharedWorkerSessionEvents(t, session.fixture.baseURL, session.id, workID)
+	}
 	return acpSharedRun{
 		session:        sharedACPFactorySession(t, session.fixture.baseURL, session.id),
 		workID:         workID,
 		listed:         sharedACPWork(t, session.fixture.baseURL, session.id),
 		events:         support.GetFactoryEventsForSessionAt(t, session.fixture.baseURL, session.id),
 		responseEvents: support.GetFactoryResponseEventsAt(t, session.fixture.baseURL, session.id),
+		workerEvents:   workerEvents,
 	}
 }
 
@@ -255,6 +290,9 @@ func (session *acpSharedSession) close(t testing.TB) {
 	}
 	support.CloseFactorySessionAt(t, session.fixture.baseURL, session.id)
 	assertACPSharedSessionDeleted(t, session.fixture.baseURL, session.id)
+	session.fixture.sessionMu.Lock()
+	session.fixture.closed[session.id] = struct{}{}
+	session.fixture.sessionMu.Unlock()
 	session.closed = true
 }
 
@@ -292,8 +330,23 @@ func (fixture *acpSharedProcessFixture) close(t testing.TB) {
 				t.Errorf("close shared ACP application process: %v", err)
 			}
 		}
+		fixture.assertSessionTopology(t)
 		assertACPSharedListenerClosed(t, fixture.baseURL)
 	})
+}
+
+func (fixture *acpSharedProcessFixture) assertSessionTopology(t testing.TB) {
+	t.Helper()
+	fixture.sessionMu.Lock()
+	defer fixture.sessionMu.Unlock()
+	if len(fixture.opened) != len(fixture.closed) {
+		t.Errorf("shared ACP Factory Session lifecycle = opened:%d closed:%d, want equal", len(fixture.opened), len(fixture.closed))
+	}
+	for sessionID := range fixture.opened {
+		if _, ok := fixture.closed[sessionID]; !ok {
+			t.Errorf("shared ACP Factory Session %q was not deleted", sessionID)
+		}
+	}
 }
 
 func assertACPSharedListenerClosed(t testing.TB, baseURL string) {

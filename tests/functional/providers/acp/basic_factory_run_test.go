@@ -2,7 +2,6 @@ package acp_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -30,35 +29,6 @@ const (
 	acpDisconnectReleaseEnvironment         = "YOU_TEST_ACP_DISCONNECT_RELEASE"
 	acpPackageConformanceReleaseEnvironment = "YOU_TEST_ACP_PACKAGE_CONFORMANCE_RELEASE"
 )
-
-func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP vertical slice"}`))
-	writeACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, "1")
-
-	var processStarts atomic.Int32
-	fallback := &legacyProvider{err: errors.New("legacy provider route was unexpectedly invoked")}
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-		ProviderOverride:              fallback,
-	}, 20*time.Second)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0", got)
-	}
-	if got := processStarts.Load(); got != 1 {
-		t.Fatalf("ACP process starts = %d, want 1", got)
-	}
-	if got := fallback.calls.Load(); got != 0 {
-		t.Fatalf("legacy provider calls = %d, want 0; ACP must be selected by executorProvider", got)
-	}
-	assertACPProviderSession(t, events)
-}
 
 // TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
 // Factory execution path through an ACP server error. The helper accepts a
@@ -110,55 +80,6 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 		t.Fatalf("first ACP retry peer did not reach its controlled live-process checkpoint: %v", err)
 	}
 	assertProviderSessionID(t, events, providerID, sessionID)
-}
-
-func TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"legacy ACP spelling"}`))
-	writeLegacyACPWorker(t, dir, "cursor-acp")
-	t.Setenv(acpHelperEnvironment, "1")
-
-	var processStarts atomic.Int32
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second)
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
-	}
-	if got := processStarts.Load(); got != 1 {
-		t.Fatalf("ACP process starts = %d, want 1", got)
-	}
-}
-
-func TestFactoryRunProjectsOperatorConfiguredACPIntegrationIntoInvocationCatalog(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"configured ACP provider"}`))
-	writeACPWorker(t, dir, "custom-acp")
-	t.Setenv(acpHelperEnvironment, "1")
-
-	var processStarts atomic.Int32
-	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second, func(home string) {
-		configDir := filepath.Join(home, ".you-agent-factory")
-		if err := os.MkdirAll(configDir, 0o700); err != nil {
-			t.Fatalf("create operator config directory: %v", err)
-		}
-		config := []byte(`{"workers":{"acp":{"integrations":[{"id":"entry-1","name":"custom-acp","transport":"stdio","command":"custom-agent acp"}]}}}`)
-		if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
-			t.Fatalf("write operator config: %v", err)
-		}
-	})
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
-	}
-	if got := processStarts.Load(); got != 1 {
-		t.Fatalf("configured ACP process starts = %d, want 1", got)
-	}
-	assertProviderSession(t, events, "custom-acp")
 }
 
 func assertACPProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
@@ -220,29 +141,6 @@ func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	}
 	if got := fallback.calls.Load(); got != 0 {
 		t.Fatalf("legacy provider calls for unknown ACP provider = %d, want 0", got)
-	}
-}
-
-func TestScriptWrapExecutorProviderRetainsLegacyProviderRoute(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"script wrap compatibility"}`))
-	writeLegacyACPWorker(t, dir, "SCRIPT_WRAP")
-
-	var processStarts atomic.Int32
-	fallback := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
-		ProviderOverride:              fallback,
-	}, 20*time.Second)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
-	}
-	if got := fallback.calls.Load(); got != 1 {
-		t.Fatalf("legacy provider calls = %d, want 1", got)
-	}
-	if got := processStarts.Load(); got != 0 {
-		t.Fatalf("ACP process starts for SCRIPT_WRAP = %d, want 0", got)
 	}
 }
 
