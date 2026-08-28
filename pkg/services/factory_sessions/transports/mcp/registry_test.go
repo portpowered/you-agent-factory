@@ -740,6 +740,13 @@ func TestBaselineFixtureMatchesProjectedInventory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalToolInventoryJSON() error = %v", err)
 	}
+	generated, err := mcpfactorysession.GenerateToolInventoryJSON()
+	if err != nil {
+		t.Fatalf("GenerateToolInventoryJSON() error = %v", err)
+	}
+	if string(generated) != string(projected) {
+		t.Fatalf("generated inventory differs from direct projection:\ngenerated=%s\nprojected=%s", generated, projected)
+	}
 	if string(baseline) != string(projected) {
 		t.Fatalf("baseline fixture differs from projected inventory:\nbaseline=%s\nprojected=%s", baseline, projected)
 	}
@@ -810,6 +817,16 @@ func TestVerifyToolInventory_FailsWhenDiscoveredToolMissingHandler(t *testing.T)
 	}
 	if !strings.Contains(err.Error(), unregisteredTool) {
 		t.Fatalf("VerifyToolInventory() error = %v, want offending tool %q", err, unregisteredTool)
+	}
+	encoded, err := mcpfactorysession.MarshalVerifiedToolInventoryJSON(inventory)
+	if err == nil {
+		t.Fatal("MarshalVerifiedToolInventoryJSON() error = nil, want handler verification failure")
+	}
+	if !strings.Contains(err.Error(), unregisteredTool) {
+		t.Fatalf("MarshalVerifiedToolInventoryJSON() error = %v, want offending tool %q", err, unregisteredTool)
+	}
+	if encoded != nil {
+		t.Fatalf("MarshalVerifiedToolInventoryJSON() payload = %q, want nil", encoded)
 	}
 }
 
