@@ -215,13 +215,32 @@ func (fixture *sharedPetriProcessFixture) close() error {
 		closeErr = errors.Join(closeErr, processErr)
 		closeErr = errors.Join(closeErr, recordSharedPetriProcessStopped())
 	}
+	if fixture.router != nil {
+		if got := fixture.router.routeCount(); got != 0 {
+			closeErr = errors.Join(
+				closeErr,
+				fmt.Errorf("shared Petri command routes remaining after cleanup = %d", got),
+			)
+		}
+	}
 	lifecycleErr := fixture.sessionLifecycleError()
 	if removeErr := os.RemoveAll(fixture.rootDir); removeErr != nil {
-		closeErr = errors.Join(closeErr, lifecycleErr)
-		if closeErr != nil {
-			return errors.Join(closeErr, fmt.Errorf("remove fixture root: %w", removeErr))
-		}
-		return fmt.Errorf("remove fixture root: %w", removeErr)
+		return errors.Join(
+			closeErr,
+			lifecycleErr,
+			fmt.Errorf("remove fixture root: %w", removeErr),
+		)
+	}
+	if _, statErr := os.Stat(fixture.rootDir); statErr == nil {
+		closeErr = errors.Join(
+			closeErr,
+			fmt.Errorf("shared Petri fixture root still exists after cleanup: %s", fixture.rootDir),
+		)
+	} else if !os.IsNotExist(statErr) {
+		closeErr = errors.Join(
+			closeErr,
+			fmt.Errorf("probe removed shared Petri fixture root: %w", statErr),
+		)
 	}
 	return errors.Join(closeErr, lifecycleErr)
 }
@@ -349,6 +368,12 @@ func (router *sharedPetriCommandRouter) unregister(factoryDir string) {
 	}
 	delete(router.routes, factoryDir)
 	router.mu.Unlock()
+}
+
+func (router *sharedPetriCommandRouter) routeCount() int {
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	return len(router.routes)
 }
 
 func (router *sharedPetriCommandRouter) callsFor(factoryDir string) int {

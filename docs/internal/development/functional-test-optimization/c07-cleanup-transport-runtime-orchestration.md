@@ -765,3 +765,90 @@ discovery mode skip runtime-cardinality assertions while retaining the full
 needed to make the already observed cleanup ownership explicit. Repeat, race,
 platform, clean-room, final lane, CI, and merge evidence remain for later
 stories.
+
+## Story 004 — Runtime API and Orchestration teardown repair
+
+Story `functional-test-optimization-c07-cleanup-transport-runtime-orchestration-004`
+repairs the two package-local gaps identified by the preceding census. No
+production, shared-support, contract, generated, excluded, or new Runtime API
+root files changed.
+
+### Repair
+
+- Petri `TestMain` now recognizes the Go test binary's non-empty `test.list`
+  flag as discovery. Discovery still emits an empty lifecycle matrix, but does
+  not require full-execution scenario cardinality; a full run still requires
+  all 44 scenarios.
+- The Petri ledger accepts the bounded repeated identities produced by
+  `-count=N`, using the test count as the maximum occurrence, while preserving
+  duplicate rejection for the normal count-one run. Full-run cardinality scales
+  to `44*N`, and process start/stop balance remains required.
+- The shared Petri fixture now checks that its active command-route registry is
+  empty after scenario cleanup and that its temporary root returns
+  `os.IsNotExist` after removal. Existing public session, Work, Event, dispatch,
+  failure, ordering, and correlation assertions remain unchanged.
+
+### Final story evidence
+
+Environment: Windows `amd64`, Go `1.25.0`. The affected package set resolved
+to the same eleven packages and 117 top-level identities recorded above.
+
+Discovery procedure:
+
+```text
+go test ./tests/functional/orchestration/petri/dispatch -list '^Test' -v
+```
+
+Observed result: exit `0`; all eight Petri top-level tests listed;
+`PETRI_DISPATCH_RUNTIME_MATRIX {"processes":[],"scenarios":[]}`; no runtime
+process or session was started. The previous pre-repair exit-1 cardinality
+failure is gone.
+
+Focused/full execution procedure:
+
+```text
+$packages = @(go list ./tests/functional/runtime_api/... ./tests/functional/orchestration/...)
+foreach ($package in $packages) {
+    go test $package -count=1 -timeout=10m
+}
+go test ./tests/functional/orchestration/petri/dispatch -count=1 -timeout=20m -v
+```
+
+The per-package count-one procedure exited `0` for all eleven packages. The
+final Petri matrix recorded 44 scenarios, zero open scenarios, one start/stop
+for `shared-package-process`, and one start/stop for
+`isolated-executor-panic-process`.
+
+Repeat procedure:
+
+```text
+for each package in (go list ./tests/functional/runtime_api/... ./tests/functional/orchestration/...):
+    go test $package -count=3 -timeout=20m
+```
+
+All eleven package commands exited `0`. The final Petri verbose matrix
+recorded 132 scenarios, zero open scenarios, three starts/stops for the
+isolated panic process, and one start/stop for the shared process. The initial
+repeat attempt exposed the duplicate-name ledger defect; the bounded
+repetition repair above was applied and the complete repeat procedure passed.
+
+Race procedure:
+
+```text
+for each package in (go list ./tests/functional/runtime_api/... ./tests/functional/orchestration/...):
+    go test $package -race -count=1 -timeout=20m
+```
+
+All eleven package commands exited `0` on Windows `amd64`, with no race
+detector findings. The route-count, session, process, ledger, listener, and
+temporary-root observations remained clean at the package-owned boundaries.
+
+### Story result and limits
+
+The story's public assertion/test identity parity is preserved: 117 top-level
+identities and 102 named nested identities remain, and no scenario was removed,
+skipped, or weakened. `GATE-RUNTIME-ORCH`, `GATE-REPEAT`, applicable
+`GATE-RACE`, and the package-local `GATE-CLEANUP` evidence pass on this head.
+Platform-specific Unix evidence, enabled ACPX real-client prerequisites,
+clean-room `VAL-001`, lane/contract gates, current-head PR CI, conflict
+resolution, and merge remain owned by later gates/stories.
