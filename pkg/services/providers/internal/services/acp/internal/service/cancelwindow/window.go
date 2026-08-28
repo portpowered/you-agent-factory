@@ -15,7 +15,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-// sendTimeout is passed to the outbound session/cancel notification send as
+// defaultSendTimeout is passed to the outbound session/cancel notification send as
 // a best-effort deadline. The underlying acp-go-sdk connection does not
 // observe ctx once the send has entered its synchronous, unbuffered
 // io.Writer.Write call (SendNotification only checks ctx.Done() before that
@@ -24,7 +24,7 @@ import (
 // waiting for the send to finish (see the ownership field below) - only the
 // send itself, and whichever goroutine is waiting on its result, can be left
 // blocked by a stuck peer.
-const sendTimeout = 500 * time.Millisecond
+const defaultSendTimeout = 500 * time.Millisecond
 
 // Session is the exact live session/prompt turn a session/cancel
 // notification can currently target. It exists only for the span between
@@ -49,13 +49,14 @@ const sendTimeout = 500 * time.Millisecond
 // inside a stuck peer write; nothing in this package waits for that write to
 // return.
 type Session struct {
-	attemptID  string
-	sessionID  acpsdk.SessionId
-	connection *acpsdk.ClientSideConnection
-	mu         sync.Mutex
-	ownership  sessionOwnership
-	cancelled  bool
-	done       chan struct{}
+	attemptID   string
+	sessionID   acpsdk.SessionId
+	connection  *acpsdk.ClientSideConnection
+	sendTimeout time.Duration
+	mu          sync.Mutex
+	ownership   sessionOwnership
+	cancelled   bool
+	done        chan struct{}
 }
 
 // sessionOwnership tracks which side - TryCancel or End - first acted on a
@@ -72,14 +73,25 @@ const (
 // Window is the single-slot live-session tracker for one ACP daemon. The
 // zero value is ready to use.
 type Window struct {
-	mu     sync.Mutex
-	active *Session
+	mu          sync.Mutex
+	active      *Session
+	sendTimeout time.Duration
 }
 
 // Begin opens the cancelable window for one attempt's in-flight session/
 // prompt turn.
 func (w *Window) Begin(attemptID string, sessionID acpsdk.SessionId, connection *acpsdk.ClientSideConnection) *Session {
-	session := &Session{attemptID: attemptID, sessionID: sessionID, connection: connection, done: make(chan struct{})}
+	sendTimeout := w.sendTimeout
+	if sendTimeout == 0 {
+		sendTimeout = defaultSendTimeout
+	}
+	session := &Session{
+		attemptID:   attemptID,
+		sessionID:   sessionID,
+		connection:  connection,
+		sendTimeout: sendTimeout,
+		done:        make(chan struct{}),
+	}
 	w.mu.Lock()
 	w.active = session
 	w.mu.Unlock()
@@ -162,13 +174,14 @@ func (w *Window) Claim(attemptID string) (*Session, bool) {
 // only ever held for these instantaneous bookkeeping transitions, never
 // across the outbound send itself.
 //
-// The outbound send passes its own fixed sendTimeout as a best-effort ctx
+// The outbound send passes its session-local sendTimeout as a best-effort ctx
 // deadline, independent of the caller's ctx: this keeps a genuine send
 // failure (wrapped in providers.ErrControlSignalFailed below) unambiguously
 // distinct from the caller giving up during the wait phase below, which
 // instead surfaces the caller's own unwrapped ctx.Err(). It does not,
 // however, guarantee the send returns within sendTimeout - the underlying
-// SDK write is not itself ctx-aware once started (see sendTimeout's doc) -
+// SDK write is not itself ctx-aware once started (see defaultSendTimeout's
+// doc) -
 // so a stuck peer can still leave this specific TryCancel call, and whatever
 // goroutine is waiting on it, blocked past that bound. Nothing else in this
 // package waits on it. A send failure returns promptly without waiting
@@ -189,7 +202,7 @@ func (session *Session) TryCancel(ctx context.Context) (accepted bool, err error
 		return false, nil
 	}
 
-	sendCtx, cancelSend := context.WithTimeout(context.Background(), sendTimeout)
+	sendCtx, cancelSend := context.WithTimeout(context.Background(), session.sendTimeout)
 	sendErr := session.connection.Cancel(sendCtx, acpsdk.CancelNotification{SessionId: session.sessionID})
 	cancelSend()
 

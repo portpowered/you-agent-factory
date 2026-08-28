@@ -52,13 +52,18 @@ func (noopClient) WaitForTerminalExit(context.Context, acpsdk.WaitForTerminalExi
 // tests can wait on a real Go channel instead of any sleep-based timing.
 type fakeSessionPeer struct {
 	received chan acpsdk.CancelNotification
+	done     chan struct{}
 }
 
 func newFakeSessionPeer() *fakeSessionPeer {
-	return &fakeSessionPeer{received: make(chan acpsdk.CancelNotification, 8)}
+	return &fakeSessionPeer{
+		received: make(chan acpsdk.CancelNotification, 8),
+		done:     make(chan struct{}),
+	}
 }
 
 func (peer *fakeSessionPeer) run(from io.Reader) {
+	defer close(peer.done)
 	scanner := bufio.NewScanner(from)
 	for scanner.Scan() {
 		var message struct {
@@ -85,7 +90,11 @@ func newPipedConnection(t *testing.T, peer *fakeSessionPeer) *acpsdk.ClientSideC
 	t.Helper()
 	outboundReader, outboundWriter := io.Pipe()
 	go peer.run(outboundReader)
-	t.Cleanup(func() { _ = outboundWriter.Close() })
+	t.Cleanup(func() {
+		_ = outboundWriter.Close()
+		_ = outboundReader.Close()
+		<-peer.done
+	})
 	return acpsdk.NewClientSideConnection(noopClient{}, outboundWriter, io.MultiReader())
 }
 
@@ -95,6 +104,9 @@ func TestWindowTryCancelDeliversNotificationAndBlocksUntilWindowCloses(t *testin
 
 	w := &Window{}
 	session := w.Begin("attempt-1", acpsdk.SessionId("session-1"), connection)
+	if session.sendTimeout != defaultSendTimeout {
+		t.Fatalf("zero-value Window session sendTimeout = %s, want %s", session.sendTimeout, defaultSendTimeout)
+	}
 
 	if _, ok := w.Claim("attempt-other"); ok {
 		t.Fatal("Claim(attempt-other) ok = true, want false for a different attempt id")
@@ -241,16 +253,43 @@ func TestWindowClaimPinsExactGenerationSoReusedAttemptIDCannotRedirectDelivery(t
 // entered is closed once the blocked Write is reached, giving the test a
 // real synchronization point instead of a sleep.
 type gatedWriter struct {
-	w       io.Writer
-	entered chan struct{}
-	release chan struct{}
-	once    sync.Once
+	w           io.Writer
+	entered     chan struct{}
+	release     chan struct{}
+	once        sync.Once
+	releaseOnce sync.Once
 }
 
 func (g *gatedWriter) Write(p []byte) (int, error) {
 	g.once.Do(func() { close(g.entered) })
 	<-g.release
 	return g.w.Write(p)
+}
+
+func (g *gatedWriter) releaseWrite() {
+	g.releaseOnce.Do(func() { close(g.release) })
+}
+
+func stopAndDrainTimer(timer *time.Timer) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+}
+
+// waitForSignal bounds only a failed witness's diagnostic path; successful
+// ordering is driven by the supplied channel rather than by the timeout.
+func waitForSignal(t *testing.T, signal <-chan struct{}, timeout time.Duration, message string) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer stopAndDrainTimer(timer)
+	select {
+	case <-signal:
+	case <-timer.C:
+		t.Fatal(message)
+	}
 }
 
 // TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound
@@ -271,61 +310,105 @@ func (g *gatedWriter) Write(p []byte) (int, error) {
 // own session ID and never the replacement generation that reused the
 // identity in the meantime.
 func TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound(t *testing.T) {
+	const testSendTimeout = 10 * time.Millisecond
+
 	peer := newFakeSessionPeer()
 	outboundReader, outboundWriter := io.Pipe()
 	gate := &gatedWriter{w: outboundWriter, entered: make(chan struct{}), release: make(chan struct{})}
 	go peer.run(outboundReader)
-	t.Cleanup(func() { _ = outboundWriter.Close() })
 	connection := acpsdk.NewClientSideConnection(noopClient{}, gate, io.MultiReader())
 
-	w := &Window{}
+	w := &Window{sendTimeout: testSendTimeout}
 	sessionA := w.Begin("attempt-1", acpsdk.SessionId("session-A"), connection)
-	claimedA, ok := w.Claim("attempt-1")
-	if !ok || claimedA != sessionA {
-		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimedA, ok)
-	}
-
 	type outcome struct {
 		accepted bool
 		err      error
 	}
 	tryCancelDone := make(chan outcome, 1)
+	var tryCancelResult outcome
+	var receiveTryCancelOnce sync.Once
+	waitForTryCancel := func() outcome {
+		receiveTryCancelOnce.Do(func() { tryCancelResult = <-tryCancelDone })
+		return tryCancelResult
+	}
+
+	var endAOnce sync.Once
+	endA := func() { endAOnce.Do(func() { w.End(sessionA, false) }) }
+	var sessionB *Session
+	var endBOnce sync.Once
+	endB := func() {
+		if sessionB != nil {
+			endBOnce.Do(func() { w.End(sessionB, false) })
+		}
+	}
+	var endDone chan struct{}
+	tryCancelStarted := false
+	t.Cleanup(func() {
+		// Release the real blocked Write before joining TryCancel. End must
+		// also run on every failure path so the waiting call can observe its
+		// terminal outcome and all goroutines can finish before the pipes close.
+		gate.releaseWrite()
+		endA()
+		endB()
+		if endDone != nil {
+			<-endDone
+		}
+		if tryCancelStarted {
+			_ = waitForTryCancel()
+		}
+		_ = outboundWriter.Close()
+		_ = outboundReader.Close()
+		<-peer.done
+	})
+	if sessionA.sendTimeout != testSendTimeout {
+		t.Fatalf("test Window session sendTimeout = %s, want %s", sessionA.sendTimeout, testSendTimeout)
+	}
+
+	claimedA, ok := w.Claim("attempt-1")
+	if !ok || claimedA != sessionA {
+		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimedA, ok)
+	}
+
+	tryCancelStarted = true
 	go func() {
 		accepted, err := claimedA.TryCancel(context.Background())
 		tryCancelDone <- outcome{accepted: accepted, err: err}
 	}()
 
 	// TryCancel has won ownership of A and is now blocked mid-send, well past
-	// what sendTimeout would bound if the SDK actually honored it.
-	<-gate.entered
-	time.Sleep(2 * sendTimeout)
+	// what the session-local send bound would limit if the SDK honored it.
+	waitForSignal(t, gate.entered, 2*time.Second, "TryCancel() did not enter the gated real SDK write")
+	boundTimer := time.NewTimer(2 * sessionA.sendTimeout)
+	t.Cleanup(func() { stopAndDrainTimer(boundTimer) })
+	// This timer starts only after writer entry, making its channel an
+	// explicit post-entry elapsed signal instead of a scheduling sleep.
+	<-boundTimer.C
 
-	endDone := make(chan struct{})
+	endDone = make(chan struct{})
 	go func() {
 		// A's real Execute() outcome was not a cancellation - the daemon's
 		// own response raced ahead of the (still in-flight) cancel send.
-		w.End(sessionA, false)
+		endA()
 		close(endDone)
 	}()
 
-	select {
-	case <-endDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("End() did not reach a terminal result while TryCancel's send was stuck; a blocked peer write must never block End")
-	}
+	waitForSignal(t, endDone, 2*time.Second, "End() did not reach a terminal result while TryCancel's send was stuck; a blocked peer write must never block End")
 
 	// The identity must be free for reuse immediately - not just eventually.
-	sessionB := w.Begin("attempt-1", acpsdk.SessionId("session-B"), connection)
+	sessionB = w.Begin("attempt-1", acpsdk.SessionId("session-B"), connection)
+	if sessionB.sendTimeout != testSendTimeout {
+		t.Fatalf("replacement session sendTimeout = %s, want %s", sessionB.sendTimeout, testSendTimeout)
+	}
 	claimedB, ok := w.Claim("attempt-1")
 	if !ok || claimedB != sessionB {
 		t.Fatalf("Claim(attempt-1) after A's End = (%v, %v), want the fresh session B and true", claimedB, ok)
 	}
-	w.End(sessionB, false)
+	endB()
 
 	// Now let A's long-stuck send finally land.
-	close(gate.release)
+	gate.releaseWrite()
 
-	result := <-tryCancelDone
+	result := waitForTryCancel()
 	if result.err != nil {
 		t.Fatalf("TryCancel() error = %v, want nil", result.err)
 	}
