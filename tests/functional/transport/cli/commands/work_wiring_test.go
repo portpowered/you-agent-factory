@@ -109,20 +109,14 @@ func testCLIWorkListAndShowReflectSubmittedWork(t *testing.T, remote *sharedRemo
 	for _, marker := range []string{
 		"Work ID:\t" + workID,
 		"Name:\t" + workWiringListShowWorkName,
+		"State name:\t" + shown.State.Name,
 	} {
 		if !strings.Contains(showHuman, marker) {
 			t.Fatalf("work show output missing %q:\n%s", marker, showHuman)
 		}
 	}
-	stateMarkerFound := false
-	for _, state := range []string{"init", "complete", "failed"} {
-		if strings.Contains(showHuman, "State name:\t"+state) {
-			stateMarkerFound = true
-			break
-		}
-	}
-	if !stateMarkerFound {
-		t.Fatalf("work show output missing a known customer-visible state:\n%s", showHuman)
+	if shown.State.Name != "init" && shown.State.Name != "complete" && shown.State.Name != "failed" {
+		t.Fatalf("work show returned an unknown customer-visible state %q:\n%s", shown.State.Name, showHuman)
 	}
 }
 
@@ -203,6 +197,7 @@ func testCLIWorkShowMissingReturnsNotFound(t *testing.T, remote *sharedRemoteCLI
 		"work", "show", workWiringMissingWorkID,
 	)
 	assertCLIWorkShowNotFoundFailure(t, showJSONOut, err, workWiringMissingWorkID)
+	remote.assertHealthy(t, factoryDir)
 }
 
 // TestCLIWorkRenderProducesDeterministicGraph proves you work render emits

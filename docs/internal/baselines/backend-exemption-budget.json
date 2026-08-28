@@ -723,7 +723,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/transport/cli/commands/session_wiring_test.go#TestCLISessionCreateListShowDelete",
+      "target": "tests/functional/transport/cli/commands/session_wiring_test.go#testCLISessionCreateListShowDelete",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
     },

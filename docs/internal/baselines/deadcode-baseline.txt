@@ -65,10 +65,14 @@ internal/builtcliacceptance/harness.go: unreachable func: Command.Run
 internal/builtcliacceptance/harness.go: unreachable func: Command.Start
 internal/builtcliacceptance/harness.go: unreachable func: Command.StdoutPipe
 internal/builtcliacceptance/harness.go: unreachable func: Command.Wait
+internal/builtcliacceptance/harness.go: unreachable func: Command.execute
+internal/builtcliacceptance/harness.go: unreachable func: Harness.Close
 internal/builtcliacceptance/harness.go: unreachable func: Harness.Command
 internal/builtcliacceptance/harness.go: unreachable func: Harness.CommandContext
 internal/builtcliacceptance/harness.go: unreachable func: Harness.NewSession
+internal/builtcliacceptance/harness.go: unreachable func: Harness.acquireInvocation
 internal/builtcliacceptance/harness.go: unreachable func: NewHarness
+internal/builtcliacceptance/harness.go: unreachable func: NewReusableHarness
 internal/builtcliacceptance/harness.go: unreachable func: ScenarioFailure.Error
 internal/builtcliacceptance/harness.go: unreachable func: Session.ProcessEnv
 internal/builtcliacceptance/harness.go: unreachable func: Session.ProcessEnvWith
@@ -81,6 +85,8 @@ internal/builtcliacceptance/harness.go: unreachable func: Session.ServerFlags
 internal/builtcliacceptance/harness.go: unreachable func: Session.WithNoExternalServer
 internal/builtcliacceptance/harness.go: unreachable func: Session.failure
 internal/builtcliacceptance/harness.go: unreachable func: Session.run
+internal/builtcliacceptance/harness.go: unreachable func: newHarness
+internal/builtcliacceptance/harness.go: unreachable func: newReusableHarnessState
 internal/builtcliacceptance/harness.go: unreachable func: tailBytes
 internal/builtcliacceptance/port.go: unreachable func: ReserveLocalTCPPort
 internal/builtcliacceptance/scenarios.go: unreachable func: S24Scenarios
