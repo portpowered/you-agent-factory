@@ -148,10 +148,10 @@ stories.
 
 | Row | Given -> when -> then | Owner | Current status |
 | --- | --- | --- | --- |
-| CLEAN-001 | Successful shared scenario completes -> scenario cleanup runs -> session is deleted, route removed, and temporary Factory/worktree paths are absent. | story 002 | Not yet exercised; migration fixture proof. |
-| CLEAN-002 | Provider or runtime failure completes -> cleanup runs -> session/route/path census is zero and the process remains healthy. | story 002 | Not yet exercised; migration fixture proof. |
+| CLEAN-001 | Successful shared scenario completes -> scenario cleanup runs -> session is deleted, route removed, and temporary Factory/worktree paths are absent. | story 002 | PASS: shared topology and known-good recovery scenarios delete sessions, remove routes, and verify owned paths absent. |
+| CLEAN-002 | Provider or runtime failure completes -> cleanup runs -> session/route/path census is zero and the process remains healthy. | story 002 | PASS: invalid-template, dependency-failure, timeout, cancellation, and unknown-route scenarios clean up before the next known-good session succeeds. |
 | CLEAN-003 | Controlled or real timeout returns -> cleanup runs -> active execution is zero, child PID is gone, and session/route/path are removed. | story 003 | Not yet exercised; retained-process proof. |
-| CLEAN-004 | Context cancellation is observed -> cleanup runs -> no active execution/session/route/path remains and the next scenario succeeds. | story 002 | Not yet exercised; migration fixture proof. |
+| CLEAN-004 | Context cancellation is observed -> cleanup runs -> no active execution/session/route/path remains and the next scenario succeeds. | story 002 | PASS: shared adverse-recovery cancellation subcase is followed by a known-good session; final fixture census is empty. |
 | CLEAN-005 | Helper subtest intentionally fails after acquiring process/session/route/temp resources -> parent observes non-zero child exit -> cleanup callbacks run and listener/PID/session/route/path/worktree census is empty. | story 003 | Not yet exercised; forced-assertion-failure proof. |
 
 ## Before-migration process topology
@@ -224,3 +224,71 @@ cleanup. This story does not claim the stronger post-migration resource census.
   process-sensitive and forced-unwind cleanup -> `PROV-ISO-003`; repeat/package
   outcome -> `PROV-REPEAT-004`; tagged long proof -> `PROV-LONG-005`; PR timing
   -> `PR-CI-006`; integrated clean-room report -> `VAL-007`.
+
+## PROV-MIG-002 evidence record
+
+Story 002 migrated the eligible controlled-edge cases to the package-local
+shared fixture in `tests/functional/providers/shared_process_test.go`. The
+fixture builds one `root.BuildProcess` application, starts one loopback
+listener, runs one continuously executing process, and exposes explicit
+Factory Session open/submit/read/close/delete helpers. Every controlled
+provider request is selected by an immutable cleaned `WorkDir` route; duplicate
+selectors are rejected, unknown routes fail without invoking a runner, and
+route registrations are removed with their session.
+
+Verification procedures and observations:
+
+1. Shared topology, route isolation, and adverse recovery:
+   `go test -count=1 -timeout=10m ./tests/functional/providers -run
+   '^TestProvidersSharedProcess(Topology|Routes|AdverseRecovery)$' -v`
+   exited `0` in `2.230s`. The topology test ran two explicit sessions
+   concurrently with distinct routes and outputs. The route test proved
+   duplicate registration rejection, known-route dispatch, and unknown-route
+   non-invocation. The recovery test proved invalid-template zero-call
+   failure, dependency failure, timeout retry, cancellation, unknown-route
+   failure, and known-good recovery.
+2. Focused default eligible migration selector:
+   `go test -count=1 -timeout=10m ./tests/functional/providers -run
+   '^(TestProvidersSharedProcess(Topology|Routes|AdverseRecovery)(/.*)?|TestScriptExecutor_(Success|Failure|CommandCancellationIsReported|InvalidWorkstationTemplateFailsBeforeCommand|PreservesTokenColor|SuccessWithColorMetadata|FailureRoutesToFailedPlace|ArgTemplating|WorkTypeIDFromTargetPlace|ArgTemplatingWithTags|RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv|RuntimeConfigMergePreservesCanonicalTopologyAndPromptTemplates|RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick|AsyncWorkerPoolTemplateFallbackScenarios)(/.*)?|TestMockWorkers_(AgentDefaultAcceptMovesWorkToOutputPlace|AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput|ScriptDefaultAcceptProducesSuccessfulScriptResult|ScriptRejectConfigRoutesFailureAndLogsCommandOutput|ServiceCommandRunnerCompletesModelAndScriptWorkers)(/.*)?)$'`
+   exited `0` in `10.753s`. Public Work states, Factory Events, dispatch
+   outputs/errors, controlled provider requests, timeout ordering, mock
+   stdout/stderr policy, and service completion logs remained asserted by the
+   migrated tests.
+3. Tagged-long selector:
+   `go test -json -tags=functionallong -count=1 -timeout=30m
+   ./tests/functional/providers -run
+   '^(TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOnLaterTick|TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion|TestTemplateTests_ScriptWrap(Claude|Codex)ResolvesWorkstationExecutionTemplates)(/.*)?$'`
+   passed the loaded-worker timeout (`0.78s`) and timeout companion (`0.28s`)
+   cases. Claude and Codex template cases each failed at `1.16s` with the
+   same blank runtime template context and missing resolved request witness
+   already reproduced against the parent/base test implementation; their
+   assertions remain unchanged and are not claimed as migrated passes.
+4. Full default package:
+   `go test -json -count=1 -timeout=10m ./tests/functional/providers`
+   exited `1` only at the retained
+   `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials`
+   assertion: observed failure reason `unknown`, expected
+   `permanent_bad_request`. The test and assertion are isolated and unchanged;
+   the same mismatch is recorded in the baseline diagnostic above.
+
+The shared fixture's finalizer passed its topology census: constructor count
+`1`, listener starts `1`, all explicit session IDs opened by the fixture were
+deleted, route count `0`, and the fixture-owned root was absent after process
+shutdown. Static source tracing after migration leaves `13` default Linux
+application constructions (`9` listeners) and `11` Windows constructions
+(`7` listeners), with the tagged-long selector using the existing shared
+fixture and adding no second construction. No provider credentials, remote
+calls, customer data, or paid calls were used.
+
+- Property proved: controlled eligible default behavior is exercised through
+  one production root/process/listener with explicit-session isolation,
+  immutable routing, adverse-case recovery, and success/failure/cancellation
+  cleanup.
+- Property not proved: the two known baseline template-resolution cases,
+  retained real executable/process-tree/record-replay/environment/assertion-
+  failure cells, three-run repeat cleanup, package success past the retained
+  mismatch, and PR CI timing.
+- Remaining gates: retained isolation -> `PROV-ISO-003`; repeat/package and
+  baseline disposition -> `PROV-REPEAT-004`; tagged long parity ->
+  `PROV-LONG-005`; PR timing -> `PR-CI-006`; final clean-room report ->
+  `VAL-007`.

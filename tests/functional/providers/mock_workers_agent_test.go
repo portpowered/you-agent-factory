@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -16,41 +17,36 @@ import (
 
 func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock accept payload"))
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     dir,
-		UseMockWorkers: true,
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     sharedMockAgentAcceptWorkID,
+		WorkTypeID: "task",
+		TraceID:    "trace-shared-mock-agent-accept",
+		Payload:    []byte("mock accept payload"),
 	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+
+	scenario, listed := runSharedMockFactory(t, dir, 5*time.Second)
 	for placeID, want := range map[string]int{"task:done": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
+	scenario.stop(t)
 }
 
 func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject payload"))
-	logDir := t.TempDir()
-	exitCode := 7
-
-	configPath := support.WriteMockWorkersConfig(t, rejectedAgentMockConfig(exitCode))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Args: []string{
-			"--with-mock-workers", configPath,
-			"--runtime-log-dir", logDir,
-		},
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     sharedMockAgentRejectWorkID,
+		WorkTypeID: "task",
+		TraceID:    "trace-shared-mock-agent-reject",
+		Payload:    []byte("mock reject payload"),
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	assertMockAgentRejected(t, server)
-	server.Stop(t)
+	scenario, _ := runSharedMockFactory(t, dir, 5*time.Second)
+	assertMockAgentRejected(t, scenario)
+	fixture := scenario.fixture
+	scenario.stop(t)
 
-	record := findRuntimeLogRecord(t, requireAnyRuntimeLogPath(t, logDir), commandRunnerCompletedLogEvent)
+	record := findSharedRuntimeLogRecord(t, fixture, dir, 7)
 	if record["exit_code"] != float64(7) {
 		t.Fatalf("logged exit_code = %#v, want 7", record["exit_code"])
 	}
@@ -91,15 +87,15 @@ func rejectedAgentMockConfig(exitCode int) *workers.MockWorkersConfig {
 	}
 }
 
-func assertMockAgentRejected(t *testing.T, server *support.FunctionalAPIServer) {
+func assertMockAgentRejected(t *testing.T, scenario *sharedProviderScenario) {
 	t.Helper()
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	listed := scenario.listWork(t)
 	for placeID, want := range map[string]int{"task:failed": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	for _, event := range server.GetFactoryEvents(t) {
+	for _, event := range scenario.factoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}

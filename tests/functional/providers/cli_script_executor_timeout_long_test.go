@@ -32,9 +32,9 @@ func TestScriptExecutor_RuntimeWorkerTimeoutFromLoadedConfigRequeuesAndRetriesOn
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+	assertDispatchOutcomeSequence(t, server.factoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 		factoryapi.WorkOutcomeAccepted,
 	}, "execution timeout")
-	server.Stop(t)
+	server.stop(t)
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -23,9 +22,7 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	writeExecutionTemplateSeed(t, dir)
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}, 10*time.Second)
+	scenario, listed := runSharedProviderFactory(t, dir, support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch"), runner, 10*time.Second)
 	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
@@ -37,6 +34,7 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	}, executionTemplateWantPrompt(dir)))
 	assertProviderStdin(t, req, "")
 	assertProviderExecutionFields(t, dir, req)
+	scenario.stop(t)
 }
 
 func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *testing.T) {
@@ -49,13 +47,12 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	writeExecutionTemplateSeed(t, dir)
 
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}, 10*time.Second)
+	scenario, listed := runSharedProviderFactory(t, dir, support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch"), runner, 10*time.Second)
 	assertCursorProviderCompleted(t, listed)
 
 	req := runner.LastRequest()
 	assertCommandArgs(t, req, []string{"exec", "--model", "test-codex-model", "-"})
 	assertProviderStdin(t, req, executionTemplateWantPrompt(dir))
 	assertProviderExecutionFields(t, dir, req)
+	scenario.stop(t)
 }
