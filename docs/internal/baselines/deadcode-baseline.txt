@@ -185,8 +185,8 @@ internal/contractstaging/policy.go: unreachable func: AllowedArtifacts
 internal/contractstaging/policy.go: unreachable func: RawArtifacts
 internal/contractstaging/repository_staging_test_lock.go: unreachable func: LockRepositoryStagingForTest
 internal/contractstaging/repository_staging_test_lock.go: unreachable func: repositoryRootFromWorkingDirectory
-internal/contractstaging/repository_staging_test_lock_windows.go: unreachable func: lockRepositoryStagingFile
-internal/contractstaging/repository_staging_test_lock_windows.go: unreachable func: unlockRepositoryStagingFile
+internal/contractstaging/repository_staging_test_lock_unix.go: unreachable func: lockRepositoryStagingFile
+internal/contractstaging/repository_staging_test_lock_unix.go: unreachable func: unlockRepositoryStagingFile
 internal/contractvalidator/compatibility_inventory.go: unreachable func: CompatibilityInventorySemanticsDiagnostics
 internal/contractvalidator/javascript_manifest.go: unreachable func: RuntimeManifestSemanticsDiagnostics
 internal/contractvalidator/validator.go: unreachable func: Registry.selectEntry
@@ -574,6 +574,8 @@ pkg/platform/internal/runtimeartifact/paths.go: unreachable func: RuntimeLogsDat
 pkg/platform/internal/runtimeartifact/paths.go: unreachable func: RuntimeMetricsDatedDir
 pkg/platform/logging/runtime_logger.go: unreachable func: legacyRuntimeLogDir
 pkg/platform/portablefiles/materialize.go: unreachable func: ValidationRoot.TargetDir
+pkg/platform/process/command_process_test_unix.go: unreachable func: commandTestProcessRunning
+pkg/platform/process/command_process_test_unix.go: unreachable func: commandTestTerminateProcess
 pkg/platform/process/log_effect.go: unreachable func: CommandRunnerWithLogging
 pkg/platform/process/log_effect.go: unreachable func: LoggingCommandRunner.Run
 pkg/platform/process/log_effect.go: unreachable func: commandCompletionLogFields
@@ -3112,8 +3114,8 @@ tests/functional/sessions/root_composition/runtime_api_fixture/shared_fixture.go
 tests/functional/sessions/root_composition/runtime_api_fixture/shared_fixture.go: unreachable func: waitRuntimeAPIFactorySessionStopped
 tests/functional/sessions/root_composition/runtime_api_fixture/shared_fixture.go: unreachable func: writeRuntimeAPIFixtureFactory
 tests/functional/transport/terminalportlock/terminal_port_lock.go: unreachable func: Acquire
-tests/functional/transport/terminalportlock/terminal_port_lock_windows.go: unreachable func: lockFile
-tests/functional/transport/terminalportlock/terminal_port_lock_windows.go: unreachable func: unlockFile
+tests/functional/transport/terminalportlock/terminal_port_lock_unix.go: unreachable func: lockFile
+tests/functional/transport/terminalportlock/terminal_port_lock_unix.go: unreachable func: unlockFile
 tests/functional/workers/inference/claude/golden_common.go: unreachable func: assertProviderSessionGoldensMatch
 tests/functional/workers/inference/claude/golden_common.go: unreachable func: claudeTimeoutCommandRunner
 tests/functional/workers/inference/claude/golden_common.go: unreachable func: loadClaudeGoldenCase
