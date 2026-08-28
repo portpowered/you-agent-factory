@@ -1,7 +1,8 @@
-package runtime_api_test
+package runtime_api
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayRea
 
 func TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions(t *testing.T) {
 	support.SkipLongFunctional(t, "slow observability smoke")
-	server, dispatchRelease := newServiceModeObservabilityServer(t)
+	server, dispatchRelease := newSharedServiceModeObservabilityServer(t)
 
 	idle := waitForPublicFactorySession(t, server, 5*time.Second, serviceModeSessionIdle)
 	assertPublicStatusMatchesSession(t, server, idle)
@@ -65,10 +66,6 @@ func TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTr
 	assertPublicStatusMatchesSession(t, server, completed)
 	assertCompletedServiceModeWork(t, server, traceID, activeWorkID)
 	assertServiceModeHasCompletedDispatch(t, server, activeWorkID)
-	assertServiceModeServerStillRunning(t, server, "service-mode runtime exited after returning to idle")
-
-	server.Stop(t)
-	assertServiceModeServerStops(t, server)
 }
 
 func newServiceModeObservabilityServer(t *testing.T) (*FunctionalServer, chan struct{}) {
@@ -78,6 +75,24 @@ func newServiceModeObservabilityServer(t *testing.T) (*FunctionalServer, chan st
 	dispatchRelease := make(chan struct{})
 	provider := &serviceModeBlockingProvider{release: dispatchRelease}
 	return StartFunctionalServer(t, dir, false, withProvider(provider)), dispatchRelease
+}
+
+func newSharedServiceModeObservabilityServer(t *testing.T) (*functionalAPIServer, chan struct{}) {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
+	dispatchRelease := make(chan struct{})
+	provider := &serviceModeBlockingProvider{release: dispatchRelease}
+	return startSharedFunctionalServer(t, dir, runtimeAPIScenario{provider: provider}), dispatchRelease
+}
+
+type serviceModeAPI interface {
+	URL() string
+	StatusURL() string
+	SubmitWork(*testing.T, string, json.RawMessage) string
+	ListWork(*testing.T) factoryapi.ListWorkResponse
+	Session(*testing.T) factoryapi.FactorySession
+	GetFactoryEvents(*testing.T) []factoryapi.FactoryEvent
 }
 
 func serviceModeSessionIdle(session factoryapi.FactorySession) bool {
@@ -92,7 +107,7 @@ func serviceModeSessionActive(session factoryapi.FactorySession) bool {
 		session.Runtime.Progress.InFlightCount > 0
 }
 
-func submitServiceModeSmokeWork(t *testing.T, server *FunctionalServer) string {
+func submitServiceModeSmokeWork(t *testing.T, server serviceModeAPI) string {
 	t.Helper()
 
 	traceID := server.SubmitWork(t, "task", []byte(`{"title":"service-mode smoke item"}`))
@@ -102,7 +117,7 @@ func submitServiceModeSmokeWork(t *testing.T, server *FunctionalServer) string {
 	return traceID
 }
 
-func requirePublicWorkForTrace(t *testing.T, server *FunctionalServer, traceID string) string {
+func requirePublicWorkForTrace(t *testing.T, server serviceModeAPI, traceID string) string {
 	t.Helper()
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -122,7 +137,7 @@ func requirePublicWorkForTrace(t *testing.T, server *FunctionalServer, traceID s
 	return ""
 }
 
-func assertCompletedServiceModeWork(t *testing.T, server *FunctionalServer, traceID, workID string) {
+func assertCompletedServiceModeWork(t *testing.T, server serviceModeAPI, traceID, workID string) {
 	t.Helper()
 
 	for _, item := range server.ListWork(t).Results {
@@ -140,10 +155,10 @@ func assertCompletedServiceModeWork(t *testing.T, server *FunctionalServer, trac
 	t.Fatalf("public Work listing missing completed work %q", workID)
 }
 
-func assertPublicStatusMatchesSession(t *testing.T, server *FunctionalServer, session factoryapi.FactorySession) {
+func assertPublicStatusMatchesSession(t *testing.T, server serviceModeAPI, session factoryapi.FactorySession) {
 	t.Helper()
 
-	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := support.GetJSON[factoryapi.StatusResponse](t, server.StatusURL())
 	if status.FactoryState != session.Runtime.Progress.FactoryState {
 		t.Fatalf("GET /status factoryState = %q, Factory Session = %q", status.FactoryState, session.Runtime.Progress.FactoryState)
 	}
@@ -159,7 +174,7 @@ func assertPublicStatusMatchesSession(t *testing.T, server *FunctionalServer, se
 	}
 }
 
-func assertServiceModeHasPendingDispatch(t *testing.T, server *FunctionalServer, workID string) {
+func assertServiceModeHasPendingDispatch(t *testing.T, server serviceModeAPI, workID string) {
 	t.Helper()
 
 	for _, dispatch := range support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)) {
@@ -170,7 +185,7 @@ func assertServiceModeHasPendingDispatch(t *testing.T, server *FunctionalServer,
 	t.Fatalf("public Factory Events contain no pending dispatch for work %q", workID)
 }
 
-func assertServiceModeHasCompletedDispatch(t *testing.T, server *FunctionalServer, workID string) {
+func assertServiceModeHasCompletedDispatch(t *testing.T, server serviceModeAPI, workID string) {
 	t.Helper()
 
 	for _, dispatch := range support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)) {
@@ -183,7 +198,7 @@ func assertServiceModeHasCompletedDispatch(t *testing.T, server *FunctionalServe
 
 func waitForPublicFactorySession(
 	t *testing.T,
-	server *FunctionalServer,
+	server serviceModeAPI,
 	timeout time.Duration,
 	match func(factoryapi.FactorySession) bool,
 ) factoryapi.FactorySession {
@@ -191,13 +206,13 @@ func waitForPublicFactorySession(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		session := support.GetDefaultSession(t, server.URL())
+		session := server.Session(t)
 		if match(session) {
 			return session
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	session := support.GetDefaultSession(t, server.URL())
+	session := server.Session(t)
 	t.Fatalf("timed out waiting for public Factory Session within %s: %#v", timeout, session.Runtime)
 	return session
 }

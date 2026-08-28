@@ -54,7 +54,7 @@ func waitForRuntimeConfigAlignmentServerCompletion(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.statusURL())
 		if status.RuntimeStatus == string(interfaces.RuntimeStatusFinished) {
 			return
 		}
@@ -68,8 +68,8 @@ func waitForRuntimeConfigAlignmentServerCompletion(
 		time.Sleep(runtimeConfigAlignmentPollInterval)
 	}
 
-	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	session := support.GetDefaultSession(t, server.URL())
+	status := support.GetJSON[factoryapi.StatusResponse](t, server.statusURL())
+	session := server.Session(t)
 	t.Fatalf("timed out waiting %s for runtime completion; status=%s marking=%#v", timeout, status.RuntimeStatus, session.Runtime.Petri)
 }
 
@@ -390,7 +390,7 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 	t.Helper()
 
 	if !runner.waitForFirstDispatch(runtimeConfigAlignmentSignalTimeout) {
-		session := support.GetDefaultSession(t, server.URL())
+		session := server.Session(t)
 		t.Fatalf(
 			"timed out waiting for %s to start; marking=%#v",
 			runtimeConfigAlignmentExecuteWorkstation,
@@ -400,7 +400,7 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 
 	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
 	for time.Now().Before(deadline) {
-		session := support.GetDefaultSession(t, server.URL())
+		session := server.Session(t)
 		available, _, ok := runtimeConfigAlignmentResourceUsage(session, "agent-slot")
 		if session.Runtime.Progress.InFlightCount > 0 && ok && available == 0 {
 			return
@@ -408,7 +408,7 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 		time.Sleep(runtimeConfigAlignmentPollInterval)
 	}
 
-	session := support.GetDefaultSession(t, server.URL())
+	session := server.Session(t)
 	available, total, _ := runtimeConfigAlignmentResourceUsage(session, "agent-slot")
 	t.Fatalf(
 		"expected %s to consume agent-slot while in flight; in_flight=%d resource=%d/%d",

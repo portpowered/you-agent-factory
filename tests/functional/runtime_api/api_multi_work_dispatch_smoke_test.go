@@ -12,13 +12,10 @@ import (
 // multi-submit admission and dispatch planning publication for concurrent Work.
 func TestSubmitMultipleRuntimeWorkItemsCompletes(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	server := startFunctionalServerWithArgs(
-		t,
-		dir,
-		false,
-		nil,
-		withWorkerCommands(support.NewStaticSuccessCommandRunner("Done. COMPLETE"), nil),
-	)
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: support.NewStaticSuccessCommandRunner("Done. COMPLETE"),
+		models:         []string{"gpt-5-codex"},
+	})
 
 	submitted := server.SubmitRuntimeWork(t,
 		work.SubmitRequest{
@@ -42,7 +39,7 @@ func TestSubmitMultipleRuntimeWorkItemsCompletes(t *testing.T) {
 	for index, item := range submitted {
 		workIDs[index] = item.WorkID
 	}
-	waitForGeneratedWorkIDsComplete(t, server.URL(), workIDs, 15*time.Second)
+	waitForGeneratedWorkIDsCompleteAtEndpoint(t, server.workURL("/work"), workIDs, 15*time.Second)
 
 	listed := server.ListWork(t)
 	if len(listed.Results) != 2 {

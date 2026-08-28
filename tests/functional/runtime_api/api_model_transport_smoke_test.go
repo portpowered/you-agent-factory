@@ -94,9 +94,12 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 			Content: mustMarshalFunctionalAudioContentResponse(t, audioPath),
 		},
 	}
-	server := startFunctionalServer(t, dir, false, withProvider(providerStub))
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		provider: providerStub,
+		models:   []string{"OMNIVOICE_Q4_K_M"},
+	})
 
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.StatusURL())
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("GET /status factory_state = %q, want RUNNING", status.FactoryState)
 	}

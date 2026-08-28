@@ -52,6 +52,8 @@ func withEnvironment(environment []string) runtimeOption {
 
 type functionalAPIServer struct {
 	*support.FunctionalAPIServer
+	shared    *runtimeAPIPackageFixture
+	sessionID string
 }
 
 func generatedWorkStateName(state *factoryapi.WorkState) string {
@@ -143,7 +145,7 @@ func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work
 		request := normalized[i]
 		response := postJSON[factoryapi.SubmitWorkResponse](
 			t,
-			support.DefaultSessionWorkURL(fs.URL(), "/work"),
+			fs.workURL("/work"),
 			map[string]any{
 				"name":                   request.Name,
 				"workTypeName":           request.WorkTypeID,
@@ -161,6 +163,20 @@ func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work
 		normalized[i].CurrentChainingTraceID = response.TraceId
 	}
 	return normalized
+}
+
+func (fs *functionalAPIServer) SubmitWork(t *testing.T, workTypeID string, payload json.RawMessage) string {
+	t.Helper()
+
+	submitted := fs.SubmitRuntimeWork(t, work.SubmitRequest{
+		Name:       "functional-server-submit",
+		WorkTypeID: workTypeID,
+		Payload:    payload,
+	})
+	if len(submitted) != 1 || submitted[0].TraceID == "" {
+		t.Fatalf("POST /work returned %#v, want one trace ID", submitted)
+	}
+	return submitted[0].TraceID
 }
 
 func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {

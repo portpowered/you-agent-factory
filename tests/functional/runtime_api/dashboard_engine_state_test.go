@@ -2,13 +2,13 @@ package runtime_api
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -19,17 +19,14 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	support.SkipLongFunctional(t, "slow dashboard engine-state sweep")
 	dir := scaffoldDashboardWorldViewFunctionalDir(t)
 	provider := newFunctionalWorldViewProvider()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderOverride: provider,
-		},
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		provider: provider,
+		models:   []string{"gpt-5-codex"},
 	})
 
-	submitDashboardWorldViewFunctionalWork(t, server.URL(), "world-view-success", "trace-world-view-success")
+	submitDashboardWorldViewFunctionalWork(t, server, "world-view-success", "trace-world-view-success")
 	provider.nextDispatch(t)
-	if got := support.GetDefaultSession(t, server.URL()).Runtime.Progress.InFlightCount; got != 1 {
+	if got := server.Session(t).Runtime.Progress.InFlightCount; got != 1 {
 		t.Fatalf("in-flight dispatch count = %d, want 1", got)
 	}
 	provider.respond(providers.ExecuteResult{
@@ -40,9 +37,9 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 			ID:       "sess-world-view-success",
 		},
 	}, nil)
-	waitForPublicWorkInPlace(t, server.URL(), "task:complete", "world-view-success", time.Second)
+	waitForPublicWorkInPlace(t, server, "task:complete", "world-view-success", time.Second)
 
-	submitDashboardWorldViewFunctionalWork(t, server.URL(), "world-view-failed", "trace-world-view-failed")
+	submitDashboardWorldViewFunctionalWork(t, server, "world-view-failed", "trace-world-view-failed")
 	provider.nextDispatch(t)
 	provider.respond(providers.ExecuteResult{}, providers.ExecuteFailure{
 		Kind:    providers.ExecuteFailureKindInvalidRequest,
@@ -53,9 +50,9 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 			ID:       "sess-world-view-failed",
 		},
 	})
-	waitForPublicWorkInPlace(t, server.URL(), "task:failed", "world-view-failed", time.Second)
+	waitForPublicWorkInPlace(t, server, "task:failed", "world-view-failed", time.Second)
 
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	listed := server.ListWork(t)
 	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("task:complete token count = %d, want 1", got)
 	}
@@ -63,7 +60,6 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 		t.Fatalf("task:failed token count = %d, want 1", got)
 	}
 	assertFunctionalProviderSessionsInEvents(t, server.GetFactoryEvents(t))
-	server.Stop(t)
 }
 
 func scaffoldDashboardWorldViewFunctionalDir(t *testing.T) string {
@@ -102,7 +98,7 @@ func writeDashboardWorldViewAgents(t *testing.T, dir string, agentType string) {
 	}
 }
 
-func submitDashboardWorldViewFunctionalWork(t *testing.T, baseURL string, workID string, traceID string) {
+func submitDashboardWorldViewFunctionalWork(t *testing.T, server *functionalAPIServer, workID string, traceID string) {
 	t.Helper()
 	workType := "task"
 	works := []factoryapi.Work{{
@@ -112,7 +108,7 @@ func submitDashboardWorldViewFunctionalWork(t *testing.T, baseURL string, workID
 		TraceId:      &traceID,
 		Payload:      map[string]any{"item": "dashboard-world-view-functional"},
 	}}
-	support.UpsertDefaultSessionWorkRequest(t, baseURL, factoryapi.WorkRequest{
+	putGeneratedWorkRequestAt(t, server.workURL("/work-requests/"+url.PathEscape("request-"+workID)), factoryapi.WorkRequest{
 		RequestId: "request-" + workID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works:     &works,
@@ -139,11 +135,11 @@ func assertFunctionalProviderSessionsInEvents(t *testing.T, events []factoryapi.
 	}
 }
 
-func waitForPublicWorkInPlace(t *testing.T, baseURL, placeID, workID string, timeout time.Duration) {
+func waitForPublicWorkInPlace(t *testing.T, server *functionalAPIServer, placeID, workID string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
+		listed := server.ListWork(t)
 		if support.HasWorkAtCustomerState(listed, workID, placeID) {
 			return
 		}

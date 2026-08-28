@@ -1,4 +1,4 @@
-package runtime_api_test
+package runtime_api
 
 func twoStagePipelineConfig() map[string]any {
 	return map[string]any{

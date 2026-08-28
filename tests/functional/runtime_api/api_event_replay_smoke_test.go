@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -16,12 +15,12 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
 	provider := &eventReplayBlockingProvider{release: releaseDispatch}
-	server := startFunctionalServer(t, dir, false, withProvider(provider))
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{provider: provider})
 
-	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
+	stream := openFactoryEventHTTPStream(t, server.eventsURL())
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedWorkAt(t, server.workURL("/work"), factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("Event Replay Story"),
 		WorkTypeName: "task",
 		Payload: map[string]string{
@@ -43,8 +42,8 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	}
 
 	assertEventReplayActiveSession(t, outcome.activeSession)
-	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
-	assertEventReplayCompletedSession(t, support.GetDefaultSession(t, server.URL()))
+	support.WaitForSessionTerminalStatus(t, server.URL(), server.sessionID, 10*time.Second)
+	assertEventReplayCompletedSession(t, server.Session(t))
 
 	work := server.ListWork(t)
 	if len(work.Results) != 1 || stringPointerValue(work.Results[0].TraceId) != traceID {
@@ -83,7 +82,7 @@ func collectEventReplayOutcome(
 			outcome.request = event
 		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
 			if !released {
-				outcome.activeSession = support.GetDefaultSession(t, server.URL())
+				outcome.activeSession = server.Session(t)
 				close(releaseDispatch)
 				released = true
 			}

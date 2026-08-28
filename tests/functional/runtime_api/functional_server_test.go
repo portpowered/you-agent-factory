@@ -1,39 +1,17 @@
-package runtime_api_test
+package runtime_api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type FunctionalServer struct {
 	*support.FunctionalAPIServer
-}
-
-type runtimeOption func(*support.FunctionalAPIServerConfig)
-
-func withProvider(provider any) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) {
-		switch provider := provider.(type) {
-		case nil:
-			cfg.Edges.ProviderOverride = nil
-		case providers.Service:
-			cfg.Edges.ProviderOverride = provider
-		case interface {
-			Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
-		}:
-			cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
-		default:
-			panic("withProvider requires a Providers service or legacy test provider")
-		}
-	}
 }
 
 func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload json.RawMessage) string {
@@ -71,6 +49,15 @@ func functionalServerStringPtr(value string) *string { return &value }
 func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
 	return support.ListDefaultSessionWork(t, fs.URL())
+}
+
+func (fs *FunctionalServer) Session(t *testing.T) factoryapi.FactorySession {
+	t.Helper()
+	return support.GetDefaultSession(t, fs.URL())
+}
+
+func (fs *FunctionalServer) StatusURL() string {
+	return fs.URL() + "/status"
 }
 
 func StartFunctionalServerWithArgs(
