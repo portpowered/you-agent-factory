@@ -384,3 +384,44 @@ This validation promotes TASK-003 for review handoff. The final PR head is
 the evidence-updated branch head pushed to PR #2382; CI start, the PR-host
 package timing, terminal required checks, conflict resolution, and merge are
 review-owned and are not claimed by this artifact.
+
+## Review correction: repeated-read stabilization and size split
+
+Source head: `f043b66c53` (`test: stabilize provider session CLI coverage`).
+The replay/history assertions now live in `worker_sessions_cli_replay_test.go`,
+the main CLI setup matrix is extracted from the top-level test, and the
+backend-size limits are satisfied without removing any direct witness. FT-B05
+polls the public `confirmationState` until it reaches `CONFIRMED` before
+comparing repeated `show`, `read`, and replay output. This accommodates the
+one-time confirmation transition observed by the public read path while
+retaining byte-for-byte output and full identity/history assertions after the
+state settles.
+
+The review failure was reproduced on Linux with coverage instrumentation:
+the first `show` returned `UNCONFIRMED`, the second returned `CONFIRMED`, and
+all other serialized fields were identical. After the bounded stabilization,
+the same coverage-style parent test passed ten consecutive repetitions.
+
+```text
+make backend-size
+PASS; all owned Go backend files are within file limit 1000 and function limit 100
+
+go test -v -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; package time 9.548s; root-builds=1 api-host-starts=1 cli-builds=1; active-provider-routes=0
+
+go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
+PASS; package time 22.291s
+
+go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
+PASS; package time 3.872s; no race report
+
+go test -covermode=count -coverpkg=./pkg/... -coverprofile=/tmp/c06-parent-repeat-final.out -count=10 -run '^TestWorkerSessionsCLI$' ./tests/functional/provider_sessions/cli
+PASS; Linux/amd64; package time 5.733s
+```
+
+The Linux command is a coverage-style repeated run of the review-failing
+parent/subtest; the full Backend Functional Coverage lane and PR-host timing
+remain CI/review evidence. Local Windows retains the documented skip for the
+Unix-only child interrupt witness. The new source remains entirely within
+`tests/functional/provider_sessions/cli/**`; the tracked evidence artifact is
+the only other changed path.
