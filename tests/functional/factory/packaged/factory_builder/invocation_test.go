@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +34,52 @@ const (
 	operatorFactoryRootArgument    = "~/.you-agent-factory/factories"
 )
 
+func invokeFactoryBuilder(
+	t *testing.T,
+	scenario *factoryBuilderScenario,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	commandArgs := []string{
+		"you", "--json", "run", "--named", factoryBuilderName, "--no-record",
+	}
+	for _, flag := range []struct {
+		name string
+		key  string
+	}{
+		{name: "--factory-name", key: "factoryName"},
+		{name: "--orchestrator", key: "orchestrator"},
+		{name: "--builder-provider", key: "builderProvider"},
+		{name: "--builder-model", key: "builderModel"},
+	} {
+		value, ok := args[flag.key].(string)
+		if ok && strings.TrimSpace(value) != "" {
+			commandArgs = append(commandArgs, flag.name, value)
+		}
+	}
+	if request, ok := args["request"].(string); ok && strings.TrimSpace(request) != "" {
+		commandArgs = append(commandArgs, request)
+	}
+
+	inputs := support.FakeInputs(t.Context(), commandArgs)
+	inputs.Input.Env = append([]string(nil), scenario.environment...)
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(Factory Builder %v) error = %v\nstdout:\n%s\nstderr:\n%s",
+			commandArgs, err, inputs.Stdout(), inputs.Stderr(),
+		)
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("Factory Builder stderr = %q, want empty successful invocation stderr", inputs.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	if err := scenario.fixture.recordInvocationRequestID(response.RequestId); err != nil {
+		t.Fatalf("Factory Builder invocation request ID: %v", err)
+	}
+	return response
+}
+
 // TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory proves the public
 // Builder invocation can produce a staged YAML graph that the agent validates
 // and persists through the normal named-Factory CLI flow before the customer
@@ -53,7 +96,6 @@ func testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T, fix
 	runner.process = fixture.process
 	runner.environment = scenario.environment
 	runner.operatorRoot = scenario.operatorRoot
-	scenario.open(t)
 	response := invokeFactoryBuilder(t, scenario, map[string]any{
 		"request":         graphFactoryRequest,
 		"factoryName":     graphFactoryName,
@@ -64,7 +106,7 @@ func testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T, fix
 	assertBuilderCompleted(t, response, graphFactoryName, "graph")
 
 	installedPath := filepath.Join(scenario.operatorRoot, graphFactoryName)
-	assertBuilderStageIsWorkspaceScoped(t, scenario.factoryDir, runner.StagePath())
+	assertBuilderStageIsWorkspaceScoped(t, scenario.workingDirectory, runner.StagePath())
 	assertBuilderPersistsToOperatorRoot(t, runner, scenario.workingDirectory)
 	assertInstalledGraphFactory(t, fixture.process, scenario.environment, installedPath, runner.operatorRoot)
 	assertInstalledGraphFactoryRuns(t, scenario, installedPath)
@@ -89,7 +131,6 @@ func testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 	runner.environment = scenario.environment
 	runner.operatorRoot = scenario.operatorRoot
 	writeJavaScriptAgentPresetConfig(t, scenario.homeDir)
-	scenario.open(t)
 	response := invokeFactoryBuilder(t, scenario, map[string]any{
 		"request":         javascriptFactoryRequest,
 		"factoryName":     javascriptFactoryName,
@@ -100,7 +141,7 @@ func testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 	assertBuilderCompleted(t, response, javascriptFactoryName, "javascript")
 
 	installedPath := filepath.Join(scenario.operatorRoot, javascriptFactoryName)
-	assertBuilderStageIsWorkspaceScoped(t, scenario.factoryDir, runner.StagePath())
+	assertBuilderStageIsWorkspaceScoped(t, scenario.workingDirectory, runner.StagePath())
 	assertBuilderPersistsToOperatorRoot(t, runner, scenario.workingDirectory)
 	assertInstalledJavaScriptFactory(t, fixture.process, scenario.environment, installedPath, runner.operatorRoot)
 	assertInstalledJavaScriptFactoryRuns(t, scenario, installedPath)
@@ -136,7 +177,6 @@ func testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t *te
 			runner.process = fixture.process
 			runner.environment = factoryScenario.environment
 			runner.operatorRoot = factoryScenario.operatorRoot
-			factoryScenario.open(t)
 
 			installedPath := filepath.Join(factoryScenario.operatorRoot, testCase.factoryName)
 			var before []byte
@@ -144,7 +184,6 @@ func testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t *te
 				installExistingGraphFactory(t, fixture.process, factoryScenario.environment, factoryScenario.workingDirectory, runner.operatorRoot, testCase.factoryName)
 				assertInstalledGraphFactoryRuns(t, factoryScenario, installedPath)
 				before = readInstalledFactoryConfig(t, installedPath)
-				replaceCurrentFactoryForSession(t, factoryScenario, factoryScenario.fixture.factoryDir)
 			}
 			providerCallsBeforeBuilder := runner.InstalledFactoryCallCount()
 
@@ -156,7 +195,7 @@ func testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t *te
 				"builderModel":    "gpt-5",
 			})
 			assertInvalidCandidateGuidance(t, response, testCase.factoryName, runner.StagePath())
-			assertBuilderRejectedCandidate(t, runner, factoryScenario.factoryDir, factoryScenario.workingDirectory, providerCallsBeforeBuilder)
+			assertBuilderRejectedCandidate(t, runner, factoryScenario.workingDirectory, providerCallsBeforeBuilder)
 
 			if testCase.installExistingOne {
 				after := readInstalledFactoryConfig(t, installedPath)
@@ -205,11 +244,11 @@ func assertInvalidCandidateGuidance(t *testing.T, response factoryapi.Invocation
 func assertBuilderRejectedCandidate(
 	t *testing.T,
 	runner *factoryBuilderCommandRunner,
-	stageWorkspace, workingDirectory string,
+	workingDirectory string,
 	providerCallsBeforeBuilder int,
 ) {
 	t.Helper()
-	assertBuilderStageIsWorkspaceScoped(t, stageWorkspace, runner.StagePath())
+	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
 	if runner.ValidationAttemptCount() != 1 {
 		t.Fatalf("candidate validation attempts = %d, want one public CLI validation", runner.ValidationAttemptCount())
 	}
@@ -448,49 +487,31 @@ func assertInstalledJavaScriptFactoryRuns(
 	installedPath string,
 ) {
 	t.Helper()
-	factory := loadFactoryFromPath(t, scenario, installedPath, "installed JavaScript Factory")
-	if factory.Orchestrator == nil || factory.Orchestrator.Javascript == nil ||
-		factory.Orchestrator.Javascript.InlineSource == nil {
-		t.Fatal("installed JavaScript Factory does not carry inline workflow source")
+	run := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
+		"--output", "response-stream",
+		"--provider", "CODEX", "--model", "gpt-5",
+		"--briefs", "Analyze the release plan and identify important risks.",
+	})
+	run.Input.Env = append([]string(nil), scenario.environment...)
+	run.Input.WorkingDirectory = scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(run.Input); err != nil {
+		t.Fatalf("Process.Execute(run installed JavaScript Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, run.Stdout(), run.Stderr())
 	}
-	javascript := factory.Orchestrator.Javascript
-	args := map[string]any{
-		"briefs": "Analyze the release plan and identify important risks.",
+	if run.Stderr() != "" {
+		t.Fatalf("installed JavaScript Factory stderr = %q, want empty successful invocation stderr", run.Stderr())
 	}
-	requestID := fmt.Sprintf("factory-builder-javascript-%d", scenario.fixture.nextRequestID())
-	response := postFactoryBuilderJSON[factoryapi.FactorySessionSyncExecutionResponse](
-		t,
-		strings.TrimSuffix(scenario.fixture.baseURL, "/")+"/factory-sessions/sync",
-		factoryapi.FactorySessionExecutionRequest{
-			RequestId: requestID,
-			Source: factoryapi.FactorySessionExecutionSource{
-				Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
-				InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
-					Dialect:      javascript.Dialect,
-					Entrypoint:   javascript.Entrypoint,
-					InlineSource: *javascript.InlineSource,
-					Metadata:     javascript.Metadata,
-				},
-			},
-			Args:         &args,
-			Orchestrator: factory.Orchestrator,
-		},
-		"start installed JavaScript Factory",
-	)
-	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("installed JavaScript Factory durable session status = %q, want %q; response = %#v", response.Status, factoryapi.FactorySessionDurableLifecycleStatusSucceeded, response)
+	response := support.DecodeInvocationResponseJSON(t, run.Stdout())
+	if err := scenario.fixture.recordInvocationRequestID(response.RequestId); err != nil {
+		t.Fatalf("installed JavaScript Factory invocation request ID: %v", err)
 	}
-	if response.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
-		t.Fatalf("installed JavaScript Factory sync outcome = %q, want %q", response.SyncOutcome, factoryapi.FactorySessionSyncExecutionOutcomeCompleted)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("installed JavaScript Factory invocation status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
 	}
-	if response.SessionId == "" || response.SessionId == scenario.sessionID {
-		t.Fatalf("installed JavaScript Factory durable session ID = %q, want a distinct non-empty session", response.SessionId)
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("installed JavaScript Factory primary result = %#v, want one JSON part", response.PrimaryResult)
 	}
-	if response.Result == nil || response.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal ||
-		response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
-		t.Fatalf("installed JavaScript Factory durable result = %#v, want one final JSON part", response.Result)
-	}
-	part, err := (*response.Result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*response.PrimaryResult)[0].AsWorkJsonContentPart()
 	if err != nil {
 		t.Fatalf("installed JavaScript Factory primary result as JSON: %v", err)
 	}
@@ -506,10 +527,23 @@ func assertInstalledGraphFactoryRuns(
 	installedPath string,
 ) {
 	t.Helper()
-	replaceCurrentFactoryForSession(t, scenario, installedPath)
-	response := invokeFactorySession(t, scenario, map[string]any{
-		"releaseNotes": "Review these release notes for publication.",
+	run := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--factory", filepath.Join(installedPath, factorydefinitions.FactoryConfigFile), "--no-record",
+		"--provider", "CODEX", "--model", "gpt-5",
+		"Review these release notes for publication.",
 	})
+	run.Input.Env = append([]string(nil), scenario.environment...)
+	run.Input.WorkingDirectory = scenario.workingDirectory
+	if err := scenario.fixture.process.Execute(run.Input); err != nil {
+		t.Fatalf("Process.Execute(run installed Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, run.Stdout(), run.Stderr())
+	}
+	if run.Stderr() != "" {
+		t.Fatalf("installed Factory stderr = %q, want empty successful invocation stderr", run.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, run.Stdout())
+	if err := scenario.fixture.recordInvocationRequestID(response.RequestId); err != nil {
+		t.Fatalf("installed Factory invocation request ID: %v", err)
+	}
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("installed Factory invocation status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
 	}
@@ -520,127 +554,6 @@ func assertInstalledGraphFactoryRuns(
 	if err != nil || part.Text != graphFactoryPrimaryReply {
 		t.Fatalf("installed Factory primary result = %#v, want %q", response.PrimaryResult, graphFactoryPrimaryReply)
 	}
-}
-
-func invokeFactorySession(
-	t *testing.T,
-	scenario *factoryBuilderScenario,
-	args map[string]any,
-) factoryapi.InvocationResponse {
-	t.Helper()
-	requestID := fmt.Sprintf("factory-builder-session-%d", scenario.fixture.nextRequestID())
-	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
-	if err != nil {
-		t.Fatalf("marshal Factory Session invocation: %v", err)
-	}
-	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
-		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build Factory Session invocation request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("POST Factory Session invocation: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("POST Factory Session invocation status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode Factory Session invocation: %v", err)
-	}
-	return decoded
-}
-
-func loadFactoryFromPath(
-	t *testing.T,
-	scenario *factoryBuilderScenario,
-	factoryPath, label string,
-) factoryapi.Factory {
-	t.Helper()
-	payload, err := support.FlattenFactoryConfigWithProcessAndEnv(
-		t,
-		scenario.fixture.process,
-		scenario.environment,
-		factoryPath,
-	)
-	if err != nil {
-		t.Fatalf("flatten %s: %v", label, err)
-	}
-	var factory factoryapi.Factory
-	if err := json.Unmarshal(payload, &factory); err != nil {
-		t.Fatalf("decode %s: %v\npayload:\n%s", label, err, payload)
-	}
-	return factory
-}
-
-func replaceCurrentFactoryForSession(
-	t *testing.T,
-	scenario *factoryBuilderScenario,
-	factoryPath string,
-) {
-	t.Helper()
-	factory := loadFactoryFromPath(t, scenario, factoryPath, "Factory for current-session replacement")
-	current := support.GetJSON[factoryapi.Factory](
-		t,
-		strings.TrimSuffix(scenario.fixture.baseURL, "/")+
-			"/factory-sessions/"+url.PathEscape(scenario.sessionID)+"/factory",
-	)
-	if current.Version == nil {
-		t.Fatalf("current Factory version is nil, want optimistic version for replacement")
-	}
-	factory.Name = current.Name
-	factory.Version = &factoryapi.HybridLogicalTimestamp{
-		Logical:  current.Version.Logical + 1,
-		Physical: current.Version.Physical.Add(1),
-	}
-	mode := factoryapi.FactorySaveModeReplaceCurrent
-	requestBody, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: factory, Mode: &mode})
-	if err != nil {
-		t.Fatalf("marshal current Factory replacement: %v", err)
-	}
-	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
-		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/factory"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPut, endpoint, bytes.NewReader(requestBody))
-	if err != nil {
-		t.Fatalf("build current Factory replacement request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("PUT current Factory replacement: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("PUT current Factory replacement status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
-	}
-}
-
-func postFactoryBuilderJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
-	t.Helper()
-	payload, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("%s: marshal request: %v", failurePrefix, err)
-	}
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("%s: POST %s status = %d: %s", failurePrefix, endpoint, response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	var decoded T
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
-	}
-	return decoded
 }
 
 func assertRepresentativeGraphDefinition(t *testing.T, definition map[string]any) {

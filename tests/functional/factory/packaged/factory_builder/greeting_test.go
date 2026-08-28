@@ -1,12 +1,7 @@
 package factory_builder
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -57,6 +52,10 @@ func (runner *greetingCommandRunner) snapshot() (routing int, help, build []stri
 
 func TestFactoryBuilder(t *testing.T) {
 	fixture := newFactoryBuilderSharedFixture(t)
+	// A reusable process cannot execute a local one-shot command while its
+	// continuous host owns the default runtime. Run the ordinary CLI behavior
+	// cases first, then use the same process for the explicit-session lifecycle
+	// witness and authoritative cleanup probe.
 	t.Run("TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding", func(t *testing.T) {
 		testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t, fixture)
 	})
@@ -72,6 +71,13 @@ func TestFactoryBuilder(t *testing.T) {
 	t.Run("TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation", func(t *testing.T) {
 		testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t, fixture)
 	})
+	if t.Failed() {
+		return
+	}
+	fixture.startServer(t)
+	defer fixture.assertDurableSessionsClean(t)
+	defer fixture.closeAllScenarios(t)
+	fixture.openAllScenarios(t)
 }
 
 // TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding proves problems.md
@@ -80,7 +86,6 @@ func TestFactoryBuilder(t *testing.T) {
 func testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t *testing.T, fixture *factoryBuilderSharedFixture) {
 	runner := &greetingCommandRunner{}
 	scenario := fixture.newScenario(t, runner)
-	scenario.open(t)
 	response := invokeFactoryBuilder(t, scenario, map[string]any{
 		"request":         "what can you do?",
 		"builderProvider": "CODEX",
@@ -122,7 +127,6 @@ func testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t *testing.T, fixtur
 func testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t *testing.T, fixture *factoryBuilderSharedFixture) {
 	runner := &greetingCommandRunner{}
 	scenario := fixture.newScenario(t, runner)
-	scenario.open(t)
 	response := invokeFactoryBuilder(t, scenario, map[string]any{
 		"builderProvider": "CODEX",
 		"builderModel":    "gpt-5",
@@ -133,32 +137,4 @@ func testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t *testing.T, fixture
 	if _, _, buildPrompts := runner.snapshot(); len(buildPrompts) != 0 {
 		t.Fatalf("build workstation ran %d times with no request, want 0", len(buildPrompts))
 	}
-}
-
-func invokeFactoryBuilder(
-	t *testing.T,
-	scenario *factoryBuilderScenario,
-	args map[string]any,
-) factoryapi.InvocationResponse {
-	t.Helper()
-	requestID := fmt.Sprintf("factory-builder-greeting-%d", scenario.fixture.nextRequestID())
-	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
-	if err != nil {
-		t.Fatalf("marshal Factory Builder invocation: %v", err)
-	}
-	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
-		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("POST Factory Builder invocation: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST Factory Builder invocation status = %d", response.StatusCode)
-	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode Factory Builder invocation: %v", err)
-	}
-	return decoded
 }

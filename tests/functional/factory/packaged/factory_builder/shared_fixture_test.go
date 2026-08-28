@@ -2,6 +2,7 @@ package factory_builder
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,16 +27,22 @@ const factoryBuilderSharedFixtureTimeout = 15 * time.Second
 const factoryBuilderExpectedSessions = 6
 
 // factoryBuilderSharedFixture owns one root-built process and one continuous
-// API host for all six Factory Builder scenarios. Each child copies the
-// packaged Factory into a private home and opens a non-default Factory Session.
+// API host for all six Factory Builder scenarios. The ordinary cases execute
+// through the local public CLI before the host is activated; the host then
+// exercises the six private scenario sessions and their cleanup contract.
 type factoryBuilderSharedFixture struct {
 	rootDir    string
 	process    support.ApplicationProcess
 	provider   *factoryBuilderProviderCommandRouter
+	api        *support.ProcessAPIServer
 	baseURL    string
 	factoryDir string
-	requestID  atomic.Uint64
 	lifecycle  *factoryBuilderLifecycleLedger
+	scenarios  []*factoryBuilderScenario
+	requestIDs struct {
+		sync.Mutex
+		values map[string]struct{}
+	}
 }
 
 type factoryBuilderLifecycleResource struct {
@@ -116,7 +122,7 @@ func (ledger *factoryBuilderLifecycleLedger) close(
 	return fmt.Errorf("Factory Session %q was not registered", sessionID)
 }
 
-func (ledger *factoryBuilderLifecycleLedger) assertClean(t testing.TB) {
+func (ledger *factoryBuilderLifecycleLedger) assertClean(t testing.TB, runtimeArtifacts, isolatedRows int) {
 	t.Helper()
 	ledger.mu.Lock()
 	processStarts := ledger.processStarts
@@ -163,8 +169,8 @@ func (ledger *factoryBuilderLifecycleLedger) assertClean(t testing.TB) {
 		t.Errorf("explicit sessions closed = %d, want %d", closed, len(resources))
 	}
 	t.Logf(
-		"Factory Builder lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=0",
-		processStarts, len(resources), closed, len(sessions), len(roots),
+		"Factory Builder lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=%d isolated_rows=%d",
+		processStarts, len(resources), closed, len(sessions), len(roots), runtimeArtifacts, isolatedRows,
 	)
 }
 
@@ -279,11 +285,12 @@ func newFactoryBuilderSharedFixture(t *testing.T) *factoryBuilderSharedFixture {
 		rootDir:   rootDir,
 		process:   process,
 		provider:  provider,
+		api:       api,
 		lifecycle: lifecycle,
 	}
-	// Register the post-process probe before CleanupProcess so Go's LIFO cleanup
-	// order stops the hosted command, closes the reusable process, and only then
-	// verifies the listener and test-owned roots are gone.
+	// The process is closed after any later host/session cleanup callbacks. The
+	// authoritative persisted-session probe is registered when the host starts,
+	// after the host's own stop callback and before session close callbacks.
 	t.Cleanup(func() { fixture.cleanup(t) })
 	support.CleanupProcess(t, process)
 
@@ -295,27 +302,90 @@ func newFactoryBuilderSharedFixture(t *testing.T) *factoryBuilderSharedFixture {
 		workingDirectory,
 		factoryBuilderName,
 	)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--dir", factoryDir,
-		"--continuously", "--with-server", "--quiet", "--no-record",
-		"--provider", "CODEX", "--model", "gpt-5",
-	})
-	inputs.Input.Env = environment
-	inputs.Input.WorkingDirectory = factoryDir
-	support.StartProcessCommand(t, process, inputs.Input)
-	baseURL := api.WaitForURL(t)
-	support.WaitForStatus(t, baseURL, factoryBuilderSharedFixtureTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
-
-	fixture.baseURL = baseURL
 	fixture.factoryDir = factoryDir
 	return fixture
 }
 
+func (fixture *factoryBuilderSharedFixture) startServer(t *testing.T) {
+	t.Helper()
+	if fixture.api == nil {
+		t.Fatal("Factory Builder API server is not configured")
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", fixture.factoryDir,
+		"--continuously", "--with-server", "--quiet", "--no-record",
+		"--provider", "CODEX", "--model", "gpt-5",
+	})
+	inputs.Input.Env = factoryBuilderCustomerEnvironment(filepath.Join(fixture.rootDir, "home"))
+	inputs.Input.WorkingDirectory = fixture.factoryDir
+	support.StartProcessCommand(t, fixture.process, inputs.Input)
+	fixture.baseURL = fixture.api.WaitForURL(t)
+	support.WaitForStatus(t, fixture.baseURL, factoryBuilderSharedFixtureTimeout, func(status factoryapi.StatusResponse) bool {
+		return strings.TrimSpace(status.RuntimeStatus) != ""
+	})
+}
+
+func (fixture *factoryBuilderSharedFixture) openAllScenarios(t *testing.T) {
+	t.Helper()
+	for _, scenario := range fixture.scenarios {
+		scenario.open(t)
+	}
+}
+
+func (fixture *factoryBuilderSharedFixture) closeAllScenarios(t testing.TB) {
+	t.Helper()
+	for index := len(fixture.scenarios) - 1; index >= 0; index-- {
+		fixture.scenarios[index].close(t)
+	}
+}
+
+func (fixture *factoryBuilderSharedFixture) assertDurableSessionsClean(t testing.TB) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(fixture.baseURL, "/") + "/factory-sessions?scope=persisted"
+	client := http.Client{Timeout: time.Second}
+	response, err := client.Get(endpoint)
+	if err != nil {
+		t.Errorf("FACTORY-BUILDER-CLEANUP-001 list persisted Factory Sessions: %v", err)
+		fixture.lifecycle.assertClean(t, 0, -1)
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Errorf("FACTORY-BUILDER-CLEANUP-001 list persisted Factory Sessions status = %d: %s", response.StatusCode, strings.TrimSpace(string(payload)))
+		fixture.lifecycle.assertClean(t, 0, -1)
+		return
+	}
+	var listing factoryapi.ListFactorySessionsResponse
+	if err := json.NewDecoder(response.Body).Decode(&listing); err != nil {
+		t.Errorf("FACTORY-BUILDER-CLEANUP-001 decode persisted Factory Sessions: %v", err)
+		fixture.lifecycle.assertClean(t, 0, -1)
+		return
+	}
+	if listing.Scope == nil || *listing.Scope != factoryapi.FactorySessionListScopePersisted {
+		t.Errorf("FACTORY-BUILDER-CLEANUP-001 persisted Factory Session list scope = %#v, want persisted", listing.Scope)
+	}
+	isolatedRows := 0
+	runtimeArtifacts := 0
+	if listing.DurableSessions != nil {
+		isolatedRows = len(*listing.DurableSessions)
+		for _, session := range *listing.DurableSessions {
+			if session.ArtifactCount != nil {
+				runtimeArtifacts += *session.ArtifactCount
+			}
+		}
+	}
+	if isolatedRows != 0 {
+		t.Errorf("FACTORY-BUILDER-CLEANUP-001 persisted Factory Session rows = %d, want 0", isolatedRows)
+	}
+	if runtimeArtifacts != 0 {
+		t.Errorf("FACTORY-BUILDER-CLEANUP-001 persisted runtime artifacts = %d, want 0", runtimeArtifacts)
+	}
+	fixture.lifecycle.assertClean(t, runtimeArtifacts, isolatedRows)
+}
+
 func (fixture *factoryBuilderSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
-	fixture.lifecycle.assertClean(t)
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.
@@ -355,8 +425,21 @@ func factoryBuilderCustomerEnvironment(homeDir string) []string {
 	)
 }
 
-func (fixture *factoryBuilderSharedFixture) nextRequestID() uint64 {
-	return fixture.requestID.Add(1)
+func (fixture *factoryBuilderSharedFixture) recordInvocationRequestID(requestID string) error {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return fmt.Errorf("invocation request ID is empty")
+	}
+	fixture.requestIDs.Lock()
+	defer fixture.requestIDs.Unlock()
+	if fixture.requestIDs.values == nil {
+		fixture.requestIDs.values = make(map[string]struct{})
+	}
+	if _, exists := fixture.requestIDs.values[requestID]; exists {
+		return fmt.Errorf("invocation request ID %q is not unique", requestID)
+	}
+	fixture.requestIDs.values[requestID] = struct{}{}
+	return nil
 }
 
 func (fixture *factoryBuilderSharedFixture) newScenario(
@@ -364,7 +447,10 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 	runner platformprocess.CommandRunner,
 ) *factoryBuilderScenario {
 	t.Helper()
-	rootDir := t.TempDir()
+	rootDir, err := os.MkdirTemp(fixture.rootDir, "scenario-")
+	if err != nil {
+		t.Fatalf("create Factory Builder scenario root: %v", err)
+	}
 	homeDir := filepath.Join(rootDir, "home")
 	workingDirectory := filepath.Join(rootDir, "work")
 	for label, path := range map[string]string{"home": homeDir, "working directory": workingDirectory} {
@@ -379,7 +465,7 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 	t.Cleanup(func() {
 		fixture.provider.unregister(selectorPaths)
 	})
-	return &factoryBuilderScenario{
+	scenario := &factoryBuilderScenario{
 		fixture:          fixture,
 		rootDir:          rootDir,
 		homeDir:          homeDir,
@@ -389,6 +475,8 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 		workingDirectory: workingDirectory,
 		selectorPaths:    selectorPaths,
 	}
+	fixture.scenarios = append(fixture.scenarios, scenario)
+	return scenario
 }
 
 func (scenario *factoryBuilderScenario) open(t *testing.T) {
@@ -398,9 +486,6 @@ func (scenario *factoryBuilderScenario) open(t *testing.T) {
 	if scenario.sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("opened Factory Builder Factory Session returned default session %q", scenario.sessionID)
 	}
-	t.Cleanup(func() {
-		scenario.close(t)
-	})
 	if err := scenario.fixture.lifecycle.register(
 		scenario.sessionID, scenario.rootDir, scenario.factoryDir,
 	); err != nil {
