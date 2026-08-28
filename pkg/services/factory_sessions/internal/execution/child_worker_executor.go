@@ -21,6 +21,15 @@ type WorkerExecution interface {
 
 type childExecuteService = WorkerExecution
 
+// childTimeoutContextFactory is the package-private timeout boundary for one
+// child attempt. Production uses childTimeoutContext, while package tests can
+// release a controlled deadline without changing the production timeout policy.
+type childTimeoutContextFactory func(context.Context, time.Duration) (context.Context, context.CancelFunc)
+
+func childTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, timeout)
+}
+
 type childWorkerProgressPublisher func(string, workers.ProgressFragment)
 
 type childWorkerExecutionBinding struct {
@@ -236,6 +245,7 @@ type childWorkerExecutor struct {
 	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer
 	maxWorkerDuration     time.Duration
+	timeoutContextFactory childTimeoutContextFactory
 }
 
 // childResourceLease is the execution-owned view of a resource lease. The
@@ -283,6 +293,7 @@ func newChildWorkerExecutor(
 		workingDir:            strings.TrimSpace(workingDir),
 		maxAttempts:           attempts,
 		resourceLeaseAcquirer: nil,
+		timeoutContextFactory: childTimeoutContext,
 	}
 }
 
@@ -346,7 +357,7 @@ func (e *childWorkerExecutor) Execute(
 				return e.failedChild(base, req, dispatchID, childIndex, preStartResult, err)
 			}
 		}
-		invoked, err := executeChildAttempt(ctx, e.execute, request)
+		invoked, err := e.executeChildAttempt(ctx, request)
 		invoked = normalizeChildStructuredResult(req, invoked)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
 			if progress != nil {
@@ -361,6 +372,17 @@ func (e *childWorkerExecutor) Execute(
 		return e.completedChild(base, req, dispatchID, childIndex, invoked)
 	}
 	return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("javascript child execution exhausted its attempt budget")
+}
+
+func (e *childWorkerExecutor) executeChildAttempt(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	timeoutContextFactory := e.timeoutContextFactory
+	if timeoutContextFactory == nil {
+		timeoutContextFactory = childTimeoutContext
+	}
+	return executeChildAttemptWithFactory(ctx, timeoutContextFactory, e.execute, request)
 }
 
 func (e *childWorkerExecutor) beginChildWorkerAttempt(
@@ -414,17 +436,25 @@ func executeChildAttempt(
 	execute childExecuteService,
 	request workers.ExecuteRequest,
 ) (workers.ExecuteResult, error) {
+	return executeChildAttemptWithFactory(ctx, childTimeoutContext, execute, request)
+}
+
+func executeChildAttemptWithFactory(
+	ctx context.Context,
+	timeoutContextFactory childTimeoutContextFactory,
+	execute childExecuteService,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if request.Target.Timeout <= 0 {
 		return execute.Execute(ctx, request)
 	}
-	attemptCtx := ctx
-	cancel := func() {}
-	if request.Target.Timeout > 0 {
-		attemptCtx, cancel = context.WithTimeout(ctx, request.Target.Timeout)
+	if timeoutContextFactory == nil {
+		timeoutContextFactory = childTimeoutContext
 	}
+	attemptCtx, cancel := timeoutContextFactory(ctx, request.Target.Timeout)
 	defer cancel()
 
 	type completion struct {

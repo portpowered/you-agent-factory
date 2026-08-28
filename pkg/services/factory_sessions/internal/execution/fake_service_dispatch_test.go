@@ -703,6 +703,7 @@ const (
 )
 
 type childTerminalResponseCase struct {
+	id            string
 	name          string
 	behavior      terminalWorkerBehavior
 	progress      []workers.ProgressFragment
@@ -725,6 +726,7 @@ func TestChildWorkerExecutor_PublishesExactlyOneDurableTerminalResponseForEveryO
 func childTerminalResponseCases() []childTerminalResponseCase {
 	return []childTerminalResponseCase{
 		{
+			id:       "success",
 			name:     "success with provider terminal progress",
 			behavior: terminalWorkerSuccess,
 			progress: []workers.ProgressFragment{
@@ -734,6 +736,7 @@ func childTerminalResponseCases() []childTerminalResponseCase {
 			wantKind: responseevents.KindRun, wantPhase: responseevents.PhaseCompleted,
 		},
 		{
+			id:            "failure",
 			name:          "failure without provider terminal progress",
 			behavior:      terminalWorkerFailure,
 			progress:      []workers.ProgressFragment{{Kind: workers.ProgressFragmentKind, Payload: "failure progress"}},
@@ -742,6 +745,7 @@ func childTerminalResponseCases() []childTerminalResponseCase {
 			wantErrorCode: "stream_failed",
 		},
 		{
+			id:            "cancellation",
 			name:          "cancellation without provider terminal progress",
 			behavior:      terminalWorkerCancellation,
 			wantKind:      responseevents.KindError,
@@ -749,6 +753,7 @@ func childTerminalResponseCases() []childTerminalResponseCase {
 			wantErrorCode: "stream_canceled",
 		},
 		{
+			id:            "timeout",
 			name:          "timeout without provider terminal progress",
 			behavior:      terminalWorkerTimeout,
 			wantKind:      responseevents.KindError,
@@ -760,24 +765,32 @@ func childTerminalResponseCases() []childTerminalResponseCase {
 
 func runChildTerminalResponseCase(t *testing.T, test childTerminalResponseCase) {
 	t.Helper()
-	const sessionID = "dur-sess-terminal-bridge"
+	sessionID := "dur-sess-terminal-" + test.id
 	service := newDurableResponseEventsService(t)
 	state := seedResponseEventSession(t, service, sessionID)
 	if err := service.ensureSessionResponseEvents(sessionID, state); err != nil {
 		t.Fatalf("ensure response events: %v", err)
 	}
 
-	provider, started := newTerminalWorkerProvider(test.behavior)
+	barriers := newTerminalWorkerBarriers()
+	provider := newTerminalWorkerProvider(test.behavior, barriers)
 	workerService := newTerminalWorkersService(t, provider)
 	execution := terminalWorkerExecution{service: workerService, progress: test.progress}
 	executor := newChildWorkerExecutor(
 		sessionID, execution, newChildRecordSink(), childTestValues{},
 		service.observeWorkerDispatch, "/project", 0,
 	)
+	if test.behavior == terminalWorkerTimeout {
+		// Codex has no native attempt timeout in this test service. Keep the
+		// configured attempt bound meaningful, then release it through the
+		// controlled factory after the provider start barrier.
+		executor.maxWorkerDuration = time.Second
+		executor.timeoutContextFactory = barriers.timeoutContext
+	}
 	executor.publish = func(_ string, fragment workers.ProgressFragment) {
 		service.PublishWorkerProgress(fragment)
 	}
-	executionErr := executeTerminalChild(t, executor, test.behavior, started)
+	executionErr := executeTerminalChild(t, executor, test.behavior, barriers)
 
 	cursor, err := service.SubscribeResponseEvents(context.Background(), sessionID, factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID})
 	if err != nil {
@@ -791,46 +804,154 @@ func runChildTerminalResponseCase(t *testing.T, test childTerminalResponseCase) 
 	assertTerminalResponse(t, events, test, executionErr)
 }
 
+// terminalWorkerBarrierWatchdog is diagnostic only. Normal outcome progression
+// is driven by the case-owned channels; this timer turns a stuck barrier into
+// an actionable test failure and does not determine any outcome.
+const terminalWorkerBarrierWatchdog = time.Second
+
+type terminalWorkerBarriers struct {
+	started       chan struct{}
+	deadline      chan struct{}
+	canceled      chan struct{}
+	completed     chan error
+	startOnce     sync.Once
+	deadlineOnce  sync.Once
+	cancelOnce    sync.Once
+	cancelMu      sync.Mutex
+	cancelAttempt context.CancelFunc
+}
+
+func newTerminalWorkerBarriers() *terminalWorkerBarriers {
+	return &terminalWorkerBarriers{
+		started:   make(chan struct{}),
+		deadline:  make(chan struct{}),
+		canceled:  make(chan struct{}),
+		completed: make(chan error, 1),
+	}
+}
+
+func (barriers *terminalWorkerBarriers) markStarted() {
+	barriers.startOnce.Do(func() { close(barriers.started) })
+}
+
+func (barriers *terminalWorkerBarriers) cancelParent(cancel context.CancelFunc) {
+	barriers.cancelOnce.Do(func() {
+		close(barriers.canceled)
+		cancel()
+	})
+}
+
+func (barriers *terminalWorkerBarriers) timeoutContext(
+	parent context.Context,
+	timeout time.Duration,
+) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	base, cancel := context.WithCancel(parent)
+	barriers.cancelMu.Lock()
+	barriers.cancelAttempt = cancel
+	deadlineReleased := false
+	select {
+	case <-barriers.deadline:
+		deadlineReleased = true
+	default:
+	}
+	barriers.cancelMu.Unlock()
+	if deadlineReleased {
+		cancel()
+	}
+	return terminalWorkerDeadlineContext{
+		Context:          base,
+		deadline:         time.Now().Add(timeout),
+		deadlineReleased: barriers.deadline,
+	}, cancel
+}
+
+func (barriers *terminalWorkerBarriers) releaseDeadline() {
+	barriers.deadlineOnce.Do(func() {
+		close(barriers.deadline)
+		barriers.cancelMu.Lock()
+		cancel := barriers.cancelAttempt
+		barriers.cancelMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+	})
+}
+
+type terminalWorkerDeadlineContext struct {
+	context.Context
+	deadline         time.Time
+	deadlineReleased <-chan struct{}
+}
+
+func (ctx terminalWorkerDeadlineContext) Deadline() (time.Time, bool) {
+	return ctx.deadline, true
+}
+
+func (ctx terminalWorkerDeadlineContext) Err() error {
+	select {
+	case <-ctx.deadlineReleased:
+		return context.DeadlineExceeded
+	default:
+		return ctx.Context.Err()
+	}
+}
+
 func executeTerminalChild(
 	t *testing.T,
 	executor *childWorkerExecutor,
 	behavior terminalWorkerBehavior,
-	started <-chan struct{},
+	barriers *terminalWorkerBarriers,
 ) error {
 	t.Helper()
 	request := factory.JavaScriptChildExecutionRequest{
 		Prompt: "run", Preset: "agent", ModelProvider: "codex", Model: "terminal-model",
 	}
-	if behavior == terminalWorkerSuccess || behavior == terminalWorkerFailure {
-		_, err := executor.Execute(context.Background(), request)
-		return err
-	}
-
-	ctx := context.Background()
-	var cancel context.CancelFunc
-	if behavior == terminalWorkerCancellation {
-		ctx, cancel = context.WithCancel(ctx)
-	} else {
-		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
-	}
-	defer cancel()
-
-	done := make(chan error, 1)
+	parentCtx, cancelParent := context.WithCancel(context.Background())
+	defer barriers.cancelParent(cancelParent)
+	joined := false
 	go func() {
-		_, err := executor.Execute(ctx, request)
-		done <- err
+		_, err := executor.Execute(parentCtx, request)
+		barriers.completed <- err
 	}()
+	t.Cleanup(func() {
+		barriers.cancelParent(cancelParent)
+		barriers.releaseDeadline()
+		if joined {
+			return
+		}
+		timer := time.NewTimer(terminalWorkerBarrierWatchdog)
+		defer timer.Stop()
+		select {
+		case <-barriers.completed:
+			joined = true
+		case <-timer.C:
+			t.Errorf("terminal worker completion barrier did not close")
+		}
+	})
 	select {
-	case <-started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("real Workers provider was not started")
+	case <-barriers.started:
+	case <-time.After(terminalWorkerBarrierWatchdog):
+		t.Fatal("terminal Workers provider start barrier did not close")
 	}
 	if behavior == terminalWorkerCancellation {
-		cancel()
-	} else {
-		<-ctx.Done()
+		barriers.cancelParent(cancelParent)
+	} else if behavior == terminalWorkerTimeout {
+		barriers.releaseDeadline()
 	}
-	return <-done
+	var executionErr error
+	select {
+	case executionErr = <-barriers.completed:
+		joined = true
+	case <-time.After(terminalWorkerBarrierWatchdog):
+		t.Fatal("terminal worker completion barrier did not close")
+	}
+	if behavior == terminalWorkerTimeout && parentCtx.Err() != nil {
+		t.Fatalf("timeout canceled parent context: %v", parentCtx.Err())
+	}
+	return executionErr
 }
 
 func assertTerminalResponse(
@@ -850,6 +971,15 @@ func assertTerminalResponse(
 	if len(terminals) != 1 {
 		t.Fatalf("response events = %#v, want exactly one terminal event", events)
 	}
+	expectedProgressEvents := 0
+	for _, fragment := range test.progress {
+		if !isChildTerminalProgress(fragment) {
+			expectedProgressEvents++
+		}
+	}
+	if len(events) != expectedProgressEvents+1 {
+		t.Fatalf("response event count = %d, want %d progress events plus one terminal", len(events), expectedProgressEvents+1)
+	}
 	terminal := terminals[0]
 	if terminal.Kind != test.wantKind || terminal.Phase != test.wantPhase {
 		t.Fatalf("terminal event = %#v, want kind=%q phase=%q", terminal, test.wantKind, test.wantPhase)
@@ -863,17 +993,20 @@ func assertTerminalResponse(
 			t.Fatalf("terminal error code = %q, want %q", payload.Code, test.wantErrorCode)
 		}
 	}
-	if len(test.progress) > 0 && (len(events) < 2 || events[len(events)-1].EventID != terminal.EventID) {
+	if len(events) == 0 || events[len(events)-1].EventID != terminal.EventID {
 		t.Fatalf("events = %#v, want progress before the terminal event", events)
+	}
+	for _, event := range events[:len(events)-1] {
+		if isTerminalResponseEvent(event) {
+			t.Fatalf("events = %#v, want no terminal response before the final event", events)
+		}
 	}
 }
 
-func newTerminalWorkerProvider(behavior terminalWorkerBehavior) (providers.Service, <-chan struct{}) {
-	started := make(chan struct{})
-	var once sync.Once
+func newTerminalWorkerProvider(behavior terminalWorkerBehavior, barriers *terminalWorkerBarriers) providers.Service {
 	provider := testutil.NativeProvider{
 		ExecuteFunc: func(ctx context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
-			once.Do(func() { close(started) })
+			barriers.markStarted()
 			switch behavior {
 			case terminalWorkerSuccess:
 				return providers.ExecuteResult{
@@ -887,7 +1020,7 @@ func newTerminalWorkerProvider(behavior terminalWorkerBehavior) (providers.Servi
 			}
 		},
 	}
-	return provider, started
+	return provider
 }
 
 type terminalWorkerExecution struct {
@@ -911,14 +1044,18 @@ func (execution terminalWorkerExecution) Execute(
 func terminalResponseEvents(events []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
 	terminals := make([]responseevents.FactoryResponseEvent, 0, 2)
 	for _, event := range events {
-		isRunTerminal := event.Kind == responseevents.KindRun && event.Phase == responseevents.PhaseCompleted
-		isErrorTerminal := event.Kind == responseevents.KindError &&
-			(event.Phase == responseevents.PhaseFailed || event.Phase == responseevents.PhaseCanceled)
-		if isRunTerminal || isErrorTerminal {
+		if isTerminalResponseEvent(event) {
 			terminals = append(terminals, event)
 		}
 	}
 	return terminals
+}
+
+func isTerminalResponseEvent(event responseevents.FactoryResponseEvent) bool {
+	isRunTerminal := event.Kind == responseevents.KindRun && event.Phase == responseevents.PhaseCompleted
+	isErrorTerminal := event.Kind == responseevents.KindError &&
+		(event.Phase == responseevents.PhaseFailed || event.Phase == responseevents.PhaseCanceled)
+	return isRunTerminal || isErrorTerminal
 }
 
 func TestJavaScriptRuntimeService_CloseReportsNonCooperativeRunTimeout(t *testing.T) {
