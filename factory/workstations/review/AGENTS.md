@@ -83,19 +83,46 @@ If the change involves modification to the website, you should use the playwrigh
   hold routes this task back through the `ci-wait` gate, which does the
   waiting for you and costs no review visit. Never end with `<REJECTED>`
   merely because CI is pending — waiting on CI is not executor rework.
-- Known-baseline flake policy: if a required check fails ONLY on a test in a
-  package the PR diff does not touch, and that test is a known baseline flake
-  (see the deflake lane list in docs/temp/scale-program-rules.md in the root
-  repo, or verify it reproduces on the base SHA), rerun the failed jobs ONCE
-  (`gh run rerun <id> --failed`) and immediately end `<CONTINUE>` — the
-  `ci-wait` gate waits out the rerun and hands the task back to review with
-  terminal checks. If on that next pass the rerun greened, proceed. If
-  the same untouched-package flake fails twice, post ONE comment naming the
-  test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
-  REQUIRED — waiting on baseline deflake", and end `<CONTINUE>`. That is a wait
-  on another lane, not executor rework, so it takes the hold route; post that
-  comment at most once and stay silent on later holds for the same flake. Never
-  demand code changes for a baseline flake in a package the diff does not touch.
+- Known-baseline flake policy: preserve both existing qualification paths. If a
+  required check fails ONLY on a test in a package the PR diff does not touch,
+  and that test is either a known baseline flake (see the deflake lane list in
+  docs/temp/scale-program-rules.md in the root repo) or is verified to
+  reproduce on the base SHA, rerun the failed jobs ONCE (`gh run rerun <id>
+  --failed`) and immediately end `<CONTINUE>` — the `ci-wait` gate waits out
+  the rerun and hands the task back to review with terminal checks. If on that
+  next pass the rerun greened, proceed. If the same untouched-package flake
+  fails twice, post ONE comment naming the test and the owning deflake lane,
+  state explicitly "NO EXECUTOR ACTION REQUIRED — waiting on baseline
+  deflake", and end `<CONTINUE>`. That is a wait on another lane, not executor
+  rework, so it takes the hold route; post that comment at most once and stay
+  silent on later holds for the same flake.
+
+  There is also a third, narrow candidate-baseline-flake path for a required
+  check that fails ONLY on a test in a package the PR diff does not touch. It
+  qualifies only when ALL of these facts are established:
+
+  1. The failed test passes locally with `-count=20` or more on both the PR
+     head and the base SHA.
+  2. Review finds no obvious causal connection to the diff, including through
+     a shared symbol, changed construction order, or equivalent behavior.
+  3. No other independent blocking evidence applies.
+
+  Repeated local non-reproduction on both head and base is evidence supporting
+  a candidate flake; it is not grounds to block an otherwise unrelated lane.
+  For a qualifying candidate, rerun the failed jobs exactly ONCE (`gh run
+  rerun <id> --failed`), then post at most ONE PR conversation comment naming
+  the test and stating exactly "NO EXECUTOR ACTION REQUIRED -- candidate
+  baseline flake, operator notified" while asking the operator to add the
+  test to the deflake list. Return the hold route with `<CONTINUE>`; do not
+  reject the lane or demand executor code changes. This comment and rerun are
+  a bounded exception to the otherwise silent hold rules: later visits for the
+  same candidate do not repeat either action. The candidate path cannot bypass
+  a failing project acceptance criterion, a failure in a touched or causally
+  affected package, or any other independent blocker, and grants no general
+  authority to waive red CI.
+
+  Never demand code changes for a baseline or qualifying candidate flake in a
+  package the diff does not touch.
 
 ### Step 2.1a - Reject a plan that disagrees with itself
 
@@ -229,12 +256,33 @@ first time you raise a blocker set, or a new blocker on a head pushed since
 your last pass. Holds are bounded by the review visit cap, so a genuinely
 stuck lane still surfaces without you forcing a rejection.
 
+### Step 4.3 — Rebase evidence and moving-tip convergence
+
+A reviewer may require a rebase only when one of these two conditions is
+actually established:
+
+1. GitHub reports an actual merge conflict. The rebase-demand comment must
+   identify the conflict evidence, including the conflicting files or the
+   applicable merge-state report.
+2. The branch lacks a specifically named commit required by its own
+   specifically named red check. The rebase-demand comment must name the
+   missing commit, the dependent red check, and the evidence that connects
+   that check to that commit.
+
+An advanced `main` tip, branch age, ordinary divergence, a desire to refresh
+CI, or a request to move to a newer tip is insufficient by itself. Before
+repeating a rebase demand with a different tip SHA, stop and check for new
+evidence that independently satisfies one of the two permitted conditions;
+do not repeat the demand when the only change is that `main` advanced. No
+other review instruction authorizes a moving-tip rebase path.
+
 ### Step 5 - handle feedback
 
 - Post a PR comment with your review summary, including the acceptance criteria checklist results, only after the required CI state is terminal for the current head or you have concrete independent review findings to report.
 - Include any blocking issues, correctness concerns, missing tests, CI failures, or prompt-rule violations in that comment.
 - If you would have requested changes in a normal review, describe the required fixes plainly in the comment so the executor can act on them.
 - If earlier blocking feedback is no longer applicable, say so explicitly in a newer PR conversation comment so the processor has clear resolution evidence.
+- Any comment that requires a rebase must identify one of the two permitted conditions above and include its named conflict evidence or missing commit/check evidence. Do not issue a generic or moving-tip rebase demand.
 - Do not post a PR comment whose only content is that required CI is still pending or in progress.
 - A hold (`<CONTINUE>`) is silent by definition: when you hold for non-terminal CI or for an unchanged head with no new findings, post no PR comment at all.
 
@@ -244,7 +292,7 @@ Use `gh pr comment` for the comment post. Do not use `gh pr review --approve` or
 
 If you believe that the PR is complete and the CI passes, please merge the PR. 
 
-If the PR has merge conflicts, please tell the processor to fix the merge conflicts and rebase and push the changes.
+If GitHub reports an actual merge conflict, tell the processor to resolve the named conflicts, rebase, and push the changes. If the branch lacks a specifically named commit required by its own specifically named red check, use the same evidence-bound instruction. Apply Step 4.3: an advanced `main` tip alone is insufficient, and do not ask for a rebase merely to refresh the branch or move it to a newer SHA.
 
 Never run `gh pr merge --admin` or any administrative/bypass flag past a failing
 required status check: required checks are enforced by the repository ruleset,
