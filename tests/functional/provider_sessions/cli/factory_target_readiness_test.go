@@ -81,197 +81,227 @@ func (err *factoryTargetReadinessError) Unwrap() error {
 // deadline case drives only the package-local waiter with a classified public
 // observation because the valid production fixture resolves immediately.
 func TestFactoryTargetReadinessCharacterization(t *testing.T) {
-	t.Run("FT-RDY-01 fully written explicit session exposes exact target", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
+	t.Run("FT-RDY-01 fully written explicit session exposes exact target", characterizeFactoryTargetReadinessHappy)
+	t.Run("FT-RDY-02 malformed target config is an immediate semantic failure", characterizeFactoryTargetReadinessSemanticFailure)
+	t.Run("FT-TIME-01 readiness deadline reports last public observation", characterizeFactoryTargetReadinessDeadline)
+	t.Run("FT-CAN-01 cancellation stops readiness without public mutation", characterizeFactoryTargetReadinessCancellation)
+}
 
-		caseFixture := newWorkerSessionsCLICase(t)
-		fixture := caseFixture.fixture
-		sessionID := caseFixture.openSession(t)
-		observed, err := waitForFactoryTargetReadiness(
-			ctx,
-			sessionID,
-			"default",
-			15*time.Second,
-			func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
-				return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, sessionID, caseFixture.factoryDir)
-			},
-		)
-		if err != nil {
-			t.Fatalf("public Factory-target readiness: %v", err)
-		}
-		assertFactoryTargetReadinessObservation(t, observed, caseFixture.factoryDir)
-		assertExplicitFactorySessionTarget(t, fixture.baseURL, sessionID, caseFixture.factoryDir)
+func characterizeFactoryTargetReadinessHappy(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 
-		before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	caseFixture := newWorkerSessionsCLICase(t)
+	fixture := caseFixture.fixture
+	sessionID := caseFixture.openSession(t)
+	observed, err := waitForCaseFactoryTargetReadiness(ctx, fixture, caseFixture, sessionID)
+	if err != nil {
+		t.Fatalf("public Factory-target readiness: %v", err)
+	}
+	assertFactoryTargetReadinessObservation(t, observed, caseFixture.factoryDir)
+	assertExplicitFactorySessionTarget(t, fixture.baseURL, sessionID, caseFixture.factoryDir)
 
-		after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
-		assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
-		if len(caseFixture.sessionIDs) != 1 {
-			t.Fatalf("public readiness opened or closed Factory Sessions: %#v", caseFixture.sessionIDs)
-		}
-	})
+	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
+	if len(caseFixture.sessionIDs) != 1 {
+		t.Fatalf("public readiness opened or closed Factory Sessions: %#v", caseFixture.sessionIDs)
+	}
+}
 
-	t.Run("FT-RDY-02 malformed target config is an immediate semantic failure", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-		defer cancel()
+func characterizeFactoryTargetReadinessSemanticFailure(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
 
-		caseFixture := newWorkerSessionsCLICase(t)
-		fixture := caseFixture.fixture
-		factoryConfig := filepath.Join(caseFixture.factoryDir, "factory.json")
-		if err := os.WriteFile(factoryConfig, []byte("{"), 0o644); err != nil {
-			t.Fatalf("write malformed Factory config: %v", err)
-		}
-		callStart := fixture.runner.CallCount()
-		var checks atomic.Int32
-		_, err := waitForFactoryTargetReadiness(
-			ctx,
-			"<none>",
-			"default",
-			15*time.Second,
-			func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
-				checks.Add(1)
-				return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, "<none>", caseFixture.factoryDir)
-			},
-		)
-		if err == nil {
-			t.Fatal("malformed Factory target was reported ready")
-		}
-		var readinessErr *factoryTargetReadinessError
-		if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessSemanticFailure {
-			t.Fatalf("malformed Factory readiness error = %v, want semantic failure", err)
-		}
-		if got := checks.Load(); got != 1 {
-			t.Fatalf("malformed Factory readiness checks = %d, want immediate single check", got)
-		}
-		for _, marker := range []string{
-			"target=\"default\"",
-			"session=\"<none>\"",
-			"first_public_operation=\"" + factoryTargetReadinessOperation + "\"",
-			"FACTORY_SESSION_CONFIG_LOAD_FAILED",
-		} {
-			if !strings.Contains(err.Error(), marker) {
-				t.Fatalf("malformed Factory readiness error omitted %q: %v", marker, err)
-			}
-		}
-		if got := fixture.runner.CallCount(); got != callStart {
-			t.Fatalf("malformed Factory readiness invoked provider route: before=%d after=%d", callStart, got)
-		}
-		if len(caseFixture.sessionIDs) != 0 {
-			t.Fatalf("malformed Factory readiness opened a session: %#v", caseFixture.sessionIDs)
-		}
-		assertFactorySessionFolderAbsent(t, fixture.baseURL, caseFixture.factoryDir)
-	})
+	caseFixture := newWorkerSessionsCLICase(t)
+	fixture := caseFixture.fixture
+	factoryConfig := filepath.Join(caseFixture.factoryDir, "factory.json")
+	if err := os.WriteFile(factoryConfig, []byte("{"), 0o644); err != nil {
+		t.Fatalf("write malformed Factory config: %v", err)
+	}
+	callStart := fixture.runner.CallCount()
+	var checks atomic.Int32
+	_, err := waitForFactoryTargetReadiness(
+		ctx,
+		"<none>",
+		"default",
+		15*time.Second,
+		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
+			checks.Add(1)
+			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, "<none>", caseFixture.factoryDir)
+		},
+	)
+	assertFactoryTargetReadinessSemanticFailure(t, err, int(checks.Load()), fixture.runner.CallCount()-callStart)
+	if len(caseFixture.sessionIDs) != 0 {
+		t.Fatalf("malformed Factory readiness opened a session: %#v", caseFixture.sessionIDs)
+	}
+	assertFactorySessionFolderAbsent(t, fixture.baseURL, caseFixture.factoryDir)
+}
 
-	t.Run("FT-TIME-01 readiness deadline reports last public observation", func(t *testing.T) {
-		var checks atomic.Int32
-		_, err := waitForFactoryTargetReadiness(
-			context.Background(),
-			"session-timeout",
-			"default",
-			50*time.Millisecond,
-			func(context.Context) (factoryTargetReadinessObservation, error) {
-				checks.Add(1)
-				return factoryTargetReadinessObservation{Result: "HTTP 503 code=FACTORY_SESSION_NOT_READY"}, &factoryTargetReadinessError{
-					Class:      factoryTargetReadinessTransient,
-					Operation:  factoryTargetReadinessOperation,
-					TargetID:   "default",
-					SessionID:  "session-timeout",
-					LastResult: "HTTP 503 code=FACTORY_SESSION_NOT_READY",
-					Cause:      errors.New("public target discovery remains not ready"),
-				}
-			},
-		)
-		if err == nil {
-			t.Fatal("readiness waiter returned nil before its deadline")
-		}
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("readiness deadline error = %v, want context deadline", err)
-		}
-		var readinessErr *factoryTargetReadinessError
-		if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessDeadline {
-			t.Fatalf("readiness deadline error = %v, want deadline classification", err)
-		}
-		if checks.Load() < 1 {
-			t.Fatal("readiness deadline made no public observation")
-		}
-		for _, marker := range []string{
-			"target=\"default\"",
-			"session=\"session-timeout\"",
-			"first_public_operation=\"" + factoryTargetReadinessOperation + "\"",
-			"HTTP 503 code=FACTORY_SESSION_NOT_READY",
-		} {
-			if !strings.Contains(err.Error(), marker) {
-				t.Fatalf("readiness deadline error omitted %q: %v", marker, err)
-			}
-		}
-	})
+func characterizeFactoryTargetReadinessDeadline(t *testing.T) {
+	t.Helper()
+	var checks atomic.Int32
+	_, err := waitForFactoryTargetReadiness(
+		context.Background(),
+		"session-timeout",
+		"default",
+		50*time.Millisecond,
+		func(context.Context) (factoryTargetReadinessObservation, error) {
+			checks.Add(1)
+			return transientFactoryTargetReadinessObservation()
+		},
+	)
+	if err == nil {
+		t.Fatal("readiness waiter returned nil before its deadline")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("readiness deadline error = %v, want context deadline", err)
+	}
+	var readinessErr *factoryTargetReadinessError
+	if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessDeadline {
+		t.Fatalf("readiness deadline error = %v, want deadline classification", err)
+	}
+	if checks.Load() < 1 {
+		t.Fatal("readiness deadline made no public observation")
+	}
+	assertReadinessErrorMarkers(t, err, "default", "session-timeout", "HTTP 503 code=FACTORY_SESSION_NOT_READY")
+}
 
-	t.Run("FT-CAN-01 cancellation stops readiness without public mutation", func(t *testing.T) {
-		caseFixture := newWorkerSessionsCLICase(t)
-		fixture := caseFixture.fixture
-		sessionID := caseFixture.openSession(t)
-		before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
-		ctx, cancel := context.WithCancel(context.Background())
-		var checks atomic.Int32
-		_, err := waitForFactoryTargetReadiness(
-			ctx,
-			sessionID,
-			"default",
-			15*time.Second,
-			func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
-				checks.Add(1)
-				cancel()
-				return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, sessionID, caseFixture.factoryDir)
-			},
-		)
-		if err == nil {
-			t.Fatal("canceled readiness returned nil error")
+func characterizeFactoryTargetReadinessCancellation(t *testing.T) {
+	t.Helper()
+	caseFixture := newWorkerSessionsCLICase(t)
+	fixture := caseFixture.fixture
+	sessionID := caseFixture.openSession(t)
+	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	ctx, cancel := context.WithCancel(context.Background())
+	var checks atomic.Int32
+	_, err := waitForFactoryTargetReadiness(
+		ctx,
+		sessionID,
+		"default",
+		15*time.Second,
+		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
+			checks.Add(1)
+			cancel()
+			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, sessionID, caseFixture.factoryDir)
+		},
+	)
+	if err == nil {
+		t.Fatal("canceled readiness returned nil error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled readiness error = %v, want context cancellation", err)
+	}
+	var readinessErr *factoryTargetReadinessError
+	if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessCanceled {
+		t.Fatalf("canceled readiness error = %v, want canceled classification", err)
+	}
+	if checks.Load() != 1 {
+		t.Fatalf("canceled readiness checks = %d, want one bounded observation", checks.Load())
+	}
+	assertReadinessErrorMarkers(t, err, "default", sessionID, "")
+	after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
+}
+
+func waitForCaseFactoryTargetReadiness(
+	ctx context.Context,
+	fixture *workerSessionsCLISharedFixture,
+	caseFixture *workerSessionsCLICase,
+	sessionID string,
+) (factoryTargetReadinessObservation, error) {
+	return waitForFactoryTargetReadiness(ctx, sessionID, "default", 15*time.Second,
+		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
+			return observeFactoryTargetReadiness(observeCtx, fixture.baseURL, sessionID, caseFixture.factoryDir)
+		})
+}
+
+func transientFactoryTargetReadinessObservation() (factoryTargetReadinessObservation, error) {
+	const result = "HTTP 503 code=FACTORY_SESSION_NOT_READY"
+	return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
+		Class:      factoryTargetReadinessTransient,
+		Operation:  factoryTargetReadinessOperation,
+		TargetID:   "default",
+		SessionID:  "session-timeout",
+		LastResult: result,
+		Cause:      errors.New("public target discovery remains not ready"),
+	}
+}
+
+func assertFactoryTargetReadinessSemanticFailure(t *testing.T, err error, checks, providerCalls int) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("malformed Factory target was reported ready")
+	}
+	var readinessErr *factoryTargetReadinessError
+	if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessSemanticFailure {
+		t.Fatalf("malformed Factory readiness error = %v, want semantic failure", err)
+	}
+	if checks != 1 {
+		t.Fatalf("malformed Factory readiness checks = %d, want immediate single check", checks)
+	}
+	assertReadinessErrorMarkers(t, err, "default", "<none>", "FACTORY_SESSION_CONFIG_LOAD_FAILED")
+	if providerCalls != 0 {
+		t.Fatalf("malformed Factory readiness invoked provider route: calls=%d", providerCalls)
+	}
+}
+
+func assertReadinessErrorMarkers(t *testing.T, err error, targetID, sessionID, lastResult string) {
+	t.Helper()
+	for _, marker := range []string{
+		"target=\"" + targetID + "\"",
+		"session=\"" + sessionID + "\"",
+		"first_public_operation=\"" + factoryTargetReadinessOperation + "\"",
+	} {
+		if !strings.Contains(err.Error(), marker) {
+			t.Fatalf("readiness error omitted %q: %v", marker, err)
 		}
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("canceled readiness error = %v, want context cancellation", err)
-		}
-		var readinessErr *factoryTargetReadinessError
-		if !errors.As(err, &readinessErr) || readinessErr.Class != factoryTargetReadinessCanceled {
-			t.Fatalf("canceled readiness error = %v, want canceled classification", err)
-		}
-		if checks.Load() != 1 {
-			t.Fatalf("canceled readiness checks = %d, want one bounded observation", checks.Load())
-		}
-		for _, marker := range []string{
-			"target=\"default\"",
-			"session=\"" + sessionID + "\"",
-			"first_public_operation=\"" + factoryTargetReadinessOperation + "\"",
-		} {
-			if !strings.Contains(err.Error(), marker) {
-				t.Fatalf("canceled readiness error omitted %q: %v", marker, err)
-			}
-		}
-		after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
-		assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
-	})
+	}
+	if lastResult != "" && !strings.Contains(err.Error(), lastResult) {
+		t.Fatalf("readiness error omitted last result %q: %v", lastResult, err)
+	}
 }
 
 func observeFactoryTargetReadiness(ctx context.Context, baseURL, sessionID, factoryDir string) (factoryTargetReadinessObservation, error) {
-	targetID := "default"
+	const targetID = "default"
+	payload, err := marshalFactoryTargetReadinessRequest(factoryDir)
+	if err != nil {
+		return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessSemanticFailure, "request payload could not be encoded", err)
+	}
+	request, err := newFactoryTargetReadinessRequest(ctx, baseURL, payload)
+	if err != nil {
+		return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessSemanticFailure, "request could not be built", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		result := "request failed"
+		if ctx.Err() != nil {
+			result = "request canceled: " + ctx.Err().Error()
+		}
+		return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessTransient, result, err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return decodeFactoryTargetReadinessHTTPError(response, targetID, sessionID)
+	}
+	return decodeFactoryTargetReadinessSuccess(response, targetID, sessionID, factoryDir)
+}
+
+func marshalFactoryTargetReadinessRequest(factoryDir string) ([]byte, error) {
 	validateOnly := true
-	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
+	return json.Marshal(factoryapi.OpenFactorySessionRequest{
 		FolderPath: factoryDir,
 		Target: &factoryapi.FactorySessionTargetRef{
 			Kind: factoryapi.FactorySessionTargetRefKindDefault,
 		},
 		ValidateOnly: &validateOnly,
 	})
-	if err != nil {
-		return factoryTargetReadinessObservation{}, &factoryTargetReadinessError{
-			Class:      factoryTargetReadinessSemanticFailure,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: "request payload could not be encoded",
-			Cause:      err,
-		}
-	}
+}
+
+func newFactoryTargetReadinessRequest(ctx context.Context, baseURL string, payload []byte) (*http.Request, error) {
 	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
@@ -279,92 +309,43 @@ func observeFactoryTargetReadiness(ctx context.Context, baseURL, sessionID, fact
 		bytes.NewReader(payload),
 	)
 	if err != nil {
-		return factoryTargetReadinessObservation{Result: "request could not be built"}, &factoryTargetReadinessError{
-			Class:      factoryTargetReadinessSemanticFailure,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: "request could not be built",
-			Cause:      err,
-		}
+		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		result := "request failed"
-		if ctx.Err() != nil {
-			result = "request canceled: " + ctx.Err().Error()
-		}
-		return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-			Class:      factoryTargetReadinessTransient,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: result,
-			Cause:      err,
-		}
-	}
-	defer response.Body.Close()
+	return request, nil
+}
 
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		var apiError factoryapi.ErrorResponse
-		decodeErr := json.NewDecoder(io.LimitReader(response.Body, 32*1024)).Decode(&apiError)
-		code := string(apiError.Code)
-		if code == "" {
-			code = "UNKNOWN"
-		}
-		result := fmt.Sprintf("HTTP %d code=%s", response.StatusCode, code)
-		message := strings.TrimSpace(apiError.Message)
-		if decodeErr != nil || message == "" {
-			message = fmt.Sprintf("public readiness endpoint returned HTTP %d", response.StatusCode)
-		}
-		failureClass := factoryTargetReadinessTransient
-		if response.StatusCode >= http.StatusBadRequest && response.StatusCode < http.StatusInternalServerError {
-			failureClass = factoryTargetReadinessSemanticFailure
-		}
-		return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-			Class:      failureClass,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: result,
-			Cause:      errors.New(message),
-		}
+func decodeFactoryTargetReadinessHTTPError(response *http.Response, targetID, sessionID string) (factoryTargetReadinessObservation, error) {
+	var apiError factoryapi.ErrorResponse
+	decodeErr := json.NewDecoder(io.LimitReader(response.Body, 32*1024)).Decode(&apiError)
+	code := string(apiError.Code)
+	if code == "" {
+		code = "UNKNOWN"
 	}
+	result := fmt.Sprintf("HTTP %d code=%s", response.StatusCode, code)
+	message := strings.TrimSpace(apiError.Message)
+	if decodeErr != nil || message == "" {
+		message = fmt.Sprintf("public readiness endpoint returned HTTP %d", response.StatusCode)
+	}
+	failureClass := factoryTargetReadinessTransient
+	if response.StatusCode >= http.StatusBadRequest && response.StatusCode < http.StatusInternalServerError {
+		failureClass = factoryTargetReadinessSemanticFailure
+	}
+	return factoryTargetReadinessFailure(targetID, sessionID, failureClass, result, errors.New(message))
+}
 
+func decodeFactoryTargetReadinessSuccess(response *http.Response, targetID, sessionID, factoryDir string) (factoryTargetReadinessObservation, error) {
 	var opened factoryapi.OpenFactorySessionResponse
 	if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
-		result := "successful response could not be decoded"
-		return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-			Class:      factoryTargetReadinessSemanticFailure,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: result,
-			Cause:      err,
-		}
+		return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessSemanticFailure, "successful response could not be decoded", err)
 	}
 	if opened.InitsNewFactory != nil && *opened.InitsNewFactory {
 		result := "public validation found no runnable Factory target"
-		return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-			Class:      factoryTargetReadinessSemanticFailure,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: result,
-			Cause:      errors.New(result),
-		}
+		return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessSemanticFailure, result, errors.New(result))
 	}
 	if opened.Targets == nil || len(*opened.Targets) == 0 {
 		result := "public validation returned zero runnable Factory targets"
-		return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-			Class:      factoryTargetReadinessSemanticFailure,
-			Operation:  factoryTargetReadinessOperation,
-			TargetID:   targetID,
-			SessionID:  sessionID,
-			LastResult: result,
-			Cause:      errors.New(result),
-		}
+		return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessSemanticFailure, result, errors.New(result))
 	}
 	for _, candidate := range *opened.Targets {
 		if candidate.Ref.Kind != factoryapi.FactorySessionTargetRefKindDefault ||
@@ -379,13 +360,22 @@ func observeFactoryTargetReadiness(ctx context.Context, baseURL, sessionID, fact
 		}, nil
 	}
 	result := fmt.Sprintf("public validation returned %d targets but omitted target %q", len(*opened.Targets), targetID)
+	return factoryTargetReadinessFailure(targetID, sessionID, factoryTargetReadinessSemanticFailure, result, errors.New(result))
+}
+
+func factoryTargetReadinessFailure(
+	targetID, sessionID string,
+	class factoryTargetReadinessFailureClass,
+	result string,
+	cause error,
+) (factoryTargetReadinessObservation, error) {
 	return factoryTargetReadinessObservation{Result: result}, &factoryTargetReadinessError{
-		Class:      factoryTargetReadinessSemanticFailure,
+		Class:      class,
 		Operation:  factoryTargetReadinessOperation,
 		TargetID:   targetID,
 		SessionID:  sessionID,
 		LastResult: result,
-		Cause:      errors.New(result),
+		Cause:      cause,
 	}
 }
 
