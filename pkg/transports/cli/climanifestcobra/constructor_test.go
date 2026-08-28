@@ -886,7 +886,8 @@ func TestGenericGroupHelpCharacterization(t *testing.T) {
 		wantUsage int
 		wantErr   string
 	}{
-		{name: "help", args: []string{"--help"}, wantUsage: 3},
+		{name: "help", args: []string{"--help"}, wantUsage: 1},
+		{name: "short help", args: []string{"-h"}, wantUsage: 1},
 		{name: "bare", args: []string{}, wantUsage: 1},
 		{
 			name:    "unknown input",
