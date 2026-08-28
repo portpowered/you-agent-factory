@@ -115,6 +115,17 @@ func replaySessionProjection(t *testing.T, events []json.RawMessage) (SessionRea
 	return session, result
 }
 
+func replaySessionPublicFields(t *testing.T, session SessionReadResult) [9]any {
+	t.Helper()
+	if session.Lifecycle == nil || session.Lifecycle.StartedAt == nil {
+		t.Fatalf("lifecycle = %#v, want startedAt", session.Lifecycle)
+	}
+	if session.ResultSummary == nil {
+		t.Fatal("resultSummary missing")
+	}
+	return [9]any{session.SessionID, session.Status, session.SourceHash, session.Policy.EffectiveHash, session.Phase, session.Lifecycle.StartedAt.UTC(), session.ResultSummary.ResultStatus, session.ArtifactCount, session.Links}
+}
+
 func filteredReconnectEvents(
 	t *testing.T,
 	events []json.RawMessage,
@@ -317,24 +328,8 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 	t.Parallel()
 	retryable := true
 	records := []factory.JavaScriptRuntimeRecord{
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-2",
-				Status:        factory.JavaScriptChildDispatchStatusQueued,
-				Label:         "child-1",
-				ExecutionMode: ChildExecutorModeLive,
-			},
-		},
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-2",
-				Status:        factory.JavaScriptChildDispatchStatusRunning,
-				Label:         "child-1",
-				ExecutionMode: ChildExecutorModeLive,
-			},
-		},
+		liveChildDispatchRecord("dispatch-2", factory.JavaScriptChildDispatchStatusQueued, "child-1", ""),
+		liveChildDispatchRecord("dispatch-2", factory.JavaScriptChildDispatchStatusRunning, "child-1", ""),
 		{
 			Kind: factory.JavaScriptRecordKindChildDispatch,
 			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
@@ -683,39 +678,8 @@ func TestReplaySessionProjection_EquivalentOrchestratorsSharePublicSessionProjec
 	petriProjection, _ := replaySessionProjection(t, petriEvents)
 	javascriptProjection, _ := replaySessionProjection(t, javascriptEvents)
 
-	type sharedPublicSession struct {
-		SessionID     string
-		Status        LifecycleStatus
-		SourceHash    string
-		PolicyHash    string
-		Phase         string
-		StartedAt     time.Time
-		ResultStatus  string
-		ArtifactCount int
-		Links         InspectionLinks
-	}
-	sharedProjection := func(session SessionReadResult) sharedPublicSession {
-		t.Helper()
-		if session.Lifecycle == nil || session.Lifecycle.StartedAt == nil {
-			t.Fatalf("lifecycle = %#v, want startedAt", session.Lifecycle)
-		}
-		if session.ResultSummary == nil {
-			t.Fatal("resultSummary missing")
-		}
-		return sharedPublicSession{
-			SessionID:     session.SessionID,
-			Status:        session.Status,
-			SourceHash:    session.SourceHash,
-			PolicyHash:    session.Policy.EffectiveHash,
-			Phase:         session.Phase,
-			StartedAt:     session.Lifecycle.StartedAt.UTC(),
-			ResultStatus:  session.ResultSummary.ResultStatus,
-			ArtifactCount: session.ArtifactCount,
-			Links:         session.Links,
-		}
-	}
-	petriPublic := sharedProjection(petriProjection)
-	javascriptPublic := sharedProjection(javascriptProjection)
+	petriPublic := replaySessionPublicFields(t, petriProjection)
+	javascriptPublic := replaySessionPublicFields(t, javascriptProjection)
 	if petriPublic != javascriptPublic {
 		t.Fatalf("shared public session projection differs by orchestrator:\nPETRI: %#v\nJAVASCRIPT: %#v", petriPublic, javascriptPublic)
 	}

@@ -267,18 +267,7 @@ func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testi
 	)
 
 	session, result := replaySessionProjection(t, events)
-	if session.Status != LifecycleStatusRunning {
-		t.Fatalf("status = %q, want RUNNING", session.Status)
-	}
-	if result.SessionStatus != LifecycleStatusRunning {
-		t.Fatalf("result sessionStatus = %q, want RUNNING", result.SessionStatus)
-	}
-	if session.Lifecycle == nil || session.Lifecycle.PausedAt == nil || !session.Lifecycle.PausedAt.Equal(pausedAt) {
-		t.Fatalf("pausedAt = %#v, want %s", session.Lifecycle, pausedAt)
-	}
-	if session.Lifecycle.ResumedAt == nil || !session.Lifecycle.ResumedAt.Equal(resumedAt) {
-		t.Fatalf("resumedAt = %#v, want %s", session.Lifecycle.ResumedAt, resumedAt)
-	}
+	assertPauseResumeProjection(t, session, result, pausedAt, resumedAt)
 
 	var lifecycleEnvelope canonicalFactoryEvent
 	if err := json.Unmarshal(events[2], &lifecycleEnvelope); err != nil {
@@ -348,6 +337,16 @@ func TestReplaySessionProjection_LegacyPauseResumeEventsDeriveStatus(t *testing.
 	)
 
 	session, result := replaySessionProjection(t, events)
+	assertPauseResumeProjection(t, session, result, pausedAt, resumedAt)
+}
+
+func assertPauseResumeProjection(
+	t *testing.T,
+	session SessionReadResult,
+	result ResultReadResult,
+	pausedAt, resumedAt time.Time,
+) {
+	t.Helper()
 	if session.Status != LifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", session.Status)
 	}
@@ -531,26 +530,8 @@ func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtif
 	t.Parallel()
 	artifactRef := factory.FormatArtifactURI("session-live-child", "child-artifact-1")
 	records := []factory.JavaScriptRuntimeRecord{
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-1",
-				Status:        factory.JavaScriptChildDispatchStatusQueued,
-				Label:         "summarize-findings",
-				ExecutionMode: ChildExecutorModeLive,
-				ArtifactRef:   artifactRef,
-			},
-		},
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-1",
-				Status:        factory.JavaScriptChildDispatchStatusRunning,
-				Label:         "summarize-findings",
-				ExecutionMode: ChildExecutorModeLive,
-				ArtifactRef:   artifactRef,
-			},
-		},
+		liveChildDispatchRecord("dispatch-1", factory.JavaScriptChildDispatchStatusQueued, "summarize-findings", artifactRef),
+		liveChildDispatchRecord("dispatch-1", factory.JavaScriptChildDispatchStatusRunning, "summarize-findings", artifactRef),
 		{
 			Kind: factory.JavaScriptRecordKindChildDispatch,
 			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
@@ -809,6 +790,18 @@ func lateChildCompletionRecords(
 func successfulRuntimeOutcome(records []factory.JavaScriptRuntimeRecord) factory.JavaScriptRuntimeOutcome {
 	return factory.JavaScriptRuntimeOutcome{
 		OK: true, Records: records, Value: factory.TypedValue{JSON: json.RawMessage("null")},
+	}
+}
+
+func liveChildDispatchRecord(
+	dispatchID, status, label, artifactRef string,
+) factory.JavaScriptRuntimeRecord {
+	return factory.JavaScriptRuntimeRecord{
+		Kind: factory.JavaScriptRecordKindChildDispatch,
+		ChildDispatch: &factory.JavaScriptChildDispatchRecord{
+			DispatchID: dispatchID, Status: status, Label: label,
+			ExecutionMode: ChildExecutorModeLive, ArtifactRef: artifactRef,
+		},
 	}
 }
 
