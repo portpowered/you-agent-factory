@@ -265,6 +265,44 @@ Every plan **MUST** include this responsibility split:
 Implementation completion is a handoff, not lane completion. Review and the
 factory workflow continue until merge or a structured blocked outcome.
 
+## 11. Source-plan alignment
+
+When work derives from a governing source plan (a Project's `sourcePlan` or an
+idea payload that names one), that plan file is the source of truth and the
+PRD is a derived execution artifact:
+
+- The PRD **MUST** name the source plan path in `context.sourcePlan`.
+- Every task **MUST** carry a `sourcePlanRef` naming the plan section or
+  requirement it implements. Work no plan section accounts for is an explicit
+  open question or contract-delta request, never a silent addition.
+- The PRD **MUST NOT** weaken, reinterpret, or drop source-plan requirements.
+  A genuine conflict between the plan and repository reality is recorded and
+  surfaced for the Project Lead or operator to resolve; the planner does not
+  resolve it by rewording the requirement.
+- Reviewers verify delivered behavior against the referenced plan sections,
+  not only against the PRD's own restatement.
+
+## 12. Functional test-case specification
+
+A task that adds or changes functional tests **MUST** enumerate its complete
+intended case matrix in the plan, not delegate case discovery to the
+implementer:
+
+- every happy case: each supported input shape, actor, and journey with its
+  observable outcome;
+- every unhappy case that applies: bad input, authorization failure,
+  dependency failure and timeout, partial completion, concurrency,
+  cancellation, capacity, persistence, and recovery — each with the defined
+  error behavior and state outcome;
+- boundary cases: empty, minimum, maximum, duplicate, ordering, and
+  idempotency conditions where the contract defines them.
+
+Each case is written given/when/then with the observable result it asserts.
+"Add functional tests for X" without the enumerated matrix is not a plannable
+task. The matrix is the review contract: a delivered test suite is measured
+against the enumerated cases, and an intentionally omitted case is named with
+its owning later gate rather than silently skipped.
+
 ## Plan review checklist
 
 - The problem, current behavior, desired outcome, scope, and decision are clear.
@@ -280,3 +318,5 @@ factory workflow continue until merge or a structured blocked outcome.
 - Task dependencies and shared-surface ownership are explicit.
 - Task, reviewer, and loopback responsibilities do not overlap ambiguously.
 - Delivery responsibility matches the canonical implementation/review split.
+- Every task traces to its source-plan section when a source plan governs.
+- Functional-test work enumerates its full happy/unhappy/boundary case matrix.

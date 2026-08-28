@@ -24,6 +24,15 @@ Do not ask the customer questions in this autonomous workstation. Record a
 genuinely unresolved decision under open questions and state the safe assumption
 used to continue.
 
+When the customer ask names a `sourcePlan` (a governing plan file), read it in
+full before planning. The source plan is the source of truth: the PRD you
+write is a derived execution artifact for one slice of it. Reference the
+source plan path in the PRD, trace every task to the plan section or
+requirement it implements, and stay within the sections the ask assigns. If
+the ask or repository reality contradicts the source plan, record the conflict
+as an open question with your safe assumption — never silently resolve it by
+weakening or reinterpreting the plan.
+
 Write `tasks/todo/{{ (index .Inputs 0).Name }}.md` using the plan template.
 
 Required planning behavior:
@@ -50,8 +59,36 @@ Required planning behavior:
 - include a clean-room validation loopback that reports through
   `factory/docs/standards/validation-loopback-template.md` and does not silently
   repair defects;
-- use observable, measurable project and task acceptance criteria; and
+- use observable, measurable project and task acceptance criteria;
+- when a task adds or changes functional tests, enumerate the complete
+  intended case matrix in the plan — every happy case, every unhappy case
+  (bad input, authorization, dependency failure/timeout, partial completion,
+  concurrency, cancellation, recovery), and boundary cases — each as
+  given/when/then with its observable outcome. "Add functional tests for X"
+  without the enumerated matrix is not a plannable task; and
 - include the canonical implementation/review delivery criterion verbatim.
+
+For Work whose acceptance includes measured test latency or performance,
+optimize for delivery
+throughput rather than laboratory benchmark purity:
+
+- Treat supplied package timings as prioritization observations, not portable
+  absolute thresholds. Do not turn them into mandatory local wall-clock limits,
+  variance envelopes, quiet-host prerequisites, or pre-implementation stop
+  conditions unless the customer explicitly asks for that exact benchmark.
+- Assume the shared host is compute-saturated. A noisy, slow, or environmentally
+  failing pre-change run must be retained as diagnostic evidence, but it must
+  not prevent an otherwise well-founded process-reuse, fixture-reuse, controlled
+  worker, or setup-reduction change from being implemented and submitted.
+- Ask whether the proposed topology materially removes expensive work using
+  patterns already proven in the repository while preserving observable
+  behavior. Prefer focused behavior, useful repeat/race, cleanup, and
+  process-count evidence over repeated local timing rituals.
+- The PR's package-level functional/unit latency result is the primary
+  performance verdict. Directional package improvement plus preserved behavior
+  is success; a non-improving PR receives another bounded optimization pass.
+  Do not require a universal percentage, three local samples, or low local
+  variance unless explicitly present in the admitted customer contract.
 
 Do not plan meta tests that merely scan source files, documentation topology,
 bundle internals, or inventories unless that structure is itself the product
@@ -67,6 +104,8 @@ Mechanically convert the Markdown plan into
 - `branchName` exactly equal to `{{ (index .Inputs 0).Name }}`
 - `description`
 - `context.customerAsk`
+- `context.sourcePlan` — the governing plan path from the ask, or `null` only
+  when the ask names none
 - `context.problem`
 - `context.solution`
 - `acceptanceCriteria` containing the project criteria, relevant named quality
@@ -83,6 +122,8 @@ Each user story **MUST** contain:
 - sequential `id` values shaped as
   `{{ (index .Inputs 0).Name }}-001`, `-002`, and so on;
 - `title`, `description`, `parentBehavior`, and `outcome`;
+- `sourcePlanRef` — the source-plan section or requirement this story
+  implements, when `context.sourcePlan` is set;
 - `dependencies` and `sharedSurfaceOwner`;
 - `scope.in` and `scope.out`;
 - `contractChanges` containing the exact relevant before/after excerpts when
