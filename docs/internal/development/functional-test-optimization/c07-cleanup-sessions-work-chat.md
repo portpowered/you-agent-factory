@@ -32,7 +32,7 @@ The exact discovery commands were run before any repository edit:
 ```text
 go test -list '^Test' ./tests/functional/sessions/lifecycle
 go test -list '^Test' ./tests/functional/work/routing
-go test -list '^Test' ./tests/functional/chat_sessions/root_composition
+go test -list '^Test' ./tests/functional/sessions/chat_sessions/root_composition
 ```
 
 The commands exited `0`. The lifecycle package's `TestMain` emitted its
@@ -45,7 +45,7 @@ The final top-level denominator is exactly the planning baseline:
 | --- | ---: | --- |
 | `./tests/functional/sessions/lifecycle` | 12 | exact list below |
 | `./tests/functional/work/routing` | 1 | exact list below; it owns nested scenario cases |
-| `./tests/functional/chat_sessions/root_composition` | 25 | exact list below; two are peer-process entrypoints |
+| `./tests/functional/sessions/chat_sessions/root_composition` | 25 | exact list below; two are peer-process entrypoints |
 | **Total** | **38** | **matches the PRD baseline** |
 
 ### Lifecycle denominator (12)
@@ -129,7 +129,7 @@ The package-level characterization commands were:
 ```text
 go test -count=1 -timeout=10m ./tests/functional/sessions/lifecycle
 go test -count=1 -timeout=10m ./tests/functional/work/routing
-go test -count=1 -timeout=10m ./tests/functional/chat_sessions/root_composition
+go test -count=1 -timeout=10m ./tests/functional/sessions/chat_sessions/root_composition
 ```
 
 All three exited `0`:
@@ -145,7 +145,7 @@ The focused characterization commands were also run:
 ```text
 go test -count=1 -timeout=10m -v -run '^TestFactorySessionCleanupRunsAfterEarlySubtestExit$' ./tests/functional/sessions/lifecycle
 go test -count=1 -timeout=10m -v -run '^TestSharedProcessWorkRouting$' ./tests/functional/work/routing
-go test -count=1 -timeout=10m -v -run '^(TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess|TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes|TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch|TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText|TestACPWorkerChildStreamSurvivesRetainedReplay)$' ./tests/functional/chat_sessions/root_composition
+go test -count=1 -timeout=10m -v -run '^(TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess|TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes|TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch|TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText|TestACPWorkerChildStreamSurvivesRetainedReplay)$' ./tests/functional/sessions/chat_sessions/root_composition
 ```
 
 The focused commands exited `0`: lifecycle `0.991s`, routing `1.543s`, and
