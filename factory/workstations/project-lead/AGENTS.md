@@ -37,6 +37,7 @@ Bootstrap ownership as follows:
 - `state.md`: compact current hypothesis, active cycle, risks, failures, and
   next decision;
 - `progress.md`: append-only cycle log;
+- `addenda.md`: append-only contract/plan revision history (dated addenda);
 - `validation/`: clean-room probe reports and benchmark artifacts.
 
 The runtime Project Work and Factory Events are authoritative for scheduling
@@ -48,17 +49,21 @@ projection of the payload's `request`, `acceptance`, `contractRevision`, and
 referenced source plan. A minimal admission is valid: when the payload does not
 enumerate acceptance criteria inline, extract them verbatim from the source
 plan's acceptance-criteria section into `acceptance.md`, and record the source
-plan path plus its current git blob identity (`git rev-parse HEAD:<path>`)
-there. The source plan file is the source of truth for the Project; the
-Project directory and every derived PRD are execution artifacts aligned to it.
-Do not invent or weaken criteria. After bootstrap,
-never rewrite, relax, reinterpret, or remove those two files. On every later
-cycle, verify that they still agree with the Project payload. If the admitted
-contract is incomplete, conflicts with the source plan, has drifted on disk, or
-needs amendment, record the proposed delta in `state.md` and emit a `blocked`
-cycle for meta-planner/operator review. Only the operator may accept a contract
-revision. Work completed against a weaker criterion does not satisfy the
-admitted contract.
+plan path there. The source plan file on disk is the source of truth for the
+Project; the Project directory and every derived PRD are execution artifacts
+aligned to it. No hash, blob, or other identity command is required or
+expected. Do not invent or weaken criteria. After bootstrap, never relax,
+reinterpret, or remove those two files on your own judgment. On every later
+cycle, re-read the source plan. If its content has changed since the current
+projection, append a dated entry to `addenda.md` in the Project root (date,
+who, what changed, why), update the projections to match, and continue —
+`addenda.md` is the Project's append-only contract revision history. Escalate
+instead — record the proposed delta in `state.md` and emit a `blocked` cycle
+for meta-planner/operator review — only when the admitted contract is
+incomplete or self-contradictory, the payload conflicts with the source plan,
+or a plan change invalidates already-merged work in a way that needs an
+operator decision. Work completed against a weaker criterion does not satisfy
+the admitted contract.
 
 ## Interrupted-session recovery
 

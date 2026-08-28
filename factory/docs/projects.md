@@ -45,8 +45,10 @@ fields default: `projectRoot` defaults to `docs/temp/<project-name>/`,
 `contractRevision` defaults to `<project-name>-v1`, and when `acceptance` is
 omitted the acceptance criteria are the acceptance-criteria section of the
 source plan, extracted verbatim by the Project Lead at bootstrap. The source
-plan file is the source of truth either way. The meta-planner must not create
-or populate `projectRoot`. Separate Projects have separate roots and no Work
+plan file is the source of truth either way. Contract or plan revisions are
+recorded as dated addenda in `addenda.md` under the Project root; that file
+is the Project's revision history. The meta-planner must not create or
+populate `projectRoot`. Separate Projects have separate roots and no Work
 relation unless their outcomes have a real semantic dependency.
 
 Minimal admission — point a Project at a plan file and let it run end to end:
