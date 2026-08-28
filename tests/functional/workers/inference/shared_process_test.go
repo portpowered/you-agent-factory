@@ -38,8 +38,15 @@ var sharedInferenceGroup = &inferenceProcessGroup{}
 // that only exercise construction tests do not pay for a service-mode host.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if err := sharedInferenceGroup.close(); err != nil {
-		fmt.Fprintf(os.Stderr, "close shared inference process group: %v\n", err)
+	closeErr := sharedInferenceGroup.close()
+	if closeErr != nil {
+		fmt.Fprintf(os.Stderr, "close shared inference process group: %v\n", closeErr)
+		if code == 0 {
+			code = 1
+		}
+	}
+	if err := writeForcedInferenceCleanupReport(sharedInferenceGroup, closeErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write forced inference cleanup report: %v\n", err)
 		if code == 0 {
 			code = 1
 		}
@@ -66,8 +73,10 @@ type inferenceProcessGroup struct {
 	override         *inferenceProviderOverride
 	workerRecordings *inferenceWorkerRecordingRouter
 
-	externals map[string]*inferenceIntegrationRouter
-	sessions  map[string]struct{}
+	externals         map[string]*inferenceIntegrationRouter
+	sessions          map[string]struct{}
+	openedSessionIDs  []string
+	deletedSessionIDs []string
 }
 
 type inferenceDaemon struct {
@@ -318,7 +327,7 @@ func runSharedInferenceFactory(
 	sessionClosed := false
 	defer func() {
 		if !sessionClosed {
-			support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+			closeSharedInferenceSession(t, group, sessionID)
 		}
 	}()
 	updateSharedInferenceRouteContext(t, group, dir, scenario, sessionID)
@@ -339,7 +348,7 @@ func runSharedInferenceFactory(
 	support.WaitForSessionTerminalStatus(t, group.baseURL, sessionID, timeout)
 
 	result := collectSharedInferenceFactoryResult(t, group, sessionID, scenario, responseStream, timeout)
-	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+	closeSharedInferenceSession(t, group, sessionID)
 	sessionClosed = true
 	if responseStream != nil {
 		responseStream.WaitClosed(timeout)
@@ -400,7 +409,17 @@ func openSharedInferenceSession(
 		t.Fatalf("Factory Session ID %q was reused by the shared process group", sessionID)
 	}
 	group.sessions[sessionID] = struct{}{}
+	group.openedSessionIDs = append(group.openedSessionIDs, sessionID)
 	return sessionID
+}
+
+// closeSharedInferenceSession records the public deletion only after the
+// existing termination-and-delete helper has completed successfully. The
+// caller owns group.mu, which serializes scenario cleanup and the final census.
+func closeSharedInferenceSession(t *testing.T, group *inferenceProcessGroup, sessionID string) {
+	t.Helper()
+	support.CloseFactorySessionAt(t, group.baseURL, sessionID)
+	group.deletedSessionIDs = append(group.deletedSessionIDs, sessionID)
 }
 
 func updateSharedInferenceRouteContext(

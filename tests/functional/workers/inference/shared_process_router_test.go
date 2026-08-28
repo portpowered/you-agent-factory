@@ -203,6 +203,15 @@ func (router *inferenceCommandRouter) clear(dir string) {
 	delete(router.routes, cleanInferencePath(dir))
 }
 
+func (router *inferenceCommandRouter) routeCount() int {
+	if router == nil {
+		return 0
+	}
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	return len(router.routes)
+}
+
 func (router *inferenceCommandRouter) route(request platformprocess.CommandRequest) (inferenceCommandRoute, error) {
 	router.mu.Lock()
 	defer router.mu.Unlock()

@@ -39,6 +39,7 @@ func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 	)
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--named", invocationHelpNamedFactoryName,
@@ -95,6 +96,7 @@ func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
 	)
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--named", invocationHelpNamedFactoryName,
@@ -156,6 +158,7 @@ func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
+	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--named", invocationHelpNamedFactoryName,
@@ -197,6 +200,7 @@ func TestCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 	for _, command := range [][]string{
 		{"you", "session", "--help"},
 		{"you", "session", "pause", "--help"},

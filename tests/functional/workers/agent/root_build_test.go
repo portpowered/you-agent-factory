@@ -24,6 +24,7 @@ func TestAgentRunnerDeliveryRemainsInertThroughRootBuildProcessConstruction(t *t
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 	if process == nil || process.ProviderRegistry() == nil {
 		t.Fatal("root-built process or provider registry = nil, want inert composition")
 	}

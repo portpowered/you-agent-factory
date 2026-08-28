@@ -63,7 +63,9 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,
@@ -124,7 +126,9 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	if runner.CallCount() != 1 {
@@ -174,11 +178,13 @@ func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath
 			inputs.Input.WorkingDirectory = factoryDir
 			inputs.Input.Stdin = strings.NewReader(test.stdin)
 			inputs.Input.StdinIsTTY = &test.stdinIsTTY
-			err := support.BuildProcess(t, serviceedges.Edges{
+			process := support.BuildProcess(t, serviceedges.Edges{
 				ProviderCommandRunner:          runner,
 				WorkSubmittedFileReader:        os.ReadFile,
 				WorkSubmittedFilePathInspector: os.Stat,
-			}).Execute(inputs.Input)
+			})
+			support.CleanupProcess(t, process)
+			err := process.Execute(inputs.Input)
 			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
 			}
@@ -204,11 +210,13 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 	}
 	inputs := support.FakeInputs(t.Context(), missingArgs)
 	inputs.Input.WorkingDirectory = factoryDir
-	err := support.BuildProcess(t, serviceedges.Edges{
+	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner:          runner,
 		WorkSubmittedFileReader:        os.ReadFile,
 		WorkSubmittedFilePathInspector: os.Stat,
-	}).Execute(inputs.Input)
+	})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), missingPath) {
 		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
 	}
@@ -222,11 +230,13 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 	}
 	directoryInputs := support.FakeInputs(t.Context(), directoryArgs)
 	directoryInputs.Input.WorkingDirectory = factoryDir
-	err = support.BuildProcess(t, serviceedges.Edges{
+	directoryProcess := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner:          runner,
 		WorkSubmittedFileReader:        os.ReadFile,
 		WorkSubmittedFilePathInspector: os.Stat,
-	}).Execute(directoryInputs.Input)
+	})
+	support.CleanupProcess(t, directoryProcess)
+	err = directoryProcess.Execute(directoryInputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "regular file") {
 		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
 	}
@@ -260,7 +270,9 @@ func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 
@@ -301,7 +313,9 @@ func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
 		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
 	}
@@ -361,6 +375,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	hostedAPI.HoldShutdownUntilSignaled(workObservedGate)
 	hostedServerEdges.APIServerStarter = hostedAPI.Start
 	hostedProcess := support.BuildProcess(t, hostedServerEdges)
+	support.CleanupProcess(t, hostedProcess)
 
 	args := []string{
 		"you", "run",
@@ -469,7 +484,9 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err == nil {
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute error = nil, want terminal clean invocation failure")
 	}
 
@@ -541,7 +558,9 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 		"prove detached server preference cannot attach",
 	})
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := support.BuildProcess(t, clientEdges).Execute(inputs.Input); err == nil {
+	process := support.BuildProcess(t, clientEdges)
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf(
 			"Process.Execute(detached --server run) unexpectedly succeeded; want failure when client provider edges are isolated from the continuous host\nstdout:\n%s\nstderr:\n%s",
 			inputs.Stdout(),

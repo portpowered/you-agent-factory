@@ -30,6 +30,7 @@ func TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner(t *te
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
 	}
+	support.CleanupProcess(t, process)
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute() error = %v; stdout=%q stderr=%q",
