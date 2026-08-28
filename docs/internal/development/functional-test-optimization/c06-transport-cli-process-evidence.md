@@ -358,3 +358,47 @@ the declared dependency fidelity. It does not prove Unix signal/descendant
 reaping on this Windows host, three-repeat stability after relocation, same-head
 PR package timing, or independent clean-room reconciliation; those remain
 GATE-UNIX/GATE-WINDOWS, GATE-REPEAT, GATE-PR-PERF, and VAL-001 edges.
+
+## Story 003 — final corrected-head result
+
+- Tested implementation head: `40aa62e58c0cfa2de8d89a2c2ce9afa8201ca602`.
+  The evidence below covers the corrected two-lane topology; the later
+  evidence-only commit does not alter the tests or their measured behavior.
+- GATE-FUNC functional command: `go test -count=1 -timeout=10m
+  ./tests/functional/transport/cli/process`; Windows passed, exit code `0`,
+  `1.791s`, with the four remaining Process.Execute/process-free tests.
+- GATE-FUNC integration command: the c06 11-test `-run` matrix in
+  `./tests/integration/transport/cli/process`; Windows passed, exit code `0`,
+  `13.937s`, with the three documented Unix-only skips. The same matrix on a
+  Linux filesystem copy passed all 11 tests in `10.019s`.
+- GATE-REPEAT exact command: `go test -count=3 -timeout=30m
+  ./tests/functional/transport/cli/process`; Windows passed, exit code `0`,
+  `8.618s`, with three identical repetitions and successful shared-root
+  teardown between repetitions.
+- GATE-UNIX: from `/tmp/you-c06-linux-copy-2379`, the real built CLI and OS
+  process matrix passed all three Unix-only cancellation/SIGINT/exit-130 cases
+  plus the eight shared executable cases. The attributable provider process
+  was joined and absent in the cancellation assertions. An earlier mounted
+  checkout attempt was killed during `go build` after `90.115s`; it is recorded
+  as WSL/mounted-filesystem contention and is not used as evidence.
+- GATE-WINDOWS: the Windows functional and integration commands passed; the
+  Windows helper build-tag path compiled, applicable children joined, streams
+  closed, temporary fixture/binary cleanup completed, and only the three
+  documented Unix-only cases skipped.
+- GATE-PR-PERF: hosted Backend Functional Coverage run
+  `33155882997` on pre-correction head `c4464b3c0` reported this functional
+  package at `14.358s`; the comparable `ubuntu-latest` run `33159282213` on
+  corrected head `40aa62e58` reported `1.521s`, pass. This is an `89.4%`
+  directional package reduction, so the bounded non-improvement pass was not
+  required. Same-Windows-runner local package timing also improved from
+  merge-base `19.055s` to corrected head `1.791s`.
+- VAL-001: a fresh detached Windows worktree at `40aa62e58` had empty status
+  before and after; functional c06 passed in `1.939s`, and the corrected
+  integration c06 matrix passed in `15.310s`. Independent body/lane reading
+  reconciled all 15 tests and CASE-001 through CASE-028 without edits.
+
+The repository CI workflow has no dedicated Windows or integration-platform
+job; the platform gate is therefore owned by the exact local Windows and
+Linux-filesystem integration runs above, while hosted Backend Functional
+Coverage supplies the Linux CI and timing evidence. No workflow or production
+surface was changed to manufacture a platform result.
