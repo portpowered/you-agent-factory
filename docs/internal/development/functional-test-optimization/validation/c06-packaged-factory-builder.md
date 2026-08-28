@@ -2,7 +2,7 @@
 
 ## Environment and artifact
 
-- Commit/build identifier: `d9f14a1ff2f2b9e096769fa34198ee5259cfd8c1` (rebased implementation head validated before this report was amended).
+- Commit/build identifier: validated implementation snapshot `7f04145845c02baa2ca9fdc98393c462ec837ed6`; the current follow-up commit is report-only and changes no executable source.
 - Base comparison: merge-base with `origin/main` is `54c3400e3bcc4cabce5bd3a376f51dedd424133d`.
 - Environment and configuration: Windows 11 Home `10.0.26200`, `windows/amd64`, Go `1.25.0`; task packet files remain ignored scaffolding and outside the product diff.
 - Governing plan: `docs/internal/development/plans/backlog/shared-functional-process-sessions.md`, section 12 `TASK-003`.
