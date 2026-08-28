@@ -170,6 +170,8 @@ func TestRootProcessHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testi
 	} else if !info.IsDir() {
 		t.Fatalf("first home state path = %q, want directory", filepath.Join(first.HomeDir, ".you-agent-factory"))
 	}
+
+	failAcceptanceForcedUnwindAfterAssertion(t, harness, process)
 }
 
 func TestRootProcessHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
