@@ -312,9 +312,10 @@ root-level test files, explicitly excluding the transformation subpackage.
 
 ### Environment and artifact
 
-- Commit/build identifier: rebased validation tree
-  `af43713a6206ce0cea222f6cdc5020d5ef063a86`; this report supersedes the
-  earlier story-004 measurements from `7201155c7ef25baf423742c2d88a68a4fc027dc8`.
+- Commit/build identifier: final rebased validation tree before this report
+  update `cba0d9f3c8afbd179d2acca28fc94430ccbf01f4`; the full generated baseline
+  is carried by `8e64ac14c46119026836765d53cb8ccc35300b21`. This report supersedes
+  the earlier story-004 measurements from `7201155c7ef25baf423742c2d88a68a4fc027dc8`.
 - Environment and configuration: Windows `10.0.26200`, `windows/amd64`, Go
   `1.25.0`; the runtime commands ran from fresh detached worktrees of the exact
   code head with a clean `git status` before tests. The lint commands ran in
@@ -390,11 +391,12 @@ Factory Events, which the command-runner contract cannot provide.
 | `make backend-size` | 0; all owned Go files within the 1,000-line file and 100-line function limits | Durable fixture topology has no size violation. | Terminal PR lint. |
 | `make pkg-structure` | 0; service and functional package structure holds, 541 deletion-only entries remain | No new or stale package-structure finding after the durable move; the retained migration-only marker remains valid. | Terminal PR lint. |
 | `go run ./cmd/deadcodecheck` (before promotion) | 1; generated `bin/deadcode-current.txt` reported `3,069` baseline findings versus `3,122` current findings | The pinned production-entrypoint analyzer produced the complete normalized report for the rebased tree, including the durable importable fixture findings and rebased platform-specific rows. | This expected pre-promotion drift did not prove the final ratchet; the generated report was promoted under the operator-authorized fence waiver. |
-| `make deadcode` (after full promotion) | 0; baseline matches `3,122` findings | The full generated `docs/internal/baselines/deadcode-baseline.txt` now matches the rebased tree. | Terminal PR lint and review acceptance. |
+| `go run ./cmd/deadcodecheck` (latest rebased tree) | 0; generated `bin/deadcode-current.txt` and the committed baseline both contain `3,122` findings | The full report was regenerated again after the final sync rebase onto `origin/main` `eaea1c6630`; the normalized output matches byte-for-byte. | Terminal PR lint and review acceptance. |
+| `make deadcode` (after full promotion and latest rebase) | 0; baseline matches `3,122` findings | The full generated `docs/internal/baselines/deadcode-baseline.txt` matches the latest rebased tree. | Terminal PR lint and review acceptance. |
 | `make ui-lint` | 1; `ui/scripts/biome-output-exclusions.test.mjs` could not resolve `ui/node_modules/@biomejs/biome/bin/biome` under Node `v22.12.0` | No UI source is in the c06 diff; the failure is a missing local frontend dependency. | Local UI lint is unavailable until the existing frontend toolchain is provisioned; CI/other UI lanes remain the applicable evidence. |
 | `make ui-deadcode` | 1; `bun scripts/check-deadcode-baseline.ts` stopped because no existing `knip` binary was available and `--no-install` was set | No UI source is in the c06 diff; the failure is a missing local frontend dependency. | Local UI deadcode is unavailable until the existing frontend toolchain is provisioned; CI/other UI lanes remain the applicable evidence. |
 | `make lint` | 2; all backend targets, including deadcode, passed; only `ui-lint` and `ui-deadcode` failed because the existing local frontend binaries are unavailable | The changed Go fixture satisfies the complete available backend lint surface. | Local UI lint remains unavailable until the existing frontend toolchain is provisioned; PR CI owns the repository-level result. |
-| Full default, repeat, race, and tagged commands above | 0; once `24.480s`, repeat `74.669s`, race `49.992s`, tagged `23.193s` | Behavior, explicit-session cleanup, repetition, race safety, and isolated replay/topology remain green on the rebased validation tree. | PR-head CI timing, clean-room scope audit, and merge. |
+| Full default, repeat, race, and tagged commands above | 0; once `21.289s`, repeat `70.048s`, race `57.221s`, tagged `25.669s` | Behavior, explicit-session cleanup, repetition, race safety, and isolated replay/topology remain green on the latest rebased validation tree. | PR-head CI timing, clean-room scope audit, and merge. |
 
 The PR review identified that the PRD's `context.sourcePlan`
 (`docs/temp/functional-test-optimization.md`) is absent from this checkout and
@@ -406,14 +408,16 @@ the gap. The operator override now explicitly voids that pointer for this lane.
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | REVIEW-001 | RESOLVED | `Test-Path docs/temp/functional-test-optimization.md` is false; the path is also absent from `origin/main`. | An authoritative c06 source-plan section or an operator-approved conflict/delta plan. | The operator override explicitly treats the gitignored pointer as void and directs completion without further source-plan material. | `prd.json.operatorOverride` in the task packet. |
-| REVIEW-002 | RESOLVED | The rebased analyzer generated `3,122` findings against the pre-promotion `3,069`-finding baseline, including the durable fixture findings. | A source-plan/operator decision authorizing the exact deadcode baseline rows, or an approved durable test layout that remains importable from the runtime API tests without artificial reachability. | The operator authorized a full generated baseline on the rebased tree; `make deadcode` passes after the complete report replacement. | `go run ./cmd/deadcodecheck`, generated `bin/deadcode-current.txt`, commit `af43713a6206ce0cea222f6cdc5020d5ef063a86`, and `make deadcode`. |
+| REVIEW-002 | RESOLVED | The first rebased analyzer generated `3,122` findings against the pre-promotion `3,069`-finding baseline, including the durable fixture findings. The final sync rebase regenerated the same `3,122`-finding report. | A source-plan/operator decision authorizing the exact deadcode baseline rows, or an approved durable test layout that remains importable from the runtime API tests without artificial reachability. | The operator authorized a full generated baseline on the rebased tree; the regenerated report and `make deadcode` pass after the complete report replacement. | `go run ./cmd/deadcodecheck`, generated `bin/deadcode-current.txt`, baseline commit `8e64ac14c46119026836765d53cb8ccc35300b21`, and `make deadcode`. |
 | ENV-001 | ENVIRONMENTAL | `make ui-lint` cannot resolve the checked-in Biome binary and `make ui-deadcode` cannot find the existing `knip` binary with installation disabled. | A provisioned existing frontend lint toolchain for a complete local `make lint`. | The backend-only c06 change did not alter UI files or dependencies; all available backend lint targets pass and repository CI remains the applicable UI evidence. | Local `make lint` output; no frontend installation or dependency mutation was performed. |
 
 ### Verdict
 
 RESOLVED for Story-004's implementation blockers. Per the operator override, the
 tree was rebased onto `origin/main` before the pinned deadcode analyzer ran, and
-the complete generated report was committed as `af43713a6206ce0cea222f6cdc5020d5ef063a86`.
+the complete generated report was committed as
+`8e64ac14c46119026836765d53cb8ccc35300b21`. A later main advance required one
+additional sync rebase; the report was regenerated again and matched exactly.
 No production, analyzer, or artificial-reachability change was made. The absent
 gitignored source-plan pointer is void for this lane.
 
