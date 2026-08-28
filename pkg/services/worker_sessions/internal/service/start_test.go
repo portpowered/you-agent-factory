@@ -98,7 +98,17 @@ func TestStart_InvalidRequestHasNoRegistryEventsOrWorkersSideEffects(t *testing.
 }
 
 func TestStart_MissingRequestIDDoesNotConsumeAnIdempotencyKey(t *testing.T) {
-	execution := succeedingExecution()
+	dispatchRecorded := make(chan struct{})
+	var dispatchRecordedOnce sync.Once
+	execution := &fakeExecution{
+		dispatch: func(_ context.Context, req workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			// Start returns at Workers admission, while fakeExecution records the
+			// dispatch immediately before invoking this callback. Observe that
+			// callback before asserting the recorded side effect.
+			dispatchRecordedOnce.Do(func() { close(dispatchRecorded) })
+			return acceptedResult(req), nil
+		},
+	}
 	registry := newRegistryWithExecution(execution)
 	invalid := validAsyncStartRequest("worker-request-id", "dispatch-request-id")
 	invalid.RequestID = ""
@@ -110,6 +120,7 @@ func TestStart_MissingRequestIDDoesNotConsumeAnIdempotencyKey(t *testing.T) {
 	if _, err := registry.Start(context.Background(), valid); err != nil {
 		t.Fatalf("Start() after invalid request ID error = %v, want nil", err)
 	}
+	waitForStartSignal(t, dispatchRecorded, "Workers dispatch was not recorded after valid retry")
 	if execution.callCount() != 1 {
 		t.Fatalf("Workers dispatch count after valid retry = %d, want 1", execution.callCount())
 	}
