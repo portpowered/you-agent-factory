@@ -22,7 +22,6 @@ import (
 func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 	inventory := loadRESTOperationInventory(t)
 	ctx := newRoutingReachabilityContext(t)
-	defer ctx.server.Stop(t)
 
 	client := &http.Client{Timeout: routingReachabilityRequestTimeout}
 	var shutdownOperation *contractinventory.Operation
@@ -43,7 +42,21 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 				t.Fatalf("%s %s (%s): %v", operation.Method, request.URL.String(), operation.OperationID, err)
 			}
 			defer response.Body.Close()
-
+			if operation.OperationID == "openFactorySession" {
+				if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+					body, _ := io.ReadAll(response.Body)
+					t.Fatalf("%s status = %d, want success: %s", operation.OperationID, response.StatusCode, strings.TrimSpace(string(body)))
+				}
+				var opened factoryapi.OpenFactorySessionResponse
+				if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
+					t.Fatalf("decode %s response: %v", operation.OperationID, err)
+				}
+				if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+					t.Fatalf("%s response = %#v, want explicit session", operation.OperationID, opened)
+				}
+				ctx.scenario.trackSession(t, opened.Session.Id)
+				return
+			}
 			if response.StatusCode == http.StatusNotFound {
 				switch operation.OperationID {
 				case "getHumanApprovalBySessionId":
@@ -77,10 +90,20 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 		t.Fatal("OpenAPI operation inventory does not contain shutdownServer")
 	}
 
-	// Shutdown cancels the shared functional server after acknowledging the
-	// request, so it must be the final operation exercised by this fixture.
+	// shutdownServer is process-mutating: keep its lifecycle witness isolated so
+	// it cannot terminate the package-owned server needed by later cases.
+	shutdownDir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	shutdownServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                shutdownDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer shutdownServer.Stop(t)
+	shutdownContext := *ctx
+	shutdownContext.baseURL = shutdownServer.URL()
+
 	t.Run(shutdownOperation.OperationID, func(t *testing.T) {
-		request, err := ctx.safeRequest(*shutdownOperation)
+		request, err := shutdownContext.safeRequest(*shutdownOperation)
 		if err != nil {
 			t.Fatalf("build safe request for %s %s (%s): %v", shutdownOperation.Method, shutdownOperation.Path, shutdownOperation.OperationID, err)
 		}
@@ -98,7 +121,7 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 		timer := time.NewTimer(routingReachabilityRequestTimeout)
 		defer timer.Stop()
 		select {
-		case <-ctx.server.Done():
+		case <-shutdownServer.Done():
 		case <-timer.C:
 			t.Fatal("shutdownServer acknowledged but functional server did not stop")
 		}
@@ -123,13 +146,8 @@ func assertModelCacheNotFoundResponse(t *testing.T, response *http.Response) {
 // published OpenAPI surface return a structured not-found response at the public
 // HTTP contract boundary.
 func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "routing-unknown-route", dir)
 
 	unknownPath := "/functional-routing-unknown-route"
 	response, err := http.Get(server.URL() + unknownPath)
@@ -142,13 +160,8 @@ func TestAPIUnknownRouteReturnsStructuredNotFound(t *testing.T) {
 }
 
 func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "routing-dashboard", dir)
 
 	shellResponse, err := http.Get(server.URL() + "/dashboard/ui")
 	if err != nil {
@@ -214,13 +227,8 @@ func TestAPIDashboardRoutesServeEmbeddedShellAssetAndFallback(t *testing.T) {
 // OpenAPI routes return the documented method-error response at the public HTTP
 // contract boundary instead of a not-found outcome that would hide the mismatch.
 func TestAPIWrongMethodReturnsDocumentedMethodError(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "routing-wrong-method", dir)
 
 	knownPath := "/status"
 	request, err := http.NewRequest(http.MethodPost, server.URL()+knownPath, nil)
@@ -333,15 +341,13 @@ func newRoutingReachabilityContext(t *testing.T) *routingReachabilityContext {
 
 	dir := scaffoldRoutingReachabilityFactory(t)
 	liveJavaScriptFactoryDir := scaffoldRoutingLiveJavaScriptFactory(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
+	fixture := c06SharedHTTPServer(t)
+	scenario := fixture.newScenario(t, "routing-reachability", dir, liveJavaScriptFactoryDir)
+	scenario.registerRunner(t, []string{fixture.factoryDir, dir, liveJavaScriptFactoryDir}, generatedClientStreamingRunner{})
 	ctx := &routingReachabilityContext{
 		t:                        t,
-		server:                   server,
-		baseURL:                  server.URL(),
+		scenario:                 scenario,
+		baseURL:                  scenario.URL(),
 		factoryDir:               dir,
 		liveJavaScriptFactoryDir: liveJavaScriptFactoryDir,
 	}

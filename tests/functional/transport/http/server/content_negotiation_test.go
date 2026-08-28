@@ -24,13 +24,8 @@ func TestAPIJSONRequestsAndResponsesUseDocumentedContentType(t *testing.T) {
 	requestMediaType := documentedJSONRequestMediaType(t, operation)
 	responseMediaType := documentedJSONSuccessResponseMediaType(t, operation)
 
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "content-negotiation-valid", dir)
 
 	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: dir})
 	if err != nil {
@@ -97,13 +92,9 @@ func TestAPIUnsupportedContentTypeReturns415(t *testing.T) {
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	documentedRequestMediaType := documentedJSONRequestMediaType(t, operation)
 
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "content-negotiation-unsupported", dir)
+	server.openSession(t, dir)
 	beforeSessions := liveNegotiationSessionIDs(t, server.URL())
 
 	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: dir})
@@ -136,13 +127,9 @@ func TestAPIMalformedJSONReturnsStructured400(t *testing.T) {
 	operation := loadContentNegotiationOperation(t, "openFactorySession")
 	requestMediaType := documentedJSONRequestMediaType(t, operation)
 
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "content-negotiation-malformed", dir)
+	server.openSession(t, dir)
 	beforeSessions := liveNegotiationSessionIDs(t, server.URL())
 
 	endpoint := strings.TrimSuffix(server.URL(), "/") + "/factory-sessions"
