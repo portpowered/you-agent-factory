@@ -6,11 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,31 +20,18 @@ func TestRunKeyValueParametersReachFactoryInvocation(t *testing.T) {
 
 	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
-	submissions := &invocationSubmissionObservation{}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		SubmissionRecorder: submissions.observe,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"invoke marker",
 		"--topic=" + topicValue,
 		"--priority=" + priorityValue,
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -56,11 +40,11 @@ func TestRunKeyValueParametersReachFactoryInvocation(t *testing.T) {
 		)
 	}
 
-	records := submissions.snapshot()
-	if len(records) != 1 {
+	records := parameterProcesses.submissions.snapshot()
+	if got := len(records) - beforeSubmissions; got != 1 {
 		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
 	}
-	arguments := records[0].Request.InvocationArguments
+	arguments := records[beforeSubmissions].Request.InvocationArguments
 	if arguments == nil {
 		t.Fatal("submitted invocation arguments = nil")
 	}
@@ -77,32 +61,19 @@ func TestRunKeyValuePreservesEqualsInValue(t *testing.T) {
 
 	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
-	submissions := &invocationSubmissionObservation{}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		SubmissionRecorder: submissions.observe,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"invoke marker",
 		"--topic=Ship the café résumé plan",
 		"--priority=urgent",
 		"--callback=" + callbackValue,
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(embedded-equals key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -111,11 +82,11 @@ func TestRunKeyValuePreservesEqualsInValue(t *testing.T) {
 		)
 	}
 
-	records := submissions.snapshot()
-	if len(records) != 1 {
+	records := parameterProcesses.submissions.snapshot()
+	if got := len(records) - beforeSubmissions; got != 1 {
 		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
 	}
-	arguments := records[0].Request.InvocationArguments
+	arguments := records[beforeSubmissions].Request.InvocationArguments
 	if arguments == nil {
 		t.Fatal("submitted invocation arguments = nil")
 	}
@@ -132,33 +103,20 @@ func TestRunDuplicateKeyUsesDocumentedPrecedence(t *testing.T) {
 
 	factoryDir := scaffoldNamedKeyValueInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "processor",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 
-	submissions := &invocationSubmissionObservation{}
-	process := support.BuildProcess(t, serviceedges.Edges{
-		SubmissionRecorder: submissions.observe,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
-		"--with-mock-workers", mockWorkersPath,
 		"invoke marker",
 		"--topic=Ship the café résumé plan",
 		"--priority=urgent",
 		"--tag=" + firstTagValue,
 		"--tag=" + secondTagValue,
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(duplicate key=value invocation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -167,11 +125,11 @@ func TestRunDuplicateKeyUsesDocumentedPrecedence(t *testing.T) {
 		)
 	}
 
-	records := submissions.snapshot()
-	if len(records) != 1 {
+	records := parameterProcesses.submissions.snapshot()
+	if got := len(records) - beforeSubmissions; got != 1 {
 		t.Fatalf("canonical submissions = %d, want 1; records=%#v", len(records), records)
 	}
-	arguments := records[0].Request.InvocationArguments
+	arguments := records[beforeSubmissions].Request.InvocationArguments
 	if arguments == nil {
 		t.Fatal("submitted invocation arguments = nil")
 	}
@@ -218,21 +176,16 @@ func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			submissions := &invocationSubmissionObservation{}
-			providerRunner := testutil.NewProviderCommandRunner()
-			process := support.BuildProcess(t, serviceedges.Edges{
-				SubmissionRecorder:    submissions.observe,
-				ProviderCommandRunner: providerRunner,
-			})
+			beforeSubmissions := len(parameterProcesses.submissions.snapshot())
+			beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
 			base := []string{
 				"you", "run",
 				"--factory", factoryPath,
 				"--no-record",
 			}
-			inputs := support.FakeInputs(t.Context(), append(base, test.invocationArgs...))
-			inputs.WorkingDirectory = t.TempDir()
+			inputs := parameterInputs(t, append(base, test.invocationArgs...))
 
-			executeErr := process.Execute(inputs.Input)
+			executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
 			if executeErr == nil {
 				t.Fatalf(
 					"Process.Execute(malformed key=value) succeeded; stdout:\n%s\nstderr:\n%s",
@@ -251,11 +204,11 @@ func TestRunMalformedKeyValueFailsWithoutDispatch(t *testing.T) {
 					)
 				}
 			}
-			if records := submissions.snapshot(); len(records) != 0 {
-				t.Fatalf("canonical submissions = %d, want 0; records=%#v", len(records), records)
+			if records := parameterProcesses.submissions.snapshot(); len(records)-beforeSubmissions != 0 {
+				t.Fatalf("canonical submission delta = %d, want 0; records=%#v", len(records)-beforeSubmissions, records)
 			}
-			if providerRunner.CallCount() != 0 {
-				t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+			if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
+				t.Fatalf("provider dispatch call delta = %d, want 0", got)
 			}
 		})
 	}

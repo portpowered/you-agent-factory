@@ -9,11 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,26 +24,12 @@ func TestRunAcceptsOnePositionalPrompt(t *testing.T) {
 	factoryDir := support.ScaffoldSingleStepFactory(t, "positional-values")
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-	var observation cliobservation.Result
-	process := support.BuildProcess(t, serviceedges.Edges{
-		CLIObserver: cliobservation.Capture(&observation),
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	observation := executeParameterObservation(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
 		prompt,
 	})
-	inputs.WorkingDirectory = t.TempDir()
-
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(run positional prompt) error = %v\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
 	if observation.Parse.CommandPath != "you run" {
 		t.Fatalf("observed command path = %q, want you run", observation.Parse.CommandPath)
 	}
@@ -65,20 +48,16 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 	factoryDir := scaffoldSinglePositionalInvocationFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-	providerRunner := testutil.NewProviderCommandRunner()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
+	beforeProviderCalls := parameterProcesses.providerRunner.CallCount()
+	inputs := parameterInputs(t, []string{
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
 		"first prompt",
 		"second prompt",
 	})
-	inputs.WorkingDirectory = t.TempDir()
 
-	executeErr := process.Execute(inputs.Input)
+	executeErr := parameterProcesses.fullHandlerProcess.Execute(inputs.Input)
 	if executeErr == nil {
 		t.Fatalf(
 			"Process.Execute(extra positional prompts) succeeded; stdout:\n%s\nstderr:\n%s",
@@ -108,8 +87,8 @@ func TestRunRejectsExtraPositionalValues(t *testing.T) {
 		response.Family != factoryapi.ErrorFamilyBadRequest {
 		t.Fatalf("ErrorResponse = %#v, want positional-overflow code and BAD_REQUEST", response)
 	}
-	if providerRunner.CallCount() != 0 {
-		t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+	if got := parameterProcesses.providerRunner.CallCount() - beforeProviderCalls; got != 0 {
+		t.Fatalf("provider dispatch call delta = %d, want 0", got)
 	}
 }
 
@@ -127,14 +106,12 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		inputs := support.FakeInputs(t.Context(), []string{
+		inputs := parameterInputs(t, []string{
 			"you", "--remote", "--server", server.URL,
 			"session", "pause",
 		})
-		inputs.WorkingDirectory = t.TempDir()
 
-		if err := process.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(session pause default targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,
@@ -158,14 +135,12 @@ func TestOptionalSessionIDUsesDefaultWhenOmitted(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		inputs := support.FakeInputs(t.Context(), []string{
+		inputs := parameterInputs(t, []string{
 			"you", "--remote", "--server", server.URL,
 			"session", "pause", overrideSessionID,
 		})
-		inputs.WorkingDirectory = t.TempDir()
 
-		if err := process.Execute(inputs.Input); err != nil {
+		if err := parameterProcesses.fullHandlerProcess.Execute(inputs.Input); err != nil {
 			t.Fatalf(
 				"Process.Execute(session pause override targeting) error = %v\nstdout:\n%s\nstderr:\n%s",
 				err,
