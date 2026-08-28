@@ -180,3 +180,48 @@ witnesses. It does not prove a clean final checkout, PR-host package timing,
 remote provider behavior, Unix interrupt behavior on this Windows host,
 terminal CI, conflict resolution, or merge; those remain TASK-003/review-owned
 edges.
+
+## TASK-003 clean-room validation
+
+The clean-room validation checkout was a detached worktree at source commit
+`152ce11fccce39257bb9efef3add74902fe1b19e`. It was clean before and after the
+runtime probes. Environment: `go version go1.25.0 windows/amd64`; Windows 11
+build `26200`; `amd64`; local sanitized fixtures only; 0 remote calls and
+`$0` paid cost.
+
+Required clean-room commands and observed results:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; package time 8.365s; exit code 0
+
+go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
+PASS; package time 19.053s; exit code 0
+
+go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
+PASS; package time 4.337s; exit code 0; no race report
+```
+
+The verbose clean-room package run passed all supported tests and emitted:
+
+```text
+C06 TASK-002 topology: root-builds=1 api-host-starts=1 cli-builds=1
+```
+
+The eight-test denominator remained intact. The built cancellation test was
+explicitly skipped because `os.Interrupt` is unsupported for child processes
+on Windows; the Unix-only interrupt witness remains assigned to the Unix
+PR/platform gate. The runtime assertions proved the CLI/transcript/stream/
+error/order witnesses, explicit identity isolation, route attribution,
+repeatability, fleet race safety, and deterministic child/session/path/listener
+cleanup. `git diff --check` passed and the owned-path audit against the
+characterization base found only the six package/evidence paths permitted by
+GATE-SCOPE.
+
+Local diagnostic timing improved from the baseline package result of `18.410s`
+to `8.365s` in the clean checkout. This is directional local evidence only;
+the Backend Functional Coverage package row and its PR-host directional verdict
+remain review-owned. The canonical loopback report is emitted at
+`validation/functional-test-optimization-c06-provider-sessions-cli.md`; that
+directory is excluded from the PR diff by the repository validation-artifact
+convention.
