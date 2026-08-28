@@ -66,9 +66,33 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	fixture := newRecordingsRootBoundaryFixture()
 	stub := newRecordingsRequestBoundaryStub()
 	worldView := runRecordingsReconstructThroughRootProof(t, stub, fixture)
+	runRecordingsGlobalProjectionScopeProof(t, stub)
 	runRecordingsDashboardThroughRootProof(t, stub, worldView)
 	runRecordingsValidateThroughRootProof(t, stub, fixture)
 	runRecordingsNilServiceRejectionProof(t, fixture, worldView)
+}
+
+func runRecordingsGlobalProjectionScopeProof(t *testing.T, stub *recordingsRequestBoundaryStub) {
+	t.Helper()
+
+	sessionID := "session-visualization-scope"
+	_, err := recordingsqueries.ReconstructWorldState(stub, []factorydefinitions.FactoryEvent{{
+		Id:   "evt-scoped",
+		Type: factorydefinitions.FactoryEventTypeWorkRequest,
+		Context: factorydefinitions.FactoryEventContext{
+			Sequence:  0,
+			SessionID: &sessionID,
+		},
+	}}, 0)
+	if err != nil {
+		t.Fatalf("ReconstructWorldState: %v", err)
+	}
+	if stub.lastReconstruct.Scope != (recordings.CanonicalEventScope{}) {
+		t.Fatalf("reconstruct scope = %#v, want global scope", stub.lastReconstruct.Scope)
+	}
+	if stub.lastReconstruct.Events[0].Scope != (recordings.CanonicalEventScope{}) {
+		t.Fatalf("reconstruct event scope = %#v, want global scope", stub.lastReconstruct.Events[0].Scope)
+	}
 }
 
 func runRecordingsReconstructThroughRootProof(

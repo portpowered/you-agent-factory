@@ -39,11 +39,6 @@
       "reason": "tests/functional/providers/script: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
     },
     {
-      "package": "github.com/portpowered/infinite-you/tests/functional/recordings",
-      "bucket": "ENVIRONMENT-DEPENDENT",
-      "reason": "Linux build constraints leave this functional package without runnable Go test files"
-    },
-    {
       "package": "github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock",
       "bucket": "ENVIRONMENT-DEPENDENT",
       "reason": "tests/functional/transport/terminalportlock: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"

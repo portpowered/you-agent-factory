@@ -189,7 +189,7 @@ func newRuntimeRoot(
 	}
 	historicalQuery := historicalquerywire.NewService(
 		readFile,
-		recordingsinternal.NewProjectionService(),
+		NewProjectionService(),
 	)
 	root := recordingsinternal.NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
