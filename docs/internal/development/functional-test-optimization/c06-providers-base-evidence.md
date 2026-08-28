@@ -20,6 +20,16 @@ public witnesses, classification, isolation reasons, and static process
 topology. It does not claim migrated parity, new-fixture cleanup, a passing
 package, or CI timing improvement.
 
+## Operator disposition for integrated handoff
+
+The operator directive dated `2026-08-28` accepts the clean-base
+reproduction of the mixed-worker refusal mismatch and the Claude/Codex
+template failures as pre-existing provider/runtime defects. `PROV-REPEAT-004`
+and `PROV-LONG-005` remain truthfully **BLOCKED-BY-PRE-EXISTING** for this PR;
+their assertions are unchanged and are not being converted into passes. The
+directive authorizes the final rebase, push, PR creation, and review-owned CI
+handoff with those two criteria recorded as waived-as-blocked.
+
 ## Discovery and source reconciliation
 
 The direct package contains 16 Go files: 11 scenario files, two OS-specific
@@ -365,12 +375,14 @@ inside that child and is closed before the parent reads the cleanup report.
 
 ### Environment and artifact
 
-- Commit/build identifier: `bec56f236044ee282fff390da8af2d6a4af738d1`, the
-  implementation head used for the integrated package runs below.
+- Commit/build identifier: `69a4b414e3`, the rebased implementation head used
+  for the integrated package runs below; it is based on `origin/main`
+  `bb37276f74`.
 - Environment and configuration: clean Git worktree on
   `go1.25.0 windows/amd64`; no provider credentials or remote configuration.
-  `git status --short --branch` reported only the expected branch identity
-  and no tracked or untracked source change.
+  `git status --short --branch` reported only the expected branch identity;
+  `prd.json` and `progress.txt` are ignored scaffolding and are excluded from
+  the tracked diff.
 - Customer entry point: the direct base-provider Go functional package, using
   production `root.BuildProcess`/wire/HTTP/Factory Session/Factory Runtime
   assembly through the package fixtures.
@@ -387,29 +399,32 @@ inside that child and is closed before the parent reads the cleanup report.
 | PROV-CHAR-001 | PASS | The characterization ledger maps all 40 scenario rows and five cleanup rows one-to-one and preserves the public witness matrix. | No new characterization beyond the recorded ledger. |
 | PROV-ISO-003 | PASS | The retained selector passed in 18.851s on Windows; forced assertion cleanup proved closed listener, deleted sessions, zero routes, and absent owned paths. Unix shebang rows explicitly skip before construction. | Unix executable/process behavior remains owned by Linux PR CI. |
 | PROV-MIG-002 | PASS | Shared fixture census reported one root/listener and zero routes/owned root after cleanup; static post-migration counts are 13 Linux and 11 Windows constructions, with no additional long construction. | Runtime counts on the PR runner remain for review confirmation. |
-| PROV-REPEAT-004 | BLOCKED | The exact once command exited 1 in 27.164s on the unchanged mixed-refusal assertion. The exact `-count=3` command exited 1 in 99.409s and reproduced that same assertion once per run, with no new failure or state contamination. | Package success past the pre-declared mismatch. |
-| PROV-LONG-005 | BLOCKED | The exact tagged command exited 1 in 27.138s: timeout and timeout-companion cases passed; Claude and Codex template cases retained their base failures, plus the same mixed-refusal assertion. | Four-case long parity and Linux long topology. |
-| PR-CI-006 | BLOCKED | No PR exists yet, so review-owned Backend Functional Coverage timing has not run. The exact comment procedure is recorded below. | Final-head CI timing/direction and review topology confirmation. |
+| PROV-REPEAT-004 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On the rebased head, the exact once command exited 1 in 24.432s and the exact `-count=3` command exited 1 in 74.461s. The unchanged mixed-refusal assertion reproduced once per run with no new failure or state contamination; the operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Package success past the pre-declared mismatch. |
+| PROV-LONG-005 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On the rebased head, the exact tagged command exited 1 in 28.942s. Timeout and timeout-companion cases passed; Claude, Codex, and the same mixed-refusal assertion failed exactly as characterized. The operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Four-case long parity and Linux long topology. |
+| PR-CI-006 | REVIEW HANDOFF | The operator authorized the PR/CI handoff with the two pre-existing blockers recorded as waived-as-blocked. Review must record final-head Backend Functional Coverage timing and topology in a PR comment using the procedure below. | Final-head CI timing/direction and review topology confirmation. |
 | Security/privacy | PASS | All runs used controlled local fixtures, zero credentials, zero customer data, and zero paid/remote calls; test-owned temporary roots were cleaned by the fixture and retained cleanup proofs. | Host-wide artifact/process state outside test ownership. |
 | Compatibility | PASS | The branch diff is limited to the owned direct-provider tests and c06 evidence document; no API, CLI grammar, event schema, generated output, shared support, workflow, Makefile, baseline, or stability-cleanup surface changed. | Full repository verification and merge-base review. |
 | VAL-007 | PASS | This read-only report follows the validation-loopback template and records the blocked findings plus a delta-plan request without changing product/runtime assertions. | Independent integrated validation and review disposition. |
 | PROJECT-AC1/2/3 | BLOCKED | These are explicitly later lane-wide gates and are not claimed by this slice. | Lane-wide timing, global isolation inventory, and full-suite parity. |
-| Implementation delivery | BLOCKED | The final-head PR/CI handoff cannot be claimed while the required package gates are blocked and no PR has been opened. | Operator/runtime disposition, final push, open PR, started CI, and review feedback. |
+| Implementation delivery | REVIEW HANDOFF | The operator-authorized disposition permits implementation handoff with `PROV-REPEAT-004` and `PROV-LONG-005` blocked-by-pre-existing. The final push, open PR, started CI, and review feedback are session handoff actions. | Review-owned terminal CI, conflict resolution, and merge. |
 
 ### Customer journey
 
-1. The implementation head was checked in a clean worktree and the exact
+1. The rebased implementation head was checked in a clean worktree and the exact
    default package command was run through the production root and loopback
-   HTTP/session path. All default cases reached their existing public
-   assertions except the retained mixed-refusal baseline assertion.
+   HTTP/session path. It exited `1` in `24.432s`; all default cases reached
+   their existing public assertions except the retained mixed-refusal baseline
+   assertion.
 2. The exact repeat command ran the package three times in the same test
-   process. Each run produced the same single retained assertion failure;
-   the shared fixture finalizer still reported one construction/listener,
-   deleted explicit sessions, zero routes, and no fixture root.
+   process and exited `1` in `74.461s`. Each run produced the same single
+   retained assertion failure; the shared fixture finalizer still reported one
+   construction/listener, deleted explicit sessions, zero routes, and no
+   fixture root.
 3. The exact tagged command exercised all four long rows. The two timeout
-   rows passed through the shared explicit-session fixture. The Claude and
-   Codex rows reproduced their pre-migration provider/template failures, so
-   their public expectations remain visible and unmodified.
+   rows passed through the shared explicit-session fixture. It exited `1` in
+   `28.942s`; the Claude and Codex rows reproduced their pre-migration
+   provider/template failures, so their public expectations remain visible and
+   unmodified.
 
 ### Cross-task integration and usability
 
@@ -431,7 +446,8 @@ inside that child and is closed before the parent reads the cleanup report.
 
 ### Final-head PR-CI-006 evidence procedure
 
-After the smallest approved correction or disposition is available:
+The operator disposition is available. After the final head is pushed and the
+PR is open:
 
 1. Run the exact package command on the final head and record the
    package-level Backend Functional Coverage job URL, commit SHA, exit status,
@@ -451,18 +467,20 @@ After the smallest approved correction or disposition is available:
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| C06-F-001 | BLOCKER | `go test -count=1 -timeout=10m ./tests/functional/providers`; repeat with `-count=3`. | Mixed mock-worker replay preserves the declared neutral terminal refusal. | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` observes failure reason `unknown` instead of `permanent_bad_request`; the same unchanged assertion fails once in each repeat. | Current package run: exit 1, 27.164s; repeat: exit 1, 99.409s; base diagnostic and prior ledger record the same mismatch. |
-| C06-F-002 | BLOCKER | `go test -tags=functionallong -count=1 -timeout=30m ./tests/functional/providers`; focused template selectors on clean base and final head. | Claude/Codex execution-template rows complete with the declared Work and exact provider request witnesses. | Claude fails with blank `.Context` values, `inputs=2`, and extra runtime flags; Codex fails with failed Work and an extra `--json` argument. The same failure class reproduces from clean base commit `67710223e`. | Tagged package: exit 1, 27.138s; clean-base focused run: exit 1, 3.692s; assertions remain unchanged. |
-| C06-F-003 | BLOCKER | Attempt to satisfy the implementation handoff before resolving C06-F-001/C06-F-002. | Final head is pushed, PR is open, and required CI starts on that head. | No PR/CI evidence can truthfully be recorded while required package parity is blocked and the runtime/provider owner has not disposed of the base failures. | PR list for branch returned no existing PR. |
+| C06-F-001 | BLOCKED-BY-PRE-EXISTING | `go test -count=1 -timeout=10m ./tests/functional/providers`; repeat with `-count=3`. | Mixed mock-worker replay preserves the declared neutral terminal refusal. | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` observes failure reason `unknown` instead of `permanent_bad_request`; the same unchanged assertion fails once in each repeat. | Rebasing-head package run: exit 1, 24.432s; repeat: exit 1, 74.461s; clean-base diagnostic and prior ledger record the same mismatch. Operator disposition waives this pre-existing blocker for the PR. |
+| C06-F-002 | BLOCKED-BY-PRE-EXISTING | `go test -tags=functionallong -count=1 -timeout=30m ./tests/functional/providers`; focused template selectors on clean base and final head. | Claude/Codex execution-template rows complete with the declared Work and exact provider request witnesses. | Claude fails with blank `.Context` values, `inputs=2`, and extra runtime flags; Codex fails with failed Work and an extra `--json` argument. The same failure class reproduces from clean base commit `67710223e`. | Rebasing-head tagged package: exit 1, 28.942s; clean-base focused run: exit 1, 3.692s; assertions remain unchanged. Operator disposition waives this pre-existing blocker for the PR. |
+| C06-F-003 | REVIEW HANDOFF | Push the final head, open the named PR, and start required CI. | Final head is pushed, PR is open, and required CI starts on that head. | Operator disposition authorizes this handoff without changing C06-F-001/C06-F-002 assertions; review owns final-head timing/topology evidence and terminal CI. | The PR description will use this PRD and include the exact command results and clean-base SHA; CI start will be confirmed once after PR creation. |
 
 ### Verdict
 
-BLOCKED
+REVIEW HANDOFF WITH OPERATOR-WAIVED PRE-EXISTING BLOCKERS
 
 ### Delta-plan request
 
 - Affected behavior and criterion: base-provider integrated parity,
-  `PROV-REPEAT-004`, `PROV-LONG-005`, and the dependent
+  `PROV-REPEAT-004` and `PROV-LONG-005` remain truthfully blocked by
+  pre-existing provider/runtime defects. The operator has waived those two
+  criteria as blocked for this PR and authorized the dependent
   `PR-CI-006`/implementation delivery handoff.
 - Root-cause evidence or remaining uncertainty: both the mixed-refusal
   assertion and the Claude/Codex template failures reproduce on the clean
@@ -472,9 +490,10 @@ BLOCKED
   characterized public witness.
 - Smallest recommended correction/prerequisite: have the owning provider/
   runtime lane either correct and verify the pre-existing refusal/template
-  behavior or provide an operator-authorized exception/delta for these
-  already-failing base rows. Then rerun the exact once, repeat, and tagged
-  commands and proceed to the PR-CI-006 handoff.
-- Dependencies and retest scope: provider/runtime owner disposition;
-  rerun the full default package once and three times, the tagged package,
-  the retained cleanup selector, and the final-head PR package coverage.
+  behavior in a provider/runtime-owned lane. No assertion change is authorized
+  or required for this PR; review records the blocked criteria as
+  waived-as-blocked and owns terminal CI and package timing.
+- Dependencies and retest scope: the operator disposition is the prerequisite
+  for handoff. The exact default once/repeat and tagged commands were run on
+  rebased head `69a4b414e3`; review-owned final-head Backend Functional Coverage
+  and topology evidence remain in the PR conversation.
