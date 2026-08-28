@@ -93,6 +93,9 @@ func BuildOperatorSettingsRootGoInventory(root string) (OperatorSettingsRootGoIn
 	if err := validateOperatorSettingsRootGoInventory(inventory); err != nil {
 		return OperatorSettingsRootGoInventory{}, fmt.Errorf("validate candidate: %w", err)
 	}
+	if err := verifyOperatorSettingsRootGoProductionPolicy(inventory); err != nil {
+		return OperatorSettingsRootGoInventory{}, fmt.Errorf("validate production policy: %w", err)
+	}
 	return inventory, nil
 }
 
@@ -222,6 +225,9 @@ func BuildProviderSessionsRootGoInventory(root string) (ProviderSessionsRootGoIn
 	if err := validateProviderSessionsRootGoInventory(inventory); err != nil {
 		return ProviderSessionsRootGoInventory{}, fmt.Errorf("validate candidate: %w", err)
 	}
+	if err := verifyProviderSessionsRootGoProductionPolicy(inventory); err != nil {
+		return ProviderSessionsRootGoInventory{}, fmt.Errorf("validate production policy: %w", err)
+	}
 	return inventory, nil
 }
 
@@ -311,50 +317,6 @@ func WriteSnapshotCandidates(root string, candidates SnapshotCandidates) error {
 		}
 	}
 	return nil
-}
-
-// WriteOperatorSettingsRootGoInventory writes one validated S-05 candidate.
-func WriteOperatorSettingsRootGoInventory(root string, inventory OperatorSettingsRootGoInventory) error {
-	payload, err := marshalSnapshot("operator settings root go inventory", inventory, func() error {
-		return validateOperatorSettingsRootGoInventory(inventory)
-	})
-	if err != nil {
-		return err
-	}
-	return writeSnapshot(root, OperatorSettingsRootGoInventoryRelativePath, payload)
-}
-
-// WriteOperatorSettingsTopLevelInventory writes one validated S-06 candidate.
-func WriteOperatorSettingsTopLevelInventory(root string, inventory OperatorSettingsTopLevelInventory) error {
-	payload, err := marshalSnapshot("operator settings top-level inventory", inventory, func() error {
-		return validateOperatorSettingsTopLevelInventory(inventory)
-	})
-	if err != nil {
-		return err
-	}
-	return writeSnapshot(root, OperatorSettingsTopLevelInventoryRelativePath, payload)
-}
-
-// WriteProviderSessionsRootGoInventory writes one validated S-07 candidate.
-func WriteProviderSessionsRootGoInventory(root string, inventory ProviderSessionsRootGoInventory) error {
-	payload, err := marshalSnapshot("provider sessions root go inventory", inventory, func() error {
-		return validateProviderSessionsRootGoInventory(inventory)
-	})
-	if err != nil {
-		return err
-	}
-	return writeSnapshot(root, ProviderSessionsRootGoInventoryRelativePath, payload)
-}
-
-// WriteProviderSessionsTopLevelInventory writes one validated S-08 candidate.
-func WriteProviderSessionsTopLevelInventory(root string, inventory ProviderSessionsTopLevelInventory) error {
-	payload, err := marshalSnapshot("provider sessions top-level inventory", inventory, func() error {
-		return validateProviderSessionsTopLevelInventory(inventory)
-	})
-	if err != nil {
-		return err
-	}
-	return writeSnapshot(root, ProviderSessionsTopLevelInventoryRelativePath, payload)
 }
 
 type snapshotWrite struct {

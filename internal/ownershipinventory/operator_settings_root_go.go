@@ -123,6 +123,39 @@ func VerifyOperatorSettingsRootGoInventory(root string) error {
 	if !slices.Equal(live, committed) {
 		return fmt.Errorf("operator settings root .go files drift: live=%v committed=%v", live, committed)
 	}
+	if err := verifyOperatorSettingsRootGoProductionPolicy(inventory); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyOperatorSettingsRootGoProductionPolicy(inventory OperatorSettingsRootGoInventory) error {
+	for _, file := range inventory.Files {
+		kind, foldTarget, ok := ClassifyOperatorSettingsRootContractFile(file.File)
+		if !ok {
+			return fmt.Errorf("operator settings root go inventory file %q is unclassified by production ownership policy", file.File)
+		}
+		wantClassification, err := operatorSettingsRootGoSnapshotClassification(file.File, kind, foldTarget)
+		if err != nil {
+			return err
+		}
+		if file.Classification != wantClassification {
+			return fmt.Errorf("operator settings root go inventory file %q classification %q disagrees with production ownership policy classification %q", file.File, file.Classification, wantClassification)
+		}
+		if kind == "excess_fold" {
+			if file.FoldDestination != foldTarget.Destination {
+				return fmt.Errorf("operator settings root go inventory file %q foldDestination = %q, want production policy destination %q", file.File, file.FoldDestination, foldTarget.Destination)
+			}
+			if file.Cluster != foldTarget.Cluster {
+				return fmt.Errorf("operator settings root go inventory file %q cluster = %q, want production policy cluster %q", file.File, file.Cluster, foldTarget.Cluster)
+			}
+		}
+	}
+	committed := operatorSettingsRootGoFileNames(inventory.Files)
+	want := OperatorSettingsRootContractInventory()
+	if !slices.Equal(committed, want) {
+		return fmt.Errorf("operator settings root contract inventory drift: json=%v go=%v", committed, want)
+	}
 	return nil
 }
 

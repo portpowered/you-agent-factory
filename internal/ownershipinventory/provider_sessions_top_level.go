@@ -155,6 +155,15 @@ func VerifyProviderSessionsTopLevelInventory(root string) error {
 	if err := validateProviderSessionsTopLevelInventory(inventory); err != nil {
 		return err
 	}
+	for _, child := range inventory.Children {
+		wantClassification, ok := providerSessionsTopLevelSnapshotClassification(child.Directory)
+		if !ok {
+			return fmt.Errorf("provider sessions top-level inventory directory %q is unclassified by production ownership policy", child.Directory)
+		}
+		if child.Classification != wantClassification {
+			return fmt.Errorf("provider sessions top-level inventory directory %q classification %q disagrees with production ownership policy classification %q", child.Directory, child.Classification, wantClassification)
+		}
+	}
 	live, err := ListProviderSessionsTopLevelDirectories(root)
 	if err != nil {
 		return err

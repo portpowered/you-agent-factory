@@ -154,6 +154,34 @@ func VerifyProviderSessionsRootGoInventory(root string) error {
 	if !slices.Equal(live, committed) {
 		return fmt.Errorf("provider sessions root .go files drift: live=%v committed=%v", live, committed)
 	}
+	if err := verifyProviderSessionsRootGoProductionPolicy(inventory); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyProviderSessionsRootGoProductionPolicy(inventory ProviderSessionsRootGoInventory) error {
+	for _, file := range inventory.Files {
+		kind, foldTarget, ok := ClassifyProviderSessionsRootContractFile(file.File)
+		if !ok {
+			return fmt.Errorf("provider sessions root go inventory file %q is unclassified by production ownership policy", file.File)
+		}
+		wantClassification, err := providerSessionsRootGoSnapshotClassification(file.File, kind, foldTarget)
+		if err != nil {
+			return err
+		}
+		if file.Classification != wantClassification {
+			return fmt.Errorf("provider sessions root go inventory file %q classification %q disagrees with production ownership policy classification %q", file.File, file.Classification, wantClassification)
+		}
+		if kind == "excess_fold" && file.FoldDestination != foldTarget.Destination {
+			return fmt.Errorf("provider sessions root go inventory file %q foldDestination = %q, want production policy destination %q", file.File, file.FoldDestination, foldTarget.Destination)
+		}
+	}
+	committed := providerSessionsRootGoFileNames(inventory.Files)
+	want := ProviderSessionsRootContractInventory()
+	if !slices.Equal(committed, want) {
+		return fmt.Errorf("provider sessions root contract inventory drift: json=%v go=%v", committed, want)
+	}
 	return nil
 }
 
