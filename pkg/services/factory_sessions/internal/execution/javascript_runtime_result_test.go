@@ -51,6 +51,7 @@ func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
 
 func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
 	const mib = 1024 * 1024
+	const fixtureMaxBytes = 4 * 1024
 	for _, limit := range []struct {
 		name                    string
 		maxBytes, wantThreshold int
@@ -59,10 +60,11 @@ func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
 		{"larger 128 MiB", 128 * mib, 100 * mib},
 	} {
 		t.Run(limit.name, func(t *testing.T) {
-			threshold := durableSessionSnapshotWarningThresholdForMax(limit.maxBytes)
-			if int(threshold) != limit.wantThreshold {
-				t.Fatalf("warning threshold = %d, want %d", threshold, limit.wantThreshold)
+			productionThreshold := durableSessionSnapshotWarningThresholdForMax(limit.maxBytes)
+			if int(productionThreshold) != limit.wantThreshold {
+				t.Fatalf("warning threshold = %d, want %d", productionThreshold, limit.wantThreshold)
 			}
+			fixtureThreshold := durableSessionSnapshotWarningThresholdForMax(fixtureMaxBytes)
 			for _, boundary := range []struct {
 				name  string
 				delta int
@@ -75,16 +77,18 @@ func TestPersistSessionSnapshotWarnsBeforeConfiguredHardLimit(t *testing.T) {
 						persistence:              store,
 						persistenceWarningLogger: zap.New(core),
 					}
-					service.persistedSnapshotMaxBytes = limit.maxBytes
-					state := exactEncodedSizeWarningState(t, int(threshold)+boundary.delta)
+					service.persistedSnapshotMaxBytes = fixtureMaxBytes
+					targetBytes := int(fixtureThreshold) + boundary.delta
+					state := exactEncodedSizeWarningState(t, targetBytes)
 					if err := service.persistSessionSnapshot(state); err != nil {
 						t.Fatalf("persistSessionSnapshot: %v", err)
 					}
-					if got := len(store.payload); got != int(threshold)+boundary.delta {
-						t.Fatalf("persisted snapshot bytes = %d, want %d", got, int(threshold)+boundary.delta)
+					if got := len(store.payload); got != targetBytes {
+						t.Fatalf("persisted snapshot bytes = %d, want %d", got, targetBytes)
 					}
+					t.Logf("snapshot topology: production_max_bytes=%d production_threshold_bytes=%d fixture_max_bytes=%d fixture_threshold_bytes=%d target_bytes=%d persisted_bytes=%d", limit.maxBytes, productionThreshold, fixtureMaxBytes, fixtureThreshold, targetBytes, len(store.payload))
 					entries := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").All()
-					assertSnapshotWarning(t, entries, boundary.warn, threshold)
+					assertSnapshotWarning(t, entries, boundary.warn, fixtureThreshold)
 				})
 			}
 		})
@@ -116,13 +120,16 @@ func assertSnapshotWarning(t *testing.T, entries []observer.LoggedEntry, wantWar
 func TestPersistSessionSnapshotWarningDoesNotHideSaveFailure(t *testing.T) {
 	wantErr := errors.New("checkpoint unavailable")
 	core, observed := observer.New(zap.WarnLevel)
-	const maxBytes = 4096
+	const maxBytes = 4 * 1024
 	service := &JavaScriptRuntimeService{
 		persistence:              &runtimeRecordingStore{saveErr: wantErr},
 		persistenceWarningLogger: zap.New(core),
 	}
 	service.persistedSnapshotMaxBytes = maxBytes
-	if err := service.persistSessionSnapshot(exactEncodedSizeWarningState(t, int(durableSessionSnapshotWarningThresholdForMax(maxBytes)))); !errors.Is(err, wantErr) {
+	threshold := durableSessionSnapshotWarningThresholdForMax(maxBytes)
+	state := exactEncodedSizeWarningState(t, int(threshold))
+	t.Logf("snapshot topology: fixture_max_bytes=%d fixture_threshold_bytes=%d target_bytes=%d save_failure=true", maxBytes, threshold, threshold)
+	if err := service.persistSessionSnapshot(state); !errors.Is(err, wantErr) {
 		t.Fatalf("persistSessionSnapshot error = %v, want %v", err, wantErr)
 	}
 	if got := observed.FilterMessage("durable Factory Session snapshot reached the size warning threshold").Len(); got != 1 {
