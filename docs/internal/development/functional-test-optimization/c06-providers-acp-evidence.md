@@ -95,8 +95,10 @@ single fixture in `shared_process_test.go`. Twenty scenario subtests cover the
 success/failure baseline, executor and legacy compatibility, configured ACP,
 self-cancellation, response and Worker Session history, partial failure,
 authentication, model and resource inputs, BTRC success/failure parity,
-content forwarding, invalid/catalog/init command behavior, JavaScript ACP and
-MockWorkers, and mixed ACP/SCRIPT_WRAP routing. The exact existing assertions
+content forwarding, invalid/catalog/init command behavior, JavaScript ACP, and
+mixed ACP/SCRIPT_WRAP routing. The ACP-selected MockWorkers compatibility
+assertion is owned by the Workers mock cell at
+`tests/functional/workers/mock/javascript_acp_test.go`. The exact existing assertions
 remain at their public boundaries: terminal Work state, Factory Events and
 ordering, Provider Session identity, response-event ordering and provenance,
 Worker Session replay, typed authentication/generic/cancellation errors,
@@ -111,8 +113,8 @@ verified the loopback listener was unreachable. Each subtest receives its own
 fixture directory and restores its provider-mode environment through
 `t.Setenv`; CLI/catalog cases use separate temporary operator homes, and the
 fixture cleanup removes the configured integration. The controlled command
-factory observed 17 ACP peer starts: catalog-only and MockWorkers cases
-correctly contributed zero, while each live ACP witness contributed its
+factory observed 17 ACP peer starts: the catalog-only case correctly
+contributed zero, while each live ACP witness contributed its
 expected peer. The injected legacy provider counter remained unchanged for
 ACP-only cases and increased exactly once for the mixed route case.
 
@@ -310,8 +312,8 @@ output; a top-level row with no child list has one parent execution record.
 | 19 | `TestBTRCP0ACPTargetSuccessCharacterization` (`btrc_p0_characterization_test.go`) | ACP-016 | One raw peer; exact Factory Event order, Work/session projection, Provider Session, and response terminal. | shareable-with-mock; migrate as parity witness |
 | 20 | `TestBTRCP0ACPTargetProtocolFailureCharacterization` (`btrc_p0_characterization_test.go`) | ACP-017 | One raw peer; exact failure event order, typed failure, failed Work/session projection, and response error. | shareable-with-mock; migrate as parity witness |
 | 21 | `TestRootBuiltACPCommandsRejectInvalidMutationsWithoutPersistingSettings` (`catalog_cli_negative_test.go`) | `missing_name`, `non_canonical_name`, `unsupported_transport`, `empty_command`, `missing_delete_name` -> ACP-018..022 | One root, five command subcases, no provider command; invalid mutations leave settings absent. | shareable; migrate |
-| 22 | `TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry` (`catalog_cli_test.go`) | ACP-023 | One root and repeated `Process.Execute` calls over one settings home; no provider process. | shareable; migrate |
-| 23 | `TestYouInitMaterializesPackagedACPDefaultsAndPreservesCustomEntries` (`catalog_cli_test.go`) | ACP-024 | One root and repeated init/add commands; packaged defaults and custom entry persist without duplication. | shareable; migrate |
+| 22 | `TestACPSharedProcess` (`shared_process_test.go`, `catalog-persistence` scenario) | ACP-023 | One shared root and repeated public catalog operations over one settings home; no provider process. | shareable; migrate |
+| 23 | `TestACPSharedProcess` (`shared_process_test.go`, `catalog-init-idempotency` scenario) | ACP-024 | One shared root and repeated init/add commands; packaged defaults and custom entry persist without duplication. | shareable; migrate |
 | 24 | `TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection` (`daemon_concurrency_test.go`) | ACP-025 | One daemon root, one held raw peer, two prompts; connection serialization is the witness. | isolated-with-reason: connection serialization; retain |
 | 25 | `TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt` (`daemon_crash_recovery_test.go`) | ACP-026 | One daemon root, two raw peers; intentional crash, failed first execution, recovered second execution, two starts. | isolated-with-reason: crash and replacement; retain |
 | 26 | `TestProvidersACPRetiresDisconnectedConnectionBeforeReuse` (`daemon_crash_recovery_test.go`) | ACP-027 | One daemon root, two raw peers; response-ready, stdout disconnect, retirement, and replacement are asserted. | isolated-with-reason: connection retirement; retain |
@@ -321,7 +323,7 @@ output; a top-level row with no child list has one parent execution record.
 | 30 | `TestPinnedACPSDKGoldenManifestIsCompleteAndParseable` (`golden_fixture_test.go`) | ACP-031, ACP-054 | Root-free tracked assets; checksums, JSON, uniqueness, and manifest counts. | shareable; retain |
 | 31 | `TestACPGoldenRPCPeerProcess` (`golden_rpc_peer_test.go`) | ACP-052 | Child-process target is inert without its parent golden mode; parent tests own wire assertions. | isolated-with-reason: helper-process boundary; retain as helper |
 | 32 | `TestJavaScriptFactoryAgentRunRoutesExecutorProviderThroughACP` (`javascript_factory_run_test.go`) | ACP-008 | One root-built `Process.Execute`, one raw peer, JavaScript output, route, and Provider Session. | shareable-with-mock; migrate |
-| 33 | `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` (`javascript_factory_run_test.go`) | ACP-009 | One root-built `Process.Execute`; MockWorkers path intentionally makes zero live provider calls. | shareable-with-mock; migrate without weakening the assertion |
+| 33 | `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected` (`tests/functional/workers/mock/javascript_acp_test.go`) | ACP-009 | One root-built `Process.Execute`; the Workers mock cell's counted ACP command edge and provider command runner intentionally receive zero calls. | shareable-with-mock; moved to owning Workers mock cell without weakening the assertion |
 | 34 | `TestFactoryMixesACPAndScriptWrapWorkersWithoutCrossRouting` (`mixed_provider_factory_test.go`) | ACP-010 | One root-built Work run; one raw ACP peer and one injected legacy provider route complete independently. | shareable-with-mock; migrate |
 | 35 | `TestPackagedACPProfilesUseSharedConformanceBehavior` (`packaged_conformance_test.go`) | 20 profile children -> ACP-039; parent asset count -> ACP-038; one runtime execution -> ACP-040 | Twenty root-free fixture checks plus one root-built run with one raw peer and an allowlisted packaged command. | aggregate: shareable for ACP-038/039; isolated-with-reason for ACP-040 command projection; retain/migrate only the eligible asset portion |
 | 36 | `TestPackagedACPUnexpectedCommand` (`packaged_conformance_test.go`) | ACP-041 | Empty child target used when the command allowlist is violated; it must not launch an ambient executable. | isolated-with-reason: helper/process command boundary; retain as helper |
@@ -357,7 +359,7 @@ cleanup decisions rather than silently invented new tests.
 | ACP-006 | Given an unknown ACP provider is named; when Work runs; then it fails before ACP or fallback start. | Provider selection before process start; isolated-with-reason: pre-start boundary. | retain |
 | ACP-007 | Given `SCRIPT_WRAP` is selected while ACP exists; when Work runs; then legacy runs once and ACP starts zero times. | Root plus injected legacy edge and zero ACP start counter; shareable-with-mock. | migrate |
 | ACP-008 | Given a JavaScript Factory selects ACP; when `Process.Execute` runs it; then output contains completion and Provider Session evidence. | Root, JavaScript public process, controlled raw peer; shareable-with-mock. | migrate |
-| ACP-009 | Given a JavaScript Factory uses MockWorkers with ACP selected; when it runs; then it succeeds with zero live provider calls. | Root and existing MockWorkers behavior, zero live process/runner calls; shareable-with-mock. | migrate without weakening assertion |
+| ACP-009 | Given a JavaScript Factory uses MockWorkers with ACP selected; when it runs; then it succeeds with zero live provider calls. | Root and existing MockWorkers behavior in `tests/functional/workers/mock/javascript_acp_test.go`; counted ACP command edge and provider runner both remain at zero; shareable-with-mock. | moved to owning Workers mock cell without weakening assertion |
 | ACP-010 | Given one Factory has ACP and SCRIPT_WRAP Work; when both dispatch; then both complete and each route is called once. | Root, one controlled ACP peer, one injected legacy edge; shareable-with-mock. | migrate |
 | ACP-011 | Given a controlled peer emits supported updates; when Work runs; then response events and Worker Session records preserve order, provenance, Provider Session identity, and replay separation. | Raw peer response stream plus public Worker Session/Factory Event observations; shareable-with-mock. | migrate |
 | ACP-012 | Given a peer emits partial output then fails; when Work runs; then Work fails with one non-empty terminal ERROR and no false success. | Raw peer partial update/RPC failure plus public failed Work; shareable-with-mock. | migrate |

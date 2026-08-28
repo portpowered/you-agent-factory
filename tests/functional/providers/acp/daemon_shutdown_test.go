@@ -15,6 +15,7 @@ func TestProvidersShutdownCancelsActivePromptAndJoinsACPProcess(t *testing.T) {
 	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", signal)
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 	executionDone := make(chan error, 1)
 	go func() {
 		_, executeErr := invokeACPDaemonWorkflow(t, server, "shutdown", singleACPAgentWorkflow)

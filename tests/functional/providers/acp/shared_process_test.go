@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const acpSharedProcessTimeout = 20 * time.Second
@@ -33,6 +34,7 @@ func TestACPSharedProcess(t *testing.T) {
 	t.Setenv("YOU_TEST_ACP_SESSION_ID", "")
 	fixture := newACPSharedProcessFixture(t)
 	runACPSharedEligibleBehavior(t, fixture)
+	functionalevidence.Covers(t, "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list")
 }
 
 type acpSharedProcessFixture struct {

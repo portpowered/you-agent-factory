@@ -46,7 +46,6 @@ func runACPSharedEligibleBehavior(t *testing.T, fixture *acpSharedProcessFixture
 		{"catalog-persistence", runACPSharedCatalogPersistence},
 		{"catalog-init-idempotency", runACPSharedCatalogInit},
 		{"javascript-acp-run", runACPSharedJavaScriptACP},
-		{"javascript-mock-workers", runACPSharedJavaScriptMockWorkers},
 		{"mixed-acp-and-legacy-routing", runACPSharedMixedRouting},
 	}
 	for _, scenario := range scenarios {
@@ -390,23 +389,6 @@ func runACPSharedJavaScriptACP(t *testing.T, fixture *acpSharedProcessFixture) {
 	if !strings.Contains(inputs.Stdout(), "ACP root execution COMPLETE") ||
 		!strings.Contains(inputs.Stdout(), `"providerSessionRef":"acp-session-functional-1"`) {
 		t.Fatalf("JavaScript ACP result omitted content/session evidence: %s", inputs.Stdout())
-	}
-}
-
-func runACPSharedJavaScriptMockWorkers(t *testing.T, fixture *acpSharedProcessFixture) {
-	t.Helper()
-	dir := writeACPJavaScriptFactory(t)
-	inputs := sharedACPJavaScriptInputs(t, fixture, dir, "you", "run", "--factory", "./acp.js", "--with-mock-workers", "--no-record")
-	starts := fixture.peerStarts.Load()
-	legacyCalls := fixture.legacy.calls.Load()
-	if err := fixture.process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(mock JavaScript Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-	if fixture.peerStarts.Load() != starts || fixture.legacy.calls.Load() != legacyCalls {
-		t.Fatalf("mock execution started live providers ACP=%d legacy=%d, want zero", fixture.peerStarts.Load()-starts, fixture.legacy.calls.Load()-legacyCalls)
-	}
-	if !strings.Contains(inputs.Stdout(), " completed (SUCCEEDED).") {
-		t.Fatalf("mock JavaScript Factory did not succeed: %s", inputs.Stdout())
 	}
 }
 

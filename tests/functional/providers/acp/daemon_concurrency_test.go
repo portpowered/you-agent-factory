@@ -23,6 +23,7 @@ func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.
 
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 	results := make(chan struct {
 		response factoryapi.FactorySessionSyncExecutionResponse
 		err      error

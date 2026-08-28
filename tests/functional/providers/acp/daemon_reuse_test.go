@@ -14,6 +14,7 @@ func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing
 	t.Setenv(acpHelperEnvironment, "persistent")
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 
 	for attempt := 1; attempt <= 2; attempt++ {
 		result, executeErr := invokeACPDaemonWorkflow(t, server, "persistent-attempt-"+strconv.Itoa(attempt), singleACPAgentWorkflow)
@@ -32,6 +33,7 @@ func TestProvidersACPRejectsIncompatibleProtocolVersionAtStdioBoundary(t *testin
 	t.Setenv(acpHelperEnvironment, "version")
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 	result, executeErr := invokeACPDaemonWorkflow(t, server, "version-attempt", singleACPAgentWorkflow)
 	if executeErr != nil || result.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("version-incompatible execution = %#v, error = %v; want FAILED", result, executeErr)

@@ -19,6 +19,7 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 	t.Setenv("YOU_TEST_ACP_CRASH_MARKER", marker)
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 	first, err := invokeACPDaemonWorkflow(t, server, "crash", singleACPAgentWorkflow)
 	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("first execution = %#v, error = %v; want failed peer crash", first, err)
@@ -45,6 +46,7 @@ func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
 	t.Setenv(acpDisconnectReleaseEnvironment, releaseMarker)
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 
 	first, err := invokeACPDaemonWorkflow(t, server, "disconnect-first", singleACPAgentWorkflow)
 	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
