@@ -379,6 +379,53 @@ func factoryTargetReadinessFailure(
 	}
 }
 
+func normalizeFactoryTargetReadinessError(
+	observation factoryTargetReadinessObservation,
+	err error,
+	targetID, sessionID string,
+) *factoryTargetReadinessError {
+	var readinessErr *factoryTargetReadinessError
+	if errors.As(err, &readinessErr) {
+		return readinessErr
+	}
+	return &factoryTargetReadinessError{
+		Class:      factoryTargetReadinessTransient,
+		Operation:  factoryTargetReadinessOperation,
+		TargetID:   targetID,
+		SessionID:  sessionID,
+		LastResult: observation.Result,
+		Cause:      err,
+	}
+}
+
+func factoryTargetReadinessWaitFailure(
+	ctx, waitCtx context.Context,
+	lastObservation factoryTargetReadinessObservation,
+	firstFailure *factoryTargetReadinessError,
+	targetID, sessionID string,
+) (factoryTargetReadinessObservation, error) {
+	failureClass := factoryTargetReadinessDeadline
+	cause := waitCtx.Err()
+	if parentErr := ctx.Err(); parentErr != nil {
+		cause = parentErr
+		if errors.Is(parentErr, context.Canceled) {
+			failureClass = factoryTargetReadinessCanceled
+		}
+	}
+	lastResult := lastObservation.Result
+	if strings.TrimSpace(lastResult) == "" {
+		lastResult = firstFailure.LastResult
+	}
+	return lastObservation, &factoryTargetReadinessError{
+		Class:      failureClass,
+		Operation:  firstFailure.Operation,
+		TargetID:   targetID,
+		SessionID:  sessionID,
+		LastResult: lastResult,
+		Cause:      cause,
+	}
+}
+
 func waitForFactoryTargetReadiness(
 	ctx context.Context,
 	sessionID, targetID string,
@@ -417,17 +464,7 @@ func waitForFactoryTargetReadiness(
 		if err == nil {
 			return observation, nil
 		}
-		var readinessErr *factoryTargetReadinessError
-		if !errors.As(err, &readinessErr) {
-			readinessErr = &factoryTargetReadinessError{
-				Class:      factoryTargetReadinessTransient,
-				Operation:  factoryTargetReadinessOperation,
-				TargetID:   targetID,
-				SessionID:  sessionID,
-				LastResult: observation.Result,
-				Cause:      err,
-			}
-		}
+		readinessErr := normalizeFactoryTargetReadinessError(observation, err, targetID, sessionID)
 		if firstFailure == nil {
 			firstFailure = readinessErr
 		}
@@ -437,26 +474,14 @@ func waitForFactoryTargetReadiness(
 
 		select {
 		case <-waitCtx.Done():
-			failureClass := factoryTargetReadinessDeadline
-			cause := waitCtx.Err()
-			if parentErr := ctx.Err(); parentErr != nil {
-				cause = parentErr
-				if errors.Is(parentErr, context.Canceled) {
-					failureClass = factoryTargetReadinessCanceled
-				}
-			}
-			lastResult := lastObservation.Result
-			if strings.TrimSpace(lastResult) == "" {
-				lastResult = firstFailure.LastResult
-			}
-			return lastObservation, &factoryTargetReadinessError{
-				Class:      failureClass,
-				Operation:  firstFailure.Operation,
-				TargetID:   targetID,
-				SessionID:  sessionID,
-				LastResult: lastResult,
-				Cause:      cause,
-			}
+			return factoryTargetReadinessWaitFailure(
+				ctx,
+				waitCtx,
+				lastObservation,
+				firstFailure,
+				targetID,
+				sessionID,
+			)
 		case <-ticker.C:
 		}
 	}
