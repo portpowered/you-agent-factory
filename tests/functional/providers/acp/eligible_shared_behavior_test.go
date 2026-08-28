@@ -471,35 +471,22 @@ func waitForACPSharedPeerExits(t *testing.T, fixture *acpSharedProcessFixture) {
 	if want == 0 {
 		return
 	}
-	confirmed := fixture.peerExitsSeen.Load()
+	releaseACPSharedPeers(t, fixture, want)
 	_, err := support.WaitForObservation(
 		sharedACPScenarioTimeout,
 		func() (int32, error) {
-			data, readErr := os.ReadFile(fixture.peerExits)
-			if os.IsNotExist(readErr) {
-				return 0, nil
-			}
+			pids, readErr := readACPSharedPeerPIDs(fixture)
 			if readErr != nil {
 				return 0, readErr
 			}
-			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-			if confirmed > int32(len(lines)) {
-				return confirmed, fmt.Errorf("ACP helper exit observations regressed from %d to %d", confirmed, len(lines))
-			}
-			for _, line := range lines[confirmed:] {
-				if strings.TrimSpace(line) == "" {
-					continue
-				}
-				pid, parseErr := strconv.Atoi(strings.TrimSpace(line))
-				if parseErr != nil || pid <= 0 {
-					return confirmed, fmt.Errorf("invalid ACP helper PID %q", line)
-				}
+			var confirmed int32
+			for _, pid := range pids {
 				hasExited, processErr := acpHelperProcessExited(pid)
 				if processErr != nil {
 					return confirmed, fmt.Errorf("inspect ACP helper PID %d: %w", pid, processErr)
 				}
 				if !hasExited {
-					return confirmed, nil
+					continue
 				}
 				confirmed++
 			}
@@ -508,9 +495,163 @@ func waitForACPSharedPeerExits(t *testing.T, fixture *acpSharedProcessFixture) {
 		func(got int32) bool { return got >= want },
 	)
 	if err != nil {
-		t.Fatalf("wait for shared ACP peer exits: %v; want at least %d exits", err, want)
+		startPIDs, startErr := readACPHelperPIDs(fixture.peerStartMarker)
+		readyRecords, readyErr := readACPHelperReadyRecords(fixture.peerReady)
+		exitPIDs, exitErr := readACPHelperPIDs(fixture.peerExits)
+		t.Fatalf("wait for shared ACP peer exits: %v; want at least %d exits; starts=%#v (err=%v); ready=%#v (err=%v); exits=%#v (err=%v)", err, want, startPIDs, startErr, readyRecords, readyErr, exitPIDs, exitErr)
 	}
-	fixture.peerExitsSeen.Store(confirmed)
+}
+
+func readACPSharedPeerPIDs(fixture *acpSharedProcessFixture) ([]int, error) {
+	startPIDs, err := readACPHelperPIDs(fixture.peerStartMarker)
+	if err != nil {
+		return nil, fmt.Errorf("read ACP helper starts: %w", err)
+	}
+	readyRecords, err := readACPHelperReadyRecords(fixture.peerReady)
+	if err != nil {
+		return nil, fmt.Errorf("read ACP helper readiness: %w", err)
+	}
+	exitPIDs, err := readACPHelperPIDs(fixture.peerExits)
+	if err != nil {
+		return nil, fmt.Errorf("read ACP helper exits: %w", err)
+	}
+	seen := make(map[int]struct{}, len(startPIDs)+len(readyRecords)+len(exitPIDs))
+	pids := make([]int, 0, len(startPIDs)+len(readyRecords)+len(exitPIDs))
+	for _, pid := range startPIDs {
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+		pids = append(pids, pid)
+	}
+	for _, record := range readyRecords {
+		if _, ok := seen[record.pid]; ok {
+			continue
+		}
+		seen[record.pid] = struct{}{}
+		pids = append(pids, record.pid)
+	}
+	for _, pid := range exitPIDs {
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+		pids = append(pids, pid)
+	}
+	return pids, nil
+}
+
+func releaseACPSharedPeers(t *testing.T, fixture *acpSharedProcessFixture, want int32) {
+	t.Helper()
+	readySeen := fixture.peerReadySeen.Load()
+	_, err := support.WaitForObservation(
+		sharedACPScenarioTimeout,
+		func() (int32, error) {
+			readyRecords, readyErr := readACPHelperReadyRecords(fixture.peerReady)
+			if readyErr != nil {
+				return 0, readyErr
+			}
+			if readySeen > int32(len(readyRecords)) {
+				return readySeen, fmt.Errorf("ACP helper readiness observations regressed from %d to %d", readySeen, len(readyRecords))
+			}
+			for _, record := range readyRecords[readySeen:] {
+				file, openErr := os.OpenFile(fixture.peerReady, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+				if openErr != nil {
+					return readySeen, fmt.Errorf("release ACP helper %s: %w", record.token, openErr)
+				}
+				_, writeErr := fmt.Fprintf(file, "release %s\n", record.token)
+				closeErr := file.Close()
+				if writeErr != nil {
+					return readySeen, fmt.Errorf("release ACP helper %s: %w", record.token, writeErr)
+				}
+				if closeErr != nil {
+					return readySeen, fmt.Errorf("close ACP helper release for %s: %w", record.token, closeErr)
+				}
+				readySeen++
+			}
+
+			startPIDs, startErr := readACPHelperPIDs(fixture.peerStartMarker)
+			if startErr != nil {
+				return readySeen, startErr
+			}
+			if int32(len(startPIDs)) >= want {
+				return want, nil
+			}
+			return int32(len(exitPIDs)), nil
+		},
+		func(got int32) bool { return got >= want },
+	)
+	if err != nil {
+		startPIDs, startErr := readACPHelperPIDs(fixture.peerStartMarker)
+		readyRecords, readyErr := readACPHelperReadyRecords(fixture.peerReady)
+		exitPIDs, exitErr := readACPHelperPIDs(fixture.peerExits)
+		t.Fatalf("wait for shared ACP peer readiness or exit: %v; want at least %d peers; starts=%#v (err=%v); ready=%#v (err=%v); exits=%#v (err=%v)", err, want, startPIDs, startErr, readyRecords, readyErr, exitPIDs, exitErr)
+	}
+	fixture.peerReadySeen.Store(readySeen)
+}
+
+type acpHelperReadyRecord struct {
+	token string
+	pid   int
+}
+
+func readACPHelperReadyRecords(path string) ([]acpHelperReadyRecord, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	contents := strings.TrimSpace(string(data))
+	if contents == "" {
+		return nil, nil
+	}
+	lines := strings.Split(contents, "\n")
+	records := make([]acpHelperReadyRecord, 0, len(lines))
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "release" {
+			continue
+		}
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("invalid ACP helper readiness record %q", line)
+		}
+		pid, pidErr := strconv.Atoi(fields[1])
+		if fields[0] == "" || pidErr != nil || pid <= 0 {
+			return nil, fmt.Errorf("invalid ACP helper readiness record %q", line)
+		}
+		records = append(records, acpHelperReadyRecord{token: fields[0], pid: pid})
+	}
+	return records, nil
+}
+
+func readACPHelperPIDs(path string) ([]int, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	contents := strings.TrimSpace(string(data))
+	if contents == "" {
+		return nil, nil
+	}
+	lines := strings.Split(contents, "\n")
+	pids := make([]int, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		pid, parseErr := strconv.Atoi(line)
+		if parseErr != nil || pid <= 0 {
+			return nil, fmt.Errorf("invalid ACP helper PID %q", line)
+		}
+		pids = append(pids, pid)
+	}
+	return pids, nil
 }
 
 func sharedACPSubmitRequest(name, title string) factoryapi.SubmitWorkRequest {

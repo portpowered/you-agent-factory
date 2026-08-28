@@ -122,6 +122,9 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
+			if err := holdACPHelperUntilReleased(); err != nil {
+				return err
+			}
 			if p.mode == "package-conformance" {
 				return waitForPackageConformanceRelease()
 			}

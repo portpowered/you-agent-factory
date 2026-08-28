@@ -36,20 +36,22 @@ func TestACPSharedProcess(t *testing.T) {
 }
 
 type acpSharedProcessFixture struct {
-	process       support.ApplicationProcess
-	command       *support.ProcessCommand
-	api           *support.ProcessAPIServer
-	baseURL       string
-	homeDir       string
-	peerExits     string
-	legacy        *legacyProvider
-	rootBuilds    atomic.Int32
-	peerStarts    atomic.Int32
-	peerExitsSeen atomic.Int32
-	sessionMu     sync.Mutex
-	opened        map[string]struct{}
-	closed        map[string]struct{}
-	closeOnce     sync.Once
+	process         support.ApplicationProcess
+	command         *support.ProcessCommand
+	api             *support.ProcessAPIServer
+	baseURL         string
+	homeDir         string
+	peerStartMarker string
+	peerExits       string
+	peerReady       string
+	legacy          *legacyProvider
+	rootBuilds      atomic.Int32
+	peerStarts      atomic.Int32
+	peerReadySeen   atomic.Int32
+	sessionMu       sync.Mutex
+	opened          map[string]struct{}
+	closed          map[string]struct{}
+	closeOnce       sync.Once
 }
 
 type acpSharedSession struct {
@@ -71,18 +73,24 @@ func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 	t.Helper()
 	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	homeDir := t.TempDir()
+	peerStarts := filepath.Join(t.TempDir(), "peer-starts")
 	peerExits := filepath.Join(t.TempDir(), "peer-exits")
+	peerReady := filepath.Join(t.TempDir(), "peer-ready")
+	t.Setenv(acpHelperStartMarkerEnvironment, peerStarts)
 	t.Setenv(acpHelperExitMarkerEnvironment, peerExits)
+	t.Setenv(acpHelperReadyMarkerEnvironment, peerReady)
 	installSharedACPIntegration(t, homeDir)
 	api := support.NewProcessAPIServer()
 	legacy := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
 	fixture := &acpSharedProcessFixture{
-		api:       api,
-		homeDir:   homeDir,
-		peerExits: peerExits,
-		legacy:    legacy,
-		opened:    make(map[string]struct{}),
-		closed:    make(map[string]struct{}),
+		api:             api,
+		homeDir:         homeDir,
+		peerStartMarker: peerStarts,
+		peerExits:       peerExits,
+		peerReady:       peerReady,
+		legacy:          legacy,
+		opened:          make(map[string]struct{}),
+		closed:          make(map[string]struct{}),
 	}
 
 	fixture.rootBuilds.Add(1)

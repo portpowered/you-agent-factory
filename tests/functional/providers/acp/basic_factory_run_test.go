@@ -28,7 +28,9 @@ const (
 	acpDisconnectReadyEnvironment           = "YOU_TEST_ACP_DISCONNECT_READY"
 	acpDisconnectReleaseEnvironment         = "YOU_TEST_ACP_DISCONNECT_RELEASE"
 	acpPackageConformanceReleaseEnvironment = "YOU_TEST_ACP_PACKAGE_CONFORMANCE_RELEASE"
+	acpHelperStartMarkerEnvironment         = "YOU_TEST_ACP_HELPER_START_MARKER"
 	acpHelperExitMarkerEnvironment          = "YOU_TEST_ACP_HELPER_EXIT_MARKER"
+	acpHelperReadyMarkerEnvironment         = "YOU_TEST_ACP_HELPER_READY_MARKER"
 )
 
 // TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
@@ -294,20 +296,21 @@ func TestACPAgentHelperProcess(t *testing.T) {
 	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" && mode != "shared-spine" {
 		return
 	}
+	recordACPHelperPID(acpHelperStartMarkerEnvironment)
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
-		recordACPHelperPID()
+		recordACPHelperPID(acpHelperExitMarkerEnvironment)
 		os.Exit(2)
 	}
-	recordACPHelperPID()
+	recordACPHelperPID(acpHelperExitMarkerEnvironment)
 	os.Exit(0)
 }
 
 // recordACPHelperPID is enabled only by the shared-process witness. Its
 // append-only marker gives the parent the child identity needed to observe the
 // actual OS process boundary before reusing the provider integration.
-func recordACPHelperPID() {
-	marker := strings.TrimSpace(os.Getenv(acpHelperExitMarkerEnvironment))
+func recordACPHelperPID(environment string) {
+	marker := strings.TrimSpace(os.Getenv(environment))
 	if marker == "" {
 		return
 	}
@@ -318,4 +321,49 @@ func recordACPHelperPID() {
 	}
 	_, _ = file.WriteString(strconv.Itoa(os.Getpid()) + "\n")
 	_ = file.Close()
+}
+
+// holdACPHelperUntilReleased keeps a shared one-shot peer alive after it has
+// flushed a prompt response. The parent observes the terminal Work result,
+// then releases this exact helper before it waits for process exit.
+// Without this checkpoint, the child can exit while the ACP SDK is still
+// draining the prompt's notifications and turn a valid response into a
+// transport failure.
+func holdACPHelperUntilReleased() error {
+	readyMarker := strings.TrimSpace(os.Getenv(acpHelperReadyMarkerEnvironment))
+	if strings.TrimSpace(os.Getenv(acpHelperExitMarkerEnvironment)) == "" || readyMarker == "" {
+		return nil
+	}
+
+	pid := strconv.Itoa(os.Getpid())
+	token := fmt.Sprintf("%s-%d", pid, time.Now().UnixNano())
+	file, err := os.OpenFile(readyMarker, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("record ACP helper readiness: %w", err)
+	}
+	if _, err := fmt.Fprintf(file, "%s %s\n", token, pid); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("record ACP helper readiness: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close ACP helper readiness marker: %w", err)
+	}
+
+	releaseLine := "release " + token
+	for {
+		data, err := os.ReadFile(readyMarker)
+		if os.IsNotExist(err) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect ACP helper release: %w", err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(line) == releaseLine {
+				return nil
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
