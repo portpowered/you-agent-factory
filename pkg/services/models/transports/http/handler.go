@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -126,12 +125,6 @@ func (h *Handler) PullModel(w http.ResponseWriter, r *http.Request, modelName st
 	}
 	result, err := h.adapter.PullModel(r.Context(), modelName)
 	if err != nil {
-		if isModelPullError(err) {
-			var pullErr *modelinference.PullError
-			errors.As(err, &pullErr)
-			h.writeJSON(w, managedRuntimePullHTTPStatus(pullErr.Result), modelPullResponseFromService(pullErr.Result))
-			return
-		}
 		h.writeRootOrInternalError(w, modelsHTTPOperationPull, err, pullFailedMessage)
 		return
 	}
@@ -148,11 +141,6 @@ func (h *Handler) RemoveModel(w http.ResponseWriter, r *http.Request, modelName 
 		return
 	}
 	h.writeJSON(w, http.StatusOK, modelRemoveResponseFromService(result))
-}
-
-func isModelPullError(err error) bool {
-	var pullErr *modelinference.PullError
-	return errors.As(err, &pullErr) && pullErr != nil
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {

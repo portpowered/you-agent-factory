@@ -51,9 +51,6 @@ func TestManagedRuntimePullMapping(t *testing.T) {
 	}
 
 	failure := models.PullResult{ManagedPullOutcome: "TIMED_OUT", ReadinessState: "FAILED"}
-	if got := managedRuntimePullHTTPStatus(failure); got != http.StatusGatewayTimeout {
-		t.Fatalf("status = %d, want %d", got, http.StatusGatewayTimeout)
-	}
 	cause := errors.Join(context.DeadlineExceeded, models.ErrSourceFetchFailed)
 	err := &models.PullError{Result: failure, Cause: cause}
 	var classified *models.PullError

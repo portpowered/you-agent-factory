@@ -58,6 +58,15 @@ func rootErrorMappingCases() []rootErrorMappingCase {
 			wantStatus: http.StatusNotFound, wantCode: "MODEL_NOT_AVAILABLE", wantFamily: factoryapi.ErrorFamilyNotFound,
 		},
 		{
+			name: "pull classified failure", operation: modelsHTTPOperationPull,
+			err: &models.PullError{
+				Result: models.PullResult{ModelName: "voice", ManagedPullOutcome: "SOURCE_FETCH_FAILED"},
+				Cause:  errors.New("controlled source failure with private details"),
+			},
+			wantStatus: http.StatusInternalServerError, wantCode: "INTERNAL_ERROR",
+			wantFamily: factoryapi.ErrorFamilyInternalServerError,
+		},
+		{
 			name: "remove cache not found", operation: modelsHTTPOperationRemove, err: models.ErrModelCacheNotFound,
 			wantStatus: http.StatusNotFound, wantCode: "MODEL_CACHE_NOT_FOUND", wantFamily: factoryapi.ErrorFamilyNotFound,
 		},
@@ -253,6 +262,12 @@ func TestRootErrorResponse_IgnoresCrossOperationTypedFailures(t *testing.T) {
 	if _, _, ok := RootErrorResponse(models.ErrPullUnsupported, modelsHTTPOperationInvoke); ok {
 		t.Fatal("RootErrorResponse(ErrPullUnsupported, invoke) = handled, want pull-only mapping")
 	}
+	failure := &models.PullError{Result: models.PullResult{ModelName: "voice"}, Cause: models.ErrSourceFetchFailed}
+	for _, operation := range []modelsHTTPOperation{modelsHTTPOperationCatalog, modelsHTTPOperationInvoke} {
+		if _, _, ok := RootErrorResponse(failure, operation); ok {
+			t.Fatalf("RootErrorResponse(PullError, %v) = handled, want pull-only mapping", operation)
+		}
+	}
 }
 
 func TestRootErrorResponse_LeavesUnmappedInternalFailures(t *testing.T) {
@@ -337,6 +352,36 @@ func TestHandler_PullModelUnmappedFailureDoesNotLeakInternalPaths(t *testing.T) 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
 
 	assertCatalogHTTPError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", pullFailedMessage)
+}
+
+func TestHandler_PullModelClassifiedFailureDoesNotExposeResultOrCause(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{
+		pull: func(context.Context, string) (models.PullResult, error) {
+			return models.PullResult{}, &models.PullError{
+				Result: models.PullResult{
+					ModelName:          "voice",
+					ManagedPullOutcome: "CACHE_INSTALLATION_FAILED",
+					ReadinessState:     "FAILED",
+					CachePath:          `C:\\private\\models\\voice\\rev-1`,
+					PullDiagnostics: models.PullDiagnostics{
+						RequestURL: "https://private.example.test/token=secret",
+					},
+				},
+				Cause: errors.New("private response body: token=secret"),
+			}
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
+
+	assertCatalogHTTPError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", pullFailedMessage)
+	if strings.Contains(recorder.Body.String(), "secret") || strings.Contains(recorder.Body.String(), "CACHE_INSTALLATION_FAILED") {
+		t.Fatalf("classified pull response leaks result or cause: %s", recorder.Body.String())
+	}
 }
 
 func TestHandler_InvokeModelMapsTypedRootFailures(t *testing.T) {
