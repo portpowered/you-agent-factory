@@ -8,7 +8,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/inventorygen"
+	factorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
 
 const (
@@ -34,10 +34,14 @@ func run(store generatedartifacts.Store, root string, stdout, stderr io.Writer) 
 		return 1
 	}
 
-	artifact, err := inventorygen.Artifact()
+	payload, err := factorysession.GenerateToolInventoryJSON()
 	if err != nil {
 		fmt.Fprintf(stderr, "%s generation failed: %v\n", commandPrefix, err)
 		return 1
+	}
+	artifact := generatedartifacts.Artifact{
+		Path:    factorysession.ToolInventoryBaselineRelativePath,
+		Payload: payload,
 	}
 	if err := store.Write(root, []generatedartifacts.Artifact{artifact}); err != nil {
 		fmt.Fprintf(stderr, "%s generation failed: %v\n", commandPrefix, err)

@@ -6,11 +6,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	factorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/inventorygen"
 )
 
 type testFileSystem struct{}
@@ -64,16 +64,16 @@ func TestRunWritesOnlyTheProductionS11Artifact(t *testing.T) {
 		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
-	artifact, err := inventorygen.Artifact()
+	expected, err := factorysession.GenerateToolInventoryJSON()
 	if err != nil {
-		t.Fatalf("inventorygen.Artifact() error = %v", err)
+		t.Fatalf("GenerateToolInventoryJSON() error = %v", err)
 	}
 	target := filepath.Join(root, filepath.FromSlash(factorysession.ToolInventoryBaselineRelativePath))
 	got, err := os.ReadFile(target)
 	if err != nil {
 		t.Fatalf("read generated S-11: %v", err)
 	}
-	if !bytes.Equal(got, artifact.Payload) {
+	if !bytes.Equal(got, expected) {
 		t.Fatal("generated S-11 differs from the production inventory artifact")
 	}
 	files := filesUnderRoot(t, root)
@@ -174,6 +174,29 @@ func TestRunFailsClosedForInvalidRoot(t *testing.T) {
 	target := filepath.Join(root, filepath.FromSlash(factorysession.ToolInventoryBaselineRelativePath))
 	if _, err := os.Stat(target); err == nil {
 		t.Fatalf("S-11 unexpectedly exists beneath invalid root: %s", target)
+	}
+}
+
+func TestVerifiedToolInventoryJSONRejectsUnregisteredProjectedTool(t *testing.T) {
+	const unregisteredTool = "you.factory_session.inventorygen_probe"
+	inventory, err := factorysession.ProjectToolInventoryFromDiscovered([]factorysession.ToolDefinition{{
+		Name:        unregisteredTool,
+		Description: "probe tool without handler registration",
+		InputSchema: map[string]any{"type": "object"},
+	}})
+	if err != nil {
+		t.Fatalf("ProjectToolInventoryFromDiscovered() error = %v", err)
+	}
+
+	payload, err := factorysession.MarshalVerifiedToolInventoryJSON(inventory)
+	if err == nil {
+		t.Fatal("MarshalVerifiedToolInventoryJSON() error = nil, want handler verification failure")
+	}
+	if !strings.Contains(err.Error(), unregisteredTool) {
+		t.Fatalf("MarshalVerifiedToolInventoryJSON() error = %v, want offending tool %q", err, unregisteredTool)
+	}
+	if payload != nil {
+		t.Fatalf("failed payload = %q, want nil", payload)
 	}
 }
 
