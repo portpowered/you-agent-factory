@@ -25,9 +25,8 @@ import (
 // completion, single- and two-stage pipelines, and ideation happy-path coverage
 // without inspecting internal Petri markings.
 func TestPetriSharedDispatchSuccess(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
 	t.Run("simple_single_worker_pipeline_completes", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 		traceID := "trace-simple-pipeline"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -52,7 +51,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("preseeded_work_reaches_success_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "auth"}`))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "logging"}`))
@@ -72,7 +71,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("mixed_preseeded_and_late_submit_completes", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "pre-existing"}`))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "new-arrival"}`))
@@ -90,7 +89,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("archive_terminal_work_completes_without_refire", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 		testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "settings page"}`))
 
@@ -107,7 +106,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("two_stage_pipeline_reaches_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"two-stage pipeline"}`))
 
@@ -130,7 +129,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("scaffolded_simple_pipeline_completes_one_task", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := support.ScaffoldFactory(t, simpleSingleWorkerPipelineConfig())
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"scaffolded simple pipeline"}`))
@@ -148,7 +147,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("ideation_happy_path_reaches_story_complete", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 		originTraceID := "trace-ideation-happy-path"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -174,7 +173,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("dispatcher_workflow_single_idea_reaches_prd_complete", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceID := "trace-dispatcher-single"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
@@ -193,7 +192,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("dispatcher_lifecycle_idea_reaches_archived_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
 		originTraceID := "trace-idea-lifecycle-test"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -221,7 +220,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("ideation_rejection_loop_reaches_story_complete", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 		originTraceID := "trace-rejection-loop-001"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -277,7 +276,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("idea_plan_execute_review_reaches_task_complete", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -298,7 +297,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("idea_to_prd_multiple_ideas_each_reach_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 		trace1 := "trace-idea-multi-1"
 		trace2 := "trace-idea-multi-2"
@@ -326,7 +325,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("config_driven_happy_path_two_stage_completes", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Config-driven happy path"}`))
 
@@ -339,7 +338,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("noop_pipeline_completes_without_provider", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "noop_pipeline"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "noop fallback test"}`))
 
@@ -357,7 +356,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("service_simple_multiple_work_items_complete", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-1"}`))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-2"}`))
@@ -371,7 +370,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("scaffolded_multiple_work_items_complete_independently", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := support.ScaffoldFactory(t, simpleSingleWorkerPipelineConfig())
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		for i := 0; i < 3; i++ {
@@ -392,7 +391,7 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 	})
 
 	t.Run("scaffolded_two_stage_service_pipeline_completes", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := support.ScaffoldFactory(t, twoStageServicePipelineConfig())
 		writeServicePipelineWorkerConfig(t, dir, "worker-a")
 		writeServicePipelineWorkerConfig(t, dir, "worker-b")
@@ -414,9 +413,8 @@ func TestPetriSharedDispatchSuccess(t *testing.T) {
 // public failed location with a failed dispatch outcome on Factory Events,
 // without routing the same Work to success terminals.
 func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
 	t.Run("mock_provider_error_routes_to_failed_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
 		traceID := "trace-provider-error"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -458,7 +456,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("provider_command_exit_routes_to_failed_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
 		traceID := "trace-command-exit-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -500,7 +498,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("rejected_worker_outcome_routes_to_failed_terminal", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs"))
 		traceID := "trace-rejected-outcome"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -545,7 +543,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("planner_failure_routes_idea_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
 		traceID := "trace-planner-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -590,7 +588,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("executor_failure_routes_prd_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
 		traceID := "trace-executor-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -631,7 +629,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("idea_to_prd_planner_command_failure_routes_idea_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 		testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title":"broken idea"}`))
 
@@ -658,7 +656,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("idea_plan_execute_review_script_failure_routes_plan_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -695,7 +693,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("idea_plan_execute_review_planner_failure_routes_idea_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 		testutil.WriteSeedMarkdownFile(t, dir, "idea", "architecture-review",
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
@@ -723,7 +721,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 
 	t.Run("idea_plan_execute_review_processor_exhaustion_routes_task_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 		originTraceID := "trace-processor-exhaustion"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -767,9 +765,8 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 // routing for Petri workstations with and without authored failure arcs using
 // root.BuildProcess and the shared ProviderCommandRunner edge.
 func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
 	t.Run("provider_process_failure_without_failure_arcs_routes_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
 		traceID := "trace-executor-process-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -809,7 +806,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 	})
 
 	t.Run("provider_nonzero_exit_without_failure_arcs_routes_to_failed", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
 		traceID := "trace-executor-exit-failure"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -851,7 +848,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 	})
 
 	t.Run("provider_failure_with_failure_arcs_routes_to_failed_not_done", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_with_arcs"))
 		traceID := "trace-executor-failure-arcs"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -896,7 +893,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 	})
 
 	t.Run("provider_success_leaves_work_at_authored_done_place", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 		traceID := "trace-executor-success"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -936,7 +933,7 @@ func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
 // Petri structures.
 func runSharedPetriInvocationMapping(t *testing.T) {
 	t.Run("factory_model_maps_to_provider_invocation", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"model mapping probe"}`))
 
@@ -953,7 +950,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 	})
 
 	t.Run("work_payload_maps_into_provider_user_message", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 		markdownNeedle := "# Architecture Review"
 		testutil.WriteSeedMarkdownFile(t, dir, "task", "architecture-review",
@@ -982,7 +979,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 	})
 
 	t.Run("work_name_maps_into_invocation_prompt", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 		workName := "design-doc-review"
 		traceID := "trace-prompt-mapping"
@@ -1009,7 +1006,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 	})
 
 	t.Run("cross_work_type_terminal_preserves_origin_trace", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 		originTraceID := "trace-cross-work-type-mapping"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -1030,7 +1027,7 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 	})
 
 	t.Run("dispatch_events_reference_terminal_work_identity", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
 		traceID := "trace-dispatch-event-mapping"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -1051,9 +1048,8 @@ func runSharedPetriInvocationMapping(t *testing.T) {
 // TestPetriInvocationInputAndOutputMapping retains the failed-lineage witness
 // while the shared command edge supplies deterministic provider outcomes.
 func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
 	t.Run("failed_terminal_preserves_origin_trace_lineage", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_plan_execute_review_with_limits"))
 		originTraceID := "trace-failed-lineage-mapping"
 		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{

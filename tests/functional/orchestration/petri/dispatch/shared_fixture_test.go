@@ -23,24 +23,24 @@ import (
 
 const sharedPetriFixtureShutdownTimeout = 15 * time.Second
 
-// Top-level groups retain their existing nested t.Parallel coverage, but the
-// shared application process should not be driven by every group at once.
-// Keeping two groups in flight overlaps group-level setup/teardown while
-// bounding the public session and dispatcher load under -race.
-const sharedPetriTopLevelConcurrency = 2
+// Shared scenarios retain their t.Parallel coverage, but the shared
+// application process should not be driven by every scenario at once.
+// Bounding actual scenario execution keeps public session and dispatcher load
+// controlled under -race without blocking a parent test on its own children.
+const sharedPetriScenarioConcurrency = 2
 
 var (
 	sharedPetriFixtureOnce  sync.Once
 	sharedPetriFixture      *sharedPetriProcessFixture
 	sharedPetriFixtureErr   error
-	sharedPetriTopLevelSlot = make(chan struct{}, sharedPetriTopLevelConcurrency)
+	sharedPetriScenarioSlot = make(chan struct{}, sharedPetriScenarioConcurrency)
 )
 
-func enterSharedPetriTopLevelGroup(t *testing.T) {
+func enterSharedPetriScenario(t *testing.T) {
 	t.Helper()
 	t.Parallel()
-	sharedPetriTopLevelSlot <- struct{}{}
-	t.Cleanup(func() { <-sharedPetriTopLevelSlot })
+	sharedPetriScenarioSlot <- struct{}{}
+	t.Cleanup(func() { <-sharedPetriScenarioSlot })
 }
 
 // TestMain closes the package-scoped process after every scenario has released

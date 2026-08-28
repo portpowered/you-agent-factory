@@ -23,9 +23,8 @@ import (
 // both reach the expected public terminal Work locations and restore resource
 // availability after quiescence.
 func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
 	t.Run("capacity_limited_concurrency_completes_all_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
@@ -50,7 +49,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 	})
 
 	t.Run("serial_concurrency_limit_completes_all_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "serial_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
@@ -87,9 +86,8 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 // produce one distinct successful terminal Work per seeded Trace ID without
 // collapsing, swapping, or duplicating identities.
 func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
 	t.Run("single_seed_correlates_to_terminal_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceID := "trace-single-seed"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
@@ -103,7 +101,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 
 	t.Run("two_concurrent_seeds_each_reach_terminal_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceIDs := seedIdeas(t, dir, []seedIdea{
 			{traceID: "trace-alpha", title: "feature-alpha"},
@@ -120,7 +118,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 
 	t.Run("multi_seed_completions_remain_distinct", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		const n = 5
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		ideas := make([]seedIdea, n)
@@ -142,7 +140,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 
 	t.Run("concurrent_execution_pool_keeps_distinct_work_identities", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedIdeas(t, dir, []seedIdea{
 			{traceID: "trace-iso-1", title: "file-1"},
@@ -165,7 +163,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 // the failing identity to the Factory-configured failed location without a
 // second successful dispatch or completion path for that same Work.
 func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
-	enterSharedPetriTopLevelGroup(t)
+	enterSharedPetriScenario(t)
 	const (
 		failTraceID = "trace-will-fail"
 		passTraceID = "trace-will-pass"
