@@ -4331,16 +4331,18 @@ func TestCancel_CancellationWinningProcessExitDoesNotReclassifySessionAsProcessG
 }
 
 func TestStart_CallerCancellationDoesNotCancelServerOwnedAdmission(t *testing.T) {
+	innerEvents := newEventsAppender()
+	eventsSvc := newGatedEvents(innerEvents)
 	dispatchDone := make(chan struct{})
+	dispatchContextErr := make(chan error, 1)
 	execution := &fakeExecution{
-		admissionStarted: make(chan struct{}),
-		releaseAdmission: make(chan struct{}),
-		dispatch: func(_ context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+		dispatch: func(ctx context.Context, request workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error) {
+			dispatchContextErr <- ctx.Err()
 			close(dispatchDone)
 			return acceptedResult(request), nil
 		},
 	}
-	registry, err := newService(executionBoundary{execution: execution}, newEventsAppender(), nil)
+	registry, err := newService(executionBoundary{execution: execution}, eventsSvc, nil)
 	if err != nil {
 		t.Fatalf("service.New() error = %v, want nil", err)
 	}
@@ -4351,7 +4353,11 @@ func TestStart_CallerCancellationDoesNotCancelServerOwnedAdmission(t *testing.T)
 		_, startErr := registry.Start(ctx, validAsyncStartRequest("worker-start-canceled", "dispatch-start-canceled"))
 		results <- startErr
 	}()
-	waitForStartSignal(t, execution.admissionStarted, "Start did not reach the controlled admission barrier")
+	// Start reports admission only after the opening topic is ready. Gate the
+	// real readiness check so caller cancellation is observed before the
+	// server-owned handoff reaches Workers; the dispatch signal below proves
+	// that releasing readiness still allows the detached attempt to proceed.
+	waitForStartSignal(t, eventsSvc.subscribeStarted, "Start did not reach the opening-topic readiness barrier")
 	cancel()
 	select {
 	case startErr := <-results:
@@ -4362,11 +4368,17 @@ func TestStart_CallerCancellationDoesNotCancelServerOwnedAdmission(t *testing.T)
 		t.Fatal("Start did not return after caller cancellation")
 	}
 
-	close(execution.releaseAdmission)
+	close(eventsSvc.releaseSubscribe)
 	select {
 	case <-dispatchDone:
 	case <-time.After(time.Second):
 		t.Fatal("server-owned admission did not finish after caller cancellation")
+	}
+	if dispatchErr := <-dispatchContextErr; dispatchErr != nil {
+		t.Fatalf("server-owned dispatch context error = %v, want nil after caller cancellation", dispatchErr)
+	}
+	if execution.callCount() != 1 {
+		t.Fatalf("server-owned dispatch count = %d, want exactly one", execution.callCount())
 	}
 }
 

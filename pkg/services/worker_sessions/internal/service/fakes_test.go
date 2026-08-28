@@ -350,6 +350,68 @@ func newEventsAppender() events.Service {
 	return svc
 }
 
+// terminalAppendObserver preserves the real in-memory Events implementation
+// while exposing a signal after a targeted Worker Session terminal record has
+// been committed. The controlled Workers boundary returns before Worker
+// Sessions commits that record, so waiting for the boundary alone is not a
+// sufficient observation point for a terminal Get assertion.
+type terminalAppendObserver struct {
+	events.Service
+
+	mu      sync.Mutex
+	signals map[events.Topic]chan struct{}
+	once    map[events.Topic]*sync.Once
+}
+
+func newTerminalAppendObserver(inner events.Service, topics ...events.Topic) *terminalAppendObserver {
+	observer := &terminalAppendObserver{
+		Service: inner,
+		signals: make(map[events.Topic]chan struct{}, len(topics)),
+		once:    make(map[events.Topic]*sync.Once, len(topics)),
+	}
+	for _, topic := range topics {
+		observer.signals[topic] = make(chan struct{})
+		observer.once[topic] = &sync.Once{}
+	}
+	return observer
+}
+
+func (o *terminalAppendObserver) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	result, err := o.Service.Append(ctx, req)
+	if err != nil || !isWorkerSessionTerminalAppend(req) {
+		return result, err
+	}
+
+	o.mu.Lock()
+	signal := o.signals[req.Topic]
+	once := o.once[req.Topic]
+	o.mu.Unlock()
+	if signal != nil && once != nil {
+		once.Do(func() { close(signal) })
+	}
+	return result, nil
+}
+
+func (o *terminalAppendObserver) waitForTerminalAppend(t *testing.T, topic events.Topic) {
+	t.Helper()
+	o.mu.Lock()
+	signal, registered := o.signals[topic]
+	o.mu.Unlock()
+	if !registered {
+		t.Fatalf("terminal append signal for topic %q is not registered", topic)
+	}
+	if err := waitControlledSignal(signal, controlledBoundaryWaitTimeout); err != nil {
+		t.Fatalf("terminal append for topic %q: %v", topic, err)
+	}
+}
+
+func isWorkerSessionTerminalAppend(req events.AppendRequest) bool {
+	return req.SourceType == "worker_session_lifecycle" &&
+		req.SourceSequence == 2 &&
+		req.SourceEventID == "terminal" &&
+		req.SchemaID == "workers.draft.v1"
+}
+
 // brokenEventsAppender is a controlled EventsAppender test double whose
 // Append always fails, used to prove Start's before-handoff publication
 // barrier explicitly fails the attempt and never reaches Workers.
@@ -462,7 +524,13 @@ func (b *blockingTerminalAppendEventsAppender) release() {
 
 func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testing.T) {
 	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
+	sourceTopic := workersessions.Topic("source-session")
+	successorTopic := workersessions.Topic("successor-session")
+	eventsSvc := newTerminalAppendObserver(newEventsAppender(), sourceTopic, successorTopic)
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
 	reference := providers.SessionRef{
 		Provider: providers.IDCodex,
 		Kind:     providers.SessionIDKind,
@@ -471,6 +539,7 @@ func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testin
 
 	sourceResult := startControlledSession(t, registry, boundary, "source-session", "dispatch-source")
 	boundary.complete(completedDispatchWithProviderSession("dispatch-source", reference), nil)
+	eventsSvc.waitForTerminalAppend(t, sourceTopic)
 	source := <-sourceResult
 	if source.Session.State != workersessions.StateCompleted {
 		t.Fatalf("source session = %#v, want COMPLETED", source.Session)
@@ -504,6 +573,7 @@ func TestContinue_CreatesDistinctSuccessorWithExactReferenceAndLineage(t *testin
 	assertSuccessorLineage(t, successorAfter, request, reference)
 
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+	eventsSvc.waitForTerminalAppend(t, successorTopic)
 	finalSuccessor, err := registry.Get(context.Background(), workersessions.GetRequest{ID: request.SuccessorWorkerSessionID})
 	if err != nil {
 		t.Fatalf("Get(final successor) error = %v", err)

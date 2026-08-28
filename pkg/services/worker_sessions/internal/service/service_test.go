@@ -626,7 +626,13 @@ func newGatedRetryExecution() *gatedRetryExecution {
 
 func TestInterrupt_CancelsExactSourceBeforeAdmittingExactSessionSuccessor(t *testing.T) {
 	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
+	sourceTopic := workersessions.Topic("source-session")
+	successorTopic := workersessions.Topic("successor-session")
+	eventsSvc := newTerminalAppendObserver(newEventsAppender(), sourceTopic, successorTopic)
+	registry, err := newService(boundary, eventsSvc, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
 	sourceResult, reference := prepareInterruptSource(t, registry, boundary)
 
 	request := workersessions.InterruptRequest{
@@ -639,6 +645,7 @@ func TestInterrupt_CancelsExactSourceBeforeAdmittingExactSessionSuccessor(t *tes
 	if err != nil {
 		t.Fatalf("Interrupt() error = %v", err)
 	}
+	eventsSvc.waitForTerminalAppend(t, sourceTopic)
 	assertInterruptAcceptedResult(t, result, reference)
 	cancellations := boundary.cancellations()
 	if len(cancellations) != 1 || cancellations[0].DispatchID != "dispatch-source" {
@@ -652,6 +659,7 @@ func TestInterrupt_CancelsExactSourceBeforeAdmittingExactSessionSuccessor(t *tes
 	}
 
 	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+	eventsSvc.waitForTerminalAppend(t, successorTopic)
 	finalSuccessor, err := registry.Get(context.Background(), workersessions.GetRequest{ID: "successor-session"})
 	if err != nil {
 		t.Fatalf("Get(successor) error = %v", err)
