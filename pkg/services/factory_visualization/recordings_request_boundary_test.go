@@ -66,16 +66,16 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	fixture := newRecordingsRootBoundaryFixture()
 	stub := newRecordingsRequestBoundaryStub()
 	worldView := runRecordingsReconstructThroughRootProof(t, stub, fixture)
+	runRecordingsGlobalProjectionScopeProof(t, stub)
 	runRecordingsDashboardThroughRootProof(t, stub, worldView)
 	runRecordingsValidateThroughRootProof(t, stub, fixture)
 	runRecordingsNilServiceRejectionProof(t, fixture, worldView)
 }
 
-func TestVisualizationReconstructRequestUsesGlobalProjectionScope(t *testing.T) {
-	t.Parallel()
+func runRecordingsGlobalProjectionScopeProof(t *testing.T, stub *recordingsRequestBoundaryStub) {
+	t.Helper()
 
 	sessionID := "session-visualization-scope"
-	stub := newRecordingsRequestBoundaryStub()
 	_, err := recordingsqueries.ReconstructWorldState(stub, []factorydefinitions.FactoryEvent{{
 		Id:   "evt-scoped",
 		Type: factorydefinitions.FactoryEventTypeWorkRequest,
