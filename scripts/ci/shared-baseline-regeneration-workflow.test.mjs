@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
 	existsSync,
 	mkdtempSync,
@@ -262,10 +262,10 @@ function createControlledCommandEdge({
 const LOCAL_GIT_SNAPSHOT_PATH = SHARED_BASELINE_PATHS[0];
 const LOCAL_GIT_MAIN_ONLY_PATH = "docs/internal/baselines/newer-main-only.txt";
 
-function runLocalGit(cwd, args) {
+function runLocalGit(cwd, args, { env = {} } = {}) {
 	const result = spawnSync("git", args, {
 		cwd,
-		env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
+		env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", ...env },
 		encoding: "utf8",
 		windowsHide: true,
 	});
@@ -276,8 +276,8 @@ function runLocalGit(cwd, args) {
 	};
 }
 
-function requireLocalGit(cwd, args) {
-	const result = runLocalGit(cwd, args);
+function requireLocalGit(cwd, args, options = {}) {
+	const result = runLocalGit(cwd, args, options);
 	assert.equal(
 		result.status,
 		0,
@@ -440,6 +440,297 @@ function captureLocalRepositoryState(cwd) {
 		refs: requireLocalGit(cwd, ["for-each-ref", "--format=%(refname)=%(objectname)", "refs/heads", "refs/remotes"]),
 	};
 }
+
+const AUTH_DEFAULT_TOKEN = "default-fixture-token";
+const AUTH_APP_TOKEN = "app-fixture-token";
+
+function gitShellPath(path) {
+	return process.platform === "win32" ? path.replaceAll("\\", "/") : path;
+}
+
+function credentialHelperCommand({ label, token, tracePath }) {
+	const trace = bashQuote(gitShellPath(tracePath));
+	return [
+		"!f() { case \"\${1:-}\" in get)",
+		`printf '%s\\n' ${bashQuote(label)} >> ${trace};`,
+		`printf '%s\\n' ${bashQuote(`username=${label}`)};`,
+		`printf '%s\\n' ${bashQuote(`password=${token}`)};`,
+		";; *) exit 0 ;; esac; }; f",
+	].join(" ");
+}
+
+function startCredentialWitnessServer(temporaryDirectory) {
+	const tracePath = join(temporaryDirectory, "credential-trace.log");
+	const serverScript = join(temporaryDirectory, "credential-witness-server.mjs");
+	writeFileSync(
+		serverScript,
+		[
+			'import { appendFileSync } from "node:fs";',
+			'import { createServer } from "node:http";',
+			"const tracePath = process.argv[2];",
+			"const labels = new Map([[\"default-fixture-token\", \"default\"], [\"app-fixture-token\", \"app\"]]);",
+			"const server = createServer((request, response) => {",
+			"\tconst authorization = request.headers.authorization || \"\";",
+			"\tif (!authorization.startsWith(\"Basic \")) {",
+			"\t\tappendFileSync(tracePath, \"anonymous\\n\");",
+			"\t\tresponse.writeHead(401, { \"WWW-Authenticate\": \"Basic realm=credential-witness\" });",
+			"\t\tresponse.end();",
+			"\t\treturn;",
+			"\t}",
+			"\tconst decoded = Buffer.from(authorization.slice(6), \"base64\").toString(\"utf8\");",
+			"\tconst password = decoded.slice(decoded.indexOf(\":\") + 1);",
+			"\tappendFileSync(tracePath, (labels.get(password) || \"unknown\") + \"\\n\");",
+			"\tresponse.writeHead(200, { \"Content-Type\": \"text/plain\" });",
+			"\tresponse.end(\"credential witness response\");",
+			"});",
+			"server.listen(0, \"127.0.0.1\", () => {",
+			"\tprocess.stdout.write(`READY ${server.address().port}\\n`);",
+			"});",
+		].join("\n"),
+		"utf8",
+	);
+
+	const child = spawn(process.execPath, [serverScript, tracePath], {
+		stdio: ["ignore", "pipe", "pipe"],
+		windowsHide: true,
+	});
+	let output = "";
+	let settled = false;
+	return new Promise((resolve, reject) => {
+		const fail = (error) => {
+			if (settled) return;
+			settled = true;
+			reject(error);
+		};
+		child.once("error", (error) => fail(new Error(`credential witness server failed to start: ${error.message}`)));
+		child.once("exit", (code) => {
+			if (code !== 0) fail(new Error(`credential witness server exited before readiness with code ${code}`));
+		});
+		child.stdout.on("data", (chunk) => {
+			output += chunk.toString();
+			const ready = output.match(/READY (\d+)/);
+			if (!ready || settled) return;
+			settled = true;
+			resolve({ child, port: Number(ready[1]), tracePath });
+		});
+	});
+}
+
+async function stopCredentialWitnessServer(server) {
+	if (!server || server.child.exitCode !== null) return;
+	const exited = new Promise((resolve) => server.child.once("exit", resolve));
+	server.child.kill();
+	await exited;
+}
+
+async function createLocalGitCredentialFixture({
+	userName = "credential-witness",
+	userEmail = "credential-witness@example.invalid",
+	onTemporaryDirectory,
+	failAt = "",
+} = {}) {
+	const temporaryDirectory = mkdtempSync(join(tmpdir(), "shared-baseline-credential-"));
+	onTemporaryDirectory?.(temporaryDirectory);
+	let server;
+	const globalConfigPath = join(temporaryDirectory, "empty-global.gitconfig");
+	const originDirectory = join(temporaryDirectory, "origin.git");
+	const runnerDirectory = join(temporaryDirectory, "runner");
+	try {
+		server = await startCredentialWitnessServer(temporaryDirectory);
+		if (failAt === "server") throw new Error("simulated credential witness setup failure");
+		writeFileSync(globalConfigPath, "", "utf8");
+		const gitOptions = { env: { GIT_CONFIG_GLOBAL: globalConfigPath } };
+		const run = (cwd, args) => runLocalGit(cwd, args, gitOptions);
+		const requireGit = (cwd, args) => {
+			const result = run(cwd, args);
+			assert.equal(result.status, 0, `git ${args.join(" ")} failed: ${result.stderr.trim()}`);
+			return result.stdout.trim();
+		};
+		requireGit(temporaryDirectory, ["init", "--bare", originDirectory]);
+		requireGit(temporaryDirectory, ["init", runnerDirectory]);
+		requireGit(runnerDirectory, ["config", "user.name", userName]);
+		requireGit(runnerDirectory, ["config", "user.email", userEmail]);
+		writeFileSync(join(runnerDirectory, "witness.txt"), "credential witness\n", "utf8");
+		requireGit(runnerDirectory, ["add", "--", "witness.txt"]);
+		requireGit(runnerDirectory, ["commit", "-m", "credential witness"]);
+		const remoteUrl = `http://127.0.0.1:${server.port}/repo.git`;
+		requireGit(runnerDirectory, ["remote", "add", "origin", remoteUrl]);
+		if (failAt === "git") throw new Error("simulated credential witness Git setup failure");
+		return {
+			temporaryDirectory,
+			runnerDirectory,
+			globalConfigPath,
+			remoteUrl,
+			tracePath: server.tracePath,
+			helperTracePath: join(temporaryDirectory, "credential-helper-trace.log"),
+			server,
+			cleanup: async () => {
+				await stopCredentialWitnessServer(server);
+				rmSync(temporaryDirectory, { recursive: true, force: true });
+			},
+		};
+	} catch (error) {
+		await stopCredentialWitnessServer(server);
+		rmSync(temporaryDirectory, { recursive: true, force: true });
+		throw error;
+	}
+}
+
+function configureLocalGitCredentialWitness(fixture, {
+	checkoutToken = "",
+	helperOrder = ["app", "default"],
+} = {}) {
+	const gitOptions = { env: { GIT_CONFIG_GLOBAL: fixture.globalConfigPath } };
+	const requireGit = (args) => {
+		const result = runLocalGit(fixture.runnerDirectory, args, gitOptions);
+		assert.equal(result.status, 0, `git ${args.join(" ")} failed: ${result.stderr.trim()}`);
+		return result.stdout.trim();
+	};
+	if (checkoutToken) {
+		const encoded = Buffer.from(`checkout:${checkoutToken}`, "utf8").toString("base64");
+		requireGit([
+			"config",
+			"--local",
+			`http.${fixture.remoteUrl}.extraheader`,
+			`AUTHORIZATION: Basic ${encoded}`,
+		]);
+	}
+	const tokens = { app: AUTH_APP_TOKEN, default: AUTH_DEFAULT_TOKEN };
+	for (const label of helperOrder) {
+		if (!tokens[label]) throw new Error(`unsupported credential witness helper: ${label}`);
+		requireGit([
+			"config",
+			"--local",
+			"--add",
+			"credential.helper",
+			credentialHelperCommand({
+				label,
+				token: tokens[label],
+				tracePath: fixture.helperTracePath,
+			}),
+		]);
+	}
+}
+
+async function runLocalGitCredentialWitness(options = {}) {
+	const fixture = await createLocalGitCredentialFixture(options);
+	const gitOptions = {
+		env: {
+			GIT_CONFIG_GLOBAL: fixture.globalConfigPath,
+			GIT_TERMINAL_PROMPT: "0",
+		},
+	};
+	try {
+		configureLocalGitCredentialWitness(fixture, options);
+		const push = runLocalGit(
+			fixture.runnerDirectory,
+			["push", "origin", "HEAD:main"],
+			gitOptions,
+		);
+		const readLines = (path) => (existsSync(path) ? readFileSync(path, "utf8").trim().split(/\r?\n/).filter(Boolean) : []);
+		return {
+			push,
+			authenticatedLabels: readLines(fixture.tracePath).filter((label) => label !== "anonymous"),
+			helperLabels: readLines(fixture.helperTracePath),
+			metadata: runLocalGit(fixture.runnerDirectory, ["show", "-s", "--format=%an <%ae>", "HEAD"], gitOptions).stdout.trim(),
+			temporaryDirectory: fixture.temporaryDirectory,
+		};
+	} finally {
+		await fixture.cleanup();
+	}
+}
+
+test("AUTH-01 local-real Git records credential identity and characterizes checkout order dependency", async () => {
+	const retainedCheckout = await runLocalGitCredentialWitness({
+		checkoutToken: AUTH_DEFAULT_TOKEN,
+		helperOrder: ["app", "default"],
+	});
+	const appOnlyCheckout = await runLocalGitCredentialWitness({
+		checkoutToken: "",
+		helperOrder: ["app", "default"],
+	});
+
+	assert.notEqual(retainedCheckout.push.status, 0);
+	assert.notEqual(appOnlyCheckout.push.status, 0);
+	// Characterization: a checkout-persisted extraheader is selected before the
+	// later helper, while disabling persistence lets the App helper win.
+	assert.ok(retainedCheckout.authenticatedLabels.length > 0);
+	assert.ok(retainedCheckout.authenticatedLabels.every((label) => label === "default"));
+	assert.ok(appOnlyCheckout.authenticatedLabels.length > 0);
+	assert.ok(appOnlyCheckout.authenticatedLabels.every((label) => label === "app"));
+	assert.deepEqual(appOnlyCheckout.helperLabels, ["app"]);
+	assert.doesNotMatch(
+		`${retainedCheckout.push.stdout}${retainedCheckout.push.stderr}${appOnlyCheckout.push.stdout}${appOnlyCheckout.push.stderr}`,
+		/default-fixture-token|app-fixture-token/,
+	);
+	assert.equal(existsSync(retainedCheckout.temporaryDirectory), false);
+	assert.equal(existsSync(appOnlyCheckout.temporaryDirectory), false);
+});
+
+test("AUTH-03 local-real Git keeps authentication independent from commit metadata", async () => {
+	const githubActionsMetadata = await runLocalGitCredentialWitness({
+		checkoutToken: AUTH_DEFAULT_TOKEN,
+		helperOrder: ["app", "default"],
+		userName: "github-actions[bot]",
+		userEmail: "41898282+github-actions[bot]@users.noreply.github.com",
+	});
+	const appLookingMetadata = await runLocalGitCredentialWitness({
+		checkoutToken: AUTH_DEFAULT_TOKEN,
+		helperOrder: ["app", "default"],
+		userName: "you-baseline-bot[bot]",
+		userEmail: "baseline-bot@example.invalid",
+	});
+
+	assert.ok(githubActionsMetadata.authenticatedLabels.length > 0);
+	assert.ok(githubActionsMetadata.authenticatedLabels.every((label) => label === "default"));
+	assert.ok(appLookingMetadata.authenticatedLabels.length > 0);
+	assert.ok(appLookingMetadata.authenticatedLabels.every((label) => label === "default"));
+	assert.notEqual(githubActionsMetadata.metadata, appLookingMetadata.metadata);
+	assert.match(githubActionsMetadata.metadata, /^github-actions\[bot\] </);
+	assert.match(appLookingMetadata.metadata, /^you-baseline-bot\[bot\] </);
+	assert.doesNotMatch(
+		`${githubActionsMetadata.push.stdout}${githubActionsMetadata.push.stderr}${appLookingMetadata.push.stdout}${appLookingMetadata.push.stderr}`,
+		/default-fixture-token|app-fixture-token/,
+	);
+	assert.equal(existsSync(githubActionsMetadata.temporaryDirectory), false);
+	assert.equal(existsSync(appLookingMetadata.temporaryDirectory), false);
+});
+
+test("F-19 credential witness setup and command failures clean fixtures without changing developer state", async () => {
+	const developerState = captureLocalRepositoryState(repositoryRoot);
+	let failedSetupDirectory = "";
+	await assert.rejects(
+		() =>
+			createLocalGitCredentialFixture({
+				failAt: "server",
+				onTemporaryDirectory: (directory) => {
+					failedSetupDirectory = directory;
+				},
+			}),
+		/simulated credential witness setup failure/,
+	);
+	assert.equal(existsSync(failedSetupDirectory), false);
+
+	const fixture = await createLocalGitCredentialFixture();
+	try {
+		configureLocalGitCredentialWitness(fixture, { helperOrder: ["app"] });
+		const gitOptions = {
+			env: {
+				GIT_CONFIG_GLOBAL: fixture.globalConfigPath,
+				GIT_TERMINAL_PROMPT: "0",
+			},
+		};
+		assert.throws(
+			() => requireLocalGit(fixture.runnerDirectory, ["push", "origin", "HEAD:main"], gitOptions),
+			/failed:/,
+		);
+	} finally {
+		const temporaryDirectory = fixture.temporaryDirectory;
+		await fixture.cleanup();
+		assert.equal(existsSync(temporaryDirectory), false);
+	}
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+});
 
 test("TASK-001 local-real Git characterizes stale bot ancestry without treating newer main paths as branch changes", () => {
 	const developerState = captureLocalRepositoryState(repositoryRoot);
