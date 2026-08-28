@@ -18,6 +18,11 @@ import (
 	"time"
 )
 
+// This package intentionally keeps all three real-client cases isolated: the
+// two helper cases own process-tree timeout/non-zero cleanup, while the pinned
+// ACPX case owns executable selection, stdio negotiation, and session teardown.
+// The normal-path direct-start accounting is 2 + 2 + 6 = 10; starts performed
+// internally by Go, npx, ACPX, or the built executable are outside that count.
 const (
 	pinnedAcpxPackage           = "acpx@0.13.0"
 	pinnedAcpxVersion           = "0.13.0"
