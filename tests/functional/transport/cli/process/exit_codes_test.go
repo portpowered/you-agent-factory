@@ -16,35 +16,24 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestCLIWorkerFailureExitCode proves a terminal worker failure crosses the
-// public CLI process boundary as a typed failure without using the MockWorkers
-// feature outside its workers/mock functional cell.
+// reusable customer Process.Execute boundary as a typed failure without using
+// the MockWorkers feature outside its workers/mock functional cell.
 func TestCLIWorkerFailureExitCode(t *testing.T) {
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		ExitCode: 1,
-		Stderr:   []byte("provider process failed with private detail"),
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", factoryPath,
-		"--provider", "codex", "--no-record", "--quiet",
-		"worker-failure-exit",
-	})
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
+	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerFailurePrompt)
+	fixture := sharedWorkerOutcomeProcess(t)
+	fixture.bind(workerFailurePrompt, factoryDir)
+	err := fixture.execute(inputs.Input)
 	if err == nil {
 		t.Fatal("worker failure Process.Execute error = nil; want typed process failure")
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want one worker dispatch", runner.CallCount())
+	if calls := fixture.router.callCount(workerFailurePrompt); calls != 1 {
+		t.Fatalf("worker failure provider command calls = %d, want one worker dispatch", calls)
 	}
 	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
 		t.Fatalf("worker failure stdout = %q, want no false success output", stdout)
@@ -158,53 +147,23 @@ func TestBuiltCLIInterruptedResponseStreamExitCode(t *testing.T) {
 	}
 }
 
-func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
-	t.Helper()
-	tempDir, err := os.MkdirTemp("", "you-cli-functional-process-")
-	if err != nil {
-		t.Fatalf("create temporary CLI build directory: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(tempDir, binaryName)
-	command := exec.CommandContext(ctx, "go", "build", "-o", binaryPath, "./cmd/factory")
-	command.Dir = repoRoot
-	buildLog, err := command.CombinedOutput()
-	if err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, buildLog)
-	}
-	return binaryPath
-}
-
 // TestCLISuccessExitCode proves a successful one-shot worker run reaches the
-// public CLI process boundary through an injected provider command runner.
+// reusable customer Process.Execute boundary through an injected provider
+// command runner.
 func TestCLISuccessExitCode(t *testing.T) {
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
-	const wantPrimaryResult = "worker success exit COMPLETE"
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte(wantPrimaryResult),
-	})
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", factoryPath,
-		"--provider", "codex", "--no-record", "--quiet",
-		"worker-success-exit",
-	})
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
+	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerSuccessPrompt)
+	fixture := sharedWorkerOutcomeProcess(t)
+	fixture.bind(workerSuccessPrompt, factoryDir)
+	err := fixture.execute(inputs.Input)
 	if err != nil {
 		t.Fatalf("successful worker Process.Execute failed: %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want one worker dispatch", runner.CallCount())
+	if calls := fixture.router.callCount(workerSuccessPrompt); calls != 1 {
+		t.Fatalf("worker success provider command calls = %d, want one worker dispatch", calls)
 	}
-	if got := strings.TrimSpace(inputs.Stdout()); got != wantPrimaryResult {
-		t.Fatalf("worker success stdout = %q, want primary result %q", got, wantPrimaryResult)
+	if got := strings.TrimSpace(inputs.Stdout()); got != workerSuccessPrimaryResult {
+		t.Fatalf("worker success stdout = %q, want primary result %q", got, workerSuccessPrimaryResult)
 	}
 	if inputs.Stderr() != "" {
 		t.Fatalf("worker success stderr = %q, want empty diagnostics", inputs.Stderr())

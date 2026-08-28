@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -31,15 +32,16 @@ const (
 // built child executable; it therefore cannot prove that cancellation reaps
 // the attributable external child process observed through its PID file.
 
-// TestCLIContextCancellationStopsExternalWork proves cancelling the CLI process
-// context stops the injected provider/external worker process attributable to the
-// invocation, so cancelled runs do not leave orphaned external work running.
+// TestCLIContextCancellationStopsExternalWork proves an interrupt delivered to
+// the built CLI cancels its invocation context and stops the attributable
+// provider/external worker process, so cancelled runs do not leave orphaned work.
 func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("blocking /bin/sh external-work fixture is unavailable on Windows")
 	}
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	providerPIDFile := filepath.Join(t.TempDir(), "provider.pid")
@@ -58,7 +60,7 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 		prompt,
 	)
 
-	command := harness.Command(args...)
+	command := exec.Command(binaryPath, args...)
 	command.Dir = session.WorkDir
 	command.Env = session.ProcessEnv()
 
@@ -67,30 +69,39 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	command.Stderr = &stderr
 
 	if err := command.Start(); err != nil {
-		t.Fatalf("start root process: %v", err)
+		t.Fatalf("start built CLI process: %v", err)
 	}
+	waitDone := make(chan struct{})
+	var waitErr error
+	go func() {
+		waitErr = command.Wait()
+		close(waitDone)
+	}()
 	providerPID := 0
 	t.Cleanup(func() {
-		command.Cancel()
-		_ = command.Wait()
+		if command.ProcessState == nil || !command.ProcessState.Exited() {
+			_ = command.Process.Kill()
+		}
+		select {
+		case <-waitDone:
+		case <-time.After(contextCancellationScenarioTimeout):
+			t.Errorf("timed out joining root process during cleanup")
+		}
 		if providerPID > 0 {
 			terminateContextCancellationProcess(providerPID)
 			_ = waitForContextCancellationProcessExit(providerPID, 15*time.Second)
 		}
 	})
 
-	waitResult := make(chan error, 1)
-	go func() {
-		waitResult <- command.Wait()
-	}()
-
 	providerPID = waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
 
-	command.Cancel()
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("interrupt built CLI process: %v", err)
+	}
 
 	select {
-	case err := <-waitResult:
-		if err == nil {
+	case <-waitDone:
+		if waitErr == nil {
 			t.Fatalf(
 				"cancelled root process returned success; want process failure after context cancellation\nstdout:\n%s\nstderr:\n%s",
 				stdout.String(),
@@ -98,8 +109,8 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 			)
 		}
 	case <-time.After(contextCancellationScenarioTimeout):
-		command.Cancel()
-		<-waitResult
+		_ = command.Process.Kill()
+		<-waitDone
 		t.Fatalf(
 			"timed out waiting for root process to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
 			stdout.String(),
@@ -115,15 +126,16 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	}
 }
 
-// TestCLIContextCancellationEmitsNoSuccessResult proves cancelling the CLI process
-// context during an in-flight invocation yields an interrupted terminal public outcome
-// without emitting a completed success primary result attributable to the cancelled run.
+// TestCLIContextCancellationEmitsNoSuccessResult proves an interrupt delivered
+// to the built CLI during an in-flight invocation yields a canceled terminal
+// public outcome without emitting a completed success primary result.
 func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("blocking /bin/sh external-work fixture is unavailable on Windows")
 	}
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	providerPIDFile := filepath.Join(t.TempDir(), "provider.pid")
@@ -142,7 +154,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 		prompt,
 	)
 
-	command := harness.Command(args...)
+	command := exec.Command(binaryPath, args...)
 	command.Dir = session.WorkDir
 	command.Env = session.ProcessEnv()
 
@@ -151,33 +163,41 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	command.Stderr = &stderr
 
 	if err := command.Start(); err != nil {
-		t.Fatalf("start root process: %v", err)
+		t.Fatalf("start built CLI process: %v", err)
 	}
+	waitDone := make(chan struct{})
+	var waitErr error
+	go func() {
+		waitErr = command.Wait()
+		close(waitDone)
+	}()
 	providerPID := 0
 	t.Cleanup(func() {
-		command.Cancel()
-		_ = command.Wait()
+		if command.ProcessState == nil || !command.ProcessState.Exited() {
+			_ = command.Process.Kill()
+		}
+		select {
+		case <-waitDone:
+		case <-time.After(contextCancellationScenarioTimeout):
+			t.Errorf("timed out joining root process during cleanup")
+		}
 		if providerPID > 0 {
 			terminateContextCancellationProcess(providerPID)
 			_ = waitForContextCancellationProcessExit(providerPID, 15*time.Second)
 		}
 	})
 
-	waitResult := make(chan error, 1)
-	go func() {
-		waitResult <- command.Wait()
-	}()
-
 	providerPID = waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
 
-	command.Cancel()
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("interrupt built CLI process: %v", err)
+	}
 
-	var waitErr error
 	select {
-	case waitErr = <-waitResult:
+	case <-waitDone:
 	case <-time.After(contextCancellationScenarioTimeout):
-		command.Cancel()
-		<-waitResult
+		_ = command.Process.Kill()
+		<-waitDone
 		t.Fatalf(
 			"timed out waiting for root process to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
 			stdout.String(),

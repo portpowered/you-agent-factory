@@ -27,12 +27,13 @@ const successStdoutPrimaryResult = "mock worker accepted"
 // the primary-result stream.
 func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initOutcome := initializeOperatorConfig(t, ctx, session, "success-stdout-purity-config-init")
+	initOutcome := initializeOperatorConfig(t, ctx, binaryPath, session, "success-stdout-purity-config-init")
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -55,7 +56,7 @@ func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 		fmt.Sprintf("success-stdout-purity-%d", time.Now().UnixNano()),
 	)
 
-	result, err := session.Run(ctx, args...)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
 	if err != nil {
 		t.Fatalf(
 			"successful stdout-purity run failed: %v\nstdout:\n%s\nstderr:\n%s",
@@ -104,12 +105,13 @@ func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 // stdout free of a false primary result, and exits unsuccessfully.
 func TestCLIFailureWritesDiagnosticToStderr(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initOutcome := initializeOperatorConfig(t, ctx, session, "failure-stderr-config-init")
+	initOutcome := initializeOperatorConfig(t, ctx, binaryPath, session, "failure-stderr-config-init")
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -132,7 +134,7 @@ func TestCLIFailureWritesDiagnosticToStderr(t *testing.T) {
 		fmt.Sprintf("failure-stderr-%d", time.Now().UnixNano()),
 	)
 
-	result, err := session.Run(ctx, args...)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
 	if err == nil {
 		t.Fatalf("terminal worker failure result = %#v; want process failure", result)
 	}
@@ -198,18 +200,19 @@ const quietPrimaryResultSeparator = "--- primary result ---"
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	t.Run("success suppresses stdout lifecycle presentation", func(t *testing.T) {
-		streamSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-stream-config")
+		streamSession := newConfiguredGoalSession(t, ctx, binaryPath, harness, "quiet-mode-stream-config")
 		streamMockWorkersPath := writeAcceptingGoalMockWorkers(t)
 		streamPrompt := fmt.Sprintf("quiet-mode-stream-baseline-%d", time.Now().UnixNano())
 		streamArgs := appendGoalRunArgs(streamSession, streamMockWorkersPath, streamPrompt,
 			"--output", "response-stream",
 		)
-		streamResult, err := streamSession.Run(ctx, streamArgs...)
+		streamResult, err := runBuiltYouBinary(ctx, binaryPath, streamSession, streamArgs...)
 		if err != nil {
 			t.Fatalf(
 				"response-stream success run failed: %v\nstdout:\n%s\nstderr:\n%s",
@@ -241,11 +244,11 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 			)
 		}
 
-		quietSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-success-config")
+		quietSession := newConfiguredGoalSession(t, ctx, binaryPath, harness, "quiet-mode-success-config")
 		quietMockWorkersPath := writeAcceptingGoalMockWorkers(t)
 		quietPrompt := fmt.Sprintf("quiet-mode-success-%d", time.Now().UnixNano())
 		quietArgs := appendGoalRunArgs(quietSession, quietMockWorkersPath, quietPrompt, "--quiet")
-		quietResult, err := quietSession.Run(ctx, quietArgs...)
+		quietResult, err := runBuiltYouBinary(ctx, binaryPath, quietSession, quietArgs...)
 		if err != nil {
 			t.Fatalf(
 				"quiet success run failed: %v\nstdout:\n%s\nstderr:\n%s",
@@ -286,11 +289,11 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 	})
 
 	t.Run("success suppresses verbose stderr operator logs", func(t *testing.T) {
-		verboseSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-verbose-config")
+		verboseSession := newConfiguredGoalSession(t, ctx, binaryPath, harness, "quiet-mode-verbose-config")
 		verboseMockWorkersPath := writeAcceptingGoalMockWorkers(t)
 		prompt := fmt.Sprintf("quiet-mode-verbose-baseline-%d", time.Now().UnixNano())
 		verboseArgs := appendGoalRunArgs(verboseSession, verboseMockWorkersPath, prompt, "--verbose")
-		verboseResult, err := verboseSession.Run(ctx, verboseArgs...)
+		verboseResult, err := runBuiltYouBinary(ctx, binaryPath, verboseSession, verboseArgs...)
 		if err != nil {
 			t.Fatalf(
 				"verbose success run failed: %v\nstdout:\n%s\nstderr:\n%s",
@@ -309,11 +312,11 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 				successStdoutPrimaryResult,
 			)
 		}
-		quietSession := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-verbose-contrast-config")
+		quietSession := newConfiguredGoalSession(t, ctx, binaryPath, harness, "quiet-mode-verbose-contrast-config")
 		quietMockWorkersPath := writeAcceptingGoalMockWorkers(t)
 		quietPrompt := fmt.Sprintf("quiet-mode-verbose-contrast-%d", time.Now().UnixNano())
 		quietArgs := appendGoalRunArgs(quietSession, quietMockWorkersPath, quietPrompt, "--quiet")
-		quietResult, err := quietSession.Run(ctx, quietArgs...)
+		quietResult, err := runBuiltYouBinary(ctx, binaryPath, quietSession, quietArgs...)
 		if err != nil {
 			t.Fatalf(
 				"quiet success run failed: %v\nstdout:\n%s\nstderr:\n%s",
@@ -338,7 +341,7 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 	})
 
 	t.Run("failure keeps quiet stdout script-safe", func(t *testing.T) {
-		session := newConfiguredGoalSession(t, ctx, harness, "quiet-mode-failure-config")
+		session := newConfiguredGoalSession(t, ctx, binaryPath, harness, "quiet-mode-failure-config")
 		rejectingMockWorkersPath := writeRejectingGoalMockWorkers(t)
 		quietFailureArgs := appendGoalRunArgs(
 			session,
@@ -346,7 +349,7 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 			fmt.Sprintf("quiet-mode-failure-%d", time.Now().UnixNano()),
 			"--quiet",
 		)
-		failureResult, err := session.Run(ctx, quietFailureArgs...)
+		failureResult, err := runBuiltYouBinary(ctx, binaryPath, session, quietFailureArgs...)
 		if err == nil {
 			t.Fatalf("quiet terminal failure result = %#v; want process failure", failureResult)
 		}
@@ -368,12 +371,13 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 func newConfiguredGoalSession(
 	t testing.TB,
 	ctx context.Context,
+	binaryPath string,
 	harness *builtcliacceptance.Harness,
 	scenario string,
 ) *builtcliacceptance.Session {
 	t.Helper()
 	session := harness.NewSession(t).WithNoExternalServer(t)
-	initOutcome := initializeOperatorConfig(t, ctx, session, scenario)
+	initOutcome := initializeOperatorConfig(t, ctx, binaryPath, session, scenario)
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",

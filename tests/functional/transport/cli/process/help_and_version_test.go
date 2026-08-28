@@ -57,6 +57,7 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 
 	for _, tc := range []struct {
 		name string
@@ -72,7 +73,7 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
-			result, err := session.Run(ctx, tc.args...)
+			result, err := runBuiltYouBinary(ctx, binaryPath, session, tc.args...)
 			session.RequireSuccess(t, tc.name, result, err)
 
 			if strings.TrimSpace(result.Stderr) != "" {
@@ -119,8 +120,8 @@ func TestCLIHelpListsPublicCommandFamilies(t *testing.T) {
 		})
 	}
 
-	bareListed := runRootHelpListedCommands(t, harness, nil)
-	helpListed := runRootHelpListedCommands(t, harness, []string{"--help"})
+	bareListed := runRootHelpListedCommands(t, binaryPath, harness, nil)
+	helpListed := runRootHelpListedCommands(t, binaryPath, harness, []string{"--help"})
 	if !sameStringSet(bareListed, helpListed) {
 		t.Fatalf("bare root and --help listed different command families:\nbare=%v\nhelp=%v", bareListed, helpListed)
 	}
@@ -134,6 +135,7 @@ func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 
 	for _, tc := range []struct {
 		name string
@@ -149,7 +151,7 @@ func TestCLISubcommandHelpUsesStableUsageAndExitZero(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
-			result, err := session.Run(ctx, tc.args...)
+			result, err := runBuiltYouBinary(ctx, binaryPath, session, tc.args...)
 			session.RequireSuccess(t, tc.name, result, err)
 
 			if strings.TrimSpace(result.Stderr) != "" {
@@ -190,6 +192,7 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 
 	for _, tc := range []struct {
 		name string
@@ -204,7 +207,7 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 
-			result, err := session.Run(ctx, tc.args...)
+			result, err := runBuiltYouBinary(ctx, binaryPath, session, tc.args...)
 			session.RequireSuccess(t, tc.name, result, err)
 
 			if strings.TrimSpace(result.Stderr) != "" {
@@ -240,6 +243,7 @@ func TestCLIVersionWritesOneMachineReadableVersion(t *testing.T) {
 
 func runRootHelpListedCommands(
 	t *testing.T,
+	binaryPath string,
 	harness *builtcliacceptance.Harness,
 	args []string,
 ) []string {
@@ -249,7 +253,7 @@ func runRootHelpListedCommands(
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	result, err := session.Run(ctx, args...)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, args...)
 	session.RequireSuccess(t, "root-help-listing", result, err)
 	return parseListedRootCommands(result.Stdout)
 }

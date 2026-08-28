@@ -18,12 +18,13 @@ func TestCLIUnknownCommandWritesSafeCodedStderr(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 	session := harness.NewSession(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	result, err := session.Run(ctx, unknownCommandProbeToken)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, unknownCommandProbeToken)
 	if err == nil {
 		t.Fatalf("unknown root command result = %#v; want process failure", result)
 	}
@@ -70,12 +71,13 @@ func TestCLIUnknownCommandReturnsUsageExitCode(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	binaryPath := buildYouBinary(t, t.Context(), harness.RepoRoot)
 	session := harness.NewSession(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	result, err := session.Run(ctx, unknownCommandProbeToken)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, unknownCommandProbeToken)
 	if err == nil {
 		t.Fatalf("unknown root command result = %#v; want process failure", result)
 	}

@@ -19,6 +19,7 @@ type operatorConfigOutcome struct {
 func initializeOperatorConfig(
 	t testing.TB,
 	ctx context.Context,
+	binaryPath string,
 	session *builtcliacceptance.Session,
 	scenario string,
 ) operatorConfigOutcome {
@@ -26,7 +27,7 @@ func initializeOperatorConfig(
 
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
-	result, err := session.Run(ctx, "run", "--factory", missingFactory)
+	result, err := runBuiltYouBinary(ctx, binaryPath, session, "run", "--factory", missingFactory)
 	if err == nil {
 		t.Fatalf("%s: run missing Factory unexpectedly succeeded: stdout=%q stderr=%q", scenario, result.Stdout, result.Stderr)
 	}
