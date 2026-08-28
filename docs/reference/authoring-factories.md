@@ -49,6 +49,7 @@ A minimal workflow needs one work type, one worker, and one workstation:
 
 ```json
 {
+  "name": "minimal-workflow",
   "workTypes": [
     {
       "name": "task",
@@ -68,7 +69,7 @@ A minimal workflow needs one work type, one worker, and one workstation:
       "worker": "processor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }
@@ -103,6 +104,7 @@ with `you factory config validate ./factory.json`:
 
 ```json
 {
+  "name": "expected-artifacts",
   "workTypes": [
     {
       "name": "task",
@@ -128,7 +130,7 @@ with `you factory config validate ./factory.json`:
       "worker": "processor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{ "workType": "task", "state": "failed" }],
       "expectedArtifacts": [
         {
           "name": "manifest",
@@ -175,6 +177,7 @@ camelCase config fields.
 
 ```json
 {
+  "name": "sample-service",
   "id": "sample-service",
   "resources": [
     { "name": "agent-slot", "capacity": 1 }
@@ -201,8 +204,8 @@ camelCase config fields.
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
-      "onContinue": { "workType": "story", "state": "init" },
-      "onFailure": { "workType": "story", "state": "failed" },
+      "onContinue": [{ "workType": "story", "state": "init" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }],
       "resources": [{ "name": "agent-slot", "capacity": 1 }]
     },
     {
@@ -210,8 +213,8 @@ camelCase config fields.
       "worker": "reviewer",
       "inputs": [{ "workType": "story", "state": "in-review" }],
       "outputs": [{ "workType": "story", "state": "complete" }],
-      "onRejection": { "workType": "story", "state": "init" },
-      "onFailure": { "workType": "story", "state": "failed" },
+      "onRejection": [{ "workType": "story", "state": "init" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }],
       "resources": [{ "name": "agent-slot", "capacity": 1 }]
     },
     {
@@ -717,6 +720,7 @@ This workstation stays the same for both local and cloud TTS:
 
 ```json
 {
+  "name": "local-tts",
   "workTypes": [
     {
       "name": "speech",
@@ -940,7 +944,7 @@ Keep the exact contracts on the canonical owner pages:
       "behavior": "POLLER",
       "worker": "github-poller",
       "outputs": [{ "workType": "task", "state": "init" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }
@@ -997,7 +1001,7 @@ Bound workstation:
   "behavior": "POLLER",
   "worker": "linear-poller",
   "outputs": [{ "workType": "task", "state": "init" }],
-  "onFailure": { "workType": "task", "state": "failed" }
+  "onFailure": [{ "workType": "task", "state": "failed" }]
 }
 ```
 

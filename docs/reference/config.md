@@ -135,6 +135,7 @@ state:
 
 ```json
 {
+  "name": "review-factory",
   "id": "review-factory",
   "workTypes": [
     {
@@ -156,7 +157,7 @@ state:
       "worker": "reviewer",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }

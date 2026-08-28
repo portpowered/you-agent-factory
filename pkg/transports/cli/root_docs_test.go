@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
@@ -200,6 +202,78 @@ func executeDocumentedConfigExample(t *testing.T, args []string) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
 	}
+}
+
+func TestFactoryDocumentation_CompleteExamplesReachGeneratedBoundary(t *testing.T) {
+	for _, topic := range []string{"config", "authoring-factories"} {
+		t.Run(topic, func(t *testing.T) {
+			doc, err := docscli.Markdown(topic)
+			if err != nil {
+				t.Fatalf("Markdown(%s) error = %v", topic, err)
+			}
+
+			completeExamples := 0
+			for _, block := range documentedJSONBlocks(doc) {
+				var shape struct {
+					WorkTypes    []json.RawMessage `json:"workTypes"`
+					Workstations []struct {
+						OnFailure json.RawMessage `json:"onFailure"`
+					} `json:"workstations"`
+				}
+				if err := json.Unmarshal([]byte(block), &shape); err != nil || len(shape.WorkTypes) == 0 || len(shape.Workstations) == 0 {
+					continue
+				}
+				completeExamples++
+				failureRoutes := 0
+				for index, workstation := range shape.Workstations {
+					if len(workstation.OnFailure) == 0 || string(workstation.OnFailure) == "null" {
+						continue
+					}
+					var routes []json.RawMessage
+					if err := json.Unmarshal(workstation.OnFailure, &routes); err != nil || len(routes) == 0 {
+						t.Fatalf("%s Factory example workstation[%d] has a non-empty array-valued onFailure route", topic, index)
+					}
+					failureRoutes++
+				}
+				if failureRoutes == 0 {
+					t.Fatalf("%s Factory example has no onFailure route\n%s", topic, block)
+				}
+
+				factory, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON([]byte(block))
+				if err != nil {
+					t.Fatalf("%s Factory example rejected by generated boundary: %v\n%s", topic, err, block)
+				}
+				if strings.TrimSpace(string(factory.Name)) == "" {
+					t.Fatalf("%s Factory example has no non-empty name\n%s", topic, block)
+				}
+			}
+
+			if completeExamples == 0 {
+				t.Fatalf("%s has no complete Factory JSON examples", topic)
+			}
+		})
+	}
+}
+
+func documentedJSONBlocks(markdown string) []string {
+	const fence = "```json"
+	const closingFence = "```"
+	var blocks []string
+	for offset := 0; offset < len(markdown); {
+		open := strings.Index(markdown[offset:], fence)
+		if open < 0 {
+			break
+		}
+		contentStart := offset + open + len(fence)
+		close := strings.Index(markdown[contentStart:], closingFence)
+		if close < 0 {
+			break
+		}
+		contentEnd := contentStart + close
+		blocks = append(blocks, strings.TrimSpace(markdown[contentStart:contentEnd]))
+		offset = contentEnd + len(closingFence)
+	}
+	return blocks
 }
 
 func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testing.T) {
