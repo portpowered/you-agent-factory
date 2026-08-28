@@ -312,12 +312,13 @@ root-level test files, explicitly excluding the transformation subpackage.
 
 ### Environment and artifact
 
-- Commit/build identifier: code-bearing final implementation head
-  `7201155c7ef25baf423742c2d88a68a4fc027dc8`; the report is a documentation-only
-  follow-up on this same branch.
+- Commit/build identifier: review-follow-up implementation head
+  `9f0b71ab37`; this report supersedes the earlier story-004 measurements from
+  `7201155c7ef25baf423742c2d88a68a4fc027dc8`.
 - Environment and configuration: Windows `10.0.26200`, `windows/amd64`, Go
-  `1.25.0`; each command ran from a fresh detached worktree of the exact head,
-  with a clean `git status` before tests.
+  `1.25.0`; the runtime commands ran from fresh detached worktrees of the exact
+  code head with a clean `git status` before tests. The lint commands ran in
+  this worktree at the same code head with only this evidence document dirty.
 - Customer entry point: production `root.BuildProcess`/`Process.Execute` and
   the in-process HTTP API boundary used by `./tests/functional/runtime_api`.
 - Real and substituted dependencies: production root/wire/services, HTTP,
@@ -330,14 +331,14 @@ root-level test files, explicitly excluding the transformation subpackage.
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Complete default package once | PASS | Fresh-head `go test -count=1 -timeout=15m ./tests/functional/runtime_api` exited `0` in `26.536s`. | Terminal PR CI remains review-owned. |
-| Repeat isolation | PASS | Fresh-head `go test -count=3 -timeout=45m ./tests/functional/runtime_api` exited `0` in `84.916s`; the package fixture's explicit-session, edge-lane, stream, listener, and root cleanup assertions passed on all three runs. | Other platforms remain unproven. |
-| Race support | PASS | Fresh-head `go test -race -count=1 -timeout=20m ./tests/functional/runtime_api` exited `0` in `68.790s` with no race finding. | Other platforms and terminal PR CI remain unproven. |
-| Tagged live-record/replay witness | PASS | Fresh-head `go test -tags=functionallong -count=1 -timeout=15m ./tests/functional/runtime_api` exited `0` in `29.594s`; CASE-41 retained its isolated two-process topology. | Tagged repeat/race are not required by this story. |
+| Complete default package once | PASS | Review-follow-up head `go test -count=1 -timeout=15m ./tests/functional/runtime_api` exited `0` in `25.240s`. | Terminal PR CI remains review-owned. |
+| Repeat isolation | PASS | Review-follow-up head `go test -count=3 -timeout=45m ./tests/functional/runtime_api` exited `0` in `66.657s`; the package fixture's explicit-session, edge-lane, stream, listener, and root cleanup assertions passed on all three runs. | Other platforms remain unproven. |
+| Race support | PASS | Review-follow-up head `go test -race -count=1 -timeout=20m ./tests/functional/runtime_api` exited `0` in `50.508s` with no race finding. | Other platforms and terminal PR CI remain unproven. |
+| Tagged live-record/replay witness | PASS | Review-follow-up head `go test -tags=functionallong -count=1 -timeout=15m ./tests/functional/runtime_api` exited `0` in `23.143s`; CASE-41 retained its isolated two-process topology. | Tagged repeat/race are not required by this story. |
 | CASE-01 through CASE-44 audit | PASS | The c06 case map contains all `44/44` case IDs with source witness, classification, and remaining boundary; the final package and tagged witness runs passed. | No remote-provider or paid validation is applicable. |
 | Behavior and cleanup parity | PASS | Story-001 pre-change witness contract plus story-003 post-change functional evidence cover HTTP/API responses, Work, Factory Events, projections, SSE, logs, config, replay, controlled effects, and cleanup; the fresh-head package gates reran the delivered behavior. | A second independent pre-change package run was not needed; the baseline is retained at `67710223e327d02c0de93a6ad826c754fe5c1702`. |
-| Authorized scope | PASS | Final three-dot `origin/main...HEAD` review contains only the c06 artifact and root `tests/functional/runtime_api` files; no `factory_transformation/**`, shared support, c01 inventory, baselines, production, contracts, generated, UI, CI, or unrelated paths are present. | Review owns any later conflict resolution. |
-| Directional package timing/topology | PASS | Story-003 recorded local default-package timing improving from `32.329s` pre-change to `27.127s` post-change (about `16.1%` faster); the final clean-head once run was `26.536s`. The shared fixture asserts one package `Process.Execute`/listener start for eligible cases, while process-input, lifecycle, recording, replay, and CLI cases retain isolation. | PR Backend Functional Coverage timing and terminal status belong to `GATE-PR-FUNCTIONAL`. |
+| Authorized scope | PASS | Review-follow-up diff contains the c06 artifact, root `tests/functional/runtime_api` compatibility/adapters/call sites, and the durable `tests/functional/sessions/root_composition/runtime_api_fixture` owner; no `factory_transformation/**`, shared support, c01 inventory, baseline, production, contract, generated, UI, CI, or unrelated paths are present. | The missing c06 source-plan authority remains a review blocker. |
+| Directional package timing/topology | PASS | The current once run is `25.240s` versus the `32.329s` pre-change diagnostic; local timings are contaminated directional evidence only. The shared fixture asserts one package `Process.Execute`/listener start for eligible cases, while process-input, lifecycle, recording, replay, and CLI cases retain isolation. | PR Backend Functional Coverage timing and terminal status belong to `GATE-PR-FUNCTIONAL`. |
 
 ### Customer journey
 
@@ -371,17 +372,51 @@ root-level test files, explicitly excluding the transformation subpackage.
   observations, session IDs, stream ownership, and process shutdown are covered
   by the story-003 fixture assertions.
 
-### Findings
+### Review follow-up and findings
+
+The review follow-up moved the importable package fixture and injected-failure
+cleanup witness out of migration-only `tests/functional/runtime_api` into
+`tests/functional/sessions/root_composition/runtime_api_fixture`. The old
+`FunctionalServer` implementation was not retained; the old path contains only
+a documented package marker for its existing deletion-only baseline row. Each
+fixture file is below the 1,000-line backend-size limit. Eligible shared
+provider controls now use `ProviderCommandRunner` edges. The dashboard
+world-view Providers fake remains a documented case-specific exception because
+its witness requires injecting provider SessionRef metadata into canonical
+Factory Events, which the command-runner contract cannot provide.
+
+| Command/procedure | Exit/result | Property proved | Not proved |
+| --- | ---: | --- | --- |
+| `make backend-size` | 0; all owned Go files within the 1,000-line file and 100-line function limits | Review-follow-up fixture topology has no size violation. | Terminal PR lint. |
+| `make pkg-structure` | 0; service and functional package structure holds, 541 deletion-only entries remain | No new or stale package-structure finding after the durable move; the excluded baseline file was not edited. | Reviewer acceptance of the retained marker depends on the source-plan/route decision. |
+| `make deadcode` | 1; baseline has `3,103` findings and the review-follow-up tree has `3,156`, including `55` new findings in `tests/functional/sessions/root_composition/runtime_api_fixture` | The production-entrypoint analyzer identifies the regular importable fixture as test-only code; a base probe at `origin/main` also showed the existing Windows/platform baseline mismatch (`3,103` versus `3,101`). | Full deadcode ratchet cannot pass without either an authorized exact baseline delta for this durable test fixture or an approved alternate layout that keeps the fixture importable without production-unreachable regular functions. The excluded deadcode baseline was not edited. |
+| `make ui-lint` | 1; `ui/scripts/biome-output-exclusions.test.mjs` could not resolve `ui/node_modules/@biomejs/biome/bin/biome` under Node `v22.12.0` | No UI source is in the c06 diff; the failure is a missing local frontend dependency. | Local UI lint is unavailable until the existing frontend toolchain is provisioned; CI/other UI lanes remain the applicable evidence. |
+| `make ui-deadcode` | 1; `bun scripts/check-deadcode-baseline.ts` stopped because no existing `knip` binary was available and `--no-install` was set | No UI source is in the c06 diff; the failure is a missing local frontend dependency. | Local UI deadcode is unavailable until the existing frontend toolchain is provisioned; CI/other UI lanes remain the applicable evidence. |
+| `make lint` | 1; backend structural checks, vet, contracts, and all other listed targets passed, while `ui-lint`, `ui-deadcode`, and `deadcode` failed as recorded above | The changed Go fixture satisfies size/structure checks, but the complete local lint gate is not green on this environment and head. | PR-head Backend Lint must be rerun after the authority/layout decision; no UI dependency or excluded baseline repair was inferred. |
+| Full default, repeat, race, and tagged commands above | 0 | Behavior, explicit-session cleanup, repetition, race safety, and isolated replay/topology remain green on `9f0b71ab37`. | PR-head CI, source-plan authority, and merge. |
+
+The PR review also identified that the PRD's `context.sourcePlan`
+(`docs/temp/functional-test-optimization.md`) is absent from this checkout and
+`origin/main`. The checked-in shared-process plan documents the general fixture
+pattern but does not supply c06-specific authority. No ignored local task file
+is being treated as an authoritative substitute, and no baseline or production
+change was made to conceal that gap.
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| None | — | No validation failure observed. | All required local-real gates pass without repair. | Observed. | Once, repeat, race, tagged, CASE-map, topology, cleanup, and scope checks above. |
+| REVIEW-001 | BLOCKED | `Test-Path docs/temp/functional-test-optimization.md` is false; the path is also absent from `origin/main`. | An authoritative c06 source-plan section or an operator-approved conflict/delta plan. | The c06-specific authority is unavailable, so the retained baseline-marker layout cannot be claimed as approved source-plan scope. | Review feedback; the checked-in shared-process plan is general only. |
+| REVIEW-002 | BLOCKED | `make deadcode` reports `3,103` baseline findings versus `3,156` current findings; `55` current-only findings are functions in the new durable importable fixture package. | A source-plan/operator decision authorizing the exact deadcode baseline rows, or an approved durable test layout that remains importable from the runtime API tests without adding production-unreachable regular functions. | The fixture cannot be imported from root-package `_test.go` files while remaining entirely `_test.go`; changing the analyzer, adding artificial reachability, or editing the excluded baseline would broaden or weaken the task. | Local `make deadcode`; base probe at `origin/main`; implementation standards require a structured delta when the smallest correct change conflicts with scope. |
+| ENV-001 | BLOCKED | `make ui-lint` cannot resolve the checked-in Biome binary and `make ui-deadcode` cannot find the existing `knip` binary with installation disabled. | A provisioned existing frontend lint toolchain for a complete local `make lint`. | The backend-only c06 change did not alter UI files or dependencies, so no frontend installation or dependency mutation was performed. | Local commands above; CI/other frontend lanes are outside this worktree's available toolchain. |
 
 ### Verdict
 
-PASS
+BLOCKED pending authoritative c06 source-plan direction and the deadcode/layout
+decision. The local complete lint command is also unavailable on this host
+because the existing frontend binaries are not installed.
 
 The local-real production-composed HTTP/package run is the highest feasible
-integrated runtime proof. Validation made no code repair and leaves terminal
-PR CI, mergeability, parent-project full-suite timing, and merge to review under
-`GATE-PR-FUNCTIONAL` and `GATE-REVIEW-MERGE`.
+integrated runtime proof. Runtime behavior and the backend size/structure gates
+pass on the review-follow-up head, but the missing source-plan authority and
+the 55 new deadcode findings are genuine review blockers. Terminal PR CI,
+mergeability, parent-project full-suite timing, and merge remain under
+`GATE-PR-FUNCTIONAL` and `GATE-REVIEW-MERGE` after those decisions are supplied.
