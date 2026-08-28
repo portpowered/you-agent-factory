@@ -27,7 +27,7 @@ func TestCLIWorkerFailureExitCode(t *testing.T) {
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
 	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerFailurePrompt)
 	fixture := sharedWorkerOutcomeProcess(t)
-	fixture.bind(workerFailurePrompt, factoryDir)
+	fixture.bind(t, workerFailurePrompt, factoryDir)
 	err := fixture.execute(inputs.Input)
 	if err == nil {
 		t.Fatal("worker failure Process.Execute error = nil; want typed process failure")
@@ -154,7 +154,7 @@ func TestCLISuccessExitCode(t *testing.T) {
 	factoryDir, factoryPath := scaffoldCLIExitCodeFactory(t)
 	inputs := newCLIExitCodeInputs(t, factoryDir, factoryPath, workerSuccessPrompt)
 	fixture := sharedWorkerOutcomeProcess(t)
-	fixture.bind(workerSuccessPrompt, factoryDir)
+	fixture.bind(t, workerSuccessPrompt, factoryDir)
 	err := fixture.execute(inputs.Input)
 	if err != nil {
 		t.Fatalf("successful worker Process.Execute failed: %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())

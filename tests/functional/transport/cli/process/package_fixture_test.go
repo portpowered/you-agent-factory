@@ -29,7 +29,6 @@ var processCLIBinary struct {
 }
 
 var sharedWorkerOutcome struct {
-	once    sync.Once
 	process support.ApplicationProcess
 	router  *workerOutcomeCommandRouter
 	err     error
@@ -44,9 +43,12 @@ var sharedWorkerOutcome struct {
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
-	if sharedWorkerOutcome.process != nil {
+	sharedWorkerOutcome.mu.Lock()
+	sharedProcess := sharedWorkerOutcome.process
+	sharedWorkerOutcome.mu.Unlock()
+	if sharedProcess != nil {
 		closeContext, cancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
-		if err := sharedWorkerOutcome.process.Close(closeContext); err != nil && exitCode == 0 {
+		if err := sharedProcess.Close(closeContext); err != nil && exitCode == 0 {
 			fmt.Fprintf(os.Stderr, "close shared worker-outcome process: %v\n", err)
 			exitCode = 1
 		}
@@ -196,13 +198,15 @@ func (router *workerOutcomeCommandRouter) callCount(selector string) int {
 
 func sharedWorkerOutcomeProcess(t testing.TB) *sharedWorkerOutcomeProcessFixture {
 	t.Helper()
-	sharedWorkerOutcome.once.Do(func() {
+	sharedWorkerOutcome.mu.Lock()
+	defer sharedWorkerOutcome.mu.Unlock()
+	if sharedWorkerOutcome.process == nil && sharedWorkerOutcome.err == nil {
 		sharedWorkerOutcome.router = newWorkerOutcomeCommandRouter()
 		sharedWorkerOutcome.process, sharedWorkerOutcome.err = support.BuildProcessWithContext(
 			context.Background(),
 			serviceedges.Edges{ProviderCommandRunner: sharedWorkerOutcome.router},
 		)
-	})
+	}
 	if sharedWorkerOutcome.err != nil {
 		t.Fatalf("BuildProcess() for shared worker outcomes: %v", sharedWorkerOutcome.err)
 	}
@@ -225,7 +229,37 @@ func (fixture *sharedWorkerOutcomeProcessFixture) execute(input root.Input) erro
 	return fixture.process.Execute(input)
 }
 
-func (fixture *sharedWorkerOutcomeProcessFixture) bind(selector, workingDirectory string) {
+func (fixture *sharedWorkerOutcomeProcessFixture) bind(
+	t testing.TB,
+	selector string,
+	workingDirectory string,
+) {
+	t.Helper()
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+
+	// go test -count=N repeats the test list in one test process, so TestMain
+	// does not recreate package fixtures between repetitions. A reusable root
+	// is intentionally shared by the failure/success pair in one repetition,
+	// but the runtime graph must be closed before the next repetition starts so
+	// its durable runtime state cannot bleed into a fresh Factory fixture.
+	if fixture.router.callCount(selector) > 0 {
+		closeContext, cancel := context.WithTimeout(context.Background(), packageResourceCloseTimeout)
+		closeErr := fixture.process.Close(closeContext)
+		cancel()
+		if closeErr != nil {
+			t.Fatalf("close shared worker-outcome process before repeat: %v", closeErr)
+		}
+		fixture.router = newWorkerOutcomeCommandRouter()
+		fixture.process, sharedWorkerOutcome.err = support.BuildProcessWithContext(
+			context.Background(),
+			serviceedges.Edges{ProviderCommandRunner: fixture.router},
+		)
+		sharedWorkerOutcome.process = fixture.process
+		if sharedWorkerOutcome.err != nil {
+			t.Fatalf("BuildProcess() for repeated shared worker outcomes: %v", sharedWorkerOutcome.err)
+		}
+	}
 	fixture.router.bind(selector, workingDirectory)
 }
 
