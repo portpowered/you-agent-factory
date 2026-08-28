@@ -15,6 +15,8 @@ import (
 
 func TestEndToEndTopologyProjectionSmoke_LiveEventsAndReplayConfigMatch(t *testing.T) {
 	support.SkipLongFunctional(t, "slow topology projection live-vs-replay sweep")
+	// C06-ISOLATED CASE-41: the witness compares a finalized live recording
+	// with a second replay server, requiring two process lifecycles by design.
 
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"workTypes": []map[string]any{

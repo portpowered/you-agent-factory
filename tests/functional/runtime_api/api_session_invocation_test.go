@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -19,9 +18,12 @@ import (
 // is configured and returns the completed primary result text.
 func TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature(t *testing.T) {
 	dir := scaffoldStructuredArgsInvocationFactory(t)
-	server := startFunctionalServerWithArgs(t, dir, false, nil, withWorkerCommands(support.NewStaticSuccessCommandRunner("structured primary COMPLETE"), nil))
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: support.NewStaticSuccessCommandRunner("structured primary COMPLETE"),
+		models:         []string{"gpt-5-codex"},
+	})
 
-	response := postInvocation(t, server.URL(), factoryapi.InvocationRequest{
+	response := postInvocation(t, server.sessionURL("/invocations"), factoryapi.InvocationRequest{
 		Args: &map[string]any{"input": "structured invoke"},
 	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
@@ -81,29 +83,21 @@ func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {
 	return dir
 }
 
-func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
+func postInvocation(t *testing.T, endpoint string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
 	t.Helper()
 
 	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
-	response, err := http.Post(
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
-		"application/json",
-		bytes.NewReader(body),
-	)
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d: %s",
-			response.StatusCode,
-			strings.TrimSpace(string(payload)),
-		)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
 	}
 
 	var decoded factoryapi.InvocationResponse

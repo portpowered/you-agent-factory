@@ -24,7 +24,7 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 		fixture.server,
 		10*time.Second,
 		func(session factoryapi.FactorySession) bool {
-			listed := support.ListDefaultSessionWork(t, fixture.server.URL())
+			listed := fixture.server.ListWork(t)
 			return fixture.runner.CallCount() >= 3 &&
 				support.HasWorkAtCustomerState(listed, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init")
 		},
@@ -36,7 +36,7 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 		fixture.server,
 		5*time.Second,
 		func(session factoryapi.FactorySession) bool {
-			listed := support.ListDefaultSessionWork(t, fixture.server.URL())
+			listed := fixture.server.ListWork(t)
 			return support.HasWorkAtCustomerState(listed, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init") &&
 				support.HasWorkAtCustomerState(listed, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
 		},
@@ -44,10 +44,10 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 	// The predicate reads Work through the canonical event projection. Refresh
 	// the aggregate session after that event-backed condition so the assertion
 	// compares public progress and Work state from the same observation window.
-	isolatedSession = support.GetDefaultSession(t, fixture.server.URL())
+	isolatedSession = fixture.server.Session(t)
 
 	if isolatedSession.Runtime.Progress.InFlightCount != 0 {
-		listed := support.ListDefaultSessionWork(t, fixture.server.URL())
+		listed := fixture.server.ListWork(t)
 		events := fixture.server.GetFactoryEvents(t)
 		dispatches := support.ObserveDispatchEvents(t, events)
 		t.Fatalf(
@@ -150,13 +150,13 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 		"claude-sonnet-4-5-20250514",
 		pauseDuration,
 	)
-	fixture.server = startFunctionalServerWithArgs(
-		t,
-		pauseHarness.Dir,
-		false,
-		nil,
-		withWorkerCommands(runner, nil),
-	)
+	fixture.server = startSharedFunctionalServer(t, pauseHarness.Dir, runtimeAPIScenario{
+		providerRunner: runner,
+		models: []string{
+			"claude-sonnet-4-5-20250514",
+			"gpt-5-codex",
+		},
+	})
 	return fixture
 }
 
@@ -210,15 +210,15 @@ func waitForThrottlePausePublicSession(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		session := support.GetDefaultSession(t, server.URL())
+		session := server.Session(t)
 		if match(session) {
 			return session
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	session := support.GetDefaultSession(t, server.URL())
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	session := server.Session(t)
+	listed := server.ListWork(t)
 	if session.Runtime.Petri != nil {
 		t.Fatalf("timed out waiting for public Factory Session within %s: progress=%#v work=%#v", timeout, session.Runtime.Progress, listed.Results)
 	}

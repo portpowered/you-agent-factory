@@ -11,6 +11,9 @@ import (
 )
 
 func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner(t *testing.T) {
+	// C06-ISOLATED CASE-21: this witness proves a shaped provider runner is
+	// installed before root/service construction, which a reused process cannot
+	// establish without changing the behavior under test.
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider server alignment"}`))
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))

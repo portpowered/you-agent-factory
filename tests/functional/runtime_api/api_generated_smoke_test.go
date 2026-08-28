@@ -26,7 +26,22 @@ func commandPrompt(request platformprocess.CommandRequest) string {
 
 func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
 	t.Helper()
-	stream := openDefaultSessionFactoryEventHTTPStream(t, baseURL)
+	assertGeneratedEventsStreamHasCanonicalHistoryAt(t, support.DefaultSessionEventsURL(baseURL))
+}
+
+func assertGeneratedEventsStreamHasCanonicalHistoryAt(t *testing.T, endpoint string) {
+	t.Helper()
+	stream := openFactoryEventHTTPStream(t, endpoint)
+	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
+	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
+		factoryapi.FactoryEventTypeRunRequest,
+		factoryapi.FactoryEventTypeInitialStructureRequest,
+	)
+}
+
+func assertGeneratedEventsStreamHasCanonicalHistoryForServer(t *testing.T, server *functionalAPIServer) {
+	t.Helper()
+	stream := server.openEventStream(t)
 	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
 	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
 		factoryapi.FactoryEventTypeRunRequest,
@@ -36,6 +51,11 @@ func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string
 
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
+	return submitGeneratedWorkAt(t, support.DefaultSessionWorkURL(baseURL, "/work"), req)
+}
+
+func submitGeneratedWorkAt(t *testing.T, endpoint string, req factoryapi.SubmitWorkRequest) string {
+	t.Helper()
 	if req.Name == nil || *req.Name == "" {
 		req.Name = stringPtr("generated-api-submit")
 	}
@@ -43,7 +63,7 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -64,11 +84,19 @@ func stringPtr(value string) *string {
 
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
 	t.Helper()
+	return putGeneratedWorkRequestAt(
+		t,
+		support.DefaultSessionWorkURL(baseURL, "/work-requests/"+url.PathEscape(requestID)),
+		req,
+	)
+}
+
+func putGeneratedWorkRequestAt(t *testing.T, endpoint string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
+	t.Helper()
 	body, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("marshal generated work request: %v", err)
 	}
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work-requests/"+url.PathEscape(requestID))
 	httpReq, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build PUT /work-requests request: %v", err)
@@ -114,9 +142,14 @@ func waitForGeneratedWorkComplete(t *testing.T, baseURL string, traceID string, 
 
 func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, placeID string, timeout time.Duration) factoryapi.ListWorkResponse {
 	t.Helper()
+	return waitForGeneratedWorkAtEndpoint(t, support.DefaultSessionWorkURL(baseURL, "/work"), traceID, placeID, timeout)
+}
+
+func waitForGeneratedWorkAtEndpoint(t *testing.T, endpoint string, traceID string, placeID string, timeout time.Duration) factoryapi.ListWorkResponse {
+	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
 		for _, item := range work.Results {
 			if stringPointerValue(item.TraceId) == traceID && generatedWorkPlaceID(item) == placeID {
 				return work
@@ -124,12 +157,17 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
 	t.Fatalf("timed out waiting for trace %q at %s; last work response: %#v", traceID, placeID, work)
 	return factoryapi.ListWorkResponse{}
 }
 
 func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []string, timeout time.Duration) []factoryapi.Work {
+	t.Helper()
+	return waitForGeneratedWorkIDsCompleteAtEndpoint(t, support.DefaultSessionWorkURL(baseURL, "/work"), workIDs, timeout)
+}
+
+func waitForGeneratedWorkIDsCompleteAtEndpoint(t *testing.T, endpoint string, workIDs []string, timeout time.Duration) []factoryapi.Work {
 	t.Helper()
 	want := make(map[string]bool, len(workIDs))
 	for _, workID := range workIDs {
@@ -137,7 +175,7 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
 		found := make(map[string]factoryapi.Work, len(want))
 		for _, item := range work.Results {
 			workID := stringPointerValue(item.WorkId)
@@ -154,7 +192,7 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, endpoint)
 	t.Fatalf("timed out waiting for completed work IDs %v; last work response: %#v", workIDs, work)
 	return nil
 }

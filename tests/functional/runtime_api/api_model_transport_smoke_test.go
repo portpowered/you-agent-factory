@@ -2,7 +2,6 @@ package runtime_api
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -10,19 +9,23 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork confirms model pull returns a configured legacy cache hit without upstream network requests.
 func TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork(t *testing.T) {
+	// C06-ISOLATED CASE-08: the managed-cache environment and rejecting model
+	// HTTP edge are process inputs whose no-network witness must not share the
+	// model host catalog or environment with another scenario.
 	dir := support.ScaffoldFactory(t, localCachedModelTransportSmokeConfig())
 	cacheDirectory := t.TempDir()
 	revision := "cached-revision"
@@ -89,14 +92,15 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("write audio fixture: %v", err)
 	}
 
-	providerStub := &modelTransportSmokeProvider{
-		response: workerexecution.InferenceResponse{
-			Content: mustMarshalFunctionalAudioContentResponse(t, audioPath),
-		},
-	}
-	server := startFunctionalServer(t, dir, false, withProvider(providerStub))
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte(mustMarshalFunctionalAudioContentResponse(t, audioPath)),
+	})
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: runner,
+		models:         []string{"OMNIVOICE_Q4_K_M"},
+	})
 
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.StatusURL())
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("GET /status factory_state = %q, want RUNNING", status.FactoryState)
 	}
@@ -159,15 +163,12 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("POST /models/.../invocations audio part = %#v, want audio/wav at %s", audioPart, audioPath)
 	}
 
-	calls := providerStub.Calls()
+	calls := runner.Requests()
 	if len(calls) != 1 {
-		t.Fatalf("provider calls = %d, want 1", len(calls))
+		t.Fatalf("provider command calls = %d, want 1", len(calls))
 	}
-	if calls[0].Model != "OMNIVOICE_Q4_K_M" || calls[0].ModelOperation != "TTS" {
-		t.Fatalf("provider call = %#v, want OMNIVOICE_Q4_K_M TTS", calls[0])
-	}
-	if len(calls[0].ModelBindings) != 1 || len(calls[0].ModelBindings[0].Content) != 1 || calls[0].ModelBindings[0].Content[0].Text != "hello world" {
-		t.Fatalf("provider bindings = %#v, want one text binding for hello world", calls[0].ModelBindings)
+	if calls[0].Command != "codex" || !strings.Contains(string(calls[0].Stdin), "hello world") {
+		t.Fatalf("provider command request = %#v, want codex prompt containing hello world", calls[0])
 	}
 
 	assertUnsupportedModelInvocationRejected(t, server.URL())
@@ -303,12 +304,6 @@ func providerBackedModelTransportBindings() *[]factoryapi.WorkstationOperationBi
 	}}
 }
 
-type modelTransportSmokeProvider struct {
-	mu       sync.Mutex
-	calls    []workerexecution.ProviderInferenceRequest
-	response workerexecution.InferenceResponse
-}
-
 type rejectingModelAssetHTTP struct {
 	mu    sync.Mutex
 	calls int
@@ -325,29 +320,4 @@ func (client *rejectingModelAssetHTTP) Calls() int {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	return client.calls
-}
-
-func (p *modelTransportSmokeProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
-	response := p.response
-	if response.Content != "" && response.Diagnostics == nil {
-		response.Diagnostics = &workerexecution.WorkDiagnostics{Metadata: map[string]string{
-			workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
-		}}
-	}
-	return response, nil
-}
-
-func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenceRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	calls := make([]workerexecution.ProviderInferenceRequest, len(p.calls))
-	for i, call := range p.calls {
-		calls[i] = workerexecution.CloneProviderInferenceRequest(call)
-	}
-	return calls
 }

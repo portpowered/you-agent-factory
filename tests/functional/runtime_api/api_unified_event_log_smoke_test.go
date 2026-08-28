@@ -19,6 +19,9 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 	if testing.Short() {
 		t.Skip("slow unified event-log smoke")
 	}
+	// C06-ISOLATED CASE-22: recording finalization and the second replay
+	// server must observe a closed first process and artifact, preserving the
+	// live/replay identity witness.
 	fixture := newUnifiedEventLogSmokeFixture(t)
 	server := fixture.server
 	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())

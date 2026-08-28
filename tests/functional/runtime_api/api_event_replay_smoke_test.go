@@ -1,13 +1,9 @@
 package runtime_api
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -15,13 +11,14 @@ import (
 func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
-	provider := &eventReplayBlockingProvider{release: releaseDispatch}
-	server := startFunctionalServer(t, dir, false, withProvider(provider))
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: support.NewGatedSuccessCommandRunner("completed", releaseDispatch),
+	})
 
-	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
+	stream := server.openEventStream(t)
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedWorkAt(t, server.workURL("/work"), factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("Event Replay Story"),
 		WorkTypeName: "task",
 		Payload: map[string]string{
@@ -43,8 +40,8 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	}
 
 	assertEventReplayActiveSession(t, outcome.activeSession)
-	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
-	assertEventReplayCompletedSession(t, support.GetDefaultSession(t, server.URL()))
+	support.WaitForSessionTerminalStatus(t, server.URL(), server.sessionID, 10*time.Second)
+	assertEventReplayCompletedSession(t, server.Session(t))
 
 	work := server.ListWork(t)
 	if len(work.Results) != 1 || stringPointerValue(work.Results[0].TraceId) != traceID {
@@ -83,7 +80,7 @@ func collectEventReplayOutcome(
 			outcome.request = event
 		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
 			if !released {
-				outcome.activeSession = support.GetDefaultSession(t, server.URL())
+				outcome.activeSession = server.Session(t)
 				close(releaseDispatch)
 				released = true
 			}
@@ -138,28 +135,4 @@ func assertEventReplayCompletedSession(t *testing.T, session factoryapi.FactoryS
 	if session.Runtime.Progress.Categories.Terminal != 1 {
 		t.Fatalf("completed Factory Session terminal count = %d, want 1", session.Runtime.Progress.Categories.Terminal)
 	}
-}
-
-type eventReplayBlockingProvider struct {
-	release <-chan struct{}
-}
-
-func (p *eventReplayBlockingProvider) Infer(
-	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	select {
-	case <-p.release:
-	case <-ctx.Done():
-		return workerexecution.InferenceResponse{}, ctx.Err()
-	}
-
-	return workerexecution.InferenceResponse{
-		Content: "completed",
-		ProviderSession: &providers.SessionMetadata{
-			Provider: "codex",
-			Kind:     "session_id",
-			ID:       "sess-event-replay-smoke",
-		},
-	}, nil
 }

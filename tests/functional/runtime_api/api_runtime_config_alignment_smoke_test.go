@@ -63,6 +63,9 @@ func TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExec
 }
 
 func testRuntimeConfigAlignmentCanonicalRoundTripAndExecution(t *testing.T) {
+	// C06-ISOLATED CASE-40: the canonical flatten/readback witness is currently
+	// coupled to the same process execution body; retain the combined case
+	// until that process-owned boundary can be split without weakening parity.
 	dir := setupRuntimeConfigAlignmentFactory(t)
 	assertRuntimeConfigAlignmentCanonicalRoundTrip(t, dir)
 	server, providerRunner, scriptRunner := startRuntimeConfigAlignmentSmokeServer(t, dir)
@@ -199,8 +202,14 @@ func startRuntimeConfigAlignmentSmokeServer(
 	})
 	providerRunner := newRuntimeConfigAlignmentProviderRunner()
 	scriptRunner := newRuntimeConfigAlignmentScriptRunner()
-	server := startFunctionalServerWithArgs(t, dir, false, nil,
-		withWorkerCommands(providerRunner, scriptRunner))
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: providerRunner,
+		scriptRunner:   scriptRunner,
+		models: []string{
+			"claude-sonnet-4-20250514",
+			"gpt-5.4",
+		},
+	})
 
 	return server, providerRunner, scriptRunner
 }
@@ -230,8 +239,8 @@ func assertRuntimeConfigAlignmentFinalState(
 ) {
 	t.Helper()
 
-	session := support.GetDefaultSession(t, server.URL())
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	session := server.Session(t)
+	listed := server.ListWork(t)
 	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
 		t.Fatalf("completed task token count = %d, want 1; work=%#v", got, listed.Results)
 	}
@@ -254,7 +263,7 @@ func assertRuntimeConfigAlignmentFinalState(
 		t,
 		support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),
 	)
-	assertRuntimeConfigAlignmentCompleteWorkPayload(t, support.ListDefaultSessionWork(t, server.URL()))
+	assertRuntimeConfigAlignmentCompleteWorkPayload(t, server.ListWork(t))
 	assertRuntimeConfigAlignmentEventHistory(t, server)
 	assertRuntimeConfigAlignmentTopologyProjection(t, server)
 }

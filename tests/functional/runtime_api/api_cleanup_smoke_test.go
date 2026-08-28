@@ -8,19 +8,24 @@ import (
 	"testing"
 	"time"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true)
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: support.NewStaticSuccessCommandRunner("Done. COMPLETE"),
+		models:         []string{"gpt-5-codex"},
+	})
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedWorkAt(t, server.workURL("/work"), factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "cleanup smoke"},
 	})
-	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+	work := waitForGeneratedWorkAtEndpoint(t, server.workURL("/work"), traceID, "task:complete", 10*time.Second)
 	if len(work.Results) != 1 {
 		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
 	}
@@ -32,7 +37,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", completed.State)
 	}
 
-	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.statusURL())
 	if statusRead.TotalTokens != 1 {
 		t.Fatalf("GET /status total_tokens = %d, want 1", statusRead.TotalTokens)
 	}
@@ -40,7 +45,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 		t.Fatalf("GET /status terminal count = %d, want 1", statusRead.Categories.Terminal)
 	}
 	assertCleanupSmokeCanonicalFactoryEvents(t, server, support.StringPointerValue(completed.WorkId))
-	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
+	assertGeneratedEventsStreamHasCanonicalHistoryForServer(t, server)
 	assertCleanupSmokeDashboardShell(t, server.URL())
 }
 
