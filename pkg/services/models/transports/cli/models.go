@@ -597,9 +597,15 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 			diagnostics, endpoint, 0, response.Duration,
 			modelsTransportErrorSummary(err),
 		)
+		if response.HTTP != nil {
+			return malformedModelsResponseError(err)
+		}
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
+	if resp == nil || resp.Body == nil {
+		return malformedModelsResponseError(nil)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -658,9 +664,15 @@ func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.U
 			diagnostics, endpoint, 0, response.Duration,
 			modelsTransportErrorSummary(err),
 		)
+		if response.HTTP != nil {
+			return malformedModelsResponseError(err)
+		}
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
+	if resp == nil || resp.Body == nil {
+		return malformedModelsResponseError(nil)
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

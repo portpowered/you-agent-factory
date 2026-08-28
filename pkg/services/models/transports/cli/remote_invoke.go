@@ -49,20 +49,89 @@ func (service *httpService) invokeRemoteGeneric(
 		return err
 	}
 	if response.Failure != nil {
-		message := strings.TrimSpace(response.Failure.Message)
-		if message == "" {
-			message = "model invocation failed"
-		}
-		return fmt.Errorf("models invocation failed: %s", message)
+		return genericCLIInvocationFailureFromGenerated(response.Failure, modelName, operation)
+	}
+	if err := validateGenericCLIResponse(response); err != nil {
+		return err
 	}
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}
 	result, err := genericCLIResultFromGenerated(response, modelName, operation)
 	if err != nil {
-		return err
+		return malformedModelsResponseError(err)
 	}
 	return writeGenericCLIOutputWithCatalog(cfg.Output, result, catalog, operation)
+}
+
+func genericCLIInvocationFailureFromGenerated(
+	failure *factoryapi.ModelInvocationFailure,
+	modelName string,
+	operation string,
+) error {
+	if failure == nil {
+		return nil
+	}
+	if strings.TrimSpace(string(failure.Class)) == "" || strings.TrimSpace(failure.Message) == "" {
+		return malformedModelsResponseError(nil)
+	}
+	mapped := &modelinference.InvocationFailure{
+		Class:     modelinference.InvocationFailureClass(failure.Class),
+		Message:   strings.TrimSpace(failure.Message),
+		Model:     modelinference.ModelReference{NameOrURI: modelName},
+		Operation: operation,
+	}
+	if failure.Model != nil && strings.TrimSpace(failure.Model.NameOrUri) != "" {
+		mapped.Model = modelinference.ModelReference{NameOrURI: failure.Model.NameOrUri}
+	}
+	if failure.Slot != nil {
+		mapped.Slot = strings.TrimSpace(*failure.Slot)
+	}
+	if failure.Parameter != nil {
+		mapped.Parameter = strings.TrimSpace(*failure.Parameter)
+	}
+	if failure.Field != nil {
+		mapped.Field = strings.TrimSpace(*failure.Field)
+	}
+	if failure.Operation != nil && strings.TrimSpace(*failure.Operation) != "" {
+		mapped.Operation = strings.TrimSpace(*failure.Operation)
+	}
+	return mapModelsClientError(mapped)
+}
+
+func validateGenericCLIResponse(response factoryapi.GenericModelInvocationResponse) error {
+	if len(response.Outputs) == 0 {
+		return malformedModelsResponseError(nil)
+	}
+	for _, output := range response.Outputs {
+		if strings.TrimSpace(output.Name) == "" || !genericCLIResponseModalityValid(output.Modality) {
+			return malformedModelsResponseError(nil)
+		}
+		if output.Content == nil && output.Artifact == nil {
+			return malformedModelsResponseError(nil)
+		}
+		if output.Content != nil && *output.Content == "" && output.Artifact == nil {
+			return malformedModelsResponseError(nil)
+		}
+		if output.Artifact != nil && strings.TrimSpace(output.Artifact.ArtifactRef) == "" {
+			return malformedModelsResponseError(nil)
+		}
+	}
+	return nil
+}
+
+func genericCLIResponseModalityValid(modality factoryapi.ModelInvocationContentType) bool {
+	switch modality {
+	case factoryapi.ModelInvocationContentTypeText,
+		factoryapi.ModelInvocationContentTypeImage,
+		factoryapi.ModelInvocationContentTypeAudio,
+		factoryapi.ModelInvocationContentTypeVideo,
+		factoryapi.ModelInvocationContentTypeJSON,
+		factoryapi.ModelInvocationContentTypeBinary:
+		return true
+	default:
+		return false
+	}
 }
 
 func genericCLIRequestFromInputs(

@@ -22,6 +22,7 @@ const (
 	modelsRootPullFailedCode       = "CLI_MODEL_PULL_FAILED"
 	modelsRootDefaultErrorText     = "models command failed"
 	modelsRootMissingCachePrefix   = "model cache is not installed; run you models pull"
+	modelsMalformedResponseCode    = "MODEL_BACKEND_FAILURE"
 )
 
 const modelsFactoryLayoutNotFoundCode = "CURRENT_FACTORY_NOT_FOUND"
@@ -209,6 +210,14 @@ func mapModelsClientError(err error) error {
 		return mapped
 	}
 	return mapModelsRootError(err)
+}
+
+func malformedModelsResponseError(cause error) error {
+	return mapModelsClientError(&modelinference.InvocationFailure{
+		Class:   modelinference.InvocationFailureClassMalformedResponse,
+		Message: "malformed models response",
+		Cause:   cause,
+	})
 }
 
 func mapModelsRootError(err error) error {

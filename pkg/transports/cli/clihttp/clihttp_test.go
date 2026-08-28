@@ -139,6 +139,33 @@ func TestProtocolPreservesDurationOnTransportAndDecodeErrors(t *testing.T) {
 	})
 }
 
+func TestProtocolRejectsTrailingJSONValues(t *testing.T) {
+	t.Parallel()
+
+	body := &trackedBody{Reader: strings.NewReader(`{"ok":true} {"unexpected":true}`)}
+	clock := &clockSequence{values: []time.Time{time.Unix(3, 0), time.Unix(3, int64(time.Millisecond))}}
+	protocol, err := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+	}), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var response struct {
+		OK bool `json:"ok"`
+	}
+	result, err := protocol.GetJSON(context.Background(), "http://factory.test/models/llm", &response)
+	if err == nil || !strings.Contains(err.Error(), "multiple JSON values") {
+		t.Fatalf("trailing JSON error = %v, want multiple-value parse failure", err)
+	}
+	if !response.OK || result.Duration != time.Millisecond {
+		t.Fatalf("response/duration = %#v/%s, want decoded first value and measured duration", response, result.Duration)
+	}
+	if !body.closed {
+		t.Fatal("trailing JSON failure did not close response body")
+	}
+}
+
 func TestProtocolRejectsNilSuccessfulResponse(t *testing.T) {
 	clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
 	protocol, _ := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) { return nil, nil }), clock)
