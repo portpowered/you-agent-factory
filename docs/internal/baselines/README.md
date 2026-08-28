@@ -84,12 +84,12 @@ generator from the named evidence.
 
 The status terms below are deliberately narrow. **Merged** means that the
 writer or generator is present on the current branch; it does not mean that a
-workflow updates the file automatically. **Pending** means that the mechanism
-exists only in held PR #2347 at head
-`6df6a8971bca3c10f1dec0fd037c0cc5578730ef`. **Absent** means that no
-deterministic writer exists on main; the row is handed to later Scope 3 work,
-and a verification test or an unrelated artifact generator must not be
-relabelled as a maintenance mechanism.
+workflow updates the file automatically. There are no **Pending** rows in this
+revision: pending is reserved for a mechanism that exists only in a held
+change, and PR #2347 has since merged as `fee3da73388514cfb5975307d2cd1e07b345cd84`.
+**Absent** means that no deterministic writer exists on main; the row is
+handed to later Scope 3 work, and a verification test or an unrelated artifact
+generator must not be relabelled as a maintenance mechanism.
 
 ### Manual ratchets
 
@@ -117,8 +117,8 @@ relabelled as a maintenance mechanism.
 
 | Class | Comparison file | Owner and comparison unit | Deterministic generation command | Generator status and safe use |
 | --- | --- | --- | --- | --- |
-| S-01 | `docs/internal/baselines/deadcode-baseline.txt` | Backend dead-code gate — normalized unreachable-symbol identity | After PR #2347 merges: `make regenerate-shared-ci-baselines BASELINE_REGEN_ROOT=. UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json" BASELINE_REGEN_DEADCODE_REPORT="$DEADCODE_REPORT_PATH"` | Pending in held PR #2347 at the exact head above. Until merged, `make deadcode` is verification only; use the delivered normalized report and pinned analyzer required by that PR. |
-| S-02 | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | Unit-lane performance gate — three unit-lane wall samples plus package and test inventories | After PR #2347 merges: `make regenerate-shared-ci-baselines BASELINE_REGEN_ROOT=. UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json" BASELINE_REGEN_DEADCODE_REPORT="$DEADCODE_REPORT_PATH"` | Pending in held PR #2347 at the exact head above. The generator validates three hosted samples and updates only the allowlisted shared baselines; do not substitute local timing runs. |
+| S-01 | `docs/internal/baselines/deadcode-baseline.txt` | Backend dead-code gate — normalized unreachable-symbol identity | `make regenerate-shared-ci-baselines BASELINE_REGEN_ROOT=. UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json" BASELINE_REGEN_DEADCODE_REPORT="$DEADCODE_REPORT_PATH"` | Merged on main via PR #2347, merge commit `fee3da73388514cfb5975307d2cd1e07b345cd84`; `.github/workflows/regenerate-shared-ci-baselines.yml` invokes `Makefile:regenerate-shared-ci-baselines`, which writes this allowlisted file through `cmd/unitlanebudget/regenerate.go:regenerateSharedBaselines`. Use the delivered normalized dead-code report from completed hosted CI; `make deadcode` remains verification only. |
+| S-02 | `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | Unit-lane performance gate — three unit-lane wall samples plus package and test inventories | `make regenerate-shared-ci-baselines BASELINE_REGEN_ROOT=. UNIT_LATENCY_BUDGET="$UNIT_BUDGET_BASELINE" UNIT_LATENCY_SAMPLES=".artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json" BASELINE_REGEN_DEADCODE_REPORT="$DEADCODE_REPORT_PATH"` | Merged on main via PR #2347, merge commit `fee3da73388514cfb5975307d2cd1e07b345cd84`; `.github/workflows/regenerate-shared-ci-baselines.yml` invokes `Makefile:regenerate-shared-ci-baselines`, which validates three complete hosted `github-actions`/`ubuntu-24.04` samples and writes only the allowlisted shared baselines through `cmd/unitlanebudget/regenerate.go:regenerateSharedBaselines`. Do not substitute local timing runs. |
 | S-03 | `docs/internal/baselines/ownership-inventory.json` | PSS-F01 ownership inventory — package path, destination mapping, named owner, and guard row | `go run ./cmd/ownershipinventoryfreeze` | Merged on the current branch. This command deterministically writes the ownership inventory and the path-lease freeze; inspect both diffs and prove them with `make ownership-inventory-check`. |
 | S-04 | `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json` | PSS-F01 path-lease freeze — packet ID, exclusive path, and active-lease overlap | `go run ./cmd/ownershipinventoryfreeze` | Merged on the current branch; generated together with S-03. Inspect the packet and lease changes before committing either snapshot. |
 | S-05 | `docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json` | Operator Settings ownership — root `.go` filename and contract/fold classification | No deterministic generator exists on main. `go test ./internal/ownershipinventory -count=1` is verification only. | Absent; test helpers write temporary fixtures, not this file. Later Scope 3 owns a writer and its evidence contract. |
@@ -130,12 +130,12 @@ relabelled as a maintenance mechanism.
 | S-11 | `contracts/testdata/baseline/mcp-tools.json` | MCP tool identity — tool name, ID candidate, description, input schema, and handler registration | No deterministic generator exists on main. The focused baseline tests in the inventory table are verification only. | Absent; `mcpdiscoverygen` writes different discovery artifacts and must not be treated as this snapshot's writer. Later Scope 3 owns the generator. |
 
 The classification intentionally separates backend dead-code from frontend
-dead-code: S-01 has a self-maintaining writer only in the held PR, while R-03's
-writer flag would accept new unused-code findings into a quality gate. The
-coverage manifests are also ratchets: their generator flags produce candidates,
-but unattended replacement could lower a package floor. The two absent
-inventory mechanisms and the absent MCP writer remain explicit Scope 3 work;
-this story does not invent a generator or alter a required check.
+dead-code: S-01 now has a self-maintaining writer on main through merged PR
+#2347, while R-03's writer flag would accept new unused-code findings into a
+quality gate. The coverage manifests are also ratchets: their generator flags
+produce candidates, but unattended replacement could lower a package floor. The
+two absent inventory mechanisms and the absent MCP writer remain explicit Scope
+3 work; this story does not invent a generator or alter a required check.
 
 ### Unit identity reconciliation
 
