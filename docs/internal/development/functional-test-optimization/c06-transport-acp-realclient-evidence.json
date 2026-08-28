@@ -50,8 +50,12 @@
     "singleRunCommand": "go test -count=1 -timeout=15m ./tests/functional/transport/acp/realclient",
     "repeatRunCommand": "go test -count=3 -timeout=45m ./tests/functional/transport/acp/realclient",
     "platform": "windows/amd64",
+    "singleRunOutcome": "pass (exit 0)",
+    "repeatRunOutcome": "pass (exit 0; count=3)",
     "outcome": "pass-with-explicit-skip",
     "pinnedClientOutcome": "explicit-skip",
+    "nodeVersion": "v22.12.0",
+    "requiredPinnedClientOutcome": "fail-closed before startup: Node.js 22.13.0 or later is required",
     "processStartsBefore": 10,
     "processStartsAfter": 10
   },
