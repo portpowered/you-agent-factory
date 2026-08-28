@@ -267,9 +267,24 @@ function checkCurrentMain(edge, { mainSha, defaultBranch, phase }) {
 	};
 }
 
-function readRemoteBranchPaths(edge, { mainSha, botBranch }) {
-	const output = edge.git(["diff", "--name-only", mainSha, `origin/${botBranch}`]).stdout;
-	return validateAllowlistedPaths(output.split(/\r?\n/).filter(Boolean));
+function inspectRemoteBranch(edge, { mainSha, botBranch, expectedSha }) {
+	const remoteRef = `origin/${botBranch}`;
+	const actualSha = edge.git(["rev-parse", remoteRef]).stdout.trim();
+	if (actualSha !== expectedSha) {
+		throw new Error(
+			`automation branch moved from ${expectedSha} to ${actualSha || "(unknown)"} before reconciliation; refusing to replace concurrent work`,
+		);
+	}
+	const baseSha = edge.git(["merge-base", mainSha, remoteRef]).stdout.trim();
+	requireCommitSha(baseSha, "automation branch base revision");
+	const parentSha = edge.git(["rev-parse", `${remoteRef}^`]).stdout.trim();
+	requireCommitSha(parentSha, "automation branch parent revision");
+	const output = edge.git(["diff", "--name-only", baseSha, remoteRef]).stdout;
+	return {
+		baseSha,
+		parentSha,
+		paths: validateAllowlistedPaths(output.split(/\r?\n/).filter(Boolean)),
+	};
 }
 
 function refreshRemoteBranch(edge, botBranch) {
@@ -296,7 +311,12 @@ function matchesRemoteCandidate(edge, botBranch) {
 	return matches;
 }
 
-function validatePullRequestMetadata(metadata, { defaultBranch, botBranch, commitSha }) {
+function validatePullRequestMetadata(metadata, {
+	defaultBranch,
+	botBranch,
+	commitSha,
+	candidatePaths,
+}) {
 	if (
 		metadata.baseRefName !== defaultBranch ||
 		metadata.headRefName !== botBranch
@@ -309,10 +329,38 @@ function validatePullRequestMetadata(metadata, { defaultBranch, botBranch, commi
 		throw new Error(`pull request head does not match generated commit ${commitSha}`);
 	}
 	if (!Array.isArray(metadata.files)) throw new Error("pull request metadata did not include files");
-	validateAllowlistedPaths(
+	const pullRequestPaths = validateAllowlistedPaths(
 		metadata.files.map((file) => file?.path),
 		{ requireChanges: true },
 	);
+	if (pullRequestPaths.join("\n") !== candidatePaths.join("\n")) {
+		throw new Error(
+			`pull request files do not match generated candidate; expected ${candidatePaths.join(", ")}, received ${pullRequestPaths.join(", ")}`,
+		);
+	}
+}
+
+function verifyCandidateBase(edge, { mainSha, revision, label }) {
+	const parentSha = edge.git(["rev-parse", `${revision}^`]).stdout.trim();
+	if (parentSha !== mainSha) {
+		throw new Error(
+			`${label} parent ${parentSha || "(unknown)"} does not match guarded main ${mainSha}`,
+		);
+	}
+}
+
+function readGeneratedCandidatePaths(edge, { mainSha, changedPaths }) {
+	const workingTreePaths = edge.git(["diff", "--name-only", mainSha]).stdout
+		.split(/\r?\n/)
+		.filter(Boolean);
+	const stagedPaths = edge.git(["diff", "--cached", "--name-only"]).stdout
+		.split(/\r?\n/)
+		.filter(Boolean);
+	return validateAllowlistedPaths([
+		...changedPaths,
+		...workingTreePaths,
+		...stagedPaths,
+	]);
 }
 
 export function reconcileBotCandidate({
@@ -330,12 +378,9 @@ export function reconcileBotCandidate({
 	if (!String(repository).trim()) throw new Error("repository is required for bot reconciliation");
 	requireCommitSha(mainSha, "main revision");
 	if (botBranchExists) requireCommitSha(botBranchSha, "existing bot branch revision");
-	const candidatePaths = validateAllowlistedPaths(changedPaths, {
+	const requestedCandidatePaths = validateAllowlistedPaths(changedPaths, {
 		requireChanges: changedPaths.length > 0,
 	});
-	if (candidatePaths.length > 0 && !String(sourceRunUrl).trim()) {
-		throw new Error("source CI run URL is required for a generated pull request");
-	}
 	const edge = createCommandEdge(commandRunner);
 
 	let reconciliation = checkCurrentMain(edge, {
@@ -344,11 +389,23 @@ export function reconcileBotCandidate({
 		phase: "reconciliation",
 	});
 	if (reconciliation) return reconciliation;
+	const candidatePaths = readGeneratedCandidatePaths(edge, {
+		mainSha,
+		changedPaths: requestedCandidatePaths,
+	});
+	if (candidatePaths.length > 0 && !String(sourceRunUrl).trim()) {
+		throw new Error("source CI run URL is required for a generated pull request");
+	}
 
 	if (candidatePaths.length === 0) {
+		let remoteBranch = null;
 		if (botBranchExists) {
 			refreshRemoteBranch(edge, botBranch);
-			readRemoteBranchPaths(edge, { mainSha, botBranch });
+			remoteBranch = inspectRemoteBranch(edge, {
+				mainSha,
+				botBranch,
+				expectedSha: botBranchSha,
+			});
 		}
 		let botBranchPresent = false;
 		if (botBranchExists) {
@@ -364,6 +421,12 @@ export function reconcileBotCandidate({
 		}
 		const pullRequests = readOpenPullRequests(edge, { repository, defaultBranch, botBranch });
 		ensureSinglePullRequest(pullRequests, botBranch);
+		reconciliation = checkCurrentMain(edge, {
+			mainSha,
+			defaultBranch,
+			phase: "no-diff cleanup",
+		});
+		if (reconciliation) return reconciliation;
 		if (pullRequests.length === 1) {
 			const pullRequestNumber = parsePullRequestNumber(
 				pullRequests[0].number,
@@ -380,20 +443,35 @@ export function reconcileBotCandidate({
 			]);
 		}
 		if (botBranchPresent) {
+			reconciliation = checkCurrentMain(edge, {
+				mainSha,
+				defaultBranch,
+				phase: "obsolete branch cleanup",
+			});
+			if (reconciliation) return reconciliation;
 			edge.git(["push", "origin", "--delete", botBranch]);
 		}
 		return {
 			action: pullRequests.length === 1 ? "close-existing" : "noop",
 			publish: false,
+			remotePaths: remoteBranch?.paths || [],
 		};
 	}
 
-	let remotePaths = [];
+	let remoteBranch = null;
 	if (botBranchExists) {
 		refreshRemoteBranch(edge, botBranch);
-		remotePaths = readRemoteBranchPaths(edge, { mainSha, botBranch });
+		remoteBranch = inspectRemoteBranch(edge, {
+			mainSha,
+			botBranch,
+			expectedSha: botBranchSha,
+		});
 	}
-	const candidateMatchesRemote = botBranchExists && matchesRemoteCandidate(edge, botBranch);
+	const candidateMatchesRemote =
+		botBranchExists &&
+		remoteBranch.baseSha === mainSha &&
+		remoteBranch.parentSha === mainSha &&
+		matchesRemoteCandidate(edge, botBranch);
 	const initialPullRequests = readOpenPullRequests(edge, { repository, defaultBranch, botBranch });
 	ensureSinglePullRequest(initialPullRequests, botBranch);
 
@@ -415,6 +493,19 @@ export function reconcileBotCandidate({
 		const stagedPaths = edge.git(["diff", "--cached", "--name-only"]).stdout.split(/\r?\n/).filter(Boolean);
 		validateAllowlistedPaths(stagedPaths, { requireChanges: true });
 		edge.git(["commit", "-m", prTitle]);
+		const generatedCommitSha = edge.git(["rev-parse", "HEAD"]).stdout.trim();
+		requireCommitSha(generatedCommitSha, "generated branch revision");
+		verifyCandidateBase(edge, {
+			mainSha,
+			revision: "HEAD",
+			label: "generated candidate",
+		});
+		reconciliation = checkCurrentMain(edge, {
+			mainSha,
+			defaultBranch,
+			phase: "candidate push",
+		});
+		if (reconciliation) return reconciliation;
 		edge.gh(["auth", "setup-git", "--hostname", "github.com"]);
 		const pushArgs = ["push"];
 		if (botBranchExists) {
@@ -424,8 +515,7 @@ export function reconcileBotCandidate({
 		}
 		pushArgs.push("origin", `${botBranch}:${botBranch}`);
 		edge.git(pushArgs);
-		commitSha = edge.git(["rev-parse", "HEAD"]).stdout.trim();
-		requireCommitSha(commitSha, "generated branch revision");
+		commitSha = generatedCommitSha;
 	}
 
 	reconciliation = checkCurrentMain(edge, {
@@ -501,7 +591,12 @@ export function reconcileBotCandidate({
 		]).stdout,
 		"gh pr view",
 	);
-	validatePullRequestMetadata(metadata, { defaultBranch, botBranch, commitSha });
+	validatePullRequestMetadata(metadata, {
+		defaultBranch,
+		botBranch,
+		commitSha,
+		candidatePaths,
+	});
 
 	reconciliation = checkCurrentMain(edge, {
 		mainSha,
@@ -530,7 +625,7 @@ export function reconcileBotCandidate({
 		publish: true,
 		commitSha,
 		pullRequestNumber,
-		remotePaths,
+		remotePaths: remoteBranch?.paths || [],
 	};
 }
 
