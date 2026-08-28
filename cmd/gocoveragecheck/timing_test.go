@@ -328,11 +328,8 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
-	if !strings.Contains(strings.Join(gotArgs, " "), "-count=1") {
-		t.Fatalf("coverage go test args = %v, want explicit -count=1", gotArgs)
-	}
-	if !slicesContains(gotArgs, "-parallel=2") {
-		t.Fatalf("coverage go test args = %v, want bounded functional test parallelism", gotArgs)
+	if slicesContains(gotArgs, "-count=1") || slicesContains(gotArgs, "-parallel=2") {
+		t.Fatalf("coverage go test args = %v, want Go default count and in-package parallelism", gotArgs)
 	}
 
 	data, readErr := os.ReadFile(timingPath)
