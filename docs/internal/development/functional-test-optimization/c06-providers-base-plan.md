@@ -25,10 +25,15 @@ replay, environment, logging, telemetry, and executable cases in isolated
 boundaries with an exact reason.
 
 The migrated fixture and its topology/cleanup proofs are test-only declarations
-in the existing `tests/functional/providers/helpers_test.go` file. Keeping the
-fixture in a test file is required because the repository deadcode checker
-analyzes normal package files without test variants; this preserves the
-aggregate package command without adding an excluded deadcode-baseline entry.
+in the existing aggregate test files, with the fixture core in
+`tests/functional/providers/helpers_test.go`, shared-process assertions in
+`cli_script_executor_test.go`, runtime-log scanning in
+`runtime_logging_smoke_test.go`, and forced-cleanup proof in
+`cli_timeout_cleanup_smoke_test.go`. Keeping the fixture in test files is
+required because the repository deadcode checker analyzes normal package files
+without test variants; the split also keeps each file within the backend-size
+limit while preserving the aggregate package command without adding an
+excluded deadcode-baseline entry.
 Controlled model behavior uses the `ProviderCommandRunner` edge with
 provider-shaped sanitized results. The process-sensitive mock-worker and
 child-process assertions remain isolated where their CLI-global or executable

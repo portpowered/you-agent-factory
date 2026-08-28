@@ -3,6 +3,8 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +26,57 @@ import (
 )
 
 const runtimeLoggingSmokeEnvKey = "AGENT_FACTORY_RUNTIME_LOGGING_SMOKE_ENV"
+
+func FindRuntimeLogRecord(
+	t *testing.T,
+	fixture *ProcessFixture,
+	workDir string,
+	exitCode int,
+) map[string]any {
+	t.Helper()
+	var found map[string]any
+	err := filepath.WalkDir(fixture.runtimeLogs, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".log" {
+			return nil
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		decoder := json.NewDecoder(file)
+		for {
+			var record map[string]any
+			if err := decoder.Decode(&record); err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+			if record["event_name"] != commandRunnerCompletedLogEvent {
+				continue
+			}
+			if got, ok := record["working_dir"].(string); ok && workDir != "" && got != workDir {
+				continue
+			}
+			if got, ok := record["exit_code"].(float64); !ok || int(got) != exitCode {
+				continue
+			}
+			found = record
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan shared runtime logs: %v", err)
+	}
+	if found == nil {
+		t.Fatalf("shared runtime logs contain no %s record for %q exit %d", commandRunnerCompletedLogEvent, workDir, exitCode)
+	}
+	return found
+}
 
 type runtimeLoggingSmokeRunner struct {
 	stdout   string
