@@ -387,7 +387,7 @@ review-owned and are not claimed by this artifact.
 
 ## Review correction: repeated-read stabilization and size split
 
-Source head: `f043b66c53` (`test: stabilize provider session CLI coverage`).
+Source head: `fc7f4d692e` (`test: stabilize provider session CLI coverage`).
 The replay/history assertions now live in `worker_sessions_cli_replay_test.go`,
 the main CLI setup matrix is extracted from the top-level test, and the
 backend-size limits are satisfied without removing any direct witness. FT-B05
@@ -407,13 +407,13 @@ make backend-size
 PASS; all owned Go backend files are within file limit 1000 and function limit 100
 
 go test -v -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
-PASS; package time 9.548s; root-builds=1 api-host-starts=1 cli-builds=1; active-provider-routes=0
+PASS; package time 9.372s; root-builds=1 api-host-starts=1 cli-builds=1; active-provider-routes=0
 
 go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
-PASS; package time 22.291s
+PASS; package time 21.242s
 
 go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
-PASS; package time 3.872s; no race report
+PASS; package time 4.153s; no race report
 
 go test -covermode=count -coverpkg=./pkg/... -coverprofile=/tmp/c06-parent-repeat-final.out -count=10 -run '^TestWorkerSessionsCLI$' ./tests/functional/provider_sessions/cli
 PASS; Linux/amd64; package time 5.733s
