@@ -1,143 +1,147 @@
 package factorysessionexecution
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestBuildCanonicalSessionEvents_RunningAndTerminalSessions(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
-	finishedAt := time.Date(2026, 6, 8, 14, 10, 0, 0, time.UTC)
-
-	runningEvents := BuildCanonicalSessionEvents(
-		SessionReadResult{
-			SessionID:        "dur-sess-js-run-n-001",
-			Status:           LifecycleStatusRunning,
-			OrchestratorKind: "JAVASCRIPT",
-			Dialect:          "you-workflow-v1",
-			Phase:            "verify",
-			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-		},
-		ResultReadResult{
-			SessionID:    "dur-sess-js-run-n-001",
-			ResultStatus: ResultStatusPartial,
-		},
-	)
-	if len(runningEvents) != 2 {
-		t.Fatalf("running events = %d, want 2", len(runningEvents))
+func replaySession(
+	sessionID, orchestratorKind string,
+	status LifecycleStatus,
+	startedAt *time.Time,
+	sourceHash, policyHash, phase string,
+) SessionReadResult {
+	return SessionReadResult{
+		SessionID:        sessionID,
+		Status:           status,
+		OrchestratorKind: orchestratorKind,
+		SourceHash:       sourceHash,
+		Policy:           PolicyProjection{EffectiveHash: policyHash},
+		ResolvedSource:   ResolvedSource{SourceHash: sourceHash},
+		Lifecycle:        &LifecycleTimestamps{StartedAt: startedAt},
+		Phase:            phase,
 	}
-	assertCanonicalEventEnvelope(t, runningEvents[0], "SESSION_STARTED", "session-started/dur-sess-js-run-n-001")
-	assertCanonicalEventEnvelope(t, runningEvents[1], "SESSION_RESULT_UPDATED", "session-result-updated/dur-sess-js-run-n-001")
-
-	terminalEvents := BuildCanonicalSessionEvents(
-		SessionReadResult{
-			SessionID:        "dur-sess-js-success-002",
-			Status:           LifecycleStatusSucceeded,
-			OrchestratorKind: "JAVASCRIPT",
-			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
-		},
-		ResultReadResult{
-			SessionID:    "dur-sess-js-success-002",
-			ResultStatus: ResultStatusFinal,
-		},
-	)
-	if len(terminalEvents) != 3 {
-		t.Fatalf("terminal events = %d, want 3", len(terminalEvents))
-	}
-	assertCanonicalEventEnvelope(t, terminalEvents[2], "SESSION_COMPLETED", "session-completed/dur-sess-js-success-002")
 }
 
-func TestPetriTokenSummary_RoundTripsThroughTaggedDurableHistory(t *testing.T) {
-	snapshot := PersistedRuntimeSessionState{Records: []DurableSessionRecord{{Kind: DurableRecordKindPetriTokenSummary, PetriSummary: &PetriTokenSummary{TokenID: "token-summary", WorkID: "work-summary", WorkTypeID: "task", PlaceID: "task:done", State: "done"}}}}
-	encoded, err := json.Marshal(snapshot)
+func javascriptReplaySession(sessionID string, status LifecycleStatus, startedAt *time.Time) SessionReadResult {
+	return replaySession(sessionID, "JAVASCRIPT", status, startedAt, "sha256:fixture", "sha256:policy", "")
+}
+
+func javascriptReplayEvents(
+	sessionID string,
+	status LifecycleStatus,
+	startedAt *time.Time,
+	result ResultReadResult,
+) []json.RawMessage {
+	result.SessionID = sessionID
+	return BuildCanonicalRuntimeSessionEvents(javascriptReplaySession(sessionID, status, startedAt), result)
+}
+
+func canonicalReplayEvents(session SessionReadResult, status ResultStatus) []json.RawMessage {
+	return BuildCanonicalSessionEvents(session, ResultReadResult{SessionID: session.SessionID, ResultStatus: status})
+}
+
+func replayResult(sessionID string, status ResultStatus, artifactIDs ...string) ResultReadResult {
+	return ResultReadResult{SessionID: sessionID, ResultStatus: status, ArtifactIDs: artifactIDs}
+}
+
+func replayResultAvailability(sessionID string, sessionStatus LifecycleStatus, status ResultStatus, primary json.RawMessage) ResultReadResult {
+	return ResultReadResult{SessionID: sessionID, SessionStatus: sessionStatus, ResultStatus: status, PrimaryResult: primary}
+}
+
+func syncTimeoutReplayResult(sessionID string) ResultReadResult {
+	return ResultReadResult{SessionID: sessionID, ResultStatus: ResultStatusNotReady, Availability: &ResultAvailabilityDetail{Reason: "SYNC_WAIT_TIMED_OUT", Message: "Sync wait ended before a terminal result was available.", Retryable: true}}
+}
+
+func orchestratorReplaySession(
+	sessionID, orchestratorKind string,
+	status LifecycleStatus,
+	startedAt *time.Time,
+) SessionReadResult {
+	return replaySession(sessionID, orchestratorKind, status, startedAt, "", "", "")
+}
+
+func replayOrchestratorSessionID(prefix, orchestratorKind string) string {
+	return prefix + "-" + strings.ToLower(orchestratorKind)
+}
+
+func replayDispatchProjectionForOrchestrator(
+	t *testing.T,
+	prefix, orchestratorKind string,
+	sessionStatus LifecycleStatus,
+	resultStatus ResultStatus,
+	startedAt *time.Time,
+	phase string,
+	live DispatchSummary,
+) []DispatchSummary {
+	t.Helper()
+	sessionID := replayOrchestratorSessionID(prefix, orchestratorKind)
+	session := orchestratorReplaySession(sessionID, orchestratorKind, sessionStatus, startedAt)
+	session.Phase = phase
+	events := BuildCanonicalRuntimeSessionEvents(
+		session,
+		ResultReadResult{SessionID: sessionID, ResultStatus: resultStatus},
+		RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+	)
+	replayed, err := ReplayDispatchProjection(events)
 	if err != nil {
-		t.Fatalf("marshal summary snapshot: %v", err)
+		t.Fatalf("ReplayDispatchProjection: %v", err)
 	}
-	var decoded PersistedRuntimeSessionState
-	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		t.Fatalf("unmarshal summary snapshot: %v", err)
-	}
-	hydrated := runtimeStateFromPersistedSnapshot(decoded)
-	if len(hydrated.petriMutations) != 0 || len(hydrated.petriSummaries) != 1 || hydrated.petriSummaries[0].WorkID != "work-summary" {
-		t.Fatalf("hydrated summary state = %d mutations, %#v", len(hydrated.petriMutations), hydrated.petriSummaries)
-	}
-	resaved := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(hydrated, 0)
-	if len(resaved.Records) != 1 || resaved.Records[0].PetriSummary == nil {
-		t.Fatalf("resaved summary records = %#v", resaved.Records)
-	}
+	return replayed
 }
 
-func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtifactsAndProviderSession(t *testing.T) {
-	t.Parallel()
-	artifactRef := factory.FormatArtifactURI("session-live-child", "child-artifact-1")
-	records := []factory.JavaScriptRuntimeRecord{
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-1",
-				Status:        factory.JavaScriptChildDispatchStatusQueued,
-				Label:         "summarize-findings",
-				ExecutionMode: ChildExecutorModeLive,
-				ArtifactRef:   artifactRef,
-			},
-		},
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-1",
-				Status:        factory.JavaScriptChildDispatchStatusRunning,
-				Label:         "summarize-findings",
-				ExecutionMode: ChildExecutorModeLive,
-				ArtifactRef:   artifactRef,
-			},
-		},
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:         "dispatch-1",
-				Status:             factory.JavaScriptChildDispatchStatusCompleted,
-				Label:              "summarize-findings",
-				ExecutionMode:      ChildExecutorModeLive,
-				Provider:           "mock",
-				ProviderSessionRef: "provider-session-42",
-				ArtifactRef:        artifactRef,
-			},
-		},
+func replaySessionProjection(t *testing.T, events []json.RawMessage) (SessionReadResult, ResultReadResult) {
+	t.Helper()
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
 	}
+	return session, result
+}
 
-	observedAt := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	projection := ProjectRuntimeExecutionRecords("session-live-child", records, observedAt)
-	if len(projection.Dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one dispatch", projection.Dispatches)
+func replaySessionPublicFields(t *testing.T, session SessionReadResult) [9]any {
+	t.Helper()
+	if session.Lifecycle == nil || session.Lifecycle.StartedAt == nil {
+		t.Fatalf("lifecycle = %#v, want startedAt", session.Lifecycle)
 	}
-	dispatch := projection.Dispatches[0]
-	if dispatch.Status != DispatchStatusCompleted {
-		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
+	if session.ResultSummary == nil {
+		t.Fatal("resultSummary missing")
 	}
-	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0].ID != "provider-session-42" {
-		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	return [9]any{session.SessionID, session.Status, session.SourceHash, session.Policy.EffectiveHash, session.Phase, session.Lifecycle.StartedAt.UTC(), session.ResultSummary.ResultStatus, session.ArtifactCount, session.Links}
+}
+
+func filteredReconnectEvents(
+	t *testing.T,
+	events []json.RawMessage,
+	request EventReconnectRequest,
+	sessionID string,
+	want int,
+) []json.RawMessage {
+	t.Helper()
+	filtered, err := FilterEventsAfterReconnect(events, request, sessionID)
+	if err != nil {
+		t.Fatalf("FilterEventsAfterReconnect: %v", err)
 	}
-	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != "child-artifact-1" {
-		t.Fatalf("outputArtifactIds = %#v", dispatch.OutputArtifactIDs)
+	if len(filtered) != want {
+		t.Fatalf("filtered events = %d, want %d", len(filtered), want)
 	}
-	transitions := projection.DispatchStatusTransitions["dispatch-1"]
-	if len(transitions) != 3 {
-		t.Fatalf("statusTransitions = %#v, want queued/running/completed", transitions)
-	}
-	if len(projection.Artifacts) != 1 || projection.Artifacts[0].ID != "child-artifact-1" {
-		t.Fatalf("artifacts = %#v", projection.Artifacts)
-	}
+	return filtered
 }
 
 func TestPersistedTokenFailureHistoryRetainsHeadTailAndReloads(t *testing.T) {
@@ -324,24 +328,8 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 	t.Parallel()
 	retryable := true
 	records := []factory.JavaScriptRuntimeRecord{
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-2",
-				Status:        factory.JavaScriptChildDispatchStatusQueued,
-				Label:         "child-1",
-				ExecutionMode: ChildExecutorModeLive,
-			},
-		},
-		{
-			Kind: factory.JavaScriptRecordKindChildDispatch,
-			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-2",
-				Status:        factory.JavaScriptChildDispatchStatusRunning,
-				Label:         "child-1",
-				ExecutionMode: ChildExecutorModeLive,
-			},
-		},
+		liveChildDispatchRecord("dispatch-2", factory.JavaScriptChildDispatchStatusQueued, "child-1", ""),
+		liveChildDispatchRecord("dispatch-2", factory.JavaScriptChildDispatchStatusRunning, "child-1", ""),
 		{
 			Kind: factory.JavaScriptRecordKindChildDispatch,
 			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
@@ -407,51 +395,26 @@ func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {
 		json.RawMessage(`{"id":"session-completed/s1","context":{"sequence":3,"sessionSequence":2}}`),
 	}
 
-	all, err := FilterEventsAfterReconnect(events, EventReconnectRequest{}, "s1")
-	if err != nil {
-		t.Fatalf("FilterEventsAfterReconnect all: %v", err)
-	}
-	if len(all) != 3 {
-		t.Fatalf("all events = %d, want 3", len(all))
-	}
-
-	afterStart, err := FilterEventsAfterReconnect(events, EventReconnectRequest{
+	filteredReconnectEvents(t, events, EventReconnectRequest{}, "s1", 3)
+	filteredReconnectEvents(t, events, EventReconnectRequest{
 		AfterEventID: "session-started/s1",
-	}, "s1")
-	if err != nil {
-		t.Fatalf("FilterEventsAfterReconnect after start: %v", err)
-	}
-	if len(afterStart) != 2 {
-		t.Fatalf("after start events = %d, want 2", len(afterStart))
-	}
+	}, "s1", 2)
 
 	sequence := 1
-	afterSequence, err := FilterEventsAfterReconnect(events, EventReconnectRequest{
+	filteredReconnectEvents(t, events, EventReconnectRequest{
 		AfterSequence: &sequence,
-	}, "s1")
-	if err != nil {
-		t.Fatalf("FilterEventsAfterReconnect after sequence: %v", err)
-	}
-	if len(afterSequence) != 1 {
-		t.Fatalf("after sequence events = %d, want 1", len(afterSequence))
-	}
+	}, "s1", 1)
 
 	eventsWithoutSessionSequence := append([]json.RawMessage(nil), events...)
 	eventsWithoutSessionSequence[1] = json.RawMessage(
 		`{"id":"session-result-updated/s1","context":{"sequence":42}}`,
 	)
 	canonicalSequence := 42
-	afterCanonicalSequence, err := FilterEventsAfterReconnect(eventsWithoutSessionSequence, EventReconnectRequest{
+	filteredReconnectEvents(t, eventsWithoutSessionSequence, EventReconnectRequest{
 		AfterSequence: &canonicalSequence,
-	}, "s1")
-	if err != nil {
-		t.Fatalf("FilterEventsAfterReconnect canonical sequence fallback: %v", err)
-	}
-	if len(afterCanonicalSequence) != 1 {
-		t.Fatalf("after canonical sequence events = %d, want 1", len(afterCanonicalSequence))
-	}
+	}, "s1", 1)
 
-	_, err = FilterEventsAfterReconnect(events, EventReconnectRequest{
+	_, err := FilterEventsAfterReconnect(events, EventReconnectRequest{
 		AfterEventID: "missing-event",
 	}, "s1")
 	if !errors.Is(err, ErrReconnectCursorNotFound) {
@@ -459,246 +422,237 @@ func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {
 	}
 }
 
-func TestReplaySessionProjection_TerminalSessionBracket(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
-	finishedAt := time.Date(2026, 6, 11, 12, 0, 2, 0, time.UTC)
-	sessionID := "dur-sess-replay-001"
-	events := BuildCanonicalRuntimeSessionEvents(
-		SessionReadResult{
-			SessionID:        sessionID,
-			Status:           LifecycleStatusSucceeded,
-			OrchestratorKind: "JAVASCRIPT",
-			Dialect:          "you-workflow-v1",
-			SourceHash:       "sha256:fixture",
-			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-			ResolvedSource: ResolvedSource{
-				SourceRef:  "workflow/simple-final",
-				SourceHash: "sha256:fixture",
-			},
-			ResultSummary: &ResultSummary{
-				ResultStatus: string(ResultStatusFinal),
-				Summary:      "Completed simple workflow.",
-			},
-			Lifecycle: &LifecycleTimestamps{
-				StartedAt:  &startedAt,
-				FinishedAt: &finishedAt,
-			},
-		},
-		ResultReadResult{
-			SessionID:    sessionID,
-			ResultStatus: ResultStatusFinal,
-		},
-	)
+const (
+	terminalWorkerSuccess      = "success"
+	terminalWorkerFailure      = "failure"
+	terminalWorkerCancellation = "cancellation"
+	terminalWorkerTimeout      = "timeout"
+)
 
-	session, result, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
-	}
-	if session.Status != LifecycleStatusSucceeded {
-		t.Fatalf("status = %q, want SUCCEEDED", session.Status)
-	}
-	if session.SourceHash != "sha256:fixture" {
-		t.Fatalf("sourceHash = %q", session.SourceHash)
-	}
-	if session.Policy.EffectiveHash != "sha256:policy" {
-		t.Fatalf("policyHash = %q", session.Policy.EffectiveHash)
-	}
-	if session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(ResultStatusFinal) {
-		t.Fatalf("resultSummary = %#v, want FINAL", session.ResultSummary)
-	}
-	if session.Links.Session == "" || session.Links.Events == "" {
-		t.Fatal("expected inspection links")
-	}
-	if result.ResultStatus != ResultStatusFinal {
-		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+type childTerminalResponseCase struct {
+	name          string
+	behavior      string
+	progress      []workerexecution.ProgressFragment
+	wantKind      responseevents.Kind
+	wantPhase     responseevents.Phase
+	wantErrorCode string
+}
+
+func TestChildWorkerExecutor_PublishesExactlyOneDurableTerminalResponseForEveryOutcome(t *testing.T) {
+	t.Parallel()
+	for _, test := range childTerminalResponseCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			runChildTerminalResponseCase(t, test)
+		})
 	}
 }
 
-func TestReplaySessionProjection_IdempotentOnDuplicateSequence(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
-	sessionID := "dur-sess-replay-002"
-	events := BuildCanonicalRuntimeSessionEvents(
-		SessionReadResult{
-			SessionID:        sessionID,
-			Status:           LifecycleStatusRunning,
-			OrchestratorKind: "JAVASCRIPT",
-			SourceHash:       "sha256:fixture",
-			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
-			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-		},
-		ResultReadResult{
-			SessionID:    sessionID,
-			ResultStatus: ResultStatusNotReady,
-		},
-	)
+func terminalResponseCase(name, behavior string, progress []workerexecution.ProgressFragment, kind responseevents.Kind, phase responseevents.Phase, errorCode string) childTerminalResponseCase {
+	return childTerminalResponseCase{name: name, behavior: behavior, progress: progress, wantKind: kind, wantPhase: phase, wantErrorCode: errorCode}
+}
 
-	firstSession, firstResult, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection first: %v", err)
-	}
-	secondSession, secondResult, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection second: %v", err)
-	}
-	if firstSession.SessionID != secondSession.SessionID ||
-		firstSession.Status != secondSession.Status ||
-		firstSession.SourceHash != secondSession.SourceHash ||
-		firstSession.Policy.EffectiveHash != secondSession.Policy.EffectiveHash ||
-		firstSession.Links.Session != secondSession.Links.Session {
-		t.Fatalf("session projection changed on replay: %#v vs %#v", firstSession, secondSession)
-	}
-	if firstResult.ResultStatus != secondResult.ResultStatus ||
-		firstResult.SessionStatus != secondResult.SessionStatus {
-		t.Fatalf("result projection changed on replay: %#v vs %#v", firstResult, secondResult)
+func childTerminalResponseCases() []childTerminalResponseCase {
+	return []childTerminalResponseCase{
+		terminalResponseCase("success with provider terminal progress", terminalWorkerSuccess, []workerexecution.ProgressFragment{{Kind: workerexecution.ProgressFragmentKind, Payload: "provider progress"}, {Kind: workerexecution.CompletedFragmentKind, Type: "COMPLETED"}}, responseevents.KindRun, responseevents.PhaseCompleted, ""),
+		terminalResponseCase("failure without provider terminal progress", terminalWorkerFailure, []workerexecution.ProgressFragment{{Kind: workerexecution.ProgressFragmentKind, Payload: "failure progress"}}, responseevents.KindError, responseevents.PhaseFailed, "stream_failed"),
+		terminalResponseCase("cancellation without provider terminal progress", terminalWorkerCancellation, nil, responseevents.KindError, responseevents.PhaseFailed, "stream_canceled"),
+		terminalResponseCase("timeout without provider terminal progress", terminalWorkerTimeout, nil, responseevents.KindError, responseevents.PhaseFailed, "timeout"),
 	}
 }
 
-func TestReplaySessionProjection_ReplacesArtifactStubsWithoutDuplication(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
-	finishedAt := time.Date(2026, 6, 11, 12, 0, 2, 0, time.UTC)
-	sessionID := "dur-sess-replay-003"
-	events := BuildCanonicalRuntimeSessionEvents(
-		SessionReadResult{
-			SessionID:        sessionID,
-			Status:           LifecycleStatusSucceeded,
-			OrchestratorKind: "JAVASCRIPT",
-			SourceHash:       "sha256:fixture",
-			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
-			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
-		},
-		ResultReadResult{
-			SessionID:    sessionID,
-			ResultStatus: ResultStatusFinal,
-			ArtifactIDs:  []string{"art-1", "art-2"},
-		},
+func runChildTerminalResponseCase(t *testing.T, test childTerminalResponseCase) {
+	t.Helper()
+	const sessionID = "dur-sess-terminal-bridge"
+	service := newDurableResponseEventsService(t)
+	state := seedResponseEventSession(t, service, sessionID)
+	if err := service.ensureSessionResponseEvents(sessionID, state); err != nil {
+		t.Fatalf("ensure response events: %v", err)
+	}
+
+	provider, started := newTerminalWorkerProvider(test.behavior)
+	workerService := newTerminalWorkersService(t, provider)
+	execution := terminalWorkerExecution{service: workerService, progress: test.progress}
+	executor := newChildWorkerExecutor(
+		sessionID, execution, newChildRecordSink(), childTestValues{},
+		service.observeWorkerDispatch, "/project", 0,
 	)
+	executor.publish = func(_ string, fragment workerexecution.ProgressFragment) {
+		service.PublishWorkerProgress(fragment)
+	}
+	executionErr := executeTerminalChild(t, executor, test.behavior, started)
 
-	session, _, err := ReplaySessionProjection(events)
+	cursor, err := service.SubscribeResponseEvents(context.Background(), sessionID, factorysessions.ResponseEventSubscriptionRequest{SessionID: sessionID})
 	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
+		t.Fatalf("SubscribeResponseEvents: %v", err)
 	}
-	if len(session.ArtifactRefs) != 2 {
-		t.Fatalf("artifact refs = %d, want 2", len(session.ArtifactRefs))
+	defer cursor.Detach()
+	events, err := cursor.Drain()
+	if err != nil {
+		t.Fatalf("Drain response events: %v", err)
+	}
+	assertTerminalResponse(t, events, test, executionErr)
+}
+
+func executeTerminalChild(
+	t *testing.T,
+	executor *childWorkerExecutor,
+	behavior string,
+	started <-chan struct{},
+) error {
+	t.Helper()
+	request := factory.JavaScriptChildExecutionRequest{
+		Prompt: "run", Preset: "agent", ModelProvider: "codex", Model: "terminal-model",
+	}
+	if behavior == terminalWorkerSuccess || behavior == terminalWorkerFailure {
+		_, err := executor.Execute(context.Background(), request)
+		return err
 	}
 
-	// Replaying the same events again must not duplicate artifact stubs.
-	sessionAgain, _, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection again: %v", err)
+	ctx := context.Background()
+	var cancel context.CancelFunc
+	if behavior == terminalWorkerCancellation {
+		ctx, cancel = context.WithCancel(ctx)
+	} else {
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
 	}
-	if len(sessionAgain.ArtifactRefs) != 2 {
-		t.Fatalf("artifact refs after second replay = %d, want 2", len(sessionAgain.ArtifactRefs))
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := executor.Execute(ctx, request)
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("real Workers provider was not started")
+	}
+	if behavior == terminalWorkerCancellation {
+		cancel()
+	} else {
+		<-ctx.Done()
+	}
+	return <-done
+}
+
+func assertTerminalResponse(t *testing.T, events []responseevents.FactoryResponseEvent, test childTerminalResponseCase, executionErr error) {
+	t.Helper()
+	assertTerminalExecutionResult(t, test, executionErr)
+	terminal := terminalResponseWithExpectedOrder(t, events, test)
+	assertTerminalKindAndPhase(t, terminal, test)
+	assertTerminalErrorPayload(t, terminal, test)
+}
+
+func assertTerminalExecutionResult(t *testing.T, test childTerminalResponseCase, executionErr error) {
+	t.Helper()
+	if test.behavior == terminalWorkerSuccess {
+		if executionErr != nil {
+			t.Fatalf("success child execution error = %v", executionErr)
+		}
+		return
+	}
+	if executionErr == nil {
+		t.Fatal("unhappy child execution error = nil")
 	}
 }
 
-func TestReplaySessionProjection_FirstTerminalOutcomeWinsCompetingRace(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
-	finishedAt := startedAt.Add(time.Second)
-	sessionID := "dur-sess-replay-terminal-race"
-	base := SessionReadResult{
-		SessionID: sessionID, Status: LifecycleStatusCanceled, OrchestratorKind: "JAVASCRIPT",
-		Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+func terminalResponseWithExpectedOrder(t *testing.T, events []responseevents.FactoryResponseEvent, test childTerminalResponseCase) responseevents.FactoryResponseEvent {
+	t.Helper()
+	terminals := terminalResponseEvents(events)
+	if len(terminals) != 1 {
+		t.Fatalf("response events = %#v, want exactly one terminal event", events)
 	}
-	canceled := BuildCanonicalRuntimeSessionEvents(base, ResultReadResult{
-		SessionID: sessionID, ResultStatus: ResultStatusUnavailable, SessionStatus: LifecycleStatusCanceled,
-	})
-	base.Status = LifecycleStatusFailed
-	failed := BuildCanonicalRuntimeSessionEvents(base, ResultReadResult{
-		SessionID: sessionID, ResultStatus: ResultStatusFailedWithPartial, SessionStatus: LifecycleStatusFailed,
-	})
+	terminal := terminals[0]
+	if len(test.progress) > 0 && (len(events) < 2 || events[len(events)-1].EventID != terminal.EventID) {
+		t.Fatalf("events = %#v, want progress before the terminal event", events)
+	}
+	return terminal
+}
 
-	session, result, err := ReplaySessionProjection(append(canceled, failed...))
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
-	}
-	if session.Status != LifecycleStatusCanceled || result.SessionStatus != LifecycleStatusCanceled || result.ResultStatus != ResultStatusUnavailable {
-		t.Fatalf("late terminal outcome overwrote cancellation: session=%#v result=%#v", session, result)
+func assertTerminalKindAndPhase(t *testing.T, terminal responseevents.FactoryResponseEvent, test childTerminalResponseCase) {
+	t.Helper()
+	if terminal.Kind != test.wantKind || terminal.Phase != test.wantPhase {
+		t.Fatalf("terminal event = %#v, want kind=%q phase=%q", terminal, test.wantKind, test.wantPhase)
 	}
 }
 
-func TestReplaySessionProjection_PreservesSyncTimeoutAvailability(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
-	sessionID := "dur-sess-replay-timeout-availability"
-	events := BuildCanonicalRuntimeSessionEvents(
-		SessionReadResult{
-			SessionID:        sessionID,
-			Status:           LifecycleStatusRunning,
-			OrchestratorKind: "JAVASCRIPT",
-			SourceHash:       "sha256:fixture",
-			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
-			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-		},
-		ResultReadResult{
-			SessionID:    sessionID,
-			ResultStatus: ResultStatusNotReady,
-			Availability: &ResultAvailabilityDetail{
-				Reason:    "SYNC_WAIT_TIMED_OUT",
-				Message:   "Sync wait ended before a terminal result was available.",
-				Retryable: true,
-			},
-		},
-	)
-
-	_, result, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
+func assertTerminalErrorPayload(t *testing.T, terminal responseevents.FactoryResponseEvent, test childTerminalResponseCase) {
+	t.Helper()
+	if test.wantErrorCode == "" {
+		return
 	}
-	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
-		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	var payload responseevents.ErrorPayload
+	if err := json.Unmarshal(terminal.Payload, &payload); err != nil {
+		t.Fatalf("decode terminal error payload: %v", err)
+	}
+	if payload.Code != test.wantErrorCode {
+		t.Fatalf("terminal error code = %q, want %q", payload.Code, test.wantErrorCode)
 	}
 }
 
-func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
-	t.Parallel()
-	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
-	sessionID := "dur-sess-replay-004"
-	base := BuildCanonicalRuntimeSessionEvents(
-		SessionReadResult{
-			SessionID:        sessionID,
-			Status:           LifecycleStatusRunning,
-			OrchestratorKind: "JAVASCRIPT",
-			SourceHash:       "sha256:fixture",
-			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
-			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+func newTerminalWorkerProvider(behavior string) (providers.Service, <-chan struct{}) {
+	started := make(chan struct{})
+	var once sync.Once
+	provider := testutil.NativeProvider{
+		ExecuteFunc: func(ctx context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			once.Do(func() { close(started) })
+			switch behavior {
+			case terminalWorkerSuccess:
+				return providers.ExecuteResult{
+					Outcome: providers.ExecuteOutcomeAccepted, Content: "completed",
+				}, nil
+			case terminalWorkerFailure:
+				return providers.ExecuteResult{}, errors.New("provider failed")
+			default:
+				<-ctx.Done()
+				return providers.ExecuteResult{}, ctx.Err()
+			}
 		},
-		ResultReadResult{
-			SessionID:    sessionID,
-			ResultStatus: ResultStatusNotReady,
-		},
-	)
-	events := append(append([]json.RawMessage(nil), base...), json.RawMessage(`{"type":"DISPATCH_QUEUED","id":"dispatch-queued/1","context":{"sequence":99},"payload":{}}`))
+	}
+	return provider, started
+}
 
-	session, _, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
+type terminalWorkerExecution struct {
+	service  WorkerExecution
+	progress []workerexecution.ProgressFragment
+}
+
+func (execution terminalWorkerExecution) Execute(
+	ctx context.Context,
+	request workerexecution.ExecuteRequest,
+) (workerexecution.ExecuteResult, error) {
+	if request.Input.ProgressPublisher == nil {
+		return workerexecution.ExecuteResult{}, errors.New("progress publisher is required")
 	}
-	if session.SessionID != sessionID {
-		t.Fatalf("sessionId = %q, want %q", session.SessionID, sessionID)
+	for _, fragment := range execution.progress {
+		request.Input.ProgressPublisher(fragment)
 	}
+	return execution.service.Execute(ctx, request)
+}
+
+func terminalResponseEvents(events []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
+	terminals := make([]responseevents.FactoryResponseEvent, 0, 2)
+	for _, event := range events {
+		isRunTerminal := event.Kind == responseevents.KindRun && event.Phase == responseevents.PhaseCompleted
+		isErrorTerminal := event.Kind == responseevents.KindError &&
+			(event.Phase == responseevents.PhaseFailed || event.Phase == responseevents.PhaseCanceled)
+		if isRunTerminal || isErrorTerminal {
+			terminals = append(terminals, event)
+		}
+	}
+	return terminals
 }
 
 func TestReplaySessionProjection_EquivalentOrchestratorsSharePublicSessionProjection(t *testing.T) {
 	t.Parallel()
 	startedAt := time.Date(2026, 7, 11, 18, 30, 0, 0, time.UTC)
 	sessionID := "dur-sess-orchestrator-parity-001"
-	baseSession := SessionReadResult{
-		SessionID:      sessionID,
-		Status:         LifecycleStatusRunning,
-		SourceHash:     "sha256:equivalent-source",
-		Policy:         PolicyProjection{EffectiveHash: "sha256:equivalent-policy"},
-		ResolvedSource: ResolvedSource{SourceHash: "sha256:equivalent-source"},
-		Lifecycle:      &LifecycleTimestamps{StartedAt: &startedAt},
-		Phase:          "execute",
-	}
+	baseSession := replaySession(
+		sessionID, "", LifecycleStatusRunning, &startedAt,
+		"sha256:equivalent-source", "sha256:equivalent-policy", "execute",
+	)
 	result := ResultReadResult{SessionID: sessionID, ResultStatus: ResultStatusNotReady}
 
 	petriSession := baseSession
@@ -721,48 +675,11 @@ func TestReplaySessionProjection_EquivalentOrchestratorsSharePublicSessionProjec
 	}
 	javascriptEvents = append(javascriptEvents, canonicalTypedInternalEvent(t, "ORCHESTRATOR_CHECKPOINT_WRITTEN", sessionID, javascriptPayload))
 
-	petriProjection, _, err := ReplaySessionProjection(petriEvents)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection(PETRI): %v", err)
-	}
-	javascriptProjection, _, err := ReplaySessionProjection(javascriptEvents)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection(JAVASCRIPT): %v", err)
-	}
+	petriProjection, _ := replaySessionProjection(t, petriEvents)
+	javascriptProjection, _ := replaySessionProjection(t, javascriptEvents)
 
-	type sharedPublicSession struct {
-		SessionID     string
-		Status        LifecycleStatus
-		SourceHash    string
-		PolicyHash    string
-		Phase         string
-		StartedAt     time.Time
-		ResultStatus  string
-		ArtifactCount int
-		Links         InspectionLinks
-	}
-	sharedProjection := func(session SessionReadResult) sharedPublicSession {
-		t.Helper()
-		if session.Lifecycle == nil || session.Lifecycle.StartedAt == nil {
-			t.Fatalf("lifecycle = %#v, want startedAt", session.Lifecycle)
-		}
-		if session.ResultSummary == nil {
-			t.Fatal("resultSummary missing")
-		}
-		return sharedPublicSession{
-			SessionID:     session.SessionID,
-			Status:        session.Status,
-			SourceHash:    session.SourceHash,
-			PolicyHash:    session.Policy.EffectiveHash,
-			Phase:         session.Phase,
-			StartedAt:     session.Lifecycle.StartedAt.UTC(),
-			ResultStatus:  session.ResultSummary.ResultStatus,
-			ArtifactCount: session.ArtifactCount,
-			Links:         session.Links,
-		}
-	}
-	petriPublic := sharedProjection(petriProjection)
-	javascriptPublic := sharedProjection(javascriptProjection)
+	petriPublic := replaySessionPublicFields(t, petriProjection)
+	javascriptPublic := replaySessionPublicFields(t, javascriptProjection)
 	if petriPublic != javascriptPublic {
 		t.Fatalf("shared public session projection differs by orchestrator:\nPETRI: %#v\nJAVASCRIPT: %#v", petriPublic, javascriptPublic)
 	}
@@ -781,13 +698,6 @@ func TestReplayDispatchProjection_EquivalentOrchestratorsMatchLiveDispatchSummar
 
 	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
 		t.Run(orchestratorKind, func(t *testing.T) {
-			session := SessionReadResult{
-				SessionID:        "dispatch-parity-" + strings.ToLower(orchestratorKind),
-				Status:           LifecycleStatusSucceeded,
-				OrchestratorKind: orchestratorKind,
-				Phase:            "execute",
-				Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-			}
 			live := DispatchSummary{
 				ID:                  "dispatch-equivalent-1",
 				Status:              DispatchStatusCompleted,
@@ -800,16 +710,9 @@ func TestReplayDispatchProjection_EquivalentOrchestratorsMatchLiveDispatchSummar
 				ProviderSessionRefs: []ProviderSessionRef{providerRef},
 				OutputArtifactIDs:   []string{"artifact-equivalent-1"},
 			}
-			events := BuildCanonicalRuntimeSessionEvents(
-				session,
-				ResultReadResult{SessionID: session.SessionID, ResultStatus: ResultStatusFinal},
-				RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+			replayed := replayDispatchProjectionForOrchestrator(
+				t, "dispatch-parity", orchestratorKind, LifecycleStatusSucceeded, ResultStatusFinal, &startedAt, "execute", live,
 			)
-
-			replayed, err := ReplayDispatchProjection(events)
-			if err != nil {
-				t.Fatalf("ReplayDispatchProjection: %v", err)
-			}
 			if len(replayed) != 1 || !reflect.DeepEqual(replayed[0], live) {
 				t.Fatalf("replayed dispatch = %#v, want live projection %#v", replayed, live)
 			}
@@ -822,22 +725,10 @@ func TestReplayDispatchProjection_EquivalentOrchestratorsPreserveAbsentProviderS
 	startedAt := time.Date(2026, 7, 11, 20, 5, 0, 0, time.UTC)
 	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
 		t.Run(orchestratorKind, func(t *testing.T) {
-			session := SessionReadResult{
-				SessionID:        "dispatch-no-provider-" + strings.ToLower(orchestratorKind),
-				Status:           LifecycleStatusFailed,
-				OrchestratorKind: orchestratorKind,
-				Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-			}
 			live := DispatchSummary{ID: "dispatch-no-provider", Status: DispatchStatusFailed, DispatchKind: "AGENT"}
-			events := BuildCanonicalRuntimeSessionEvents(
-				session,
-				ResultReadResult{SessionID: session.SessionID, ResultStatus: ResultStatusUnavailable},
-				RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+			replayed := replayDispatchProjectionForOrchestrator(
+				t, "dispatch-no-provider", orchestratorKind, LifecycleStatusFailed, ResultStatusUnavailable, &startedAt, "", live,
 			)
-			replayed, err := ReplayDispatchProjection(events)
-			if err != nil {
-				t.Fatalf("ReplayDispatchProjection: %v", err)
-			}
 			if len(replayed) != 1 || len(replayed[0].ProviderSessionRefs) != 0 {
 				t.Fatalf("replayed dispatch = %#v, want absent provider session refs", replayed)
 			}
@@ -860,22 +751,11 @@ func TestReplaySessionProjection_EquivalentOrchestratorsRestoreArtifactsAndLates
 
 	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
 		t.Run(orchestratorKind, func(t *testing.T) {
-			sessionID := "artifact-parity-" + strings.ToLower(orchestratorKind)
-			session := SessionReadResult{
-				SessionID:        sessionID,
-				Status:           LifecycleStatusRunning,
-				OrchestratorKind: orchestratorKind,
-				Lifecycle: &LifecycleTimestamps{
-					StartedAt: &startedAt,
-					PausedAt:  &pausedAt,
-					ResumedAt: &resumedAt,
-				},
-			}
-			events := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
-				SessionID:    sessionID,
-				ResultStatus: ResultStatusPartial,
-				ArtifactIDs:  []string{"artifact-parity-1"},
-			})
+			sessionID := replayOrchestratorSessionID("artifact-parity", orchestratorKind)
+			session := orchestratorReplaySession(sessionID, orchestratorKind, LifecycleStatusRunning, &startedAt)
+			session.Lifecycle.PausedAt = &pausedAt
+			session.Lifecycle.ResumedAt = &resumedAt
+			events := BuildCanonicalRuntimeSessionEvents(session, replayResult(sessionID, ResultStatusPartial, "artifact-parity-1"))
 			artifactEvent := canonicalTypedInternalEvent(t, "ARTIFACT_CREATED", sessionID, map[string]any{
 				"artifact":   artifact,
 				"capturedAt": resumedAt.Format(time.RFC3339),
@@ -896,10 +776,7 @@ func TestReplaySessionProjection_EquivalentOrchestratorsRestoreArtifactsAndLates
 			}
 			events = append(events, artifactEvent, canonicalTypedInternalEvent(t, internalType, sessionID, internalPayload))
 
-			replayed, _, err := ReplaySessionProjection(events)
-			if err != nil {
-				t.Fatalf("ReplaySessionProjection: %v", err)
-			}
+			replayed, _ := replaySessionProjection(t, events)
 			wantRef := ArtifactRefSummary{ID: "artifact-parity-1", Kind: "FINAL_RESULT", Visibility: "PUBLIC", ContentHash: "sha256:artifact-parity", SizeBytes: 128}
 			if replayed.ArtifactCount != 1 || !reflect.DeepEqual(replayed.ArtifactRefs, []ArtifactRefSummary{wantRef}) {
 				t.Fatalf("artifact projection = count %d refs %#v, want %#v", replayed.ArtifactCount, replayed.ArtifactRefs, wantRef)
@@ -946,23 +823,13 @@ func TestReplaySessionProjection_EquivalentOrchestratorsPreserveResultAvailabili
 		t.Run(test.name, func(t *testing.T) {
 			var sharedResult *ResultReadResult
 			for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
-				sessionID := "result-parity-" + strings.ToLower(orchestratorKind)
-				session := SessionReadResult{
-					SessionID:        sessionID,
-					Status:           test.sessionStatus,
-					OrchestratorKind: orchestratorKind,
-					Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-				}
+				sessionID := replayOrchestratorSessionID("result-parity", orchestratorKind)
+				session := orchestratorReplaySession(sessionID, orchestratorKind, test.sessionStatus, &startedAt)
 				if IsTerminalLifecycleStatus(test.sessionStatus) {
 					finishedAt := startedAt.Add(time.Minute)
 					session.Lifecycle.FinishedAt = &finishedAt
 				}
-				live := ResultReadResult{
-					SessionID:     sessionID,
-					SessionStatus: test.sessionStatus,
-					ResultStatus:  test.resultStatus,
-					PrimaryResult: test.primaryResult,
-				}
+				live := replayResultAvailability(sessionID, test.sessionStatus, test.resultStatus, test.primaryResult)
 				events := BuildCanonicalRuntimeSessionEvents(session, live)
 				if test.precedingPartial {
 					partialEvent := canonicalTypedInternalEvent(t, "SESSION_RESULT_UPDATED", sessionID, map[string]any{
@@ -972,10 +839,7 @@ func TestReplaySessionProjection_EquivalentOrchestratorsPreserveResultAvailabili
 					events = append(events[:1], append([]json.RawMessage{partialEvent}, events[1:]...)...)
 				}
 
-				replayedSession, replayedResult, err := ReplaySessionProjection(events)
-				if err != nil {
-					t.Fatalf("ReplaySessionProjection(%s): %v", orchestratorKind, err)
-				}
+				replayedSession, replayedResult := replaySessionProjection(t, events)
 				if replayedResult.ResultStatus != test.resultStatus || replayedResult.SessionStatus != test.sessionStatus {
 					t.Fatalf("%s result availability = (%q, %q), want (%q, %q)", orchestratorKind, replayedResult.ResultStatus, replayedResult.SessionStatus, test.resultStatus, test.sessionStatus)
 				}
