@@ -230,8 +230,17 @@ func TestModelsRootCompositionModelScenarios(t *testing.T) {
 // keeping a Factory declaration ahead of the built-in definition with the same
 // model name.
 func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
+	runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(t, nil)
+}
+
+func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWithBarrier(
+	t *testing.T,
+	barrier *sharedModelsSessionBarrier,
+) {
 	fixture := ensureSharedModelsFixture(t)
-	fixture.withSession(t, "catalog capability and Factory precedence", func(_ string) {
+	fixture.withSession(t, "catalog capability and Factory precedence", func(sessionID string) {
+		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
+		barrier.wait(t)
 		listed := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.baseURL+"/models")
 		catalogModel := findCatalogModel(t, listed.Results, "OMNIVOICE_Q4_K_M", "GET /models")
 		if catalogModel.ProviderLocality != factoryapi.WorkerModelLocalityLocal ||
@@ -307,8 +316,17 @@ func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 }
 
 func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
+	runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(t, nil)
+}
+
+func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
+	t *testing.T,
+	barrier *sharedModelsSessionBarrier,
+) {
 	fixture := ensureSharedModelsFixture(t)
-	fixture.withSession(t, "unknown model detail", func(_ string) {
+	fixture.withSession(t, "unknown model detail", func(sessionID string) {
+		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
+		barrier.wait(t)
 		endpoint := fixture.baseURL + "/models/missing-catalog-model"
 		response, err := http.Get(endpoint)
 		if err != nil {
