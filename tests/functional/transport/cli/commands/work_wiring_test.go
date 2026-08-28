@@ -85,6 +85,7 @@ func testCLIWorkListAndShowReflectSubmittedWork(t *testing.T, remote *sharedRemo
 		t.Fatalf("work list JSON missing submitted work %q at init or complete: %#v", workID, listed.Results)
 	}
 
+	waitForWorkStateViaCLI(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workID, "complete", 30*time.Second)
 	shown, err := runWorkShowCLIJSON(t, ctx, remote.process, factoryDir, remote.baseURL, sessionID, workID)
 	if err != nil {
 		t.Fatalf("you work show %s: %v", workID, err)
