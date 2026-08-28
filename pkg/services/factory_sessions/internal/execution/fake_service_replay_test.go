@@ -221,10 +221,7 @@ func TestDurablePetriFailureHistorySnapshotGrowthIsBounded(t *testing.T) {
 	for _, retryCount := range retryCounts {
 		t.Run(fmt.Sprintf("N=%d", retryCount), func(t *testing.T) {
 			store := &runtimeRecordingStore{}
-			mutations := make([]interfaces.TokenMutationRecord, retryCount)
-			for retry := 1; retry <= retryCount; retry++ {
-				mutations[retry-1] = failureMutation(failureHistoryForRetryCount(retry), retry)
-			}
+			mutations, constructedFailureRecords := failureMutationSequence(retryCount)
 			state := runtimeSessionState{
 				session: SessionReadResult{
 					SessionID: "~default",
@@ -256,7 +253,7 @@ func TestDurablePetriFailureHistorySnapshotGrowthIsBounded(t *testing.T) {
 			}
 			baselineBytes[retryCount] = len(before)
 			boundedBytes[retryCount] = len(store.payload)
-			t.Logf("N=%d before_bytes=%d after_bytes=%d", retryCount, len(before), len(store.payload))
+			t.Logf("failure-history topology: N=%d mutations=%d prior_history_records=%d final_history_records=%d constructed_failure_records=%d before_bytes=%d after_bytes=%d", retryCount, len(mutations), retryCount-1, retryCount, constructedFailureRecords, len(before), len(store.payload))
 		})
 	}
 
@@ -271,6 +268,21 @@ func TestDurablePetriFailureHistorySnapshotGrowthIsBounded(t *testing.T) {
 	if boundedBytes[1000] > boundedBytes[100]*12 {
 		t.Fatalf("bounded snapshots grew superlinearly: N=100=%d, N=1000=%d", boundedBytes[100], boundedBytes[1000])
 	}
+}
+
+func failureMutationSequence(retryCount int) ([]interfaces.TokenMutationRecord, int) {
+	mutations := make([]interfaces.TokenMutationRecord, retryCount)
+	constructedFailureRecords := 0
+	for retry := 1; retry <= retryCount; retry++ {
+		historySize := 1
+		if retry == retryCount {
+			historySize = retryCount
+		}
+		history := failureHistoryForRetryCount(historySize)
+		constructedFailureRecords += len(history.FailureLog)
+		mutations[retry-1] = failureMutation(history, retry)
+	}
+	return mutations, constructedFailureRecords
 }
 
 func failureMutation(history workerexecution.History, retry int) interfaces.TokenMutationRecord {

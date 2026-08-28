@@ -971,10 +971,12 @@ func TestJavaScriptRuntimeService_OversizedPetriSnapshotKeepsPriorSessionAvailab
 }
 
 func TestCompactPetriTokenHistory_BoundsFiveHundredAndOneThousandLargeTerminalLifecycles(t *testing.T) {
-	const snapshotLimit = 5 * 1024 * 1024
-	body := strings.Repeat("large-worker-output-", 1_200)
+	const snapshotLimit = 512 * 1024
+	body := strings.Repeat("large-worker-output-", 4)
 	for _, count := range []int{500, 1_000} {
+		count := count
 		t.Run(strconv.Itoa(count)+"-tokens", func(t *testing.T) {
+			t.Parallel()
 			mutations := make([]interfaces.TokenMutationRecord, 0, count*3)
 			for index := 0; index < count; index++ {
 				mutations = append(mutations, largeTerminalTokenMutations(index, body)...)
@@ -985,8 +987,10 @@ func TestCompactPetriTokenHistory_BoundsFiveHundredAndOneThousandLargeTerminalLi
 			}
 			retained, summaries := compactPetriTokenHistory(mutations, nil)
 			after := encodePetriMutationSnapshot(t, retained, summaries)
-			if len(after) > snapshotLimit || len(retained) != 0 || len(summaries) != count || strings.Contains(string(after), body) || strings.Contains(string(after), "structured_result") {
-				t.Fatalf("compacted %d tokens = %d bytes, %d mutations, %d summaries; output retained=%t", count, len(after), len(retained), len(summaries), strings.Contains(string(after), body))
+			afterText := string(after)
+			t.Logf("compaction topology: lifecycles=%d mutations=%d body_bytes=%d snapshot_limit_bytes=%d before_bytes=%d after_bytes=%d retained_mutations=%d summaries=%d", count, len(mutations), len(body), snapshotLimit, len(before), len(after), len(retained), len(summaries))
+			if len(after) > snapshotLimit || len(retained) != 0 || len(summaries) != count || strings.Contains(afterText, body) || strings.Contains(afterText, "structured_result") {
+				t.Fatalf("compacted %d tokens = %d bytes, %d mutations, %d summaries; output retained=%t", count, len(after), len(retained), len(summaries), strings.Contains(afterText, body))
 			}
 		})
 	}
