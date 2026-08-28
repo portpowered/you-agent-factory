@@ -1,10 +1,14 @@
 package fix
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +19,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,10 +30,60 @@ const (
 
 var packagedFixPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.json`)
 
+// Story 001 characterization map (reconciled against the recovered P012
+// inventory):
+//
+//   - TestPackagedFixUsesNamedWorktreeAndIndependentReview -> CLI terminal
+//     response, provider role/order/model prompts, real checkout existence and
+//     preservation of an unrelated Git worktree, durable plan. Retained as
+//     isolated-with-reason in packaged-fix-real-git-worktree; its fidelity is
+//     local-real Git/filesystem plus a controlled ProviderCommandRunner.
+//   - TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted,
+//     TestPackagedFixCarriesIndependentRejectionFeedback, and
+//     TestPackagedFixUsesConfiguredAndExplicitRoleModels -> CLI response and
+//     exact controlled provider requests (including defaults, feedback, role
+//     order, and model/provider selection). Eligible for
+//     packaged-fix-public-outcomes; fidelity is local-real root composition and
+//     test-owned filesystem with a controlled ProviderCommandRunner. The model
+//     test has two eligible configuration cells.
+//   - TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution
+//     -> public Execute error and zero provider calls. Retained as
+//     isolated-with-reason in packaged-fix-worktree-validation because path
+//     validation is the property under test; fidelity is local-real path
+//     validation with a controlled runner that must remain unused.
+//   - TestPackagedFixWorktreeCreationFailureIsStable -> failed CLI response,
+//     fix:failed Work state, and zero provider calls. Retained as
+//     isolated-with-reason in packaged-fix-real-filesystem-failure because a
+//     valid name is deliberately run from a non-repository; fidelity is
+//     local-real Git/filesystem failure plus a controlled runner.
+//   - TestPackagedFixWorkerFailureIsStable -> failed CLI response, fix:failed
+//     Work state, and planner-plus-failed-iterator request count. Retained as
+//     isolated-with-reason in packaged-fix-command-failure because the command
+//     runner error is the injected failure witness; fidelity is a controlled
+//     ProviderCommandRunner over local-real root composition.
+//   - TestPackagedFixReviewLoopExhaustionIsStable -> failed CLI response,
+//     fix:failed Work state, eight reviewer visits, and 18 total requests.
+//     Eligible for packaged-fix-public-outcomes because bounded rejection is a
+//     controlled workflow outcome, not a command/process failure.
+//
+// Resource ownership: retained rows keep one root-built process per local-real
+// edge and the testing package owns their temporary paths. Eligible rows share
+// one continuous root-built host process, while each scenario owns a copied
+// Factory, explicit Factory Session, selector, worktree, plan, and request
+// identity. The CLI parity cell uses the existing root-built local CLI helper
+// because a local CLI invocation cannot bind the host process's already-owned
+// default runtime. Story 004 owns the direct census of process, session,
+// worktree, and runtime cleanup. Existing assertions are characterization and
+// must remain intact.
+
 // TestPackagedFixUsesNamedWorktreeAndIndependentReview proves the public named
 // route prepares the requested checkout before any provider call, preserves
 // unrelated worktrees, repeats the Ralph iterator, and returns only after the
 // independent reviewer approves the completed plan.
+//
+// Retained-edge fidelity: this is an isolated local-real Git/worktree witness,
+// not a controlled worktree substitute. The t.TempDir-owned repository and
+// worktrees are its cleanup boundary.
 func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 	workspace := initPackagedFixGitRepository(t)
 	unrelated := createPackagedFixWorktree(t, workspace, "unrelated-work")
@@ -91,25 +144,34 @@ func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 	}
 }
 
-// TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted
-// proves the named route needs only its required request/worktree inputs and
-// resolves operator provider/model defaults for planner, iterator, and review.
-func TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t *testing.T) {
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "CODEX")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "operator-configured-model")
-	workspace := initPackagedFixGitRepository(t)
-	runner := &packagedFixCommandRunner{}
+// TestPackagedFixSharedProcess proves compatible public-outcome scenarios can
+// share one root-built process while retaining explicit Factory Session and
+// selector isolation for each invocation.
+func TestPackagedFixSharedProcess(t *testing.T) {
+	t.Run("UsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted", testPackagedFixOperatorDefaults)
 
-	response, stderr, err := runPackagedFixCLI(
-		t,
-		runner,
-		workspace,
-		"--to", "complete Fix with operator defaults",
-		"--worktree-name", "operator-default-fix",
-	)
-	if err != nil {
-		t.Fatalf("Process.Execute(@you/fix) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
-	}
+	t.Run("CarriesIndependentRejectionFeedback", testPackagedFixRejectionFeedback)
+
+	t.Run("UsesConfiguredAndExplicitRoleModels", testPackagedFixConfiguredAndExplicitRoleModels)
+
+	t.Run("ReviewLoopExhaustionIsStable", testPackagedFixReviewLoopExhaustion)
+
+	t.Run("CLIResponseMatchesExplicitSession", testPackagedFixCLIResponseParity)
+	t.Run("CleanupPathCensus", testPackagedFixCleanupPathCensus)
+	t.Cleanup(func() {
+		assertPackagedFixResourceCensus(t, sharedPackagedFixFixture(t))
+	})
+}
+
+func testPackagedFixOperatorDefaults(t *testing.T) {
+	t.Parallel()
+	runner := &packagedFixCommandRunner{}
+	worktreeName := "shared-operator-default-fix"
+	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request":      "complete Fix with operator defaults",
+		"worktreeName": worktreeName,
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
 	}
@@ -118,26 +180,19 @@ func TestPackagedFixUsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted(t *
 			t.Fatalf("request[%d] = command %q args %#v, want operator CODEX/operator-configured-model", index, request.Command, request.Args)
 		}
 	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
 }
 
-// TestPackagedFixCarriesIndependentRejectionFeedback proves a reviewer can
-// reject a completed iteration and that the next iterator receives the prior
-// candidate and actionable feedback before the reviewer is called again.
-func TestPackagedFixCarriesIndependentRejectionFeedback(t *testing.T) {
-	workspace := initPackagedFixGitRepository(t)
+func testPackagedFixRejectionFeedback(t *testing.T) {
+	t.Parallel()
 	runner := &packagedFixCommandRunner{rejectFirstReview: true}
-
-	response, stderr, err := runPackagedFixCLI(
-		t,
-		runner,
-		workspace,
-		"--provider", "CODEX", "--model", "review-loop-model",
-		"--to", "revise the requested fix",
-		"--worktree-name", "reviewed-fix",
-	)
-	if err != nil {
-		t.Fatalf("Process.Execute(@you/fix) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
-	}
+	worktreeName := "shared-reviewed-fix"
+	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	scenario.fixture.census.recordPath(packagedFixCleanupRejection)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request":      "revise the requested fix",
+		"worktreeName": worktreeName,
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
 	}
@@ -155,23 +210,24 @@ func TestPackagedFixCarriesIndependentRejectionFeedback(t *testing.T) {
 	if !strings.Contains(revisionPrompt, "first Fix candidate") {
 		t.Fatalf("revision iterator prompt = %q, want prior candidate", revisionPrompt)
 	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
 }
 
-// TestPackagedFixUsesConfiguredAndExplicitRoleModels proves omitted role
-// parameters inherit concrete installed worker settings, while explicit role
-// parameters override those settings independently for all three stages.
-func TestPackagedFixUsesConfiguredAndExplicitRoleModels(t *testing.T) {
-	tests := []struct {
-		name             string
-		configure        func(*testing.T, string)
-		args             []string
-		plannerModel     string
-		iteratorModel    string
-		reviewerModel    string
-		plannerProvider  string
-		iteratorProvider string
-		reviewerProvider string
-	}{
+type packagedFixRoleModelScenario struct {
+	name             string
+	configure        func(*testing.T, string)
+	args             []string
+	plannerModel     string
+	iteratorModel    string
+	reviewerModel    string
+	plannerProvider  string
+	iteratorProvider string
+	reviewerProvider string
+}
+
+func testPackagedFixConfiguredAndExplicitRoleModels(t *testing.T) {
+	t.Parallel()
+	tests := []packagedFixRoleModelScenario{
 		{
 			name: "installed worker configuration",
 			configure: func(t *testing.T, factoryDir string) {
@@ -208,49 +264,291 @@ func TestPackagedFixUsesConfiguredAndExplicitRoleModels(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
-			workspace := initPackagedFixGitRepository(t)
-			runner := &packagedFixCommandRunner{firstIteratorContinue: true}
-			response, stderr, err := runPackagedFixCLIWithFactorySetup(
-				t,
-				runner,
-				workspace,
-				test.configure,
-				append(test.args, "--to", "complete a configured Fix request", "--worktree-name", "configured-fix")...,
-			)
-			if err != nil {
-				t.Fatalf("Process.Execute(@you/fix) error = %v\nresponse = %#v\nstderr = %q", err, response, stderr)
-			}
-			if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-				t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
-			}
-			requests := runner.Requests()
-			if len(requests) != 4 {
-				t.Fatalf("provider request count = %d, want planner, iterator, reviewer with one final iterator", len(requests))
-			}
-			for index, request := range requests {
-				wantModel := test.plannerModel
-				wantProvider := test.plannerProvider
-				if index == 1 {
-					wantModel, wantProvider = test.iteratorModel, test.iteratorProvider
-				}
-				if index == 3 {
-					wantModel, wantProvider = test.reviewerModel, test.reviewerProvider
-				}
-				if index == 2 {
-					wantModel, wantProvider = test.iteratorModel, test.iteratorProvider
-				}
-				if request.Command != wantProvider || !packagedFixRequestIncludesModel(request, wantModel) {
-					t.Fatalf("request[%d] = command %q args %#v, want %s/%s", index, request.Command, request.Args, wantProvider, wantModel)
-				}
-			}
+			testPackagedFixRoleModelScenario(t, test)
 		})
+	}
+}
+
+func testPackagedFixRoleModelScenario(t *testing.T, test packagedFixRoleModelScenario) {
+	worktreeName := "shared-configured-fix-" + strings.ReplaceAll(test.name, " ", "-")
+	runner := &packagedFixCommandRunner{firstIteratorContinue: true}
+	scenario := openPackagedFixScenario(t, runner, worktreeName, test.configure)
+	invocationArgs := map[string]any{
+		"request":      "complete a configured Fix request",
+		"worktreeName": worktreeName,
+	}
+	for index := 0; index+1 < len(test.args); index += 2 {
+		invocationArgs[strings.TrimPrefix(test.args[index], "--")] = test.args[index+1]
+	}
+	response := invokePackagedFixSession(t, scenario, invocationArgs)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response status = %q, want COMPLETED: %#v", response.Status, response)
+	}
+	requests := runner.Requests()
+	if len(requests) != 4 {
+		t.Fatalf("provider request count = %d, want planner, iterator, reviewer with one final iterator", len(requests))
+	}
+	for index, request := range requests {
+		wantModel, wantProvider := test.plannerModel, test.plannerProvider
+		if index == 1 || index == 2 {
+			wantModel, wantProvider = test.iteratorModel, test.iteratorProvider
+		}
+		if index == 3 {
+			wantModel, wantProvider = test.reviewerModel, test.reviewerProvider
+		}
+		if request.Command != wantProvider || !packagedFixRequestIncludesModel(request, wantModel) {
+			t.Fatalf("request[%d] = command %q args %#v, want %s/%s", index, request.Command, request.Args, wantProvider, wantModel)
+		}
+	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "approved")
+}
+
+func testPackagedFixReviewLoopExhaustion(t *testing.T) {
+	t.Parallel()
+	runner := &packagedFixCommandRunner{alwaysRejectReview: true}
+	worktreeName := "shared-bounded-review"
+	scenario := openPackagedFixScenario(t, runner, worktreeName, nil)
+	response := invokePackagedFixSession(t, scenario, map[string]any{
+		"request":      "keep rejecting this Fix request",
+		"worktreeName": worktreeName,
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
+	}
+	if response.WorkState == nil || *response.WorkState != "fix:failed" {
+		t.Fatalf("response workState = %#v, want fix:failed", response.WorkState)
+	}
+	if got := runner.ReviewerCalls(); got != 8 {
+		t.Fatalf("reviewer calls = %d, want eight bounded review visits", got)
+	}
+	if got := len(runner.Requests()); got != 18 {
+		t.Fatalf("provider request count = %d, want planner, nine iterators, and eight reviewers", got)
+	}
+	assertPackagedFixSharedEvidence(t, scenario, runner, "failed")
+}
+
+func testPackagedFixCLIResponseParity(t *testing.T) {
+	t.Parallel()
+	request := "prove the packaged Fix CLI response"
+
+	apiRunner := &packagedFixCommandRunner{}
+	apiWorktreeName := "shared-cli-api-parity-fix"
+	apiScenario := openPackagedFixScenario(t, apiRunner, apiWorktreeName, nil)
+	apiResponse := invokePackagedFixSession(t, apiScenario, map[string]any{
+		"request":      request,
+		"worktreeName": apiWorktreeName,
+	})
+	if apiResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("explicit-session response status = %q, want COMPLETED: %#v", apiResponse.Status, apiResponse)
+	}
+	assertPackagedFixSharedEvidence(t, apiScenario, apiRunner, "approved")
+
+	cliRunner := &packagedFixCommandRunner{}
+	cliWorkspace := initPackagedFixGitRepository(t)
+	cliWorktreeName := "cli-parity-fix"
+	cliResponse, stderr, err := runPackagedFixCLI(
+		t,
+		cliRunner,
+		cliWorkspace,
+		"--provider", "CODEX", "--model", "operator-configured-model",
+		"--to", request,
+		"--worktree-name", cliWorktreeName,
+	)
+	if err != nil {
+		t.Fatalf("root-built customer CLI error = %v\nresponse = %#v\nstderr = %q", err, cliResponse, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("root-built customer CLI stderr = %q, want empty successful-run stderr", stderr)
+	}
+	if cliResponse.Status != apiResponse.Status {
+		t.Fatalf("customer CLI status = %q, explicit-session status = %q", cliResponse.Status, apiResponse.Status)
+	}
+	if got, want := packagedFixPrimaryResultText(t, cliResponse), packagedFixPrimaryResultText(t, apiResponse); got != want {
+		t.Fatalf("customer CLI primary result = %q, explicit-session primary result = %q", got, want)
+	}
+	if got := strings.Join(cliRunner.Roles(), ","); got != "planner,iterator,reviewer" {
+		t.Fatalf("customer CLI stage order = %q, want planner,iterator,reviewer", got)
+	}
+}
+
+func invokePackagedFixSession(
+	t *testing.T,
+	scenario *packagedFixScenario,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	// The packaged Petri Factory must run inside this already-open explicit
+	// session so the assertions below can observe its canonical Work, Event,
+	// dispatch, and replay history. The public run CLI has no session-target
+	// flag, and its remote durable source only resolves JavaScript workflow
+	// factories, so this is the narrowly scoped CLI-plus-API parity exception.
+	// TestPackagedFixSharedProcess/CLIResponseMatchesExplicitSession still
+	// executes the same invocation through the root-built customer CLI and
+	// compares its terminal response with this explicit-session API path.
+	payload, err := json.Marshal(factoryapi.InvocationRequest{
+		RequestId: &scenario.requestID,
+		Args:      &args,
+	})
+	if err != nil {
+		t.Fatalf("marshal Fix invocation request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode POST %s: %v", endpoint, err)
+	}
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, packagedFixFixtureShutdownTimeout)
+	return decoded
+}
+
+func assertPackagedFixSharedEvidence(
+	t *testing.T,
+	scenario *packagedFixScenario,
+	runner *packagedFixCommandRunner,
+	wantWorkStateName string,
+) {
+	t.Helper()
+	workResponse := support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		strings.TrimSuffix(scenario.fixture.baseURL, "/")+
+			"/factory-sessions/"+url.PathEscape(scenario.sessionID)+"/work",
+	)
+	if len(workResponse.Results) != 1 {
+		t.Fatalf("session Work results = %#v, want one Fix Work item", workResponse.Results)
+	}
+	work := workResponse.Results[0]
+	if work.State == nil || work.State.Name != wantWorkStateName {
+		t.Fatalf("session Work state = %#v, want name %q", work.State, wantWorkStateName)
+	}
+	if work.WorkId == nil || strings.TrimSpace(*work.WorkId) == "" {
+		t.Fatalf("session Work identity = %#v, want non-empty Work ID", work.WorkId)
+	}
+
+	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+	if len(events) < 2 {
+		t.Fatalf("retained Factory Event history length = %d, want at least two events", len(events))
+	}
+	hasWorkRequest := false
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest {
+			hasWorkRequest = true
+			break
+		}
+	}
+	if !hasWorkRequest {
+		t.Fatal("retained Factory Event history has no Work Request event")
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	roles := runner.Roles()
+	if len(dispatches) < len(roles) || len(dispatches) > len(roles)+1 {
+		t.Fatalf("dispatch count = %d, provider role count = %d; dispatches = %#v", len(dispatches), len(roles), dispatches)
+	}
+	wantTransitions := map[string]string{
+		"planner":  "plan-fix",
+		"iterator": "iterate-fix",
+		"reviewer": "review-fix",
+	}
+	roleIndex := 0
+	loopBreakerCount := 0
+	for index, dispatch := range dispatches {
+		transition := dispatch.Request.TransitionId
+		if transition == "review-fix-loop-breaker" {
+			loopBreakerCount++
+			if loopBreakerCount > 1 {
+				t.Fatalf("dispatch[%d] repeats the review loop breaker", index)
+			}
+			if index != len(dispatches)-1 {
+				t.Fatalf("dispatch[%d] transition = %q, want loop breaker only after worker dispatches", index, transition)
+			}
+		} else {
+			if roleIndex >= len(roles) {
+				t.Fatalf("dispatch[%d] transition = %q has no matching provider role", index, transition)
+			}
+			role := roles[roleIndex]
+			if got := transition; got != wantTransitions[role] {
+				t.Fatalf("dispatch[%d] transition = %q for role %q, want %q", index, got, role, wantTransitions[role])
+			}
+			roleIndex++
+		}
+		if dispatch.Response == nil {
+			t.Fatalf("dispatch[%d] = %#v, want retained dispatch response", index, dispatch)
+		}
+		if !support.DispatchObservationIncludesWork(dispatch, *work.WorkId) {
+			t.Fatalf("dispatch[%d] = %#v, want Work ID %q", index, dispatch, *work.WorkId)
+		}
+	}
+	if roleIndex != len(roles) {
+		t.Fatalf("provider roles consumed by dispatches = %d, want %d", roleIndex, len(roles))
+	}
+	if len(dispatches) == len(roles)+1 && loopBreakerCount != 1 {
+		t.Fatalf("extra dispatches = %d, want one review loop breaker", len(dispatches)-len(roles))
+	}
+
+	assertPackagedFixReplayAndRecord(t, scenario, runner, wantWorkStateName, *work.WorkId, events)
+}
+
+func assertPackagedFixReplayAndRecord(
+	t *testing.T,
+	scenario *packagedFixScenario,
+	runner *packagedFixCommandRunner,
+	wantWorkStateName, workID string,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	sequence := support.ReconnectSequenceForFactoryEvent(events[0])
+	replayed := support.GetFactoryEventsAfterForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID, support.FactoryEventReadCursor{
+		AfterEventID:  events[0].Id,
+		AfterSequence: &sequence,
+	})
+	if len(replayed) != len(events)-1 {
+		t.Fatalf("retained replay event count = %d, want %d", len(replayed), len(events)-1)
+	}
+	for index := range replayed {
+		if replayed[index].Id != events[index+1].Id {
+			t.Fatalf("retained replay event %d = %q, want %q", index, replayed[index].Id, events[index+1].Id)
+		}
+	}
+	eventIDs := make([]string, 0, len(events))
+	for _, event := range events {
+		eventIDs = append(eventIDs, event.Id)
+	}
+	scenario.fixture.census.recordEvidence(
+		scenario.requestID,
+		scenario.worktreeName,
+		workID,
+		runner.PlanPath(),
+		eventIDs,
+	)
+	if wantWorkStateName == "fix:failed" {
+		scenario.fixture.census.recordPath(packagedFixCleanupFailure)
+	} else {
+		scenario.fixture.census.recordPath(packagedFixCleanupSuccess)
+	}
+	if runner.rejectFirstReview || runner.alwaysRejectReview {
+		scenario.fixture.census.recordPath(packagedFixCleanupRejection)
 	}
 }
 
 // TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution
 // proves required and path-traversing names fail at the public boundary without
 // launching planner work.
+//
+// Retained-edge fidelity: path validation is the property under test, so this
+// scenario remains isolated with the controlled runner only observing that no
+// provider command is attempted. Its t.TempDir workspace owns cleanup.
 func TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution(t *testing.T) {
 	tests := []struct {
 		name string
@@ -279,6 +577,10 @@ func TestPackagedFixRejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution(
 
 // TestPackagedFixWorktreeCreationFailureIsStable proves a valid name still
 // fails before provider execution when the caller directory is not a Git repo.
+//
+// Retained-edge fidelity: the non-repository Git/filesystem failure is a
+// local-real witness and must not be replaced by a mocked worktree result. The
+// t.TempDir workspace owns the failed-attempt cleanup.
 func TestPackagedFixWorktreeCreationFailureIsStable(t *testing.T) {
 	workspace := t.TempDir()
 	runner := &packagedFixCommandRunner{}
@@ -306,6 +608,10 @@ func TestPackagedFixWorktreeCreationFailureIsStable(t *testing.T) {
 
 // TestPackagedFixWorkerFailureIsStable proves a provider failure routes the
 // public invocation to the failed terminal state rather than approval.
+//
+// Retained-edge fidelity: the command-runner error is the failure property, so
+// this remains an isolated root-built cell with a controlled
+// ProviderCommandRunner and t.TempDir-owned filesystem.
 func TestPackagedFixWorkerFailureIsStable(t *testing.T) {
 	workspace := initPackagedFixGitRepository(t)
 	runner := &packagedFixCommandRunner{failRole: "iterator"}
@@ -328,36 +634,6 @@ func TestPackagedFixWorkerFailureIsStable(t *testing.T) {
 	}
 	if got := len(runner.Requests()); got != 2 {
 		t.Fatalf("provider request count = %d, want planner plus failed iterator", got)
-	}
-}
-
-// TestPackagedFixReviewLoopExhaustionIsStable proves independent rejection
-// cannot run forever and reaches fix:failed through the authored breaker.
-func TestPackagedFixReviewLoopExhaustionIsStable(t *testing.T) {
-	workspace := initPackagedFixGitRepository(t)
-	runner := &packagedFixCommandRunner{alwaysRejectReview: true}
-	response, _, err := runPackagedFixCLI(
-		t,
-		runner,
-		workspace,
-		"--provider", "CODEX", "--model", "bounded-review-model",
-		"--to", "keep rejecting this Fix request",
-		"--worktree-name", "bounded-review",
-	)
-	if err == nil {
-		t.Fatal("Process.Execute error = nil, want bounded review failure")
-	}
-	if response.Status != factoryapi.InvocationTerminalStatusFailed {
-		t.Fatalf("response status = %q, want FAILED: %#v", response.Status, response)
-	}
-	if response.WorkState == nil || *response.WorkState != "fix:failed" {
-		t.Fatalf("response workState = %#v, want fix:failed", response.WorkState)
-	}
-	if got := runner.ReviewerCalls(); got != 8 {
-		t.Fatalf("reviewer calls = %d, want eight bounded review visits", got)
-	}
-	if got := len(runner.Requests()); got != 18 {
-		t.Fatalf("provider request count = %d, want planner, nine iterators, and eight reviewers", got)
 	}
 }
 

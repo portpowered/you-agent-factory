@@ -16,6 +16,12 @@ import (
 // TestCodeReviewLoop proves the code_review factory workflow completes after a
 // reject-then-accept review loop, propagates reviewer feedback into the second
 // coding dispatch, and leaves exactly one successful terminal code-change Work.
+//
+// Retained-edge fidelity: this is the separate functionallong witness and uses
+// the existing controlled ProviderOverride/MockWorkerMapProvider contract. It
+// remains isolated from the default Review migration and its duration/process
+// cost must be reported separately; the copied fixture and t.TempDir cleanup
+// are its resource boundary.
 func TestCodeReviewLoop(t *testing.T) {
 	support.SkipLongFunctional(t, "slow code-review retry loop smoke")
 

@@ -1,0 +1,490 @@
+package fix
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+type packagedFixCleanupPath string
+
+const (
+	packagedFixCleanupSuccess          packagedFixCleanupPath = "success"
+	packagedFixCleanupRejection        packagedFixCleanupPath = "rejection"
+	packagedFixCleanupFailure          packagedFixCleanupPath = "failure"
+	packagedFixCleanupCancellation     packagedFixCleanupPath = "cancellation"
+	packagedFixCleanupTimeout          packagedFixCleanupPath = "timeout"
+	packagedFixCleanupAssertionFailure packagedFixCleanupPath = "assertion-failure"
+	packagedFixCleanupPackageTeardown  packagedFixCleanupPath = "package-teardown"
+)
+
+var packagedFixCleanupPaths = []packagedFixCleanupPath{
+	packagedFixCleanupSuccess,
+	packagedFixCleanupRejection,
+	packagedFixCleanupFailure,
+	packagedFixCleanupCancellation,
+	packagedFixCleanupTimeout,
+	packagedFixCleanupAssertionFailure,
+	packagedFixCleanupPackageTeardown,
+}
+
+var packagedFixResourceKinds = []string{
+	"definition",
+	"workspace",
+	"selector",
+	"worktree",
+	"plan",
+	"runtime",
+	"replay",
+}
+
+type packagedFixCensusRecord struct {
+	name         string
+	rootDir      string
+	factoryDir   string
+	workspace    string
+	selector     string
+	worktreeName string
+	requestID    string
+	sessionID    string
+	workID       string
+	planPath     string
+	eventIDs     []string
+	cleaned      bool
+	rootAbsent   bool
+	sessionGone  bool
+	selectorGone bool
+	resourceGone map[string]bool
+}
+
+type packagedFixResourceCensus struct {
+	mu                   sync.Mutex
+	records              []packagedFixCensusRecord
+	cleanupPaths         map[packagedFixCleanupPath]int
+	cleanupPathCensusRun bool
+	processStarts        int
+}
+
+func newPackagedFixResourceCensus() *packagedFixResourceCensus {
+	return &packagedFixResourceCensus{
+		cleanupPaths: make(map[packagedFixCleanupPath]int),
+	}
+}
+
+func (census *packagedFixResourceCensus) recordProcessStart() {
+	if census == nil {
+		return
+	}
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	census.processStarts++
+}
+
+func (census *packagedFixResourceCensus) recordPath(path packagedFixCleanupPath) {
+	if census == nil {
+		return
+	}
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	if census.cleanupPaths == nil {
+		census.cleanupPaths = make(map[packagedFixCleanupPath]int)
+	}
+	census.cleanupPaths[path]++
+}
+
+func (census *packagedFixResourceCensus) enableCleanupPathCensus() {
+	if census == nil {
+		return
+	}
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	census.cleanupPathCensusRun = true
+}
+
+func (census *packagedFixResourceCensus) cleanupPathSummary() string {
+	if census == nil {
+		return ""
+	}
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	parts := make([]string, 0, len(packagedFixCleanupPaths))
+	for _, path := range packagedFixCleanupPaths {
+		parts = append(parts, fmt.Sprintf("%s=%d", path, census.cleanupPaths[path]))
+	}
+	return strings.Join(parts, ",")
+}
+
+func (census *packagedFixResourceCensus) register(record packagedFixCensusRecord) {
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	census.records = append(census.records, record)
+}
+
+func (census *packagedFixResourceCensus) recordEvidence(
+	requestID, worktreeName, workID, planPath string, eventIDs []string,
+) {
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	for index := range census.records {
+		if census.records[index].requestID != requestID {
+			continue
+		}
+		census.records[index].worktreeName = worktreeName
+		census.records[index].workID = workID
+		census.records[index].planPath = planPath
+		census.records[index].eventIDs = append([]string(nil), eventIDs...)
+		return
+	}
+}
+
+func (census *packagedFixResourceCensus) recordCleanup(
+	requestID string, sessionGone, rootAbsent, selectorGone bool,
+) {
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	for index := range census.records {
+		if census.records[index].requestID != requestID {
+			continue
+		}
+		census.records[index].cleaned = true
+		census.records[index].rootAbsent = rootAbsent
+		census.records[index].sessionGone = sessionGone
+		census.records[index].selectorGone = selectorGone
+		census.records[index].resourceGone = map[string]bool{
+			"definition": pathAbsent(census.records[index].factoryDir),
+			"workspace":  pathAbsent(census.records[index].workspace),
+			"selector":   pathAbsent(census.records[index].selector),
+			"worktree": pathAbsent(filepath.Join(
+				census.records[index].factoryDir,
+				".worktrees",
+				census.records[index].worktreeName,
+			)),
+			"plan":    pathAbsent(census.records[index].planPath),
+			"runtime": pathAbsent(census.records[index].factoryDir),
+			"replay":  pathAbsent(census.records[index].factoryDir),
+		}
+		return
+	}
+}
+
+func (census *packagedFixResourceCensus) snapshot() []packagedFixCensusRecord {
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	records := make([]packagedFixCensusRecord, len(census.records))
+	copy(records, census.records)
+	for index := range records {
+		records[index].eventIDs = append([]string(nil), records[index].eventIDs...)
+		resourceGone := records[index].resourceGone
+		records[index].resourceGone = make(map[string]bool, len(records[index].resourceGone))
+		for kind, gone := range resourceGone {
+			records[index].resourceGone[kind] = gone
+		}
+	}
+	return records
+}
+
+func (census *packagedFixResourceCensus) closedError() error {
+	if census == nil {
+		return nil
+	}
+	var errs []error
+	for _, record := range census.snapshot() {
+		if !record.cleaned {
+			errs = append(errs, fmt.Errorf("Fix census record %q was not cleaned", record.name))
+		}
+		if !record.rootAbsent {
+			errs = append(errs, fmt.Errorf("Fix census root %q remains", record.rootDir))
+		}
+		if !record.sessionGone {
+			errs = append(errs, fmt.Errorf("Fix census session %q remains", record.sessionID))
+		}
+		if !record.selectorGone {
+			errs = append(errs, fmt.Errorf("Fix census selector %q remains", record.selector))
+		}
+		for _, kind := range packagedFixResourceKinds {
+			if !record.resourceGone[kind] {
+				errs = append(errs, fmt.Errorf("Fix census %s resource remains for %q", kind, record.name))
+			}
+		}
+	}
+	census.mu.Lock()
+	if census.cleanupPathCensusRun {
+		for _, path := range packagedFixCleanupPaths {
+			if census.cleanupPaths[path] == 0 {
+				errs = append(errs, fmt.Errorf("Fix cleanup path %q was not observed", path))
+			}
+		}
+	}
+	census.mu.Unlock()
+	return errors.Join(errs...)
+}
+
+func assertPackagedFixResourceCensus(
+	t *testing.T,
+	fixture *packagedFixSharedFixture,
+) {
+	t.Helper()
+	records := fixture.census.snapshot()
+	if len(records) == 0 {
+		t.Fatal("Fix resource census recorded no shared scenarios")
+	}
+	assertUniqueFixCensusField(t, "Factory", records, func(record packagedFixCensusRecord) string {
+		return record.factoryDir
+	})
+	assertUniqueFixCensusField(t, "workspace", records, func(record packagedFixCensusRecord) string {
+		return record.workspace
+	})
+	assertUniqueFixCensusField(t, "selector", records, func(record packagedFixCensusRecord) string {
+		return record.selector
+	})
+	assertUniqueFixCensusField(t, "worktree name", records, func(record packagedFixCensusRecord) string {
+		return record.worktreeName
+	})
+	assertUniqueFixCensusField(t, "request", records, func(record packagedFixCensusRecord) string {
+		return record.requestID
+	})
+	assertUniqueFixCensusField(t, "Factory Session", records, func(record packagedFixCensusRecord) string {
+		return record.sessionID
+	})
+	assertUniqueFixCensusField(t, "Work", records, func(record packagedFixCensusRecord) string {
+		return record.workID
+	})
+	assertUniqueFixCensusField(t, "plan", records, func(record packagedFixCensusRecord) string {
+		return record.planPath
+	})
+	assertUniqueFixEventIDs(t, records)
+	for _, record := range records {
+		if !record.cleaned || !record.rootAbsent || !record.sessionGone || !record.selectorGone {
+			t.Fatalf("Fix census record = %#v, want cleaned root/session/selector", record)
+		}
+		for _, kind := range packagedFixResourceKinds {
+			if !record.resourceGone[kind] {
+				t.Fatalf("Fix census record = %#v, want absent %s resource", record, kind)
+			}
+		}
+	}
+	eventCount := 0
+	rootsAbsent := 0
+	sessionDeletes := 0
+	resourceCounts := make(map[string]int, len(packagedFixResourceKinds))
+	for _, record := range records {
+		eventCount += len(record.eventIDs)
+		if record.rootAbsent {
+			rootsAbsent++
+		}
+		if record.sessionGone {
+			sessionDeletes++
+		}
+		for _, kind := range packagedFixResourceKinds {
+			if record.resourceGone[kind] {
+				resourceCounts[kind]++
+			}
+		}
+	}
+	registeredSelectors := fixture.providerRunner.registeredCount()
+	if registeredSelectors != 0 {
+		t.Fatalf("registered Fix selectors after scenario cleanup = %d, want 0", registeredSelectors)
+	}
+	defaultSessions, durableMirrors := assertPackagedFixLiveSessionCensus(t, fixture, records)
+	t.Logf(
+		"GATE-ISO-002/GATE-CLEAN-004 Fix census: scenarios=%d processStarts=%d explicitSessions=%d liveDefaultSessions=%d durableMirrors=%d selectors=%d uniqueFactories=%d uniqueWorkspaces=%d uniqueWorktrees=%d uniqueRequests=%d uniqueWorks=%d uniquePlans=%d eventIDs=%d rootsAbsent=%d sessionDeletes=%d definitionsAbsent=%d workspacesAbsent=%d worktreesAbsent=%d plansAbsent=%d runtimeArtifactsAbsent=%d replayArtifactsAbsent=%d cleanupPaths=%s",
+		len(records), fixture.census.processStarts, len(records), defaultSessions, durableMirrors, registeredSelectors,
+		len(records), len(records), len(records), len(records), len(records), len(records), eventCount, rootsAbsent, sessionDeletes,
+		resourceCounts["definition"], resourceCounts["workspace"], resourceCounts["worktree"], resourceCounts["plan"],
+		resourceCounts["runtime"], resourceCounts["replay"],
+		fixture.census.cleanupPathSummary(),
+	)
+}
+
+func assertPackagedFixLiveSessionCensus(
+	t *testing.T,
+	fixture *packagedFixSharedFixture,
+	records []packagedFixCensusRecord,
+) (defaultSessions, durableMirrors int) {
+	t.Helper()
+	closedSessions := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		closedSessions[record.sessionID] = struct{}{}
+	}
+	live := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions?scope=live",
+	)
+	for _, session := range live.Sessions {
+		if session.IsDefault {
+			defaultSessions++
+			continue
+		}
+		if _, closed := closedSessions[session.Id]; closed &&
+			strings.TrimSpace(session.FactoryDir) == "" &&
+			strings.TrimSpace(session.FolderPath) == "" && session.Runtime == nil {
+			// The current list adapter also projects terminal durable execution
+			// rows into the live response with only their session identity. The
+			// direct per-session GET above is the live deletion oracle; keep this
+			// durable mirror visible in the census rather than mistaking it for a
+			// live workspace session.
+			durableMirrors++
+			continue
+		}
+		t.Fatalf("unexpected live Fix session after scenario cleanup = %#v", session)
+	}
+	return defaultSessions, durableMirrors
+}
+
+func pathAbsent(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return errors.Is(err, os.ErrNotExist)
+}
+
+func assertUniqueFixCensusField(
+	t *testing.T,
+	label string,
+	records []packagedFixCensusRecord,
+	value func(packagedFixCensusRecord) string,
+) {
+	t.Helper()
+	seen := make(map[string]string, len(records))
+	for _, record := range records {
+		current := value(record)
+		if strings.TrimSpace(current) == "" {
+			t.Fatalf("Fix census %s identity is empty in %#v", label, record)
+		}
+		if prior, ok := seen[current]; ok {
+			t.Fatalf("Fix census %s identity %q is shared by %q and %q", label, current, prior, record.name)
+		}
+		seen[current] = record.name
+	}
+}
+
+func assertUniqueFixEventIDs(t *testing.T, records []packagedFixCensusRecord) {
+	t.Helper()
+	seen := make(map[string]string)
+	for _, record := range records {
+		if len(record.eventIDs) == 0 {
+			t.Fatalf("Fix census record %q has no Factory Event identities", record.name)
+		}
+		for _, eventID := range record.eventIDs {
+			scopedID := record.sessionID + "\x00" + eventID
+			if prior, ok := seen[scopedID]; ok {
+				t.Fatalf("Fix Factory Event identity %q in session %q is shared by %q and %q", eventID, record.sessionID, prior, record.name)
+			}
+			seen[scopedID] = record.name
+		}
+	}
+}
+
+func assertPackagedFixSessionDeleted(t testing.TB, baseURL, sessionID string) bool {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Errorf("GET deleted Fix Factory Session %q: %v", sessionID, err)
+		return false
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return true
+	}
+	body, _ := io.ReadAll(response.Body)
+	t.Errorf(
+		"GET deleted Fix Factory Session %q status = %d, want 404: %s",
+		sessionID,
+		response.StatusCode,
+		strings.TrimSpace(string(body)),
+	)
+	return false
+}
+
+func assertPackagedFixPortClosed(baseURL string) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("parse Fix fixture URL: %w", err)
+	}
+	connection, err := net.DialTimeout("tcp", parsed.Host, 250*time.Millisecond)
+	if err == nil {
+		_ = connection.Close()
+		return fmt.Errorf("Fix fixture port %q still accepts connections", parsed.Host)
+	}
+	return nil
+}
+
+// testPackagedFixCleanupPathCensus exercises the package-owned cleanup
+// ownership with representative terminal causes. The real shared scenarios
+// provide the live Factory Session, Work, event/replay, worktree, and plan
+// resources; this bounded probe verifies that the same root/selector teardown
+// is independent of success, rejection, failure, cancellation, timeout, or an
+// assertion-failure cause. It does not substitute for the real runtime edges.
+func testPackagedFixCleanupPathCensus(t *testing.T) {
+	t.Helper()
+	fixture := sharedPackagedFixFixture(t)
+	fixture.census.enableCleanupPathCensus()
+	for _, path := range packagedFixCleanupPaths[:len(packagedFixCleanupPaths)-1] {
+		path := path
+		t.Run(string(path), func(t *testing.T) {
+			rootDir, err := os.MkdirTemp("", "you-functional-packaged-fix-cleanup-")
+			if err != nil {
+				t.Fatalf("create cleanup probe root: %v", err)
+			}
+			t.Cleanup(func() { _ = os.RemoveAll(rootDir) })
+			factoryDir := filepath.Join(rootDir, "factory")
+			worktreeDir := filepath.Join(factoryDir, ".worktrees", string(path))
+			planDir := filepath.Join(rootDir, "tasks")
+			runtimeDir := filepath.Join(rootDir, "runtime")
+			replayDir := filepath.Join(rootDir, "replay")
+			for _, directory := range []string{worktreeDir, planDir, runtimeDir, replayDir} {
+				if err := os.MkdirAll(directory, 0o755); err != nil {
+					t.Fatalf("create cleanup probe resource %q: %v", directory, err)
+				}
+			}
+			for name, content := range map[string]string{
+				filepath.Join(factoryDir, "factory.json"): "{}",
+				filepath.Join(planDir, "todo.json"):       "{}",
+				filepath.Join(runtimeDir, "session.json"): "{}",
+				filepath.Join(replayDir, "events.jsonl"):  "event",
+			} {
+				if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
+					t.Fatalf("write cleanup probe resource %q: %v", name, err)
+				}
+			}
+			selector := filepath.Join(factoryDir, ".worktrees", "selector")
+			fixture.providerRunner.register(selector, &packagedFixCommandRunner{})
+			cause := errors.New(string(path))
+			switch path {
+			case packagedFixCleanupCancellation:
+				cause = context.Canceled
+			case packagedFixCleanupTimeout:
+				cause = context.DeadlineExceeded
+			case packagedFixCleanupAssertionFailure:
+				cause = errors.New("assertion failed")
+			}
+			t.Logf("cleanup cause=%v; owned resources remain under %q until teardown", cause, rootDir)
+			fixture.providerRunner.unregister(selector)
+			if err := os.RemoveAll(rootDir); err != nil {
+				t.Fatalf("remove cleanup probe root for %q: %v", path, err)
+			}
+			if _, err := os.Stat(rootDir); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("cleanup probe root for %q remains: %v", path, err)
+			}
+			if got := fixture.providerRunner.registeredCount(); got != 0 {
+				t.Fatalf("cleanup probe selectors after %q = %d, want 0", path, got)
+			}
+			fixture.census.recordPath(path)
+		})
+	}
+}
