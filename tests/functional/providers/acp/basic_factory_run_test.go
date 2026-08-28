@@ -39,6 +39,8 @@ const (
 // configured ACP integration because packaged ACP profiles may truthfully omit
 // session resume; packaged behavior is covered by the package conformance
 // matrix and capability tests.
+// Isolation: isolated-with-reason - restart and session continuation; the two
+// real ACP process identities and exact opaque session load are the witness.
 func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	const sessionID = "acp-session-retry-resume"
 	const providerID = "retry-acp"
@@ -111,6 +113,9 @@ func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, pro
 	t.Fatal("Factory events omitted the ACP Provider Session reference")
 }
 
+// Isolation: isolated-with-reason - startup boundary; only root construction
+// is allowed, so any shared command execution would destroy the zero-start
+// assertion.
 func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 	var processStarts atomic.Int32
 	_ = support.BuildProcess(t, serviceedges.Edges{
@@ -121,6 +126,8 @@ func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 	}
 }
 
+// Isolation: isolated-with-reason - pre-start provider selection; the unknown
+// provider must fail before either ACP or fallback process/effect starts.
 func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unknown ACP provider"}`))
@@ -278,6 +285,9 @@ func (p *legacyProvider) Continue(ctx context.Context, request providers.Continu
 	}, nil
 }
 
+// Isolation: isolated-with-reason - helper-process boundary; this child is an
+// inert target unless a parent deliberately supplies a recognized mode, while
+// parent tests own all ACP protocol assertions.
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
 	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" && mode != "shared-spine" {

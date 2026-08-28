@@ -11,13 +11,14 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - crash and replacement; the failed first
+// child and successful second child must remain distinct real ACP processes.
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "crash-once")
 	marker := filepath.Join(t.TempDir(), "crashed")
 	t.Setenv("YOU_TEST_ACP_CRASH_MARKER", marker)
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
-	defer server.Stop(t)
 	first, err := invokeACPDaemonWorkflow(t, server, "crash", singleACPAgentWorkflow)
 	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("first execution = %#v, error = %v; want failed peer crash", first, err)
@@ -31,6 +32,8 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 	}
 }
 
+// Isolation: isolated-with-reason - connection retirement; a live child closes
+// stdout and a replacement must be selected rather than reusing stale stdio.
 func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "disconnect-once")
 	dir := t.TempDir()
@@ -42,7 +45,6 @@ func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
 	t.Setenv(acpDisconnectReleaseEnvironment, releaseMarker)
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts)
-	defer server.Stop(t)
 
 	first, err := invokeACPDaemonWorkflow(t, server, "disconnect-first", singleACPAgentWorkflow)
 	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {

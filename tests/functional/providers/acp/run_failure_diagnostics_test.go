@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - pinned wire peer; each failure branch
+// requires a fresh golden subprocess and exact session/config RPC diagnostics.
 func TestYouRunMapsGoldenSessionAndConfigRPCFailuresToTerminalWork(t *testing.T) {
 	for _, test := range []struct {
 		mode       string

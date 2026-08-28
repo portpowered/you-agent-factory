@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - pinned permission wire; each branch must
+// observe its own exact selected permission option on a fresh peer.
 func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
 	tests := []struct {
 		name            string

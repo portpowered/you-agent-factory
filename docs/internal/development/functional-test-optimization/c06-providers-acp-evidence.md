@@ -139,6 +139,60 @@ does not prove direct repeated-run cleanup, race freedom, retained isolated
 lifecycle cleanup under every early assertion, PR CI timing, or clean-room
 behavior; those remain later gates.
 
+## Isolated lifecycle preservation
+
+- Story: `functional-test-optimization-c06-providers-acp-004`
+- Gate: `LIFE-004`
+- Recorded: `2026-08-28` after the isolated-boundary hardening
+- Scope: retained startup, lookup, command-start, negotiation, stderr,
+  crash/replacement, disconnect/reuse, cancellation/shutdown, packaged command,
+  persistent-connection, pinned-wire, permission-wire, bidirectional-RPC, and
+  helper-process witnesses.
+- Dependency fidelity: local-real `root.BuildProcess` and
+  `Process.Execute`, loopback HTTP server, OS subprocesses and stdio pipes,
+  with controlled ACP peers injected only through `edges.Edges`.
+
+Exact verification procedures and observed results:
+
+```text
+go test -count=1 -timeout=15m ./tests/functional/providers/acp -run '^(TestACPCommandStartFailureMapsToDependencyFailure|TestACPFailureRedactsConfiguredSecretsFromStderr|TestACPProtocolFailuresMapToStableWorkerFailureClasses|TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass|TestFactoryRunRetriesACPProviderByResumingExactSession|TestRootConstructionDoesNotStartACPProcess|TestUnknownExecutorProviderFailsBeforeACPProcessStart|TestProvidersACP|TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio|TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio)$'
+exit 0; retained lifecycle subset passed in 11.483s
+
+go test -json -count=1 -timeout=15m ./tests/functional/providers/acp
+exit 0; complete package rerun reported no fail or skip records
+```
+
+Every retained top-level test now has an inline `isolated-with-reason`
+annotation naming the exact process, connection, command, environment,
+negotiation, stderr, wire, helper, or process-count property that sharing would
+destroy. The tests retain their fresh boundaries and exact start-count,
+replacement, reuse, serialization, negotiation, diagnostic, permission, and
+protocol assertions.
+
+The package-local daemon harness registers cleanup before constructing the
+server. On normal, failure, cancellation, crash, disconnect, and early
+assertion paths it verifies that the root `Process.Execute` has joined, closes
+the application, probes `/status` once and observes the loopback listener is
+unreachable, and removes the owned application home before asserting the path
+is absent. Packaged spawn and tournament tests use the same joined-process and
+listener checks before their temporary directories are released. Durable sync
+invocations also require a non-empty public Factory Session identity and a
+terminal status; their `dur-sess-*` records are not passed to the live-session
+delete route, whose status endpoint correctly returns `404` for durable IDs.
+
+The focused run exercised the real start-failure, missing-executable,
+negotiation, retry/replacement, serialization, crash, disconnect, persistent
+reuse, shutdown/join, and packaged persistent-stdio witnesses. The complete
+package rerun retained the migrated public matrix and all pinned-wire/helper
+cases. This proves local-real isolation and deterministic owned cleanup; it
+does not prove unsupported OS-specific process semantics, remote agents,
+repeat cleanup, race freedom, PR CI timing, or clean-room reproduction.
+
+`FT-TIMEOUT` remains unimplemented by decision: the public
+`wait.timeoutMillis` input bounds synchronous waiting and is not an ACP
+provider-attempt deadline. No timeout contract or production behavior was
+invented; `GATE-SCOPE-001` remains an explicit separately authorized follow-up.
+
 ## Discovery and pre-migration baseline run
 
 | Property | Observation |
@@ -367,8 +421,8 @@ remains explicit for the later lifecycle story.
 ## Remaining edges
 
 - `PARITY-003`: migrate eligible cases while preserving every listed witness.
-- `LIFE-004`: directly prove normal, failure, cancellation, crash, recovery,
-  and early-assertion teardown on retained process/connection cases.
+- `LIFE-004`: satisfied by the isolated-boundary annotations and direct
+  joined-process, listener, and owned-path cleanup assertions recorded above.
 - `REPEAT-005` / `RACE-006`: repeat and supported race gates.
 - `TOPO-007`: direct before/after topology instrumentation and material work
   reduction after migration.

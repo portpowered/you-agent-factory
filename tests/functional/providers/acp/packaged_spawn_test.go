@@ -18,6 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - persistent connection count; the packaged
+// workflow must use one real ACP stdio peer across all four agent sessions.
 func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "spawn")
 	var starts atomic.Int32
@@ -102,9 +104,10 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 	if starts.Load() != 1 {
 		t.Fatalf("ACP process starts = %d, want one persistent stdio peer for four agents", starts.Load())
 	}
-	// Stop the daemon before TempDir cleanup so the persistent ACP peer releases
-	// its working-directory handle on Windows.
-	server.Stop(t)
+	// Stop and close the daemon before TempDir cleanup so the persistent ACP
+	// peer releases its working-directory handle on Windows. The helper also
+	// proves Process.Execute joined and the listener is no longer reachable.
+	stopAndAssertACPServer(t, server)
 }
 
 func packagedACPEnvironment(homeDir string) []string {

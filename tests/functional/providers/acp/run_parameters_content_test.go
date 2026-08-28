@@ -15,6 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - pinned wire transcript; sharing would
+// erase the exact initialize/session/prompt/update ordering witness.
 func TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP request"}`))

@@ -16,6 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Isolation: isolated-with-reason - persistent connection count; competitors
+// and judge must share one real ACP stdio peer for the packaged workflow.
 func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "tournament")
 	var starts atomic.Int32
@@ -85,5 +87,5 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 	if starts.Load() != 1 {
 		t.Fatalf("ACP process starts = %d, want one persistent stdio peer for three agents", starts.Load())
 	}
-	server.Stop(t)
+	stopAndAssertACPServer(t, server)
 }
