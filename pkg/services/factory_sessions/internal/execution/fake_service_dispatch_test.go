@@ -23,35 +23,9 @@ import (
 func TestAppendDispatchInterruptedEvent_RecordsCanonicalMetadata(t *testing.T) {
 	t.Parallel()
 	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
-	session := SessionReadResult{
-		SessionID:        "dur-sess-interrupt-001",
-		Status:           LifecycleStatusRunning,
-		OrchestratorKind: "JAVASCRIPT",
-		Dialect:          "you-workflow-v1",
-		Phase:            "execute",
-		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-	}
-	base := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
-		SessionID:    session.SessionID,
-		ResultStatus: ResultStatusNotReady,
-	})
-	dispatch := DispatchSummary{
-		ID:     "disp-js-002",
-		Status: DispatchStatusRunning,
-		Phase:  "execute",
-		Label:  "audit",
-	}
-	events := AppendDispatchInterruptedEvent(
-		base,
-		session,
-		dispatch,
-		InterruptDispatchRequest{
-			ControlRequest: ControlRequest{Reason: "operator stop"},
-			DispatchID:     "disp-js-002",
-		},
-		DispatchStatusRunning,
-		canonicalEventSourceRuntimeService,
-		startedAt,
+	_, base, events := interruptedDispatchFixture(
+		"dur-sess-interrupt-001", startedAt, startedAt,
+		"JAVASCRIPT", "you-workflow-v1", "execute", "audit", "operator stop", ResultStatusNotReady,
 	)
 	if len(events) != len(base)+1 {
 		t.Fatalf("events = %d, want %d", len(events), len(base)+1)
@@ -109,23 +83,9 @@ func TestMarkDispatchInterrupted_UpdatesInspectionProjection(t *testing.T) {
 func TestReplayDispatchProjection_DerivesInterruptedDispatchMetadata(t *testing.T) {
 	t.Parallel()
 	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
-	session := SessionReadResult{
-		SessionID:        "dur-sess-interrupt-002",
-		Status:           LifecycleStatusRunning,
-		OrchestratorKind: "JAVASCRIPT",
-		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-	}
-	events := AppendDispatchInterruptedEvent(
-		BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{SessionID: session.SessionID}),
-		session,
-		DispatchSummary{ID: "disp-js-002", Status: DispatchStatusRunning, Phase: "execute"},
-		InterruptDispatchRequest{
-			ControlRequest: ControlRequest{Reason: "bad prompt"},
-			DispatchID:     "disp-js-002",
-		},
-		DispatchStatusRunning,
-		canonicalEventSourceRuntimeService,
-		startedAt,
+	_, _, events := interruptedDispatchFixture(
+		"dur-sess-interrupt-002", startedAt, startedAt,
+		"JAVASCRIPT", "", "", "", "bad prompt", "",
 	)
 
 	replayed, err := ReplayDispatchProjection(events)
@@ -149,49 +109,11 @@ func TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent(t *testin
 	service := newContractFakeService(t)
 	started := startAsyncByRequestID(t, service, "req-js-run-n-001")
 
-	result, err := service.InterruptDispatch(context.Background(), started.SessionID, InterruptDispatchRequest{
-		ControlRequest: ControlRequest{Reason: "stop bad run"},
-		DispatchID:     "disp-js-002",
-	})
-	if err != nil {
-		t.Fatalf("InterruptDispatch: %v", err)
-	}
-	if result.Outcome != LifecycleControlOutcomeAccepted {
-		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
-	}
-
-	dispatch, err := service.GetDispatch(context.Background(), started.SessionID, "disp-js-002")
-	if err != nil {
-		t.Fatalf("GetDispatch: %v", err)
-	}
-	if dispatch.Status != DispatchStatusInterrupted {
-		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
-	}
+	dispatch, events := interruptFakeDispatch(t, service, started.SessionID, "stop bad run")
 	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Message != "stop bad run" {
 		t.Fatalf("failureDetail = %#v, want stop bad run", dispatch.FailureDetail)
 	}
-
-	events, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
-	if err != nil {
-		t.Fatalf("ReadEvents: %v", err)
-	}
-	found := false
-	for _, raw := range events.Events {
-		var envelope canonicalFactoryEvent
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			t.Fatalf("unmarshal event: %v", err)
-		}
-		if envelope.Type != "DISPATCH_INTERRUPTED" {
-			continue
-		}
-		found = true
-		if envelope.Context.DispatchID == nil || *envelope.Context.DispatchID != "disp-js-002" {
-			t.Fatalf("dispatchId = %#v, want disp-js-002", envelope.Context.DispatchID)
-		}
-	}
-	if !found {
-		t.Fatal("DISPATCH_INTERRUPTED event missing from session events")
-	}
+	findDispatchInterruptedEventPayload(t, events.Events, "disp-js-002")
 
 	replayed, err := ReplayDispatchProjection(events.Events)
 	if err != nil {
@@ -211,16 +133,8 @@ func TestFakeServiceDispatchListAndDetailDefaultToUnconfirmedTogether(t *testing
 	if err != nil {
 		t.Fatalf("ListDispatches: %v", err)
 	}
-	var listed DispatchSummary
-	found := false
-	for _, dispatch := range list.Dispatches {
-		if dispatch.ID == "disp-js-002" {
-			listed = dispatch
-			found = true
-			break
-		}
-	}
-	if !found {
+	listed := findDispatchByID(list.Dispatches, "disp-js-002")
+	if listed == nil {
 		t.Fatalf("dispatch list = %#v, want disp-js-002", list.Dispatches)
 	}
 	if listed.ConfirmationState != ConfirmationStateUnconfirmed {
@@ -239,38 +153,19 @@ func TestFakeServiceDispatchListAndDetailDefaultToUnconfirmedTogether(t *testing
 func TestRestoreInterruptedDispatchResultSuppression_LateCompletionDoesNotReactivateRouting(t *testing.T) {
 	t.Parallel()
 	observedAt := time.Date(2026, 6, 20, 15, 0, 0, 0, time.UTC)
-	interrupted := DispatchSummary{
-		ID:     "disp-js-002",
-		Status: DispatchStatusInterrupted,
-		Phase:  "execute",
-		Label:  "audit",
-		FailureDetail: &DispatchFailureDetail{
-			Reason:  dispatchInterruptionFailureReasonCode,
-			Message: "operator stop",
-		},
-	}
+	interrupted := interruptedDispatchSummary("audit", "operator stop")
 	state := &runtimeSessionState{
 		session: SessionReadResult{SessionID: "dur-sess-interrupt-late-001", Phase: "execute"},
 		dispatches: []DispatchSummary{
 			interrupted,
 		},
-		dispatchStatusTransitions: map[string][]DispatchStatus{
-			"disp-js-002": {DispatchStatusQueued, DispatchStatusRunning, DispatchStatusInterrupted},
-		},
+		dispatchStatusTransitions: interruptedDispatchTransitions(),
 	}
 	preserved := snapshotInterruptedDispatches(state)
 
-	lateRecords := []factory.JavaScriptRuntimeRecord{{
-		Kind: factory.JavaScriptRecordKindChildDispatch,
-		ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-			DispatchID:         "disp-js-002",
-			Status:             factory.JavaScriptChildDispatchStatusCompleted,
-			Label:              "audit",
-			ArtifactRef:        "artifact://child-artifact-late",
-			ProviderSessionRef: "provider-session-late",
-			Provider:           "fake",
-		},
-	}}
+	lateRecords := lateChildCompletionRecords(
+		"disp-js-002", "audit", "artifact://child-artifact-late", "provider-session-late", "fake",
+	)
 	applyRuntimeExecutionRecordProjection(state, "dur-sess-interrupt-late-001", lateRecords, observedAt)
 	if state.dispatches[0].Status != DispatchStatusCompleted {
 		t.Fatalf("projected status = %q, want COMPLETED before suppression", state.dispatches[0].Status)
@@ -309,71 +204,25 @@ func TestApplyTerminalRuntimeProjection_PreservesInterruptedDispatchAndEvents(t 
 	observedAt := time.Date(2026, 6, 20, 15, 30, 0, 0, time.UTC)
 	sessionID := "dur-sess-interrupt-terminal-001"
 	startedAt := observedAt.Add(-time.Minute)
-	running := SessionReadResult{
-		SessionID: sessionID,
-		Status:    LifecycleStatusRunning,
-		Phase:     "execute",
-		Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt},
-	}
-	events := AppendDispatchInterruptedEvent(
-		BuildCanonicalRuntimeSessionEvents(running, ResultReadResult{SessionID: sessionID}),
-		running,
-		DispatchSummary{ID: "disp-js-002", Status: DispatchStatusRunning, Phase: "execute"},
-		InterruptDispatchRequest{DispatchID: "disp-js-002", ControlRequest: ControlRequest{Reason: "operator stop"}},
-		DispatchStatusRunning,
-		canonicalEventSourceRuntimeService,
-		observedAt,
+	running, _, events := interruptedDispatchFixture(
+		sessionID, startedAt, observedAt, "", "", "execute", "", "operator stop", "",
 	)
 	prior := &runtimeSessionState{
-		session: running,
-		dispatches: []DispatchSummary{{
-			ID:            "disp-js-002",
-			Status:        DispatchStatusInterrupted,
-			Phase:         "execute",
-			FailureDetail: dispatchInterruptionFailureDetail("operator stop"),
-		}},
-		dispatchStatusTransitions: map[string][]DispatchStatus{
-			"disp-js-002": {DispatchStatusQueued, DispatchStatusRunning, DispatchStatusInterrupted},
-		},
-		events: events,
+		session:                   running,
+		dispatches:                []DispatchSummary{interruptedDispatchSummary("", "operator stop")},
+		dispatchStatusTransitions: interruptedDispatchTransitions(),
+		events:                    events,
 	}
-	lateRecords := []factory.JavaScriptRuntimeRecord{{
-		Kind: factory.JavaScriptRecordKindChildDispatch,
-		ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-			DispatchID:  "disp-js-002",
-			Status:      factory.JavaScriptChildDispatchStatusCompleted,
-			Label:       "audit",
-			ArtifactRef: "artifact://child-artifact-late",
-		},
-	}}
+	lateRecords := lateChildCompletionRecords("disp-js-002", "audit", "artifact://child-artifact-late", "", "")
 	terminal := runtimeSessionState{session: running}
-	applyRuntimeSuccessProjection(&terminal, sessionID, factory.JavaScriptRuntimeOutcome{
-		OK:      true,
-		Records: lateRecords,
-		Value:   factory.TypedValue{JSON: json.RawMessage("null")},
-	}, observedAt)
+	applyRuntimeSuccessProjection(&terminal, sessionID, successfulRuntimeOutcome(lateRecords), observedAt)
 
-	applyTerminalRuntimeProjection(prior, terminal, factory.JavaScriptRuntimeOutcome{
-		OK:      true,
-		Records: lateRecords,
-		Value:   factory.TypedValue{JSON: json.RawMessage("null")},
-	})
+	applyTerminalRuntimeProjection(prior, terminal, successfulRuntimeOutcome(lateRecords))
 
 	if prior.dispatches[0].Status != DispatchStatusInterrupted {
 		t.Fatalf("dispatch status = %q, want INTERRUPTED", prior.dispatches[0].Status)
 	}
-	foundInterruptedEvent := false
-	for _, raw := range prior.events {
-		var envelope factoryEventEnvelope
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			continue
-		}
-		if envelope.Type == "DISPATCH_INTERRUPTED" {
-			foundInterruptedEvent = true
-			break
-		}
-	}
-	if !foundInterruptedEvent {
+	if !containsEventType(prior.events, "DISPATCH_INTERRUPTED") {
 		t.Fatal("DISPATCH_INTERRUPTED event missing after terminal projection")
 	}
 	if prior.session.Progress != nil && prior.session.Progress.CompletedDispatches != 0 {
@@ -397,19 +246,8 @@ func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testi
 	resumedAt := time.Date(2026, 6, 11, 12, 0, 10, 0, time.UTC)
 	sessionID := "dur-sess-replay-pause-resume-001"
 
-	baseSession := SessionReadResult{
-		SessionID:        sessionID,
-		Status:           LifecycleStatusRunning,
-		OrchestratorKind: "JAVASCRIPT",
-		SourceHash:       "sha256:fixture",
-		Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-		ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
-		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-	}
-	baseResult := ResultReadResult{
-		SessionID:    sessionID,
-		ResultStatus: ResultStatusNotReady,
-	}
+	baseSession := javascriptReplaySession(sessionID, LifecycleStatusRunning, &startedAt)
+	baseResult := javascriptReplayResult(sessionID)
 
 	events := BuildCanonicalRuntimeSessionEvents(baseSession, baseResult)
 	events = AppendSessionLifecycleControlEvent(
@@ -433,10 +271,7 @@ func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testi
 		"",
 	)
 
-	session, result, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
-	}
+	session, result := replaySessionProjection(t, events)
 	if session.Status != LifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", session.Status)
 	}
@@ -476,19 +311,8 @@ func TestReplaySessionProjection_LegacyPauseResumeEventsDeriveStatus(t *testing.
 		return raw
 	}
 
-	baseSession := SessionReadResult{
-		SessionID:        sessionID,
-		Status:           LifecycleStatusRunning,
-		OrchestratorKind: "JAVASCRIPT",
-		SourceHash:       "sha256:fixture",
-		Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
-		ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
-		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
-	}
-	baseResult := ResultReadResult{
-		SessionID:    sessionID,
-		ResultStatus: ResultStatusNotReady,
-	}
+	baseSession := javascriptReplaySession(sessionID, LifecycleStatusRunning, &startedAt)
+	baseResult := javascriptReplayResult(sessionID)
 
 	events := BuildCanonicalRuntimeSessionEvents(baseSession, baseResult)
 	events = append(events,
@@ -528,10 +352,7 @@ func TestReplaySessionProjection_LegacyPauseResumeEventsDeriveStatus(t *testing.
 		}),
 	)
 
-	session, result, err := ReplaySessionProjection(events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
-	}
+	session, result := replaySessionProjection(t, events)
 	if session.Status != LifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", session.Status)
 	}
@@ -618,10 +439,7 @@ func TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation
 		t.Fatalf("event count after resume = %d, want %d", len(afterResume.Events), len(afterPause.Events)+1)
 	}
 
-	replayed, _, err := ReplaySessionProjection(afterResume.Events)
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
-	}
+	replayed, _ := replaySessionProjection(t, afterResume.Events)
 	if replayed.Status != LifecycleStatusRunning {
 		t.Fatalf("replayed status = %q, want RUNNING", replayed.Status)
 	}
@@ -645,29 +463,7 @@ func TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEven
 		t.Fatalf("dispatch disp-js-002 = %#v, want RUNNING before interrupt", runningBefore)
 	}
 
-	interruptResult, err := service.InterruptDispatch(context.Background(), started.SessionID, InterruptDispatchRequest{
-		ControlRequest: ControlRequest{Reason: "stop before provider completion"},
-		DispatchID:     "disp-js-002",
-	})
-	if err != nil {
-		t.Fatalf("InterruptDispatch: %v", err)
-	}
-	if interruptResult.Outcome != LifecycleControlOutcomeAccepted {
-		t.Fatalf("outcome = %q, want ACCEPTED", interruptResult.Outcome)
-	}
-
-	dispatch, err := service.GetDispatch(context.Background(), started.SessionID, "disp-js-002")
-	if err != nil {
-		t.Fatalf("GetDispatch: %v", err)
-	}
-	if dispatch.Status != DispatchStatusInterrupted {
-		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
-	}
-
-	events, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
-	if err != nil {
-		t.Fatalf("ReadEvents: %v", err)
-	}
+	_, events := interruptFakeDispatch(t, service, started.SessionID, "stop before provider completion")
 	payload := findDispatchInterruptedEventPayload(t, events.Events, "disp-js-002")
 	if payload.ObservedStatus != string(factoryapi.FactoryDispatchStatusRUNNING) {
 		t.Fatalf("observedStatus = %q, want RUNNING", payload.ObservedStatus)
@@ -690,6 +486,106 @@ func TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEven
 	}
 	if err := ValidateDispatchListMatchesSessionProgress(session, updated.Dispatches); err != nil {
 		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
+	}
+}
+
+func interruptedDispatchFixture(
+	sessionID string,
+	startedAt, observedAt time.Time,
+	orchestratorKind, dialect, sessionPhase, label, reason string,
+	resultStatus ResultStatus,
+) (SessionReadResult, []json.RawMessage, []json.RawMessage) {
+	session := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: orchestratorKind,
+		Dialect:          dialect,
+		Phase:            sessionPhase,
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	base := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
+		SessionID:    sessionID,
+		ResultStatus: resultStatus,
+	})
+	events := AppendDispatchInterruptedEvent(
+		base,
+		session,
+		DispatchSummary{ID: "disp-js-002", Status: DispatchStatusRunning, Phase: "execute", Label: label},
+		InterruptDispatchRequest{
+			ControlRequest: ControlRequest{Reason: reason},
+			DispatchID:     "disp-js-002",
+		},
+		DispatchStatusRunning,
+		canonicalEventSourceRuntimeService,
+		observedAt,
+	)
+	return session, base, events
+}
+
+func interruptedDispatchSummary(label, reason string) DispatchSummary {
+	return DispatchSummary{
+		ID: "disp-js-002", Status: DispatchStatusInterrupted, Phase: "execute", Label: label,
+		FailureDetail: dispatchInterruptionFailureDetail(reason),
+	}
+}
+
+func javascriptReplayResult(sessionID string) ResultReadResult {
+	return ResultReadResult{SessionID: sessionID, ResultStatus: ResultStatusNotReady}
+}
+
+func interruptedDispatchTransitions() map[string][]DispatchStatus {
+	return map[string][]DispatchStatus{"disp-js-002": {DispatchStatusQueued, DispatchStatusRunning, DispatchStatusInterrupted}}
+}
+
+func interruptFakeDispatch(
+	t *testing.T,
+	service *FakeService,
+	sessionID, reason string,
+) (DispatchDetail, EventReadResult) {
+	t.Helper()
+	result, err := service.InterruptDispatch(context.Background(), sessionID, InterruptDispatchRequest{
+		ControlRequest: ControlRequest{Reason: reason},
+		DispatchID:     "disp-js-002",
+	})
+	if err != nil {
+		t.Fatalf("InterruptDispatch: %v", err)
+	}
+	if result.Outcome != LifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	dispatch, err := service.GetDispatch(context.Background(), sessionID, "disp-js-002")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.Status != DispatchStatusInterrupted {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+	events, err := service.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	return dispatch, events
+}
+
+func lateChildCompletionRecords(
+	dispatchID, label, artifactRef, providerSessionRef, provider string,
+) []factory.JavaScriptRuntimeRecord {
+	return []factory.JavaScriptRuntimeRecord{{
+		Kind: factory.JavaScriptRecordKindChildDispatch,
+		ChildDispatch: &factory.JavaScriptChildDispatchRecord{
+			DispatchID:         dispatchID,
+			Status:             factory.JavaScriptChildDispatchStatusCompleted,
+			Label:              label,
+			ArtifactRef:        artifactRef,
+			ProviderSessionRef: providerSessionRef,
+			Provider:           provider,
+		},
+	}}
+}
+
+func successfulRuntimeOutcome(records []factory.JavaScriptRuntimeRecord) factory.JavaScriptRuntimeOutcome {
+	return factory.JavaScriptRuntimeOutcome{
+		OK: true, Records: records, Value: factory.TypedValue{JSON: json.RawMessage("null")},
 	}
 }
 
