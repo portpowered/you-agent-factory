@@ -49,8 +49,8 @@ test("enumerates exactly the classified snapshots and wires every merged writer"
 	for (const command of [
 		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget',
 		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze',
-		"UPDATE_CLI_BASELINES=1 $(GO) test ./pkg/transports/cli/commandidentity -run '^TestWriteProductionInventoryBaseline$$' -count=1",
-		"UPDATE_CLI_BASELINES=1 $(GO) test ./pkg/transports/cli/cliinputs -run '^TestWriteProductionInputsInventoryBaseline$$' -count=1",
+		'cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run \'^TestWriteProductionInventoryBaseline$$\' -count=1',
+		'cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run \'^TestWriteProductionInputsInventoryBaseline$$\' -count=1',
 		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .',
 	]) {
 		assert.ok(makefile.includes(command), `Makefile is missing canonical writer command: ${command}`);

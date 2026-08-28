@@ -97,6 +97,18 @@ UNIT_LATENCY_BUDGET ?= docs/internal/baselines/go-unit-lane-latency-budget.v1.js
 UNIT_LATENCY_SAMPLES ?= .artifacts/unit-latency/run-1.v2.json,.artifacts/unit-latency/run-2.v2.json,.artifacts/unit-latency/run-3.v2.json
 BASELINE_REGEN_ROOT ?= .
 BASELINE_REGEN_DEADCODE_REPORT ?=
+# The CLI inventory writers are update-mode tests. Keep their environment
+# assignment valid for native Windows Make while retaining the POSIX form used
+# by Linux CI and Windows shells backed by sh.exe.
+ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL))))
+BASELINE_REGEN_CLI_UPDATE_ENV := UPDATE_CLI_BASELINES=1
+else
+BASELINE_REGEN_CLI_UPDATE_ENV := set UPDATE_CLI_BASELINES=1 &&
+endif
+else
+BASELINE_REGEN_CLI_UPDATE_ENV := UPDATE_CLI_BASELINES=1
+endif
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 FUNCTIONAL_LONG_COMPILE_PACKAGES := $(FUNCTIONAL_LONG_PACKAGES) ./pkg/services/models/internal/backendconformance
@@ -522,8 +534,8 @@ test-unit-latency-budget:
 regenerate-shared-ci-baselines:
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget -mode regenerate -root . -budget "$(UNIT_LATENCY_BUDGET)" -samples "$(UNIT_LATENCY_SAMPLES)" $(if $(strip $(BASELINE_REGEN_DEADCODE_REPORT)),-deadcode-report "$(BASELINE_REGEN_DEADCODE_REPORT)",)
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze
-	cd "$(BASELINE_REGEN_ROOT)" && UPDATE_CLI_BASELINES=1 $(GO) test ./pkg/transports/cli/commandidentity -run '^TestWriteProductionInventoryBaseline$$' -count=1
-	cd "$(BASELINE_REGEN_ROOT)" && UPDATE_CLI_BASELINES=1 $(GO) test ./pkg/transports/cli/cliinputs -run '^TestWriteProductionInputsInventoryBaseline$$' -count=1
+	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run '^TestWriteProductionInventoryBaseline$$' -count=1
+	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run '^TestWriteProductionInputsInventoryBaseline$$' -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
