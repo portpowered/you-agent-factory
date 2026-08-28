@@ -342,16 +342,16 @@ surface.
 After the review-required test-only fixture move, deadcode-baseline correction,
 and command-runner conversion, the affected package checks were rerun:
 
-1. The migrated eligible selector exited `0` in `9.544s`; the preserved
+1. The migrated eligible selector exited `0` in `9.441s`; the preserved
    eligible public assertions all pass.
 2. `go test ./tests/functional/providers -run
    '^(TestProvidersSharedProcessTopology|TestProvidersSharedProcessRoutes|TestProvidersSharedProcessAdverseRecovery|TestProviders_ForcedAssertionFailureCleansOwnedResources)$' -count=1`
-   exited `0` in `2.702s`, including the shared topology/routes/recovery and
+   exited `0` in `4.277s`, including the shared topology/routes/recovery and
    forced assertion-cleanup tests after the test-only fixture move.
-3. `go test ./tests/functional/providers -count=1` exited `1` in `25.012s`
+3. `go test ./tests/functional/providers -count=1` exited `1` in `28.749s`
    only at the retained mixed-worker `unknown` versus
    `permanent_bad_request` assertion; the clean-base blocker is unchanged.
-4. The unblocked tagged timeout-companion selector exited `0` in `2.303s`;
+4. The unblocked tagged timeout-companion selector exited `0` in `2.487s`;
    the operator-waived Claude/Codex rows remain unchanged.
 5. `go run ./cmd/functionalboundarycheck`, `make pkg-structure`, and
    `make test` exited `0`.
@@ -395,7 +395,7 @@ Verification procedures and observations:
 1. Retained process and cleanup selectors:
    `go test -count=1 -timeout=10m ./tests/functional/providers -run
    '^(TestScriptExecutor_MissingCommandFailsStartup|TestIntegrationSmoke_(TimeoutCancelsProcessTreeAndClearsActiveExecution|TimeoutRequeuesWorkAndSucceedsOnLaterAttempt|ProcessTreeHelper)|TestMockWorkers_(AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary|ScriptRejectConfigWithZeroExitCodeStillRoutesFailure|ScriptConfigExecutesCommandRunnerSideEffect|ScriptHelper)|TestPackagedScriptRuntime_(FreshInstallExecutesFactoryRelativeScript|NonZeroExitUsesStandardFailureOutcome)|TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies|TestProviders_ForcedAssertionFailureCleansOwnedResources)$' -v`
-   exited `0` in `13.882s` on `go1.25.0` `windows/amd64`. All selected
+   exited `0` in `15.655s` on `go1.25.0` `windows/amd64`. All selected
    non-Unix cases passed. The two packaged shebang cases skipped before
    construction with `executable shebang scripts are not supported on
    Windows`; Linux PR CI owns those real Unix cells.
@@ -444,9 +444,9 @@ unproven and is owned by Linux PR CI. The criterion is therefore recorded as
 
 ### Environment and artifact
 
-- Commit/build identifier: `b54edfc096`, the review-fix implementation head
-  used for the integrated package runs below; it is based on `origin/main`
-  `eaea1c6630`.
+- Commit/build identifier: `7c89c7e808`, the rebased review-fix head used for
+  the integrated package runs below; it is based on `origin/main`
+  `f49e0c2e6f`.
 - Environment and configuration: clean Git worktree on
   `go1.25.0 windows/amd64`; no provider credentials or remote configuration.
   `git status --short --branch` reported only the expected branch identity;
@@ -467,32 +467,32 @@ unproven and is owned by Linux PR CI. The criterion is therefore recorded as
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
 | PROV-CHAR-001 | PASS | The characterization ledger maps all 40 scenario rows and five cleanup rows one-to-one and preserves the public witness matrix. | No new characterization beyond the recorded ledger. |
-| PROV-ISO-003 | BLOCKED / UNPROVEN UNIX CELL | The retained selector passed in 13.882s on Windows; forced assertion cleanup proved closed listener, deleted sessions, zero routes, and absent owned paths. Unix shebang rows explicitly skip before construction. | Unix executable/process behavior and its cleanup remain owned by Linux PR CI. |
+| PROV-ISO-003 | BLOCKED / UNPROVEN UNIX CELL | The retained selector passed in 15.655s on Windows; forced assertion cleanup proved closed listener, deleted sessions, zero routes, and absent owned paths. Unix shebang rows explicitly skip before construction. | Unix executable/process behavior and its cleanup remain owned by Linux PR CI. |
 | PROV-MIG-002 | PASS | Shared fixture census reported one root/listener and zero routes/owned root after cleanup; static post-migration counts are 13 Linux and 11 Windows constructions, with no additional long construction. | Runtime counts on the PR runner remain for review confirmation. |
-| PROV-REPEAT-004 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On implementation head `b54edfc096`, the exact once command exited 1 in 25.012s and the exact `-count=3` command exited 1 in 70.981s. The unchanged mixed-refusal assertion reproduced once per run with no new failure or state contamination; the operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Package success past the pre-declared mismatch. |
-| PROV-LONG-005 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On implementation head `b54edfc096`, the exact tagged command exited 1 in 27.636s. Timeout and timeout-companion cases passed; Claude, Codex, and the same mixed-refusal assertion failed exactly as characterized. The operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Four-case long parity and Linux long topology. |
+| PROV-REPEAT-004 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On rebased head `7c89c7e808`, the exact once command exited 1 in 28.749s and the exact `-count=3` command exited 1 in 68.025s. The unchanged mixed-refusal assertion reproduced once per run with no new failure or state contamination; the operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Package success past the pre-declared mismatch. |
+| PROV-LONG-005 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On rebased head `7c89c7e808`, the exact tagged command exited 1 in 27.351s. Timeout and timeout-companion cases passed; Claude, Codex, and the same mixed-refusal assertion failed exactly as characterized. The operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Four-case long parity and Linux long topology. |
 | PR-CI-006 | REVIEW HANDOFF | The operator authorized the PR/CI handoff with the two pre-existing blockers recorded as waived-as-blocked. Review must record final-head Backend Functional Coverage timing and topology in a PR comment using the procedure below. | Final-head CI timing/direction and review topology confirmation. |
 | Security/privacy | PASS | All runs used controlled local fixtures, zero credentials, zero customer data, and zero paid/remote calls; test-owned temporary roots were cleaned by the fixture and retained cleanup proofs. | Host-wide artifact/process state outside test ownership. |
 | Compatibility | PASS after review correction (prior reviewed head FAIL) | The final review-fix diff leaves `docs/internal/baselines/deadcode-baseline.txt` unchanged from `origin/main`; the prior 34-line fixture finding was a compatibility failure and was removed by moving the fixture into the existing test-only helper file. No API, CLI grammar, event schema, generated output, shared support, workflow, Makefile, or stability-cleanup surface changed. | Full repository verification and merge-base review; the Windows host still reports the existing Unix/Windows deadcode-baseline difference. |
-| VAL-007 | PASS after review correction | This read-only report follows the validation-loopback template, identifies implementation head `b54edfc096`, records the prior compatibility failure and its correction, and preserves the blocked findings plus delta-plan request without changing product/runtime assertions. | Independent integrated validation and review disposition. |
+| VAL-007 | PASS after review correction | This read-only report follows the validation-loopback template, identifies rebased validation head `7c89c7e808`, records the prior compatibility failure and its correction, and preserves the blocked findings plus delta-plan request without changing product/runtime assertions. | Independent integrated validation and review disposition. |
 | PROJECT-AC1/2/3 | BLOCKED | These are explicitly later lane-wide gates and are not claimed by this slice. | Lane-wide timing, global isolation inventory, and full-suite parity. |
 | Implementation delivery | REVIEW HANDOFF | The operator-authorized disposition permits implementation handoff with `PROV-REPEAT-004` and `PROV-LONG-005` blocked-by-pre-existing. The final push, open PR, started CI, and review feedback are session handoff actions. | Review-owned terminal CI, conflict resolution, and merge. |
 
 ### Customer journey
 
-1. The review-fix implementation head `b54edfc096` was checked in a clean
+1. The rebased review-fix head `7c89c7e808` was checked in a clean
    worktree and the exact default package command was run through the
-   production root and loopback HTTP/session path. It exited `1` in `25.012s`;
+   production root and loopback HTTP/session path. It exited `1` in `28.749s`;
    all default cases reached their existing public assertions except the
    retained mixed-refusal baseline assertion.
 2. The exact repeat command ran the package three times in the same test
-   process and exited `1` in `70.981s`. Each run produced the same single
+   process and exited `1` in `68.025s`. Each run produced the same single
    retained assertion failure; the shared fixture finalizer still reported one
    construction/listener, deleted explicit sessions, zero routes, and no
    fixture root.
 3. The exact tagged command exercised all four long rows. The two timeout
    rows passed through the shared explicit-session fixture. It exited `1` in
-   `27.636s`; the Claude and Codex rows reproduced their pre-migration
+   `27.351s`; the Claude and Codex rows reproduced their pre-migration
    provider/template failures, so their public expectations remain visible and
    unmodified.
 
@@ -537,10 +537,10 @@ PR is open:
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| C06-F-001 | BLOCKED-BY-PRE-EXISTING | `go test -count=1 -timeout=10m ./tests/functional/providers`; repeat with `-count=3`. | Mixed mock-worker replay preserves the declared neutral terminal refusal. | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` observes failure reason `unknown` instead of `permanent_bad_request`; the same unchanged assertion fails once in each repeat. | Implementation-head package run: exit 1, 25.012s; repeat: exit 1, 70.981s; clean-base diagnostic and prior ledger record the same mismatch. Operator disposition waives this pre-existing blocker for the PR. |
-| C06-F-002 | BLOCKED-BY-PRE-EXISTING | `go test -tags=functionallong -count=1 -timeout=30m ./tests/functional/providers`; focused template selectors on clean base and implementation head. | Claude/Codex execution-template rows complete with the declared Work and exact provider request witnesses. | Claude fails with blank `.Context` values, `inputs=2`, and extra runtime flags; Codex fails with failed Work and an extra `--json` argument. The same failure class reproduces from clean base commit `67710223e`. | Implementation-head tagged package: exit 1, 27.636s; clean-base focused run: exit 1, 3.692s; assertions remain unchanged. Operator disposition waives this pre-existing blocker for the PR. |
-| C06-F-004 | RESOLVED REVIEW BLOCKER | `git diff origin/main...HEAD -- docs/internal/baselines/deadcode-baseline.txt` on the prior reviewed head `98b2dfb6a0`; `make deadcode` after `b54edfc096`. | The excluded baseline remains unchanged and the provider fixture does not add deadcode findings. | Prior head added 34 provider-helper entries, which was a compatibility failure; `b54edfc096` moves the fixture into `_test.go`, removes all 34 lines, and current deadcode has no provider fixture finding. | Prior Compatibility status is recorded as FAIL in this report history; current review-fix diff has no baseline change. Windows retains only the existing Unix/Windows lock-helper mismatch. |
-| C06-F-005 | REVIEW FOLLOW-UP | Prior required run `33169994378`, `Backend Unit Latency`; focused `go test ./pkg/services/providers/internal/services/acp/internal/service -run '^TestProtocolFailuresMapToStableExecuteFailureKinds/server-failure$' -count=1` on the implementation head and the same package at `origin/main`. | Required Backend Unit Latency is green on the final head. | The prior CI run failed in an untouched ACP package at `server-failure`; the focused current-head check passed once in 0.555s and the base check also passed once. The final push starts a fresh required run; the prior failed job is unrelated to this diff. | Review comment `5452592186` records the prior failure and green focused/base checks. Review must confirm the fresh final-head check and rerun that failed job once if it recurs. |
+| C06-F-001 | BLOCKED-BY-PRE-EXISTING | `go test -count=1 -timeout=10m ./tests/functional/providers`; repeat with `-count=3`. | Mixed mock-worker replay preserves the declared neutral terminal refusal. | `TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials` observes failure reason `unknown` instead of `permanent_bad_request`; the same unchanged assertion fails once in each repeat. | Rebasing-head package run: exit 1, 28.749s; repeat: exit 1, 68.025s; clean-base diagnostic and prior ledger record the same mismatch. Operator disposition waives this pre-existing blocker for the PR. |
+| C06-F-002 | BLOCKED-BY-PRE-EXISTING | `go test -tags=functionallong -count=1 -timeout=30m ./tests/functional/providers`; focused template selectors on clean base and implementation head. | Claude/Codex execution-template rows complete with the declared Work and exact provider request witnesses. | Claude fails with blank `.Context` values, `inputs=2`, and extra runtime flags; Codex fails with failed Work and an extra `--json` argument. The same failure class reproduces from clean base commit `67710223e`. | Rebasing-head tagged package: exit 1, 27.351s; clean-base focused run: exit 1, 3.692s; assertions remain unchanged. Operator disposition waives this pre-existing blocker for the PR. |
+| C06-F-004 | RESOLVED REVIEW BLOCKER | `git diff origin/main...HEAD -- docs/internal/baselines/deadcode-baseline.txt` on the prior reviewed head `98b2dfb6a0`; `make deadcode` after rebased head `7c89c7e808`. | The excluded baseline remains unchanged and the provider fixture does not add deadcode findings. | Prior head added 34 provider-helper entries, which was a compatibility failure; the rebased review fix moves the fixture into `_test.go`, removes all 34 lines, and current deadcode has no provider fixture finding. | Prior Compatibility status is recorded as FAIL in this report history; current rebased diff has no baseline change. Windows retains only the existing Unix/Windows lock-helper mismatch. |
+| C06-F-005 | REVIEW FOLLOW-UP | Prior required run `33169994378`, `Backend Unit Latency`; focused `go test ./pkg/services/providers/internal/services/acp/internal/service -run '^TestProtocolFailuresMapToStableExecuteFailureKinds/server-failure$' -count=1` on the rebased implementation head and the same package at `origin/main`. | Required Backend Unit Latency is green on the final head. | The prior CI run failed in an untouched ACP package at `server-failure`; the focused rebased-head check passed once in 0.534s and the base check also passed once. The final push starts a fresh required run; the prior failed job is unrelated to this diff. | Review comment `5452592186` records the prior failure and green focused/base checks. Review must confirm the fresh final-head check and rerun that failed job once if it recurs. |
 | C06-F-003 | REVIEW HANDOFF | Push the final head, open the named PR, and start required CI. | Final head is pushed, PR is open, and required CI starts on that head. | Operator disposition authorizes this handoff without changing C06-F-001/C06-F-002 assertions; review owns final-head timing/topology evidence and terminal CI. | The PR description will use this PRD and include the exact command results and clean-base SHA; CI start will be confirmed once after PR creation. |
 
 ### Verdict
@@ -568,5 +568,5 @@ REVIEW HANDOFF WITH OPERATOR-WAIVED PRE-EXISTING BLOCKERS
 - Dependencies and retest scope: the operator disposition is the prerequisite
   for handoff. The exact default once/repeat and tagged commands were run on
   the recorded implementation head; the review-fix source commit is
-  `b54edfc096`. Review-owned final-head Backend Functional Coverage and topology
+  `7c89c7e808`. Review-owned final-head Backend Functional Coverage and topology
   evidence remain in the PR conversation.
