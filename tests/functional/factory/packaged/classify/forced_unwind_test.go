@@ -3,7 +3,9 @@ package classify
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -67,12 +69,19 @@ func classifyListenerError(baseURL string) error {
 		return fmt.Errorf("classify API listener URL is empty")
 	}
 	client := http.Client{Timeout: time.Second}
-	response, err := client.Get(strings.TrimSuffix(baseURL, "/") + "/status")
-	if err != nil {
-		return nil
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
+	deadline := time.Now().Add(2 * time.Second)
+	lastStatus := 0
+	for time.Now().Before(deadline) {
+		response, err := client.Get(endpoint)
+		if err != nil {
+			return nil
+		}
+		lastStatus = response.StatusCode
+		_ = response.Body.Close()
+		time.Sleep(10 * time.Millisecond)
 	}
-	_ = response.Body.Close()
-	return fmt.Errorf("classify API listener %s remained reachable with status %d", baseURL, response.StatusCode)
+	return fmt.Errorf("classify API listener %s remained reachable with status %d", baseURL, lastStatus)
 }
 
 func classifyPathAbsent(path string) bool {
@@ -81,4 +90,37 @@ func classifyPathAbsent(path string) bool {
 	}
 	_, err := os.Stat(path)
 	return os.IsNotExist(err)
+}
+
+func assertClassifySessionAbsent(t testing.TB, baseURL, sessionID string) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	client := http.Client{Timeout: time.Second}
+	response, err := client.Get(endpoint)
+	if err != nil {
+		t.Errorf("GET deleted Factory Session %q: %v", sessionID, err)
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return
+	}
+	body, _ := io.ReadAll(response.Body)
+	t.Errorf(
+		"GET deleted Factory Session %q status = %d, want 404: %s",
+		sessionID,
+		response.StatusCode,
+		strings.TrimSpace(string(body)),
+	)
+}
+
+func cleanupClassifyScenarioRoot(t testing.TB, rootDir string) {
+	t.Helper()
+	if err := os.RemoveAll(rootDir); err != nil {
+		t.Errorf("remove classify scenario root %q: %v", rootDir, err)
+		return
+	}
+	if !classifyPathAbsent(rootDir) {
+		t.Errorf("classify scenario root %q remains after cleanup", rootDir)
+	}
 }

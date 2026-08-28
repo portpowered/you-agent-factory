@@ -68,10 +68,17 @@ func catalogListenerError(baseURL string) error {
 		return fmt.Errorf("catalog API listener URL is empty")
 	}
 	client := http.Client{Timeout: time.Second}
-	response, err := client.Get(strings.TrimSuffix(baseURL, "/") + "/status")
-	if err != nil {
-		return nil
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
+	deadline := time.Now().Add(2 * time.Second)
+	lastStatus := 0
+	for time.Now().Before(deadline) {
+		response, err := client.Get(endpoint)
+		if err != nil {
+			return nil
+		}
+		lastStatus = response.StatusCode
+		_ = response.Body.Close()
+		time.Sleep(10 * time.Millisecond)
 	}
-	_ = response.Body.Close()
-	return fmt.Errorf("catalog API listener %s remained reachable with status %d", baseURL, response.StatusCode)
+	return fmt.Errorf("catalog API listener %s remained reachable with status %d", baseURL, lastStatus)
 }

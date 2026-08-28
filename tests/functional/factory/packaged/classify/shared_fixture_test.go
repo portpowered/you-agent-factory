@@ -246,8 +246,13 @@ func (fixture *classifySharedFixture) close() error {
 		errs = append(errs, fmt.Errorf("close root process: %w", err))
 	}
 	cancel()
+	if err := classifyListenerError(fixture.baseURL); err != nil {
+		errs = append(errs, err)
+	}
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
 		errs = append(errs, fmt.Errorf("remove fixture root: %w", err))
+	} else if !classifyPathAbsent(fixture.rootDir) {
+		errs = append(errs, fmt.Errorf("fixture root %q remains after cleanup", fixture.rootDir))
 	}
 	return errors.Join(errs...)
 }
@@ -255,6 +260,7 @@ func (fixture *classifySharedFixture) close() error {
 type classifyScenario struct {
 	fixture   *classifySharedFixture
 	sessionID string
+	rootDir   string
 }
 
 func openClassifyScenario(
@@ -264,7 +270,11 @@ func openClassifyScenario(
 	t.Helper()
 	fixture := sharedClassifyFixture(t)
 	fixture.providerRunner.setDelegate(runner)
-	homeDir := t.TempDir()
+	rootDir := t.TempDir()
+	homeDir := filepath.Join(rootDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("create classify scenario home: %v", err)
+	}
 	factoryDir := support.CopyFactoryAsNamed(
 		t,
 		fixture.factoryDir,
@@ -277,7 +287,9 @@ func openClassifyScenario(
 		t.Fatal("opened classify session has no id")
 	}
 	t.Cleanup(func() {
+		defer cleanupClassifyScenarioRoot(t, rootDir)
 		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		assertClassifySessionAbsent(t, fixture.baseURL, sessionID)
 	})
-	return &classifyScenario{fixture: fixture, sessionID: sessionID}
+	return &classifyScenario{fixture: fixture, sessionID: sessionID, rootDir: rootDir}
 }

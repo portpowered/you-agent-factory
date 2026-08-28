@@ -220,5 +220,13 @@ func (fixture *catalogSharedProcessFixture) close() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), catalogSharedProcessShutdownTimeout)
 	defer cancel()
-	return fixture.process.Close(ctx)
+	closeErr := fixture.process.Close(ctx)
+	if fixture.apiRouter != nil {
+		if server := fixture.apiRouter.current(); server != nil {
+			if baseURL, ok := server.BaseURL(); ok {
+				closeErr = errors.Join(closeErr, catalogListenerError(baseURL))
+			}
+		}
+	}
+	return closeErr
 }
