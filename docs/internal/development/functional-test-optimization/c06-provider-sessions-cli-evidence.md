@@ -336,10 +336,10 @@ or merge.
 ## TASK-003 final clean-room validation
 
 The final validation used a newly created detached clean worktree after syncing
-the branch onto the current `origin/main`. The validated source head was
-`4aa8f9df5785bce28e47513ff1b174c0ca6eeb76`; the subsequent evidence commit is
-documentation-only and does not alter the package implementation or its
-runtime dependencies.
+the branch onto the current `origin/main`. The validated delivered source head
+was `b0402f64ee3529ab3ab3dc96ee0b091cf1851b9a`; the evidence reconciliation
+commit that follows changes this markdown only and does not alter the package
+implementation or its runtime dependencies.
 
 Environment and fidelity matched the declared gate:
 `go version go1.25.0 windows/amd64`; Windows 11 build `26200`; `amd64`; production
@@ -351,16 +351,16 @@ Required final-head commands and results:
 
 ```text
 go test -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
-PASS; package time 8.808s; exit code 0
+PASS; package time 8.508s; exit code 0
 
 go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
-PASS; package time 20.616s; exit code 0
+PASS; package time 21.109s; exit code 0
 
 go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
-PASS; package time 3.964s; exit code 0; no race report
+PASS; package time 4.348s; exit code 0; no race report
 
 go test -v -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
-PASS; package time 11.678s; exit code 0
+PASS; package time 9.301s; exit code 0
 C06 TASK-002 topology: root-builds=1 api-host-starts=1 cli-builds=1
 C06 TASK-002 cleanup: active-provider-routes=0
 ```
@@ -372,7 +372,7 @@ tests passed, including the direct matrix witnesses, repeated identity/history
 reads, fleet order/parity checks, route lifecycle, and deterministic cleanup.
 
 The local diagnostic package result improved directionally from the baseline
-`18.410s` to `8.808s`. This is a local sample, not a portable threshold; the
+`18.410s` to `8.508s`. This is a local sample, not a portable threshold; the
 review-owned Backend Functional Coverage package row supplies the PR-host
 directional verdict. `git diff --check` and the allowed-path audit against
 `origin/main` `bb37276f74e9e904e637931c2c13a37a67b54ca8` passed, with only the
