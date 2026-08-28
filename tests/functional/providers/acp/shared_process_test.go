@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,18 +36,20 @@ func TestACPSharedProcess(t *testing.T) {
 }
 
 type acpSharedProcessFixture struct {
-	process    support.ApplicationProcess
-	command    *support.ProcessCommand
-	api        *support.ProcessAPIServer
-	baseURL    string
-	homeDir    string
-	legacy     *legacyProvider
-	rootBuilds atomic.Int32
-	peerStarts atomic.Int32
-	sessionMu  sync.Mutex
-	opened     map[string]struct{}
-	closed     map[string]struct{}
-	closeOnce  sync.Once
+	process       support.ApplicationProcess
+	command       *support.ProcessCommand
+	api           *support.ProcessAPIServer
+	baseURL       string
+	homeDir       string
+	peerExits     string
+	legacy        *legacyProvider
+	rootBuilds    atomic.Int32
+	peerStarts    atomic.Int32
+	peerExitsSeen atomic.Int32
+	sessionMu     sync.Mutex
+	opened        map[string]struct{}
+	closed        map[string]struct{}
+	closeOnce     sync.Once
 }
 
 type acpSharedSession struct {
@@ -68,15 +71,18 @@ func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 	t.Helper()
 	hostDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	homeDir := t.TempDir()
+	peerExits := filepath.Join(t.TempDir(), "peer-exits")
+	t.Setenv(acpHelperExitMarkerEnvironment, peerExits)
 	installSharedACPIntegration(t, homeDir)
 	api := support.NewProcessAPIServer()
 	legacy := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
 	fixture := &acpSharedProcessFixture{
-		api:     api,
-		homeDir: homeDir,
-		legacy:  legacy,
-		opened:  make(map[string]struct{}),
-		closed:  make(map[string]struct{}),
+		api:       api,
+		homeDir:   homeDir,
+		peerExits: peerExits,
+		legacy:    legacy,
+		opened:    make(map[string]struct{}),
+		closed:    make(map[string]struct{}),
 	}
 
 	fixture.rootBuilds.Add(1)
@@ -164,6 +170,7 @@ func (session *acpSharedSession) runRequest(
 		t.Fatalf("shared ACP submission = %#v, want Work ID", submitted)
 	}
 	support.WaitForSessionTerminalStatus(t, session.fixture.baseURL, session.id, acpSharedProcessTimeout)
+	waitForACPSharedPeerExits(t, session.fixture)
 	var workerEvents []factoryapi.WorkerSessionEvent
 	if captureWorkerEvents {
 		workerEvents = getACPSharedWorkerSessionEvents(t, session.fixture.baseURL, session.id, workID)

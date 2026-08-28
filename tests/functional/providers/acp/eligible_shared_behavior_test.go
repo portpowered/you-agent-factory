@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -378,6 +380,7 @@ func runACPSharedJavaScriptACP(t *testing.T, fixture *acpSharedProcessFixture) {
 	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(JavaScript ACP Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
+	waitForACPSharedPeerExits(t, fixture)
 	if got := fixture.peerStarts.Load() - starts; got != 1 {
 		t.Fatalf("JavaScript ACP process starts = %d, want 1", got)
 	}
@@ -442,6 +445,7 @@ func runACPSharedMixedRouting(t *testing.T, fixture *acpSharedProcessFixture) {
 		Name: &nativeName, WorkTypeName: "native", Payload: map[string]string{"title": "native branch"},
 	})
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, session.id, sharedACPScenarioTimeout)
+	waitForACPSharedPeerExits(t, fixture)
 	listed := sharedACPWork(t, fixture.baseURL, session.id)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("ACP completed Work = %d, want 1", got)
@@ -459,6 +463,54 @@ func runACPSharedMixedRouting(t *testing.T, fixture *acpSharedProcessFixture) {
 		t.Fatalf("mixed legacy provider calls = %d, want 1", got)
 	}
 	session.close(t)
+}
+
+func waitForACPSharedPeerExits(t *testing.T, fixture *acpSharedProcessFixture) {
+	t.Helper()
+	want := fixture.peerStarts.Load()
+	if want == 0 {
+		return
+	}
+	confirmed := fixture.peerExitsSeen.Load()
+	_, err := support.WaitForObservation(
+		sharedACPScenarioTimeout,
+		func() (int32, error) {
+			data, readErr := os.ReadFile(fixture.peerExits)
+			if os.IsNotExist(readErr) {
+				return 0, nil
+			}
+			if readErr != nil {
+				return 0, readErr
+			}
+			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if confirmed > int32(len(lines)) {
+				return confirmed, fmt.Errorf("ACP helper exit observations regressed from %d to %d", confirmed, len(lines))
+			}
+			for _, line := range lines[confirmed:] {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				pid, parseErr := strconv.Atoi(strings.TrimSpace(line))
+				if parseErr != nil || pid <= 0 {
+					return confirmed, fmt.Errorf("invalid ACP helper PID %q", line)
+				}
+				hasExited, processErr := acpHelperProcessExited(pid)
+				if processErr != nil {
+					return confirmed, fmt.Errorf("inspect ACP helper PID %d: %w", pid, processErr)
+				}
+				if !hasExited {
+					return confirmed, nil
+				}
+				confirmed++
+			}
+			return confirmed, nil
+		},
+		func(got int32) bool { return got >= want },
+	)
+	if err != nil {
+		t.Fatalf("wait for shared ACP peer exits: %v; want at least %d exits", err, want)
+	}
+	fixture.peerExitsSeen.Store(confirmed)
 }
 
 func sharedACPSubmitRequest(name, title string) factoryapi.SubmitWorkRequest {

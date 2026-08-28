@@ -28,6 +28,7 @@ const (
 	acpDisconnectReadyEnvironment           = "YOU_TEST_ACP_DISCONNECT_READY"
 	acpDisconnectReleaseEnvironment         = "YOU_TEST_ACP_DISCONNECT_RELEASE"
 	acpPackageConformanceReleaseEnvironment = "YOU_TEST_ACP_PACKAGE_CONFORMANCE_RELEASE"
+	acpHelperExitMarkerEnvironment          = "YOU_TEST_ACP_HELPER_EXIT_MARKER"
 )
 
 // TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
@@ -295,7 +296,26 @@ func TestACPAgentHelperProcess(t *testing.T) {
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
+		recordACPHelperPID()
 		os.Exit(2)
 	}
+	recordACPHelperPID()
 	os.Exit(0)
+}
+
+// recordACPHelperPID is enabled only by the shared-process witness. Its
+// append-only marker gives the parent the child identity needed to observe the
+// actual OS process boundary before reusing the provider integration.
+func recordACPHelperPID() {
+	marker := strings.TrimSpace(os.Getenv(acpHelperExitMarkerEnvironment))
+	if marker == "" {
+		return
+	}
+	file, err := os.OpenFile(marker, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "record ACP helper exit: %v\n", err)
+		return
+	}
+	_, _ = file.WriteString(strconv.Itoa(os.Getpid()) + "\n")
+	_ = file.Close()
 }
