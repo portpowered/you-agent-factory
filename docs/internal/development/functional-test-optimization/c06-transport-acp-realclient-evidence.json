@@ -1,7 +1,13 @@
 {
   "formatVersion": 1,
   "artifactId": "functional-test-optimization-c06-transport-acp-realclient",
-  "sourcePlan": "docs/temp/functional-test-optimization.md",
+  "sourcePlan": "docs/internal/development/plans/backlog/shared-functional-process-sessions.md",
+  "sourcePlanSections": [
+    "§2 Scope and constraints",
+    "§3 Recommended approach",
+    "§12 TASK-004 — Selectively migrate ACP and AGY scenarios",
+    "§13 Project acceptance criteria"
+  ],
   "recordedCommit": "67710223e327d02c0de93a6ad826c754fe5c1702",
   "package": "github.com/portpowered/infinite-you/tests/functional/transport/acp/realclient",
   "classificationSummary": {
@@ -16,10 +22,14 @@
       "testName": "TestRunBoundedCommandTerminatesScenarioDescendants",
       "classification": "isolated-with-reason",
       "dependencyFidelity": "local_real",
+      "executableProperty": "os.Args[0] launches the real Go test executable for the helper parent and descendant",
+      "startupProperty": "the helper parent creates a real child with StdoutPipe and Cmd.Start, then records the child PID before waiting",
       "processProperty": "deadline-triggered parent and descendant process-tree termination",
-      "connectionProperty": "none",
+      "connectionProperty": "not-applicable: this helper case has no ACP or transport connection",
       "platformProperty": "Unix process group or Windows Job Object tree ownership",
       "environmentProperty": "allowlisted helper-mode environment",
+      "cancellationTimeoutProperty": "the one-second bounded deadline reports timeout and terminates the owned tree",
+      "shutdownProperty": "tree termination is followed by a recorded-PID inactive check",
       "freshDirectProcessStarts": 2,
       "cleanupWitness": "recorded descendant PID is no longer active"
     },
@@ -27,10 +37,14 @@
       "testName": "TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit",
       "classification": "isolated-with-reason",
       "dependencyFidelity": "local_real",
+      "executableProperty": "os.Args[0] launches the real Go test executable for the helper parent and descendant",
+      "startupProperty": "the helper parent creates a real child with StdoutPipe and Cmd.Start, then records the child PID before exiting non-zero",
       "processProperty": "non-zero parent exit classification and descendant termination",
-      "connectionProperty": "none",
+      "connectionProperty": "not-applicable: this helper case has no ACP or transport connection",
       "platformProperty": "Unix process group or Windows Job Object tree ownership",
       "environmentProperty": "allowlisted helper-mode environment",
+      "cancellationTimeoutProperty": "the one-second bounded wait remains bounded while this case exercises the non-zero completion branch",
+      "shutdownProperty": "non-zero exit cleanup terminates the owned tree before the recorded-PID inactive check",
       "freshDirectProcessStarts": 2,
       "cleanupWitness": "recorded descendant PID is no longer active"
     },
@@ -38,14 +52,40 @@
       "testName": "TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt",
       "classification": "isolated-with-reason",
       "dependencyFidelity": "local_real",
+      "executableProperty": "npx --yes --package acpx@0.13.0 selects the freshly built you executable from the disposable structured argv configuration",
+      "startupProperty": "go build creates the production executable, version verification starts pinned ACPX, and sessions/new proves client startup and negotiation",
       "processProperty": "pinned npx client selects and starts the freshly built you executable and deterministic provider command",
       "connectionProperty": "ACP stdio negotiation, session envelopes, streamed updates, terminal result, and close",
       "platformProperty": "platform-specific executable/script and process-tree cleanup",
       "environmentProperty": "explicit enable/require gate, Node.js >=22.13, isolated home/cache/temp, and allowlisted child environment",
+      "cancellationTimeoutProperty": "each external phase has a one-minute bound and prompt passes --timeout 45; timeout/non-zero paths terminate the owned tree",
+      "shutdownProperty": "sessions/close returns session_closed with an ACP identity, cleanup retries partial sessions, and zero disposable queue owners are required",
       "freshDirectProcessStarts": 6,
       "cleanupWitness": "session close succeeds and no disposable queue owner remains"
     }
   ],
+  "directProcessStartAccounting": {
+    "normalPathTotal": 10,
+    "formula": "2 + 2 + 6",
+    "countedOperation": "direct exec.Cmd.Start calls reached through the normal test paths; starts internal to Go, npx, ACPX, or the built executable are not counted",
+    "byTest": [
+      {
+        "testName": "TestRunBoundedCommandTerminatesScenarioDescendants",
+        "starts": 2,
+        "breakdown": "outer bounded helper plus the helper parent's descendant"
+      },
+      {
+        "testName": "TestRunBoundedCommandTerminatesDescendantsAfterNonZeroExit",
+        "starts": 2,
+        "breakdown": "outer bounded helper plus the helper parent's descendant"
+      },
+      {
+        "testName": "TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt",
+        "starts": 6,
+        "breakdown": "git rev-parse, go build, npx --version, npx sessions/new, npx prompt, and npx sessions/close"
+      }
+    ]
+  },
   "localEvidence": {
     "singleRunCommand": "go test -count=1 -timeout=15m ./tests/functional/transport/acp/realclient",
     "repeatRunCommand": "go test -count=3 -timeout=45m ./tests/functional/transport/acp/realclient",
@@ -66,7 +106,7 @@
     "committedCiResult": false
   },
   "remainingUnprovenEdges": [
-    "Windows runtime behavior unless an existing supported Windows gate runs the package",
+    "Windows Job Object behavior for the pinned ACPX client process tree; helper process-tree cases passed locally on windows/amd64",
     "remote ACP behavior"
   ]
 }
