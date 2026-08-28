@@ -577,7 +577,7 @@ func releaseACPSharedPeers(t *testing.T, fixture *acpSharedProcessFixture, want 
 			if int32(len(startPIDs)) >= want {
 				return want, nil
 			}
-			return int32(len(exitPIDs)), nil
+			return int32(len(startPIDs)), nil
 		},
 		func(got int32) bool { return got >= want },
 	)
