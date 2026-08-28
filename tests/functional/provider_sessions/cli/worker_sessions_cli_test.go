@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -40,11 +41,46 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	factoryDir := caseFixture.factoryDir
 	env := functionalEnvironment(fixture.homeDir)
 	baseURL := fixture.baseURL
+	t.Run("FT-B04 duplicate route registration fails closed", func(t *testing.T) {
+		routeCount := fixture.runner.routeCount()
+		callCount := fixture.runner.CallCount()
+		if err := fixture.runner.registerRoute("worker-session-cli-success"); err == nil {
+			t.Fatal("duplicate provider fixture route registration returned nil error")
+		} else if !strings.Contains(err.Error(), "already registered") {
+			t.Fatalf("duplicate provider fixture route error = %v, want already registered diagnostic", err)
+		}
+		if got := fixture.runner.routeCount(); got != routeCount {
+			t.Fatalf("provider fixture route count after duplicate registration = %d, want %d", got, routeCount)
+		}
+		if got := fixture.runner.CallCount(); got != callCount {
+			t.Fatalf("provider fixture call count after duplicate registration = %d, want %d", got, callCount)
+		}
+		if len(caseFixture.sessionIDs) != 0 {
+			t.Fatalf("duplicate route registration opened Factory Sessions: %#v", caseFixture.sessionIDs)
+		}
+		assertFactorySessionFolderAbsent(t, baseURL, factoryDir)
+	})
+
 	routeStart := fixture.runner.CallCount()
 	successFactorySessionID := caseFixture.openSession(t)
 	failureFactorySessionID := caseFixture.openSession(t)
+	emptyFactorySessionID := caseFixture.openSession(t)
 
-	assertWorkerSessionsCLIHelp(t, ctx, process, env, factoryDir)
+	t.Run("FT-H01 help and completion do not mutate state", func(t *testing.T) {
+		before := captureWorkerSessionsCLIPublicState(t, fixture, successFactorySessionID, failureFactorySessionID)
+		assertWorkerSessionsCLIHelp(t, ctx, process, env, factoryDir)
+		after := captureWorkerSessionsCLIPublicState(t, fixture, successFactorySessionID, failureFactorySessionID)
+		assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
+	})
+	t.Run("FT-U01 unknown input does not mutate state", func(t *testing.T) {
+		before := captureWorkerSessionsCLIPublicState(t, fixture, successFactorySessionID, failureFactorySessionID)
+		assertWorkerSessionsCLIUnknown(t, ctx, process, env, factoryDir)
+		after := captureWorkerSessionsCLIPublicState(t, fixture, successFactorySessionID, failureFactorySessionID)
+		assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
+	})
+	t.Run("FT-B01 empty explicit-session list is isolated", func(t *testing.T) {
+		assertEmptyWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, emptyFactorySessionID)
+	})
 
 	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, "worker-session-cli-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, successWorkID)
@@ -55,27 +91,51 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, failureWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, failureWorkID)
+
+	recoveryFactorySessionID := caseFixture.openSession(t)
+	recoveryWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, "worker-session-cli-recovery-success")
+	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, recoveryWorkID)
+	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, "session_fixture_codex_recovery_success", "COMPLETED")
+	t.Run("FT-R02 failure recovers into an isolated success", func(t *testing.T) {
+		assertSuccessfulWorkerSessionWithProvider(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, recoveryWorkID, "session_fixture_codex_recovery_success")
+	})
 	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, map[string]string{
-		successWorkID: successFactorySessionID,
-		failureWorkID: failureFactorySessionID,
+		successWorkID:  successFactorySessionID,
+		failureWorkID:  failureFactorySessionID,
+		recoveryWorkID: recoveryFactorySessionID,
 	}, map[string]string{
-		successWorkID: "worker-session-cli-success",
-		failureWorkID: "worker-session-cli-failure",
+		successWorkID:  "worker-session-cli-success",
+		failureWorkID:  "worker-session-cli-failure",
+		recoveryWorkID: "worker-session-cli-recovery-success",
 	}, map[string]string{
-		successWorkID: workerSessionsCodexSuccessID,
-		failureWorkID: workerSessionsCodexFailureID,
+		successWorkID:  workerSessionsCodexSuccessID,
+		failureWorkID:  workerSessionsCodexFailureID,
+		recoveryWorkID: "session_fixture_codex_recovery_success",
 	}, true)
-	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID)
+	t.Run("FT-B05 repeated reads preserve history and identity", func(t *testing.T) {
+		assertRepeatedWorkerSessionReads(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, workerSessionsCodexSuccessID, successWorkID, fixture)
+	})
+	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, fixture)
 	assertMissingWorkerSessionInputs(t, ctx, process, env, factoryDir, baseURL)
 
 	assertProviderCommandRoutesSince(t, fixture.runner, routeStart, map[string]struct{}{
-		"worker-session-cli-success": {},
-		"worker-session-cli-failure": {},
+		"worker-session-cli-success":          {},
+		"worker-session-cli-failure":          {},
+		"worker-session-cli-recovery-success": {},
 	})
 	recordPath := fixture.recordPath
-	if _, err := os.Stat(recordPath); err != nil {
+	if info, err := os.Stat(recordPath); err != nil {
 		t.Fatalf("recorded worker activity missing at %s: %v", recordPath, err)
+	} else if info.IsDir() || info.Size() == 0 {
+		t.Fatalf("recorded worker activity at %s = directory=%t size=%d, want non-empty file", recordPath, info.IsDir(), info.Size())
 	}
+	replayFixture := workerSessionReplayFixture{
+		process: process, factoryDir: factoryDir, env: env, baseURL: baseURL,
+		sessionID: successFactorySessionID, requestID: "worker-session-cli-success",
+		providerSessionID: workerSessionsCodexSuccessID, runner: fixture.runner,
+	}
+	frames := replayWorkerSessionFrames(t, ctx, replayFixture)
+	assertWSRWorkerSessionHistory(t, frames, successFactorySessionID, successWorkID, "COMPLETED")
 
 	functionalevidence.Covers(t,
 		"cli/you.worker-sessions.list",
@@ -111,18 +171,22 @@ func assertWorkerSessionsCLIHelp(t *testing.T, ctx context.Context, process supp
 			t.Fatalf("worker-sessions list help omitted %q:\n%s", marker, listHelpInputs.Stdout())
 		}
 	}
+	completionInputs := executeCLI(t, ctx, process, env, factoryDir, "__complete", "worker-sessions", "")
+	for _, marker := range []string{"continue", "invoke", "list", "read", "show", "stream"} {
+		if !strings.Contains(completionInputs.Stdout(), marker) {
+			t.Fatalf("worker-sessions completion omitted %q:\n%s", marker, completionInputs.Stdout())
+		}
+	}
+}
+
+func assertWorkerSessionsCLIUnknown(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir string) {
+	t.Helper()
 	unknownInputs, unknownErr := executeCLIExpectError(t, ctx, process, env, factoryDir, "worker-sessions", "--unknown")
 	if unknownErr == nil {
 		t.Fatal("worker-sessions unknown argument returned nil error")
 	}
 	if !strings.Contains(unknownErr.Error()+unknownInputs.Stderr(), "unknown command") {
 		t.Fatalf("worker-sessions unknown argument omitted diagnostic: %v\nstderr:\n%s", unknownErr, unknownInputs.Stderr())
-	}
-	completionInputs := executeCLI(t, ctx, process, env, factoryDir, "__complete", "worker-sessions", "")
-	for _, marker := range []string{"continue", "invoke", "list", "read", "show", "stream"} {
-		if !strings.Contains(completionInputs.Stdout(), marker) {
-			t.Fatalf("worker-sessions completion omitted %q:\n%s", marker, completionInputs.Stdout())
-		}
 	}
 }
 
@@ -356,6 +420,27 @@ func listWorkerSessionsForFactorySession(t *testing.T, baseURL, factorySessionID
 	return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
 }
 
+func assertEmptyWorkerSessionList(
+	t *testing.T,
+	ctx context.Context,
+	process support.Process,
+	env []string,
+	factoryDir, baseURL, factorySessionID string,
+) {
+	t.Helper()
+	inputs := executeCLI(t, ctx, process, env, factoryDir,
+		"--server", baseURL, "worker-sessions", "list", "--session", factorySessionID, "--output", "json",
+	)
+	var listed workerSessionListJSON
+	decodeCLIJSON(t, inputs, &listed)
+	if listed.Sessions == nil {
+		t.Fatalf("empty Factory Session Worker Session list is nil: %#v", listed)
+	}
+	if len(listed.Sessions) != 0 {
+		t.Fatalf("empty Factory Session Worker Session list = %#v, want non-nil empty sessions", listed)
+	}
+}
+
 func assertScopedWorkerSessionList(t *testing.T, listed factoryapi.ListWorkerSessionsResponse, factorySessionID, providerSessionID, workID string) {
 	t.Helper()
 	if len(listed.Sessions) != 1 {
@@ -538,6 +623,96 @@ type transcriptEntryJSON struct {
 	Type    string `json:"type"`
 }
 
+type workerSessionsCLIPublicState struct {
+	factorySessions []string
+	workItems       []string
+	workerSessions  []string
+	providerRoutes  int
+}
+
+func captureWorkerSessionsCLIPublicState(
+	t *testing.T,
+	fixture *workerSessionsCLISharedFixture,
+	factorySessionIDs ...string,
+) workerSessionsCLIPublicState {
+	t.Helper()
+	state := workerSessionsCLIPublicState{providerRoutes: fixture.runner.CallCount()}
+	factorySessions := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions",
+	)
+	for _, session := range factorySessions.Sessions {
+		state.factorySessions = append(state.factorySessions, session.Id+"|"+session.FolderPath+"|"+session.FactoryDir)
+	}
+	workerSessions := support.GetJSON[factoryapi.ListWorkerSessionsResponse](
+		t,
+		strings.TrimSuffix(fixture.baseURL, "/")+"/worker-sessions",
+	)
+	for _, session := range workerSessions.Sessions {
+		state.workerSessions = append(state.workerSessions, workerSessionPublicIdentity(session))
+	}
+	for _, factorySessionID := range factorySessionIDs {
+		workList := support.GetJSON[factoryapi.ListWorkResponse](
+			t,
+			strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/"+url.PathEscape(factorySessionID)+"/work",
+		)
+		for _, work := range workList.Results {
+			state.workItems = append(state.workItems, workPublicIdentity(work))
+		}
+	}
+	sort.Strings(state.factorySessions)
+	sort.Strings(state.workItems)
+	sort.Strings(state.workerSessions)
+	return state
+}
+
+func assertWorkerSessionsCLIPublicStateUnchanged(
+	t *testing.T,
+	before, after workerSessionsCLIPublicState,
+) {
+	t.Helper()
+	if strings.Join(before.factorySessions, "\n") != strings.Join(after.factorySessions, "\n") {
+		t.Fatalf("Factory Session identities changed: before=%v after=%v", before.factorySessions, after.factorySessions)
+	}
+	if strings.Join(before.workItems, "\n") != strings.Join(after.workItems, "\n") {
+		t.Fatalf("Work identities changed: before=%v after=%v", before.workItems, after.workItems)
+	}
+	if strings.Join(before.workerSessions, "\n") != strings.Join(after.workerSessions, "\n") {
+		t.Fatalf("Worker Session identities changed: before=%v after=%v", before.workerSessions, after.workerSessions)
+	}
+	if before.providerRoutes != after.providerRoutes {
+		t.Fatalf("provider command calls changed: before=%d after=%d", before.providerRoutes, after.providerRoutes)
+	}
+}
+
+func workerSessionPublicIdentity(session factoryapi.WorkerSessionObservation) string {
+	providerID := ""
+	if session.ProviderSession != nil {
+		providerID = session.ProviderSession.Provider + ":" + session.ProviderSession.Kind + ":" + session.ProviderSession.Id
+	}
+	factorySessionID := ""
+	if session.FactorySessionId != nil {
+		factorySessionID = *session.FactorySessionId
+	}
+	workID := ""
+	if session.WorkId != nil {
+		workID = *session.WorkId
+	}
+	return session.WorkerSessionId + "|" + factorySessionID + "|" + workID + "|" + providerID
+}
+
+func workPublicIdentity(work factoryapi.Work) string {
+	workID := ""
+	if work.WorkId != nil {
+		workID = *work.WorkId
+	}
+	requestID := ""
+	if work.RequestId != nil {
+		requestID = *work.RequestId
+	}
+	return workID + "|" + requestID + "|" + work.Name
+}
+
 func submitWork(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, name string) string {
 	t.Helper()
 	request := fmt.Sprintf(
@@ -616,8 +791,13 @@ func waitForWorkerSessionState(t *testing.T, ctx context.Context, process suppor
 
 func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID string) {
 	t.Helper()
+	assertSuccessfulWorkerSessionWithProvider(t, ctx, process, env, factoryDir, baseURL, sessionID, workID, workerSessionsCodexSuccessID)
+}
+
+func assertSuccessfulWorkerSessionWithProvider(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID, providerID string) {
+	t.Helper()
 	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, sessionID, workID, "COMPLETED")
-	assertWorkerSessionIdentity(t, session, sessionID, workerSessionsCodexSuccessID, workID)
+	assertWorkerSessionIdentity(t, session, sessionID, providerID, workID)
 	if session.State != "COMPLETED" || session.AttemptID == "" || session.DurationMillis == nil || *session.DurationMillis < 0 {
 		t.Fatalf("successful session lifecycle projection = %#v", session)
 	}
@@ -631,25 +811,75 @@ func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process su
 	}
 
 	showInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "show", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
+		"--server", baseURL, "worker-sessions", "show", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json")
 	var shown workerSessionJSON
 	decodeCLIJSON(t, showInputs, &shown)
-	assertWorkerSessionIdentity(t, shown, sessionID, workerSessionsCodexSuccessID, workID)
+	assertWorkerSessionIdentity(t, shown, sessionID, providerID, workID)
 	if shown.DurationMillis == nil || shown.TokenUsage == nil || shown.TokenUsage.TotalTokens == nil || *shown.TokenUsage.TotalTokens != 20 {
 		t.Fatalf("successful show omitted duration or token usage: %#v", shown)
 	}
 
 	readInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "read", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
+		"--server", baseURL, "worker-sessions", "read", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json")
 	var transcript transcriptJSON
 	decodeCLIJSON(t, readInputs, &transcript)
-	if transcript.ProviderSession.ID != workerSessionsCodexSuccessID || !containsString(transcript.WorkIDs, workID) || len(transcript.Entries) == 0 {
+	if transcript.ProviderSession.ID != providerID || !containsString(transcript.WorkIDs, workID) || len(transcript.Entries) == 0 {
 		t.Fatalf("successful transcript correlation = %#v", transcript)
 	}
 	transcriptText, _ := json.Marshal(transcript.Entries)
 	if !strings.Contains(string(transcriptText), "Codex fixture answer COMPLETE") {
 		t.Fatalf("successful transcript omitted fixture answer:\n%s", transcriptText)
 	}
+}
+
+func assertRepeatedWorkerSessionReads(
+	t *testing.T,
+	ctx context.Context,
+	process support.Process,
+	env []string,
+	factoryDir, baseURL, sessionID, providerID, workID string,
+	fixture *workerSessionsCLISharedFixture,
+) {
+	t.Helper()
+	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	showArgs := []string{
+		"--server", baseURL, "worker-sessions", "show", "--session", sessionID,
+		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
+	}
+	firstShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
+	secondShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
+	if strings.TrimSpace(firstShow.Stdout()) != strings.TrimSpace(secondShow.Stdout()) {
+		t.Fatalf("repeated show output changed:\nfirst:\n%s\nsecond:\n%s", firstShow.Stdout(), secondShow.Stdout())
+	}
+
+	readArgs := []string{
+		"--server", baseURL, "worker-sessions", "read", "--session", sessionID,
+		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
+	}
+	firstRead := executeCLI(t, ctx, process, env, factoryDir, readArgs...)
+	secondRead := executeCLI(t, ctx, process, env, factoryDir, readArgs...)
+	if strings.TrimSpace(firstRead.Stdout()) != strings.TrimSpace(secondRead.Stdout()) {
+		t.Fatalf("repeated read output changed:\nfirst:\n%s\nsecond:\n%s", firstRead.Stdout(), secondRead.Stdout())
+	}
+	var transcript transcriptJSON
+	decodeCLIJSON(t, firstRead, &transcript)
+	if transcript.ProviderSession.ID != providerID || !containsString(transcript.WorkIDs, workID) || len(transcript.Entries) == 0 {
+		t.Fatalf("repeated read transcript identity = %#v, want provider %s and Work %s", transcript, providerID, workID)
+	}
+
+	replayArgs := []string{
+		"--verbose", "--server", baseURL, "worker-sessions", "stream", "--session", sessionID,
+		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--replay-only", "--output", "json",
+	}
+	firstReplay := executeCLI(t, ctx, process, env, factoryDir, replayArgs...)
+	secondReplay := executeCLI(t, ctx, process, env, factoryDir, replayArgs...)
+	assertWorkerSessionReplayCapture(t, []byte(firstReplay.Stdout()), firstReplay.Stderr())
+	assertWorkerSessionReplayCapture(t, []byte(secondReplay.Stdout()), secondReplay.Stderr())
+	if strings.TrimSpace(firstReplay.Stdout()) != strings.TrimSpace(secondReplay.Stdout()) {
+		t.Fatalf("repeated replay output changed:\nfirst:\n%s\nsecond:\n%s", firstReplay.Stdout(), secondReplay.Stdout())
+	}
+	after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+	assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
 }
 
 func assertFailedWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID string) {
@@ -673,7 +903,7 @@ func assertFailedWorkerSession(t *testing.T, ctx context.Context, process suppor
 	}
 }
 
-func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID string) {
+func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID string, fixture *workerSessionsCLISharedFixture) {
 	t.Helper()
 	cases := []struct {
 		name string
@@ -698,6 +928,7 @@ func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, proce
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
+			before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
 			inputs, err := executeCLIExpectError(t, ctx, process, env, factoryDir, append([]string{"--server", baseURL}, test.args...)...)
 			if err == nil {
 				t.Fatal("missing Worker Session operation returned nil error")
@@ -706,6 +937,11 @@ func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, proce
 			if !strings.Contains(output, test.code) {
 				t.Fatalf("missing Worker Session operation omitted %s: %s", test.code, output)
 			}
+			if strings.TrimSpace(inputs.Stdout()) != "" {
+				t.Fatalf("missing Worker Session operation emitted stdout side effect: %s", inputs.Stdout())
+			}
+			after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
+			assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
 		})
 	}
 }

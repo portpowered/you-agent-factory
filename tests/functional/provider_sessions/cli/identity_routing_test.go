@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -171,6 +172,32 @@ func (runner *providerCommandRouteRunner) ActiveCallCount() int {
 	return runner.active
 }
 
+// registerRoute models the case-owned registration boundary used by the
+// controlled provider fixture. Registration is deliberately fail-closed so a
+// duplicate immutable Work marker cannot silently replace an existing result.
+func (runner *providerCommandRouteRunner) registerRoute(key string) error {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return errors.New("provider fixture route key is empty")
+	}
+	if _, exists := runner.routes[key]; exists {
+		return fmt.Errorf("provider fixture route %q is already registered", key)
+	}
+	if _, exists := runner.dynamicGates[key]; exists {
+		return fmt.Errorf("provider fixture route %q is already registered", key)
+	}
+	runner.routes[key] = platformprocess.CommandResult{}
+	return nil
+}
+
+func (runner *providerCommandRouteRunner) routeCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return len(runner.routes)
+}
+
 func assertProviderCommandRoutesSince(t *testing.T, runner *providerCommandRouteRunner, start int, want map[string]struct{}) {
 	t.Helper()
 	requests := runner.RequestsSince(start)
@@ -252,6 +279,19 @@ func assertFactorySessionAbsent(t *testing.T, baseURL, sessionID, factoryDir str
 	for _, session := range listed.Sessions {
 		if session.Id == sessionID && (session.FolderPath == factoryDir || session.FactoryDir == factoryDir) {
 			t.Fatalf("closed Factory Session %q remained addressable for folder %q in live list: %#v", sessionID, factoryDir, listed)
+		}
+	}
+}
+
+func assertFactorySessionFolderAbsent(t *testing.T, baseURL, factoryDir string) {
+	t.Helper()
+	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions",
+	)
+	for _, session := range listed.Sessions {
+		if session.FolderPath == factoryDir || session.FactoryDir == factoryDir {
+			t.Fatalf("Factory Session %q remained for folder %q after failed setup: %#v", session.Id, factoryDir, listed)
 		}
 	}
 }

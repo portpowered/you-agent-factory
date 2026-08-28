@@ -245,6 +245,7 @@ func newWorkerSessionsCLISharedRouteRunner(
 		writeCodexRollout(t, homeDir, providerSessionID, rollout)
 	}
 	addSuccessRoute("worker-session-replay-only-redirect", "session_fixture_codex_replay_redirect")
+	addSuccessRoute("worker-session-cli-recovery-success", "session_fixture_codex_recovery_success")
 	addSuccessRoute("wsr-ft-001", "session_fixture_codex_wsr_ft_001")
 	addSuccessRoute("wsr-ft-002", "session_fixture_codex_wsr_ft_002")
 	addSuccessRoute("worker-session-fleet-alpha", "session_fixture_codex_fleet_alpha")
