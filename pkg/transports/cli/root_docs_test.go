@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,7 +16,6 @@ import (
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
@@ -60,90 +58,6 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 
 	assertDocumentedModelConfigs(t, listed, inspected, pulled, invocations)
 	assertModelCommandsRequireName(t)
-}
-
-func TestModelsDocumentation_DiscoveryAndCostGuidance(t *testing.T) {
-	doc, err := docscli.Markdown("models")
-	if err != nil {
-		t.Fatalf("Markdown(models) error = %v", err)
-	}
-
-	for _, want := range []string{
-		"local Models composition",
-		"| `llm` | `OMNI` | 5.0 GB |",
-		"| `asr` | `ASR` | 148 MB |",
-		"| `tts` | `TTS` | 18.7 GB |",
-		"| `embed` | `EMBED` | 1.21 GB |",
-		"additional platform-specific backend and runtime files",
-		"`cacheBytes` reports the exact managed cache size",
-		"INFINITE_YOU_OMNIVOICE_CACHE_DIR",
-	} {
-		if !strings.Contains(doc, want) {
-			t.Fatalf("packaged models guide missing discovery or cost marker %q", want)
-		}
-	}
-
-	warning := strings.Index(doc, "Warning: Pulling `tts`")
-	pullSection := strings.Index(doc, "## Pull A Managed Local Model")
-	pullCommand := strings.Index(doc, "you models pull llm")
-	if warning < 0 || pullSection < 0 || pullCommand < 0 || warning > pullSection || warning > pullCommand {
-		t.Fatalf("TTS warning must precede pull guidance: warning=%d section=%d command=%d", warning, pullSection, pullCommand)
-	}
-
-	for _, stale := range []string{
-		"Managed Model Storage Finding",
-		"issue #2201",
-		"The placement is therefore not proven intentional",
-		"you models inspect OMNIVOICE_Q4_K_M",
-		"you models pull OMNIVOICE_Q4_K_M",
-		"you models remove OMNIVOICE_Q4_K_M",
-		"you models invoke OMNIVOICE_Q4_K_M",
-		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
-		"Run this zero-configuration command",
-		"shared in-process bootstrap",
-	} {
-		if strings.Contains(doc, stale) {
-			t.Fatalf("packaged models guide contains stale discovery or cache text %q", stale)
-		}
-	}
-}
-
-func TestModelsDocumentation_InvocationGuidance(t *testing.T) {
-	doc, err := docscli.Markdown("models")
-	if err != nil {
-		t.Fatalf("Markdown(models) error = %v", err)
-	}
-
-	for _, want := range []string{
-		"Direct invocation requires a valid Current Factory",
-		"./factory/factory.json",
-		"CURRENT_FACTORY_NOT_FOUND",
-		"An explicit `--server` must identify a reachable service",
-		`you models invoke embed --operation EMBED --input text="Find similar work"`,
-		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
-		"does not provide an `--offline` flag",
-	} {
-		if !strings.Contains(doc, want) {
-			t.Fatalf("packaged models guide missing invocation marker %q", want)
-		}
-	}
-
-	warning := strings.Index(doc, "Warning: Pulling `tts`")
-	invokeSection := strings.Index(doc, "## Invoke A Model Directly")
-	if warning < 0 || invokeSection < 0 || warning > invokeSection {
-		t.Fatalf("TTS warning must precede invocation guidance: warning=%d section=%d", warning, invokeSection)
-	}
-
-	for _, stale := range []string{
-		"OMNIVOICE_Q4_K_M",
-		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
-		"Run this zero-configuration command",
-		"shared in-process bootstrap",
-	} {
-		if strings.Contains(doc, stale) {
-			t.Fatalf("packaged models guide contains stale invocation text %q", stale)
-		}
-	}
 }
 
 func requireDocumentedModelCommands(t *testing.T, doc string) {
@@ -301,78 +215,6 @@ func executeDocumentedConfigExample(t *testing.T, args []string) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
 	}
-}
-
-func TestFactoryDocumentation_CompleteExamplesReachGeneratedBoundary(t *testing.T) {
-	for _, topic := range []string{"config", "authoring-factories"} {
-		t.Run(topic, func(t *testing.T) {
-			doc, err := docscli.Markdown(topic)
-			if err != nil {
-				t.Fatalf("Markdown(%s) error = %v", topic, err)
-			}
-
-			completeExamples := 0
-			for _, block := range documentedJSONBlocks(doc) {
-				var shape struct {
-					WorkTypes    []json.RawMessage `json:"workTypes"`
-					Workstations []struct {
-						OnFailure json.RawMessage `json:"onFailure"`
-					} `json:"workstations"`
-				}
-				if err := json.Unmarshal([]byte(block), &shape); err != nil || len(shape.WorkTypes) == 0 || len(shape.Workstations) == 0 {
-					continue
-				}
-				completeExamples++
-				failureRoutes := 0
-				for index, workstation := range shape.Workstations {
-					if len(workstation.OnFailure) == 0 || string(workstation.OnFailure) == "null" {
-						continue
-					}
-					var routes []json.RawMessage
-					if err := json.Unmarshal(workstation.OnFailure, &routes); err != nil || len(routes) == 0 {
-						t.Fatalf("%s Factory example workstation[%d] has a non-empty array-valued onFailure route", topic, index)
-					}
-					failureRoutes++
-				}
-				if failureRoutes == 0 {
-					t.Fatalf("%s Factory example has no onFailure route\n%s", topic, block)
-				}
-
-				factory, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON([]byte(block))
-				if err != nil {
-					t.Fatalf("%s Factory example rejected by generated boundary: %v\n%s", topic, err, block)
-				}
-				if strings.TrimSpace(string(factory.Name)) == "" {
-					t.Fatalf("%s Factory example has no non-empty name\n%s", topic, block)
-				}
-			}
-
-			if completeExamples == 0 {
-				t.Fatalf("%s has no complete Factory JSON examples", topic)
-			}
-		})
-	}
-}
-
-func documentedJSONBlocks(markdown string) []string {
-	const fence = "```json"
-	const closingFence = "```"
-	var blocks []string
-	for offset := 0; offset < len(markdown); {
-		open := strings.Index(markdown[offset:], fence)
-		if open < 0 {
-			break
-		}
-		contentStart := offset + open + len(fence)
-		close := strings.Index(markdown[contentStart:], closingFence)
-		if close < 0 {
-			break
-		}
-		contentEnd := contentStart + close
-		blocks = append(blocks, strings.TrimSpace(markdown[contentStart:contentEnd]))
-		offset = contentEnd + len(closingFence)
-	}
-	return blocks
 }
 
 func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testing.T) {

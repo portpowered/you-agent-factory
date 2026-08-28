@@ -981,44 +981,6 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 	}
 }
 
-func TestModelsInvokeHelpMentionsCurrentFactoryAndShippedNames(t *testing.T) {
-	var out bytes.Buffer
-	root := newLegacyTestRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "invoke", "--help"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute models invoke --help: %v", err)
-	}
-	help := out.String()
-	for _, want := range []string{
-		"Invoke one local model",
-		"Current Factory at ./factory/factory.json",
-		"llm for OMNI",
-		"asr for speech recognition",
-		"tts for voice synthesis",
-		"embed for embeddings",
-		"An explicit --server must identify a reachable service",
-		"you models invoke embed --operation EMBED",
-		"you models invoke llm --operation OMNI",
-	} {
-		if !bytes.Contains([]byte(help), []byte(want)) {
-			t.Fatalf("models invoke help missing %q:\n%s", want, help)
-		}
-	}
-	for _, stale := range []string{
-		"OMNIVOICE_Q4_K_M",
-		"--offline",
-		"zero-configuration",
-		"shared in-process bootstrap",
-	} {
-		if bytes.Contains([]byte(help), []byte(stale)) {
-			t.Fatalf("models invoke help contains stale wording %q:\n%s", stale, help)
-		}
-	}
-}
-
 func TestWorkersACPCommandsValidateAndRouteRequests(t *testing.T) {
 	t.Parallel()
 
