@@ -249,12 +249,13 @@ GATE-PR-PERF, and VAL-001.
 
 ## Story 003 — repeat and clean-room result
 
-- Tested implementation commit: `b8b2167dd` (`test: reset shared CLI process
-  fixture between repeats`).
+- Tested implementation commit: `ced9c72e4` (`test: reset shared CLI process
+  fixture between repeats`), the conflict-free rebase of the same fix from
+  `b8b2167dd` onto current `origin/main`.
 - Local platform: `windows/amd64` (`go1.25.0`), 24 logical CPUs.
 - GATE-REPEAT exact command: `go test -count=3 -timeout=30m
   ./tests/functional/transport/cli/process`.
-- GATE-REPEAT result: **PASS**, exit code `0`, package elapsed `44.555s`; all
+- GATE-REPEAT result: **PASS**, exit code `0`, package elapsed `54.997s`; all
   three repetitions produced the same 12 top-level passes and three explicit
   Unix-only skips. The shared failure/success root was reused within each
   repetition and closed before the next repetition, preventing durable runtime
@@ -262,7 +263,7 @@ GATE-PR-PERF, and VAL-001.
   child `Wait`/cancellation cleanup completed without teardown errors.
 - Current-platform GATE-FUNC rerun exact command: `go test -count=1
   -timeout=10m ./tests/functional/transport/cli/process`.
-- Current-platform result: **PASS**, exit code `0`, package elapsed `20.109s`;
+- Current-platform result: **PASS**, exit code `0`, package elapsed `21.077s`;
   12 top-level tests passed and the three documented Unix-only tests skipped.
   This is local Windows evidence only; it does not claim Unix signal,
   cancellation, exit-130, or descendant-reaping behavior.
@@ -275,7 +276,8 @@ GATE-PR-PERF, and VAL-001.
   temporary fixture cleanup, Windows helper compilation, shared-root close,
   and package binary cleanup passed in the successful reruns. Required hosted
   platform evidence remains a PR CI responsibility.
-- VAL-001 exact procedure: create a detached clean worktree at `b8b2167dd`,
+- VAL-001 exact procedure: create a detached clean worktree at `b8b2167dd`
+  (the pre-rebase implementation-equivalent fix),
   confirm `git status --short --untracked-files=all` is empty, run `go test
   -count=1 -timeout=10m ./tests/functional/transport/cli/process`, read every
   test body alongside the 15 classification rows and CASE-001 through
@@ -285,6 +287,9 @@ GATE-PR-PERF, and VAL-001.
   independent review matched all 15 top-level bodies to exactly one of 12
   `isolated-with-reason`, two `shareable-with-mock`, or one process-free
   `shareable` classification, and all 28 case rows were accounted for.
+- Final handoff head: `bce9b48af` after the required rebase onto
+  `origin/main` `93c7dd9f2`; the final-head repeat and single-run commands
+  above passed before push.
 - Remaining edges: required Unix/Windows hosted CI semantics and same-head
   Backend Functional Coverage timing are recorded in the PR conversation;
   this artifact does not claim those results before CI reports them.
