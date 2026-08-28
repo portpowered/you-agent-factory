@@ -60,6 +60,7 @@ func TestPackagedReviewSharedProcess(t *testing.T) {
 	t.Cleanup(func() {
 		assertPackagedReviewResourceCensus(t, sharedPackagedReviewFixture(t))
 	})
+	failPackagedReviewForcedUnwindAfterAssertion(t)
 }
 
 func testPackagedReviewApprovalCompletes(t *testing.T) {
