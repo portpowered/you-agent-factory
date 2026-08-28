@@ -307,3 +307,81 @@ root-level test files, explicitly excluding the transformation subpackage.
 | Repeat and race stability on the migrated fixture | `functional-test-optimization-c06-runtime-api-root-003` / `VAL-001` |
 | Clean-room final-head proof and scope loopback | `functional-test-optimization-c06-runtime-api-root-004` / `VAL-001` |
 | PR Backend Functional Coverage timing and terminal CI | `GATE-PR-FUNCTIONAL` under review ownership |
+
+## Story-004 validation report: c06 runtime API root
+
+### Environment and artifact
+
+- Commit/build identifier: code-bearing final implementation head
+  `7201155c7ef25baf423742c2d88a68a4fc027dc8`; the report is a documentation-only
+  follow-up on this same branch.
+- Environment and configuration: Windows `10.0.26200`, `windows/amd64`, Go
+  `1.25.0`; each command ran from a fresh detached worktree of the exact head,
+  with a clean `git status` before tests.
+- Customer entry point: production `root.BuildProcess`/`Process.Execute` and
+  the in-process HTTP API boundary used by `./tests/functional/runtime_api`.
+- Real and substituted dependencies: production root/wire/services, HTTP,
+  Factory Session, Work, Factory Event, projection, stream, logging, config,
+  recording, and replay paths; only external provider/command/script/model
+  effects were controlled through the existing edge ports.
+- Cost/call budget used: zero remote or paid calls; `$0`.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Complete default package once | PASS | Fresh-head `go test -count=1 -timeout=15m ./tests/functional/runtime_api` exited `0` in `26.536s`. | Terminal PR CI remains review-owned. |
+| Repeat isolation | PASS | Fresh-head `go test -count=3 -timeout=45m ./tests/functional/runtime_api` exited `0` in `84.916s`; the package fixture's explicit-session, edge-lane, stream, listener, and root cleanup assertions passed on all three runs. | Other platforms remain unproven. |
+| Race support | PASS | Fresh-head `go test -race -count=1 -timeout=20m ./tests/functional/runtime_api` exited `0` in `68.790s` with no race finding. | Other platforms and terminal PR CI remain unproven. |
+| Tagged live-record/replay witness | PASS | Fresh-head `go test -tags=functionallong -count=1 -timeout=15m ./tests/functional/runtime_api` exited `0` in `29.594s`; CASE-41 retained its isolated two-process topology. | Tagged repeat/race are not required by this story. |
+| CASE-01 through CASE-44 audit | PASS | The c06 case map contains all `44/44` case IDs with source witness, classification, and remaining boundary; the final package and tagged witness runs passed. | No remote-provider or paid validation is applicable. |
+| Behavior and cleanup parity | PASS | Story-001 pre-change witness contract plus story-003 post-change functional evidence cover HTTP/API responses, Work, Factory Events, projections, SSE, logs, config, replay, controlled effects, and cleanup; the fresh-head package gates reran the delivered behavior. | A second independent pre-change package run was not needed; the baseline is retained at `67710223e327d02c0de93a6ad826c754fe5c1702`. |
+| Authorized scope | PASS | Final three-dot `origin/main...HEAD` review contains only the c06 artifact and root `tests/functional/runtime_api` files; no `factory_transformation/**`, shared support, c01 inventory, baselines, production, contracts, generated, UI, CI, or unrelated paths are present. | Review owns any later conflict resolution. |
+| Directional package timing/topology | PASS | Story-003 recorded local default-package timing improving from `32.329s` pre-change to `27.127s` post-change (about `16.1%` faster); the final clean-head once run was `26.536s`. The shared fixture asserts one package `Process.Execute`/listener start for eligible cases, while process-input, lifecycle, recording, replay, and CLI cases retain isolation. | PR Backend Functional Coverage timing and terminal status belong to `GATE-PR-FUNCTIONAL`. |
+
+### Customer journey
+
+1. A clean detached checkout of the exact code-bearing head executed the
+   default root runtime API package once. The command returned `ok` and exit
+   `0`, covering the public HTTP/Work/Event/projection/stream/config/logging
+   witnesses and the isolated lifecycle/record/replay bodies.
+2. The same clean-head procedure repeated the package three times. All three
+   executions returned `ok` and exit `0`; explicit Factory Sessions, streams,
+   controlled lanes, listener, process, and temporary root cleanup completed.
+3. The race-enabled package returned `ok` and exit `0` with no detected race.
+   The tagged topology/replay package also returned `ok` and exit `0` from a
+   separate clean checkout.
+4. The CASE-01 through CASE-44 map was audited for presence and ownership. No
+   authorization behavior was introduced, removed, or inferred; CASE-42 remains
+   the documented no-policy scope invariant.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the canonical report is in
+  `docs/internal/development/functional-test-optimization/c06-runtime-api-root-evidence.md`.
+- Permission and error behavior: unchanged; explicit bad-input, unsupported
+  operation, dependency failure/timeout, throttling, cancellation, and
+  no-auth-policy witnesses remain in the case map and passed package evidence.
+- Persistence/reload behavior: recording finalization, replay artifacts, and
+  topology replay remain isolated and passed, including tagged CASE-41.
+- Accessibility/keyboard/responsive behavior: not applicable to this backend
+  test-topology change; the dashboard shell/fallback API witness remains
+  covered by CASE-01 and CASE-36.
+- Operational signals: cleanup ledgers and listener probes fail closed; edge
+  observations, session IDs, stream ownership, and process shutdown are covered
+  by the story-003 fixture assertions.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| None | — | No validation failure observed. | All required local-real gates pass without repair. | Observed. | Once, repeat, race, tagged, CASE-map, topology, cleanup, and scope checks above. |
+
+### Verdict
+
+PASS
+
+The local-real production-composed HTTP/package run is the highest feasible
+integrated runtime proof. Validation made no code repair and leaves terminal
+PR CI, mergeability, parent-project full-suite timing, and merge to review under
+`GATE-PR-FUNCTIONAL` and `GATE-REVIEW-MERGE`.
