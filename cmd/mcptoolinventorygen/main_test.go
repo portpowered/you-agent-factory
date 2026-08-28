@@ -164,8 +164,16 @@ func TestRunFailsClosedForInvalidRoot(t *testing.T) {
 	if !bytes.Contains(stderr.Bytes(), []byte("generation failed")) {
 		t.Fatalf("stderr = %q, want generation failure context", stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(factorysession.ToolInventoryBaselineRelativePath))); !os.IsNotExist(err) {
-		t.Fatalf("S-11 unexpectedly exists beneath invalid root: %v", err)
+	rootInfo, err := os.Stat(root)
+	if err != nil {
+		t.Fatalf("stat invalid root after failed run: %v", err)
+	}
+	if !rootInfo.Mode().IsRegular() {
+		t.Fatalf("invalid root changed type: mode=%v, want regular file", rootInfo.Mode())
+	}
+	target := filepath.Join(root, filepath.FromSlash(factorysession.ToolInventoryBaselineRelativePath))
+	if _, err := os.Stat(target); err == nil {
+		t.Fatalf("S-11 unexpectedly exists beneath invalid root: %s", target)
 	}
 }
 
