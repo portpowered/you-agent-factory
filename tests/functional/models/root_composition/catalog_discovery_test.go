@@ -474,6 +474,25 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 			t.Fatalf("GET %s failure = status %d %#v, want public unavailable model taxonomy", endpoint, response.StatusCode, failure)
 		}
 	}
+
+	for _, args := range [][]string{
+		{"you", "--json", "--server", server.URL(), "models", "list"},
+		{"you", "--json", "--server", server.URL(), "models", "inspect", "OMNIVOICE_Q4_K_M"},
+	} {
+		inputs := support.FakeInputs(t.Context(), args)
+		inputs.Input.WorkingDirectory = dir
+		inputs.Input.Env = cache.Environment
+		if err := server.Execute(t, inputs.Input); err == nil {
+			t.Fatalf("Process.Execute(%q) error = nil, want public model-unavailable failure", args)
+		}
+		if strings.TrimSpace(inputs.Stdout()) != "" {
+			t.Fatalf("Process.Execute(%q) emitted success output after readiness failure: %s", args, inputs.Stdout())
+		}
+		failure := decodeFirstDiagnostic(t, inputs.Stderr())
+		if failure.Family != factoryapi.ErrorFamilyNotFound || failure.Code != factoryapi.ErrorResponseCode("MODEL_NOT_AVAILABLE") {
+			t.Fatalf("Process.Execute(%q) diagnostic = %#v, want public unavailable model taxonomy", args, failure)
+		}
+	}
 }
 
 // TestModelsCatalogReadinessCancellationReturnsPublicFailure proves a
