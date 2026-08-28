@@ -320,6 +320,13 @@ func sharedRemoteHostFactoryConfig() map[string]any {
 	return config
 }
 
+func sessionHistoryOnlyFactoryConfig() map[string]any {
+	config := sharedRemoteHostFactoryConfig()
+	delete(config, "workers")
+	delete(config, "workstations")
+	return config
+}
+
 func sharedRemoteIsolationFactoryConfig(name, workName string) map[string]any {
 	return map[string]any{
 		"name": name,

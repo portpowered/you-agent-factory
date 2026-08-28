@@ -185,10 +185,9 @@ func testCLISessionListUsesIsolatedRecordingHome(t *testing.T, remote *sharedRem
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	characterizationFactoryDir := support.ScaffoldFactory(t, sharedRemoteHostFactoryConfig())
+	characterizationFactoryDir := support.ScaffoldFactory(t, sessionHistoryOnlyFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                characterizationFactoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
 			// Bind the durable listing to test-owned state at root composition;

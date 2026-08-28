@@ -346,7 +346,10 @@ shared-support code. The real server is composed with an explicit
 `FactorySessionResolveHomeDirectory` edge pointing to a disposable recording
 home. The public CLI still receives a different external `HOME`/
 `USERPROFILE` containing the malformed dated artifact, so a successful empty
-history response proves that the external home is not consulted.
+history response proves that the external home is not consulted. Because this
+scenario only exercises session-history listing, its temporary Factory retains
+the valid work-type declaration but has no workers or workstations; it does not
+use the MockWorkers shortcut.
 
 Focused procedure and result:
 
