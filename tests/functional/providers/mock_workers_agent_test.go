@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -16,41 +19,40 @@ import (
 
 func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock accept payload"))
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     dir,
-		UseMockWorkers: true,
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     sharedMockAgentAcceptWorkID,
+		WorkTypeID: "task",
+		TraceID:    "trace-shared-mock-agent-accept",
+		Payload:    []byte("mock accept payload"),
 	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+
+	scenario, listed := runSharedMockFactory(t, dir, support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("mock worker accepted\nCOMPLETE")},
+	), 5*time.Second)
 	for placeID, want := range map[string]int{"task:done": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
+	scenario.Stop(t)
 }
 
 func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject payload"))
-	logDir := t.TempDir()
-	exitCode := 7
-
-	configPath := support.WriteMockWorkersConfig(t, rejectedAgentMockConfig(exitCode))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Args: []string{
-			"--with-mock-workers", configPath,
-			"--runtime-log-dir", logDir,
-		},
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     sharedMockAgentRejectWorkID,
+		WorkTypeID: "task",
+		TraceID:    "trace-shared-mock-agent-reject",
+		Payload:    []byte("mock reject payload"),
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	assertMockAgentRejected(t, server)
-	server.Stop(t)
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+	scenario, _ := runSharedMockFactory(t, dir, sharedProviderRefusalRunner(), 5*time.Second)
+	assertMockAgentRejected(t, scenario)
+	fixture := scenario.Fixture()
+	scenario.Stop(t)
 
-	record := findRuntimeLogRecord(t, requireAnyRuntimeLogPath(t, logDir), commandRunnerCompletedLogEvent)
+	record := findSharedRuntimeLogRecord(t, fixture, dir, 7)
 	if record["exit_code"] != float64(7) {
 		t.Fatalf("logged exit_code = %#v, want 7", record["exit_code"])
 	}
@@ -62,6 +64,9 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 	}
 }
 
+// TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary
+// is isolated because the invalid CLI-global mock configuration must fail
+// before runtime activation and cannot be installed on the healthy shared host.
 func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject zero exit payload"))
@@ -72,6 +77,7 @@ func TestMockWorkers_AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBounda
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
 	})
+	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {
 		t.Fatalf("Process.Execute() error = %v, want public exit-code validation; stderr=%q", err, inputs.Stderr())
@@ -91,15 +97,15 @@ func rejectedAgentMockConfig(exitCode int) *workers.MockWorkersConfig {
 	}
 }
 
-func assertMockAgentRejected(t *testing.T, server *support.FunctionalAPIServer) {
+func assertMockAgentRejected(t *testing.T, scenario *sharedProviderScenario) {
 	t.Helper()
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	listed := scenario.ListWork(t)
 	for placeID, want := range map[string]int{"task:failed": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	for _, event := range server.GetFactoryEvents(t) {
+	for _, event := range scenario.FactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}

@@ -20,6 +20,9 @@ import (
 
 const packagedRuntimeScriptPath = "scripts/pf2-003-runtime-fixture.sh"
 
+// TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript is
+// isolated because it proves Unix shebang permissions and Factory-relative
+// executable selection through the real exec runner.
 func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("executable shebang scripts are not supported on Windows")
@@ -56,6 +59,8 @@ func packagedScriptRuntimeEdges(t *testing.T) serviceedges.Edges {
 	return serviceedges.Edges{ScriptCommandRunner: runner}
 }
 
+// TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome is isolated
+// because it proves real shell exit-code and stderr mapping through exec.
 func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("executable shebang scripts are not supported on Windows")

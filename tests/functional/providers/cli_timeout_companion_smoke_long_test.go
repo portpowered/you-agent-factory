@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -42,28 +41,23 @@ Execute the script.
 	})
 
 	runner := newTimeoutThenReleaseCommandRunner()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ScriptCommandRunner: runner,
-		},
-	})
+	scenario := FixtureFor(t).OpenScenario(t, dir, dir, runner)
 
 	waitForTimeoutCompanionRetryStarted(t, runner)
 
 	close(runner.releaseCh)
-	support.WaitForTerminalStatus(t, server.URL(), timeoutCompanionRunTimeout)
-	listed := support.ListDefaultSessionWork(t, server.URL())
+	scenario.WaitForTerminal(t, timeoutCompanionRunTimeout)
+	listed := scenario.ListWork(t)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 	assertListedWorkIdentity(t, listed, "done", workID, "task", traceID, nil)
-	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+	assertDispatchOutcomeSequence(t, scenario.FactoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 		factoryapi.WorkOutcomeAccepted,
 	}, "execution timeout")
 	if runner.CallCount() < 2 {
 		t.Fatalf("timeout companion runner call count = %d, want at least 2", runner.CallCount())
 	}
-	server.Stop(t)
+	scenario.Stop(t)
 }
 
 type timeoutThenReleaseCommandRunner struct {

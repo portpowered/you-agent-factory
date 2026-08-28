@@ -18,6 +18,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials
+// is isolated because it intentionally crosses record and replay process
+// modes and proves a real mock-script child filesystem side effect.
 func TestMockWorkers_EndToEndSmokeRunsMixedOutcomesWithoutLiveProviderCredentials(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow mock-workers end-to-end smoke")
@@ -80,6 +83,7 @@ args:
 		FactoryDir: t.TempDir(),
 		Args:       []string{"--replay", artifactPath},
 	})
+	defer replayServer.Stop(t)
 	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
 	listed := support.ListDefaultSessionWork(t, replayServer.URL())
 	for placeID, want := range map[string]int{
@@ -90,7 +94,6 @@ args:
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	replayServer.Stop(t)
 }
 
 func mixedMockWorkersSmokeConfig() map[string]any {
@@ -251,6 +254,7 @@ func runRecordReplayCLIWithCapturedStdoutForProviders(
 	t.Helper()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--dir", factoryDir,

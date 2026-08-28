@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -19,37 +20,34 @@ import (
 func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker script accept sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock script accept payload"))
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir, UseMockWorkers: true,
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     sharedMockScriptAcceptWorkID,
+		WorkTypeID: "task",
+		TraceID:    "trace-shared-mock-script-accept",
+		Payload:    []byte("mock script accept payload"),
 	})
-	defer server.Stop(t)
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	assertScriptMockPlaces(t, support.ListDefaultSessionWork(t, server.URL()), "done")
-	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "done", "mock worker accepted")
+
+	scenario, listed := runSharedMockFactory(t, dir, support.NewStaticSuccessCommandRunner("mock worker accepted"), 5*time.Second)
+	assertScriptMockPlaces(t, listed, "done")
+	assertListedWorkText(t, listed, "task", "done", "mock worker accepted")
+	scenario.Stop(t)
 }
 
 func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker script reject sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject payload"))
-	logDir := t.TempDir()
-	exitCode := 9
-
-	configPath := support.WriteMockWorkersConfig(t, rejectedScriptMockConfig(exitCode))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Args: []string{
-			"--with-mock-workers", configPath,
-			"--runtime-log-dir", logDir,
-		},
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkID:     sharedMockScriptRejectWorkID,
+		WorkTypeID: "task",
+		TraceID:    "trace-shared-mock-script-reject",
+		Payload:    []byte("mock script reject payload"),
 	})
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	assertScriptMockRejected(t, server)
-	server.Stop(t)
+	scenario, _ := runSharedMockFactory(t, dir, sharedScriptFailureRunner(), 5*time.Second)
+	assertScriptMockRejected(t, scenario)
+	fixture := scenario.Fixture()
+	scenario.Stop(t)
 
-	record := findRuntimeLogRecord(t, requireAnyRuntimeLogPath(t, logDir), commandRunnerCompletedLogEvent)
+	record := findSharedRuntimeLogRecord(t, fixture, dir, 9)
 	if record["exit_code"] != float64(9) {
 		t.Fatalf("logged exit_code = %#v, want 9", record["exit_code"])
 	}
@@ -61,6 +59,9 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 	}
 }
 
+// TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure is
+// isolated because malformed CLI-global script mock configuration must be
+// rejected before runtime activation.
 func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker zero-exit rejection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -72,12 +73,16 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
 	})
+	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {
 		t.Fatalf("Process.Execute() error = %v, want public exit-code validation; stderr=%q", err, inputs.Stderr())
 	}
 }
 
+// TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect is isolated
+// because its witness requires a real configured child, filesystem side effect,
+// stdout, and child exit rather than an in-process command substitute.
 func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker command-runner side-effect sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -137,10 +142,10 @@ func assertScriptMockPlaces(t *testing.T, listed factoryapi.ListWorkResponse, te
 	}
 }
 
-func assertScriptMockRejected(t *testing.T, server *support.FunctionalAPIServer) {
+func assertScriptMockRejected(t *testing.T, scenario *sharedProviderScenario) {
 	t.Helper()
-	assertScriptMockPlaces(t, support.ListDefaultSessionWork(t, server.URL()), "failed")
-	for _, event := range server.GetFactoryEvents(t) {
+	assertScriptMockPlaces(t, scenario.ListWork(t), "failed")
+	for _, event := range scenario.FactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}
@@ -157,6 +162,9 @@ func assertScriptMockRejected(t *testing.T, server *support.FunctionalAPIServer)
 	t.Fatal("Factory Event history did not contain dispatch response")
 }
 
+// TestMockWorkers_ScriptHelper is isolated because it is the real child
+// executable entrypoint for write/emit/exit behavior and must be inert in the
+// parent package invocation.
 func TestMockWorkers_ScriptHelper(t *testing.T) {
 	support.SkipLongFunctional(t, "slow mock-worker helper sweep")
 	if len(os.Args) < 4 {

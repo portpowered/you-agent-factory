@@ -1,9 +1,12 @@
 package providers
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,14 +18,303 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// Fixture returns the root process that owns this scenario.
+func (scenario *Scenario) Fixture() *ProcessFixture {
+	if scenario == nil {
+		return nil
+	}
+	return scenario.fixture
+}
+
+// RootDir returns the temporary root containing the shared process artifacts.
+func (fixture *ProcessFixture) RootDir() string {
+	if fixture == nil {
+		return ""
+	}
+	return fixture.rootDir
+}
+
+type baseCaptureCommandRunner struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (runner *baseCaptureCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.calls++
+	runner.mu.Unlock()
+	return platformprocess.CommandResult{Stdout: []byte("script-output-ok")}, nil
+}
+
+func (runner *baseCaptureCommandRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
+}
+
+type baseFailureCommandRunner struct{ message string }
+
+func (runner baseFailureCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stderr: []byte(runner.message), ExitCode: 1}, nil
+}
+
+type baseTimeoutThenSuccessCommandRunner struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (runner *baseTimeoutThenSuccessCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.calls++
+	call := runner.calls
+	runner.mu.Unlock()
+	if call == 1 {
+		<-ctx.Done()
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return platformprocess.CommandResult{Stdout: []byte("script-output-after-retry")}, nil
+}
+
+func (runner *baseTimeoutThenSuccessCommandRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.calls
+}
+
+type baseCanceledCommandRunner struct{}
+
+func (baseCanceledCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, context.Canceled
+}
+
+func assertBaseSessionPlaces(t testing.TB, listed factoryapi.ListWorkResponse, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+}
+
+func assertBaseDispatchOutput(t testing.TB, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Output == nil || *payload.Output != want {
+			t.Fatalf("dispatch output = %#v, want %q", payload.Output, want)
+		}
+		return
+	}
+	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
+}
+
+func assertBaseDispatchErrorContains(t testing.TB, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Error == nil || !strings.Contains(*payload.Error, want) {
+			t.Fatalf("dispatch error = %#v, want substring %q", payload.Error, want)
+		}
+		return
+	}
+	t.Fatalf("Factory Event history has no dispatch response: %#v", events)
+}
+
+func TestProvidersSharedProcessTopology(t *testing.T) {
+	fixture := FixtureFor(t)
+	fixture.AssertTopology(t)
+
+	firstDir := testutilCopySharedFixture(t, "script_executor_dir")
+	secondDir := testutilCopySharedFixture(t, "script_executor_dir")
+	testutil.WriteSeedFile(t, firstDir, "task", []byte("first shared payload"))
+	testutil.WriteSeedFile(t, secondDir, "task", []byte("second shared payload"))
+	first := fixture.OpenScenario(t, firstDir, firstDir, support.NewStaticSuccessCommandRunner("first-shared-output"))
+	second := fixture.OpenScenario(t, secondDir, secondDir, support.NewStaticSuccessCommandRunner("second-shared-output"))
+	if got := fixture.router.routeCount(); got != 2 {
+		t.Fatalf("shared provider active routes = %d, want two", got)
+	}
+
+	var wait sync.WaitGroup
+	wait.Add(2)
+	go func() {
+		defer wait.Done()
+		first.WaitForTerminal(t, FixtureTimeout)
+	}()
+	go func() {
+		defer wait.Done()
+		second.WaitForTerminal(t, FixtureTimeout)
+	}()
+	wait.Wait()
+	firstWork := first.ListWork(t)
+	secondWork := second.ListWork(t)
+	assertBaseSessionPlaces(t, firstWork, map[string]int{"task:done": 1, "task:init": 0})
+	assertBaseSessionPlaces(t, secondWork, map[string]int{"task:done": 1, "task:init": 0})
+	assertBaseDispatchOutput(t, first.FactoryEvents(t), "first-shared-output")
+	assertBaseDispatchOutput(t, second.FactoryEvents(t), "second-shared-output")
+	first.Stop(t)
+	second.Stop(t)
+	if got := fixture.router.routeCount(); got != 0 {
+		t.Fatalf("shared provider routes after cleanup = %d, want zero", got)
+	}
+	fixture.AssertSessionTopology(t)
+}
+
+func TestProvidersSharedProcessRoutes(t *testing.T) {
+	fixture := FixtureFor(t)
+	fixture.AssertTopology(t)
+	baselineCalls := fixture.router.callCount()
+
+	workDir := filepath.Join(fixture.rootDir, "route-test-workdir")
+	routeSelector := fmt.Sprintf("providers-shared-route-test-%d", sharedProviderRouteSequence.Add(1))
+	runner := support.NewStaticSuccessCommandRunner("registered-route-output")
+	if err := fixture.router.register(routeSelector, workDir, runner); err != nil {
+		t.Fatalf("register shared provider test route: %v", err)
+	}
+	defer func() {
+		if err := fixture.router.unregister(routeSelector); err != nil {
+			t.Errorf("unregister shared provider test route: %v", err)
+		}
+	}()
+
+	if err := fixture.router.register(routeSelector, workDir, support.NewStaticSuccessCommandRunner("duplicate-output")); err == nil {
+		t.Fatal("duplicate shared provider route registration succeeded")
+	}
+	if got := fixture.router.routeCount(); got != 1 {
+		t.Fatalf("shared provider route count after duplicate registration = %d, want one", got)
+	}
+
+	result, err := fixture.router.Run(context.Background(), platformprocess.CommandRequest{
+		Command: "echo", WorkDir: workDir, Stdin: []byte("registered route input"),
+	})
+	if err != nil {
+		t.Fatalf("registered shared provider route: %v", err)
+	}
+	if string(result.Stdout) != "registered-route-output" {
+		t.Fatalf("registered shared provider route output = %q, want registered output", result.Stdout)
+	}
+	if got := fixture.router.callCount(); got != baselineCalls+1 {
+		t.Fatalf("shared provider route calls after registered route = %d, want %d", got, baselineCalls+1)
+	}
+
+	unknownWorkDir := filepath.Join(fixture.rootDir, "unknown-route-workdir")
+	_, err = fixture.router.Run(context.Background(), platformprocess.CommandRequest{
+		Command: "echo", WorkDir: unknownWorkDir, Stdin: []byte("must not cross a route"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "no provider route matched WorkDir") {
+		t.Fatalf("unknown shared provider route error = %v, want explicit route failure", err)
+	}
+	if got := fixture.router.callCount(); got != baselineCalls+1 {
+		t.Fatalf("shared provider route calls after unknown route = %d, want %d", got, baselineCalls+1)
+	}
+}
+
+func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
+	fixture := FixtureFor(t)
+
+	t.Run("invalid_template", func(t *testing.T) {
+		dir := testutilCopySharedFixture(t, "script_executor_dir")
+		writeBaseFixtureFile(t, dir, []string{"workstations", "run-script", "AGENTS.md"}, "---\ntype: MODEL_WORKSTATION\n---\n{{")
+		testutil.WriteSeedFile(t, dir, "task", []byte("invalid-template-payload"))
+		runner := &baseCaptureCommandRunner{}
+		scenario, listed := RunFactory(t, dir, dir, runner, 5*time.Second)
+		assertBaseSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+		if got := runner.CallCount(); got != 0 {
+			t.Fatalf("invalid-template provider calls = %d, want zero", got)
+		}
+		assertBaseDispatchErrorContains(t, scenario.FactoryEvents(t), "prompt render failed")
+		scenario.Stop(t)
+	})
+
+	t.Run("dependency_failure", func(t *testing.T) {
+		dir := testutilCopySharedFixture(t, "script_executor_dir")
+		testutil.WriteSeedFile(t, dir, "task", []byte("dependency-failure-payload"))
+		scenario, listed := RunFactory(t, dir, dir, baseFailureCommandRunner{"adverse dependency failure"}, 5*time.Second)
+		assertBaseSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+		assertBaseDispatchErrorContains(t, scenario.FactoryEvents(t), "adverse dependency failure")
+		scenario.Stop(t)
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		dir := testutilCopySharedFixture(t, "script_executor_dir")
+		support.WriteWorkstationConfig(t, dir, "run-script", "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n")
+		testutil.WriteSeedFile(t, dir, "task", []byte("timeout-payload"))
+		runner := &baseTimeoutThenSuccessCommandRunner{}
+		scenario, listed := RunFactory(t, dir, dir, runner, 10*time.Second)
+		assertBaseSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		if got := runner.CallCount(); got < 2 {
+			t.Fatalf("timeout recovery provider calls = %d, want at least two", got)
+		}
+		scenario.Stop(t)
+	})
+
+	t.Run("cancellation", func(t *testing.T) {
+		dir := testutilCopySharedFixture(t, "script_executor_dir")
+		testutil.WriteSeedFile(t, dir, "task", []byte("cancellation-payload"))
+		scenario, listed := RunFactory(t, dir, dir, baseCanceledCommandRunner{}, 5*time.Second)
+		assertBaseSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+		assertBaseDispatchErrorContains(t, scenario.FactoryEvents(t), "execution cancelled: context canceled")
+		scenario.Stop(t)
+	})
+
+	t.Run("unknown_route", func(t *testing.T) {
+		dir := testutilCopySharedFixture(t, "script_executor_dir")
+		testutil.WriteSeedFile(t, dir, "task", []byte("unknown-route-payload"))
+		scenario := fixture.OpenScenario(t, dir, "", nil)
+		scenario.WaitForTerminal(t, 5*time.Second)
+		listed := scenario.ListWork(t)
+		assertBaseSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+		assertBaseDispatchErrorContains(t, scenario.FactoryEvents(t), "script command execution failed")
+		scenario.Stop(t)
+	})
+
+	t.Run("known_good_after_adverse_cases", func(t *testing.T) {
+		dir := testutilCopySharedFixture(t, "script_executor_dir")
+		testutil.WriteSeedFile(t, dir, "task", []byte("known-good-payload"))
+		scenario, listed := RunFactory(t, dir, dir, support.NewStaticSuccessCommandRunner("known-good-output"), 5*time.Second)
+		assertBaseSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		assertBaseDispatchOutput(t, scenario.FactoryEvents(t), "known-good-output")
+		scenario.Stop(t)
+	})
+
+	if got := fixture.router.routeCount(); got != 0 {
+		t.Fatalf("shared provider routes after adverse recovery = %d, want zero", got)
+	}
+}
+
+func testutilCopySharedFixture(t *testing.T, name string) string {
+	t.Helper()
+	source := support.LegacyFixtureDir(t, name)
+	return testutil.CopyFixtureDir(t, source)
+}
+
+func writeBaseFixtureFile(t *testing.T, dir string, pathParts []string, content string) {
+	t.Helper()
+	path := filepath.Join(append([]string{dir}, pathParts...)...)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 func TestScriptExecutor_Success(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("script-output-ok"), 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-	assertDispatchOutput(t, server.GetFactoryEvents(t), "script-output-ok")
-	server.Stop(t)
+	assertDispatchOutput(t, server.factoryEvents(t), "script-output-ok")
+	server.stop(t)
 }
 
 func TestScriptExecutor_Failure(t *testing.T) {
@@ -31,7 +323,7 @@ func TestScriptExecutor_Failure(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, failureRunner("script broke"), 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-	server.Stop(t)
+	server.stop(t)
 }
 
 // TestScriptExecutor_CommandCancellationIsReported proves provider command
@@ -42,12 +334,13 @@ func TestScriptExecutor_CommandCancellationIsReported(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, canceledCommandRunner{}, 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "execution cancelled: context canceled")
-	server.Stop(t)
+	assertDispatchErrorContains(t, server.factoryEvents(t), "execution cancelled: context canceled")
+	server.stop(t)
 }
 
-// TestScriptExecutor_MissingCommandFailsStartup proves a missing provider
-// command fails explicitly before execution begins.
+// TestScriptExecutor_MissingCommandFailsStartup is isolated because it proves
+// malformed worker configuration is rejected during invocation startup, before
+// a healthy shared host could have activated runtime state.
 func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
@@ -62,9 +355,11 @@ func TestScriptExecutor_MissingCommandFailsStartup(t *testing.T) {
 	home := t.TempDir()
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = dir
-	err := support.BuildProcess(t, serviceedges.Edges{
+	process := support.BuildProcess(t, serviceedges.Edges{
 		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("unused"),
-	}).Execute(inputs.Input)
+	})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
 	if err == nil ||
 		!strings.Contains(err.Error(), "construct script worker") ||
 		!strings.Contains(err.Error(), "misconfigured") {
@@ -90,8 +385,8 @@ func TestScriptExecutor_InvalidWorkstationTemplateFailsBeforeCommand(t *testing.
 	if calls := runner.CallCount(); calls != 0 {
 		t.Fatalf("script command calls = %d, want none after template rejection", calls)
 	}
-	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "prompt render failed")
-	server.Stop(t)
+	assertDispatchErrorContains(t, server.factoryEvents(t), "prompt render failed")
+	server.stop(t)
 }
 
 func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
@@ -100,9 +395,9 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("new-payload"), 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0})
-	assertDispatchOutput(t, server.GetFactoryEvents(t), "new-payload")
-	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "", "task", "", nil)
-	server.Stop(t)
+	assertDispatchOutput(t, server.factoryEvents(t), "new-payload")
+	assertListedWorkIdentity(t, listed, "done", "", "task", "", nil)
+	server.stop(t)
 }
 
 func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
@@ -117,11 +412,11 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("success-output"), 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-	assertDispatchOutput(t, server.GetFactoryEvents(t), "success-output")
-	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-seed-001", "task", "trace-seed-001", map[string]string{
+	assertDispatchOutput(t, server.factoryEvents(t), "success-output")
+	assertListedWorkIdentity(t, listed, "done", "work-seed-001", "task", "trace-seed-001", map[string]string{
 		"env": "test", "team": "platform",
 	})
-	server.Stop(t)
+	server.stop(t)
 }
 
 func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
@@ -130,8 +425,8 @@ func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, failureRunner("script-error-output"), 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "script-error-output")
-	server.Stop(t)
+	assertDispatchErrorContains(t, server.factoryEvents(t), "script-error-output")
+	server.stop(t)
 }
 
 func TestScriptExecutor_ArgTemplating(t *testing.T) {
@@ -153,8 +448,8 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-	assertDispatchOutput(t, server.GetFactoryEvents(t), "prd-my-feature\nwork-abc-123")
-	server.Stop(t)
+	assertDispatchOutput(t, server.factoryEvents(t), "prd-my-feature\nwork-abc-123")
+	server.stop(t)
 }
 
 func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
@@ -169,8 +464,8 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("output"), 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1})
-	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-type-stamp", "task", "trace-type-stamp", nil)
-	server.Stop(t)
+	assertListedWorkIdentity(t, listed, "done", "work-type-stamp", "task", "trace-type-stamp", nil)
+	server.stop(t)
 }
 
 func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
@@ -192,8 +487,8 @@ func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
 
 	server, listed := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1})
-	assertDispatchOutput(t, server.GetFactoryEvents(t), "staging\ninfra")
-	server.Stop(t)
+	assertDispatchOutput(t, server.factoryEvents(t), "staging\ninfra")
+	server.stop(t)
 }
 
 func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t *testing.T) {
@@ -221,7 +516,7 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 	})
 
 	runner := &captureCommandRunner{}
-	server, listed := runScriptFactory(t, dir, runner, 5*time.Second)
+	server, listed := runScriptFactoryAt(t, dir, support.ResolvedRuntimePath(dir, "/tmp/feature-script"), runner, 5*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:failed": 0})
 
 	if got := runner.LastWorkDir(); got != support.ResolvedRuntimePath(dir, "/tmp/feature-script") {
@@ -235,7 +530,7 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 	if !containsEnv(env, "BRANCH=feature-script") {
 		t.Fatalf("expected BRANCH env in %v", env)
 	}
-	server.Stop(t)
+	server.stop(t)
 }
 
 func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTemplates(t *testing.T) {
@@ -288,7 +583,7 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 	})
 
 	runner := &templateCaptureCommandRunner{}
-	server, listed := runScriptFactory(t, dir, runner, 10*time.Second)
+	server, listed := runScriptFactoryAt(t, dir, support.ResolvedRuntimePath(dir, "/runtime/runtime-template-name/feature-runtime-config"), runner, 10*time.Second)
 	assertSessionPlaces(t, listed, map[string]int{
 		"task:runtime-done":   1,
 		"task:init":           0,
@@ -306,8 +601,8 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 	}
 	assertCommandArgs(t, req, wantArgs)
 	assertRuntimeMergeCommandRequest(t, dir, req)
-	assertDispatchOutput(t, server.GetFactoryEvents(t), strings.Join(wantArgs, "\n"))
-	server.Stop(t)
+	assertDispatchOutput(t, server.factoryEvents(t), strings.Join(wantArgs, "\n"))
+	server.stop(t)
 }
 
 func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t *testing.T) {
@@ -329,11 +624,11 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+	assertDispatchOutcomeSequence(t, server.factoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 		factoryapi.WorkOutcomeAccepted,
 	}, "execution timeout")
-	server.Stop(t)
+	server.stop(t)
 }
 
 func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
@@ -346,8 +641,8 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 
 		server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("template-case-ok"), 10*time.Second)
 		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		assertDispatchOutput(t, server.GetFactoryEvents(t), "template-case-ok")
-		server.Stop(t)
+		assertDispatchOutput(t, server.factoryEvents(t), "template-case-ok")
+		server.stop(t)
 	})
 
 	t.Run("NoTemplateWithPayload_Completes", func(t *testing.T) {
@@ -356,8 +651,8 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 
 		server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("payload-only-ok"), 10*time.Second)
 		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		assertDispatchOutput(t, server.GetFactoryEvents(t), "payload-only-ok")
-		server.Stop(t)
+		assertDispatchOutput(t, server.factoryEvents(t), "payload-only-ok")
+		server.stop(t)
 	})
 
 	t.Run("NoTemplateAndNoPayload_Completes", func(t *testing.T) {
@@ -370,8 +665,8 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 		})
 		server, listed := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("empty-input-ok"), 10*time.Second)
 		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		assertDispatchOutput(t, server.GetFactoryEvents(t), "empty-input-ok")
-		server.Stop(t)
+		assertDispatchOutput(t, server.factoryEvents(t), "empty-input-ok")
+		server.stop(t)
 	})
 }
 
@@ -380,16 +675,20 @@ func runScriptFactory(
 	dir string,
 	runner platformprocess.CommandRunner,
 	timeout time.Duration,
-) (*support.FunctionalAPIServer, factoryapi.ListWorkResponse) {
+) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
 	t.Helper()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Edges: serviceedges.Edges{
-			ScriptCommandRunner: runner,
-		},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), timeout)
-	return server, support.ListDefaultSessionWork(t, server.URL())
+	return runScriptFactoryAt(t, dir, dir, runner, timeout)
+}
+
+func runScriptFactoryAt(
+	t *testing.T,
+	dir, workDir string,
+	runner platformprocess.CommandRunner,
+	timeout time.Duration,
+) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
+	t.Helper()
+	scenario, listed := RunFactory(t, dir, workDir, runner, timeout)
+	return &sharedProviderScenario{Scenario: scenario}, listed
 }
 
 func assertListedWorkIdentity(
