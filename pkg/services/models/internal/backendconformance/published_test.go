@@ -158,6 +158,32 @@ func assertPublishedArtifactRejected(t *testing.T, server *publishedArtifactTest
 	}
 }
 
+func assertPublishedArtifactDiagnostic(t *testing.T, err error, entry PublishedArtifact, wantDetail string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("verification error = nil, want failure")
+	}
+	message := err.Error()
+	for _, expected := range []string{entry.BackendID, entry.TargetID, "https://example.test/backend.tar.gz", wantDetail} {
+		if !strings.Contains(message, expected) {
+			t.Fatalf("verification error = %q, want %q", message, expected)
+		}
+	}
+	if strings.Contains(message, "secret") {
+		t.Fatalf("verification error leaked URL credentials: %q", message)
+	}
+}
+
+func testPublishedArtifact(location string) PublishedArtifact {
+	return PublishedArtifact{
+		BackendID: "localai-test",
+		TargetID:  "linux-amd64",
+		Location:  location,
+		SizeBytes: MinimumPinnedArtifactSizeBytes + 1,
+		SHA256:    strings.Repeat("0", sha256.Size*2),
+	}
+}
+
 func TestVerifyPublishedArtifactLocationsRejectsMissingResponseBody(t *testing.T) {
 	client := staticHTTPDoer(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK}, nil
@@ -169,6 +195,45 @@ func TestVerifyPublishedArtifactLocationsRejectsMissingResponseBody(t *testing.T
 	}})
 	if err == nil || !strings.Contains(err.Error(), "omitted an artifact body") {
 		t.Fatalf("verification error = %v, want missing-body diagnostic", err)
+	}
+}
+
+func TestVerifyPublishedArtifactLocationsRejectsTransportFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		requestErr error
+		wantDetail string
+	}{
+		{name: "timeout", requestErr: context.DeadlineExceeded, wantDetail: "request exceeded its bounded timeout"},
+		{name: "canceled", requestErr: context.Canceled, wantDetail: "request was canceled"},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			entry := testPublishedArtifact("https://user:secret@example.test/backend.tar.gz")
+			client := staticHTTPDoer(func(*http.Request) (*http.Response, error) {
+				return nil, testCase.requestErr
+			})
+
+			err := VerifyPublishedArtifactLocations(context.Background(), client, []PublishedArtifact{entry})
+			assertPublishedArtifactDiagnostic(t, err, entry, testCase.wantDetail)
+		})
+	}
+}
+
+func TestVerifyPublishedArtifactLocationsRejectsPartialResponseBodyRead(t *testing.T) {
+	entry := testPublishedArtifact("https://user:secret@example.test/backend.tar.gz")
+	body := &trackingReadCloser{Reader: &partialReadErrorReader{
+		data: []byte("partial backend body"),
+		err:  io.ErrUnexpectedEOF,
+	}}
+	client := staticHTTPDoer(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: body}, nil
+	})
+
+	err := VerifyPublishedArtifactLocations(context.Background(), client, []PublishedArtifact{entry})
+	assertPublishedArtifactDiagnostic(t, err, entry, "response body could not be read")
+	if !body.closed {
+		t.Fatal("response body was not closed after a read failure")
 	}
 }
 
@@ -236,4 +301,23 @@ type trackingReadCloser struct {
 func (body *trackingReadCloser) Close() error {
 	body.closed = true
 	return nil
+}
+
+type partialReadErrorReader struct {
+	data   []byte
+	err    error
+	offset int
+}
+
+func (reader *partialReadErrorReader) Read(buffer []byte) (int, error) {
+	if reader.offset >= len(reader.data) {
+		return 0, reader.err
+	}
+
+	read := copy(buffer, reader.data[reader.offset:])
+	reader.offset += read
+	if reader.offset == len(reader.data) {
+		return read, reader.err
+	}
+	return read, nil
 }
