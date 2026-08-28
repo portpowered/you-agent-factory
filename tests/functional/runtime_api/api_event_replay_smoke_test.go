@@ -1,12 +1,9 @@
 package runtime_api
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -14,8 +11,9 @@ import (
 func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
-	provider := &eventReplayBlockingProvider{release: releaseDispatch}
-	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{provider: provider})
+	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: support.NewGatedSuccessCommandRunner("completed", releaseDispatch),
+	})
 
 	stream := server.openEventStream(t)
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
@@ -137,28 +135,4 @@ func assertEventReplayCompletedSession(t *testing.T, session factoryapi.FactoryS
 	if session.Runtime.Progress.Categories.Terminal != 1 {
 		t.Fatalf("completed Factory Session terminal count = %d, want 1", session.Runtime.Progress.Categories.Terminal)
 	}
-}
-
-type eventReplayBlockingProvider struct {
-	release <-chan struct{}
-}
-
-func (p *eventReplayBlockingProvider) Infer(
-	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	select {
-	case <-p.release:
-	case <-ctx.Done():
-		return workerexecution.InferenceResponse{}, ctx.Err()
-	}
-
-	return workerexecution.InferenceResponse{
-		Content: "completed",
-		ProviderSession: &providers.SessionMetadata{
-			Provider: "codex",
-			Kind:     "session_id",
-			ID:       "sess-event-replay-smoke",
-		},
-	}, nil
 }

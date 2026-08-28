@@ -1,7 +1,6 @@
-package runtime_api
+package runtimeapifixture
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -28,7 +26,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -45,32 +42,11 @@ const (
 var (
 	runtimeAPIFixtureOnce sync.Once
 	runtimeAPIFixtureMu   sync.Mutex
-	runtimeAPIFixtureVal  *runtimeAPIPackageFixture
+	runtimeAPIFixtureVal  *PackageFixture
 	runtimeAPIFixtureErr  error
 )
 
-// TestMain gives the eligible runtime API cohort one package-scoped lifecycle.
-// The fixture is lazy so isolated tests and short runs do not pay for a daemon
-// they do not exercise.
-func TestMain(m *testing.M) {
-	code := m.Run()
-
-	runtimeAPIFixtureMu.Lock()
-	fixture := runtimeAPIFixtureVal
-	runtimeAPIFixtureMu.Unlock()
-	if fixture != nil {
-		if err := fixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "runtime API package fixture cleanup: %v\n", err)
-			if code == 0 {
-				code = 1
-			}
-		}
-	}
-
-	os.Exit(code)
-}
-
-type runtimeAPIPackageFixture struct {
+type PackageFixture struct {
 	rootDir string
 	hostDir string
 	baseURL string
@@ -195,105 +171,40 @@ func (ledger *runtimeAPICleanupLedger) leakError() error {
 	)
 }
 
-type runtimeAPIScenario struct {
-	provider       any
-	providerRunner platformprocess.CommandRunner
-	scriptRunner   platformprocess.CommandRunner
-	models         []string
+type Scenario struct {
+	Provider       any
+	ProviderRunner platformprocess.CommandRunner
+	ScriptRunner   platformprocess.CommandRunner
+	Models         []string
 }
 
-func (fs *functionalAPIServer) URL() string {
-	if fs == nil {
+type SessionHandle struct {
+	fixture   *PackageFixture
+	sessionID string
+}
+
+func (handle *SessionHandle) Fixture() *PackageFixture {
+	if handle == nil {
+		return nil
+	}
+	return handle.fixture
+}
+
+func (handle *SessionHandle) SessionID() string {
+	if handle == nil {
 		return ""
 	}
-	if fs.shared != nil {
-		return fs.shared.baseURL
-	}
-	if fs.FunctionalAPIServer != nil {
-		return fs.FunctionalAPIServer.URL()
-	}
-	return ""
+	return handle.sessionID
 }
 
-func (fs *functionalAPIServer) sessionURL(path string) string {
-	if fs == nil || fs.sessionID == "" {
-		return ""
-	}
-	return strings.TrimSuffix(fs.URL(), "/") + "/factory-sessions/" + url.PathEscape(fs.sessionID) + path
-}
-
-func (fs *functionalAPIServer) workURL(path string) string {
-	if fs != nil && fs.shared != nil {
-		return fs.sessionURL(path)
-	}
-	return support.DefaultSessionWorkURL(fs.URL(), path)
-}
-
-func (fs *functionalAPIServer) eventsURL() string {
-	if fs != nil && fs.shared != nil {
-		return support.SessionEventsURL(fs.URL(), fs.sessionID)
-	}
-	return support.DefaultSessionEventsURL(fs.URL())
-}
-
-func (fs *functionalAPIServer) responseEventsURL() string {
-	if fs != nil && fs.shared != nil {
-		return support.SessionResponseEventsURL(fs.URL(), fs.sessionID)
-	}
-	return support.SessionResponseEventsURL(fs.URL(), "~default")
-}
-
-func (fs *functionalAPIServer) statusURL() string {
-	if fs != nil && fs.shared != nil {
-		return fs.sessionURL("/status")
-	}
-	return strings.TrimSuffix(fs.URL(), "/") + "/status"
-}
-
-func (fs *functionalAPIServer) StatusURL() string {
-	return fs.statusURL()
-}
-
-func (fs *functionalAPIServer) Session(t *testing.T) factoryapi.FactorySession {
-	t.Helper()
-	if fs != nil && fs.shared != nil {
-		response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, fs.sessionURL(""))
-		session, err := response.AsFactorySession()
-		if err != nil {
-			t.Fatalf("decode shared Factory Session: %v", err)
-		}
-		return session
-	}
-	return support.GetDefaultSession(t, fs.URL())
-}
-
-func (fs *functionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
-	t.Helper()
-	if fs != nil && fs.shared != nil {
-		return support.GetFactoryEventsForSessionAt(t, fs.URL(), fs.sessionID)
-	}
-	return support.GetFactoryEventsAt(t, fs.URL())
-}
-
-func (fs *functionalAPIServer) openEventStream(t *testing.T) *factoryEventHTTPStream {
-	t.Helper()
-	stream := openFactoryEventHTTPStream(t, fs.eventsURL())
-	if fs != nil && fs.shared != nil {
-		fs.shared.trackStream(stream)
-	}
-	return stream
-}
-
-func startSharedFunctionalServer(
-	t *testing.T,
-	factoryDir string,
-	scenario runtimeAPIScenario,
-) *functionalAPIServer {
+// StartSharedFunctionalServer opens a unique Factory Session on the package
+// fixture and registers only the scenario's external-effect lanes.
+func StartSharedFunctionalServer(t *testing.T, factoryDir string, scenario Scenario) *SessionHandle {
 	t.Helper()
 
-	fixture := sharedRuntimeAPIFixture(t)
-	provider := runtimeAPIProviderForScenario(t, scenario)
-	if provider == nil && scenario.providerRunner == nil {
+	fixture := sharedPackageFixture(t)
+	provider := providerForScenario(t, scenario)
+	if provider == nil && scenario.ProviderRunner == nil {
 		// A mock-worker scenario does not call Providers, but registering a
 		// fail-closed route keeps an accidental real invocation from escaping
 		// the controlled package fixture.
@@ -302,15 +213,15 @@ func startSharedFunctionalServer(
 
 	var unregisterProvider func()
 	if provider != nil {
-		unregisterProvider = fixture.providerRouter.register(factoryDir, scenario.models, provider)
+		unregisterProvider = fixture.providerRouter.register(factoryDir, scenario.Models, provider)
 	}
 	var unregisterCommand func()
-	if scenario.providerRunner != nil {
-		unregisterCommand = fixture.commandRouter.register(factoryDir, scenario.providerRunner)
+	if scenario.ProviderRunner != nil {
+		unregisterCommand = fixture.commandRouter.register(factoryDir, scenario.ProviderRunner)
 	}
 	var unregisterScript func()
-	if scenario.scriptRunner != nil {
-		unregisterScript = fixture.scriptRouter.register(factoryDir, scenario.scriptRunner)
+	if scenario.ScriptRunner != nil {
+		unregisterScript = fixture.scriptRouter.register(factoryDir, scenario.ScriptRunner)
 	}
 	// Register route cleanup before opening the session. If session creation
 	// fails, testing.T cleanup still resets every scenario-owned effect lane.
@@ -338,14 +249,10 @@ func startSharedFunctionalServer(
 		}
 		t.Fatalf("shared runtime API Factory Session ID = %q, want unique explicit session", sessionID)
 	}
-	releaseSession, err := fixture.trackSession(sessionID)
+	releaseSession, err := fixture.TrackSession(sessionID)
 	if err != nil {
 		cleanupErr := closeRuntimeAPIFactorySession(fixture.baseURL, sessionID)
 		t.Fatalf("track shared runtime API Factory Session %q: %v; cleanup error: %v", sessionID, err, cleanupErr)
-	}
-	server := &functionalAPIServer{
-		shared:    fixture,
-		sessionID: sessionID,
 	}
 	t.Cleanup(func() {
 		// Close the live session before releasing its effect route. This lets
@@ -358,21 +265,28 @@ func startSharedFunctionalServer(
 			t.Errorf("release shared runtime API Factory Session %q: %v", sessionID, err)
 		}
 	})
-	return server
+	return &SessionHandle{fixture: fixture, sessionID: sessionID}
 }
 
-func (fixture *runtimeAPIPackageFixture) trackSession(id string) (func() error, error) {
+func (fixture *PackageFixture) TrackSession(id string) (func() error, error) {
 	if fixture == nil {
 		return func() error { return nil }, nil
 	}
 	return fixture.ledger.trackSession(id)
 }
 
-func (fixture *runtimeAPIPackageFixture) trackStream(stream *factoryEventHTTPStream) {
-	if fixture == nil || stream == nil {
-		return
+func (fixture *PackageFixture) TrackStream() func() {
+	if fixture == nil {
+		return func() {}
 	}
-	stream.setCloseHook(fixture.ledger.trackStream())
+	return fixture.ledger.trackStream()
+}
+
+func (fixture *PackageFixture) BaseURL() string {
+	if fixture == nil {
+		return ""
+	}
+	return fixture.baseURL
 }
 
 func openRuntimeAPIFactorySession(baseURL, folderPath string) (factoryapi.OpenFactorySessionResponse, error) {
@@ -544,12 +458,12 @@ func runtimeAPIFactorySessionRequestWithContext(ctx context.Context, method, end
 	return response.StatusCode, responseBody, nil
 }
 
-func runtimeAPIProviderForScenario(t *testing.T, scenario runtimeAPIScenario) providers.Service {
+func providerForScenario(t *testing.T, scenario Scenario) providers.Service {
 	t.Helper()
-	if scenario.providerRunner != nil {
-		return newRuntimeAPICommandProvider(scenario.providerRunner)
+	if scenario.ProviderRunner != nil {
+		return newRuntimeAPICommandProvider(scenario.ProviderRunner)
 	}
-	switch provider := scenario.provider.(type) {
+	switch provider := scenario.Provider.(type) {
 	case nil:
 		return nil
 	case providers.Service:
@@ -559,15 +473,15 @@ func runtimeAPIProviderForScenario(t *testing.T, scenario runtimeAPIScenario) pr
 	}:
 		return support.ProviderServiceFromInference(provider)
 	default:
-		t.Fatalf("unsupported shared runtime API provider %T", scenario.provider)
+		t.Fatalf("unsupported shared runtime API provider %T", scenario.Provider)
 		return nil
 	}
 }
 
-func sharedRuntimeAPIFixture(t *testing.T) *runtimeAPIPackageFixture {
+func sharedPackageFixture(t *testing.T) *PackageFixture {
 	t.Helper()
 	runtimeAPIFixtureOnce.Do(func() {
-		fixture, err := newRuntimeAPIPackageFixture()
+		fixture, err := newPackageFixture()
 		runtimeAPIFixtureMu.Lock()
 		runtimeAPIFixtureVal = fixture
 		runtimeAPIFixtureErr = err
@@ -583,17 +497,29 @@ func sharedRuntimeAPIFixture(t *testing.T) *runtimeAPIPackageFixture {
 	return fixture
 }
 
-func newRuntimeAPIPackageFixture() (*runtimeAPIPackageFixture, error) {
+// CloseSharedFixture releases the package-scoped Process.Execute fixture after
+// all tests have released their explicit Factory Sessions and effect lanes.
+func CloseSharedFixture() error {
+	runtimeAPIFixtureMu.Lock()
+	fixture := runtimeAPIFixtureVal
+	runtimeAPIFixtureMu.Unlock()
+	if fixture == nil {
+		return nil
+	}
+	return fixture.Close()
+}
+
+func newPackageFixture() (*PackageFixture, error) {
 	rootDir, err := os.MkdirTemp("", "infinite-you-runtime-api-")
 	if err != nil {
 		return nil, err
 	}
-	cleanupOnError := func(cause error) (*runtimeAPIPackageFixture, error) {
+	cleanupOnError := func(cause error) (*PackageFixture, error) {
 		return nil, errors.Join(cause, removeRuntimeAPIRoot(rootDir))
 	}
 
 	hostDir := filepath.Join(rootDir, "host")
-	if err := writeRuntimeAPIFixtureFactory(hostDir, providerBackedModelTransportSmokeConfig()); err != nil {
+	if err := writeRuntimeAPIFixtureFactory(hostDir, sharedHostFactoryConfig()); err != nil {
 		return cleanupOnError(err)
 	}
 	workerPath := filepath.Join(hostDir, "workers", "tts-worker", "AGENTS.md")
@@ -608,7 +534,7 @@ func newRuntimeAPIPackageFixture() (*runtimeAPIPackageFixture, error) {
 		return cleanupOnError(fmt.Errorf("create fixture home: %w", err))
 	}
 
-	fixture := &runtimeAPIPackageFixture{
+	fixture := &PackageFixture{
 		rootDir:        rootDir,
 		hostDir:        hostDir,
 		ledger:         newRuntimeAPICleanupLedger(),
@@ -644,12 +570,45 @@ func newRuntimeAPIPackageFixture() (*runtimeAPIPackageFixture, error) {
 	if err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("wait for package API listener: %w", err),
-			fixture.close(),
+			fixture.Close(),
 		)
 	}
 	fixture.baseURL = baseURL
 
 	return fixture, nil
+}
+
+func sharedHostFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "model-transport-smoke",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "tts-worker",
+			"type":          interfaces.WorkerTypeModel,
+			"model":         "OMNIVOICE_Q4_K_M",
+			"modelProvider": "CODEX",
+			"modelLocality": interfaces.ModelLocalityCloud,
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{{
+					"name":         "text",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+					"required":     true,
+				}},
+				"outputs": []map[string]any{{
+					"name":         "audio",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
+	}
 }
 
 func writeRuntimeAPIFixtureFactory(dir string, cfg map[string]any) error {
@@ -696,7 +655,7 @@ func runtimeAPIEnvironment(environment []string, homeDir string) []string {
 	return result
 }
 
-func (fixture *runtimeAPIPackageFixture) close() error {
+func (fixture *PackageFixture) Close() error {
 	if fixture == nil {
 		return nil
 	}
@@ -736,7 +695,7 @@ func (fixture *runtimeAPIPackageFixture) close() error {
 	return fixture.closeErr
 }
 
-func (fixture *runtimeAPIPackageFixture) cleanupLedgerError() error {
+func (fixture *PackageFixture) cleanupLedgerError() error {
 	if fixture == nil {
 		return nil
 	}
@@ -863,134 +822,6 @@ func (command *runtimeAPIProcessCommand) terminalError() error {
 	return command.terminalErr
 }
 
-type runtimeAPIProviderRouter struct {
-	mu     sync.RWMutex
-	routes map[string]runtimeAPIProviderRoute
-	models map[string]string
-}
-
-type runtimeAPIProviderRoute struct {
-	factoryDir string
-	models     []string
-	provider   providers.Service
-	token      *struct{}
-}
-
-func newRuntimeAPIProviderRouter() *runtimeAPIProviderRouter {
-	return &runtimeAPIProviderRouter{routes: make(map[string]runtimeAPIProviderRoute), models: make(map[string]string)}
-}
-
-func (router *runtimeAPIProviderRouter) register(factoryDir string, models []string, provider providers.Service) func() {
-	key := runtimeAPINormalizeDir(factoryDir)
-	route := runtimeAPIProviderRoute{
-		factoryDir: key,
-		models:     append([]string(nil), models...),
-		provider:   provider,
-		token:      &struct{}{},
-	}
-	router.mu.Lock()
-	if previous, ok := router.routes[key]; ok {
-		for _, model := range previous.models {
-			modelKey := strings.ToLower(strings.TrimSpace(model))
-			if router.models[modelKey] == key {
-				delete(router.models, modelKey)
-			}
-		}
-	}
-	router.routes[key] = route
-	for _, model := range models {
-		router.models[strings.ToLower(strings.TrimSpace(model))] = key
-	}
-	router.mu.Unlock()
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			router.mu.Lock()
-			defer router.mu.Unlock()
-			if current, ok := router.routes[key]; ok && current.token == route.token {
-				delete(router.routes, key)
-				for _, model := range route.models {
-					modelKey := strings.ToLower(strings.TrimSpace(model))
-					if router.models[modelKey] == key {
-						delete(router.models, modelKey)
-					}
-				}
-			}
-		})
-	}
-}
-
-func (router *runtimeAPIProviderRouter) routeCounts() (int, int) {
-	if router == nil {
-		return 0, 0
-	}
-	router.mu.RLock()
-	defer router.mu.RUnlock()
-	return len(router.routes), len(router.models)
-}
-
-func (router *runtimeAPIProviderRouter) providerFor(request providers.ExecuteRequest) providers.Service {
-	factoryDir := runtimeAPINormalizeDir(request.FactoryDirectory)
-	model := strings.ToLower(strings.TrimSpace(request.Model))
-	router.mu.RLock()
-	defer router.mu.RUnlock()
-	if route, ok := router.routes[factoryDir]; ok {
-		return route.provider
-	}
-	for _, route := range router.routes {
-		if runtimeAPIDirContains(route.factoryDir, factoryDir) || runtimeAPIDirContains(route.factoryDir, runtimeAPINormalizeDir(request.WorkingDirectory)) {
-			return route.provider
-		}
-	}
-	if key := router.models[model]; key != "" {
-		return router.routes[key].provider
-	}
-	return nil
-}
-
-func (router *runtimeAPIProviderRouter) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	provider := router.providerFor(request)
-	if provider == nil {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindMisconfigured,
-			Message: "no shared runtime API provider route for factory directory",
-		}
-	}
-	return provider.Execute(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) ListProviders(ctx context.Context, request providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
-	return (testutil.NativeProvider{}).ListProviders(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) GetProvider(ctx context.Context, request providers.GetProviderRequest) (providers.GetProviderResult, error) {
-	return (testutil.NativeProvider{}).GetProvider(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) ResolveIdentity(ctx context.Context, request providers.ResolveIdentityRequest) (providers.ResolveIdentityResult, error) {
-	return (testutil.NativeProvider{}).ResolveIdentity(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) ResolveSelection(ctx context.Context, request providers.ResolveSelectionRequest) (providers.ResolveSelectionResult, error) {
-	return (testutil.NativeProvider{}).ResolveSelection(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) ValidatePrerequisites(ctx context.Context, request providers.ValidatePrerequisitesRequest) error {
-	return (testutil.NativeProvider{}).ValidatePrerequisites(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) ControlAttempt(ctx context.Context, request providers.ControlAttemptRequest) (providers.ControlAttemptResult, error) {
-	return (testutil.NativeProvider{}).ControlAttempt(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) Continue(ctx context.Context, request providers.ContinueRequest) (providers.ContinueResult, error) {
-	return (testutil.NativeProvider{}).Continue(ctx, request)
-}
-
-func (router *runtimeAPIProviderRouter) ContinueReference(ctx context.Context, request providers.ContinueReferenceRequest) (providers.ContinueReferenceResult, error) {
-	return (testutil.NativeProvider{}).ContinueReference(ctx, request)
-}
-
 type runtimeAPICommandRouter struct {
 	name   string
 	mu     sync.RWMutex
@@ -1056,101 +887,6 @@ func (router *runtimeAPICommandRouter) routeCount() int {
 	return len(router.routes)
 }
 
-type runtimeAPICommandProvider struct {
-	testutil.NativeProvider
-	runner platformprocess.CommandRunner
-}
-
-func newRuntimeAPICommandProvider(runner platformprocess.CommandRunner) providers.Service {
-	provider := &runtimeAPICommandProvider{runner: runner}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (provider *runtimeAPICommandProvider) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	command := strings.TrimSpace(request.Command)
-	if command == "" {
-		command = request.Provider.CanonicalSessionProvider()
-	}
-	commandRequest := platformprocess.CommandRequest{
-		Command:                  command,
-		Args:                     append([]string(nil), request.Args...),
-		Stdin:                    []byte(request.UserMessage),
-		Env:                      append([]string(nil), request.ProcessEnvironment...),
-		WorkDir:                  request.WorkingDirectory,
-		ExecutionLogger:          request.ExecutionLogger,
-		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
-	}
-	result, err := provider.runner.Run(ctx, commandRequest)
-	if err != nil {
-		return providers.ExecuteResult{}, err
-	}
-	if failure := runtimeAPICommandFailure(result); failure != nil {
-		return providers.ExecuteResult{}, failure
-	}
-	return providers.ExecuteResult{Content: runtimeAPICommandContent(command, result.Stdout)}, nil
-}
-
-func runtimeAPICommandFailure(result platformprocess.CommandResult) error {
-	if result.ExitCode == 0 && len(result.Stderr) == 0 {
-		return nil
-	}
-	message := strings.TrimSpace(string(result.Stderr))
-	lower := strings.ToLower(message)
-	kind := providers.ExecuteFailureKindUnknown
-	switch {
-	case strings.Contains(lower, "rate_limit"), strings.Contains(lower, "429"), strings.Contains(lower, "thrott"):
-		kind = providers.ExecuteFailureKindThrottled
-	case strings.Contains(lower, "authentication"), strings.Contains(lower, "401"):
-		kind = providers.ExecuteFailureKindAuthentication
-	case strings.Contains(lower, "invalid"):
-		kind = providers.ExecuteFailureKindInvalidRequest
-	}
-	if message == "" {
-		message = "provider command failed"
-	}
-	return providers.ExecuteFailure{Kind: kind, Message: message}
-}
-
-func runtimeAPICommandContent(command string, stdout []byte) string {
-	trimmed := strings.TrimSpace(string(stdout))
-	if trimmed == "" {
-		return ""
-	}
-	scanner := bufio.NewScanner(strings.NewReader(trimmed))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var record map[string]any
-		if json.Unmarshal([]byte(line), &record) != nil {
-			continue
-		}
-		typeName, _ := record["type"].(string)
-		switch strings.ToLower(strings.TrimSpace(command)) {
-		case "codex":
-			if typeName != "item.completed" {
-				continue
-			}
-			item, _ := record["item"].(map[string]any)
-			text, _ := item["text"].(string)
-			if text != "" {
-				return text
-			}
-		case "claude":
-			if typeName != "result" {
-				continue
-			}
-			text, _ := record["result"].(string)
-			if text != "" {
-				return text
-			}
-		}
-	}
-	return trimmed
-}
-
 func runtimeAPINormalizeDir(path string) string {
 	if strings.TrimSpace(path) == "" {
 		return ""
@@ -1175,188 +911,4 @@ func runtimeAPIDirContains(parent, child string) bool {
 	return relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)))
 }
 
-var _ providers.Service = (*runtimeAPIProviderRouter)(nil)
 var _ platformprocess.CommandRunner = (*runtimeAPICommandRouter)(nil)
-var _ providers.Service = (*runtimeAPICommandProvider)(nil)
-
-func TestRuntimeAPIPackageCleanupLedgerAndEdgeLeasesAreIdempotent(t *testing.T) {
-	fixture := &runtimeAPIPackageFixture{
-		ledger:         newRuntimeAPICleanupLedger(),
-		providerRouter: newRuntimeAPIProviderRouter(),
-		commandRouter:  newRuntimeAPICommandRouter("provider"),
-		scriptRouter:   newRuntimeAPICommandRouter("script"),
-	}
-
-	releaseSession, err := fixture.trackSession("session-ledger-test")
-	if err != nil {
-		t.Fatalf("track session: %v", err)
-	}
-	stream := &factoryEventHTTPStream{}
-	fixture.trackStream(stream)
-
-	providerUnregister := fixture.providerRouter.register(t.TempDir(), []string{"model-ledger-test"}, testutil.NativeProvider{})
-	commandUnregister := fixture.commandRouter.register(t.TempDir(), support.NewRecordingCommandRunner("provider"))
-	scriptUnregister := fixture.scriptRouter.register(t.TempDir(), support.NewRecordingCommandRunner("script"))
-
-	if err := releaseSession(); err != nil {
-		t.Fatalf("release session: %v", err)
-	}
-	if err := releaseSession(); err != nil {
-		t.Fatalf("repeated session release: %v", err)
-	}
-	stream.notifyClosed()
-	stream.notifyClosed()
-	providerUnregister()
-	providerUnregister()
-	commandUnregister()
-	commandUnregister()
-	scriptUnregister()
-	scriptUnregister()
-
-	if err := fixture.cleanupLedgerError(); err != nil {
-		t.Fatalf("cleanup ledger after idempotent releases: %v", err)
-	}
-
-	t.Run("active resources fail closed", func(t *testing.T) {
-		fixture := &runtimeAPIPackageFixture{
-			ledger:         newRuntimeAPICleanupLedger(),
-			providerRouter: newRuntimeAPIProviderRouter(),
-			commandRouter:  newRuntimeAPICommandRouter("provider"),
-			scriptRouter:   newRuntimeAPICommandRouter("script"),
-		}
-		releaseSession, err := fixture.trackSession("session-leak-test")
-		if err != nil {
-			t.Fatalf("track leaked session: %v", err)
-		}
-		stream := &factoryEventHTTPStream{}
-		fixture.trackStream(stream)
-		unregister := fixture.providerRouter.register(t.TempDir(), nil, testutil.NativeProvider{})
-		if err := fixture.cleanupLedgerError(); err == nil {
-			t.Fatal("cleanup ledger error = nil, want active resource failure")
-		}
-
-		if err := releaseSession(); err != nil {
-			t.Fatalf("release leaked session: %v", err)
-		}
-		stream.notifyClosed()
-		unregister()
-		if err := fixture.cleanupLedgerError(); err != nil {
-			t.Fatalf("cleanup ledger after releasing active resources: %v", err)
-		}
-	})
-}
-
-// C06-ISOLATED CASE-43: cleanup itself owns process, listener, root, and
-// tracked-lane teardown; injected lifecycle failures must remain visible while
-// every independent cleanup action still runs.
-func TestRuntimeAPIPackageFixtureCleanupIsIdempotentAndPreservesFailures(t *testing.T) {
-	t.Run("normal cleanup probes listener and removes root", func(t *testing.T) {
-		fixture, listener, process := newRuntimeAPICleanupTestFixture(t, nil, nil)
-		listener.Close()
-
-		if err := fixture.close(); err != nil {
-			t.Fatalf("fixture close: %v", err)
-		}
-		if err := fixture.close(); err != nil {
-			t.Fatalf("repeated fixture close: %v", err)
-		}
-		if got := process.closeCalls.Load(); got != 1 {
-			t.Fatalf("process close calls = %d, want 1", got)
-		}
-		assertRuntimeAPITestRootRemoved(t, fixture.rootDir)
-	})
-
-	t.Run("injected execute and close failures remain visible", func(t *testing.T) {
-		executeErr := errors.New("injected Process.Execute failure")
-		closeErr := errors.New("injected application process close failure")
-		fixture, listener, process := newRuntimeAPICleanupTestFixture(t, executeErr, closeErr)
-		listener.Close()
-
-		firstErr := fixture.close()
-		if !errors.Is(firstErr, executeErr) {
-			t.Fatalf("fixture close error = %v, want Process.Execute cause", firstErr)
-		}
-		if !errors.Is(firstErr, closeErr) {
-			t.Fatalf("fixture close error = %v, want process Close cause", firstErr)
-		}
-		secondErr := fixture.close()
-		if !errors.Is(secondErr, executeErr) || !errors.Is(secondErr, closeErr) {
-			t.Fatalf("repeated fixture close error = %v, want both original causes", secondErr)
-		}
-		if got := process.closeCalls.Load(); got != 1 {
-			t.Fatalf("process close calls = %d, want 1 after repeated cleanup", got)
-		}
-		assertRuntimeAPITestRootRemoved(t, fixture.rootDir)
-	})
-
-	t.Run("reachable listener fails the cleanup probe", func(t *testing.T) {
-		listener := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		defer listener.Close()
-
-		err := runtimeAPIListenerClosed(listener.URL, 1)
-		if err == nil || !strings.Contains(err.Error(), "remained reachable") {
-			t.Fatalf("reachable listener probe error = %v, want reachability failure", err)
-		}
-	})
-}
-
-type runtimeAPICleanupTestProcess struct {
-	executeErr error
-	closeErr   error
-	closeCalls atomic.Int64
-}
-
-func (process *runtimeAPICleanupTestProcess) Execute(root.Input) error {
-	return process.executeErr
-}
-
-func (process *runtimeAPICleanupTestProcess) Close(context.Context) error {
-	process.closeCalls.Add(1)
-	return process.closeErr
-}
-
-func (*runtimeAPICleanupTestProcess) ACPServer() support.ACPServer {
-	return nil
-}
-
-func (*runtimeAPICleanupTestProcess) ProviderRegistry() support.ProviderRegistry {
-	return nil
-}
-
-func (*runtimeAPICleanupTestProcess) WorkerRecordingReader() recordings.WorkerRecordingReader {
-	return nil
-}
-
-func newRuntimeAPICleanupTestFixture(
-	t *testing.T,
-	executeErr, closeErr error,
-) (*runtimeAPIPackageFixture, *httptest.Server, *runtimeAPICleanupTestProcess) {
-	t.Helper()
-	rootDir := filepath.Join(t.TempDir(), "owned-runtime-api-root")
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		t.Fatalf("create cleanup test root: %v", err)
-	}
-	listener := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-	process := &runtimeAPICleanupTestProcess{executeErr: executeErr, closeErr: closeErr}
-	fixture := &runtimeAPIPackageFixture{
-		rootDir:        rootDir,
-		baseURL:        listener.URL,
-		process:        process,
-		ledger:         newRuntimeAPICleanupLedger(),
-		providerRouter: newRuntimeAPIProviderRouter(),
-		commandRouter:  newRuntimeAPICommandRouter("provider"),
-		scriptRouter:   newRuntimeAPICommandRouter("script"),
-	}
-	fixture.apiStarts.Store(1)
-	fixture.processStarts.Store(1)
-	inputs := support.FakeInputs(context.Background(), []string{"you", "run"})
-	fixture.command = startRuntimeAPIProcessCommand(process, inputs.Input)
-	return fixture, listener, process
-}
-
-func assertRuntimeAPITestRootRemoved(t *testing.T, path string) {
-	t.Helper()
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("cleanup test root stat error = %v, want path removed", err)
-	}
-}

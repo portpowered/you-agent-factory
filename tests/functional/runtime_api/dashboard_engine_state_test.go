@@ -148,6 +148,13 @@ func waitForPublicWorkInPlace(t *testing.T, server *functionalAPIServer, placeID
 	t.Fatalf("timed out waiting for work %q at public location %q", workID, placeID)
 }
 
+// C06-SHARED EXCEPTION CASE-dashboard-engine-state: this scenario asserts the
+// provider-session IDs emitted in canonical Factory Events for both a success
+// and a failure. The ProviderCommandRunner edge exposes command request/output
+// data but has no contract for injecting provider SessionRef metadata, so a
+// narrowly scoped Providers service remains necessary for this public event
+// witness. All other shareable provider controls in this lane use command
+// runners.
 type functionalWorldViewProvider struct {
 	testutil.NativeProvider
 	requests  chan providers.ExecuteRequest

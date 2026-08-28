@@ -1,14 +1,11 @@
 package runtime_api
 
 import (
-	"context"
 	"encoding/json"
-	"sync"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -75,8 +72,10 @@ func newServiceModeObservabilityServer(t *testing.T) (*functionalAPIServer, chan
 
 	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
 	dispatchRelease := make(chan struct{})
-	provider := &serviceModeBlockingProvider{release: dispatchRelease}
-	return startFunctionalServer(t, dir, false, withProvider(provider)), dispatchRelease
+	return startFunctionalServer(t, dir, false, withWorkerCommands(
+		support.NewGatedSuccessCommandRunner("completed", dispatchRelease),
+		nil,
+	)), dispatchRelease
 }
 
 func newSharedServiceModeObservabilityServer(t *testing.T) (*functionalAPIServer, chan struct{}) {
@@ -84,8 +83,9 @@ func newSharedServiceModeObservabilityServer(t *testing.T) (*functionalAPIServer
 
 	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
 	dispatchRelease := make(chan struct{})
-	provider := &serviceModeBlockingProvider{release: dispatchRelease}
-	return startSharedFunctionalServer(t, dir, runtimeAPIScenario{provider: provider}), dispatchRelease
+	return startSharedFunctionalServer(t, dir, runtimeAPIScenario{
+		providerRunner: support.NewGatedSuccessCommandRunner("completed", dispatchRelease),
+	}), dispatchRelease
 }
 
 type serviceModeAPI interface {
@@ -237,28 +237,4 @@ func assertServiceModeServerStops(t *testing.T, server interface{ Done() <-chan 
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("service-mode runtime did not exit after explicit cancellation")
 	}
-}
-
-type serviceModeBlockingProvider struct {
-	release <-chan struct{}
-	mu      sync.Mutex
-	calls   int
-}
-
-func (p *serviceModeBlockingProvider) Infer(
-	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	p.mu.Lock()
-	p.calls++
-	call := p.calls
-	p.mu.Unlock()
-	if call == 1 {
-		select {
-		case <-p.release:
-		case <-ctx.Done():
-			return workerexecution.InferenceResponse{}, ctx.Err()
-		}
-	}
-	return workerexecution.InferenceResponse{Content: "completed"}, nil
 }

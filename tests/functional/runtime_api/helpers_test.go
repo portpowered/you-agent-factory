@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -16,9 +19,28 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	runtimeapifixture "github.com/portpowered/infinite-you/tests/functional/sessions/root_composition/runtime_api_fixture"
 )
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)
+
+type runtimeAPIScenario struct {
+	provider       any
+	providerRunner platformprocess.CommandRunner
+	scriptRunner   platformprocess.CommandRunner
+	models         []string
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if err := runtimeapifixture.CloseSharedFixture(); err != nil {
+		fmt.Fprintf(os.Stderr, "runtime API package fixture cleanup: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
 
 func withProvider(provider any) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
@@ -52,7 +74,7 @@ func withEnvironment(environment []string) runtimeOption {
 
 type functionalAPIServer struct {
 	*support.FunctionalAPIServer
-	shared    *runtimeAPIPackageFixture
+	shared    *runtimeapifixture.PackageFixture
 	sessionID string
 }
 
@@ -135,6 +157,103 @@ func startFunctionalServerWithArgs(
 func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, runtimeOptions ...runtimeOption) *functionalAPIServer {
 	t.Helper()
 	return startFunctionalServerWithArgs(t, factoryDir, useMockWorkers, nil, runtimeOptions...)
+}
+
+func startSharedFunctionalServer(t *testing.T, factoryDir string, scenario runtimeAPIScenario) *functionalAPIServer {
+	t.Helper()
+
+	handle := runtimeapifixture.StartSharedFunctionalServer(t, factoryDir, runtimeapifixture.Scenario{
+		Provider:       scenario.provider,
+		ProviderRunner: scenario.providerRunner,
+		ScriptRunner:   scenario.scriptRunner,
+		Models:         scenario.models,
+	})
+	return &functionalAPIServer{
+		shared:    handle.Fixture(),
+		sessionID: handle.SessionID(),
+	}
+}
+
+func (fs *functionalAPIServer) URL() string {
+	if fs == nil {
+		return ""
+	}
+	if fs.shared != nil {
+		return fs.shared.BaseURL()
+	}
+	if fs.FunctionalAPIServer != nil {
+		return fs.FunctionalAPIServer.URL()
+	}
+	return ""
+}
+
+func (fs *functionalAPIServer) sessionURL(path string) string {
+	if fs == nil || fs.sessionID == "" {
+		return ""
+	}
+	return strings.TrimSuffix(fs.URL(), "/") + "/factory-sessions/" + url.PathEscape(fs.sessionID) + path
+}
+
+func (fs *functionalAPIServer) workURL(path string) string {
+	if fs != nil && fs.shared != nil {
+		return fs.sessionURL(path)
+	}
+	return support.DefaultSessionWorkURL(fs.URL(), path)
+}
+
+func (fs *functionalAPIServer) eventsURL() string {
+	if fs != nil && fs.shared != nil {
+		return support.SessionEventsURL(fs.URL(), fs.sessionID)
+	}
+	return support.DefaultSessionEventsURL(fs.URL())
+}
+
+func (fs *functionalAPIServer) responseEventsURL() string {
+	if fs != nil && fs.shared != nil {
+		return support.SessionResponseEventsURL(fs.URL(), fs.sessionID)
+	}
+	return support.SessionResponseEventsURL(fs.URL(), "~default")
+}
+
+func (fs *functionalAPIServer) statusURL() string {
+	if fs != nil && fs.shared != nil {
+		return fs.sessionURL("/status")
+	}
+	return strings.TrimSuffix(fs.URL(), "/") + "/status"
+}
+
+func (fs *functionalAPIServer) StatusURL() string {
+	return fs.statusURL()
+}
+
+func (fs *functionalAPIServer) Session(t *testing.T) factoryapi.FactorySession {
+	t.Helper()
+	if fs != nil && fs.shared != nil {
+		response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, fs.sessionURL(""))
+		session, err := response.AsFactorySession()
+		if err != nil {
+			t.Fatalf("decode shared Factory Session: %v", err)
+		}
+		return session
+	}
+	return support.GetDefaultSession(t, fs.URL())
+}
+
+func (fs *functionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	if fs != nil && fs.shared != nil {
+		return support.GetFactoryEventsForSessionAt(t, fs.URL(), fs.sessionID)
+	}
+	return support.GetFactoryEventsAt(t, fs.URL())
+}
+
+func (fs *functionalAPIServer) openEventStream(t *testing.T) *factoryEventHTTPStream {
+	t.Helper()
+	stream := openFactoryEventHTTPStream(t, fs.eventsURL())
+	if fs != nil && fs.shared != nil {
+		stream.setCloseHook(fs.shared.TrackStream())
+	}
+	return stream
 }
 
 func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work.SubmitRequest) []work.SubmitRequest {
