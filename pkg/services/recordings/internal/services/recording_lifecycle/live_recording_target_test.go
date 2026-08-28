@@ -44,7 +44,7 @@ func TestLiveRecordingTargetPlannerReservesCanonicalUUIDInDatedLayout(t *testing
 
 	clock := platformclock.NewDeterministic(time.Date(2026, 8, 23, 18, 45, 12, 0, time.UTC), time.Second)
 	home := filepath.Join("home", "operator")
-	want := filepath.Join(home, ".you-agent-factory", "recordings", "2026", "08", "23", canonicalRecordingSessionID+".jsonl")
+	want := filepath.Join(home, ".you-agent-factory", "recordings", "2026", "08", "23", canonicalRecordingSessionID+".json")
 	reserver := &namedPathReserver{path: want}
 
 	target, err := newPlanner(clock, reserver).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
@@ -59,8 +59,8 @@ func TestLiveRecordingTargetPlannerReservesCanonicalUUIDInDatedLayout(t *testing
 		t.Fatalf("target = %#v, want both paths %q", target, want)
 	}
 	if reserver.root != filepath.Join(home, ".you-agent-factory", "recordings") ||
-		!reserver.at.Equal(clock.Now().UTC()) || reserver.name != canonicalRecordingSessionID || reserver.ext != ".jsonl" {
-		t.Fatalf("ReserveNamed request = root %q, at %s, name %q, ext %q; want dated root, controlled time, UUID, .jsonl",
+		!reserver.at.Equal(clock.Now().UTC()) || reserver.name != canonicalRecordingSessionID || reserver.ext != ".json" {
+		t.Fatalf("ReserveNamed request = root %q, at %s, name %q, ext %q; want dated root, controlled time, UUID, .json",
 			reserver.root, reserver.at, reserver.name, reserver.ext)
 	}
 	if strings.Contains(filepath.Base(target.ServicePath), "factory-session-") ||
@@ -75,7 +75,7 @@ func TestLiveRecordingTargetPlannerIgnoresReportedSessionAlias(t *testing.T) {
 
 	clock := platformclock.NewDeterministic(time.Date(2026, 8, 23, 18, 45, 12, 0, time.UTC), time.Second)
 	home := t.TempDir()
-	path := filepath.Join(home, ".you-agent-factory", "recordings", "2026", "08", "23", canonicalRecordingSessionID+".jsonl")
+	path := filepath.Join(home, ".you-agent-factory", "recordings", "2026", "08", "23", canonicalRecordingSessionID+".json")
 	first, err := newPlanner(clock, &namedPathReserver{path: path}).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
 		HomeDir: home, CanonicalSessionID: canonicalRecordingSessionID, ReportedSessionID: "~default",
 	})
@@ -99,7 +99,7 @@ func TestLiveRecordingTargetPlannerRejectsCanonicalReuseWithoutCollisionArtifact
 	clock := platformclock.NewDeterministic(time.Date(2026, 8, 23, 18, 45, 12, 0, time.UTC), time.Second)
 	home := t.TempDir()
 	recordingsRoot := filepath.Join(home, ".you-agent-factory", "recordings")
-	canonicalPath := filepath.Join(recordingsRoot, "2026", "08", "23", canonicalRecordingSessionID+".jsonl")
+	canonicalPath := filepath.Join(recordingsRoot, "2026", "08", "23", canonicalRecordingSessionID+".json")
 	if err := os.MkdirAll(filepath.Dir(canonicalPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestLiveRecordingTargetPlannerRejectsCanonicalReuseWithoutCollisionArtifact
 	if !errors.Is(err, platformruntimeartifact.ErrNamedReservationExists) {
 		t.Fatalf("canonical reuse error = %v, want ErrNamedReservationExists", err)
 	}
-	collisionPath := filepath.Join(recordingsRoot, "2026", "08", "23", canonicalRecordingSessionID+"-2.jsonl")
+	collisionPath := filepath.Join(recordingsRoot, "2026", "08", "23", canonicalRecordingSessionID+"-2.json")
 	if _, statErr := os.Stat(collisionPath); !os.IsNotExist(statErr) {
 		t.Fatalf("collision artifact stat error = %v, want no %q", statErr, collisionPath)
 	}
@@ -132,7 +132,7 @@ func TestLiveRecordingTargetPlannerRequiresCanonicalUUIDAndExactReservation(t *t
 	t.Parallel()
 
 	clock := platformclock.NewDeterministic(time.Unix(1, 0), time.Second)
-	validPath := filepath.Join("home", ".you-agent-factory", "recordings", "1970", "01", "01", canonicalRecordingSessionID+".jsonl")
+	validPath := filepath.Join("home", ".you-agent-factory", "recordings", "1970", "01", "01", canonicalRecordingSessionID+".json")
 	tests := map[string]struct {
 		planner recordings.LiveRecordingTargetPlanner
 		request recordings.LiveRecordingTargetRequest

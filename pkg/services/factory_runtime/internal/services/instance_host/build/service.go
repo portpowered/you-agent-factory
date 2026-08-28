@@ -211,7 +211,8 @@ func (s *Service) BuildReplacement(
 	return s.Build(ctx, spec)
 }
 
-// SessionScopedRecordPath substitutes per-session recording tokens in record paths.
+// SessionScopedRecordPath preserves the selected default path and scopes
+// non-default explicit paths by session identity.
 func SessionScopedRecordPath(basePath string, sessionID string) string {
 	return factory.RecordingPath(basePath).ForSession(sessionID)
 }

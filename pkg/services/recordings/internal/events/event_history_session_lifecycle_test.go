@@ -33,6 +33,66 @@ func TestFactoryEventHistoryForwardsCompletedFlushWatermark(t *testing.T) {
 	}
 }
 
+func TestFactoryEventHistory_FiltersSensitiveFactoryPointerProvenance(t *testing.T) {
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":   "factory-sensitive",
+		"nested": map[string]any{"key": "value"},
+		"items": []any{
+			map[string]any{"name": "first", "a/b": "slash", "a~b": "tilde"},
+			map[string]any{"name": "second"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	history.SetInitialStructureFactory(snapshot)
+	history.SetInvocationSensitiveJSONPointers([]string{
+		"",
+		"/name",
+		"/nested/key",
+		"/items/0/name",
+		"/items/0/a~1b",
+		"/items/0/a~0b",
+		"/items/1/name",
+		"/missing",
+		"/items/0/a~2b",
+		"/items/0/a~",
+	})
+
+	var duringAppend []recordings.RecordingSecret
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		duringAppend = history.SecretProvenanceDuringAppend(event)
+	})
+	history.RecordInitialStructure()
+
+	events := history.CanonicalEvents()
+	if len(events) != 1 {
+		t.Fatalf("canonical events = %d, want one initial structure event", len(events))
+	}
+	provenance := history.SecretProvenanceForEvent(events[0])
+	wantPointers := []string{
+		"/factory",
+		"/factory/name",
+		"/factory/nested/key",
+		"/factory/items/0/name",
+		"/factory/items/0/a~1b",
+		"/factory/items/0/a~0b",
+		"/factory/items/1/name",
+	}
+	if len(provenance) != len(wantPointers) || len(duringAppend) != len(wantPointers) {
+		t.Fatalf("filtered provenance = %#v, callback provenance = %#v, want %d entries", provenance, duringAppend, len(wantPointers))
+	}
+	for index, want := range wantPointers {
+		if provenance[index].JSONPointer != want || provenance[index].Provenance != recordings.RecordingSecretProvenanceDeclared {
+			t.Fatalf("provenance[%d] = %#v, want declared pointer %q", index, provenance[index], want)
+		}
+		if duringAppend[index] != provenance[index] {
+			t.Fatalf("during-append provenance[%d] = %#v, want detached copy %#v", index, duringAppend[index], provenance[index])
+		}
+	}
+}
+
 func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketSequence(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 12, 10, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
@@ -212,6 +272,96 @@ func TestFactoryStateToDurableLifecycleStatus_MapsLiveFactoryStates(t *testing.T
 	}
 	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != interfaces.FactorySessionLifecycleStatusRunning {
 		t.Fatalf("running = %q, want RUNNING", got)
+	}
+}
+
+func TestFactoryEventHistory_SessionLifecycleGuardsAndOptionalPayloads(t *testing.T) {
+	t.Parallel()
+
+	t0 := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionPaused(SessionLifecycleControlInput{}, t0)
+	history.RecordSessionResumed(SessionLifecycleControlInput{}, t0)
+	history.RecordSessionStarted(SessionLifecycleStartInput{}, t0)
+	history.RecordSessionResultUpdated(SessionLifecycleResultInput{SessionID: "session-rich"}, t0)
+	history.RecordSessionCompleted(SessionLifecycleCompleteInput{}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID: "session-rich",
+		Outcome:   interfaces.FactorySessionLifecycleControlOutcome("REJECTED"),
+	}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID: "session-rich",
+		Outcome:   interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		Operation: interfaces.FactorySessionLifecycleControlKind("unsupported"),
+	}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID:      "session-rich",
+		Outcome:        interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		Operation:      interfaces.FactorySessionLifecycleControlPause,
+		PreviousStatus: interfaces.FactorySessionLifecycleStatusRunning,
+		NewStatus:      interfaces.FactorySessionLifecycleStatusRunning,
+	}, t0)
+
+	history.RecordSessionStarted(SessionLifecycleStartInput{
+		SessionID:           "session-rich",
+		OrchestratorKind:    interfaces.OrchestratorKindJavaScript,
+		OrchestratorDialect: "workflow-v1",
+		Source:              "runtime",
+		FactoryID:           "factory-rich",
+		SourceRef:           "workflow/main.js",
+		SourceHash:          "sha256:source",
+		PolicyHash:          "sha256:policy",
+		ArgsDigest:          "sha256:args",
+		Tick:                1,
+	}, t0)
+	// SESSION_STARTED is idempotent for a recording.
+	history.RecordSessionStarted(SessionLifecycleStartInput{SessionID: "session-rich"}, t0.Add(time.Second))
+	history.RecordSessionResultUpdated(SessionLifecycleResultInput{
+		SessionID:        "session-rich",
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		PhaseID:          "phase-review",
+		PhaseName:        "review",
+		Source:           "runtime",
+		Tick:             2,
+		ResultStatus:     interfaces.FactorySessionResultStatusFinal,
+		ResultSummary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "final result",
+		}},
+		ArtifactIDs: []string{"artifact-1"},
+	}, t0.Add(2*time.Second))
+
+	resultStatus := interfaces.FactorySessionResultStatusFailedWithPartial
+	history.RecordSessionCompleted(SessionLifecycleCompleteInput{
+		SessionID:        "session-rich",
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Source:           "runtime",
+		Tick:             3,
+		FinalStatus:      interfaces.FactorySessionLifecycleStatusFailed,
+		ResultStatus:     &resultStatus,
+		ArtifactIDs:      []string{"artifact-2"},
+		DispatchCounts:   &interfaces.FactorySessionChildDispatchCounts{Queued: 1, Running: 2, Completed: 3},
+		FailureDetail: &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureTypeUnknown,
+			Message: "partial failure",
+		},
+	}, t0.Add(-time.Second))
+	// SESSION_COMPLETED is also idempotent.
+	history.RecordSessionCompleted(SessionLifecycleCompleteInput{SessionID: "session-rich"}, t0.Add(4*time.Second))
+
+	events := history.CanonicalEvents()
+	if len(events) != 3 || events[0].Type != interfaces.FactoryEventTypeSessionStarted ||
+		events[1].Type != interfaces.FactoryEventTypeSessionResultUpdated ||
+		events[2].Type != interfaces.FactoryEventTypeSessionCompleted {
+		t.Fatalf("session lifecycle events = %#v, want started/result/completed", events)
+	}
+	var completed interfaces.FactorySessionCompletedEventPayload
+	if err := events[2].DecodePayload(&completed); err != nil {
+		t.Fatalf("decode completed payload: %v", err)
+	}
+	if completed.DurationMillis == nil || *completed.DurationMillis != 0 || completed.DispatchCounts == nil ||
+		completed.DispatchCounts.Queued != 1 || completed.FailureDetail == nil || completed.FailureDetail.Message != "partial failure" {
+		t.Fatalf("completed payload = %#v, want clamped duration and optional fields", completed)
 	}
 }
 

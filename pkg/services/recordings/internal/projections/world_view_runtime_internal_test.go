@@ -10,6 +10,182 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestFactoryWorldReducerRejectsMalformedOwnerEvents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		eventType interfaces.FactoryEventType
+		apply     func(*factoryWorldReducer, interfaces.FactoryEvent) error
+	}{
+		{name: "work state", eventType: interfaces.FactoryEventTypeWorkStateChange, apply: (*factoryWorldReducer).applyWorkStateChangeEvent},
+		{name: "dispatch request", eventType: interfaces.FactoryEventTypeDispatchRequest, apply: (*factoryWorldReducer).applyDispatchRequestEvent},
+		{name: "dispatch response", eventType: interfaces.FactoryEventTypeDispatchResponse, apply: (*factoryWorldReducer).applyDispatchResponseEvent},
+		{name: "factory state", eventType: interfaces.FactoryEventTypeFactoryStateResponse, apply: (*factoryWorldReducer).applyFactoryStateResponseEvent},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertMalformedOwnerEvent(t, test.name, test.eventType, test.apply)
+		})
+	}
+}
+
+func assertMalformedOwnerEvent(
+	t *testing.T,
+	name string,
+	eventType interfaces.FactoryEventType,
+	apply func(*factoryWorldReducer, interfaces.FactoryEvent) error,
+) {
+	t.Helper()
+	if err := apply(newFactoryWorldReducer(0), interfaces.FactoryEvent{
+		Type:    eventType,
+		Payload: []byte("{"),
+	}); err == nil {
+		t.Fatalf("malformed %s event returned nil error", name)
+	}
+}
+
+func TestFactoryWorldReducerRejectsMalformedStructureEvents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		eventType interfaces.FactoryEventType
+		payload   any
+	}{
+		{name: "run request", eventType: interfaces.FactoryEventTypeRunRequest, payload: interfaces.RunRequestEventPayload{}},
+		{name: "initial structure", eventType: interfaces.FactoryEventTypeInitialStructureRequest, payload: interfaces.InitialStructureRequestEventPayload{}},
+		{name: "factory change", eventType: interfaces.FactoryEventTypeFactoryChange, payload: interfaces.FactoryChangeEventPayload{}},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if err := newFactoryWorldReducer(0).applyStructureEvent(canonicalWorldProjectionEvent(t, test.eventType, interfaces.FactoryEventContext{}, test.payload)); err == nil {
+				t.Fatalf("nil Factory snapshot in %s returned nil error", test.name)
+			}
+		})
+	}
+}
+
+func TestFactoryWorldReducerRejectsMissingPayloads(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		eventType interfaces.FactoryEventType
+		apply     func(*factoryWorldReducer, interfaces.FactoryEvent) error
+	}{
+		{name: "work request", eventType: interfaces.FactoryEventTypeWorkRequest, apply: (*factoryWorldReducer).applyWorkRequestEvent},
+		{name: "relationship change", eventType: interfaces.FactoryEventTypeRelationshipChangeRequest, apply: (*factoryWorldReducer).applyRelationshipChangeEvent},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if err := test.apply(newFactoryWorldReducer(0), canonicalWorldProjectionEvent(t, test.eventType, interfaces.FactoryEventContext{}, struct{}{})); err == nil {
+				t.Fatalf("empty %s payload returned nil error", test.name)
+			}
+		})
+	}
+}
+
+func TestFactoryWorldReducerHandlesEmptyOutputRoutes(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(0)
+	if err := reducer.applyCanonicalFactory(nil); err == nil {
+		t.Fatal("nil Factory snapshot returned nil error")
+	}
+	if got := reducer.outputPlaceForWork("missing", workerexecution.OutcomeContinue, "task"); got != "" {
+		t.Fatalf("unknown workstation output place = %q, want empty", got)
+	}
+	if got := reducer.outputPlaceForOutcome(interfaces.FactoryWorkstation{}, workerexecution.OutcomeContinue, "task"); got != "" {
+		t.Fatalf("empty continue route = %q, want empty", got)
+	}
+	if got := reducer.outputPlaceForOutcome(interfaces.FactoryWorkstation{}, workerexecution.OutcomeRejected, "task"); got != "" {
+		t.Fatalf("empty rejection route = %q, want empty", got)
+	}
+}
+
+func TestFactoryWorldReducerHandlesMissingResourceRoutes(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(0)
+	if got := reducer.firstAvailableResourceTokenID(""); got != "" {
+		t.Fatalf("empty resource ID token = %q, want empty", got)
+	}
+	if got := reducer.firstAvailableResourceTokenID("missing"); got != "" {
+		t.Fatalf("missing resource token = %q, want empty", got)
+	}
+}
+
+func TestFactoryWorldReducerHandlesEmptyResourceRefs(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(0)
+	if got := reducer.consumeResourceUnits(nil); got != nil {
+		t.Fatalf("nil resource refs = %#v, want nil", got)
+	}
+	emptyResources := []interfaces.DispatchResourceRef{}
+	if got := reducer.consumeResourceUnits(&emptyResources); got != nil {
+		t.Fatalf("empty resource refs = %#v, want nil", got)
+	}
+	unnamedResources := []interfaces.DispatchResourceRef{{}}
+	if got := reducer.consumeResourceUnits(&unnamedResources); len(got) != 0 {
+		t.Fatalf("unnamed resource refs = %#v, want no consumed units", got)
+	}
+}
+
+func TestFactoryWorldReducerReleasesMatchingResources(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(0)
+	consumed := []interfaces.FactoryResourceUnit{{ResourceID: "reviewers", TokenID: "resource-token"}}
+	otherResource := []workerexecution.DispatchResourceEventRef{{Name: "other"}}
+	reducer.releaseResourceUnits(consumed, &otherResource)
+	reducer.releaseResourceUnits(consumed, &[]workerexecution.DispatchResourceEventRef{{Name: "reviewers"}})
+	if got := firstConsumedResourceIndex(consumed, []bool{true}, "reviewers"); got != -1 {
+		t.Fatalf("released resource index = %d, want -1", got)
+	}
+}
+
+func TestFactoryWorldReducerPreservesEmptyIdentityNoOps(t *testing.T) {
+	t.Parallel()
+
+	// Empty identities are no-ops for the trace indexes and token bookkeeping.
+	reducer := newFactoryWorldReducer(0)
+	item := work.FactoryWorkItem{ID: "work-1"}
+	reducer.addWorkToken("", "task:ready", item)
+	reducer.addWorkToken("token-1", "", item)
+	reducer.removeToken("")
+	reducer.addTraceWork("", "work-1")
+	reducer.addTraceDispatch("", "dispatch-1")
+	reducer.addTraceTerminal("", "work-1")
+	reducer.addTraceFailed("", "work-1")
+	reducer.removeTraceFailed("", "work-1")
+	reducer.removeTraceTerminal("", "work-1")
+}
+
+func TestFactoryWorldReducerHelperFallbacks(t *testing.T) {
+	t.Parallel()
+
+	if got := firstNonEmpty("", "", "selected"); got != "selected" {
+		t.Fatalf("firstNonEmpty = %q, want selected", got)
+	}
+	if got := firstNonEmpty("", ""); got != "" {
+		t.Fatalf("empty firstNonEmpty = %q, want empty", got)
+	}
+	if got := removeString([]string{"work"}, ""); len(got) != 1 || got[0] != "work" {
+		t.Fatalf("removeString empty target = %#v, want original value", got)
+	}
+	if got := removeString(nil, "work"); got != nil {
+		t.Fatalf("removeString empty values = %#v, want nil", got)
+	}
+}
+
 func TestFactoryWorldReducerAppliesCanonicalStructureAndStateEvents(t *testing.T) {
 	t.Parallel()
 	eventTime := time.Date(2026, time.July, 16, 2, 0, 0, 0, time.UTC)

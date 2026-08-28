@@ -37,7 +37,7 @@ func TestCommittedBudgetSchemaAndInstancePassDraft202012Compiler(t *testing.T) {
 	// The retained timing samples remain the historical 18,122-test baseline.
 	// Final mode uses the reviewed current-head inventory from the latest
 	// complete Ubuntu unit-lane capture.
-	const reviewedCurrentHeadTestCount = 18156
+	const reviewedCurrentHeadTestCount = 18217
 	if budget.Reference.MedianWallSeconds != 239.612 || len(budget.Reference.PackageInventory) != 444 || len(budget.Reference.TestInventory) != reviewedCurrentHeadTestCount {
 		t.Fatalf("loaded budget reference = median %.3f, packages %d, tests %d; want 239.612/444/%d", budget.Reference.MedianWallSeconds, len(budget.Reference.PackageInventory), len(budget.Reference.TestInventory), reviewedCurrentHeadTestCount)
 	}
