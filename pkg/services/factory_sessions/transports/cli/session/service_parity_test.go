@@ -59,7 +59,7 @@ func TestConstructedService_ShowHumanAndJSONMatchPackageCommands(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(sessionShowTestHandler(t, nil))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	service := constructedService(t)
 	protocol := testHTTPProtocol(t)
@@ -168,7 +168,7 @@ func TestConstructedService_CreateHumanAndJSONMatchPackageCommands(t *testing.T)
 			},
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	service := constructedService(t)
 	protocol := testHTTPProtocol(t)
@@ -202,7 +202,7 @@ func TestConstructedService_DeleteHumanAndJSONMatchPackageCommands(t *testing.T)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer srv.Close()
+	t.Cleanup(func() { srv.Close() })
 
 	service := constructedService(t)
 	protocol := testHTTPProtocol(t)
