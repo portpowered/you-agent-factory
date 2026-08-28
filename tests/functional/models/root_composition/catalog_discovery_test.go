@@ -239,7 +239,11 @@ func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWith
 	expectedFactoryName string,
 ) {
 	fixture := ensureSharedModelsFixture(t)
-	fixture.withSession(t, "catalog capability and Factory precedence", expectedFactoryName, func(sessionID, factoryDir string) {
+	factoryDir := fixture.rootDir
+	if barrier != nil {
+		factoryDir = fixture.createSessionFactory(t, expectedFactoryName)
+	}
+	fixture.withSession(t, "catalog capability and Factory precedence", expectedFactoryName, factoryDir, func(sessionID, sessionFactoryDir string) {
 		barrier.wait(t)
 		scenarioComplete := false
 		defer func() {
@@ -249,7 +253,7 @@ func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedenceWith
 		}()
 		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
 		if barrier != nil {
-			assertSharedModelsSessionRouteIsolation(t, fixture, sessionID, factoryDir)
+			assertSharedModelsSessionRouteIsolation(t, fixture, sessionID, sessionFactoryDir)
 		}
 		listed := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.baseURL+"/models")
 		catalogModel := findCatalogModel(t, listed.Results, "OMNIVOICE_Q4_K_M", "GET /models")
@@ -338,7 +342,11 @@ func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
 	expectedFactoryName string,
 ) {
 	fixture := ensureSharedModelsFixture(t)
-	fixture.withSession(t, "unknown model detail", expectedFactoryName, func(sessionID, factoryDir string) {
+	factoryDir := fixture.rootDir
+	if barrier != nil {
+		factoryDir = fixture.createSessionFactory(t, expectedFactoryName)
+	}
+	fixture.withSession(t, "unknown model detail", expectedFactoryName, factoryDir, func(sessionID, sessionFactoryDir string) {
 		barrier.wait(t)
 		scenarioComplete := false
 		defer func() {
@@ -348,7 +356,7 @@ func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
 		}()
 		assertSharedModelsSessionIdentity(t, fixture.baseURL, sessionID)
 		if barrier != nil {
-			assertSharedModelsSessionRouteIsolation(t, fixture, sessionID, factoryDir)
+			assertSharedModelsSessionRouteIsolation(t, fixture, sessionID, sessionFactoryDir)
 		}
 		endpoint := fixture.baseURL + "/models/missing-catalog-model"
 		response, err := http.Get(endpoint)

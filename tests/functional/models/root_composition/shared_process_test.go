@@ -372,11 +372,11 @@ func (fixture *sharedModelsFixture) withSession(
 	t *testing.T,
 	label string,
 	factoryName string,
+	factoryDir string,
 	observe func(string, string),
 ) {
 	t.Helper()
 
-	factoryDir := fixture.createSessionFactory(t, factoryName)
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
 	sessionID := opened.Session.Id
 	if sessionID == factorysessions.DefaultSessionID {
