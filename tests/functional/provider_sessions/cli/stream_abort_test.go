@@ -16,37 +16,38 @@ import (
 	"testing"
 	"time"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess(t *testing.T) {
-	streamServer := newAbortedWorkerSessionStreamServer(t)
+	const workerSessionID = "worker-session-root-abort"
+	streamServer := newAbortedWorkerSessionStreamServer(t, workerSessionID)
 	defer streamServer.Close()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), workerSessionAbortArgs(streamServer.URL))
-	inputs.Input.Env = functionalEnvironment(t.TempDir())
-	inputs.Input.WorkingDirectory = t.TempDir()
+	fixture := workerSessionsCLIProcess(t)
+	inputs := support.FakeInputs(t.Context(), workerSessionAbortArgs(streamServer.URL, "provider-session-root-abort"))
+	inputs.Input.Env = functionalEnvironment(fixture.homeDir)
+	inputs.Input.WorkingDirectory = fixture.hostFactory
 
-	err := process.Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	var typed *workersessionscli.CLIError
 	if !errors.As(err, &typed) || typed.Code != "WORKER_SESSION_STREAM_CLOSED" {
 		t.Fatalf("Process.Execute() error = %v, want typed WORKER_SESSION_STREAM_CLOSED", err)
 	}
-	assertWorkerSessionStreamAbortOutput(t, inputs.Stdout(), inputs.Stderr())
+	assertWorkerSessionStreamAbortOutput(t, inputs.Stdout(), inputs.Stderr(), workerSessionID)
+	assertNoActiveProviderCommandRoutes(t, fixture.runner, "root-process abrupt stream close")
 }
 
 func TestBuiltWorkerSessionsStreamAbortExitsNonZero(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), workerSessionAbortTestTimeout)
 	defer cancel()
-	streamServer := newAbortedWorkerSessionStreamServer(t)
+	const workerSessionID = "worker-session-built-abort"
+	streamServer := newAbortedWorkerSessionStreamServer(t, workerSessionID)
 	defer streamServer.Close()
 
-	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL)[1:]...)
+	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL, "provider-session-built-abort")[1:]...)
 	command.Dir = t.TempDir()
 	command.Env = functionalEnvironment(t.TempDir())
 	var stdout, stderr bytes.Buffer
@@ -61,7 +62,7 @@ func TestBuiltWorkerSessionsStreamAbortExitsNonZero(t *testing.T) {
 	if exitErr.ExitCode() == 0 {
 		t.Fatalf("built Worker Sessions stream exit code = %d, want non-zero", exitErr.ExitCode())
 	}
-	assertWorkerSessionStreamAbortOutput(t, stdout.String(), stderr.String())
+	assertWorkerSessionStreamAbortOutput(t, stdout.String(), stderr.String(), workerSessionID)
 }
 
 func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
@@ -69,6 +70,7 @@ func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
 		t.Skip("os.Interrupt is not supported for child processes on Windows")
 	}
 
+	const workerSessionID = "worker-session-built-cancel"
 	streamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
@@ -76,7 +78,7 @@ func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
 			t.Errorf("stream response writer does not support flushing")
 			return
 		}
-		_, _ = fmt.Fprint(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-cancel\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-session-cancel\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":%q,\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":%q,\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n", workerSessionID, workerSessionID)
 		flusher.Flush()
 		<-r.Context().Done()
 	}))
@@ -84,7 +86,7 @@ func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), workerSessionAbortTestTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL)[1:]...)
+	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t), workerSessionAbortArgs(streamServer.URL, "provider-session-built-cancel")[1:]...)
 	command.Dir = t.TempDir()
 	command.Env = functionalEnvironment(t.TempDir())
 	stdout, err := command.StdoutPipe()
@@ -118,7 +120,7 @@ func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
 	select {
 	case line := <-frame:
 		retainedFrame = line
-		if !strings.Contains(line, `"delivery":"RECORD"`) {
+		if !strings.Contains(line, `"delivery":"RECORD"`) || !strings.Contains(line, workerSessionID) {
 			t.Fatalf("Worker Sessions cancellation frame = %q, want retained RECORD frame", line)
 		}
 	case err := <-scanErr:
@@ -156,7 +158,7 @@ func TestBuiltWorkerSessionsStreamCancellationExits130(t *testing.T) {
 
 const workerSessionAbortTestTimeout = 60 * time.Second
 
-func newAbortedWorkerSessionStreamServer(t *testing.T) *httptest.Server {
+func newAbortedWorkerSessionStreamServer(t *testing.T, workerSessionID string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -165,19 +167,19 @@ func newAbortedWorkerSessionStreamServer(t *testing.T) *httptest.Server {
 			t.Errorf("aborted stream response writer does not support flushing")
 			return
 		}
-		_, _ = fmt.Fprint(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":\"worker-session-abort\",\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":\"worker-session-abort\",\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"delivery\":\"RECORD\",\"workerSessionId\":%q,\"providerSession\":null,\"workIds\":[],\"event\":{\"position\":1,\"sourceType\":\"worker_session\",\"sourceId\":%q,\"sourceSequence\":1,\"sourceEventId\":\"event-1\",\"schemaId\":\"worker_session.started\",\"payload\":{\"state\":\"RUNNING\"}},\"errorCode\":null,\"errorMessage\":null}\n\n", workerSessionID, workerSessionID)
 		flusher.Flush()
 	}))
 }
 
-func workerSessionAbortArgs(serverURL string) []string {
+func workerSessionAbortArgs(serverURL, providerSessionID string) []string {
 	return []string{
 		"you", "--server", serverURL, "worker-sessions", "stream",
-		"--provider", "codex", "--kind", "session_id", "--id", "provider-session-abort", "--output", "json",
+		"--provider", "codex", "--kind", "session_id", "--id", providerSessionID, "--output", "json",
 	}
 }
 
-func assertWorkerSessionStreamAbortOutput(t *testing.T, stdout, stderr string) {
+func assertWorkerSessionStreamAbortOutput(t *testing.T, stdout, stderr, workerSessionID string) {
 	t.Helper()
 	lines := nonEmptyLines(stdout)
 	if len(lines) != 1 {
@@ -187,7 +189,7 @@ func assertWorkerSessionStreamAbortOutput(t *testing.T, stdout, stderr string) {
 	if err := json.Unmarshal([]byte(lines[0]), &frame); err != nil {
 		t.Fatalf("decode retained Worker Session frame: %v\nstdout:%s", err, stdout)
 	}
-	if frame.Delivery != "RECORD" || frame.Event == nil || frame.Event.Position != 1 {
+	if frame.Delivery != "RECORD" || frame.Event == nil || frame.Event.Position != 1 || frame.WorkerSessionID != workerSessionID {
 		t.Fatalf("retained stream frame = %#v, want one RECORD at position 1", frame)
 	}
 	if strings.Contains(stdout, "TERMINAL") || strings.Contains(stdout, "REPLAY_SUMMARY") {
@@ -216,13 +218,15 @@ type workerSessionReplaySummaryJSON struct {
 	EventsEmitted int64  `json:"eventsEmitted"`
 }
 type streamFrameJSON struct {
-	Delivery        string                          `json:"delivery"`
-	ErrorCode       *string                         `json:"errorCode"`
-	ErrorMessage    *string                         `json:"errorMessage"`
-	Event           *streamEventJSON                `json:"event"`
-	ProviderSession *providerSessionJSON            `json:"providerSession"`
-	ReplaySummary   *workerSessionReplaySummaryJSON `json:"replaySummary"`
-	WorkIDs         []string                        `json:"workIds"`
+	Delivery         string                          `json:"delivery"`
+	ErrorCode        *string                         `json:"errorCode"`
+	ErrorMessage     *string                         `json:"errorMessage"`
+	Event            *streamEventJSON                `json:"event"`
+	FactorySessionID *string                         `json:"factorySessionId"`
+	ProviderSession  *providerSessionJSON            `json:"providerSession"`
+	ReplaySummary    *workerSessionReplaySummaryJSON `json:"replaySummary"`
+	WorkIDs          []string                        `json:"workIds"`
+	WorkerSessionID  string                          `json:"workerSessionId"`
 }
 
 type streamEventJSON struct {
