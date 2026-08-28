@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -36,11 +35,11 @@ args: ["test", "./..."]
 Execute the story.
 `)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	canonical, err := support.FlattenFactoryConfigWithProcess(
+	process := buildDefinitionsProcess(t)
+	canonical, err := support.FlattenFactoryConfigWithProcessAndEnv(
 		t,
 		process,
+		isolatedHomeEnvironment(t),
 		dir,
 	)
 	if err != nil {
@@ -150,8 +149,7 @@ func assertCompileFailures(t *testing.T, service factorydefinitions.Service) {
 // before it creates or activates a durable Factory directory.
 func TestFactoryDefinitionsRejectInvalidReferenceWithoutPersistence(t *testing.T) {
 	dir := support.ScaffoldFactory(t, compilationInvalidFactoryConfig())
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := buildDefinitionsProcess(t)
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "factories")
 	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
 		t.Fatalf("create named Factory root: %v", err)
@@ -162,6 +160,7 @@ func TestFactoryDefinitionsRejectInvalidReferenceWithoutPersistence(t *testing.T
 		"--from", filepath.Join(dir, factorydefinitions.FactoryConfigFile),
 		"--dir", namedFactoriesRoot,
 	})
+	inputs.Input.Env = isolatedHomeEnvironment(t)
 	inputs.Input.WorkingDirectory = dir
 	err := process.Execute(inputs.Input)
 	if err == nil {

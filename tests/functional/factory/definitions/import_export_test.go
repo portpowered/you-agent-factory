@@ -47,12 +47,12 @@ func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
 		Stdout: support.CodexSuccessStdout("Done. COMPLETE"),
 	})
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	process := buildDefinitionsProcess(t)
 
-	exported, err := support.FlattenFactoryConfigWithProcess(
+	exported, err := support.FlattenFactoryConfigWithProcessAndEnv(
 		t,
 		process,
+		isolatedHomeEnvironment(t),
 		filepath.Join(sourceDir, "factory.json"),
 	)
 	if err != nil {
@@ -132,12 +132,12 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
 	)
 	seedImportExportPortableFilesOnDisk(t, sourceDir)
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	process := buildDefinitionsProcess(t)
 
-	exported, err := support.FlattenFactoryConfigWithProcess(
+	exported, err := support.FlattenFactoryConfigWithProcessAndEnv(
 		t,
 		process,
+		isolatedHomeEnvironment(t),
 		filepath.Join(sourceDir, "factory.json"),
 	)
 	if err != nil {
@@ -228,10 +228,9 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 // the prior Current Factory definition unchanged on public readback.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
-	runner := support.NewRecordingCommandRunner("runtime must not execute during invalid import")
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	runner := sharedDefinitionsProviderRunner(t)
+	providerCallsBefore := runner.CallCount()
+	process := buildDefinitionsProcess(t)
 
 	homeDir := t.TempDir()
 	workingDir := t.TempDir()
@@ -356,8 +355,12 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 		t.Fatalf("factory list missing current factory %q; entries=%#v", importExportCurrentName, listEntries)
 	}
 
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 during rejected import", runner.CallCount())
+	if runner.CallCount() != providerCallsBefore {
+		t.Fatalf(
+			"provider command runner calls = %d, want unchanged %d during rejected import",
+			runner.CallCount(),
+			providerCallsBefore,
+		)
 	}
 }
 

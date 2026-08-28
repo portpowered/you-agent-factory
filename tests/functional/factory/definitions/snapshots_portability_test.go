@@ -22,7 +22,6 @@ func TestFactoryDefinitionsPortableSnapshotRoundTripThroughServiceRoot(t *testin
 	seedImportExportPortableFilesOnDisk(t, sourceDir)
 
 	process := buildDefinitionsProcess(t)
-	support.CleanupProcess(t, process)
 	canonical := snapshotCanonicalSource(t, process, sourceDir)
 
 	service := newFunctionalDefinitionsService(t)
@@ -35,9 +34,10 @@ func TestFactoryDefinitionsPortableSnapshotRoundTripThroughServiceRoot(t *testin
 
 func snapshotCanonicalSource(t *testing.T, process support.Process, sourceDir string) []byte {
 	t.Helper()
-	canonical, err := support.FlattenFactoryConfigWithProcess(
+	canonical, err := support.FlattenFactoryConfigWithProcessAndEnv(
 		t,
 		process,
+		isolatedHomeEnvironment(t),
 		filepath.Join(sourceDir, factorydefinitions.FactoryConfigFile),
 	)
 	if err != nil {

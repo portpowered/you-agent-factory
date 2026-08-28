@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestFactoryValidationDocsCommandDescribesStaticGate(t *testing.T) {
 	inputs := support.FakeInputs(t.Context(), []string{"you", "docs", "factory-validation"})
+	inputs.Input.Env = isolatedHomeEnvironment(t)
 	inputs.Input.WorkingDirectory = t.TempDir()
 
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := buildDefinitionsProcess(t).Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(docs factory-validation) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
