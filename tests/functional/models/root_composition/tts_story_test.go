@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,8 +43,8 @@ type ttsStory struct {
 
 func setupTTSStory(t *testing.T) ttsStory {
 	t.Helper()
-	fixture := localai.Start(t)
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	fixture := characterizationStartLocalAI(t)
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -78,7 +77,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 		}
 		return fixture.InvocationBackend(ctx, request)
 	}
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,

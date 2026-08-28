@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,8 +52,8 @@ type asrStory struct {
 
 func setupASRStory(t *testing.T) asrStory {
 	t.Helper()
-	fixture := localai.Start(t)
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	fixture := characterizationStartLocalAI(t)
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -107,7 +106,7 @@ func setupASRStory(t *testing.T) asrStory {
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	var backendSelections []serviceedges.ModelBackendArtifactSelectionRequest
 	dir := support.ScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,

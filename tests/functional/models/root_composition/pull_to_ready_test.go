@@ -268,6 +268,7 @@ func newPullToReadyAssetClient(body []byte) *pullToReadyAssetClient {
 }
 
 func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response, error) {
+	c06Ledger.assetHTTPCalls.Add(1)
 	client.calls.Add(1)
 	var body io.Reader
 	switch request.URL.Path {

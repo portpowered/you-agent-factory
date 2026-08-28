@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -28,7 +27,7 @@ func TestModelsReadinessAssetsHostEffectsRemainInertThroughRootBuildProcess(t *t
 	t.Parallel()
 
 	recorder := newModelEffectRecorder()
-	_ = support.BuildProcess(t, recorder.edges())
+	_ = characterizationBuildProcess(t, recorder.edges())
 
 	if got := recorder.totalReadiness(); got != 0 {
 		t.Fatalf("readiness effect calls = %d during BuildProcess, want 0", got)
@@ -49,7 +48,7 @@ func TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle(
 	t.Parallel()
 
 	audio := []byte("RIFF....WAVE")
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/health":
 			writer.WriteHeader(http.StatusOK)
@@ -82,7 +81,7 @@ func TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle(
 
 	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
 	environment := append(os.Environ(), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
@@ -287,6 +286,7 @@ func (client *rejectingModelAssetHTTP) Do(*http.Request) (*http.Response, error)
 	client.mu.Lock()
 	client.calls++
 	client.mu.Unlock()
+	c06Ledger.assetHTTPCalls.Add(1)
 	return nil, fmt.Errorf("unexpected model asset network request")
 }
 
@@ -318,6 +318,7 @@ func (launcher *recordingModelHostLauncher) Start(
 		return nil, fmt.Errorf("model host fixture: previous process is still active")
 	}
 	launcher.calls++
+	c06Ledger.hostStarts.Add(1)
 	launcher.active = true
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()

@@ -28,7 +28,7 @@ import (
 func TestGenericModelContractsRemainDetachedAtApplicationRoot(t *testing.T) {
 	t.Parallel()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
 	if err := process.Execute(help.Input); err != nil {
 		t.Fatalf("Process.Execute(session show help) error = %v", err)
@@ -173,7 +173,7 @@ func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t 
 	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
 	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},
@@ -231,7 +231,7 @@ func TestModelsRootCompositionModelScenarios(t *testing.T) {
 // model name.
 func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
 	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},
@@ -302,7 +302,7 @@ func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *
 // model name.
 func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
 	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},
@@ -347,7 +347,7 @@ func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t 
 // contract instead of exposing an internal runtime failure.
 func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},
@@ -388,7 +388,7 @@ func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 		t.Fatalf("GET %s = status %d, failure %#v; want typed blank-name not-found 404", invalidEndpoint, invalidResponse.StatusCode, invalidFailure)
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "inspect", "missing-catalog-model",
 	})
@@ -403,7 +403,7 @@ func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 // model definition before any model host or provider effect is attempted.
 func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T) {
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},
@@ -427,7 +427,7 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 		t.Fatalf("POST %s = status %d, failure %#v; want typed bad-request 400", endpoint, response.StatusCode, failure)
 	}
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "invoke", "tts",
 		"--operation", "ASR", "--text", "unsupported catalog operation",
@@ -444,7 +444,7 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
 	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       cache.Environment,
@@ -482,7 +482,7 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 func TestModelsCatalogReadinessCancellationReturnsPublicFailure(t *testing.T) {
 	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       cache.Environment,
@@ -515,7 +515,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
-	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
 		if inspections.Add(1) <= 1 {
 			return nil, os.ErrNotExist
 		}
@@ -546,7 +546,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
-	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
 		return nil, context.Canceled
 	}))
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -573,7 +573,7 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var startOnce sync.Once
-	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
 		startOnce.Do(func() { close(started) })
 		<-release
 		return nil, context.Canceled
@@ -613,7 +613,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
-	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
 		if inspections.Add(1) == 1 {
 			return nil, os.ErrNotExist
 		}
@@ -643,7 +643,7 @@ func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *te
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	var inspections atomic.Int32
-	process := support.BuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
+	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
 		if inspections.Add(1) >= 2 {
 			cancel()
 		}
@@ -733,7 +733,7 @@ func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},
@@ -786,7 +786,7 @@ func TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP(t *testing.T) 
 	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
@@ -827,7 +827,7 @@ func TestModelsCatalogProjectsCustomModelThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, catalogCustomModelFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},

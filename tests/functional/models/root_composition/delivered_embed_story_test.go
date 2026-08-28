@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,7 +99,7 @@ func TestDeliveredEmbedHTTPArtifactReachesProtocolFixture(t *testing.T) {
 		t.Fatalf("write delivered server factory config: %v", err)
 	}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := characterizationListen(t, "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve delivered HTTP port: %v", err)
 	}
@@ -266,7 +265,7 @@ type deliveredEmbedFixture struct {
 func newDeliveredEmbedFixture(t *testing.T) *deliveredEmbedFixture {
 	t.Helper()
 	fixture := &deliveredEmbedFixture{}
-	fixture.server = httptest.NewServer(http.HandlerFunc(fixture.serveHTTP))
+	fixture.server = characterizationNewHTTPServer(t, http.HandlerFunc(fixture.serveHTTP))
 	t.Cleanup(fixture.server.Close)
 	return fixture
 }

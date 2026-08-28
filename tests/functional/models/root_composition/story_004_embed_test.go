@@ -47,7 +47,7 @@ func testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := newStory004EmbedFixture()
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := support.BuildProcess(t, story004EmbedEdges(
+	process := characterizationBuildProcess(t, story004EmbedEdges(
 		home, assetNetwork, hostServer.Client(), launcher, protocol, compatibility,
 		selection, fixture,
 	))
@@ -149,7 +149,7 @@ func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(
 		receivedLimit = maxBytes
 		return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
 	}
-	process := support.BuildProcess(t, edges)
+	process := characterizationBuildProcess(t, edges)
 	support.CleanupProcess(t, process)
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 
@@ -190,7 +190,7 @@ func testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) 
 	fixture.SetResponse(models.EmbeddingBackendResponse{
 		Embeddings: []float64{math.NaN()},
 	})
-	process := support.BuildProcess(t, story004EmbedEdges(
+	process := characterizationBuildProcess(t, story004EmbedEdges(
 		home, assetNetwork, hostServer.Client(), launcher, &joinedProtocolNegotiator{},
 		&joinedCompatibilityChecker{}, selection, fixture,
 	))
@@ -268,7 +268,7 @@ func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *test
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := newStory004EmbedFixture()
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := support.BuildProcess(t, story004EmbedEdges(
+	process := characterizationBuildProcess(t, story004EmbedEdges(
 		home, assetFixture, hostServer.Client(), launcher, protocol, compatibility,
 		selection, fixture,
 	))
@@ -315,7 +315,7 @@ func TestModelsEmbedHTTPParityUsesTheSameFixtureThroughRootBuildProcess(t *testi
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := newStory004EmbedFixture()
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
@@ -371,7 +371,7 @@ func runStory004CLI(
 
 func story004HostServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -528,6 +528,7 @@ func (client *story004EmbedAssetHTTP) Do(request *http.Request) (*http.Response,
 	client.mu.Lock()
 	client.urls = append(client.urls, request.URL.String())
 	client.mu.Unlock()
+	c06Ledger.assetHTTPCalls.Add(1)
 	if strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B") {
 		digest := fmt.Sprintf("%x", sha256.Sum256(client.modelBody))
 		manifest := map[string]any{

@@ -34,7 +34,7 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	audio := []byte("RIFF....WAVE")
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -56,7 +56,7 @@ func runModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	environment := functionalHomeEnvironment(home)
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
@@ -162,7 +162,7 @@ func assertRootTTSOutputFile(
 func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 	t.Parallel()
 
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/health":
 			writer.WriteHeader(http.StatusOK)
@@ -182,7 +182,7 @@ func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 	backendResolverCalls := 0
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
@@ -275,7 +275,7 @@ func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryap
 func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T) {
 	t.Parallel()
 
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -301,7 +301,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 	workers[0]["model"] = "tts"
 	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
 	dir := support.ScaffoldFactory(t, config)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
@@ -337,7 +337,7 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T) {
 	t.Parallel()
 
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -355,7 +355,7 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	compatibility := &joinedCompatibilityChecker{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
@@ -427,7 +427,7 @@ func TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.
 
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	runner := support.NewRecordingCommandRunner("provider should not run before managed readiness")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
@@ -512,7 +512,7 @@ func assertUnknownBuiltinFailure(t *testing.T, serverURL string) {
 func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	t.Parallel()
 
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -531,7 +531,7 @@ func runModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	compatibility := &joinedCompatibilityChecker{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	dir := support.ScaffoldFactory(t, multiOutputModelFactoryConfig(modelServer.URL))
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient: rejectingNetwork,
 		ModelResolveBackendArtifact: func(_ context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
@@ -731,7 +731,7 @@ func multiOutputModelFactoryConfig(endpoint string) map[string]any {
 func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
@@ -752,7 +752,7 @@ func runModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuild
 	workers[0]["model"] = "tts"
 	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
 	dir := support.ScaffoldFactory(t, config)
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
@@ -941,6 +941,7 @@ type recordingModelHTTPClient struct {
 }
 
 func (client *recordingModelHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	c06Ledger.hostHTTPCalls.Add(1)
 	client.mu.Lock()
 	client.calls++
 	delegate := client.delegate

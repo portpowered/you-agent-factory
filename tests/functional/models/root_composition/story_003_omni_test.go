@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
@@ -103,7 +102,7 @@ type omniFileInputFixture struct {
 
 func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixture {
 	t.Helper()
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -139,7 +138,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
-	fixture.process = support.BuildProcess(t, serviceedges.Edges{
+	fixture.process = characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient: fixture.network, ModelAssetMakeDirectories: assetFiles.MkdirAll,
 		ModelAssetInspectPath: assetFiles.Stat, ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
 		ModelAssetResolveEnvironment: func(string) string { return "" }, ModelAssetWriteFile: assetFiles.WriteFile,

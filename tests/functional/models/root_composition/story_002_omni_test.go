@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 
@@ -17,7 +16,7 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 	t.Parallel()
 
 	const generated = "Moonlit moss beneath the rain\nSoft steps vanish into dawn\nThe quiet wakes"
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -45,7 +44,7 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 	compatibility := &joinedCompatibilityChecker{}
 	fixture := &omniTextProtocolFixture{response: generated}
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,

@@ -49,7 +49,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 		runcli.ModelCacheDirEnvironment+"="+cacheDir,
 	)
 	unexpectedProvider := support.NewRecordingCommandRunner("unexpected cloud-provider invocation")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,

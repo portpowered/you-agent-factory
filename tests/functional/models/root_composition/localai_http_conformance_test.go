@@ -27,7 +27,7 @@ import (
 // public response. The fixture is supplied only through edges.Edges; no
 // production operation vertical, registry, or artifact path is introduced.
 func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
-	fixture := localai.Start(t, localai.Options{EmbeddingDimensions: 5})
+	fixture := characterizationStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
 	home := t.TempDir()
 	writeGenericConformanceCaches(t, home)
 	dir := support.ScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
@@ -98,7 +98,7 @@ func startLocalAIConformanceServer(
 ) (*support.FunctionalAPIServer, *joinedCompatibilityChecker) {
 	t.Helper()
 	edges, rejectingNetwork, compatibility, _ := localAIConformanceEdges(home, fixture)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		ServerReadyTimeout:        60 * time.Second,
@@ -520,6 +520,7 @@ func runNoVerticalProbe(t *testing.T, endpoint string) conformance.RowResult {
 type fixtureHostHTTPClient struct{}
 
 func (fixtureHostHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	c06Ledger.hostHTTPCalls.Add(1)
 	return &http.Response{
 		StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: request,
 	}, nil

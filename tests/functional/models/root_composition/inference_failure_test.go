@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,7 +229,7 @@ func buildGenericCLIProcess(
 	compatibility genericCLICompatibilityChecker,
 ) (support.Process, string, []string) {
 	t.Helper()
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -284,7 +283,7 @@ func buildGenericCLIProcess(
 		edges.ModelCLIOutputRemovePath = outputEffects.Remove
 		edges.ModelCLIOutputRenamePath = outputEffects.Rename
 	}
-	return support.BuildProcess(t, edges), directory, functionalHomeEnvironment(home)
+	return characterizationBuildProcess(t, edges), directory, functionalHomeEnvironment(home)
 }
 
 type genericCLIProtocolClient struct{}
@@ -397,6 +396,7 @@ func (launcher *stoppableGenericCLIHostLauncher) Start(
 	Stop(context.Context) error
 }, error) {
 	launcher.mu.Lock()
+	c06Ledger.hostStarts.Add(1)
 	if launcher.endpoint == "" {
 		launcher.endpoint = spec.HealthEndpoint
 	}
@@ -441,6 +441,7 @@ func (launcher *crashedGenericCLIHostLauncher) Start(
 	Stop(context.Context) error
 }, error) {
 	launcher.startCall.Add(1)
+	c06Ledger.hostStarts.Add(1)
 	return nil, launcher.waitErr
 }
 

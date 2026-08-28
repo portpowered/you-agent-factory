@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +39,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	baseBody := []byte("functional-omnivoice-base-asset")
 	tokenizerBody := []byte("functional-omnivoice-tokenizer-asset")
 	source := newControlledModelSource(baseBody, tokenizerBody)
-	sourceServer := httptest.NewServer(source)
+	sourceServer := characterizationNewHTTPServer(t, source)
 	t.Cleanup(sourceServer.Close)
 
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(sourceServer.URL))
@@ -52,7 +51,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		"HOME="+homeDirectory,
 		"USERPROFILE="+homeDirectory,
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
@@ -65,7 +64,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		},
 	})
 
-	inspectProcess := support.BuildProcess(t, serviceedges.Edges{})
+	inspectProcess := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, inspectProcess)
 
 	beforeList := executeStory003List(t, inspectProcess, server.URL(), "before pull")
@@ -74,7 +73,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	before := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "before pull")
 	assertStory003State(t, before, factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
 
-	pullProcess := support.BuildProcess(t, serviceedges.Edges{})
+	pullProcess := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, pullProcess)
 	pullInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(server.URL()))
 	pullInputs.Input.WorkingDirectory = factoryDir
@@ -213,12 +212,12 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 		functionalHomeEnvironment(cacheDirectory),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
 	)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir, WaitForServiceModeRuntime: true, Env: environment,
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	revisionPath := filepath.Join(cacheDirectory, story003ModelName, "cached-revision")
 	beforeBytes := story003RegularFileBytes(t, revisionPath)
@@ -262,7 +261,7 @@ func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T
 }
 
 func testModelsPublicRemoveRefusesInUseCache(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodDelete || request.URL.Path != "/models/"+story003ModelName {
 			http.NotFound(writer, request)
 			return
@@ -277,7 +276,7 @@ func testModelsPublicRemoveRefusesInUseCache(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL))
 	err := process.Execute(inputs.Input)
@@ -288,7 +287,7 @@ func testModelsPublicRemoveRefusesInUseCache(t *testing.T) {
 }
 
 func testStory003ControlledSourceFailure(t *testing.T) {
-	failureSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	failureSource := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/models/"+story003Repository {
 			http.NotFound(writer, request)
 			return
@@ -306,7 +305,7 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		"HOME="+failureHomeDirectory,
 		"USERPROFILE="+failureHomeDirectory,
 	)
-	failureServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	failureServer := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                failureFactoryDir,
 		WaitForServiceModeRuntime: true,
 		Env:                       failureEnvironment,
@@ -319,7 +318,7 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		},
 	})
 
-	failureProcess := support.BuildProcess(t, serviceedges.Edges{})
+	failureProcess := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, failureProcess)
 	failureInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(failureServer.URL()))
 	failureInputs.Input.WorkingDirectory = failureFactoryDir

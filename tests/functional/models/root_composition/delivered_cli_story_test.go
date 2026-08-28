@@ -30,7 +30,7 @@ const deliveredASRSegments = `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXT
 // endpoint is disabled for ordinary production invocations; this test uses a
 // JSON bridge that forwards to the pinned LocalAI gRPC fixture.
 func TestDeliveredCLIArtifactReachesProtocolFixture(t *testing.T) {
-	fixture := localai.Start(t)
+	fixture := characterizationStartLocalAI(t)
 	bridge := newDeliveredModelBridge(t, fixture)
 	home := t.TempDir()
 	prepareDeliveredModelCaches(t, home)
@@ -194,7 +194,7 @@ type deliveredModelBridge struct {
 func newDeliveredModelBridge(t *testing.T, fixture *localai.Fixture) *deliveredModelBridge {
 	t.Helper()
 	bridge := &deliveredModelBridge{fixture: fixture}
-	bridge.server = httptest.NewServer(http.HandlerFunc(bridge.serveHTTP))
+	bridge.server = characterizationNewHTTPServer(t, http.HandlerFunc(bridge.serveHTTP))
 	t.Cleanup(bridge.server.Close)
 	return bridge
 }

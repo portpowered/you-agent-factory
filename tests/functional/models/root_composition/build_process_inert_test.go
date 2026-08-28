@@ -13,7 +13,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 var errRecordingModelEffect = errors.New("recording model effect invoked during BuildProcess")
@@ -25,7 +24,7 @@ func TestModelsEffectsRemainInertThroughRootBuildProcessConstruction(t *testing.
 	t.Parallel()
 
 	recorder := newModelEffectRecorder()
-	_ = support.BuildProcess(t, recorder.edges())
+	_ = characterizationBuildProcess(t, recorder.edges())
 
 	if got := recorder.totalCatalog(); got != 0 {
 		t.Fatalf("catalog effect calls = %d during BuildProcess, want 0", got)
@@ -144,6 +143,11 @@ type recordingModelHTTPDoer struct {
 
 func (client *recordingModelHTTPDoer) Do(*http.Request) (*http.Response, error) {
 	client.counter.Add(1)
+	if client.counter == &client.recorder.assetHTTP {
+		c06Ledger.assetHTTPCalls.Add(1)
+	} else {
+		c06Ledger.hostHTTPCalls.Add(1)
+	}
 	return nil, errRecordingModelEffect
 }
 

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -67,7 +66,7 @@ func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	const message = "model cache is not installed; run you models pull " + codedDiagnosticModelName + " first"
 
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodDelete || request.URL.Path != "/models/"+codedDiagnosticModelName {
 			http.NotFound(writer, request)
 			return
@@ -86,7 +85,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	}
 	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", codedDiagnosticModelName,
@@ -151,7 +150,7 @@ func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
 
 // TestModelsLocalInspectUnknownMatchesHTTPDiagnostic proves local and HTTP inspection expose equivalent unknown-model diagnostics.
 func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet || request.URL.Path != "/models/"+codedDiagnosticUnknownModelName {
 			http.NotFound(writer, request)
 			return
@@ -172,7 +171,7 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	}
 	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
@@ -207,7 +206,7 @@ func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedIn
 	)
 	inputs.Input.WorkingDirectory = factoryDir
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	return inputs, process.Execute(inputs.Input)
 }
@@ -221,7 +220,7 @@ func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedIn
 	inputs.Input.Env = functionalHomeEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = factoryDir
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	return inputs, process.Execute(inputs.Input)
 }
