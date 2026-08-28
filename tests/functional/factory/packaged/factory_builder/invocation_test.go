@@ -34,52 +34,6 @@ const (
 	operatorFactoryRootArgument    = "~/.you-agent-factory/factories"
 )
 
-func invokeFactoryBuilder(
-	t *testing.T,
-	scenario *factoryBuilderScenario,
-	args map[string]any,
-) factoryapi.InvocationResponse {
-	t.Helper()
-	commandArgs := []string{
-		"you", "--json", "run", "--named", factoryBuilderName, "--no-record",
-	}
-	for _, flag := range []struct {
-		name string
-		key  string
-	}{
-		{name: "--factory-name", key: "factoryName"},
-		{name: "--orchestrator", key: "orchestrator"},
-		{name: "--builder-provider", key: "builderProvider"},
-		{name: "--builder-model", key: "builderModel"},
-	} {
-		value, ok := args[flag.key].(string)
-		if ok && strings.TrimSpace(value) != "" {
-			commandArgs = append(commandArgs, flag.name, value)
-		}
-	}
-	if request, ok := args["request"].(string); ok && strings.TrimSpace(request) != "" {
-		commandArgs = append(commandArgs, request)
-	}
-
-	inputs := support.FakeInputs(t.Context(), commandArgs)
-	inputs.Input.Env = append([]string(nil), scenario.environment...)
-	inputs.Input.WorkingDirectory = scenario.workingDirectory
-	if err := scenario.fixture.process.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(Factory Builder %v) error = %v\nstdout:\n%s\nstderr:\n%s",
-			commandArgs, err, inputs.Stdout(), inputs.Stderr(),
-		)
-	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("Factory Builder stderr = %q, want empty successful invocation stderr", inputs.Stderr())
-	}
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
-	if err := scenario.fixture.recordInvocationRequestID(response.RequestId); err != nil {
-		t.Fatalf("Factory Builder invocation request ID: %v", err)
-	}
-	return response
-}
-
 // TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory proves the public
 // Builder invocation can produce a staged YAML graph that the agent validates
 // and persists through the normal named-Factory CLI flow before the customer
@@ -96,6 +50,7 @@ func testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T, fix
 	runner.process = fixture.process
 	runner.environment = scenario.environment
 	runner.operatorRoot = scenario.operatorRoot
+	scenario.open(t)
 	response := invokeFactoryBuilder(t, scenario, map[string]any{
 		"request":         graphFactoryRequest,
 		"factoryName":     graphFactoryName,
@@ -106,13 +61,10 @@ func testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t *testing.T, fix
 	assertBuilderCompleted(t, response, graphFactoryName, "graph")
 
 	installedPath := filepath.Join(scenario.operatorRoot, graphFactoryName)
-	assertBuilderStageIsWorkspaceScoped(t, scenario.workingDirectory, runner.StagePath())
+	assertBuilderStageIsWorkspaceScoped(t, scenario.factoryDir, runner.StagePath())
 	assertBuilderPersistsToOperatorRoot(t, runner, scenario.workingDirectory)
-	assertInstalledGraphFactory(t, fixture.process, scenario.environment, installedPath, runner.operatorRoot)
-	assertInstalledGraphFactoryRuns(t, scenario, installedPath)
-	if got := runner.InstalledFactoryCallCount(); got != 1 {
-		t.Fatalf("installed Factory provider command call count = %d, want one customer invocation", got)
-	}
+	scenario.installedKind = "graph"
+	scenario.installedPath = installedPath
 }
 
 // TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory proves the
@@ -131,6 +83,7 @@ func testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 	runner.environment = scenario.environment
 	runner.operatorRoot = scenario.operatorRoot
 	writeJavaScriptAgentPresetConfig(t, scenario.homeDir)
+	scenario.open(t)
 	response := invokeFactoryBuilder(t, scenario, map[string]any{
 		"request":         javascriptFactoryRequest,
 		"factoryName":     javascriptFactoryName,
@@ -141,13 +94,10 @@ func testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t *testing.T
 	assertBuilderCompleted(t, response, javascriptFactoryName, "javascript")
 
 	installedPath := filepath.Join(scenario.operatorRoot, javascriptFactoryName)
-	assertBuilderStageIsWorkspaceScoped(t, scenario.workingDirectory, runner.StagePath())
+	assertBuilderStageIsWorkspaceScoped(t, scenario.factoryDir, runner.StagePath())
 	assertBuilderPersistsToOperatorRoot(t, runner, scenario.workingDirectory)
-	assertInstalledJavaScriptFactory(t, fixture.process, scenario.environment, installedPath, runner.operatorRoot)
-	assertInstalledJavaScriptFactoryRuns(t, scenario, installedPath)
-	if got := runner.InstalledFactoryCallCount(); got != 2 {
-		t.Fatalf("installed Factory provider command call count = %d, want two intended analysis calls", got)
-	}
+	scenario.installedKind = "javascript"
+	scenario.installedPath = installedPath
 }
 
 // TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation proves
@@ -165,25 +115,27 @@ func testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t *te
 	} {
 		testCase := testCase
 		t.Run(strings.ReplaceAll(testCase.name, " ", "_"), func(t *testing.T) {
-			runner := &factoryBuilderCommandRunner{
-				targetName:              testCase.factoryName,
-				customerRequest:         invalidFactoryRequest,
-				orchestrator:            "graph",
-				candidateYAML:           representativeInvalidGraphFactoryYAML,
-				expectValidationFailure: true,
-				builderResult:           invalidCandidateResult(testCase.factoryName),
+			var factoryScenario *factoryBuilderScenario
+			if testCase.installExistingOne {
+				factoryScenario = fixture.invalidExistingScenario
 			}
-			factoryScenario := fixture.newScenario(t, runner)
-			runner.process = fixture.process
-			runner.environment = factoryScenario.environment
-			runner.operatorRoot = factoryScenario.operatorRoot
+			var runner *factoryBuilderCommandRunner
+			if factoryScenario == nil {
+				runner = newInvalidCandidateRunner(testCase.factoryName)
+				factoryScenario = fixture.newScenario(t, runner)
+				runner.process = fixture.process
+				runner.environment = factoryScenario.environment
+				runner.operatorRoot = factoryScenario.operatorRoot
+			} else {
+				runner = factoryScenario.runner
+			}
+			factoryScenario.open(t)
 
 			installedPath := filepath.Join(factoryScenario.operatorRoot, testCase.factoryName)
-			var before []byte
 			if testCase.installExistingOne {
-				installExistingGraphFactory(t, fixture.process, factoryScenario.environment, factoryScenario.workingDirectory, runner.operatorRoot, testCase.factoryName)
-				assertInstalledGraphFactoryRuns(t, factoryScenario, installedPath)
-				before = readInstalledFactoryConfig(t, installedPath)
+				if factoryScenario.installedPath != installedPath {
+					t.Fatalf("prepared existing Factory path = %q, want %q", factoryScenario.installedPath, installedPath)
+				}
 			}
 			providerCallsBeforeBuilder := runner.InstalledFactoryCallCount()
 
@@ -195,20 +147,26 @@ func testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t *te
 				"builderModel":    "gpt-5",
 			})
 			assertInvalidCandidateGuidance(t, response, testCase.factoryName, runner.StagePath())
-			assertBuilderRejectedCandidate(t, runner, factoryScenario.workingDirectory, providerCallsBeforeBuilder)
+			assertBuilderRejectedCandidate(t, runner, factoryScenario.factoryDir, factoryScenario.workingDirectory, providerCallsBeforeBuilder)
 
 			if testCase.installExistingOne {
-				after := readInstalledFactoryConfig(t, installedPath)
-				if !bytes.Equal(before, after) {
-					t.Fatalf("installed Factory changed after rejected candidate\nbefore:\n%s\nafter:\n%s", before, after)
-				}
-				assertInstalledGraphFactoryRuns(t, factoryScenario, installedPath)
 				return
 			}
 			if _, err := os.Stat(installedPath); !os.IsNotExist(err) {
 				t.Fatalf("invalid candidate installed at %q; stat error = %v", installedPath, err)
 			}
 		})
+	}
+}
+
+func newInvalidCandidateRunner(factoryName string) *factoryBuilderCommandRunner {
+	return &factoryBuilderCommandRunner{
+		targetName:              factoryName,
+		customerRequest:         invalidFactoryRequest,
+		orchestrator:            "graph",
+		candidateYAML:           representativeInvalidGraphFactoryYAML,
+		expectValidationFailure: true,
+		builderResult:           invalidCandidateResult(factoryName),
 	}
 }
 
@@ -244,11 +202,12 @@ func assertInvalidCandidateGuidance(t *testing.T, response factoryapi.Invocation
 func assertBuilderRejectedCandidate(
 	t *testing.T,
 	runner *factoryBuilderCommandRunner,
+	stageWorkspace,
 	workingDirectory string,
 	providerCallsBeforeBuilder int,
 ) {
 	t.Helper()
-	assertBuilderStageIsWorkspaceScoped(t, workingDirectory, runner.StagePath())
+	assertBuilderStageIsWorkspaceScoped(t, stageWorkspace, runner.StagePath())
 	if runner.ValidationAttemptCount() != 1 {
 		t.Fatalf("candidate validation attempts = %d, want one public CLI validation", runner.ValidationAttemptCount())
 	}
@@ -291,7 +250,7 @@ func installExistingGraphFactory(
 	}
 }
 
-func readInstalledFactoryConfig(t *testing.T, installedPath string) []byte {
+func readInstalledFactoryConfig(t testing.TB, installedPath string) []byte {
 	t.Helper()
 	config, err := os.ReadFile(filepath.Join(installedPath, factorydefinitions.FactoryConfigFile))
 	if err != nil {
@@ -362,7 +321,7 @@ func assertNoProjectLocalFactoryShadow(t *testing.T, workingDirectory, factoryNa
 }
 
 func assertInstalledGraphFactory(
-	t *testing.T,
+	t testing.TB,
 	process support.Process,
 	environment []string,
 	installedPath, operatorRoot string,
@@ -388,7 +347,7 @@ func assertInstalledGraphFactory(
 	assertInstalledFactoryIsListed(t, process, environment, operatorRoot, graphFactoryName)
 }
 
-func assertInstalledFactoryIsListed(t *testing.T, process support.Process, environment []string, operatorRoot, factoryName string) {
+func assertInstalledFactoryIsListed(t testing.TB, process support.Process, environment []string, operatorRoot, factoryName string) {
 	t.Helper()
 	list := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list", "--dir", operatorRoot})
 	list.Input.Env = environment
@@ -401,7 +360,7 @@ func assertInstalledFactoryIsListed(t *testing.T, process support.Process, envir
 }
 
 func assertInstalledJavaScriptFactory(
-	t *testing.T,
+	t testing.TB,
 	process support.Process,
 	environment []string,
 	installedPath, operatorRoot string,
@@ -427,7 +386,7 @@ func assertInstalledJavaScriptFactory(
 	assertInstalledFactoryIsListed(t, process, environment, operatorRoot, javascriptFactoryName)
 }
 
-func assertRepresentativeJavaScriptDefinition(t *testing.T, definition map[string]any) {
+func assertRepresentativeJavaScriptDefinition(t testing.TB, definition map[string]any) {
 	t.Helper()
 	if definition["name"] != javascriptFactoryName {
 		t.Fatalf("installed JavaScript Factory name = %#v, want %q", definition["name"], javascriptFactoryName)
@@ -482,7 +441,7 @@ func hasStringValue(value any, want string) bool {
 }
 
 func assertInstalledJavaScriptFactoryRuns(
-	t *testing.T,
+	t testing.TB,
 	scenario *factoryBuilderScenario,
 	installedPath string,
 ) {
@@ -522,7 +481,7 @@ func assertInstalledJavaScriptFactoryRuns(
 }
 
 func assertInstalledGraphFactoryRuns(
-	t *testing.T,
+	t testing.TB,
 	scenario *factoryBuilderScenario,
 	installedPath string,
 ) {
@@ -556,7 +515,7 @@ func assertInstalledGraphFactoryRuns(
 	}
 }
 
-func assertRepresentativeGraphDefinition(t *testing.T, definition map[string]any) {
+func assertRepresentativeGraphDefinition(t testing.TB, definition map[string]any) {
 	t.Helper()
 	if definition["name"] != graphFactoryName {
 		t.Fatalf("installed Factory name = %#v, want %q", definition["name"], graphFactoryName)
@@ -582,7 +541,7 @@ func assertRepresentativeGraphDefinition(t *testing.T, definition map[string]any
 	}
 }
 
-func assertNamedDefinitionItem(t *testing.T, value any, name, kind string) map[string]any {
+func assertNamedDefinitionItem(t testing.TB, value any, name, kind string) map[string]any {
 	t.Helper()
 	items, ok := value.([]any)
 	if !ok {

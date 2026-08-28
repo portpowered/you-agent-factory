@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,19 +28,21 @@ const factoryBuilderSharedFixtureTimeout = 15 * time.Second
 const factoryBuilderExpectedSessions = 6
 
 // factoryBuilderSharedFixture owns one root-built process and one continuous
-// API host for all six Factory Builder scenarios. The ordinary cases execute
-// through the local public CLI before the host is activated; the host then
-// exercises the six private scenario sessions and their cleanup contract.
+// API host for all six Factory Builder scenarios. Each child invokes its
+// behavior through one private explicit Factory Session on that host.
 type factoryBuilderSharedFixture struct {
-	rootDir    string
-	process    support.ApplicationProcess
-	provider   *factoryBuilderProviderCommandRouter
-	api        *support.ProcessAPIServer
-	baseURL    string
-	factoryDir string
-	lifecycle  *factoryBuilderLifecycleLedger
-	scenarios  []*factoryBuilderScenario
-	requestIDs struct {
+	rootDir                 string
+	process                 support.ApplicationProcess
+	provider                *factoryBuilderProviderCommandRouter
+	api                     *support.ProcessAPIServer
+	host                    *support.ProcessCommand
+	baseURL                 string
+	factoryDir              string
+	lifecycle               *factoryBuilderLifecycleLedger
+	requestID               atomic.Uint64
+	scenarios               []*factoryBuilderScenario
+	invalidExistingScenario *factoryBuilderScenario
+	requestIDs              struct {
 		sync.Mutex
 		values map[string]struct{}
 	}
@@ -100,10 +103,7 @@ func (ledger *factoryBuilderLifecycleLedger) register(
 	return nil
 }
 
-func (ledger *factoryBuilderLifecycleLedger) close(
-	sessionID string,
-	sessionAbsent, rootRemoved bool,
-) error {
+func (ledger *factoryBuilderLifecycleLedger) markClosed(sessionID string, sessionAbsent bool) error {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	for index := range ledger.resources {
@@ -116,6 +116,19 @@ func (ledger *factoryBuilderLifecycleLedger) close(
 		}
 		resource.closed = true
 		resource.sessionAbsent = sessionAbsent
+		return nil
+	}
+	return fmt.Errorf("Factory Session %q was not registered", sessionID)
+}
+
+func (ledger *factoryBuilderLifecycleLedger) markRootRemoved(sessionID string, rootRemoved bool) error {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	for index := range ledger.resources {
+		resource := &ledger.resources[index]
+		if resource.sessionID != sessionID {
+			continue
+		}
 		resource.rootRemoved = rootRemoved
 		return nil
 	}
@@ -254,6 +267,12 @@ type factoryBuilderScenario struct {
 	workingDirectory string
 	selectorPaths    []string
 	sessionID        string
+	sessionClosed    bool
+	rootRemoved      bool
+	runner           *factoryBuilderCommandRunner
+	installedKind    string
+	installedPath    string
+	existingBefore   []byte
 }
 
 func newFactoryBuilderSharedFixture(t *testing.T) *factoryBuilderSharedFixture {
@@ -288,9 +307,10 @@ func newFactoryBuilderSharedFixture(t *testing.T) *factoryBuilderSharedFixture {
 		api:       api,
 		lifecycle: lifecycle,
 	}
-	// The process is closed after any later host/session cleanup callbacks. The
-	// authoritative persisted-session probe is registered when the host starts,
-	// after the host's own stop callback and before session close callbacks.
+	// Register fixture cleanup before the process and host callbacks below. The
+	// normal path performs session closure, the persisted-session probe, host
+	// shutdown, installed-artifact checks, and root removal explicitly; this
+	// callback remains the final filesystem/listener safety net.
 	t.Cleanup(func() { fixture.cleanup(t) })
 	support.CleanupProcess(t, process)
 
@@ -318,55 +338,36 @@ func (fixture *factoryBuilderSharedFixture) startServer(t *testing.T) {
 	})
 	inputs.Input.Env = factoryBuilderCustomerEnvironment(filepath.Join(fixture.rootDir, "home"))
 	inputs.Input.WorkingDirectory = fixture.factoryDir
-	support.StartProcessCommand(t, fixture.process, inputs.Input)
+	fixture.host = support.StartProcessCommand(t, fixture.process, inputs.Input)
 	fixture.baseURL = fixture.api.WaitForURL(t)
 	support.WaitForStatus(t, fixture.baseURL, factoryBuilderSharedFixtureTimeout, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 }
 
-func (fixture *factoryBuilderSharedFixture) openAllScenarios(t *testing.T) {
-	t.Helper()
-	for _, scenario := range fixture.scenarios {
-		scenario.open(t)
-	}
-}
-
-func (fixture *factoryBuilderSharedFixture) closeAllScenarios(t testing.TB) {
-	t.Helper()
-	for index := len(fixture.scenarios) - 1; index >= 0; index-- {
-		fixture.scenarios[index].close(t)
-	}
-}
-
-func (fixture *factoryBuilderSharedFixture) assertDurableSessionsClean(t testing.TB) {
+func (fixture *factoryBuilderSharedFixture) assertDurableSessionsClean(t testing.TB) (runtimeArtifacts, isolatedRows int) {
 	t.Helper()
 	endpoint := strings.TrimSuffix(fixture.baseURL, "/") + "/factory-sessions?scope=persisted"
 	client := http.Client{Timeout: time.Second}
 	response, err := client.Get(endpoint)
 	if err != nil {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 list persisted Factory Sessions: %v", err)
-		fixture.lifecycle.assertClean(t, 0, -1)
-		return
+		return 0, -1
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		payload, _ := io.ReadAll(response.Body)
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 list persisted Factory Sessions status = %d: %s", response.StatusCode, strings.TrimSpace(string(payload)))
-		fixture.lifecycle.assertClean(t, 0, -1)
-		return
+		return 0, -1
 	}
 	var listing factoryapi.ListFactorySessionsResponse
 	if err := json.NewDecoder(response.Body).Decode(&listing); err != nil {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 decode persisted Factory Sessions: %v", err)
-		fixture.lifecycle.assertClean(t, 0, -1)
-		return
+		return 0, -1
 	}
 	if listing.Scope == nil || *listing.Scope != factoryapi.FactorySessionListScopePersisted {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 persisted Factory Session list scope = %#v, want persisted", listing.Scope)
 	}
-	isolatedRows := 0
-	runtimeArtifacts := 0
 	if listing.DurableSessions != nil {
 		isolatedRows = len(*listing.DurableSessions)
 		for _, session := range *listing.DurableSessions {
@@ -381,7 +382,7 @@ func (fixture *factoryBuilderSharedFixture) assertDurableSessionsClean(t testing
 	if runtimeArtifacts != 0 {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 persisted runtime artifacts = %d, want 0", runtimeArtifacts)
 	}
-	fixture.lifecycle.assertClean(t, runtimeArtifacts, isolatedRows)
+	return runtimeArtifacts, isolatedRows
 }
 
 func (fixture *factoryBuilderSharedFixture) cleanup(t testing.TB) {
@@ -396,6 +397,12 @@ func (fixture *factoryBuilderSharedFixture) cleanup(t testing.TB) {
 			response.Body.Close()
 			t.Errorf("FACTORY-BUILDER-CLEANUP-001 listener still served /status after process close: %s", strings.TrimSpace(string(body)))
 		}
+	}
+	for _, scenario := range fixture.scenarios {
+		scenario.close(t)
+	}
+	for _, scenario := range fixture.scenarios {
+		fixture.provider.unregister(scenario.selectorPaths)
 	}
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 remove shared root %q: %v", fixture.rootDir, err)
@@ -442,11 +449,16 @@ func (fixture *factoryBuilderSharedFixture) recordInvocationRequestID(requestID 
 	return nil
 }
 
+func (fixture *factoryBuilderSharedFixture) nextRequestID() uint64 {
+	return fixture.requestID.Add(1)
+}
+
 func (fixture *factoryBuilderSharedFixture) newScenario(
 	t *testing.T,
 	runner platformprocess.CommandRunner,
 ) *factoryBuilderScenario {
 	t.Helper()
+	builderRunner, _ := runner.(*factoryBuilderCommandRunner)
 	rootDir, err := os.MkdirTemp(fixture.rootDir, "scenario-")
 	if err != nil {
 		t.Fatalf("create Factory Builder scenario root: %v", err)
@@ -462,9 +474,6 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 	environment := factoryBuilderCustomerEnvironment(homeDir)
 	selectorPaths := []string{factoryDir, workingDirectory, fixture.factoryDir, filepath.Join(homeDir, ".you-agent-factory", "factories")}
 	fixture.provider.register(selectorPaths, runner)
-	t.Cleanup(func() {
-		fixture.provider.unregister(selectorPaths)
-	})
 	scenario := &factoryBuilderScenario{
 		fixture:          fixture,
 		rootDir:          rootDir,
@@ -474,6 +483,7 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 		environment:      environment,
 		workingDirectory: workingDirectory,
 		selectorPaths:    selectorPaths,
+		runner:           builderRunner,
 	}
 	fixture.scenarios = append(fixture.scenarios, scenario)
 	return scenario
@@ -493,25 +503,61 @@ func (scenario *factoryBuilderScenario) open(t *testing.T) {
 	}
 }
 
-func (scenario *factoryBuilderScenario) close(t testing.TB) {
+func (fixture *factoryBuilderSharedFixture) closeAllScenarios(t testing.TB) {
 	t.Helper()
-	if scenario == nil || scenario.sessionID == "" {
+	for _, scenario := range fixture.scenarios {
+		scenario.closeSession(t)
+	}
+}
+
+func (fixture *factoryBuilderSharedFixture) stopServer(t testing.TB) {
+	t.Helper()
+	if fixture.host != nil {
+		fixture.host.Stop(t)
+	}
+}
+
+func (fixture *factoryBuilderSharedFixture) removeAllScenarioRoots(t testing.TB) {
+	t.Helper()
+	for _, scenario := range fixture.scenarios {
+		scenario.removeRoot(t)
+	}
+}
+
+func (scenario *factoryBuilderScenario) closeSession(t testing.TB) {
+	t.Helper()
+	if scenario == nil || scenario.sessionID == "" || scenario.sessionClosed {
 		return
 	}
 	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
 	assertFactoryBuilderSessionAbsent(t, scenario.fixture.baseURL, scenario.sessionID)
-	sessionAbsent := true
-	rootRemoved := false
+	scenario.sessionClosed = true
+	if err := scenario.fixture.lifecycle.markClosed(scenario.sessionID, true); err != nil {
+		t.Errorf("record Factory Builder Factory Session cleanup: %v", err)
+	}
+}
+
+func (scenario *factoryBuilderScenario) removeRoot(t testing.TB) {
+	t.Helper()
+	if scenario == nil || scenario.rootRemoved {
+		return
+	}
 	if err := os.RemoveAll(scenario.rootDir); err != nil {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 remove scenario root %q: %v", scenario.rootDir, err)
 	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
 		t.Errorf("FACTORY-BUILDER-CLEANUP-001 scenario root %q remains: %v", scenario.rootDir, err)
 	} else {
-		rootRemoved = true
+		scenario.rootRemoved = true
 	}
-	if err := scenario.fixture.lifecycle.close(scenario.sessionID, sessionAbsent, rootRemoved); err != nil {
-		t.Errorf("record Factory Builder scenario cleanup: %v", err)
+	if err := scenario.fixture.lifecycle.markRootRemoved(scenario.sessionID, scenario.rootRemoved); err != nil {
+		t.Errorf("record Factory Builder scenario root cleanup: %v", err)
 	}
+}
+
+func (scenario *factoryBuilderScenario) close(t testing.TB) {
+	t.Helper()
+	scenario.closeSession(t)
+	scenario.removeRoot(t)
 }
 
 func assertFactoryBuilderSessionAbsent(t testing.TB, baseURL, sessionID string) {
