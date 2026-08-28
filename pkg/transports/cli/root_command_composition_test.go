@@ -235,7 +235,7 @@ func TestProductionServerStopDispatchesOnlyInjectedOperation(t *testing.T) {
 }
 
 func TestProductionMetricsCostsTimeoutDiagnosticPreservesEndpointAcrossModes(t *testing.T) {
-	const requestTimeout = 250 * time.Millisecond
+	const requestTimeout = 25 * time.Millisecond
 	modes := [][]string{
 		{"--server", "PLACEHOLDER", "metrics", "costs"},
 		{"--server", "PLACEHOLDER", "--verbose", "metrics", "costs"},
