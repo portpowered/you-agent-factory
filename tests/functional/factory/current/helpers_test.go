@@ -46,6 +46,164 @@ func startCurrentFactoryServerWithSetup(
 	})
 }
 
+func startCurrentFactoryServerWithoutMockWorkersWithSetup(
+	t *testing.T,
+	rootDir string,
+	setup currentFactoryServerSetup,
+) *support.FunctionalAPIServer {
+	t.Helper()
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                rootDir,
+		WaitForServiceModeRuntime: true,
+		BeforeStart:               setup,
+	})
+}
+
+// sharedCurrentFactoryAPI owns the one process and API listener used by the
+// compatible Current Factory read/save scenarios. Named Factory definitions
+// are authored before the continuous server invocation starts; each scenario
+// then gets its own explicit Factory Session and uniquely named fixture so a
+// save cannot affect another witness's initial state.
+type sharedCurrentFactoryAPI struct {
+	rootDir string
+	server  *support.FunctionalAPIServer
+}
+
+func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
+	t.Helper()
+
+	fixture := &sharedCurrentFactoryAPI{rootDir: t.TempDir()}
+	fixture.server = startCurrentFactoryServerWithoutMockWorkersWithSetup(
+		t,
+		fixture.rootDir,
+		currentFactorySetup(t, func(process support.Process, env []string) {
+			seedNamedFactoryRootWithProcess(t, process, env, fixture.rootDir, "alpha", "alpha-task")
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-valid",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-valid", "alpha-valid-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-invalid",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-invalid", "alpha-invalid-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-isolation",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-isolation", "alpha-isolation-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"beta-isolation",
+				functionalNamedFactoryPayloadWithWorkType(t, "beta-isolation", "beta-isolation-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-prompt-contract",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-contract", "alpha-prompt-contract-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-prompt-invalid",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-invalid", "alpha-prompt-invalid-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-prompt-nonmutation",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-nonmutation", "alpha-prompt-nonmutation-task"),
+			)
+		}),
+	)
+	t.Cleanup(func() {
+		fixture.server.Stop(t)
+		select {
+		case <-fixture.server.Done():
+		default:
+			t.Error("shared Current Factory process is still running after Stop")
+		}
+	})
+	return fixture
+}
+
+type sharedCurrentFactorySession struct {
+	serverURL string
+	id        string
+	closed    bool
+}
+
+func (fixture *sharedCurrentFactoryAPI) openSession(t *testing.T, name string) *sharedCurrentFactorySession {
+	t.Helper()
+	if fixture == nil || fixture.server == nil {
+		t.Fatal("shared Current Factory API fixture is unavailable")
+	}
+	session := &sharedCurrentFactorySession{
+		serverURL: fixture.server.URL(),
+		id:        openNamedFactorySession(t, fixture.server.URL(), fixture.rootDir, name),
+	}
+	if session.id == "~default" {
+		t.Fatalf("named Factory Session %q unexpectedly used the default session", name)
+	}
+	t.Cleanup(func() {
+		if session.closed {
+			return
+		}
+		session.close(t)
+	})
+	return session
+}
+
+func (session *sharedCurrentFactorySession) close(t *testing.T) {
+	t.Helper()
+	if session == nil || session.closed {
+		return
+	}
+	support.CloseFactorySessionAt(t, session.serverURL, session.id)
+	session.closed = true
+	assertFactorySessionDeleted(t, session.serverURL, session.id)
+}
+
+// assertFactorySessionDeleted proves cleanup through the public API rather
+// than relying only on the successful DELETE response.
+func assertFactorySessionDeleted(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+	deleted := getCurrentFactoryForSessionExpectStatus(t, serverURL, sessionID, http.StatusNotFound)
+	assertNotFoundFactorySessionError(t, deleted, "deleted session")
+}
+
+func (fixture *sharedCurrentFactoryAPI) requireServerRunning(t *testing.T) {
+	t.Helper()
+	if fixture == nil || fixture.server == nil {
+		t.Fatal("shared Current Factory API fixture is unavailable")
+	}
+	select {
+	case <-fixture.server.Done():
+		t.Fatal("shared Current Factory process exited before the scenario completed")
+	default:
+	}
+}
+
 func seedNamedFactoryRootWithProcess(
 	t *testing.T,
 	process support.Process,
@@ -140,17 +298,26 @@ func getCurrentFactoryForSession(t *testing.T, serverURL, sessionID string) fact
 
 func saveCurrentFactoryForSession(t *testing.T, serverURL, sessionID, body string) factoryapi.Factory {
 	t.Helper()
-	resp := putFactoryForSessionRequestExpectStatusWithClient(
-		t,
-		http.DefaultClient,
-		serverURL,
-		"/factory-sessions/"+sessionID+"/factory",
-		saveFactoryForSessionRequestBody(body),
-		http.StatusOK,
-	)
+	resp := saveCurrentFactoryForSessionExpectStatus(t, serverURL, sessionID, body, http.StatusOK)
 	var saved factoryapi.Factory
 	decodeJSONResponse(t, resp, &saved, "decode session current factory save response")
 	return saved
+}
+
+func saveCurrentFactoryForSessionExpectStatus(
+	t *testing.T,
+	serverURL, sessionID, body string,
+	wantStatus int,
+) *http.Response {
+	t.Helper()
+	return putFactoryForSessionRequestExpectStatusWithClient(
+		t,
+		http.DefaultClient,
+		serverURL,
+		"/factory-sessions/"+url.PathEscape(sessionID)+"/factory",
+		saveFactoryForSessionRequestBody(body),
+		wantStatus,
+	)
 }
 
 func sessionFactoryURL(serverURL, sessionID string) string {
@@ -183,14 +350,38 @@ func saveCurrentFactoryDefinition(t *testing.T, serverURL, body string) factorya
 
 func saveCurrentFactoryDefinitionExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
 	t.Helper()
-	return putFactoryForSessionRequestExpectStatusWithClient(
-		t,
-		http.DefaultClient,
-		serverURL,
-		"/factory-sessions/~default/factory",
-		saveFactoryForSessionRequestBody(body),
-		wantStatus,
-	)
+	return saveCurrentFactoryForSessionExpectStatus(t, serverURL, "~default", body, wantStatus)
+}
+
+func getCurrentFactoryForSessionExpectStatus(
+	t *testing.T,
+	serverURL, sessionID string,
+	wantStatus int,
+) factoryapi.ErrorResponse {
+	t.Helper()
+	resp, err := http.Get(sessionFactoryURL(serverURL, sessionID))
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/%s/factory: %v", sessionID, err)
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read GET /factory-sessions/%s/factory response: %v", sessionID, readErr)
+	}
+	if resp.StatusCode != wantStatus {
+		t.Fatalf(
+			"GET /factory-sessions/%s/factory status = %d, want %d: %s",
+			sessionID,
+			resp.StatusCode,
+			wantStatus,
+			body,
+		)
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("decode GET /factory-sessions/%s/factory error response: %v: %s", sessionID, err, body)
+	}
+	return errResp
 }
 
 func saveFactoryForSessionRequestBody(factoryJSON string) string {
@@ -314,6 +505,19 @@ func advancedFactoryVersion(t *testing.T, version *factoryapi.HybridLogicalTimes
 	return factoryapi.HybridLogicalTimestamp{
 		Logical:  version.Logical + 1,
 		Physical: version.Physical.UTC().Add(time.Nanosecond),
+	}
+}
+
+func assertFactoryVersionAtLeast(
+	t *testing.T,
+	got *factoryapi.HybridLogicalTimestamp,
+	want factoryapi.HybridLogicalTimestamp,
+	contextLabel string,
+) {
+	t.Helper()
+	if got == nil || got.Logical.Int64() < want.Logical.Int64() ||
+		(got.Logical.Int64() == want.Logical.Int64() && got.Physical.Before(want.Physical)) {
+		t.Fatalf("%s version = %#v, want at least %#v", contextLabel, got, want)
 	}
 }
 
