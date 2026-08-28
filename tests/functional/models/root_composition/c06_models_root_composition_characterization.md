@@ -226,7 +226,7 @@ ledger; no artificial per-row split of concurrent counters is claimed.
 | CASE-055 | `delivered_cli_story_test.go` — `TestDeliveredCLIArtifactReachesProtocolFixture`; plus delivered EMBED CLI/HTTP artifact tests | Delivered executable subprocesses; exact protocol request, transcript/segments/audio and EMBED outputs | Shipped binaries, controlled fixtures, local process boundaries; deferred stops and temp cleanup | isolated-with-reason: artifact/executable boundary |
 | CASE-056 | `api_model_local_inference_long_test.go` — `TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio`; `functionallong` guard | Not run in default suite; opt-in local-real CLI/API audio proof remains guarded, so default ledger contribution is `0` | Real local artifact/runtime only when explicitly enabled; test-owned process/cache cleanup | isolated-with-reason: guarded real-local dependency |
 | CASE-057 | `api_model_local_inference_long_test.go` — `TestRecordedRealLocalModelEventDiagnostics`; 13 `realLocalModelDiagnosticCases` table rows | Not run in default suite; pure recorded-event reducer covers no response, decode/wrong outcome/operation, output-part/media errors, valid file/URL, malformed and duplicate responses | Pure recorded data; no root/network; table test cleanup | shareable (pure reducer), but opt-in guard remains |
-| CASE-058 | No current row; PRD matrix gate for TASK-002 `TestModelsSharedProcessEligibleScenarios` | Deferred: requires two explicit Factory Sessions, unique routed edges, concurrency/race proof and cross-session witness | Not current-story evidence | deferred to TASK-002 |
+| CASE-058 | `shared_process_test.go` — `TestModelsSharedProcessEligibleScenarios`, with parallel catalog/unknown-detail subtests | `P1/A1/F3`; one shared root/API process, two distinct explicit Factory Sessions, session-scoped current-Factory route assertions for each session and its overlapping peer, unchanged `/models` catalog/detail/invocation witnesses, and focused race pass | Controlled API and fixture-owned rich catalog/cache; `t.Parallel` overlap, parent cleanup assertions, session deletion and Factory-directory removal | candidate-controlled: process-level Models contract is intentionally shared, while distinct session routes and cleanup are asserted |
 | CASE-059 | No current row; PRD matrix gate for TASK-002 cleanup proof | Deferred: requires failure/timeout/cancellation/partial teardown after sharing and later-case usability | Not current-story evidence | deferred to TASK-002 |
 | CASE-060 | No current row; PRD matrix gate for TASK-003 repeat proof | Deferred: requires `go test -count=3 -timeout=90m` and stable inventory/cleanup across runs | Not current-story evidence | deferred to TASK-003 |
 
@@ -234,8 +234,9 @@ This gives every matrix ID exactly one current row or an explicit owning-story
 deferred gate; there are no unclassified cases. The candidate labels are
 discovery inputs for TASK-002, not migration approval. In particular, the
 known CASE-007 cache leak and every host, asset, executable, pull, local-real
-protocol, listener, artifact, cancellation, and recovery row remain isolated
-until a later story proves otherwise.
+protocol, listener, artifact, cancellation, and recovery row outside the
+eligible rich-catalog group remain isolated until a later story proves
+otherwise.
 
 ## Remaining edges
 
@@ -249,5 +250,8 @@ does not prove:
 - clean-room delivered integration; or
 - parent project CI median/pass-count gates.
 
-Those are explicitly left for TASK-002, TASK-003, review CI, or the parent
-project gates named by the PRD.
+Those are explicitly left for TASK-002's broader failure/cleanup scope,
+TASK-003, review CI, or the parent project gates named by the PRD. The
+TASK-002 CASE-058 follow-up is recorded in the implementation and validation
+artifacts rather than retroactively changing this historical characterization
+status.
