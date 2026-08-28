@@ -24,9 +24,11 @@ WorkDir routes; and retains process-sensitive, malformed-startup, child,
 replay, environment, logging, telemetry, and executable cases in isolated
 boundaries with an exact reason.
 
-The migrated fixture is owned by the approved `tests/functional/providers/base`
-subsection. Aggregate-root tests may consume its exported lifecycle API, while
-new functional sources do not remain directly under the aggregate package.
+The migrated fixture and its topology/cleanup proofs are test-only declarations
+in the existing `tests/functional/providers/helpers_test.go` file. Keeping the
+fixture in a test file is required because the repository deadcode checker
+analyzes normal package files without test variants; this preserves the
+aggregate package command without adding an excluded deadcode-baseline entry.
 Controlled model behavior uses the `ProviderCommandRunner` edge with
 provider-shaped sanitized results. The process-sensitive mock-worker and
 child-process assertions remain isolated where their CLI-global or executable
@@ -59,8 +61,7 @@ boundary is the behavior under test.
 ## Verification and exclusions
 
 The implementation verification uses the root package command
-`go test ./tests/functional/providers`, the subsection command
-`go test ./tests/functional/providers/base`, the wildcard package command when
+`go test ./tests/functional/providers`, the wildcard package command when
 useful, `go run ./cmd/functionalboundarycheck`, `make pkg-structure`, and the
 repository test/lint gates named by the PRD. CI remains the authority for
 Linux-only process cells, final-head package timing, terminal checks, conflict

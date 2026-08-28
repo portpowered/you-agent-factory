@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	providerbase "github.com/portpowered/infinite-you/tests/functional/providers/base"
 )
 
 func TestScriptExecutor_Success(t *testing.T) {
@@ -396,7 +395,7 @@ func runScriptFactoryAt(
 	timeout time.Duration,
 ) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
 	t.Helper()
-	scenario, listed := providerbase.RunFactory(t, dir, workDir, runner, timeout)
+	scenario, listed := RunFactory(t, dir, workDir, runner, timeout)
 	return &sharedProviderScenario{Scenario: scenario}, listed
 }
 

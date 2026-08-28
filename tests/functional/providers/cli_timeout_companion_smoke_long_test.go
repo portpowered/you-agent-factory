@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	providerbase "github.com/portpowered/infinite-you/tests/functional/providers/base"
 )
 
 const (
@@ -42,7 +41,7 @@ Execute the script.
 	})
 
 	runner := newTimeoutThenReleaseCommandRunner()
-	scenario := providerbase.FixtureFor(t).OpenScenario(t, dir, dir, runner)
+	scenario := FixtureFor(t).OpenScenario(t, dir, dir, runner)
 
 	waitForTimeoutCompanionRetryStarted(t, runner)
 
