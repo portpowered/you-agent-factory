@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -41,6 +41,7 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.ClearSeedInputs(t, factoryDir)
 	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
+	writeWorkerSessionRouteWorkstation(t, factoryDir)
 
 	homeDir := t.TempDir()
 	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
@@ -51,10 +52,10 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	failureRollout = bytes.ReplaceAll(failureRollout, []byte("Codex fixture answer COMPLETE"), []byte("Codex authentication failed."))
 	writeCodexRollout(t, homeDir, workerSessionsCodexFailureID, failureRollout)
 
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: successStdout},
-		platformprocess.CommandResult{Stdout: failureStdout, ExitCode: 1},
-	)
+	runner := newProviderCommandRouteRunner(map[string]platformprocess.CommandResult{
+		"worker-session-cli-success": {Stdout: successStdout},
+		"worker-session-cli-failure": {Stdout: failureStdout, ExitCode: 1},
+	}, nil)
 	api := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:                    api.Start,
@@ -72,35 +73,49 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	serverInputs.Input.WorkingDirectory = factoryDir
 	server := support.StartProcessCommand(t, process, serverInputs.Input)
 	baseURL := api.WaitForURL(t)
+	successFactorySessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
+	failureFactorySessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
+	defer func() {
+		support.CloseFactorySessionAt(t, baseURL, failureFactorySessionID)
+		assertFactorySessionAbsent(t, baseURL, failureFactorySessionID, factoryDir)
+		support.CloseFactorySessionAt(t, baseURL, successFactorySessionID)
+		assertFactorySessionAbsent(t, baseURL, successFactorySessionID, factoryDir)
+		server.Stop(t)
+		if err := server.Err(); err != nil {
+			t.Errorf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
+		}
+	}()
 
 	assertWorkerSessionsCLIHelp(t, ctx, process, env, factoryDir)
 
-	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-success")
-	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
-	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexSuccessID, "COMPLETED")
-	assertSuccessfulWorkerSession(t, ctx, process, env, factoryDir, baseURL, successWorkID)
+	successWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, "worker-session-cli-success")
+	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, successWorkID)
+	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, workerSessionsCodexSuccessID, "COMPLETED")
+	assertSuccessfulWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, successWorkID)
 
-	failureWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, "worker-session-cli-failure")
-	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
-	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, workerSessionsCodexFailureID, "FAILED")
-	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureWorkID)
+	failureWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, "worker-session-cli-failure")
+	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, failureWorkID)
+	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, workerSessionsCodexFailureID, "FAILED")
+	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, failureWorkID)
 	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, map[string]string{
+		successWorkID: successFactorySessionID,
+		failureWorkID: failureFactorySessionID,
+	}, map[string]string{
 		successWorkID: "worker-session-cli-success",
 		failureWorkID: "worker-session-cli-failure",
+	}, map[string]string{
+		successWorkID: workerSessionsCodexSuccessID,
+		failureWorkID: workerSessionsCodexFailureID,
 	}, true)
-	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL)
+	assertMissingWorkerSessionOutcomes(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID)
 	assertMissingWorkerSessionInputs(t, ctx, process, env, factoryDir, baseURL)
 
-	if runner.CallCount() != 2 {
-		t.Fatalf("provider command calls = %d, want one success and one failure invocation", runner.CallCount())
-	}
+	assertProviderCommandRoutes(t, runner, map[string]struct{}{
+		"worker-session-cli-success": {},
+		"worker-session-cli-failure": {},
+	})
 	if _, err := os.Stat(recordPath); err != nil {
 		t.Fatalf("recorded worker activity missing at %s: %v", recordPath, err)
-	}
-
-	server.Stop(t)
-	if err := server.Err(); err != nil {
-		t.Fatalf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
 	}
 
 	functionalevidence.Covers(t,
@@ -159,23 +174,28 @@ func TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	fixture := newWorkerSessionReplayFixture(t, ctx)
-	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, "worker-session-replay-only-redirect")
-	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workID)
-	streamWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workerSessionsCodexSuccessID, "COMPLETED")
+	fixture := newWorkerSessionReplayFixture(t, ctx, "worker-session-replay-only-redirect", "session_fixture_codex_replay_redirect")
+	defer fixture.stop(t)
+	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, "worker-session-replay-only-redirect")
+	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, workID)
+	streamWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, fixture.providerSessionID, "COMPLETED")
 
 	contents, diagnostics := runBuiltWorkerSessionReplay(t, ctx, fixture)
 	assertWorkerSessionReplayCapture(t, contents, diagnostics)
-	fixture.stop(t)
+	assertProviderCommandRoutes(t, fixture.runner, map[string]struct{}{fixture.requestID: {}})
 }
 
 type workerSessionReplayFixture struct {
-	process      support.Process
-	server       *support.ProcessCommand
-	serverInputs *support.CapturedInputs
-	factoryDir   string
-	env          []string
-	baseURL      string
+	process           support.Process
+	server            *support.ProcessCommand
+	serverInputs      *support.CapturedInputs
+	factoryDir        string
+	env               []string
+	baseURL           string
+	sessionID         string
+	requestID         string
+	providerSessionID string
+	runner            *providerCommandRouteRunner
 }
 
 // TestWSRFT001OpeningRecordPrecedesProviderOutput exercises the customer
@@ -190,13 +210,15 @@ func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	fixture := newWorkerSessionReplayFixture(t, ctx)
-	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, "wsr-ft-001")
-	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workID)
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, factorysessions.DefaultSessionID, 30*time.Second)
+	fixture := newWorkerSessionReplayFixture(t, ctx, "wsr-ft-001", "session_fixture_codex_wsr_ft_001")
+	defer fixture.stop(t)
+	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, "wsr-ft-001")
+	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, workID)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, 30*time.Second)
+	assertScopedWorkerSessionList(t, listWorkerSessionsForFactorySession(t, fixture.baseURL, fixture.sessionID, workID), fixture.sessionID, fixture.providerSessionID, workID)
 	frames := replayWorkerSessionFrames(t, ctx, fixture)
-	assertWSRWorkerSessionHistory(t, frames, workID, "COMPLETED")
-	fixture.stop(t)
+	assertWSRWorkerSessionHistory(t, frames, fixture.sessionID, workID, "COMPLETED")
+	assertProviderCommandRoutes(t, fixture.runner, map[string]struct{}{fixture.requestID: {}})
 }
 
 // TestWSRFT002LiveAndReplayCorrelationRemainStable compares the public live
@@ -209,17 +231,19 @@ func TestWSRFT002LiveAndReplayCorrelationRemainStable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	fixture := newWorkerSessionReplayFixture(t, ctx)
-	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, "wsr-ft-002")
-	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, workID)
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, factorysessions.DefaultSessionID, 30*time.Second)
-	live := support.ListDefaultSessionWorkerSessions(t, fixture.baseURL, workID)
+	fixture := newWorkerSessionReplayFixture(t, ctx, "wsr-ft-002", "session_fixture_codex_wsr_ft_002")
+	defer fixture.stop(t)
+	workID := submitWork(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, "wsr-ft-002")
+	waitForWorkerSession(t, ctx, fixture.process, fixture.env, fixture.factoryDir, fixture.baseURL, fixture.sessionID, workID)
+	support.WaitForSessionTerminalStatus(t, fixture.baseURL, fixture.sessionID, 30*time.Second)
+	live := listWorkerSessionsForFactorySession(t, fixture.baseURL, fixture.sessionID, workID)
 	if len(live.Sessions) != 1 {
 		t.Fatalf("live Worker Session observations = %#v, want exactly one", live)
 	}
+	assertScopedWorkerSessionList(t, live, fixture.sessionID, fixture.providerSessionID, workID)
 	frames := replayWorkerSessionFrames(t, ctx, fixture)
-	assertWSRLiveReplayCorrelation(t, live.Sessions[0], frames, workID)
-	fixture.stop(t)
+	assertWSRLiveReplayCorrelation(t, live.Sessions[0], frames, fixture.sessionID, workID)
+	assertProviderCommandRoutes(t, fixture.runner, map[string]struct{}{fixture.requestID: {}})
 }
 
 func replayWorkerSessionFrames(
@@ -230,7 +254,7 @@ func replayWorkerSessionFrames(
 	t.Helper()
 	inputs := executeCLI(t, ctx, fixture.process, fixture.env, fixture.factoryDir,
 		"--server", fixture.baseURL, "worker-sessions", "stream",
-		"--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID,
+		"--session", fixture.sessionID, "--provider", "codex", "--kind", "session_id", "--id", fixture.providerSessionID,
 		"--replay-only", "--output", "json",
 	)
 	var frames []factoryapi.WorkerSessionEvent
@@ -253,6 +277,7 @@ func replayWorkerSessionFrames(
 func assertWSRWorkerSessionHistory(
 	t *testing.T,
 	frames []factoryapi.WorkerSessionEvent,
+	factorySessionID string,
 	workID string,
 	wantTerminal string,
 ) {
@@ -327,10 +352,11 @@ func assertWSRLiveReplayCorrelation(
 	t *testing.T,
 	live factoryapi.WorkerSessionObservation,
 	frames []factoryapi.WorkerSessionEvent,
+	factorySessionID string,
 	workID string,
 ) {
 	t.Helper()
-	assertWSRWorkerSessionHistory(t, frames, workID, "COMPLETED")
+	assertWSRWorkerSessionHistory(t, frames, factorySessionID, workID, "COMPLETED")
 	if frames[0].Event.SourceType == "factory_event" {
 		if live.WorkerSessionId != frames[0].WorkerSessionId || live.StartedAt == nil {
 			t.Fatalf("live Worker Session = %#v, replay opening = %#v", live, frames[0])
@@ -362,6 +388,32 @@ func assertWSRLiveReplayCorrelation(
 	}
 }
 
+func listWorkerSessionsForFactorySession(t *testing.T, baseURL, factorySessionID, workID string) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	if strings.TrimSpace(factorySessionID) == "" || strings.TrimSpace(workID) == "" {
+		t.Fatal("Factory Session and Work identities are required for a scoped Worker Session list")
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(factorySessionID) + "/worker-sessions?workId=" + url.QueryEscape(workID)
+	return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
+}
+
+func assertScopedWorkerSessionList(t *testing.T, listed factoryapi.ListWorkerSessionsResponse, factorySessionID, providerSessionID, workID string) {
+	t.Helper()
+	if len(listed.Sessions) != 1 {
+		t.Fatalf("scoped Worker Session list = %#v, want exactly one observation", listed)
+	}
+	session := listed.Sessions[0]
+	if session.FactorySessionId == nil || *session.FactorySessionId != factorySessionID {
+		t.Fatalf("scoped Worker Session Factory Session = %#v, want %s", session.FactorySessionId, factorySessionID)
+	}
+	if session.WorkId == nil || *session.WorkId != workID {
+		t.Fatalf("scoped Worker Session Work = %#v, want %s", session.WorkId, workID)
+	}
+	if session.ProviderSession == nil || session.ProviderSession.Id != providerSessionID {
+		t.Fatalf("scoped Worker Session provider identity = %#v, want %s", session.ProviderSession, providerSessionID)
+	}
+}
+
 func stringValue(payload map[string]interface{}, key string) string {
 	if value, ok := payload[key].(string); ok {
 		return value
@@ -379,16 +431,21 @@ func providerValue(payload map[string]interface{}) string {
 	return provider
 }
 
-func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context) workerSessionReplayFixture {
+func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context, requestID, providerSessionID string) workerSessionReplayFixture {
 	t.Helper()
 	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.ClearSeedInputs(t, factoryDir)
 	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
+	writeWorkerSessionRouteWorkstation(t, factoryDir)
 	homeDir := t.TempDir()
 	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
 	successRollout := readProviderFixture(t, "codex", "success", "rollout.jsonl")
-	writeCodexRollout(t, homeDir, workerSessionsCodexSuccessID, successRollout)
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: successStdout})
+	successStdout = bytes.ReplaceAll(successStdout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
+	successRollout = bytes.ReplaceAll(successRollout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
+	writeCodexRollout(t, homeDir, providerSessionID, successRollout)
+	runner := newProviderCommandRouteRunner(map[string]platformprocess.CommandResult{
+		requestID: {Stdout: successStdout},
+	}, nil)
 	api := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:                    api.Start,
@@ -403,14 +460,20 @@ func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context) workerSess
 	serverInputs.Input.Env = env
 	serverInputs.Input.WorkingDirectory = factoryDir
 	server := support.StartProcessCommand(t, process, serverInputs.Input)
+	baseURL := api.WaitForURL(t)
+	sessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
 	return workerSessionReplayFixture{
 		process: process, server: server, serverInputs: serverInputs,
-		factoryDir: factoryDir, env: env, baseURL: api.WaitForURL(t),
+		factoryDir: factoryDir, env: env, baseURL: baseURL,
+		sessionID: sessionID, requestID: requestID, providerSessionID: providerSessionID,
+		runner: runner,
 	}
 }
 
 func (fixture workerSessionReplayFixture) stop(t *testing.T) {
 	t.Helper()
+	support.CloseFactorySessionAt(t, fixture.baseURL, fixture.sessionID)
+	assertFactorySessionAbsent(t, fixture.baseURL, fixture.sessionID, fixture.factoryDir)
 	fixture.server.Stop(t)
 	if err := fixture.server.Err(); err != nil {
 		t.Fatalf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, fixture.serverInputs.Stdout(), fixture.serverInputs.Stderr())
@@ -428,7 +491,7 @@ func runBuiltWorkerSessionReplay(t *testing.T, ctx context.Context, fixture work
 	var diagnostics bytes.Buffer
 	command := exec.CommandContext(ctx, buildWorkerSessionsCLIBinary(t),
 		"--verbose", "--server", fixture.baseURL, "worker-sessions", "stream",
-		"--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID,
+		"--session", fixture.sessionID, "--provider", "codex", "--kind", "session_id", "--id", fixture.providerSessionID,
 		"--replay-only", "--output", "json",
 	)
 	command.Dir = fixture.factoryDir
@@ -498,19 +561,20 @@ func assertWorkerSessionReplayCapture(t *testing.T, contents []byte, diagnostics
 }
 
 type workerSessionJSON struct {
-	AttemptID       string               `json:"attemptId"`
-	DurationMillis  *int64               `json:"durationMillis"`
-	DurationBasis   string               `json:"durationBasis"`
-	Failure         json.RawMessage      `json:"failure"`
-	ProviderSession *providerSessionJSON `json:"providerSession"`
-	StartedAt       *time.Time           `json:"startedAt"`
-	State           string               `json:"state"`
-	TokenUsage      *tokenUsageJSON      `json:"tokenUsage"`
-	Transcript      string               `json:"transcript"`
-	WorkID          *string              `json:"workId"`
-	WorkIDs         []string             `json:"workIds"`
-	WorkName        *string              `json:"workName"`
-	WorkerSessionID string               `json:"workerSessionId"`
+	AttemptID        string               `json:"attemptId"`
+	DurationMillis   *int64               `json:"durationMillis"`
+	DurationBasis    string               `json:"durationBasis"`
+	Failure          json.RawMessage      `json:"failure"`
+	FactorySessionID *string              `json:"factorySessionId"`
+	ProviderSession  *providerSessionJSON `json:"providerSession"`
+	StartedAt        *time.Time           `json:"startedAt"`
+	State            string               `json:"state"`
+	TokenUsage       *tokenUsageJSON      `json:"tokenUsage"`
+	Transcript       string               `json:"transcript"`
+	WorkID           *string              `json:"workId"`
+	WorkIDs          []string             `json:"workIds"`
+	WorkName         *string              `json:"workName"`
+	WorkerSessionID  string               `json:"workerSessionId"`
 }
 
 type providerSessionJSON struct {
@@ -543,13 +607,13 @@ type transcriptEntryJSON struct {
 	Type    string `json:"type"`
 }
 
-func submitWork(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, name string) string {
+func submitWork(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, name string) string {
 	t.Helper()
 	request := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":"task","payload":{"title":%q}}]}`,
 		name, name, name,
 	)
-	inputs := executeCLI(t, ctx, process, env, factoryDir, "--server", baseURL, "--json", "submit", "batch", request)
+	inputs := executeCLI(t, ctx, process, env, factoryDir, "--server", baseURL, "--json", "submit", "batch", "--session", sessionID, request)
 	var response struct {
 		WorkCount int `json:"workCount"`
 		Works     []struct {
@@ -563,12 +627,15 @@ func submitWork(t *testing.T, ctx context.Context, process support.Process, env 
 	return response.Works[0].WorkID
 }
 
-func waitForWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
+func waitForWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID string) {
 	t.Helper()
-	waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, workID, "")
+	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, sessionID, workID, "")
+	if session.FactorySessionID == nil || *session.FactorySessionID != sessionID {
+		t.Fatalf("Worker Session Factory Session = %#v, want %s", session.FactorySessionID, sessionID)
+	}
 }
 
-func waitForWorkerSessionState(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID, expectedState string) workerSessionJSON {
+func waitForWorkerSessionState(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID, expectedState string) workerSessionJSON {
 	t.Helper()
 
 	// Work admission, opening, and terminal projection are separate asynchronous
@@ -584,7 +651,7 @@ func waitForWorkerSessionState(t *testing.T, ctx context.Context, process suppor
 	var lastOutput string
 	for {
 		inputs := support.FakeInputs(ctx, []string{
-			"you", "--server", baseURL, "worker-sessions", "list", "--work-id", workID, "--output", "json",
+			"you", "--server", baseURL, "worker-sessions", "list", "--session", sessionID, "--work-id", workID, "--output", "json",
 		})
 		inputs.Input.Env = append([]string(nil), env...)
 		inputs.Input.WorkingDirectory = factoryDir
@@ -616,10 +683,10 @@ func waitForWorkerSessionState(t *testing.T, ctx context.Context, process suppor
 	}
 }
 
-func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
+func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID string) {
 	t.Helper()
-	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, workID, "COMPLETED")
-	assertWorkerSessionIdentity(t, session, workerSessionsCodexSuccessID, workID)
+	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, sessionID, workID, "COMPLETED")
+	assertWorkerSessionIdentity(t, session, sessionID, workerSessionsCodexSuccessID, workID)
 	if session.State != "COMPLETED" || session.AttemptID == "" || session.DurationMillis == nil || *session.DurationMillis < 0 {
 		t.Fatalf("successful session lifecycle projection = %#v", session)
 	}
@@ -633,16 +700,16 @@ func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process su
 	}
 
 	showInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "show", "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
+		"--server", baseURL, "worker-sessions", "show", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
 	var shown workerSessionJSON
 	decodeCLIJSON(t, showInputs, &shown)
-	assertWorkerSessionIdentity(t, shown, workerSessionsCodexSuccessID, workID)
+	assertWorkerSessionIdentity(t, shown, sessionID, workerSessionsCodexSuccessID, workID)
 	if shown.DurationMillis == nil || shown.TokenUsage == nil || shown.TokenUsage.TotalTokens == nil || *shown.TokenUsage.TotalTokens != 20 {
 		t.Fatalf("successful show omitted duration or token usage: %#v", shown)
 	}
 
 	readInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
+		"--server", baseURL, "worker-sessions", "read", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexSuccessID, "--output", "json")
 	var transcript transcriptJSON
 	decodeCLIJSON(t, readInputs, &transcript)
 	if transcript.ProviderSession.ID != workerSessionsCodexSuccessID || !containsString(transcript.WorkIDs, workID) || len(transcript.Entries) == 0 {
@@ -654,10 +721,10 @@ func assertSuccessfulWorkerSession(t *testing.T, ctx context.Context, process su
 	}
 }
 
-func assertFailedWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, workID string) {
+func assertFailedWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID string) {
 	t.Helper()
-	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, workID, "FAILED")
-	assertWorkerSessionIdentity(t, session, workerSessionsCodexFailureID, workID)
+	session := waitForWorkerSessionState(t, ctx, process, env, factoryDir, baseURL, sessionID, workID, "FAILED")
+	assertWorkerSessionIdentity(t, session, sessionID, workerSessionsCodexFailureID, workID)
 	if session.State != "FAILED" || session.AttemptID == "" || session.DurationMillis == nil || *session.DurationMillis < 0 {
 		t.Fatalf("failed session lifecycle projection = %#v", session)
 	}
@@ -666,16 +733,16 @@ func assertFailedWorkerSession(t *testing.T, ctx context.Context, process suppor
 	}
 
 	showInputs := executeCLI(t, ctx, process, env, factoryDir,
-		"--server", baseURL, "worker-sessions", "show", "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexFailureID, "--output", "json")
+		"--server", baseURL, "worker-sessions", "show", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", workerSessionsCodexFailureID, "--output", "json")
 	var shown workerSessionJSON
 	decodeCLIJSON(t, showInputs, &shown)
-	assertWorkerSessionIdentity(t, shown, workerSessionsCodexFailureID, workID)
+	assertWorkerSessionIdentity(t, shown, sessionID, workerSessionsCodexFailureID, workID)
 	if shown.State != "FAILED" || (!strings.Contains(strings.ToLower(string(shown.Failure)), "auth") && !strings.Contains(strings.ToLower(string(shown.Failure)), "401")) {
 		t.Fatalf("failed show omitted recorded failure cause: %#v", shown)
 	}
 }
 
-func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string) {
+func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID string) {
 	t.Helper()
 	cases := []struct {
 		name string
@@ -684,17 +751,17 @@ func assertMissingWorkerSessionOutcomes(t *testing.T, ctx context.Context, proce
 	}{
 		{
 			name: "list missing Work",
-			args: []string{"worker-sessions", "list", "--work-id", "work-missing-from-cli", "--output", "json"},
+			args: []string{"worker-sessions", "list", "--session", sessionID, "--work-id", "work-missing-from-cli", "--output", "json"},
 			code: "WORK_NOT_FOUND",
 		},
 		{
 			name: "show missing session",
-			args: []string{"worker-sessions", "show", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-missing-from-cli", "--output", "json"},
+			args: []string{"worker-sessions", "show", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", "provider-session-missing-from-cli", "--output", "json"},
 			code: "WORKER_SESSION_NOT_FOUND",
 		},
 		{
 			name: "read missing session",
-			args: []string{"worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-missing-from-cli", "--output", "json"},
+			args: []string{"worker-sessions", "read", "--session", sessionID, "--provider", "codex", "--kind", "session_id", "--id", "provider-session-missing-from-cli", "--output", "json"},
 			code: "WORKER_SESSION_NOT_FOUND",
 		},
 	}
@@ -788,16 +855,17 @@ func assertMissingWorkerSessionInputs(t *testing.T, ctx context.Context, process
 	}
 }
 
-func assertWorkerSessionIdentity(t *testing.T, session workerSessionJSON, providerID, workID string) {
+func assertWorkerSessionIdentity(t *testing.T, session workerSessionJSON, factorySessionID, providerID, workID string) {
 	t.Helper()
 	if session.WorkerSessionID == "" || session.ProviderSession == nil ||
 		session.ProviderSession.Provider != "codex" || session.ProviderSession.Kind != "session_id" ||
-		session.ProviderSession.ID != providerID || !containsString(session.WorkIDs, workID) {
-		t.Fatalf("worker session identity = %#v, want provider %s and Work %s", session, providerID, workID)
+		session.ProviderSession.ID != providerID || !containsString(session.WorkIDs, workID) ||
+		session.FactorySessionID == nil || *session.FactorySessionID != factorySessionID {
+		t.Fatalf("worker session identity = %#v, want Factory Session %s, provider %s, and Work %s", session, factorySessionID, providerID, workID)
 	}
 }
 
-func streamWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, providerID, terminalState string) {
+func streamWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, factorySessionID, providerID, terminalState string) {
 	t.Helper()
 
 	// The list projection can observe the opening before the stream's
@@ -814,7 +882,7 @@ func streamWorkerSession(t *testing.T, ctx context.Context, process support.Proc
 	for {
 		inputs = support.FakeInputs(ctx, []string{
 			"you", "--server", baseURL, "worker-sessions", "stream",
-			"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
+			"--session", factorySessionID, "--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
 		})
 		inputs.Input.Env = append([]string(nil), env...)
 		inputs.Input.WorkingDirectory = factoryDir

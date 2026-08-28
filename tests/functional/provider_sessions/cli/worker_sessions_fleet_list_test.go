@@ -1,15 +1,18 @@
 package cli_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -27,9 +30,24 @@ func TestWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
 	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.ClearSeedInputs(t, factoryDir)
 	support.WriteAgentConfig(t, factoryDir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "fixture-model"))
+	writeWorkerSessionRouteWorkstation(t, factoryDir)
 	homeDir := t.TempDir()
 	gate := make(chan struct{})
-	runner := support.NewGatedSuccessCommandRunner("Fleet fixture COMPLETE", gate)
+	successStdout := readProviderFixture(t, "codex", "success", "stdout.jsonl")
+	successRollout := readProviderFixture(t, "codex", "success", "rollout.jsonl")
+	fleetProviderSessionIDs := map[string]string{
+		"worker-session-fleet-alpha": "session_fixture_codex_fleet_alpha",
+		"worker-session-fleet-beta":  "session_fixture_codex_fleet_beta",
+		"worker-session-fleet-gamma": "session_fixture_codex_fleet_gamma",
+	}
+	routes := make(map[string]platformprocess.CommandResult, len(fleetProviderSessionIDs))
+	for workName, providerSessionID := range fleetProviderSessionIDs {
+		stdout := bytes.ReplaceAll(successStdout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
+		rollout := bytes.ReplaceAll(successRollout, []byte(workerSessionsCodexSuccessID), []byte(providerSessionID))
+		writeCodexRollout(t, homeDir, providerSessionID, rollout)
+		routes[workName] = platformprocess.CommandResult{Stdout: stdout}
+	}
+	runner := newProviderCommandRouteRunner(routes, gate)
 	api := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter:                    api.Start,
@@ -46,30 +64,53 @@ func TestWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
 	serverInputs.Input.WorkingDirectory = factoryDir
 	server := support.StartProcessCommand(t, process, serverInputs.Input)
 	baseURL := api.WaitForURL(t)
+	factorySessionID := openExplicitWorkerSession(t, baseURL, factoryDir)
+	var releaseGate sync.Once
+	release := func() { releaseGate.Do(func() { close(gate) }) }
+	defer func() {
+		release()
+		support.CloseFactorySessionAt(t, baseURL, factorySessionID)
+		assertFactorySessionAbsent(t, baseURL, factorySessionID, factoryDir)
+		server.Stop(t)
+		if err := server.Err(); err != nil {
+			t.Errorf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
+		}
+	}()
 
-	expectedWorks := submitFleetWorks(t, ctx, process, env, factoryDir, baseURL)
-	assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "RUNNING", len(expectedWorks)), expectedWorks, "RUNNING")
-	close(gate)
-	assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "COMPLETED", len(expectedWorks)), expectedWorks, "COMPLETED")
-	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, expectedWorks, false)
-
-	server.Stop(t)
-	if err := server.Err(); err != nil {
-		t.Fatalf("server Process.Execute: %v\nstdout:\n%s\nstderr:\n%s", err, serverInputs.Stdout(), serverInputs.Stderr())
+	expectedWorks := submitFleetWorks(t, ctx, process, env, factoryDir, baseURL, factorySessionID)
+	providerIDs := make(map[string]string, len(expectedWorks))
+	for workID, workName := range expectedWorks {
+		providerIDs[workID] = fleetProviderSessionIDs[workName]
 	}
+	if err := runner.WaitForCalls(ctx, len(expectedWorks)); err != nil {
+		t.Fatalf("wait for fleet provider dispatches: %v", err)
+	}
+	assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "RUNNING", len(expectedWorks)), expectedWorks, factorySessionID, providerIDs, "RUNNING")
+	release()
+	assertFleetState(t, waitForFleetWorkerSessionsState(t, ctx, process, env, factoryDir, baseURL, "COMPLETED", len(expectedWorks)), expectedWorks, factorySessionID, providerIDs, "COMPLETED")
+	factorySessionIDs := make(map[string]string, len(expectedWorks))
+	for workID := range expectedWorks {
+		factorySessionIDs[workID] = factorySessionID
+	}
+	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, factorySessionIDs, expectedWorks, providerIDs, true)
+	assertProviderCommandRoutes(t, runner, map[string]struct{}{
+		"worker-session-fleet-alpha": {},
+		"worker-session-fleet-beta":  {},
+		"worker-session-fleet-gamma": {},
+	})
 }
 
-func submitFleetWorks(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string) map[string]string {
+func submitFleetWorks(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, factorySessionID string) map[string]string {
 	t.Helper()
 	expectedWorks := make(map[string]string, 3)
 	for _, name := range []string{"worker-session-fleet-alpha", "worker-session-fleet-beta", "worker-session-fleet-gamma"} {
-		workID := submitWork(t, ctx, process, env, factoryDir, baseURL, name)
+		workID := submitWork(t, ctx, process, env, factoryDir, baseURL, factorySessionID, name)
 		expectedWorks[workID] = name
 	}
 	return expectedWorks
 }
 
-func assertFleetState(t *testing.T, sessions []workerSessionJSON, expectedWorks map[string]string, state string) {
+func assertFleetState(t *testing.T, sessions []workerSessionJSON, expectedWorks map[string]string, factorySessionID string, providerIDs map[string]string, state string) {
 	t.Helper()
 	for _, session := range sessions {
 		if session.WorkID == nil || session.WorkName == nil || session.StartedAt == nil || session.DurationMillis == nil {
@@ -78,19 +119,25 @@ func assertFleetState(t *testing.T, sessions []workerSessionJSON, expectedWorks 
 		if want, ok := expectedWorks[*session.WorkID]; !ok || *session.WorkName != want || session.State != state {
 			t.Fatalf("%s fleet observation attribution = %#v, expected Work map %#v", state, session, expectedWorks)
 		}
+		if session.FactorySessionID == nil || *session.FactorySessionID != factorySessionID {
+			t.Fatalf("%s fleet observation Factory Session = %#v, want %s", state, session.FactorySessionID, factorySessionID)
+		}
+		if state == "COMPLETED" && (session.ProviderSession == nil || session.ProviderSession.Provider != "codex" || session.ProviderSession.Kind != "session_id" || session.ProviderSession.ID != providerIDs[*session.WorkID]) {
+			t.Fatalf("%s fleet observation provider identity = %#v, want %s", state, session.ProviderSession, providerIDs[*session.WorkID])
+		}
 		if state == "COMPLETED" && *session.DurationMillis < 0 {
 			t.Fatalf("terminal fleet observation duration = %d, want non-negative", *session.DurationMillis)
 		}
 	}
 }
 
-func assertFleetWorkerSessionList(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string, expectedWorks map[string]string, requireProviderSession bool) {
+func assertFleetWorkerSessionList(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL string, factorySessionIDs map[string]string, expectedWorks map[string]string, providerIDs map[string]string, requireProviderSession bool) {
 	t.Helper()
 	cliList := fetchFleetCLIList(t, ctx, process, env, factoryDir, baseURL, 10)
 	if len(cliList.Sessions) != len(expectedWorks) {
 		t.Fatalf("fleet CLI session count = %d, want %d: %#v", len(cliList.Sessions), len(expectedWorks), cliList)
 	}
-	byID := assertFleetCLIObservations(t, cliList, requireProviderSession)
+	byID := assertFleetCLIObservations(t, cliList, factorySessionIDs, providerIDs, requireProviderSession)
 	assertFleetWorkAttribution(t, cliList, expectedWorks)
 	assertFleetCLIOutputLimit(t, ctx, process, env, factoryDir, baseURL)
 	assertFleetHTTPMatchesCLI(t, ctx, baseURL, cliList, byID)
@@ -106,7 +153,7 @@ func fetchFleetCLIList(t *testing.T, ctx context.Context, process support.Proces
 	return result
 }
 
-func assertFleetCLIObservations(t *testing.T, list workerSessionListJSON, requireProviderSession bool) map[string]workerSessionJSON {
+func assertFleetCLIObservations(t *testing.T, list workerSessionListJSON, factorySessionIDs map[string]string, providerIDs map[string]string, requireProviderSession bool) map[string]workerSessionJSON {
 	t.Helper()
 	byID := make(map[string]workerSessionJSON, len(list.Sessions))
 	for _, session := range list.Sessions {
@@ -115,6 +162,13 @@ func assertFleetCLIObservations(t *testing.T, list workerSessionListJSON, requir
 		}
 		if requireProviderSession && (session.ProviderSession == nil || session.ProviderSession.Provider != "codex" || session.ProviderSession.Kind != "session_id") {
 			t.Fatalf("fleet CLI observation omitted provider/kind: %#v", session)
+		}
+		wantFactorySessionID, ok := factorySessionIDs[*session.WorkID]
+		if !ok || session.FactorySessionID == nil || *session.FactorySessionID != wantFactorySessionID {
+			t.Fatalf("fleet CLI observation Factory Session = %#v, want %s for Work %s", session.FactorySessionID, wantFactorySessionID, *session.WorkID)
+		}
+		if requireProviderSession && session.WorkID != nil && session.ProviderSession.ID != providerIDs[*session.WorkID] {
+			t.Fatalf("fleet CLI observation provider identity = %#v, want %s", session.ProviderSession, providerIDs[*session.WorkID])
 		}
 		if session.State != "COMPLETED" && session.State != "FAILED" {
 			t.Fatalf("fleet CLI observation state = %q, want terminal state", session.State)
@@ -192,6 +246,12 @@ func assertFleetHTTPMatchesCLI(t *testing.T, ctx context.Context, baseURL string
 		}
 		if session.WorkId == nil || session.WorkName == nil || *session.WorkId != *cliSession.WorkID || *session.WorkName != *cliSession.WorkName {
 			t.Fatalf("fleet HTTP/CLI Work attribution mismatch for %s: HTTP=%#v CLI=%#v", session.WorkerSessionId, session, cliSession)
+		}
+		if session.FactorySessionId == nil || cliSession.FactorySessionID == nil || *session.FactorySessionId != *cliSession.FactorySessionID {
+			t.Fatalf("fleet HTTP/CLI Factory Session mismatch for %s: HTTP=%#v CLI=%#v", session.WorkerSessionId, session, cliSession)
+		}
+		if session.ProviderSession == nil || cliSession.ProviderSession == nil || session.ProviderSession.Id != cliSession.ProviderSession.ID {
+			t.Fatalf("fleet HTTP/CLI provider-session mismatch for %s: HTTP=%#v CLI=%#v", session.WorkerSessionId, session, cliSession)
 		}
 	}
 }
