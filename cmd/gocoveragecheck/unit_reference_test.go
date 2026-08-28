@@ -699,8 +699,8 @@ func assertUnitCoverageReferenceHasSameExecution(t *testing.T, fixture unitCover
 	if !maps.Equal(actual.testOccurrences, wantTests) {
 		t.Fatalf("reference test occurrences = %v, want exactly once for %v", actual.testOccurrences, wantTests)
 	}
-	if len(actual.testInvocationArgs) == 0 || !slices.Contains(actual.testInvocationArgs, "-count=1") {
-		t.Fatalf("reference go test args = %v, want -count=1", actual.testInvocationArgs)
+	if len(actual.testInvocationArgs) == 0 || slices.Contains(actual.testInvocationArgs, "-count=1") {
+		t.Fatalf("reference go test args = %v, want Go default count", actual.testInvocationArgs)
 	}
 	if !maps.Equal(actual.testOccurrences, expected.testOccurrences) {
 		t.Fatalf("reference test inventory changed: expected=%v actual=%v", expected.testOccurrences, actual.testOccurrences)
