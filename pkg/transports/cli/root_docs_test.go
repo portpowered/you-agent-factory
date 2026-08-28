@@ -52,6 +52,8 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 	}
 	executeDocumentedModelExample(t, []string{"models", "pull", "llm"})
 	executeDocumentedModelExample(t, []string{"--json", "models", "pull", "embed"})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "embed", "--operation", "EMBED", "--input", "text=Find similar work"})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "llm", "--operation", "OMNI", "--input", "prompt=Write a haiku"})
 	executeDocumentedModelExample(t, []string{"models", "invoke", "tts", "--operation", "TTS", "--input", "text=Read the release summary."})
 	executeDocumentedModelExample(t, []string{"models", "invoke", "tts", "--operation", "TTS", "--text", "Read the release summary.", "--output", "speech.wav"})
 	executeDocumentedModelExample(t, []string{"--json", "models", "invoke", "tts", "--operation", "TTS", "--input", "text=Read the release summary."})
@@ -95,9 +97,51 @@ func TestModelsDocumentation_DiscoveryAndCostGuidance(t *testing.T) {
 		"you models inspect OMNIVOICE_Q4_K_M",
 		"you models pull OMNIVOICE_Q4_K_M",
 		"you models remove OMNIVOICE_Q4_K_M",
+		"you models invoke OMNIVOICE_Q4_K_M",
+		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
+		"Run this zero-configuration command",
+		"shared in-process bootstrap",
 	} {
 		if strings.Contains(doc, stale) {
 			t.Fatalf("packaged models guide contains stale discovery or cache text %q", stale)
+		}
+	}
+}
+
+func TestModelsDocumentation_InvocationGuidance(t *testing.T) {
+	doc, err := docscli.Markdown("models")
+	if err != nil {
+		t.Fatalf("Markdown(models) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"Direct invocation requires a valid Current Factory",
+		"./factory/factory.json",
+		"CURRENT_FACTORY_NOT_FOUND",
+		"An explicit `--server` must identify a reachable service",
+		`you models invoke embed --operation EMBED --input text="Find similar work"`,
+		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
+		"does not provide an `--offline` flag",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("packaged models guide missing invocation marker %q", want)
+		}
+	}
+
+	warning := strings.Index(doc, "Warning: Pulling `tts`")
+	invokeSection := strings.Index(doc, "## Invoke A Model Directly")
+	if warning < 0 || invokeSection < 0 || warning > invokeSection {
+		t.Fatalf("TTS warning must precede invocation guidance: warning=%d section=%d", warning, invokeSection)
+	}
+
+	for _, stale := range []string{
+		"OMNIVOICE_Q4_K_M",
+		"MODEL_OFFLINE_CACHE_UNAVAILABLE",
+		"Run this zero-configuration command",
+		"shared in-process bootstrap",
+	} {
+		if strings.Contains(doc, stale) {
+			t.Fatalf("packaged models guide contains stale invocation text %q", stale)
 		}
 	}
 }
@@ -112,6 +156,8 @@ func requireDocumentedModelCommands(t *testing.T, doc string) {
 		"you models inspect embed",
 		"you models pull llm",
 		"you --json models pull embed",
+		`you models invoke embed --operation EMBED --input text="Find similar work"`,
+		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
 		`you models invoke tts --operation TTS --input text="Read the release summary." > speech.wav`,
 		`you models invoke tts --operation TTS --text "Read the release summary." --output speech.wav`,
 		`you --json models invoke tts --operation TTS --input text="Read the release summary."`,
@@ -127,10 +173,12 @@ func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected []string,
 	if !listed || !reflect.DeepEqual(inspected, []string{"llm", "asr", "tts", "embed"}) || pulled != "embed" {
 		t.Fatalf("documented model task boundary = listed %t, inspected %#v, pulled %q", listed, inspected, pulled)
 	}
-	if len(invocations) != 3 {
-		t.Fatalf("documented invocations reaching model boundary = %d, want 3", len(invocations))
+	if len(invocations) != 5 {
+		t.Fatalf("documented invocations reaching model boundary = %d, want 5", len(invocations))
 	}
 	wants := []documentedModelInvocationProjection{
+		{modelName: "embed", operation: "EMBED", inputMapping: "text=Find similar work"},
+		{modelName: "llm", operation: "OMNI", inputMapping: "prompt=Write a haiku"},
 		{modelName: "tts", operation: "TTS", inputMapping: "text=Read the release summary."},
 		{modelName: "tts", operation: "TTS", text: "Read the release summary.", outputPath: "speech.wav"},
 		{modelName: "tts", operation: "TTS", inputMapping: "text=Read the release summary.", json: true},
