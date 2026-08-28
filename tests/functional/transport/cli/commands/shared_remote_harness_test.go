@@ -68,6 +68,7 @@ func TestCLISharedRemoteScenarios(t *testing.T) {
 		{name: "TestCLIFactoryInitValidateAndShow", run: testCLIFactoryInitValidateAndShow},
 		{name: "TestCLIFactoryReplaceCurrentChangesSessionFactory", run: testCLIFactoryReplaceCurrentChangesSessionFactory},
 		{name: "TestCLISessionCreateListShowDelete", run: testCLISessionCreateListShowDelete},
+		{name: "TestCLISessionListUsesIsolatedRecordingHome", run: testCLISessionListUsesIsolatedRecordingHome},
 		{name: "TestCLISessionPauseBuffersAndResumeDispatches", run: testCLISessionPauseBuffersAndResumeDispatches},
 		{name: "TestCLISessionMissingIDReturnsNotFound", run: testCLISessionMissingIDReturnsNotFound},
 		{name: "TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors", run: testCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors},
@@ -316,6 +317,13 @@ func assertIsolatedWorkList(
 func sharedRemoteHostFactoryConfig() map[string]any {
 	config := factoryWiringFactoryConfig()
 	config["id"] = factoryWiringName
+	return config
+}
+
+func sessionHistoryOnlyFactoryConfig() map[string]any {
+	config := sharedRemoteHostFactoryConfig()
+	delete(config, "workers")
+	delete(config, "workstations")
 	return config
 }
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -151,6 +152,78 @@ func testCLISessionCreateListShowDelete(t *testing.T, remote *sharedRemoteCLI) {
 	if strings.Contains(showAfterDelete, sessionID) && strings.Contains(showAfterDelete, `"id"`) {
 		t.Fatalf("session show after delete must not emit a success session payload:\n%s", showAfterDelete)
 	}
+}
+
+// testCLISessionListUsesIsolatedRecordingHome keeps the real CLI process
+// pointed at a host-like home containing one malformed dated recording
+// artifact, while the server's composed recording inventory uses its own
+// package-owned home. The public history-only response proves that the
+// external home is not consulted.
+func testCLISessionListUsesIsolatedRecordingHome(t *testing.T, remote *sharedRemoteCLI) {
+	t.Helper()
+
+	const artifactReference = "2026/08/28/c07-external-home-malformed.json"
+	externalHome := t.TempDir()
+	isolatedRecordingHome := t.TempDir()
+	artifactPath := filepath.Join(
+		externalHome,
+		".you-agent-factory",
+		"recordings",
+		filepath.FromSlash(artifactReference),
+	)
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("create external recording directory: %v", err)
+	}
+	const malformedArtifact = `{"c07":"malformed recording"}`
+	if err := os.WriteFile(artifactPath, []byte(malformedArtifact), 0o600); err != nil {
+		t.Fatalf("write malformed external recording artifact: %v", err)
+	}
+	// Keep the CLI process on the same path a real operator invocation uses,
+	// while t.Setenv restores both variables after this serialized scenario.
+	t.Setenv("HOME", externalHome)
+	t.Setenv("USERPROFILE", externalHome)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	characterizationFactoryDir := support.ScaffoldFactory(t, sessionHistoryOnlyFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                characterizationFactoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			// Bind the durable listing to test-owned state at root composition;
+			// invocation-local environment must not select an operator home.
+			FactorySessionResolveHomeDirectory: func() (string, error) { return isolatedRecordingHome, nil },
+		},
+	})
+	defer server.Stop(t)
+
+	command := remote.process.CommandContext(ctx,
+		"--server", server.URL(),
+		"--json", "session", "list", "--history-only",
+	)
+	command.Dir = characterizationFactoryDir
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("you session list consulted malformed external-home recording artifact: %v\n%s", err, output)
+	}
+
+	var listed factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(bytesTrimSpace(output), &listed); err != nil {
+		t.Fatalf("decode isolated history-only session list JSON: %v\noutput:\n%s", err, output)
+	}
+	if listed.Scope == nil || string(*listed.Scope) != "history" {
+		t.Fatalf("history-only session list scope = %#v, want history", listed.Scope)
+	}
+	if len(listed.Sessions) != 0 {
+		t.Fatalf("history-only session list returned live sessions: %#v", listed.Sessions)
+	}
+	if listed.RecordedSessions != nil && len(*listed.RecordedSessions) != 0 {
+		t.Fatalf("history-only session list consulted external recording state: %#v", listed.RecordedSessions)
+	}
+	if strings.Contains(string(output), artifactReference) || strings.Contains(string(output), malformedArtifact) {
+		t.Fatalf("history-only session list leaked external recording state:\n%s", output)
+	}
+	t.Logf("CLI history-only listing used isolated recording home %q and ignored external home %q containing %q", isolatedRecordingHome, externalHome, artifactReference)
 }
 
 // TestCLISessionPauseBuffersAndResumeDispatches proves you session pause keeps

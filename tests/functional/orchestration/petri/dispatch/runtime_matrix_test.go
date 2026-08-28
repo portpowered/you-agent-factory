@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -65,8 +66,13 @@ func (ledger *petriDispatchRuntimeLedger) processStarted(process string) error {
 		row = &petriDispatchProcessRow{Process: process}
 		ledger.processes[process] = row
 	}
-	if row.Starts != 0 {
-		return fmt.Errorf("Petri process %q was started more than once", process)
+	limit := petriDispatchProcessOccurrenceLimit(process)
+	if row.Starts >= limit {
+		return fmt.Errorf(
+			"Petri process %q was started more than %d times",
+			process,
+			limit,
+		)
 	}
 	row.Starts++
 	return nil
@@ -79,8 +85,13 @@ func (ledger *petriDispatchRuntimeLedger) processStopped(process string) error {
 	if row == nil || row.Starts == 0 {
 		return fmt.Errorf("Petri process %q stopped without a recorded start", process)
 	}
-	if row.Stops != 0 {
-		return fmt.Errorf("Petri process %q was stopped more than once", process)
+	limit := petriDispatchProcessOccurrenceLimit(process)
+	if row.Stops >= limit {
+		return fmt.Errorf(
+			"Petri process %q was stopped more than %d times",
+			process,
+			limit,
+		)
 	}
 	row.Stops++
 	return nil
@@ -97,8 +108,18 @@ func (ledger *petriDispatchRuntimeLedger) scenarioOpened(
 	if strings.TrimSpace(scenario) == "" {
 		return errors.New("Petri scenario name is required")
 	}
-	if _, exists := ledger.scenarios[scenario]; exists {
-		return fmt.Errorf("Petri scenario %q was recorded more than once", scenario)
+	occurrences := 0
+	for _, row := range ledger.scenarios {
+		if row.Scenario == scenario {
+			occurrences++
+		}
+	}
+	if occurrences >= petriDispatchRepeatCount() {
+		return fmt.Errorf(
+			"Petri scenario %q was recorded more than %d times",
+			scenario,
+			petriDispatchRepeatCount(),
+		)
 	}
 	for _, row := range ledger.scenarios {
 		if row.FactoryDir == factoryDir {
@@ -108,7 +129,11 @@ func (ledger *petriDispatchRuntimeLedger) scenarioOpened(
 			return fmt.Errorf("Petri Factory Session %q was reused", sessionID)
 		}
 	}
-	ledger.scenarios[scenario] = &petriDispatchScenarioRow{
+	rowKey := scenario
+	if occurrences > 0 {
+		rowKey = fmt.Sprintf("%s#%d", scenario, occurrences+1)
+	}
+	ledger.scenarios[rowKey] = &petriDispatchScenarioRow{
 		Scenario:    scenario,
 		Process:     process,
 		FactoryDir:  factoryDir,
@@ -121,7 +146,16 @@ func (ledger *petriDispatchRuntimeLedger) scenarioOpened(
 func (ledger *petriDispatchRuntimeLedger) scenarioCompleted(scenario, sessionID string) error {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
-	row := ledger.scenarios[scenario]
+	var row *petriDispatchScenarioRow
+	for _, candidate := range ledger.scenarios {
+		if candidate.Scenario != scenario || candidate.SessionID != "" || candidate.SessionDone {
+			continue
+		}
+		if row != nil {
+			return fmt.Errorf("Petri scenario %q has multiple incomplete rows", scenario)
+		}
+		row = candidate
+	}
 	if row == nil {
 		return fmt.Errorf("Petri scenario %q was completed without an open row", scenario)
 	}
@@ -186,7 +220,10 @@ func (ledger *petriDispatchRuntimeLedger) report() (petriDispatchRuntimeReport, 
 		return report.Processes[i].Process < report.Processes[j].Process
 	})
 	sort.Slice(report.Scenarios, func(i, j int) bool {
-		return report.Scenarios[i].Scenario < report.Scenarios[j].Scenario
+		if report.Scenarios[i].Scenario != report.Scenarios[j].Scenario {
+			return report.Scenarios[i].Scenario < report.Scenarios[j].Scenario
+		}
+		return report.Scenarios[i].FactoryDir < report.Scenarios[j].FactoryDir
 	})
 	return report, nil
 }
@@ -243,11 +280,12 @@ func emitPetriDispatchRuntimeReport() error {
 	if err != nil {
 		return err
 	}
-	if isFullPetriDispatchRun() && len(report.Scenarios) != expectedPetriScenarioRows {
+	if isFullPetriDispatchRun() && len(report.Scenarios) != expectedPetriScenarioRows*petriDispatchRepeatCount() {
 		return fmt.Errorf(
-			"full Petri dispatch run recorded %d scenarios, want %d",
+			"full Petri dispatch run recorded %d scenarios, want %d per count=%d",
 			len(report.Scenarios),
-			expectedPetriScenarioRows,
+			expectedPetriScenarioRows*petriDispatchRepeatCount(),
+			petriDispatchRepeatCount(),
 		)
 	}
 	if isFullPetriDispatchRun() {
@@ -257,11 +295,12 @@ func emitPetriDispatchRuntimeReport() error {
 				sharedRows++
 			}
 		}
-		if sharedRows != expectedSharedPetriScenarioRows {
+		if sharedRows != expectedSharedPetriScenarioRows*petriDispatchRepeatCount() {
 			return fmt.Errorf(
-				"full Petri dispatch run recorded %d shared scenarios, want %d",
+				"full Petri dispatch run recorded %d shared scenarios, want %d per count=%d",
 				sharedRows,
-				expectedSharedPetriScenarioRows,
+				expectedSharedPetriScenarioRows*petriDispatchRepeatCount(),
+				petriDispatchRepeatCount(),
 			)
 		}
 	}
@@ -269,8 +308,38 @@ func emitPetriDispatchRuntimeReport() error {
 }
 
 func isFullPetriDispatchRun() bool {
+	if isPetriDispatchDiscoveryRun() {
+		return false
+	}
 	if runFlag := flag.Lookup("test.run"); runFlag != nil {
 		return strings.TrimSpace(runFlag.Value.String()) == ""
 	}
 	return true
+}
+
+func isPetriDispatchDiscoveryRun() bool {
+	if listFlag := flag.Lookup("test.list"); listFlag != nil {
+		return strings.TrimSpace(listFlag.Value.String()) != ""
+	}
+	return false
+}
+
+func petriDispatchProcessOccurrenceLimit(process string) int {
+	// The shared process is intentionally reused for the whole package, even
+	// when -count repeats test execution. The isolated panic case owns a new
+	// process for each repetition because its Go-level panic boundary cannot be
+	// exercised through the shared host.
+	if process == isolatedPetriPanicProcessName {
+		return petriDispatchRepeatCount()
+	}
+	return 1
+}
+
+func petriDispatchRepeatCount() int {
+	if countFlag := flag.Lookup("test.count"); countFlag != nil {
+		if count, err := strconv.Atoi(strings.TrimSpace(countFlag.Value.String())); err == nil && count > 0 {
+			return count
+		}
+	}
+	return 1
 }
