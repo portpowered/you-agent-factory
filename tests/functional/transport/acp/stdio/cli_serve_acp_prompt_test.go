@@ -58,7 +58,7 @@ type rpcFrame struct {
 // rather than a fabricated or coincidental value.
 //
 // This is the "you server acp" transport-mechanics sibling of
-// tests/functional/chat_sessions/root_composition/acp_server_composition_test.go,
+// tests/functional/sessions/chat_sessions/root_composition/acp_server_composition_test.go,
 // which drives Process.ACPServer() directly rather than the CLI command
 // tree; both share support.SeedACPAgentProfile instead of each owning a
 // private copy of that fixture-seeding helper.
@@ -289,7 +289,7 @@ func readRPCResponse(t *testing.T, r *bufio.Reader) rpcFrame {
 // <ProjectFactoriesRoot(cwd)>/@scope/name/factory.json layout the production
 // named-Factory catalog and effective-catalog discovery both read -- the
 // same layout seedInstalledPackagedFactory
-// (tests/functional/chat_sessions/root_composition) writes for a real
+// (tests/functional/sessions/chat_sessions/root_composition) writes for a real
 // packaged Factory, but authored inline here as a single MODEL_WORKER
 // pipeline instead of a real packaged Factory's own business workflow, so
 // its one dispatch round is fully deterministic through a

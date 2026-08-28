@@ -226,7 +226,7 @@ func runClassifierRoutingSelectorGuard(
 		runner,
 	)
 	writeLogicalMoveSeedRequest(t, scenario.factoryDir, workID, payload)
-	fixture.provider.unregister(scenario.id)
+	scenario.closeRoute(t)
 	scenario.open(t)
 
 	session, listed, events := scenario.observe(t, 10*time.Second)
@@ -281,17 +281,24 @@ func assertClassifierRoutingAmbiguousSelector(
 	if err := fixture.provider.register("ambiguous-first", []string{fixture.rootDir}, first); err != nil {
 		t.Fatalf("register first ambiguous selector: %v", err)
 	}
+	defer func() {
+		if err := fixture.provider.unregister("ambiguous-first"); err != nil {
+			t.Errorf("unregister first ambiguous selector: %v", err)
+		}
+	}()
 	if err := fixture.provider.register("ambiguous-second", []string{ambiguousWorkDir}, second); err != nil {
-		fixture.provider.unregister("ambiguous-first")
 		t.Fatalf("register second ambiguous selector: %v", err)
 	}
+	defer func() {
+		if err := fixture.provider.unregister("ambiguous-second"); err != nil {
+			t.Errorf("unregister second ambiguous selector: %v", err)
+		}
+	}()
 	_, err := fixture.provider.Run(context.Background(), platformprocess.CommandRequest{
 		WorkDir: ambiguousWorkDir,
 		Args:    []string{requestContent},
 		Stdin:   []byte(requestContent),
 	})
-	fixture.provider.unregister("ambiguous-first")
-	fixture.provider.unregister("ambiguous-second")
 	if err == nil {
 		t.Fatal("ambiguous provider selector unexpectedly succeeded")
 	}
@@ -521,9 +528,11 @@ func runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(
 	writeLogicalMoveSeedRequest(t, scenario.factoryDir, firstWorkID, firstPayload)
 	scenario.open(t)
 
-	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, 20*time.Second)
+	workRoutingRead(t, scenario.fixture, scenario.id+"/session-terminal", func() {
+		support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, 20*time.Second)
+	})
 	writeLogicalMoveSeedRequest(t, scenario.factoryDir, secondWorkID, secondPayload)
-	waitForWorkRoutingWorkCount(t, scenario.fixture.baseURL, scenario.sessionID, 2, 20*time.Second)
+	waitForWorkRoutingWorkCount(t, scenario.fixture, scenario.fixture.baseURL, scenario.sessionID, 2, 20*time.Second)
 	session, listed, events := scenario.observe(t, 20*time.Second)
 	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 1 {
 		t.Fatalf(
@@ -671,7 +680,9 @@ func assertClassifierRoutingPublicWork(
 	if got := workRoutingPublicWorkText(admitted); got != wantPayload {
 		t.Fatalf("WORK_REQUEST payload = %q, want %q", got, wantPayload)
 	}
-	publicWork := getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, workID)
+	publicWork := workRoutingReadValue(t, scenario.fixture, scenario.id+"/work/"+workID, func() factoryapi.Work {
+		return getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, workID)
+	})
 	if got := support.StringPointerValue(publicWork.WorkId); got != workID {
 		t.Fatalf("public Work ID = %q, want %q", got, workID)
 	}
@@ -794,7 +805,9 @@ func assertClassifierRoutingFailedPublicWork(
 	if got := workRoutingPublicWorkText(admitted); got != wantPayload {
 		t.Fatalf("failed WORK_REQUEST payload = %q, want %q", got, wantPayload)
 	}
-	publicWork := getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, workID)
+	publicWork := workRoutingReadValue(t, scenario.fixture, scenario.id+"/work/"+workID, func() factoryapi.Work {
+		return getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, workID)
+	})
 	if got := support.StringPointerValue(publicWork.WorkId); got != workID {
 		t.Fatalf("failed public Work ID = %q, want %q", got, workID)
 	}

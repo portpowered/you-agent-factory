@@ -1,3 +1,4 @@
+// Functional owner: sessions/chat_sessions/root_composition.
 package root_composition_test
 
 import (
@@ -146,7 +147,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edges) (*os.File, *bufio.Reader) {
 	t.Helper()
 
-	buildProcess, err := support.BuildProcessWithContext(context.Background(), edges)
+	buildProcess, err := buildChatProcess(t, "standalone ACP harness", edges)
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
@@ -172,19 +173,32 @@ func startServeACPProcess(
 ) (*os.File, *bufio.Reader) {
 	t.Helper()
 
-	stdinRead, stdinWrite, err := os.Pipe()
+	stdinReadFile, stdinWriteFile, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
 	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
+	stdinRead := newChatPipeEndpoint(stdinReadFile, "ACP stdin reader")
+	stdinWrite := newChatPipeEndpoint(stdinWriteFile, "ACP stdin writer")
+	stdoutReadFile, stdoutWriteFile, err := os.Pipe()
 	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	t.Cleanup(func() {
 		_ = stdinRead.Close()
 		_ = stdinWrite.Close()
-		_ = stdoutRead.Close()
-		_ = stdoutWrite.Close()
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stdoutRead := newChatPipeEndpoint(stdoutReadFile, "ACP stdout reader")
+	stdoutWrite := newChatPipeEndpoint(stdoutWriteFile, "ACP stdout writer")
+	connectionID := chatCensus.openConnection(buildProcess.ACPServer(), "ACP stdio Serve", stdinWrite.file)
+	t.Cleanup(func() {
+		for name, pipe := range map[string]*chatPipeEndpoint{
+			"stdin reader":  stdinRead,
+			"stdin writer":  stdinWrite,
+			"stdout reader": stdoutRead,
+			"stdout writer": stdoutWrite,
+		} {
+			if err := pipe.Close(); err != nil {
+				t.Errorf("close %s: %v", name, err)
+			}
+		}
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -196,8 +210,8 @@ func startServeACPProcess(
 		serveErr <- buildProcess.Execute(root.Input{
 			Args:             []string{"you", "server", "acp"},
 			Env:              env,
-			Stdin:            stdinRead,
-			Stdout:           stdoutWrite,
+			Stdin:            stdinRead.file,
+			Stdout:           stdoutWrite.file,
 			Stderr:           &stderr,
 			Context:          ctx,
 			WorkingDirectory: cwd,
@@ -216,10 +230,13 @@ func startServeACPProcess(
 			case <-time.After(5 * time.Second):
 				t.Error("you server acp did not shut down after stdin closed")
 			}
+			if err := chatCensus.closeConnection(connectionID); err != nil {
+				t.Errorf("close ACP connection census: %v", err)
+			}
 		})
 	})
 
-	return stdinWrite, bufio.NewReader(stdoutRead)
+	return stdinWrite.file, bufio.NewReader(stdoutRead.file)
 }
 
 // assertServeACPStreamingNotifications asserts story 005's now-achievable
@@ -314,6 +331,7 @@ func driveServeACPSessionNew(t *testing.T, stdin *os.File, stdout *bufio.Reader,
 	if err := json.Unmarshal(resp.Result, &created); err != nil {
 		t.Fatalf("unmarshal session/new result: %v", err)
 	}
+	trackChatSessionOnConnection(t, stdin, stdout, string(created.SessionId))
 	return string(created.SessionId)
 }
 
@@ -333,6 +351,12 @@ func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Read
 		t.Fatalf("marshal session/prompt params: %v", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
+	turnID := beginChatTurn(sessionID, "ACP stdio session/prompt")
+	defer func() {
+		if err := closeChatTurn(turnID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	if _, err := stdin.Write([]byte(line)); err != nil {
 		t.Fatalf("write session/prompt request: %v", err)
 	}

@@ -1,3 +1,4 @@
+// Functional owner: sessions/chat_sessions/root_composition.
 package root_composition_test
 
 import (
@@ -123,7 +124,7 @@ func TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess(t *testing.T) 
 	// server over OS pipes), a fixed peer session identity, and a completed
 	// ACP-execution Factory activation. Combining it with another activation
 	// would make the peer/session and process-scoped ~default lifetime mutable.
-	home := t.TempDir()
+	home := chatTempDir(t, "ACP usage streaming", "usage-stream-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv(acpStreamUsagePeerEnvironment, "1")
@@ -133,9 +134,11 @@ func TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess(t *testing.T) 
 	support.SeedACPAgentProfile(t, home, "factory:"+factoryName, []string{"factory:" + factoryName})
 
 	var processStarts atomic.Int32
-	cwd := t.TempDir()
+	peerOwner := "ACP usage peer " + t.Name()
+	trackChatPeerOwner(t, peerOwner)
+	cwd := chatTempDir(t, "ACP usage streaming working directory", "usage-stream-cwd-")
 	stdin, stdout := startServeACPHarness(t, home, cwd, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpStreamUsageCommandFactory(&processStarts),
+		PlatformProcessCommandFactory: acpStreamUsageCommandFactory(&processStarts, peerOwner),
 		ProvidersExecutableLocator:    acpStreamUsageExecutableLocator{},
 	})
 
@@ -251,6 +254,7 @@ func seedACPStreamUsageFactory(t *testing.T, home string) {
 		t.Fatalf("NamedFactoriesRootForHome() error = %v", err)
 	}
 	factoryDir := filepath.Join(globalRoot, "@acp-stream-test", "usage")
+	registerChatFactoryPath(t, factoryDir)
 	writeACPStreamUsageFile(t, factoryDir, "factory.json", acpStreamUsageFactoryJSON)
 	writeACPStreamUsageFile(t, filepath.Join(factoryDir, "workers", "worker"), "AGENTS.md", acpStreamUsageWorkerAgents)
 	writeACPStreamUsageFile(t, filepath.Join(factoryDir, "workstations", "process"), "AGENTS.md", acpStreamUsageWorkstationAgents)
@@ -339,10 +343,11 @@ const acpStreamUsageWorkstationAgents = "---\n" +
 // re-execs this same test binary at TestACPStreamUsagePeerProcess, matching
 // tests/functional/providers/acp/basic_factory_run_test.go's
 // acpHelperCommandFactory pattern.
-func acpStreamUsageCommandFactory(starts *atomic.Int32) platformprocess.CommandFactory {
+func acpStreamUsageCommandFactory(starts *atomic.Int32, peerOwner string) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if name == "cursor-agent" && len(args) == 1 && args[0] == "acp" {
 			starts.Add(1)
+			beginChatPeer(peerOwner)
 			return exec.Command(os.Args[0], "-test.run=^TestACPStreamUsagePeerProcess$")
 		}
 		return exec.Command(name, args...)

@@ -1,3 +1,4 @@
+// Functional owner: sessions/chat_sessions/root_composition.
 package root_composition_test
 
 import (
@@ -53,12 +54,12 @@ func newPackagedFactoryCohort(
 	runner process.CommandRunner,
 ) *packagedFactoryCohort {
 	t.Helper()
-	home := t.TempDir()
+	home := chatTempDir(t, "packaged Factory "+factory, "packaged-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	seedInstalledPackagedFactory(t, home, factory)
 	support.SeedACPAgentProfile(t, home, target, []string{target})
-	buildProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	buildProcess, err := buildChatProcess(t, "packaged Factory "+factory, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
 	if err != nil {
@@ -91,6 +92,12 @@ func (runner *packagedFactoryPromptRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
+	callID := beginChatCall("packaged Factory provider")
+	defer func() {
+		if err := closeChatCall(callID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, request)
 	runner.mu.Unlock()
@@ -176,7 +183,7 @@ func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 			runner := newPackagedFactoryPromptRunner(testCase)
 			cohort := newPackagedFactoryCohort(t, testCase.factory, testCase.target, runner)
 
-			cwd := t.TempDir()
+			cwd := chatTempDir(t, "packaged Factory "+testCase.name+" working directory", "packaged-cwd-")
 			stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 			sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
@@ -237,6 +244,12 @@ func (runner *planParallelACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
+	callID := beginChatCall("plan-parallel provider")
+	defer func() {
+		if err := closeChatCall(callID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	runner.mu.Lock()
 	runner.requests++
 	runner.mu.Unlock()
@@ -278,7 +291,7 @@ func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 		runner,
 	)
 
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "plan-parallel working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
@@ -318,6 +331,12 @@ func (runner *builderGreetingACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
+	callID := beginChatCall("Factory Builder provider")
+	defer func() {
+		if err := closeChatCall(callID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	prompt := string(request.Stdin)
 	switch {
 	case strings.Contains(prompt, "return exactly one lowercase label: `build` or `help`"):
@@ -355,7 +374,7 @@ func TestFactoryBuilderGreetsOnAVagueFirstACPTurn(t *testing.T) {
 		"factory:@you/factory-builder",
 		runner,
 	)
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "Factory Builder working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
@@ -391,6 +410,12 @@ func (runner *spawnACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
+	callID := beginChatCall("spawn provider")
+	defer func() {
+		if err := closeChatCall(callID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	runner.mu.Lock()
 	runner.calls++
 	runner.mu.Unlock()
@@ -453,7 +478,7 @@ func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
 
 	runner := &spawnACPRunner{}
 	cohort := newPackagedFactoryCohort(t, "@you/spawn", "factory:@you/spawn", runner)
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "spawn working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
@@ -498,6 +523,12 @@ func (runner *deepResearchACPRunner) Run(
 	_ context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
+	callID := beginChatCall("deep-research provider")
+	defer func() {
+		if err := closeChatCall(callID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	runner.mu.Lock()
 	runner.calls++
 	runner.mu.Unlock()
@@ -547,7 +578,7 @@ func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testin
 		"factory:@you/deep-research",
 		runner,
 	)
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "deep-research working directory", "packaged-cwd-")
 	stdin, stdout := startServeACPProcess(t, cohort.process, cohort.home, cwd)
 
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)

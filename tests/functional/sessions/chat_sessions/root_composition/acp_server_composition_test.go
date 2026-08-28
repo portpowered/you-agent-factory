@@ -1,3 +1,4 @@
+// Functional owner: sessions/chat_sessions/root_composition.
 package root_composition_test
 
 import (
@@ -5,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,7 +21,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 
@@ -63,14 +64,14 @@ func catalogCohortForTest(t *testing.T) *catalogCohort {
 	catalogCohortState.Lock()
 	defer catalogCohortState.Unlock()
 	if catalogCohortState.cohort == nil && catalogCohortState.err == nil {
-		home, err := os.MkdirTemp("", "you-chat-catalog-cohort-")
+		home, err := chatPersistentMkdirTemp("catalog cohort", "you-chat-catalog-cohort-")
 		if err != nil {
 			catalogCohortState.err = fmt.Errorf("create catalog cohort home: %w", err)
 		} else {
 			t.Setenv("HOME", home)
 			t.Setenv("USERPROFILE", home)
 			installed := seedEveryInstalledPackagedFactory(t, home)
-			process, buildErr := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+			process, buildErr := buildChatProcess(t, "catalog cohort", serviceedges.Edges{})
 			if buildErr != nil {
 				catalogCohortState.err = fmt.Errorf("build catalog cohort process: %w", buildErr)
 				_ = os.RemoveAll(home)
@@ -96,19 +97,21 @@ func catalogCohortForTest(t *testing.T) *catalogCohort {
 // closeCatalogCohort releases the process and fixed home after all package
 // tests have finished. It is called by the package TestMain next to the
 // story-001 controlled cohort cleanup.
-func closeCatalogCohort() {
+func closeCatalogCohort() error {
 	catalogCohortState.Lock()
 	cohort := catalogCohortState.cohort
 	catalogCohortState.Unlock()
 	if cohort == nil {
-		return
+		return nil
 	}
-	if err := cohort.process.Close(context.Background()); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "catalog cohort close: %v\n", err)
+	var errs []error
+	if err := closeChatProcess(cohort.process); err != nil {
+		errs = append(errs, fmt.Errorf("catalog cohort close: %w", err))
 	}
-	if err := os.RemoveAll(cohort.home); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "catalog cohort home cleanup: %v\n", err)
+	if err := chatRemoveRoot(cohort.home); err != nil {
+		errs = append(errs, fmt.Errorf("catalog cohort home cleanup: %w", err))
 	}
+	return errors.Join(errs...)
 }
 
 // newCatalogProfileCohort builds one immutable process for an authored ACP
@@ -121,7 +124,7 @@ func newCatalogProfileCohort(
 	allowedTargets []string,
 ) *catalogCohort {
 	t.Helper()
-	home := t.TempDir()
+	home := chatTempDir(t, "catalog profile "+name, "catalog-profile-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	installed := make([]string, 0, len(allowedTargets))
@@ -130,7 +133,7 @@ func newCatalogProfileCohort(
 	}
 	seedInstalledPackagedFactories(t, home, installed)
 	support.SeedACPAgentProfile(t, home, defaultTarget, allowedTargets)
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	process, err := buildChatProcess(t, "catalog profile "+name, serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("build %s catalog profile cohort: %v", name, err)
 	}
@@ -216,6 +219,7 @@ func seedInstalledPackagedFactoryFromCatalog(
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", factoryDir, err)
 	}
+	registerChatFactoryPath(t, factoryDir)
 	configPath := filepath.Join(factoryDir, "factory.json")
 	if err := os.WriteFile(configPath, resolved.Definition.JSON, 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", configPath, err)
@@ -233,10 +237,34 @@ func packagedFactoryCatalogForTest(
 			packagedFactoryCatalogState.err = fmt.Errorf("load published catalog: %w", err)
 			return
 		}
-		catalog, err := factorydefinitionswire.NewPackagedFactoryCatalog(published.All())
-		if err != nil {
-			packagedFactoryCatalogState.err = fmt.Errorf("build packaged catalog: %w", err)
-			return
+		// Keep the fixture on the Factory Definitions public root contract. The
+		// publication loader already validates and detaches the generated
+		// definitions; this fixture only needs the public resolve operation to
+		// materialize a customer-visible installed Factory before root.BuildProcess
+		// composes the actual application services.
+		catalog := factorydefinitions.PackagedFactoryCatalogOperations{
+			Resolve: func(
+				ctx context.Context,
+				request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+				if ctx == nil {
+					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, errors.New("packaged Factory catalog context is required")
+				}
+				if err := ctx.Err(); err != nil {
+					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, fmt.Errorf("read packaged Factory catalog: %w", err)
+				}
+				definition, ok := published.Lookup(request.Name)
+				if !ok {
+					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, &factorydefinitions.UnknownPackagedFactoryError{
+						Name:      request.Name,
+						Available: published.Names(),
+					}
+				}
+				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
+					Definition: definition,
+					Formats:    append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
+				}, nil
+			},
 		}
 		packagedFactoryCatalogState.catalog = catalog
 		packagedFactoryCatalogState.names = published.Names()
@@ -257,7 +285,7 @@ func assertSessionNewReturnsDefaultTarget(t *testing.T, server acp.Server, cwd, 
 		`{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"cwd":%q,"mcpServers":[]}}`+"\n",
 		cwd,
 	)
-	if err := server.Serve(context.Background(), strings.NewReader(newSessionLine), &out); err != nil {
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(newSessionLine), &out); err != nil {
 		t.Fatalf("Serve(session/new) error = %v", err)
 	}
 
@@ -275,6 +303,7 @@ func assertSessionNewReturnsDefaultTarget(t *testing.T, server acp.Server, cwd, 
 	if len(created.ConfigOptions) != 1 || created.ConfigOptions[0].Select == nil {
 		t.Fatalf("session/new configOptions = %+v, want exactly one Factory target picker option", created.ConfigOptions)
 	}
+	trackChatSessionOnServer(t, server, string(created.SessionId))
 	if string(created.ConfigOptions[0].Select.CurrentValue) != wantCurrent {
 		t.Fatalf("session/new currentValue = %q, want %q", created.ConfigOptions[0].Select.CurrentValue, wantCurrent)
 	}
@@ -342,7 +371,7 @@ func factoryTargetSelectOption(
 		`{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"cwd":%q,"mcpServers":[]}}`+"\n",
 		cwd,
 	)
-	if err := server.Serve(context.Background(), strings.NewReader(newSessionLine), &out); err != nil {
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(newSessionLine), &out); err != nil {
 		t.Fatalf("Serve(session/new) error = %v", err)
 	}
 
@@ -357,6 +386,7 @@ func factoryTargetSelectOption(
 	if len(created.ConfigOptions) != 1 || created.ConfigOptions[0].Select == nil {
 		t.Fatalf("session/new configOptions = %+v, want exactly one Factory target picker option", created.ConfigOptions)
 	}
+	trackChatSessionOnServer(t, server, string(created.SessionId))
 	return string(created.SessionId), *created.ConfigOptions[0].Select
 }
 
@@ -396,7 +426,7 @@ func TestACPServerWithNoAuthoredAgentProfileOffersEveryInstalledFactory(t *testi
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
 
-	sessionID, option := factoryTargetSelectOption(t, server, t.TempDir())
+	sessionID, option := factoryTargetSelectOption(t, server, chatTempDir(t, "catalog-unrestricted", "catalog-cwd-"))
 	if sessionID == "" {
 		t.Fatal("session/new returned a blank sessionId")
 	}
@@ -447,7 +477,7 @@ func TestACPServerAuthoredAllowedTargetsStillRestrictsCatalog(t *testing.T) {
 		"factory:@you/classify",
 	})
 
-	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), t.TempDir())
+	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), chatTempDir(t, "catalog-restricted", "catalog-cwd-"))
 	want := []string{"factory:@you/goal", "factory:@you/classify"}
 	got := selectOptionValues(t, option)
 	if len(got) != len(want) {
@@ -468,7 +498,7 @@ func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
 
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "catalog-switch", "catalog-cwd-")
 	sessionID, option := factoryTargetSelectOption(t, server, cwd)
 	if string(option.CurrentValue) == "factory:@you/plan-parallel" {
 		t.Fatal("precondition: plan-parallel must not already be current")
@@ -480,7 +510,7 @@ func TestACPServerSetConfigOptionSelectsAnotherInstalledFactory(t *testing.T) {
 			`{"sessionId":%q,"configId":"target","value":"factory:@you/plan-parallel"}}`+"\n",
 		sessionID,
 	)
-	if err := server.Serve(context.Background(), strings.NewReader(line), &out); err != nil {
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(line), &out); err != nil {
 		t.Fatalf("Serve(session/set_config_option) error = %v", err)
 	}
 
@@ -520,7 +550,7 @@ func TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder(t *testing.T) 
 	})
 	// loop/goal/classify: not alphabetical, and the default is authored
 	// second rather than first.
-	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), t.TempDir())
+	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), chatTempDir(t, "catalog-authored-order", "catalog-cwd-"))
 	want := []string{"factory:@you/loop", "factory:@you/goal", "factory:@you/classify"}
 	got := selectOptionValues(t, option)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -538,7 +568,7 @@ func TestACPServerAuthoredAllowedTargetsAreOfferedInAuthoredOrder(t *testing.T) 
 // order.
 func TestACPServerUnrestrictedTargetsAreOfferedCurrentFirstThenSorted(t *testing.T) {
 	cohort := catalogCohortForTest(t)
-	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), t.TempDir())
+	_, option := factoryTargetSelectOption(t, cohort.process.ACPServer(), chatTempDir(t, "catalog-unrestricted-order", "catalog-cwd-"))
 	got := selectOptionValues(t, option)
 	if len(got) < 3 {
 		t.Fatalf("Factory target choices = %v, want the full installed catalog", got)
@@ -580,19 +610,29 @@ var controlledCohortState struct {
 func TestMain(m *testing.M) {
 	code := m.Run()
 
-	closeCatalogCohort()
+	if err := closeCatalogCohort(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "catalog cohort cleanup: %v\n", err)
+		code = 1
+	}
 
 	controlledCohortState.Lock()
 	cohort := controlledCohortState.cohort
 	controlledCohortState.Unlock()
 	if cohort != nil {
-		if err := cohort.process.Close(context.Background()); err != nil {
+		if err := closeChatProcess(cohort.process); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "controlled ACP cohort close: %v\n", err)
+			code = 1
 		}
-		if err := os.RemoveAll(cohort.home); err != nil {
+		if err := chatRemoveRoot(cohort.home); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "controlled ACP cohort home cleanup: %v\n", err)
+			code = 1
 		}
 	}
+	if err := chatCensus.assertClean(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "chat root-composition cleanup census: %v\n", err)
+		code = 1
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "chat root-composition cleanup census: %s\n", chatCensus.summary())
 
 	os.Exit(code)
 }
@@ -603,7 +643,7 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 	controlledCohortState.Lock()
 	defer controlledCohortState.Unlock()
 	if controlledCohortState.cohort == nil && controlledCohortState.err == nil {
-		home, err := os.MkdirTemp("", "you-chat-sessions-cohort-")
+		home, err := chatPersistentMkdirTemp("controlled ACP cohort", "you-chat-sessions-cohort-")
 		if err != nil {
 			controlledCohortState.err = fmt.Errorf("create controlled ACP cohort home: %w", err)
 		} else {
@@ -623,7 +663,7 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 					runner:               runner,
 					workingDirectoryRoot: workingDirectoryRoot,
 				}
-				process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+				process, err := buildChatProcess(t, "controlled ACP cohort", serviceedges.Edges{
 					ProviderCommandRunner: runner,
 					FactorySessionIDGenerator: func() string {
 						n := cohort.factorySessionIDCalls.Add(1)
@@ -660,21 +700,7 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 // owner gains a supported release/reopen capability.
 func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 	t.Helper()
-	home, err := os.MkdirTemp("", "you-chat-sessions-"+name+"-")
-	if err != nil {
-		t.Fatalf("create controlled ACP %s home: %v", name, err)
-	}
-	// Register home removal before the environment overrides and process
-	// close. Cleanup is LIFO: the process closes first, the test restores the
-	// caller's HOME/USERPROFILE next, and only then does Windows remove the
-	// process-scoped home. Keeping the deleted path out of the live process
-	// environment avoids a repeat-run teardown race without weakening the
-	// activation-owning root's required isolation.
-	t.Cleanup(func() {
-		if err := os.RemoveAll(home); err != nil {
-			t.Errorf("remove controlled ACP %s home: %v", name, err)
-		}
-	})
+	home := chatMkdirTemp(t, "controlled ACP "+name, "", "you-chat-sessions-"+name+"-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	workingDirectoryRoot := filepath.Join(home, "workdirs")
@@ -692,7 +718,7 @@ func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 		runner:               runner,
 		workingDirectoryRoot: workingDirectoryRoot,
 	}
-	cohort.process, err = support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	process, err := buildChatProcess(t, "controlled ACP "+name, serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		FactorySessionIDGenerator: func() string {
 			n := cohort.factorySessionIDCalls.Add(1)
@@ -703,8 +729,9 @@ func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 		_ = os.RemoveAll(home)
 		t.Fatalf("build controlled ACP %s process: %v", name, err)
 	}
+	cohort.process = process
 	t.Cleanup(func() {
-		if err := cohort.process.Close(context.Background()); err != nil {
+		if err := closeChatProcess(cohort.process); err != nil {
 			t.Errorf("close controlled ACP %s process: %v", name, err)
 		}
 	})
@@ -724,11 +751,7 @@ func controlledACPWorkingDirectory(t *testing.T, name string) string {
 
 func controlledACPWorkingDirectoryForCohort(t *testing.T, cohort *controlledACPCohort, name string) string {
 	t.Helper()
-	directory, err := os.MkdirTemp(cohort.workingDirectoryRoot, name+"-")
-	if err != nil {
-		t.Fatalf("create controlled ACP working directory: %v", err)
-	}
-	return directory
+	return chatMkdirTemp(t, "controlled ACP "+name+" working directory", cohort.workingDirectoryRoot, name+"-")
 }
 
 func controlledACPServer(t *testing.T) support.ACPServer {
@@ -765,6 +788,12 @@ func (runner *controlledACPCommandRunner) Run(
 	ctx context.Context,
 	request process.CommandRequest,
 ) (process.CommandResult, error) {
+	callID := beginChatCall("controlled ACP provider")
+	defer func() {
+		if err := closeChatCall(callID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, request)
 	busyStarted := runner.busyStarted

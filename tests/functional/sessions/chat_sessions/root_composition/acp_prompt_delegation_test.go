@@ -1,3 +1,4 @@
+// Functional owner: sessions/chat_sessions/root_composition.
 package root_composition_test
 
 import (
@@ -16,7 +17,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -200,7 +200,11 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	t.Setenv("HOME", scenario.home)
 	t.Setenv("USERPROFILE", scenario.home)
 	seedInstalledPackagedFactory(t, scenario.home, "@you/goal")
-	if err := os.WriteFile(operatorsettings.DefaultConfigPath(scenario.home), []byte("not valid json"), 0o644); err != nil {
+	// This is fixture setup for the malformed document; the failure under test
+	// is exercised through the root.BuildProcess-composed ACP server above, not
+	// through an Operator Settings path-policy assertion.
+	configPath := filepath.Join(strings.TrimSpace(scenario.home), ".you-agent-factory", "config.json")
+	if err := os.WriteFile(configPath, []byte("not valid json"), 0o644); err != nil {
 		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
 	}
 	fourthResp := sendSessionPrompt(t, scenario.server, scenario.fourthSessionID, "a prompt with no resolvable Operator Defaults")
@@ -228,14 +232,14 @@ func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 	// both home-directory variables, and corrupts Operator Settings after
 	// admission. Those destructive inputs are the filesystem and resolver
 	// properties under test and cannot be shared with another ACP session.
-	home := t.TempDir()
+	home := chatTempDir(t, "unresolvable Factory", "unresolvable-")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
 	runner := &controlledACPCommandRunner{}
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	process, err := buildChatProcess(t, "unresolvable Factory", serviceedges.Edges{
 		ProviderCommandRunner: runner,
 	})
 	if err != nil {
@@ -247,7 +251,7 @@ func newUnresolvableFactoryScenario(t *testing.T) unresolvableFactoryScenario {
 		t.Fatal("Process.ACPServer() returned a nil acp.Server")
 	}
 
-	cwd := t.TempDir()
+	cwd := chatTempDir(t, "unresolvable Factory working directory", "unresolvable-cwd-")
 	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	thirdSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
 	fourthSessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
@@ -310,18 +314,16 @@ func assertBoundedDependencyError(t *testing.T, resp rpcMessage, operation strin
 // test if that close reports an error. On-demand Factory Sessions activation
 // (see pkg/wire's compositeProcessLifecycle) keeps an opened Factory target
 // runtime's own log file handle open until Process.Close tears it down; this
-// runs before t.TempDir()'s own automatic cleanup (t.Cleanup callbacks run
-// LIFO, and this is always registered after the test's own t.TempDir() calls),
+// runs before chatTempDir's cleanup for the owning home (t.Cleanup callbacks
+// run LIFO, and the process cleanup is registered after that home is made),
 // so the runtime is closed before its home directory is removed -- proving
 // this story's reachable close path actually works, not merely compiling,
-// instead of masking an unclosed runtime with a manually managed,
-// error-tolerant temp directory.
-func closeProcessCleanly(t *testing.T, process interface {
-	Close(context.Context) error
-}) {
+// instead of masking an unclosed runtime with an error-tolerant temp
+// directory.
+func closeProcessCleanly(t *testing.T, process support.ApplicationProcess) {
 	t.Helper()
 	t.Cleanup(func() {
-		if err := process.Close(context.Background()); err != nil {
+		if err := closeChatProcess(process); err != nil {
 			t.Errorf("Process.Close() error = %v, want clean teardown", err)
 		}
 	})
@@ -416,7 +418,18 @@ func runPromptDeliveries(t *testing.T, homePrefix string, deliveries int) prompt
 	input := strings.Repeat(promptLine, deliveries)
 
 	var out bytes.Buffer
-	if err := server.Serve(context.Background(), strings.NewReader(input), &out); err != nil {
+	turnIDs := make([]string, deliveries)
+	for index := range turnIDs {
+		turnIDs[index] = beginChatTurn(sessionID, "redelivery")
+	}
+	defer func() {
+		for _, turnID := range turnIDs {
+			if err := closeChatTurn(turnID); err != nil {
+				chatCensus.recordViolation(err)
+			}
+		}
+	}()
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(input), &out); err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}
 
@@ -501,9 +514,15 @@ func doSessionPrompt(server acp.Server, sessionID, text string) (rpcMessage, err
 		return rpcMessage{}, fmt.Errorf("marshal session/prompt params: %w", err)
 	}
 	line := fmt.Sprintf(`{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":%s}`, params) + "\n"
+	turnID := beginChatTurn(sessionID, "one-shot session/prompt")
+	defer func() {
+		if err := closeChatTurn(turnID); err != nil {
+			chatCensus.recordViolation(err)
+		}
+	}()
 
 	var out bytes.Buffer
-	if err := server.Serve(context.Background(), strings.NewReader(line), &out); err != nil {
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(line), &out); err != nil {
 		return rpcMessage{}, fmt.Errorf("Serve(session/prompt): %w", err)
 	}
 	responses := responseLinesOnlyErr(&out)
