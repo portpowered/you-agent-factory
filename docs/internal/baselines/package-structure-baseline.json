@@ -1069,11 +1069,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/named_invocation/named_invocation_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/root_discovery/root_discovery_test.go",
       "target": "cli"
     },
