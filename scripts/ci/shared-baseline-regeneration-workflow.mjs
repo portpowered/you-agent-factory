@@ -23,6 +23,8 @@ export const SHARED_BASELINE_COMMENT_MARKER =
 	"<!-- shared-ci-baseline-regeneration -->";
 
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
+const NO_DIFF_PULL_REQUEST_COMMENT =
+	"The latest successful main CI run regenerated no changes; this reconciliation is no longer needed.";
 
 function normalizePath(path) {
 	return String(path || "")
@@ -177,14 +179,385 @@ export function renderPullRequestBody({
 	].join("\n");
 }
 
-function runGit(args) {
-	const result = spawnSync("git", args, { encoding: "utf8", windowsHide: true });
-	if (result.error) throw new Error(`unable to execute git: ${result.error.message}`);
-	if (result.status !== 0) {
-		const detail = `${result.stderr || result.stdout || ""}`.trim();
-		throw new Error(`git ${args.join(" ")} failed with exit code ${result.status}${detail ? `: ${detail}` : ""}`);
+function requireCommitSha(value, label) {
+	if (!COMMIT_SHA_PATTERN.test(String(value || ""))) {
+		throw new Error(`${label} must be a complete commit SHA`);
 	}
-	return result.stdout || "";
+}
+
+function parseJsonOutput(output, label) {
+	try {
+		return JSON.parse(output);
+	} catch (error) {
+		throw new Error(`${label} returned invalid JSON: ${error.message}`);
+	}
+}
+
+function parsePullRequestNumber(value, label) {
+	const number = Number(String(value || "").trim());
+	if (!Number.isInteger(number) || number <= 0) {
+		throw new Error(`${label} did not return a valid pull request number`);
+	}
+	return number;
+}
+
+function createCommandEdge(commandRunner = runExternalCommand) {
+	function invoke(command, args, options = {}) {
+		const result = normalizeCommandResult(commandRunner(command, args, options));
+		if (!options.allowFailure && result.status !== 0) {
+			const detail = result.stderr.trim();
+			throw new Error(
+				`${command} command failed with exit code ${result.status}${detail ? `: ${detail}` : ""}`,
+			);
+		}
+		return result;
+	}
+
+	return {
+		git(args, options) {
+			return invoke("git", args, options);
+		},
+		gh(args, options) {
+			return invoke("gh", args, options);
+		},
+	};
+}
+
+function readOpenPullRequests(edge, { repository, defaultBranch, botBranch }) {
+	const output = edge.gh([
+		"pr",
+		"list",
+		"--repo",
+		repository,
+		"--state",
+		"open",
+		"--base",
+		defaultBranch,
+		"--head",
+		botBranch,
+		"--json",
+		"number,url",
+		"--limit",
+		"10",
+	]).stdout;
+	const pullRequests = parseJsonOutput(output, "gh pr list");
+	if (!Array.isArray(pullRequests)) throw new Error("gh pr list returned a non-array result");
+	return pullRequests;
+}
+
+function ensureSinglePullRequest(pullRequests, botBranch) {
+	if (pullRequests.length > 1) {
+		throw new Error(`found ${pullRequests.length} open pull requests for ${botBranch}; refusing to select one`);
+	}
+}
+
+function checkCurrentMain(edge, { mainSha, defaultBranch, phase }) {
+	edge.git([
+		"fetch",
+		"--force",
+		"origin",
+		`refs/heads/${defaultBranch}:refs/remotes/origin/${defaultBranch}`,
+	]);
+	const currentMainSha = edge.git(["rev-parse", `origin/${defaultBranch}`]).stdout.trim();
+	if (currentMainSha === mainSha) return null;
+	return {
+		action: "superseded",
+		publish: false,
+		reason: `main moved from ${mainSha} to ${currentMainSha} before ${phase}; a newer run owns reconciliation`,
+	};
+}
+
+function readRemoteBranchPaths(edge, { mainSha, botBranch }) {
+	const output = edge.git(["diff", "--name-only", mainSha, `origin/${botBranch}`]).stdout;
+	return validateAllowlistedPaths(output.split(/\r?\n/).filter(Boolean));
+}
+
+function refreshRemoteBranch(edge, botBranch) {
+	edge.git([
+		"fetch",
+		"--force",
+		"origin",
+		`refs/heads/${botBranch}:refs/remotes/origin/${botBranch}`,
+	]);
+}
+
+function matchesRemoteCandidate(edge, botBranch) {
+	let matches = true;
+	for (const path of SHARED_BASELINE_PATHS) {
+		const result = edge.git(
+			["diff", "--quiet", `origin/${botBranch}`, "--", path],
+			{ allowFailure: true },
+		);
+		if (result.status !== 0 && result.status !== 1) {
+			throw new Error(`git candidate comparison failed with exit code ${result.status}`);
+		}
+		if (result.status === 1) matches = false;
+	}
+	return matches;
+}
+
+function validatePullRequestMetadata(metadata, { defaultBranch, botBranch, commitSha }) {
+	if (
+		metadata.baseRefName !== defaultBranch ||
+		metadata.headRefName !== botBranch
+	) {
+		throw new Error(
+			`pull request does not target ${defaultBranch} from ${botBranch}`,
+		);
+	}
+	if (metadata.headRefOid !== commitSha) {
+		throw new Error(`pull request head does not match generated commit ${commitSha}`);
+	}
+	if (!Array.isArray(metadata.files)) throw new Error("pull request metadata did not include files");
+	validateAllowlistedPaths(
+		metadata.files.map((file) => file?.path),
+		{ requireChanges: true },
+	);
+}
+
+export function reconcileBotCandidate({
+	repository = "",
+	defaultBranch = "main",
+	botBranch = SHARED_BASELINE_BOT_BRANCH,
+	prTitle = SHARED_BASELINE_PR_TITLE,
+	mainSha = "",
+	botBranchExists = false,
+	botBranchSha = "",
+	changedPaths = [],
+	sourceRunUrl = "",
+	commandRunner = runExternalCommand,
+} = {}) {
+	if (!String(repository).trim()) throw new Error("repository is required for bot reconciliation");
+	requireCommitSha(mainSha, "main revision");
+	if (botBranchExists) requireCommitSha(botBranchSha, "existing bot branch revision");
+	const candidatePaths = validateAllowlistedPaths(changedPaths, {
+		requireChanges: changedPaths.length > 0,
+	});
+	if (candidatePaths.length > 0 && !String(sourceRunUrl).trim()) {
+		throw new Error("source CI run URL is required for a generated pull request");
+	}
+	const edge = createCommandEdge(commandRunner);
+
+	let reconciliation = checkCurrentMain(edge, {
+		mainSha,
+		defaultBranch,
+		phase: "reconciliation",
+	});
+	if (reconciliation) return reconciliation;
+
+	if (candidatePaths.length === 0) {
+		if (botBranchExists) {
+			refreshRemoteBranch(edge, botBranch);
+			readRemoteBranchPaths(edge, { mainSha, botBranch });
+		}
+		let botBranchPresent = false;
+		if (botBranchExists) {
+			edge.gh(["auth", "setup-git", "--hostname", "github.com"]);
+			const branch = edge.git(
+				["ls-remote", "--exit-code", "--heads", "origin", botBranch],
+				{ allowFailure: true },
+			);
+			if (branch.status !== 0 && branch.status !== 2) {
+				throw new Error(`git bot branch lookup failed with exit code ${branch.status}`);
+			}
+			botBranchPresent = branch.status === 0;
+		}
+		const pullRequests = readOpenPullRequests(edge, { repository, defaultBranch, botBranch });
+		ensureSinglePullRequest(pullRequests, botBranch);
+		if (pullRequests.length === 1) {
+			const pullRequestNumber = parsePullRequestNumber(
+				pullRequests[0].number,
+				"gh pr list",
+			);
+			edge.gh([
+				"pr",
+				"close",
+				String(pullRequestNumber),
+				"--repo",
+				repository,
+				"--comment",
+				NO_DIFF_PULL_REQUEST_COMMENT,
+			]);
+		}
+		if (botBranchPresent) {
+			edge.git(["push", "origin", "--delete", botBranch]);
+		}
+		return {
+			action: pullRequests.length === 1 ? "close-existing" : "noop",
+			publish: false,
+		};
+	}
+
+	let remotePaths = [];
+	if (botBranchExists) {
+		refreshRemoteBranch(edge, botBranch);
+		remotePaths = readRemoteBranchPaths(edge, { mainSha, botBranch });
+	}
+	const candidateMatchesRemote = botBranchExists && matchesRemoteCandidate(edge, botBranch);
+	const initialPullRequests = readOpenPullRequests(edge, { repository, defaultBranch, botBranch });
+	ensureSinglePullRequest(initialPullRequests, botBranch);
+
+	reconciliation = checkCurrentMain(edge, {
+		mainSha,
+		defaultBranch,
+		phase: candidateMatchesRemote ? "branch reuse" : "candidate publication",
+	});
+	if (reconciliation) return reconciliation;
+
+	let commitSha;
+	if (candidateMatchesRemote) {
+		edge.git(["reset", "--hard", mainSha]);
+		commitSha = botBranchSha;
+	} else {
+		edge.git(["config", "user.name", "github-actions[bot]"]);
+		edge.git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
+		edge.git(["add", "--", ...SHARED_BASELINE_PATHS]);
+		const stagedPaths = edge.git(["diff", "--cached", "--name-only"]).stdout.split(/\r?\n/).filter(Boolean);
+		validateAllowlistedPaths(stagedPaths, { requireChanges: true });
+		edge.git(["commit", "-m", prTitle]);
+		edge.gh(["auth", "setup-git", "--hostname", "github.com"]);
+		const pushArgs = ["push"];
+		if (botBranchExists) {
+			pushArgs.push(`--force-with-lease=refs/heads/${botBranch}:${botBranchSha}`);
+		} else {
+			pushArgs.push("--force-with-lease");
+		}
+		pushArgs.push("origin", `${botBranch}:${botBranch}`);
+		edge.git(pushArgs);
+		commitSha = edge.git(["rev-parse", "HEAD"]).stdout.trim();
+		requireCommitSha(commitSha, "generated branch revision");
+	}
+
+	reconciliation = checkCurrentMain(edge, {
+		mainSha,
+		defaultBranch,
+		phase: "pull request reconciliation",
+	});
+	if (reconciliation) return reconciliation;
+
+	const pullRequests = readOpenPullRequests(edge, { repository, defaultBranch, botBranch });
+	ensureSinglePullRequest(pullRequests, botBranch);
+	const prBody = renderPullRequestBody({
+		sourceSha: mainSha,
+		commitSha,
+		runUrl: sourceRunUrl,
+		changedPaths: candidatePaths,
+	});
+	let pullRequestNumber;
+	if (pullRequests.length === 1) {
+		pullRequestNumber = parsePullRequestNumber(pullRequests[0].number, "gh pr list");
+		edge.gh([
+			"pr",
+			"edit",
+			String(pullRequestNumber),
+			"--repo",
+			repository,
+			"--title",
+			prTitle,
+			"--body",
+			prBody,
+		]);
+	} else {
+		const pullRequestURL = edge.gh([
+			"pr",
+			"create",
+			"--repo",
+			repository,
+			"--base",
+			defaultBranch,
+			"--head",
+			botBranch,
+			"--title",
+			prTitle,
+			"--body",
+			prBody,
+		]).stdout.trim();
+		if (!pullRequestURL) throw new Error("gh pr create did not return a pull request URL");
+		pullRequestNumber = parsePullRequestNumber(
+			edge.gh([
+				"pr",
+				"view",
+				pullRequestURL,
+				"--repo",
+				repository,
+				"--json",
+				"number",
+				"--jq",
+				".number",
+			]).stdout,
+			"gh pr view",
+		);
+	}
+
+	const metadata = parseJsonOutput(
+		edge.gh([
+			"pr",
+			"view",
+			String(pullRequestNumber),
+			"--repo",
+			repository,
+			"--json",
+			"baseRefName,headRefName,headRefOid,isDraft,files",
+		]).stdout,
+		"gh pr view",
+	);
+	validatePullRequestMetadata(metadata, { defaultBranch, botBranch, commitSha });
+
+	reconciliation = checkCurrentMain(edge, {
+		mainSha,
+		defaultBranch,
+		phase: "auto-merge verification",
+	});
+	if (reconciliation) return reconciliation;
+
+	if (metadata.isDraft === true) {
+		edge.gh(["pr", "ready", String(pullRequestNumber), "--repo", repository]);
+	}
+	edge.gh([
+		"pr",
+		"merge",
+		String(pullRequestNumber),
+		"--repo",
+		repository,
+		"--auto",
+		"--squash",
+		"--delete-branch",
+		"--match-head-commit",
+		commitSha,
+	]);
+	return {
+		action: "merge-requested",
+		publish: true,
+		commitSha,
+		pullRequestNumber,
+		remotePaths,
+	};
+}
+
+function normalizeCommandResult(result) {
+	if (typeof result === "string") return { status: 0, stdout: result, stderr: "" };
+	return {
+		status: result?.status ?? -1,
+		stdout: result?.stdout || "",
+		stderr: result?.stderr || "",
+	};
+}
+
+function runExternalCommand(command, args, { allowFailure = false } = {}) {
+	const raw = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
+	if (raw.error) throw new Error(`unable to execute ${command}: ${raw.error.message}`);
+	const result = normalizeCommandResult(raw);
+	if (!allowFailure && result.status !== 0) {
+		const detail = result.stderr.trim();
+		throw new Error(
+			`${command} command failed with exit code ${result.status}${detail ? `: ${detail}` : ""}`,
+		);
+	}
+	return result;
+}
+
+function runGit(args) {
+	return runExternalCommand("git", args).stdout;
 }
 
 function writeGitHubOutput(path, values) {
@@ -206,6 +579,29 @@ function runValidateWorkingTree({ staged = false, requireChanges = false, github
 	});
 	process.stdout.write(
 		`SHARED_BASELINE_CHANGED=${paths.length > 0 ? "true" : "false"} paths=${paths.join(",") || "(none)"}\n`,
+	);
+}
+
+function parseBooleanEnvironment(value, label) {
+	if (value === "true") return true;
+	if (value === "false" || value === "") return false;
+	throw new Error(`${label} must be true or false`);
+}
+
+function runReconcileFromEnvironment() {
+	const result = reconcileBotCandidate({
+		repository: process.env.REPOSITORY,
+		defaultBranch: process.env.DEFAULT_BRANCH || "main",
+		botBranch: process.env.BOT_BRANCH || SHARED_BASELINE_BOT_BRANCH,
+		prTitle: process.env.SHARED_BASELINE_PR_TITLE || SHARED_BASELINE_PR_TITLE,
+		mainSha: process.env.MAIN_SHA,
+		botBranchExists: parseBooleanEnvironment(process.env.BOT_BRANCH_EXISTS || "false", "BOT_BRANCH_EXISTS"),
+		botBranchSha: process.env.BOT_BRANCH_SHA || "",
+		changedPaths: (process.env.CHANGED_PATHS || "").split(",").filter(Boolean),
+		sourceRunUrl: process.env.SOURCE_RUN_URL,
+	});
+	process.stdout.write(
+		`SHARED_BASELINE_RECONCILIATION action=${result.action} publish=${result.publish ? "true" : "false"}\n`,
 	);
 }
 
@@ -243,6 +639,10 @@ function parseArguments(args) {
 
 function runCli(args) {
 	const options = parseArguments(args);
+	if (options.command === "reconcile") {
+		runReconcileFromEnvironment();
+		return;
+	}
 	if (options.command === "validate-working-tree") {
 		runValidateWorkingTree(options);
 		return;

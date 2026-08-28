@@ -161,6 +161,11 @@ jobs:
             bot_branch_exists=true
             bot_branch_sha="$(git rev-parse "origin/$BOT_BRANCH")"
           else
+            branch_probe_status="$?"
+            if [[ "$branch_probe_status" != "2" ]]; then
+              echo "::error title=Unable to inspect automation branch::git ls-remote failed with exit code $branch_probe_status; refusing to treat the branch as absent." >&2
+              exit "$branch_probe_status"
+            fi
             bot_branch_exists=false
             bot_branch_sha=""
           fi
@@ -190,130 +195,19 @@ jobs:
         shell: bash
         run: node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree --github-output "$GITHUB_OUTPUT"
 
-      - name: Close an obsolete PR after a no-diff regeneration
-        if: steps.prepare.outputs.reconcile == 'true' && steps.candidate.outputs.changed != 'true'
-        env:
-          BOT_BRANCH_EXISTS: ${{ steps.prepare.outputs.bot_branch_exists }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          pr_json="$(gh pr list --repo "$REPOSITORY" --state open --base "$DEFAULT_BRANCH" --head "$BOT_BRANCH" --json number,url --limit 10)"
-          pr_count="$(jq 'length' <<<"$pr_json")"
-          if [[ "$pr_count" -gt 1 ]]; then
-            echo "::error title=Duplicate baseline PRs::Found $pr_count open PRs for $BOT_BRANCH; refusing to select one." >&2
-            exit 1
-          fi
-          if [[ "$pr_count" == "1" ]]; then
-            pr_number="$(jq -r '.[0].number' <<<"$pr_json")"
-            gh pr close "$pr_number" --repo "$REPOSITORY" \
-              --comment "The latest successful main CI run regenerated no changes; this reconciliation is no longer needed."
-            echo "Closed obsolete shared-baseline PR #$pr_number."
-          else
-            echo "Shared CI baselines already match main; no commit or pull request is needed."
-          fi
-          if [[ "$BOT_BRANCH_EXISTS" == "true" ]]; then
-            gh auth setup-git --hostname github.com
-            if git ls-remote --exit-code --heads origin "$BOT_BRANCH" >/dev/null 2>&1; then
-              git push origin --delete "$BOT_BRANCH"
-              echo "Deleted obsolete shared-baseline automation branch $BOT_BRANCH."
-            else
-              echo "Shared-baseline automation branch $BOT_BRANCH was already absent."
-            fi
-          fi
-
-      - name: Publish or reuse the bot branch and pull request
-        if: steps.prepare.outputs.reconcile == 'true' && steps.candidate.outputs.changed == 'true'
+      - name: Reconcile the validated bot branch and pull request
+        if: steps.prepare.outputs.reconcile == 'true'
         shell: bash
         env:
+          REPOSITORY: ${{ env.REPOSITORY }}
+          DEFAULT_BRANCH: ${{ env.DEFAULT_BRANCH }}
+          BOT_BRANCH: ${{ env.BOT_BRANCH }}
+          SHARED_BASELINE_PR_TITLE: ${{ env.SHARED_BASELINE_PR_TITLE }}
           MAIN_SHA: ${{ steps.prepare.outputs.main_sha }}
           BOT_BRANCH_EXISTS: ${{ steps.prepare.outputs.bot_branch_exists }}
           BOT_BRANCH_SHA: ${{ steps.prepare.outputs.bot_branch_sha }}
           CHANGED_PATHS: ${{ steps.candidate.outputs.paths }}
+          SOURCE_RUN_URL: ${{ env.SOURCE_RUN_URL }}
         run: |
           set -euo pipefail
-          node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree --require-changes
-
-          mapfile -t snapshot_paths < <(node scripts/ci/shared-baseline-regeneration-workflow.mjs list-paths)
-          candidate_matches_remote=false
-          if [[ "$BOT_BRANCH_EXISTS" == "true" ]]; then
-            remote_paths="$(git diff --name-only "$MAIN_SHA" "origin/$BOT_BRANCH" | sort -u)"
-            if printf '%s\n' "$remote_paths" | node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-paths >/dev/null; then
-              candidate_matches_remote=true
-              for path in "${snapshot_paths[@]}"; do
-                if ! git diff --quiet "origin/$BOT_BRANCH" -- "$path"; then
-                  candidate_matches_remote=false
-                  break
-                fi
-              done
-            fi
-          fi
-
-          if [[ "$candidate_matches_remote" == "true" ]]; then
-            echo "Existing bot branch already contains the exact generated candidate; no second commit will be created."
-            git reset --hard "$MAIN_SHA"
-            commit_sha="$BOT_BRANCH_SHA"
-          else
-            git fetch --force origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
-            latest_main_sha="$(git rev-parse "origin/$DEFAULT_BRANCH")"
-            if [[ "$latest_main_sha" != "$MAIN_SHA" ]]; then
-              echo "::notice title=Superseded baseline candidate::main moved to $latest_main_sha before publication; newer CI owns reconciliation."
-              exit 0
-            fi
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- "${snapshot_paths[@]}"
-            node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-staged
-            git commit -m "$SHARED_BASELINE_PR_TITLE"
-            gh auth setup-git --hostname github.com
-            if [[ -n "$BOT_BRANCH_SHA" ]]; then
-              git push --force-with-lease="refs/heads/$BOT_BRANCH:$BOT_BRANCH_SHA" origin "$BOT_BRANCH:$BOT_BRANCH"
-            else
-              git push --force-with-lease origin "$BOT_BRANCH:$BOT_BRANCH"
-            fi
-            commit_sha="$(git rev-parse HEAD)"
-          fi
-
-          git fetch --force origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
-          latest_main_sha="$(git rev-parse "origin/$DEFAULT_BRANCH")"
-          if [[ "$latest_main_sha" != "$MAIN_SHA" ]]; then
-            echo "::notice title=Superseded published candidate::main moved to $latest_main_sha before PR reconciliation; newer CI owns the fixed branch."
-            exit 0
-          fi
-
-          pr_json="$(gh pr list --repo "$REPOSITORY" --state open --base "$DEFAULT_BRANCH" --head "$BOT_BRANCH" --json number,url --limit 10)"
-          pr_count="$(jq 'length' <<<"$pr_json")"
-          if [[ "$pr_count" -gt 1 ]]; then
-            echo "::error title=Duplicate baseline PRs::Found $pr_count open PRs for $BOT_BRANCH; refusing to select one." >&2
-            exit 1
-          fi
-          pr_body="$(node scripts/ci/shared-baseline-regeneration-workflow.mjs render-body \
-            --source-sha "$MAIN_SHA" \
-            --commit-sha "$commit_sha" \
-            --run-url "$SOURCE_RUN_URL" \
-            --paths "$CHANGED_PATHS")"
-          if [[ "$pr_count" == "1" ]]; then
-            pr_number="$(jq -r '.[0].number' <<<"$pr_json")"
-            gh pr edit "$pr_number" --repo "$REPOSITORY" \
-              --title "$SHARED_BASELINE_PR_TITLE" --body "$pr_body"
-          else
-            pr_url="$(gh pr create --repo "$REPOSITORY" --base "$DEFAULT_BRANCH" --head "$BOT_BRANCH" \
-              --title "$SHARED_BASELINE_PR_TITLE" --body "$pr_body")"
-            pr_number="$(gh pr view "$pr_url" --repo "$REPOSITORY" --json number --jq '.number')"
-          fi
-
-          pr_metadata="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json baseRefName,headRefName,headRefOid,isDraft,files)"
-          if [[ "$(jq -r '.baseRefName' <<<"$pr_metadata")" != "$DEFAULT_BRANCH" || "$(jq -r '.headRefName' <<<"$pr_metadata")" != "$BOT_BRANCH" ]]; then
-            echo "::error title=Unexpected baseline PR refs::PR #$pr_number does not target $DEFAULT_BRANCH from $BOT_BRANCH." >&2
-            exit 1
-          fi
-          if [[ "$(jq -r '.headRefOid' <<<"$pr_metadata")" != "$commit_sha" ]]; then
-            echo "::error title=Stale baseline PR head::PR #$pr_number does not point to generated commit $commit_sha." >&2
-            exit 1
-          fi
-          remote_paths="$(jq -r '.files[].path' <<<"$pr_metadata" | sort -u)"
-          printf '%s\n' "$remote_paths" | node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-paths
-          if [[ "$(jq -r '.isDraft' <<<"$pr_metadata")" == "true" ]]; then
-            gh pr ready "$pr_number" --repo "$REPOSITORY"
-          fi
-          echo "Requesting auto-merge for baseline PR #$pr_number after verifying its generated head and file scope."
-          gh pr merge "$pr_number" --repo "$REPOSITORY" --auto --squash --delete-branch --match-head-commit "$commit_sha"
+          node scripts/ci/shared-baseline-regeneration-workflow.mjs reconcile
