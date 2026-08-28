@@ -21,7 +21,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 
@@ -238,10 +237,34 @@ func packagedFactoryCatalogForTest(
 			packagedFactoryCatalogState.err = fmt.Errorf("load published catalog: %w", err)
 			return
 		}
-		catalog, err := factorydefinitionswire.NewPackagedFactoryCatalog(published.All())
-		if err != nil {
-			packagedFactoryCatalogState.err = fmt.Errorf("build packaged catalog: %w", err)
-			return
+		// Keep the fixture on the Factory Definitions public root contract. The
+		// publication loader already validates and detaches the generated
+		// definitions; this fixture only needs the public resolve operation to
+		// materialize a customer-visible installed Factory before root.BuildProcess
+		// composes the actual application services.
+		catalog := factorydefinitions.PackagedFactoryCatalogOperations{
+			Resolve: func(
+				ctx context.Context,
+				request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+				if ctx == nil {
+					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, errors.New("packaged Factory catalog context is required")
+				}
+				if err := ctx.Err(); err != nil {
+					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, fmt.Errorf("read packaged Factory catalog: %w", err)
+				}
+				definition, ok := published.Lookup(request.Name)
+				if !ok {
+					return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, &factorydefinitions.UnknownPackagedFactoryError{
+						Name:      request.Name,
+						Available: published.Names(),
+					}
+				}
+				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
+					Definition: definition,
+					Formats:    append([]factorydefinitions.PackagedFactoryFormat(nil), definition.Formats...),
+				}, nil
+			},
 		}
 		packagedFactoryCatalogState.catalog = catalog
 		packagedFactoryCatalogState.names = published.Names()

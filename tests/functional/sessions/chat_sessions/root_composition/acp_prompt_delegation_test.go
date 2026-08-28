@@ -17,7 +17,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -201,7 +200,11 @@ func TestACPPromptDelegationUnresolvableFactoryTargetFailsSafelyAndTerminalizes(
 	t.Setenv("HOME", scenario.home)
 	t.Setenv("USERPROFILE", scenario.home)
 	seedInstalledPackagedFactory(t, scenario.home, "@you/goal")
-	if err := os.WriteFile(operatorsettings.DefaultConfigPath(scenario.home), []byte("not valid json"), 0o644); err != nil {
+	// This is fixture setup for the malformed document; the failure under test
+	// is exercised through the root.BuildProcess-composed ACP server above, not
+	// through an Operator Settings path-policy assertion.
+	configPath := filepath.Join(strings.TrimSpace(scenario.home), ".you-agent-factory", "config.json")
+	if err := os.WriteFile(configPath, []byte("not valid json"), 0o644); err != nil {
 		t.Fatalf("WriteFile(corrupt Operator Settings document) error = %v", err)
 	}
 	fourthResp := sendSessionPrompt(t, scenario.server, scenario.fourthSessionID, "a prompt with no resolvable Operator Defaults")
