@@ -404,6 +404,32 @@ func TestWriteDebugFailureRedactsCauseAndHTTPSecrets(t *testing.T) {
 	}
 }
 
+func TestWriteDebugFailureRedactsPromptsBodiesAndUnrestrictedPaths(t *testing.T) {
+	t.Parallel()
+
+	err := fmt.Errorf(
+		"invoke failed: %w",
+		errors.New(`authorization=Bearer private-token prompt="PRIVATE_PROMPT" body="PRIVATE_BODY" cachePath="C:\Users\andre\AppData\Local\you\cache\model.gguf" open ./private/model.gguf`),
+	)
+	var output bytes.Buffer
+	if !WriteDebugFailure(&output, err) {
+		t.Fatal("WriteDebugFailure returned false")
+	}
+	text := output.String()
+	for _, forbidden := range []string{
+		"private-token", "PRIVATE_PROMPT", "PRIVATE_BODY", "C:\\Users\\andre", "./private/model.gguf",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("debug output leaked %q: %q", forbidden, text)
+		}
+	}
+	for _, want := range []string{"prompt=<redacted>", "body=<redacted>", "cachePath=<redacted>"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("debug output = %q, want %q", text, want)
+		}
+	}
+}
+
 func TestDebugFlagEnabledHonorsExplicitCLIValuesAndArgumentBoundary(t *testing.T) {
 	t.Parallel()
 

@@ -485,13 +485,19 @@ func debugCauseChain(err error) []string {
 var (
 	debugURLPattern                 = regexp.MustCompile(`(?i)https?://[^\s]+`)
 	debugSensitiveAssignmentPattern = regexp.MustCompile(
-		`(?i)(\b(?:authorization|cookie|set-cookie|password|passwd|secret|token|credential|api[-_]?key|access[-_]?token|refresh[-_]?token|payload|body|query|environment|env|home|userprofile|homedrive|homepath)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+(?:\s+[^\s,;]+)?)`,
+		`(?i)(\b(?:authorization|cookie|set-cookie|password|passwd|secret|token|credential|api[-_]?key|access[-_]?token|refresh[-_]?token|payload|body|request[-_]?body|response[-_]?body|query|prompt|input|content|path|file|filename|filepath|directory|dir|cache|cachepath|environment|env|home|userprofile|homedrive|homepath)\b\s*[:=]\s*)(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s,;]+(?:\s+[^\s,;]+)?)`,
 	)
+	debugWindowsPathPattern  = regexp.MustCompile(`(?i)(?:[A-Za-z]:[\\/]|\\\\)[^\s"',;)\]}]+`)
+	debugUnixPathPattern     = regexp.MustCompile(`(^|[\s=(])/(?:[^/\s"',;)\]}]+/)*[^/\s"',;)\]}]+`)
+	debugRelativePathPattern = regexp.MustCompile(`(^|[\s=(])(?:\.\.?[\\/]|~[\\/])[^\s"',;)\]}]+`)
 )
 
 func sanitizeDebugMessage(message string) string {
 	message = debugURLPattern.ReplaceAllStringFunc(message, sanitizeDebugURLMatch)
 	message = debugSensitiveAssignmentPattern.ReplaceAllString(message, `${1}<redacted>`)
+	message = debugWindowsPathPattern.ReplaceAllString(message, `<redacted>`)
+	message = debugUnixPathPattern.ReplaceAllString(message, `${1}<redacted>`)
+	message = debugRelativePathPattern.ReplaceAllString(message, `${1}<redacted>`)
 	message = strings.NewReplacer("\r", `\r`, "\n", `\n`).Replace(message)
 	message = strings.TrimSpace(message)
 	if message == "" {
