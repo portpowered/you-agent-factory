@@ -516,6 +516,19 @@ func assertRepeatedWorkerSessionReads(
 	fixture *workerSessionsCLISharedFixture,
 ) {
 	t.Helper()
+	readiness, readinessErr := waitForFactoryTargetReadiness(
+		ctx,
+		sessionID,
+		"default",
+		15*time.Second,
+		func(observeCtx context.Context) (factoryTargetReadinessObservation, error) {
+			return observeFactoryTargetReadiness(observeCtx, baseURL, sessionID, factoryDir)
+		},
+	)
+	if readinessErr != nil {
+		t.Fatalf("FT-RDY-01 public Factory-target readiness: %v", readinessErr)
+	}
+	assertFactoryTargetReadinessObservation(t, readiness, factoryDir)
 	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
 	showArgs := []string{
 		"--server", baseURL, "worker-sessions", "show", "--session", sessionID,
