@@ -17,6 +17,7 @@ import (
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/restclient"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
@@ -351,17 +352,16 @@ func waitForGeneratedClientWorkComplete(
 	timeout time.Duration,
 ) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		work := getGeneratedClientJSON[factoryapi.ListWorkResponse](t, c06SessionWorkURL(baseURL, sessionID, "/work"))
-		for _, item := range work.Results {
-			if stringPointerValue(item.TraceId) == traceID && generatedClientWorkPlaceID(item) == "task:complete" {
-				return
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	// The session-scoped status contract is the deterministic public completion
+	// boundary; use it instead of sleeping between Work list observations, then
+	// retain the trace-specific Work assertion on the public HTTP response.
+	support.WaitForSessionTerminalStatus(t, baseURL, sessionID, timeout)
 	work := getGeneratedClientJSON[factoryapi.ListWorkResponse](t, c06SessionWorkURL(baseURL, sessionID, "/work"))
+	for _, item := range work.Results {
+		if stringPointerValue(item.TraceId) == traceID && generatedClientWorkPlaceID(item) == "task:complete" {
+			return
+		}
+	}
 	t.Fatalf("timed out waiting for trace %q at task:complete; last work response: %#v", traceID, work)
 }
 

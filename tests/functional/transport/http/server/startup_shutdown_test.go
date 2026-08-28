@@ -509,16 +509,30 @@ func TestAPIServerShutdownClosesListenerAndActiveStreams(t *testing.T) {
 // the public API server lifecycle reports a documented failure and leaves no
 // leaked listeners or readiness side effects.
 func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
+	requestedURL := "http://127.0.0.1:65534"
+	observation := runBindFailureScenario(t, factory.factoryDir, requestedURL)
+	assertBindFailureObservation(t, observation)
+	assertBindFailurePortReleased(t, requestedURL)
+}
+
+type bindFailureObservation struct {
+	attempts       []string
+	stdout         string
+	stderr         string
+	browserCalls   int32
+	readinessCalls int32
+}
+
+const c06BindFailureLifecycleID = "c06-bind-failure"
+
+func runBindFailureScenario(t *testing.T, dir, requestedURL string) bindFailureObservation {
+	t.Helper()
 	// Bind failure is isolated because it exercises the starter's rejected-port
 	// fallback and process unwind rather than a serving listener.
-	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
-	dir := factory.factoryDir
-	requestedURL := "http://127.0.0.1:65534"
-
 	var attempts []string
-	const lifecycleID = "c06-bind-failure"
 	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
-		c06IsolatedLifecycle.rejectedBind(lifecycleID)
+		c06IsolatedLifecycle.rejectedBind(c06BindFailureLifecycleID)
 		attempts = append(attempts, address)
 		return nil, errors.New("address unavailable")
 	}, nil, nil)
@@ -538,10 +552,10 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 		},
 	}
 	edges.APIServerStarter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
-		c06IsolatedLifecycle.processHosted(lifecycleID)
+		c06IsolatedLifecycle.processHosted(c06BindFailureLifecycleID)
 		return starter(ctx, request)
 	}
-	process := c06BuildIsolatedProcess(t, lifecycleID, "bind failure exercises rejected ports and process unwind", c06IsolationExpectation{
+	process := c06BuildIsolatedProcess(t, c06BindFailureLifecycleID, "bind failure exercises rejected ports and process unwind", c06IsolationExpectation{
 		portRelease:   true,
 		rejectedBinds: 2,
 	}, edges)
@@ -565,13 +579,24 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 			inputs.Stderr(),
 		)
 	}
+	return bindFailureObservation{
+		attempts:       attempts,
+		stdout:         inputs.Stdout(),
+		stderr:         inputs.Stderr(),
+		browserCalls:   browserCalls.Load(),
+		readinessCalls: readinessCalls.Load(),
+	}
+}
+
+func assertBindFailureObservation(t *testing.T, observation bindFailureObservation) {
+	t.Helper()
 	for _, forbidden := range []string{"Factory initiated:", "Dashboard URL:"} {
-		if strings.Contains(inputs.Stdout(), forbidden) {
-			t.Fatalf("run stdout exposed readiness %q before bind failure:\n%s", forbidden, inputs.Stdout())
+		if strings.Contains(observation.stdout, forbidden) {
+			t.Fatalf("run stdout exposed readiness %q before bind failure:\n%s", forbidden, observation.stdout)
 		}
 	}
 
-	stderr := inputs.Stderr()
+	stderr := observation.stderr
 	const legacyBindWarning = "warning: --server is deprecated for local listener binding; use --listen <host:port> instead\n"
 	if !strings.HasPrefix(stderr, legacyBindWarning) {
 		t.Fatalf("run stderr is missing the legacy listener migration warning:\n%s", stderr)
@@ -579,22 +604,25 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	stderr = strings.TrimPrefix(stderr, legacyBindWarning)
 	var response factoryapi.ErrorResponse
 	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
-		t.Fatalf("run stderr is not exactly one ErrorResponse after the migration warning: %v\n%s", err, inputs.Stderr())
+		t.Fatalf("run stderr is not exactly one ErrorResponse after the migration warning: %v\n%s", err, observation.stderr)
 	}
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)
 	}
-	if got, want := strings.Join(attempts, ","), "127.0.0.1:65534,127.0.0.1:65535"; got != want {
+	if got, want := strings.Join(observation.attempts, ","), "127.0.0.1:65534,127.0.0.1:65535"; got != want {
 		t.Fatalf("listener attempts = %q, want %q", got, want)
 	}
-	if browserCalls.Load() != 0 || readinessCalls.Load() != 0 {
+	if observation.browserCalls != 0 || observation.readinessCalls != 0 {
 		t.Fatalf(
 			"post-failure effects = browser:%d readiness:%d, want none",
-			browserCalls.Load(),
-			readinessCalls.Load(),
+			observation.browserCalls,
+			observation.readinessCalls,
 		)
 	}
+}
 
+func assertBindFailurePortReleased(t *testing.T, requestedURL string) {
+	t.Helper()
 	parsed, err := url.Parse(requestedURL)
 	if err != nil {
 		t.Fatalf("parse requested listener URL %q: %v", requestedURL, err)
@@ -602,7 +630,7 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	if err := rebindC06Listener(parsed.Host); err != nil {
 		t.Fatalf("requested listener address %s remained unavailable after bind failure: %v", parsed.Host, err)
 	}
-	c06IsolatedLifecycle.portReleased(lifecycleID)
+	c06IsolatedLifecycle.portReleased(c06BindFailureLifecycleID)
 
 	client := &http.Client{Timeout: 500 * time.Millisecond}
 	statusResponse, err := client.Get(requestedURL + "/status")

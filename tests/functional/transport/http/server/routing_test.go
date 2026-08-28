@@ -25,6 +25,24 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 	ctx := newRoutingReachabilityContext(t)
 
 	client := &http.Client{Timeout: routingReachabilityRequestTimeout}
+	shutdownOperation := runRoutableOpenAPIOperations(t, inventory, ctx, client)
+
+	if len(inventory.Operations) == 0 {
+		t.Fatal("OpenAPI operation inventory is empty")
+	}
+	if shutdownOperation == nil {
+		t.Fatal("OpenAPI operation inventory does not contain shutdownServer")
+	}
+	assertIsolatedShutdownOperation(t, shutdownOperation, ctx, client)
+}
+
+func runRoutableOpenAPIOperations(
+	t *testing.T,
+	inventory *contractinventory.Inventory,
+	ctx *routingReachabilityContext,
+	client *http.Client,
+) *contractinventory.Operation {
+	t.Helper()
 	var shutdownOperation *contractinventory.Operation
 	for _, operation := range inventory.Operations {
 		operation := operation
@@ -44,52 +62,74 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 			}
 			defer response.Body.Close()
 			if operation.OperationID == "openFactorySession" {
-				if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-					body, _ := io.ReadAll(response.Body)
-					t.Fatalf("%s status = %d, want success: %s", operation.OperationID, response.StatusCode, strings.TrimSpace(string(body)))
-				}
-				var opened factoryapi.OpenFactorySessionResponse
-				if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
-					t.Fatalf("decode %s response: %v", operation.OperationID, err)
-				}
-				if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
-					t.Fatalf("%s response = %#v, want explicit session", operation.OperationID, opened)
-				}
-				ctx.scenario.trackSession(t, opened.Session.Id)
+				assertOpenedFactorySession(t, response, operation.OperationID, ctx)
 				return
 			}
 			if response.StatusCode == http.StatusNotFound {
-				switch operation.OperationID {
-				case "getHumanApprovalBySessionId":
-					body, readErr := io.ReadAll(response.Body)
-					if readErr != nil {
-						t.Fatalf("read expected human-approval not-found response: %v", readErr)
-					}
-					if !strings.Contains(string(body), "human approval not found") {
-						t.Fatalf("%s %s (%s) returned an unrelated 404 response: %s", operation.Method, request.URL.String(), operation.OperationID, strings.TrimSpace(string(body)))
-					}
-					return
-				case "removeModel":
-					assertModelCacheNotFoundResponse(t, response)
-					return
-				}
-				t.Fatalf(
-					"%s %s (%s) status = %d, want any non-404 handler response",
-					operation.Method,
-					request.URL.String(),
-					operation.OperationID,
-					response.StatusCode,
-				)
+				assertExpectedRouteNotFound(t, operation, request, response)
 			}
 		})
 	}
+	return shutdownOperation
+}
 
-	if len(inventory.Operations) == 0 {
-		t.Fatal("OpenAPI operation inventory is empty")
+func assertOpenedFactorySession(
+	t *testing.T,
+	response *http.Response,
+	operationID string,
+	ctx *routingReachabilityContext,
+) {
+	t.Helper()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("%s status = %d, want success: %s", operationID, response.StatusCode, strings.TrimSpace(string(body)))
 	}
-	if shutdownOperation == nil {
-		t.Fatal("OpenAPI operation inventory does not contain shutdownServer")
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
+		t.Fatalf("decode %s response: %v", operationID, err)
 	}
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("%s response = %#v, want explicit session", operationID, opened)
+	}
+	ctx.scenario.trackSession(t, opened.Session.Id)
+}
+
+func assertExpectedRouteNotFound(
+	t *testing.T,
+	operation contractinventory.Operation,
+	request *http.Request,
+	response *http.Response,
+) {
+	t.Helper()
+	switch operation.OperationID {
+	case "getHumanApprovalBySessionId":
+		body, readErr := io.ReadAll(response.Body)
+		if readErr != nil {
+			t.Fatalf("read expected human-approval not-found response: %v", readErr)
+		}
+		if !strings.Contains(string(body), "human approval not found") {
+			t.Fatalf("%s %s (%s) returned an unrelated 404 response: %s", operation.Method, request.URL.String(), operation.OperationID, strings.TrimSpace(string(body)))
+		}
+	case "removeModel":
+		assertModelCacheNotFoundResponse(t, response)
+	default:
+		t.Fatalf(
+			"%s %s (%s) status = %d, want any non-404 handler response",
+			operation.Method,
+			request.URL.String(),
+			operation.OperationID,
+			response.StatusCode,
+		)
+	}
+}
+
+func assertIsolatedShutdownOperation(
+	t *testing.T,
+	shutdownOperation *contractinventory.Operation,
+	ctx *routingReachabilityContext,
+	client *http.Client,
+) {
+	t.Helper()
 
 	// shutdownServer is process-mutating: it terminates the server, so this
 	// lifecycle witness cannot share the package-owned server needed by the
