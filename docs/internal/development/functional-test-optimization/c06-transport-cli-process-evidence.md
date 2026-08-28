@@ -246,3 +246,45 @@ target current-platform ledger. It does not prove Unix signal and descendant
 reaping, three-repeat stability, PR package timing, or independent clean-room
 classification; those remain owned by GATE-REPEAT, GATE-UNIX/GATE-WINDOWS,
 GATE-PR-PERF, and VAL-001.
+
+## Story 003 — repeat and clean-room result
+
+- Tested implementation commit: `b8b2167dd` (`test: reset shared CLI process
+  fixture between repeats`).
+- Local platform: `windows/amd64` (`go1.25.0`), 24 logical CPUs.
+- GATE-REPEAT exact command: `go test -count=3 -timeout=30m
+  ./tests/functional/transport/cli/process`.
+- GATE-REPEAT result: **PASS**, exit code `0`, package elapsed `44.555s`; all
+  three repetitions produced the same 12 top-level passes and three explicit
+  Unix-only skips. The shared failure/success root was reused within each
+  repetition and closed before the next repetition, preventing durable runtime
+  state from crossing fresh fixtures. The compile-once built artifact and all
+  child `Wait`/cancellation cleanup completed without teardown errors.
+- Current-platform GATE-FUNC rerun exact command: `go test -count=1
+  -timeout=10m ./tests/functional/transport/cli/process`.
+- Current-platform result: **PASS**, exit code `0`, package elapsed `20.109s`;
+  12 top-level tests passed and the three documented Unix-only tests skipped.
+  This is local Windows evidence only; it does not claim Unix signal,
+  cancellation, exit-130, or descendant-reaping behavior.
+- One earlier post-commit single-run attempt exited `1` only while `TestMain`
+  removed the temporary built binary (`access denied` on Windows); the
+  immediate same-head rerun passed, and the three-repeat run also completed
+  teardown successfully. This is retained as transient host cleanup
+  contention, not a behavioral pass claim.
+- GATE-WINDOWS local cleanup result: applicable child joins, stream closure,
+  temporary fixture cleanup, Windows helper compilation, shared-root close,
+  and package binary cleanup passed in the successful reruns. Required hosted
+  platform evidence remains a PR CI responsibility.
+- VAL-001 exact procedure: create a detached clean worktree at `b8b2167dd`,
+  confirm `git status --short --untracked-files=all` is empty, run `go test
+  -count=1 -timeout=10m ./tests/functional/transport/cli/process`, read every
+  test body alongside the 15 classification rows and CASE-001 through
+  CASE-028 rows, then confirm the clean worktree remains empty.
+- VAL-001 result: **PASS**. The detached clean worktree package run passed on
+  Windows in `23.207s`; the clean status was empty before and after the run;
+  independent review matched all 15 top-level bodies to exactly one of 12
+  `isolated-with-reason`, two `shareable-with-mock`, or one process-free
+  `shareable` classification, and all 28 case rows were accounted for.
+- Remaining edges: required Unix/Windows hosted CI semantics and same-head
+  Backend Functional Coverage timing are recorded in the PR conversation;
+  this artifact does not claim those results before CI reports them.
