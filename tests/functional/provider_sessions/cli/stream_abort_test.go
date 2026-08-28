@@ -37,6 +37,7 @@ func TestWorkerSessionsStreamAbortReturnsTypedDiagnosticThroughRootProcess(t *te
 		t.Fatalf("Process.Execute() error = %v, want typed WORKER_SESSION_STREAM_CLOSED", err)
 	}
 	assertWorkerSessionStreamAbortOutput(t, inputs.Stdout(), inputs.Stderr(), workerSessionID)
+	assertNoActiveProviderCommandRoutes(t, fixture.runner, "root-process abrupt stream close")
 }
 
 func TestBuiltWorkerSessionsStreamAbortExitsNonZero(t *testing.T) {

@@ -28,6 +28,7 @@ func TestWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
 	factoryDir := caseFixture.factoryDir
 	env := functionalEnvironment(fixture.homeDir)
 	baseURL := fixture.baseURL
+	caseFixture.registerRoutes(t, fleetWorkNames()...)
 	routeStart := fixture.runner.CallCount()
 	fixture.resetFleetGate()
 	defer fixture.releaseFleetGate()
@@ -60,6 +61,9 @@ func TestWorkerSessionsFleetListCLIConcurrent(t *testing.T) {
 		"worker-session-fleet-beta":  {},
 		"worker-session-fleet-gamma": {},
 	})
+	caseFixture.closeRoute(t, "worker-session-fleet-alpha")
+	caseFixture.closeRoute(t, "worker-session-fleet-beta")
+	caseFixture.closeRoute(t, "worker-session-fleet-gamma")
 }
 
 func fleetWorkNames() []string {

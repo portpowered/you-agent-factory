@@ -271,9 +271,11 @@ type workerSessionsCLICase struct {
 	fixture    *workerSessionsCLISharedFixture
 	factoryDir string
 
-	sessionMu   sync.Mutex
-	sessionIDs  []string
-	cleanupOnce sync.Once
+	sessionMu          sync.Mutex
+	sessionIDs         []string
+	routeMu            sync.Mutex
+	routeRegistrations []*providerCommandRouteRegistration
+	cleanupOnce        sync.Once
 }
 
 func newWorkerSessionsCLICase(t *testing.T) *workerSessionsCLICase {
@@ -297,6 +299,41 @@ func newWorkerSessionsCLICase(t *testing.T) *workerSessionsCLICase {
 	return caseFixture
 }
 
+func (caseFixture *workerSessionsCLICase) registerRoutes(t *testing.T, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		registration, err := caseFixture.fixture.runner.registerRoute(key)
+		if err != nil {
+			t.Fatalf("register Provider Sessions CLI route %q: %v", key, err)
+		}
+		caseFixture.routeMu.Lock()
+		caseFixture.routeRegistrations = append(caseFixture.routeRegistrations, registration)
+		caseFixture.routeMu.Unlock()
+	}
+}
+
+func (caseFixture *workerSessionsCLICase) closeRoute(t *testing.T, key string) {
+	t.Helper()
+	caseFixture.routeMu.Lock()
+	var registration *providerCommandRouteRegistration
+	for _, candidate := range caseFixture.routeRegistrations {
+		if candidate.key == key {
+			registration = candidate
+			break
+		}
+	}
+	caseFixture.routeMu.Unlock()
+	if registration == nil {
+		t.Fatalf("Provider Sessions CLI route %q has no case registration", key)
+	}
+	if err := registration.Close(); err != nil {
+		t.Fatalf("close Provider Sessions CLI route %q: %v", key, err)
+	}
+	if remaining := caseFixture.fixture.runner.activeRouteKeys(); containsString(remaining, key) {
+		t.Fatalf("Provider Sessions CLI route %q remains after close: %s", key, strings.Join(remaining, ", "))
+	}
+}
+
 func (caseFixture *workerSessionsCLICase) openSession(t *testing.T) string {
 	t.Helper()
 	sessionID := openExplicitWorkerSession(t, caseFixture.fixture.baseURL, caseFixture.factoryDir)
@@ -312,6 +349,9 @@ func (caseFixture *workerSessionsCLICase) cleanup(t *testing.T) {
 		return
 	}
 	caseFixture.cleanupOnce.Do(func() {
+		caseFixture.routeMu.Lock()
+		routeRegistrations := append([]*providerCommandRouteRegistration(nil), caseFixture.routeRegistrations...)
+		caseFixture.routeMu.Unlock()
 		caseFixture.sessionMu.Lock()
 		sessionIDs := append([]string(nil), caseFixture.sessionIDs...)
 		caseFixture.sessionMu.Unlock()
@@ -320,6 +360,15 @@ func (caseFixture *workerSessionsCLICase) cleanup(t *testing.T) {
 			support.CloseFactorySessionAt(t, caseFixture.fixture.baseURL, sessionID)
 			assertFactorySessionAbsent(t, caseFixture.fixture.baseURL, sessionID, caseFixture.factoryDir)
 			caseFixture.fixture.recordSessionClosed(sessionID)
+		}
+		for index := len(routeRegistrations) - 1; index >= 0; index-- {
+			registration := routeRegistrations[index]
+			if err := registration.Close(); err != nil {
+				t.Errorf("close Provider Sessions CLI route %q: %v", registration.key, err)
+			}
+		}
+		if remaining := caseFixture.fixture.runner.activeRouteKeys(); len(remaining) != 0 {
+			t.Errorf("Provider Sessions CLI routes remain after case cleanup: %s", strings.Join(remaining, ", "))
 		}
 		if err := os.RemoveAll(caseFixture.factoryDir); err != nil {
 			t.Errorf("remove Provider Sessions CLI case Factory %q: %v", caseFixture.factoryDir, err)
@@ -413,6 +462,10 @@ func closeWorkerSessionsCLISharedFixture() error {
 	if got := fixture.runner.ActiveCallCount(); got != 0 {
 		errs = append(errs, fmt.Errorf("active Provider Sessions CLI command routes after cleanup = %d", got))
 	}
+	if err := fixture.runner.close(); err != nil {
+		errs = append(errs, fmt.Errorf("close Provider Sessions CLI route registry: %w", err))
+	}
+	fmt.Fprintf(os.Stderr, "C06 TASK-002 cleanup: active-provider-routes=%d\n", fixture.runner.routeCount())
 	if err := fixture.sessionLifecycleError(); err != nil {
 		errs = append(errs, err)
 	}

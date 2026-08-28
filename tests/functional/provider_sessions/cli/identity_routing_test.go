@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -24,12 +25,38 @@ const workerSessionRoutePrefix = "worker-session-route="
 // identity as a deterministic request marker. Calls may arrive concurrently
 // and are never assigned a result by arrival order.
 type providerCommandRouteRunner struct {
-	mu           sync.Mutex
-	routes       map[string]platformprocess.CommandResult
-	dynamicGates map[string]*providerCommandRouteGate
-	requests     []platformprocess.CommandRequest
-	calls        chan struct{}
-	active       int
+	mu            sync.Mutex
+	definitions   map[string]providerCommandRoute
+	routes        map[string]providerCommandRoute
+	activeByRoute map[string]int
+	requests      []platformprocess.CommandRequest
+	calls         chan struct{}
+	active        int
+}
+
+type providerCommandRoute struct {
+	result platformprocess.CommandResult
+	gate   *providerCommandRouteGate
+}
+
+// providerCommandRouteRegistration owns one active route. Close is idempotent
+// so case cleanup remains deterministic even when a test reports an earlier
+// assertion failure while its cleanup stack is unwinding.
+type providerCommandRouteRegistration struct {
+	runner *providerCommandRouteRunner
+	key    string
+	once   sync.Once
+	err    error
+}
+
+func (registration *providerCommandRouteRegistration) Close() error {
+	if registration == nil {
+		return nil
+	}
+	registration.once.Do(func() {
+		registration.err = registration.runner.unregisterRoute(registration.key)
+	})
+	return registration.err
 }
 
 type providerCommandRouteGate struct {
@@ -78,17 +105,20 @@ func newProviderCommandRouteRunnerWithDynamicGates(
 	routes map[string]platformprocess.CommandResult,
 	gates map[string]*providerCommandRouteGate,
 ) *providerCommandRouteRunner {
-	cloned := make(map[string]platformprocess.CommandResult, len(routes))
+	definitions := make(map[string]providerCommandRoute, len(routes))
 	for key, result := range routes {
-		cloned[key] = cloneCommandResult(result)
+		definitions[key] = providerCommandRoute{result: cloneCommandResult(result)}
 	}
-	clonedGates := make(map[string]*providerCommandRouteGate, len(gates))
 	for key, gate := range gates {
-		clonedGates[key] = gate
+		definition := definitions[key]
+		definition.gate = gate
+		definitions[key] = definition
 	}
 	return &providerCommandRouteRunner{
-		routes: cloned, dynamicGates: clonedGates,
-		calls: make(chan struct{}, len(routes)+8),
+		definitions:   definitions,
+		routes:        make(map[string]providerCommandRoute),
+		activeByRoute: make(map[string]int),
+		calls:         make(chan struct{}, len(routes)+8),
 	}
 }
 
@@ -99,16 +129,17 @@ func (runner *providerCommandRouteRunner) Run(
 	key := providerCommandRouteKey(request)
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, cloneCommandRequest(request))
-	result, ok := runner.routes[key]
-	dynamicGate := runner.dynamicGates[key]
+	route, ok := runner.routes[key]
 	if ok {
 		runner.active++
+		runner.activeByRoute[key]++
 	}
 	runner.mu.Unlock()
 	if ok {
 		defer func() {
 			runner.mu.Lock()
 			runner.active--
+			runner.activeByRoute[key]--
 			runner.mu.Unlock()
 		}()
 	}
@@ -123,12 +154,12 @@ func (runner *providerCommandRouteRunner) Run(
 			string(request.Stdin),
 		)
 	}
-	if dynamicGate != nil {
-		if err := dynamicGate.wait(ctx); err != nil {
+	if route.gate != nil {
+		if err := route.gate.wait(ctx); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
 	}
-	return cloneCommandResult(result), nil
+	return cloneCommandResult(route.result), nil
 }
 
 func (runner *providerCommandRouteRunner) CallCount() int {
@@ -175,20 +206,57 @@ func (runner *providerCommandRouteRunner) ActiveCallCount() int {
 // registerRoute models the case-owned registration boundary used by the
 // controlled provider fixture. Registration is deliberately fail-closed so a
 // duplicate immutable Work marker cannot silently replace an existing result.
-func (runner *providerCommandRouteRunner) registerRoute(key string) error {
+func (runner *providerCommandRouteRunner) registerRoute(key string) (*providerCommandRouteRegistration, error) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	key = strings.TrimSpace(key)
 	if key == "" {
-		return errors.New("provider fixture route key is empty")
+		return nil, errors.New("provider fixture route key is empty")
 	}
-	if _, exists := runner.routes[key]; exists {
-		return fmt.Errorf("provider fixture route %q is already registered", key)
+	definition, defined := runner.definitions[key]
+	if !defined {
+		return nil, fmt.Errorf("provider fixture route %q is not defined", key)
 	}
-	if _, exists := runner.dynamicGates[key]; exists {
-		return fmt.Errorf("provider fixture route %q is already registered", key)
+	if _, registered := runner.routes[key]; registered {
+		return nil, fmt.Errorf("provider fixture route %q is already registered", key)
 	}
-	runner.routes[key] = platformprocess.CommandResult{}
+	runner.routes[key] = providerCommandRoute{
+		result: cloneCommandResult(definition.result),
+		gate:   definition.gate,
+	}
+	return &providerCommandRouteRegistration{runner: runner, key: key}, nil
+}
+
+func (runner *providerCommandRouteRunner) unregisterRoute(key string) error {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if _, registered := runner.routes[key]; !registered {
+		return fmt.Errorf("provider fixture route %q is not registered", key)
+	}
+	if active := runner.activeByRoute[key]; active != 0 {
+		return fmt.Errorf("provider fixture route %q has %d active calls", key, active)
+	}
+	delete(runner.routes, key)
+	delete(runner.activeByRoute, key)
+	return nil
+}
+
+func (runner *providerCommandRouteRunner) close() error {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.active != 0 {
+		return fmt.Errorf("provider fixture route runner has %d active calls", runner.active)
+	}
+	if len(runner.routes) != 0 {
+		keys := make([]string, 0, len(runner.routes))
+		for key := range runner.routes {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		return fmt.Errorf("provider fixture routes remain registered: %s", strings.Join(keys, ", "))
+	}
+	runner.definitions = nil
+	runner.activeByRoute = nil
 	return nil
 }
 
@@ -196,6 +264,24 @@ func (runner *providerCommandRouteRunner) routeCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return len(runner.routes)
+}
+
+func (runner *providerCommandRouteRunner) activeRouteKeys() []string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	keys := make([]string, 0, len(runner.routes))
+	for key := range runner.routes {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func assertNoActiveProviderCommandRoutes(t *testing.T, runner *providerCommandRouteRunner, owner string) {
+	t.Helper()
+	if keys := runner.activeRouteKeys(); len(keys) != 0 {
+		t.Fatalf("Provider Sessions CLI routes remain after %s: %s", owner, strings.Join(keys, ", "))
+	}
 }
 
 func assertProviderCommandRoutesSince(t *testing.T, runner *providerCommandRouteRunner, start int, want map[string]struct{}) {

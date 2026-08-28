@@ -41,10 +41,11 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	factoryDir := caseFixture.factoryDir
 	env := functionalEnvironment(fixture.homeDir)
 	baseURL := fixture.baseURL
+	caseFixture.registerRoutes(t, "worker-session-cli-success")
 	t.Run("FT-B04 duplicate route registration fails closed", func(t *testing.T) {
 		routeCount := fixture.runner.routeCount()
 		callCount := fixture.runner.CallCount()
-		if err := fixture.runner.registerRoute("worker-session-cli-success"); err == nil {
+		if _, err := fixture.runner.registerRoute("worker-session-cli-success"); err == nil {
 			t.Fatal("duplicate provider fixture route registration returned nil error")
 		} else if !strings.Contains(err.Error(), "already registered") {
 			t.Fatalf("duplicate provider fixture route error = %v, want already registered diagnostic", err)
@@ -86,12 +87,16 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, successWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, workerSessionsCodexSuccessID, "COMPLETED")
 	assertSuccessfulWorkerSession(t, ctx, process, env, factoryDir, baseURL, successFactorySessionID, successWorkID)
+	caseFixture.closeRoute(t, "worker-session-cli-success")
 
+	caseFixture.registerRoutes(t, "worker-session-cli-failure")
 	failureWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, "worker-session-cli-failure")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, failureWorkID)
 	streamWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, workerSessionsCodexFailureID, "FAILED")
 	assertFailedWorkerSession(t, ctx, process, env, factoryDir, baseURL, failureFactorySessionID, failureWorkID)
+	caseFixture.closeRoute(t, "worker-session-cli-failure")
 
+	caseFixture.registerRoutes(t, "worker-session-cli-recovery-success")
 	recoveryFactorySessionID := caseFixture.openSession(t)
 	recoveryWorkID := submitWork(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, "worker-session-cli-recovery-success")
 	waitForWorkerSession(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, recoveryWorkID)
@@ -99,6 +104,7 @@ func TestWorkerSessionsCLI(t *testing.T) {
 	t.Run("FT-R02 failure recovers into an isolated success", func(t *testing.T) {
 		assertSuccessfulWorkerSessionWithProvider(t, ctx, process, env, factoryDir, baseURL, recoveryFactorySessionID, recoveryWorkID, "session_fixture_codex_recovery_success")
 	})
+	caseFixture.closeRoute(t, "worker-session-cli-recovery-success")
 	assertFleetWorkerSessionList(t, ctx, process, env, factoryDir, baseURL, map[string]string{
 		successWorkID:  successFactorySessionID,
 		failureWorkID:  failureFactorySessionID,
@@ -206,6 +212,7 @@ func TestWorkerSessionsReplayOnlyRedirectsWellFormedNDJSON(t *testing.T) {
 	contents, diagnostics := runBuiltWorkerSessionReplay(t, ctx, fixture)
 	assertWorkerSessionReplayCapture(t, contents, diagnostics)
 	assertProviderCommandRoutesSince(t, fixture.runner, fixture.routeStart, map[string]struct{}{fixture.requestID: {}})
+	fixture.caseFixture.closeRoute(t, fixture.requestID)
 }
 
 type workerSessionReplayFixture struct {
@@ -242,6 +249,7 @@ func TestWSRFT001OpeningRecordPrecedesProviderOutput(t *testing.T) {
 	frames := replayWorkerSessionFrames(t, ctx, fixture)
 	assertWSRWorkerSessionHistory(t, frames, fixture.sessionID, workID, "COMPLETED")
 	assertProviderCommandRoutesSince(t, fixture.runner, fixture.routeStart, map[string]struct{}{fixture.requestID: {}})
+	fixture.caseFixture.closeRoute(t, fixture.requestID)
 }
 
 // TestWSRFT002LiveAndReplayCorrelationRemainStable compares the public live
@@ -267,6 +275,7 @@ func TestWSRFT002LiveAndReplayCorrelationRemainStable(t *testing.T) {
 	frames := replayWorkerSessionFrames(t, ctx, fixture)
 	assertWSRLiveReplayCorrelation(t, live.Sessions[0], frames, fixture.sessionID, workID)
 	assertProviderCommandRoutesSince(t, fixture.runner, fixture.routeStart, map[string]struct{}{fixture.requestID: {}})
+	fixture.caseFixture.closeRoute(t, fixture.requestID)
 }
 
 func replayWorkerSessionFrames(
@@ -479,6 +488,7 @@ func newWorkerSessionReplayFixture(t *testing.T, ctx context.Context, requestID,
 	t.Helper()
 	caseFixture := newWorkerSessionsCLICase(t)
 	shared := caseFixture.fixture
+	caseFixture.registerRoutes(t, requestID)
 	routeStart := shared.runner.CallCount()
 	sessionID := caseFixture.openSession(t)
 	return workerSessionReplayFixture{
