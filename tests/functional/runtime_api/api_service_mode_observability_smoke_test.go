@@ -15,6 +15,8 @@ import (
 
 func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled(t *testing.T) {
 	support.SkipLongFunctional(t, "slow service-mode lifecycle smoke")
+	// C06-ISOLATED CASE-37: listener reachability until explicit cancellation
+	// and Done-after-cancel are process lifecycle properties, not session data.
 	server, dispatchRelease := newServiceModeObservabilityServer(t)
 
 	initial := waitForPublicFactorySession(t, server, 5*time.Second, serviceModeSessionIdle)
@@ -68,13 +70,13 @@ func TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTr
 	assertServiceModeHasCompletedDispatch(t, server, activeWorkID)
 }
 
-func newServiceModeObservabilityServer(t *testing.T) (*FunctionalServer, chan struct{}) {
+func newServiceModeObservabilityServer(t *testing.T) (*functionalAPIServer, chan struct{}) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
 	dispatchRelease := make(chan struct{})
 	provider := &serviceModeBlockingProvider{release: dispatchRelease}
-	return StartFunctionalServer(t, dir, false, withProvider(provider)), dispatchRelease
+	return startFunctionalServer(t, dir, false, withProvider(provider)), dispatchRelease
 }
 
 func newSharedServiceModeObservabilityServer(t *testing.T) (*functionalAPIServer, chan struct{}) {
@@ -217,7 +219,7 @@ func waitForPublicFactorySession(
 	return session
 }
 
-func assertServiceModeServerStillRunning(t *testing.T, server *FunctionalServer, failureMessage string) {
+func assertServiceModeServerStillRunning(t *testing.T, server interface{ Done() <-chan struct{} }, failureMessage string) {
 	t.Helper()
 
 	select {
@@ -227,7 +229,7 @@ func assertServiceModeServerStillRunning(t *testing.T, server *FunctionalServer,
 	}
 }
 
-func assertServiceModeServerStops(t *testing.T, server *FunctionalServer) {
+func assertServiceModeServerStops(t *testing.T, server interface{ Done() <-chan struct{} }) {
 	t.Helper()
 
 	select {

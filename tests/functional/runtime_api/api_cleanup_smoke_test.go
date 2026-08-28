@@ -45,7 +45,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 		t.Fatalf("GET /status terminal count = %d, want 1", statusRead.Categories.Terminal)
 	}
 	assertCleanupSmokeCanonicalFactoryEvents(t, server, support.StringPointerValue(completed.WorkId))
-	assertGeneratedEventsStreamHasCanonicalHistoryAt(t, server.eventsURL())
+	assertGeneratedEventsStreamHasCanonicalHistoryForServer(t, server)
 	assertCleanupSmokeDashboardShell(t, server.URL())
 }
 

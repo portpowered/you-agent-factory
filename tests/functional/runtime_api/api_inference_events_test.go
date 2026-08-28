@@ -17,6 +17,9 @@ import (
 
 func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact(t *testing.T) {
 	support.SkipLongFunctional(t, "slow inference-event artifact sweep")
+	// C06-ISOLATED CASE-05: --record finalization and the live-to-artifact
+	// identity comparison require this process to close before replay data is
+	// read, so recording ownership remains process-scoped.
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordPath := filepath.Join(t.TempDir(), "inference-events.replay.json")
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{

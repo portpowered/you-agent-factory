@@ -17,7 +17,7 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	provider := &eventReplayBlockingProvider{release: releaseDispatch}
 	server := startSharedFunctionalServer(t, dir, runtimeAPIScenario{provider: provider})
 
-	stream := openFactoryEventHTTPStream(t, server.eventsURL())
+	stream := server.openEventStream(t)
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 
 	traceID := submitGeneratedWorkAt(t, server.workURL("/work"), factoryapi.SubmitWorkRequest{

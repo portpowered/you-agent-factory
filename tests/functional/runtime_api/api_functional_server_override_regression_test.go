@@ -25,6 +25,9 @@ type functionalStateCategories struct {
 func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride(t *testing.T) {
 	support.SkipLongFunctional(t, "slow functional-server override sweep")
 	t.Run("StartFunctionalServerMockWorkersCompletes", func(t *testing.T) {
+		// C06-ISOLATED CASE-03: --with-mock-workers is a process startup
+		// override; the compatibility witness must observe the pre-build
+		// server composition and cannot use the shared process.
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"mock worker compatibility"}`))
 
@@ -41,6 +44,9 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 	})
 
 	t.Run("ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime", func(t *testing.T) {
+		// C06-ISOLATED CASE-04: the provider command runner is installed before
+		// root construction, which is the behavior under test and is not
+		// reproducible by a session-only route on the shared process.
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))

@@ -39,6 +39,16 @@ func assertGeneratedEventsStreamHasCanonicalHistoryAt(t *testing.T, endpoint str
 	)
 }
 
+func assertGeneratedEventsStreamHasCanonicalHistoryForServer(t *testing.T, server *functionalAPIServer) {
+	t.Helper()
+	stream := server.openEventStream(t)
+	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
+	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
+		factoryapi.FactoryEventTypeRunRequest,
+		factoryapi.FactoryEventTypeInitialStructureRequest,
+	)
+}
+
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
 	return submitGeneratedWorkAt(t, support.DefaultSessionWorkURL(baseURL, "/work"), req)

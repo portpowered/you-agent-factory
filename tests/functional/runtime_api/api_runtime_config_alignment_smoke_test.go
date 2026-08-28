@@ -63,6 +63,9 @@ func TestRuntimeConfigAlignmentSmoke_CanonicalOnlyBoundaryStaysAlignedAcrossExec
 }
 
 func testRuntimeConfigAlignmentCanonicalRoundTripAndExecution(t *testing.T) {
+	// C06-ISOLATED CASE-40: the canonical flatten/readback witness is currently
+	// coupled to the same process execution body; retain the combined case
+	// until that process-owned boundary can be split without weakening parity.
 	dir := setupRuntimeConfigAlignmentFactory(t)
 	assertRuntimeConfigAlignmentCanonicalRoundTrip(t, dir)
 	server, providerRunner, scriptRunner := startRuntimeConfigAlignmentSmokeServer(t, dir)

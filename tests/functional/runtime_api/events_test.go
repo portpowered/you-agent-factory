@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,12 @@ type factoryEventHTTPStream struct {
 	done   chan struct{}
 	events chan factoryapi.FactoryEvent
 	errs   chan error
+
+	closeOnce sync.Once
+	closeErr  error
+	hookMu    sync.Mutex
+	closeHook func()
+	closed    bool
 }
 
 func openDefaultSessionFactoryEventHTTPStream(t *testing.T, baseURL string) *factoryEventHTTPStream {
@@ -32,6 +39,11 @@ func openDefaultSessionFactoryEventHTTPStream(t *testing.T, baseURL string) *fac
 // API smokes that represent dashboard, Factory Session, or replay behavior should
 // call openDefaultSessionFactoryEventHTTPStream instead of process-global /events.
 func openFactoryEventHTTPStream(t *testing.T, endpoint string) *factoryEventHTTPStream {
+	t.Helper()
+	return openFactoryEventHTTPStreamWithHook(t, endpoint, nil)
+}
+
+func openFactoryEventHTTPStreamWithHook(t *testing.T, endpoint string, closeHook func()) *factoryEventHTTPStream {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -57,20 +69,26 @@ func openFactoryEventHTTPStream(t *testing.T, endpoint string) *factoryEventHTTP
 	}
 
 	stream := &factoryEventHTTPStream{
-		t:      t,
-		cancel: cancel,
-		done:   make(chan struct{}),
-		events: make(chan factoryapi.FactoryEvent, 4096),
-		errs:   make(chan error, 1),
+		t:         t,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		events:    make(chan factoryapi.FactoryEvent, 4096),
+		errs:      make(chan error, 1),
+		closeHook: closeHook,
 	}
 	go stream.read(resp)
-	t.Cleanup(stream.close)
+	t.Cleanup(func() {
+		if err := stream.close(); err != nil {
+			t.Errorf("close /events stream: %v", err)
+		}
+	})
 	return stream
 }
 
 func (s *factoryEventHTTPStream) read(resp *http.Response) {
 	defer close(s.done)
 	defer resp.Body.Close()
+	defer s.notifyClosed()
 
 	scanner := bufio.NewScanner(resp.Body)
 	var dataLines []string
@@ -139,12 +157,51 @@ func (s *factoryEventHTTPStream) next(timeout time.Duration) factoryapi.FactoryE
 	return factoryapi.FactoryEvent{}
 }
 
-func (s *factoryEventHTTPStream) close() {
-	s.cancel()
-	select {
-	case <-s.done:
-	case <-time.After(2 * time.Second):
+func (s *factoryEventHTTPStream) setCloseHook(closeHook func()) {
+	if s == nil || closeHook == nil {
+		return
 	}
+	s.hookMu.Lock()
+	if s.closed {
+		s.hookMu.Unlock()
+		closeHook()
+		return
+	}
+	s.closeHook = closeHook
+	s.hookMu.Unlock()
+}
+
+func (s *factoryEventHTTPStream) notifyClosed() {
+	if s == nil {
+		return
+	}
+	s.hookMu.Lock()
+	if s.closed {
+		s.hookMu.Unlock()
+		return
+	}
+	s.closed = true
+	closeHook := s.closeHook
+	s.closeHook = nil
+	s.hookMu.Unlock()
+	if closeHook != nil {
+		closeHook()
+	}
+}
+
+func (s *factoryEventHTTPStream) close() error {
+	if s == nil {
+		return nil
+	}
+	s.closeOnce.Do(func() {
+		s.cancel()
+		select {
+		case <-s.done:
+		case <-time.After(2 * time.Second):
+			s.closeErr = errors.New("timed out waiting for /events stream shutdown")
+		}
+	})
+	return s.closeErr
 }
 
 func requireFunctionalEventStreamPrelude(

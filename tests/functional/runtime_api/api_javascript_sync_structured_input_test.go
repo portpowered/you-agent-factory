@@ -25,6 +25,9 @@ const (
 // runs through the public you run customer boundary with structured args.
 func TestNamedJavaScriptFactoryRunResolvesInvocationInputThroughCLI(t *testing.T) {
 	t.Parallel()
+	// C06-ISOLATED CASE-06: this witness executes the public CLI directly
+	// through Process.Execute with named-factory HOME and working-directory
+	// inputs; it has no reusable HTTP-session equivalent.
 
 	homeDir := t.TempDir()
 	sourceDir := scaffoldJavaScriptStructuredInputFactory(t)
@@ -101,6 +104,9 @@ func decodeJavaScriptInvocationResponse(t *testing.T, stdout string) factoryapi.
 // orchestrator sync execution when structured args are supplied.
 func TestJavaScriptSyncExecutionResolvesStructuredInvocationInput(t *testing.T) {
 	t.Parallel()
+	// C06-ISOLATED CASE-07: HOME/USERPROFILE, workflow-home, named-factory,
+	// and mock-worker process inputs are the contract, so this server remains
+	// isolated from the shared package process.
 
 	homeDir := t.TempDir()
 	sourceDir := scaffoldJavaScriptStructuredInputFactory(t)

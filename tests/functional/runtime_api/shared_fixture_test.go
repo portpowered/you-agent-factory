@@ -6,12 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,12 +28,19 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const runtimeAPIPackageFixtureTimeout = 15 * time.Second
+const (
+	runtimeAPIPackageFixtureTimeout       = 15 * time.Second
+	runtimeAPISessionCleanupTimeout       = 10 * time.Second
+	runtimeAPIPackageShutdownTimeout      = 5 * time.Second
+	runtimeAPIPackageListenerProbeTimeout = 2 * time.Second
+	runtimeAPIWindowsConnectionRefused    = syscall.Errno(10061)
+)
 
 var (
 	runtimeAPIFixtureOnce sync.Once
@@ -66,11 +78,121 @@ type runtimeAPIPackageFixture struct {
 	process support.ApplicationProcess
 	command *runtimeAPIProcessCommand
 
-	apiStarts atomic.Int64
+	apiStarts     atomic.Int64
+	processStarts atomic.Int64
+	ledger        *runtimeAPICleanupLedger
+	closeOnce     sync.Once
+	closeErr      error
 
 	providerRouter *runtimeAPIProviderRouter
 	commandRouter  *runtimeAPICommandRouter
 	scriptRouter   *runtimeAPICommandRouter
+}
+
+// runtimeAPICleanupLedger records resources owned by the package fixture or a
+// shared scenario. A successful release removes the resource from the active
+// set; counts remain so a missing or duplicated release cannot look clean.
+type runtimeAPICleanupLedger struct {
+	mu sync.Mutex
+
+	nextStreamID  uint64
+	sessions      map[string]struct{}
+	streams       map[uint64]struct{}
+	sessionOpens  int
+	sessionCloses int
+	streamOpens   int
+	streamCloses  int
+}
+
+func newRuntimeAPICleanupLedger() *runtimeAPICleanupLedger {
+	return &runtimeAPICleanupLedger{
+		sessions: make(map[string]struct{}),
+		streams:  make(map[uint64]struct{}),
+	}
+}
+
+func (ledger *runtimeAPICleanupLedger) trackSession(id string) (func() error, error) {
+	if ledger == nil {
+		return func() error { return nil }, nil
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, errors.New("runtime API session ID is empty")
+	}
+	ledger.mu.Lock()
+	if _, exists := ledger.sessions[id]; exists {
+		ledger.mu.Unlock()
+		return nil, fmt.Errorf("runtime API session %q is already tracked", id)
+	}
+	ledger.sessions[id] = struct{}{}
+	ledger.sessionOpens++
+	ledger.mu.Unlock()
+
+	var once sync.Once
+	var releaseErr error
+	return func() error {
+		once.Do(func() {
+			ledger.mu.Lock()
+			defer ledger.mu.Unlock()
+			if _, exists := ledger.sessions[id]; !exists {
+				releaseErr = fmt.Errorf("runtime API session %q was not tracked", id)
+				return
+			}
+			delete(ledger.sessions, id)
+			ledger.sessionCloses++
+		})
+		return releaseErr
+	}, nil
+}
+
+func (ledger *runtimeAPICleanupLedger) trackStream() func() {
+	if ledger == nil {
+		return func() {}
+	}
+	ledger.mu.Lock()
+	ledger.nextStreamID++
+	id := ledger.nextStreamID
+	ledger.streams[id] = struct{}{}
+	ledger.streamOpens++
+	ledger.mu.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			ledger.mu.Lock()
+			defer ledger.mu.Unlock()
+			if _, exists := ledger.streams[id]; !exists {
+				return
+			}
+			delete(ledger.streams, id)
+			ledger.streamCloses++
+		})
+	}
+}
+
+func (ledger *runtimeAPICleanupLedger) leakError() error {
+	if ledger == nil {
+		return nil
+	}
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if len(ledger.sessions) == 0 && len(ledger.streams) == 0 &&
+		ledger.sessionOpens == ledger.sessionCloses && ledger.streamOpens == ledger.streamCloses {
+		return nil
+	}
+	activeSessions := make([]string, 0, len(ledger.sessions))
+	for id := range ledger.sessions {
+		activeSessions = append(activeSessions, id)
+	}
+	return fmt.Errorf(
+		"runtime API cleanup ledger is not empty: active sessions=%v streams=%d session opens/closes=%d/%d stream opens/closes=%d/%d",
+		activeSessions,
+		len(ledger.streams),
+		ledger.sessionOpens,
+		ledger.sessionCloses,
+		ledger.streamOpens,
+		ledger.streamCloses,
+	)
 }
 
 type runtimeAPIScenario struct {
@@ -153,6 +275,15 @@ func (fs *functionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.Facto
 	return support.GetFactoryEventsAt(t, fs.URL())
 }
 
+func (fs *functionalAPIServer) openEventStream(t *testing.T) *factoryEventHTTPStream {
+	t.Helper()
+	stream := openFactoryEventHTTPStream(t, fs.eventsURL())
+	if fs != nil && fs.shared != nil {
+		fs.shared.trackStream(stream)
+	}
+	return stream
+}
+
 func startSharedFunctionalServer(
 	t *testing.T,
 	factoryDir string,
@@ -181,20 +312,9 @@ func startSharedFunctionalServer(
 	if scenario.scriptRunner != nil {
 		unregisterScript = fixture.scriptRouter.register(factoryDir, scenario.scriptRunner)
 	}
-
-	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
-	sessionID := opened.Session.Id
-	if sessionID == "" || sessionID == "~default" {
-		t.Fatalf("shared runtime API Factory Session ID = %q, want unique explicit session", sessionID)
-	}
-	server := &functionalAPIServer{
-		shared:    fixture,
-		sessionID: sessionID,
-	}
+	// Register route cleanup before opening the session. If session creation
+	// fails, testing.T cleanup still resets every scenario-owned effect lane.
 	t.Cleanup(func() {
-		// Close the live session before releasing its effect route. This lets
-		// cancellation reach any in-flight controlled provider call.
-		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
 		if unregisterScript != nil {
 			unregisterScript()
 		}
@@ -205,7 +325,223 @@ func startSharedFunctionalServer(
 			unregisterProvider()
 		}
 	})
+
+	opened, err := openRuntimeAPIFactorySession(fixture.baseURL, factoryDir)
+	if err != nil {
+		t.Fatalf("open shared runtime API Factory Session: %v", err)
+	}
+	sessionID := opened.Session.Id
+	if sessionID == "" || sessionID == "~default" {
+		cleanupErr := closeRuntimeAPIFactorySession(fixture.baseURL, sessionID)
+		if cleanupErr != nil {
+			t.Errorf("cleanup invalid shared runtime API Factory Session %q: %v", sessionID, cleanupErr)
+		}
+		t.Fatalf("shared runtime API Factory Session ID = %q, want unique explicit session", sessionID)
+	}
+	releaseSession, err := fixture.trackSession(sessionID)
+	if err != nil {
+		cleanupErr := closeRuntimeAPIFactorySession(fixture.baseURL, sessionID)
+		t.Fatalf("track shared runtime API Factory Session %q: %v; cleanup error: %v", sessionID, err, cleanupErr)
+	}
+	server := &functionalAPIServer{
+		shared:    fixture,
+		sessionID: sessionID,
+	}
+	t.Cleanup(func() {
+		// Close the live session before releasing its effect route. This lets
+		// cancellation reach any in-flight controlled provider call.
+		if err := closeRuntimeAPIFactorySession(fixture.baseURL, sessionID); err != nil {
+			t.Errorf("close shared runtime API Factory Session %q: %v", sessionID, err)
+			return
+		}
+		if err := releaseSession(); err != nil {
+			t.Errorf("release shared runtime API Factory Session %q: %v", sessionID, err)
+		}
+	})
 	return server
+}
+
+func (fixture *runtimeAPIPackageFixture) trackSession(id string) (func() error, error) {
+	if fixture == nil {
+		return func() error { return nil }, nil
+	}
+	return fixture.ledger.trackSession(id)
+}
+
+func (fixture *runtimeAPIPackageFixture) trackStream(stream *factoryEventHTTPStream) {
+	if fixture == nil || stream == nil {
+		return
+	}
+	stream.setCloseHook(fixture.ledger.trackStream())
+}
+
+func openRuntimeAPIFactorySession(baseURL, folderPath string) (factoryapi.OpenFactorySessionResponse, error) {
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: folderPath})
+	if err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("marshal open Factory Session request: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeAPISessionCleanupTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions",
+		strings.NewReader(string(payload)),
+	)
+	if err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("build open Factory Session request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("POST open Factory Session: %w", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("read open Factory Session response: %w", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf(
+			"POST /factory-sessions status = %d: %s",
+			response.StatusCode,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(body, &opened); err != nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("decode open Factory Session response: %w", err)
+	}
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		return factoryapi.OpenFactorySessionResponse{}, errors.New("open Factory Session response has no session ID")
+	}
+	return opened, nil
+}
+
+func closeRuntimeAPIFactorySession(baseURL, sessionID string) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return errors.New("close Factory Session requires a session ID")
+	}
+	if err := terminateRuntimeAPIFactorySession(baseURL, sessionID); err != nil {
+		if errors.Is(err, errRuntimeAPIFactorySessionGone) {
+			return nil
+		}
+		return err
+	}
+	if err := waitRuntimeAPIFactorySessionStopped(baseURL, sessionID); err != nil {
+		return err
+	}
+	return deleteRuntimeAPIFactorySession(baseURL, sessionID)
+}
+
+var errRuntimeAPIFactorySessionGone = errors.New("Factory Session is already gone")
+
+func terminateRuntimeAPIFactorySession(baseURL, sessionID string) error {
+	status, body, err := runtimeAPIFactorySessionRequest(
+		http.MethodPost,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/terminate",
+		[]byte("{}"),
+	)
+	if err != nil {
+		return fmt.Errorf("terminate Factory Session %q: %w", sessionID, err)
+	}
+	if status >= http.StatusOK && status < http.StatusMultipleChoices {
+		return nil
+	}
+	if status == http.StatusConflict && strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`) {
+		return nil
+	}
+	if status == http.StatusNotFound {
+		return errRuntimeAPIFactorySessionGone
+	}
+	return fmt.Errorf("terminate Factory Session %q status = %d: %s", sessionID, status, strings.TrimSpace(string(body)))
+}
+
+func waitRuntimeAPIFactorySessionStopped(baseURL, sessionID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeAPISessionCleanupTimeout)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	var lastStatus factoryapi.StatusResponse
+	var lastErr error
+	for {
+		status, body, err := runtimeAPIFactorySessionRequestWithContext(
+			ctx,
+			http.MethodGet,
+			strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID)+"/status",
+			nil,
+		)
+		if err == nil && status == http.StatusOK {
+			if decodeErr := json.Unmarshal(body, &lastStatus); decodeErr == nil {
+				if lastStatus.RuntimeStatus == string(interfaces.RuntimeStatusIdle) ||
+					lastStatus.RuntimeStatus == string(interfaces.RuntimeStatusFinished) {
+					return nil
+				}
+				lastErr = nil
+			} else {
+				lastErr = fmt.Errorf("decode status: %w", decodeErr)
+			}
+		} else if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("status = %d: %s", status, strings.TrimSpace(string(body)))
+		}
+
+		// The public status endpoint is the lifecycle signal; polling it avoids
+		// a fixed sleep while allowing the runtime to finish cancellation and
+		// release its session-owned resources deterministically.
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for Factory Session %q to stop: last status=%#v error=%v: %w", sessionID, lastStatus, lastErr, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func deleteRuntimeAPIFactorySession(baseURL, sessionID string) error {
+	status, body, err := runtimeAPIFactorySessionRequest(
+		http.MethodDelete,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("delete Factory Session %q: %w", sessionID, err)
+	}
+	if status == http.StatusNoContent || status == http.StatusNotFound {
+		return nil
+	}
+	return fmt.Errorf("delete Factory Session %q status = %d: %s", sessionID, status, strings.TrimSpace(string(body)))
+}
+
+func runtimeAPIFactorySessionRequest(method, endpoint string, body []byte) (int, []byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeAPISessionCleanupTimeout)
+	defer cancel()
+	return runtimeAPIFactorySessionRequestWithContext(ctx, method, endpoint, body)
+}
+
+func runtimeAPIFactorySessionRequestWithContext(ctx context.Context, method, endpoint string, body []byte) (int, []byte, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = strings.NewReader(string(body))
+	}
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, reader)
+	if err != nil {
+		return 0, nil, fmt.Errorf("build %s %s request: %w", method, endpoint, err)
+	}
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return response.StatusCode, nil, fmt.Errorf("read %s %s response: %w", method, endpoint, err)
+	}
+	return response.StatusCode, responseBody, nil
 }
 
 func runtimeAPIProviderForScenario(t *testing.T, scenario runtimeAPIScenario) providers.Service {
@@ -253,8 +589,7 @@ func newRuntimeAPIPackageFixture() (*runtimeAPIPackageFixture, error) {
 		return nil, err
 	}
 	cleanupOnError := func(cause error) (*runtimeAPIPackageFixture, error) {
-		_ = os.RemoveAll(rootDir)
-		return nil, cause
+		return nil, errors.Join(cause, removeRuntimeAPIRoot(rootDir))
 	}
 
 	hostDir := filepath.Join(rootDir, "host")
@@ -276,6 +611,7 @@ func newRuntimeAPIPackageFixture() (*runtimeAPIPackageFixture, error) {
 	fixture := &runtimeAPIPackageFixture{
 		rootDir:        rootDir,
 		hostDir:        hostDir,
+		ledger:         newRuntimeAPICleanupLedger(),
 		providerRouter: newRuntimeAPIProviderRouter(),
 		commandRouter:  newRuntimeAPICommandRouter("provider"),
 		scriptRouter:   newRuntimeAPICommandRouter("script"),
@@ -302,11 +638,14 @@ func newRuntimeAPIPackageFixture() (*runtimeAPIPackageFixture, error) {
 	})
 	inputs.Input.WorkingDirectory = hostDir
 	inputs.Input.Env = runtimeAPIEnvironment(inputs.Input.Env, homeDir)
+	fixture.processStarts.Add(1)
 	fixture.command = startRuntimeAPIProcessCommand(process, inputs.Input)
 	baseURL, err := api.WaitForBaseURL(runtimeAPIPackageFixtureTimeout)
 	if err != nil {
-		_ = fixture.close()
-		return nil, fmt.Errorf("wait for package API listener: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("wait for package API listener: %w", err),
+			fixture.close(),
+		)
 	}
 	fixture.baseURL = baseURL
 
@@ -361,25 +700,112 @@ func (fixture *runtimeAPIPackageFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
-	var result error
-	if fixture.command != nil {
-		fixture.command.stop()
-		if err := fixture.command.terminalError(); err != nil && !errors.Is(err, context.Canceled) {
-			result = errors.Join(result, fmt.Errorf("stop Process.Execute: %w", err))
+	fixture.closeOnce.Do(func() {
+		var result error
+		if fixture.command != nil {
+			if err := fixture.command.stop(); err != nil {
+				result = errors.Join(result, fmt.Errorf("stop Process.Execute: %w", err))
+			}
 		}
+		if fixture.process != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), runtimeAPIPackageShutdownTimeout)
+			if err := fixture.process.Close(ctx); err != nil {
+				result = errors.Join(result, fmt.Errorf("close application process: %w", err))
+			}
+			cancel()
+		}
+		if fixture.baseURL != "" && fixture.apiStarts.Load() != 1 {
+			result = errors.Join(result, fmt.Errorf("API listener starts = %d, want 1", fixture.apiStarts.Load()))
+		}
+		if err := runtimeAPIListenerClosed(fixture.baseURL, fixture.apiStarts.Load()); err != nil {
+			result = errors.Join(result, err)
+		}
+		if fixture.baseURL != "" && fixture.processStarts.Load() != 1 {
+			result = errors.Join(result, fmt.Errorf("Process.Execute starts = %d, want 1", fixture.processStarts.Load()))
+		}
+		if err := fixture.cleanupLedgerError(); err != nil {
+			result = errors.Join(result, err)
+		}
+		if fixture.rootDir != "" {
+			if err := removeRuntimeAPIRoot(fixture.rootDir); err != nil {
+				result = errors.Join(result, err)
+			}
+		}
+		fixture.closeErr = result
+	})
+	return fixture.closeErr
+}
+
+func (fixture *runtimeAPIPackageFixture) cleanupLedgerError() error {
+	if fixture == nil {
+		return nil
 	}
-	if fixture.process != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		result = errors.Join(result, fixture.process.Close(ctx))
-		cancel()
+	var result error
+	if err := fixture.ledger.leakError(); err != nil {
+		result = errors.Join(result, err)
 	}
-	if got := fixture.apiStarts.Load(); got != 1 {
-		result = errors.Join(result, fmt.Errorf("API listener starts = %d, want 1", got))
+	if active, models := fixture.providerRouter.routeCounts(); active != 0 || models != 0 {
+		result = errors.Join(result, fmt.Errorf("provider edge lanes remain: routes=%d model routes=%d", active, models))
 	}
-	if fixture.rootDir != "" {
-		result = errors.Join(result, os.RemoveAll(fixture.rootDir))
+	if active := fixture.commandRouter.routeCount(); active != 0 {
+		result = errors.Join(result, fmt.Errorf("provider command edge lanes remain: routes=%d", active))
+	}
+	if active := fixture.scriptRouter.routeCount(); active != 0 {
+		result = errors.Join(result, fmt.Errorf("script command edge lanes remain: routes=%d", active))
 	}
 	return result
+}
+
+func runtimeAPIListenerClosed(baseURL string, starts int64) error {
+	if strings.TrimSpace(baseURL) == "" {
+		if starts == 0 {
+			return nil
+		}
+		return fmt.Errorf("listener cleanup probe has no base URL after %d listener starts", starts)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), runtimeAPIPackageListenerProbeTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		strings.TrimSuffix(baseURL, "/")+"/status",
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("build runtime API listener cleanup probe: %w", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		if runtimeAPIConnectionWasRefused(err) {
+			return nil
+		}
+		return fmt.Errorf("runtime API listener cleanup probe did not prove closure: %w", err)
+	}
+	defer response.Body.Close()
+	return fmt.Errorf("runtime API listener remained reachable after shutdown with status %d", response.StatusCode)
+}
+
+func runtimeAPIConnectionWasRefused(err error) bool {
+	var operationError *net.OpError
+	if !errors.As(err, &operationError) || operationError.Op != "dial" {
+		return false
+	}
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, runtimeAPIWindowsConnectionRefused)
+}
+
+func removeRuntimeAPIRoot(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("remove runtime API fixture root %s: %w", path, err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("runtime API fixture root %s remains after cleanup", path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("verify runtime API fixture root %s removal: %w", path, err)
+	}
+	return nil
 }
 
 type runtimeAPIProcessCommand struct {
@@ -388,10 +814,16 @@ type runtimeAPIProcessCommand struct {
 
 	mu          sync.Mutex
 	terminalErr error
+	stopOnce    sync.Once
+	stopErr     error
 }
 
 func startRuntimeAPIProcessCommand(process support.ApplicationProcess, input root.Input) *runtimeAPIProcessCommand {
-	ctx, cancel := context.WithCancel(input.Context)
+	parent := input.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
 	input.Context = ctx
 	command := &runtimeAPIProcessCommand{cancel: cancel, done: make(chan struct{})}
 	go func() {
@@ -404,15 +836,22 @@ func startRuntimeAPIProcessCommand(process support.ApplicationProcess, input roo
 	return command
 }
 
-func (command *runtimeAPIProcessCommand) stop() {
+func (command *runtimeAPIProcessCommand) stop() error {
 	if command == nil {
-		return
+		return nil
 	}
-	command.cancel()
-	select {
-	case <-command.done:
-	case <-time.After(5 * time.Second):
-	}
+	command.stopOnce.Do(func() {
+		command.cancel()
+		select {
+		case <-command.done:
+			if err := command.terminalError(); err != nil && !errors.Is(err, context.Canceled) {
+				command.stopErr = fmt.Errorf("Process.Execute returned during shutdown: %w", err)
+			}
+		case <-time.After(runtimeAPIPackageShutdownTimeout):
+			command.stopErr = fmt.Errorf("timed out waiting %s for Process.Execute shutdown", runtimeAPIPackageShutdownTimeout)
+		}
+	})
+	return command.stopErr
 }
 
 func (command *runtimeAPIProcessCommand) terminalError() error {
@@ -434,6 +873,7 @@ type runtimeAPIProviderRoute struct {
 	factoryDir string
 	models     []string
 	provider   providers.Service
+	token      *struct{}
 }
 
 func newRuntimeAPIProviderRouter() *runtimeAPIProviderRouter {
@@ -442,26 +882,51 @@ func newRuntimeAPIProviderRouter() *runtimeAPIProviderRouter {
 
 func (router *runtimeAPIProviderRouter) register(factoryDir string, models []string, provider providers.Service) func() {
 	key := runtimeAPINormalizeDir(factoryDir)
-	route := runtimeAPIProviderRoute{factoryDir: key, models: append([]string(nil), models...), provider: provider}
+	route := runtimeAPIProviderRoute{
+		factoryDir: key,
+		models:     append([]string(nil), models...),
+		provider:   provider,
+		token:      &struct{}{},
+	}
 	router.mu.Lock()
+	if previous, ok := router.routes[key]; ok {
+		for _, model := range previous.models {
+			modelKey := strings.ToLower(strings.TrimSpace(model))
+			if router.models[modelKey] == key {
+				delete(router.models, modelKey)
+			}
+		}
+	}
 	router.routes[key] = route
 	for _, model := range models {
 		router.models[strings.ToLower(strings.TrimSpace(model))] = key
 	}
 	router.mu.Unlock()
+	var once sync.Once
 	return func() {
-		router.mu.Lock()
-		if current, ok := router.routes[key]; ok && current.provider == provider {
-			delete(router.routes, key)
-			for _, model := range models {
-				modelKey := strings.ToLower(strings.TrimSpace(model))
-				if router.models[modelKey] == key {
-					delete(router.models, modelKey)
+		once.Do(func() {
+			router.mu.Lock()
+			defer router.mu.Unlock()
+			if current, ok := router.routes[key]; ok && current.token == route.token {
+				delete(router.routes, key)
+				for _, model := range route.models {
+					modelKey := strings.ToLower(strings.TrimSpace(model))
+					if router.models[modelKey] == key {
+						delete(router.models, modelKey)
+					}
 				}
 			}
-		}
-		router.mu.Unlock()
+		})
 	}
+}
+
+func (router *runtimeAPIProviderRouter) routeCounts() (int, int) {
+	if router == nil {
+		return 0, 0
+	}
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.routes), len(router.models)
 }
 
 func (router *runtimeAPIProviderRouter) providerFor(request providers.ExecuteRequest) providers.Service {
@@ -529,44 +994,66 @@ func (router *runtimeAPIProviderRouter) ContinueReference(ctx context.Context, r
 type runtimeAPICommandRouter struct {
 	name   string
 	mu     sync.RWMutex
-	routes map[string]platformprocess.CommandRunner
+	routes map[string]runtimeAPICommandRoute
+}
+
+type runtimeAPICommandRoute struct {
+	runner platformprocess.CommandRunner
+	token  *struct{}
 }
 
 func newRuntimeAPICommandRouter(name string) *runtimeAPICommandRouter {
-	return &runtimeAPICommandRouter{name: name, routes: make(map[string]platformprocess.CommandRunner)}
+	return &runtimeAPICommandRouter{name: name, routes: make(map[string]runtimeAPICommandRoute)}
 }
 
 func (router *runtimeAPICommandRouter) register(factoryDir string, runner platformprocess.CommandRunner) func() {
 	key := runtimeAPINormalizeDir(factoryDir)
+	route := runtimeAPICommandRoute{runner: runner, token: &struct{}{}}
 	router.mu.Lock()
-	router.routes[key] = runner
+	// The route map is scenario-scoped. Replacing a route for the same
+	// directory is safe, while the token below prevents an older cleanup from
+	// deleting the replacement.
+	router.routes[key] = route
 	router.mu.Unlock()
+	var once sync.Once
 	return func() {
-		router.mu.Lock()
-		if current, ok := router.routes[key]; ok && current == runner {
-			delete(router.routes, key)
-		}
-		router.mu.Unlock()
+		once.Do(func() {
+			router.mu.Lock()
+			if current, ok := router.routes[key]; ok && current.token == route.token {
+				delete(router.routes, key)
+			}
+			router.mu.Unlock()
+		})
 	}
 }
 
 func (router *runtimeAPICommandRouter) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	key := runtimeAPINormalizeDir(request.WorkDir)
 	router.mu.RLock()
-	runner := router.routes[key]
-	if runner == nil {
+	route, ok := router.routes[key]
+	if !ok {
 		for routeDir, candidate := range router.routes {
 			if runtimeAPIDirContains(routeDir, key) {
-				runner = candidate
+				route = candidate
+				ok = true
 				break
 			}
 		}
 	}
 	router.mu.RUnlock()
-	if runner == nil {
+	if !ok || route.runner == nil {
 		return platformprocess.CommandResult{}, fmt.Errorf("no shared runtime API %s command route for %q", router.name, request.WorkDir)
 	}
-	return runner.Run(ctx, request)
+	return route.runner.Run(ctx, request)
+}
+
+func (router *runtimeAPICommandRouter) routeCount() int {
+	if router == nil {
+		return 0
+	}
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.routes)
 }
 
 type runtimeAPICommandProvider struct {
@@ -691,3 +1178,185 @@ func runtimeAPIDirContains(parent, child string) bool {
 var _ providers.Service = (*runtimeAPIProviderRouter)(nil)
 var _ platformprocess.CommandRunner = (*runtimeAPICommandRouter)(nil)
 var _ providers.Service = (*runtimeAPICommandProvider)(nil)
+
+func TestRuntimeAPIPackageCleanupLedgerAndEdgeLeasesAreIdempotent(t *testing.T) {
+	fixture := &runtimeAPIPackageFixture{
+		ledger:         newRuntimeAPICleanupLedger(),
+		providerRouter: newRuntimeAPIProviderRouter(),
+		commandRouter:  newRuntimeAPICommandRouter("provider"),
+		scriptRouter:   newRuntimeAPICommandRouter("script"),
+	}
+
+	releaseSession, err := fixture.trackSession("session-ledger-test")
+	if err != nil {
+		t.Fatalf("track session: %v", err)
+	}
+	stream := &factoryEventHTTPStream{}
+	fixture.trackStream(stream)
+
+	providerUnregister := fixture.providerRouter.register(t.TempDir(), []string{"model-ledger-test"}, testutil.NativeProvider{})
+	commandUnregister := fixture.commandRouter.register(t.TempDir(), support.NewRecordingCommandRunner("provider"))
+	scriptUnregister := fixture.scriptRouter.register(t.TempDir(), support.NewRecordingCommandRunner("script"))
+
+	if err := releaseSession(); err != nil {
+		t.Fatalf("release session: %v", err)
+	}
+	if err := releaseSession(); err != nil {
+		t.Fatalf("repeated session release: %v", err)
+	}
+	stream.notifyClosed()
+	stream.notifyClosed()
+	providerUnregister()
+	providerUnregister()
+	commandUnregister()
+	commandUnregister()
+	scriptUnregister()
+	scriptUnregister()
+
+	if err := fixture.cleanupLedgerError(); err != nil {
+		t.Fatalf("cleanup ledger after idempotent releases: %v", err)
+	}
+
+	t.Run("active resources fail closed", func(t *testing.T) {
+		fixture := &runtimeAPIPackageFixture{
+			ledger:         newRuntimeAPICleanupLedger(),
+			providerRouter: newRuntimeAPIProviderRouter(),
+			commandRouter:  newRuntimeAPICommandRouter("provider"),
+			scriptRouter:   newRuntimeAPICommandRouter("script"),
+		}
+		releaseSession, err := fixture.trackSession("session-leak-test")
+		if err != nil {
+			t.Fatalf("track leaked session: %v", err)
+		}
+		stream := &factoryEventHTTPStream{}
+		fixture.trackStream(stream)
+		unregister := fixture.providerRouter.register(t.TempDir(), nil, testutil.NativeProvider{})
+		if err := fixture.cleanupLedgerError(); err == nil {
+			t.Fatal("cleanup ledger error = nil, want active resource failure")
+		}
+
+		if err := releaseSession(); err != nil {
+			t.Fatalf("release leaked session: %v", err)
+		}
+		stream.notifyClosed()
+		unregister()
+		if err := fixture.cleanupLedgerError(); err != nil {
+			t.Fatalf("cleanup ledger after releasing active resources: %v", err)
+		}
+	})
+}
+
+// C06-ISOLATED CASE-43: cleanup itself owns process, listener, root, and
+// tracked-lane teardown; injected lifecycle failures must remain visible while
+// every independent cleanup action still runs.
+func TestRuntimeAPIPackageFixtureCleanupIsIdempotentAndPreservesFailures(t *testing.T) {
+	t.Run("normal cleanup probes listener and removes root", func(t *testing.T) {
+		fixture, listener, process := newRuntimeAPICleanupTestFixture(t, nil, nil)
+		listener.Close()
+
+		if err := fixture.close(); err != nil {
+			t.Fatalf("fixture close: %v", err)
+		}
+		if err := fixture.close(); err != nil {
+			t.Fatalf("repeated fixture close: %v", err)
+		}
+		if got := process.closeCalls.Load(); got != 1 {
+			t.Fatalf("process close calls = %d, want 1", got)
+		}
+		assertRuntimeAPITestRootRemoved(t, fixture.rootDir)
+	})
+
+	t.Run("injected execute and close failures remain visible", func(t *testing.T) {
+		executeErr := errors.New("injected Process.Execute failure")
+		closeErr := errors.New("injected application process close failure")
+		fixture, listener, process := newRuntimeAPICleanupTestFixture(t, executeErr, closeErr)
+		listener.Close()
+
+		firstErr := fixture.close()
+		if !errors.Is(firstErr, executeErr) {
+			t.Fatalf("fixture close error = %v, want Process.Execute cause", firstErr)
+		}
+		if !errors.Is(firstErr, closeErr) {
+			t.Fatalf("fixture close error = %v, want process Close cause", firstErr)
+		}
+		secondErr := fixture.close()
+		if !errors.Is(secondErr, executeErr) || !errors.Is(secondErr, closeErr) {
+			t.Fatalf("repeated fixture close error = %v, want both original causes", secondErr)
+		}
+		if got := process.closeCalls.Load(); got != 1 {
+			t.Fatalf("process close calls = %d, want 1 after repeated cleanup", got)
+		}
+		assertRuntimeAPITestRootRemoved(t, fixture.rootDir)
+	})
+
+	t.Run("reachable listener fails the cleanup probe", func(t *testing.T) {
+		listener := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		defer listener.Close()
+
+		err := runtimeAPIListenerClosed(listener.URL, 1)
+		if err == nil || !strings.Contains(err.Error(), "remained reachable") {
+			t.Fatalf("reachable listener probe error = %v, want reachability failure", err)
+		}
+	})
+}
+
+type runtimeAPICleanupTestProcess struct {
+	executeErr error
+	closeErr   error
+	closeCalls atomic.Int64
+}
+
+func (process *runtimeAPICleanupTestProcess) Execute(root.Input) error {
+	return process.executeErr
+}
+
+func (process *runtimeAPICleanupTestProcess) Close(context.Context) error {
+	process.closeCalls.Add(1)
+	return process.closeErr
+}
+
+func (*runtimeAPICleanupTestProcess) ACPServer() support.ACPServer {
+	return nil
+}
+
+func (*runtimeAPICleanupTestProcess) ProviderRegistry() support.ProviderRegistry {
+	return nil
+}
+
+func (*runtimeAPICleanupTestProcess) WorkerRecordingReader() recordings.WorkerRecordingReader {
+	return nil
+}
+
+func newRuntimeAPICleanupTestFixture(
+	t *testing.T,
+	executeErr, closeErr error,
+) (*runtimeAPIPackageFixture, *httptest.Server, *runtimeAPICleanupTestProcess) {
+	t.Helper()
+	rootDir := filepath.Join(t.TempDir(), "owned-runtime-api-root")
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		t.Fatalf("create cleanup test root: %v", err)
+	}
+	listener := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	process := &runtimeAPICleanupTestProcess{executeErr: executeErr, closeErr: closeErr}
+	fixture := &runtimeAPIPackageFixture{
+		rootDir:        rootDir,
+		baseURL:        listener.URL,
+		process:        process,
+		ledger:         newRuntimeAPICleanupLedger(),
+		providerRouter: newRuntimeAPIProviderRouter(),
+		commandRouter:  newRuntimeAPICommandRouter("provider"),
+		scriptRouter:   newRuntimeAPICommandRouter("script"),
+	}
+	fixture.apiStarts.Store(1)
+	fixture.processStarts.Store(1)
+	inputs := support.FakeInputs(context.Background(), []string{"you", "run"})
+	fixture.command = startRuntimeAPIProcessCommand(process, inputs.Input)
+	return fixture, listener, process
+}
+
+func assertRuntimeAPITestRootRemoved(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cleanup test root stat error = %v, want path removed", err)
+	}
+}

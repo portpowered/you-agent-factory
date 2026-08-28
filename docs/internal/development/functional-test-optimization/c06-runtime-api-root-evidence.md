@@ -234,6 +234,52 @@ current witness surface:
 | Controlled edges | Provider overrides, provider/script command runners, model asset HTTP, environment, workflow-home, and mock-worker compatibility edges are explicitly present in source. |
 | Process/cleanup | Current process construction and `Stop`/`Close` ownership are explicit in the helper path; normal package cleanup passed. No pre-migration shared fixture, resource ledger, listener-after-close probe, or injected-failure cleanup witness exists yet. |
 
+## Story-003 implementation evidence
+
+Story `functional-test-optimization-c06-runtime-api-root-003` preserves the
+characterized witnesses while making package and scenario cleanup observable.
+The eligible cohort still runs through one production-composed
+`root.BuildProcess`/`Process.Execute` HTTP process; process-input, lifecycle,
+recording-finalization, replay, CLI, and before-build override witnesses retain
+their one-process-per-body isolation with an inline `C06-ISOLATED` reason.
+
+### Cleanup and isolation changes
+
+- Shared Factory Sessions are opened through the public API with unique IDs,
+  tracked until a successful terminate/status/delete sequence, and released by
+  an idempotent lease. Cleanup errors use `t.Errorf` and route cleanup remains
+  registered independently, so a failure cannot skip lane reset.
+- Shared Factory Event SSE readers register a close hook. The reader close is
+  idempotent, reports a bounded shutdown timeout, and releases its ledger entry
+  only after the reader goroutine has actually ended.
+- Provider, provider-command, and script-command routes use cleanup tokens and
+  idempotent unregister functions. Package teardown fails when any route,
+  session, or stream remains active or when open/close counts differ.
+- Package teardown cancels and joins `Process.Execute`, closes the production
+  process once, probes the public listener until a refused request proves it is
+  unreachable, verifies one process/listener start for a successful shared
+  fixture, and verifies the package-owned root is absent after removal.
+- The obsolete exported `FunctionalServer` wrapper was removed; CASE-37 now
+  uses the existing private isolated wrapper. No production, shared-support,
+  contract, generated, baseline, or transformation surface changed.
+
+### Story-003 verification
+
+| Command/procedure | Exit/result | Property proved | Not proved |
+| --- | ---: | --- | --- |
+| `go test -run 'TestRuntimeAPIPackage(CleanupLedgerAndEdgeLeasesAreIdempotent\|FixtureCleanupIsIdempotentAndPreservesFailures)$' -count=1 ./tests/functional/runtime_api` | 0; `0.042s` | Idempotent session/stream/edge release; normal listener/root cleanup; injected `Process.Execute` and process-close causes remain discoverable; reachable listeners fail the cleanup probe. | A real clean-room checkout and terminal PR CI. |
+| `go test -count=1 -timeout=15m ./tests/functional/runtime_api` | 0; `42.126s` | Full default root-package parity, shared one-process fixture teardown, isolated lifecycle witnesses, public HTTP/Work/Event/projection/stream/log/config/replay assertions. | Clean-room reproduction, PR timing, terminal CI, merge. |
+| `go test -count=3 -timeout=45m ./tests/functional/runtime_api` | 0; `173.425s` | Three successive package executions preserve behavior and reset explicit sessions, streams, and controlled edge lanes. | Clean-room reproduction and repository CI timing. |
+| `go test -race -count=1 -timeout=20m ./tests/functional/runtime_api` | 0; `77.577s` on Windows `10.0.26200`, `windows/amd64`, Go `1.25.0` | No race-detector finding in the shared fixture, explicit sessions, SSE close hooks, or keyed effect routers. | Other platforms and terminal PR CI. |
+| `go test -tags=functionallong -count=1 -timeout=15m ./tests/functional/runtime_api` | 0; `37.392s` | Tagged CASE-41 live recording/replay topology witness retains its isolated two-process lifecycle. | Clean-room reproduction and merge. |
+| Scoped three-dot review from `origin/main` | Passed read-only review; changed surfaces are root `tests/functional/runtime_api` files and this c06 artifact, with `factory_transformation/**`, shared support, c01 inventory, baselines, production, contracts, generated files, and unrelated paths absent. | Authorized-scope preservation. | Independent final-head validation, PR timing, terminal CI, merge. |
+
+The local-real production-composed HTTP/package run is the highest feasible
+implementation-stage runtime proof. Remote providers and paid calls remain
+zero. VAL-001 still owns the fresh-checkout once/repeat/race loopback and the
+final CASE-01 through CASE-44 audit; GATE-PR-FUNCTIONAL still owns PR-head
+package timing and terminal CI.
+
 ## Exclusions and scope proof
 
 The story changed only this artifact. The following remain read-only and are
