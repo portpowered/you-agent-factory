@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -153,17 +154,17 @@ func testCLISessionCreateListShowDelete(t *testing.T, remote *sharedRemoteCLI) {
 	}
 }
 
-// testCLISessionListCharacterizesExternalHomeRecordingState deliberately
-// exercises the pre-repair CLI environment boundary. The server root gets a
-// separate host-like home containing one malformed dated recording artifact;
-// the shared CLI host keeps its own disposable recording home. The expected
-// failure is the characterization result for the cleanup lane, not a product
-// assertion.
-func testCLISessionListCharacterizesExternalHomeRecordingState(t *testing.T, remote *sharedRemoteCLI) {
+// testCLISessionListUsesIsolatedRecordingHome keeps the real CLI process
+// pointed at a host-like home containing one malformed dated recording
+// artifact, while the server's composed recording inventory uses its own
+// package-owned home. The public history-only response proves that the
+// external home is not consulted.
+func testCLISessionListUsesIsolatedRecordingHome(t *testing.T, remote *sharedRemoteCLI) {
 	t.Helper()
 
 	const artifactReference = "2026/08/28/c07-external-home-malformed.json"
 	externalHome := t.TempDir()
+	isolatedRecordingHome := t.TempDir()
 	artifactPath := filepath.Join(
 		externalHome,
 		".you-agent-factory",
@@ -177,9 +178,8 @@ func testCLISessionListCharacterizesExternalHomeRecordingState(t *testing.T, rem
 	if err := os.WriteFile(artifactPath, []byte(malformedArtifact), 0o600); err != nil {
 		t.Fatalf("write malformed external recording artifact: %v", err)
 	}
-	// Keep the production os.UserHomeDir resolver on the same path a real
-	// operator invocation uses, while t.Setenv restores both variables after
-	// this serialized scenario.
+	// Keep the CLI process on the same path a real operator invocation uses,
+	// while t.Setenv restores both variables after this serialized scenario.
 	t.Setenv("HOME", externalHome)
 	t.Setenv("USERPROFILE", externalHome)
 
@@ -190,27 +190,41 @@ func testCLISessionListCharacterizesExternalHomeRecordingState(t *testing.T, rem
 		FactoryDir:                characterizationFactoryDir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			// Bind the durable listing to test-owned state at root composition;
+			// invocation-local environment must not select an operator home.
+			FactorySessionResolveHomeDirectory: func() (string, error) { return isolatedRecordingHome, nil },
+		},
 	})
 	defer server.Stop(t)
 
 	command := remote.process.CommandContext(ctx,
 		"--server", server.URL(),
-		"--debug", "--json", "session", "list", "--history-only",
+		"--json", "session", "list", "--history-only",
 	)
 	command.Dir = characterizationFactoryDir
 	output, err := command.CombinedOutput()
-	if err == nil {
-		t.Fatalf("you session list unexpectedly ignored malformed external-home recording artifact:\n%s", output)
+	if err != nil {
+		t.Fatalf("you session list consulted malformed external-home recording artifact: %v\n%s", err, output)
 	}
 
-	got := string(output)
-	if !strings.Contains(got, `"code":"CLI_COMMAND_FAILED"`) {
-		t.Fatalf("characterization failure did not preserve the public CLI failure code:\n%s", got)
+	var listed factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(bytesTrimSpace(output), &listed); err != nil {
+		t.Fatalf("decode isolated history-only session list JSON: %v\noutput:\n%s", err, output)
 	}
-	if strings.Contains(got, malformedArtifact) {
-		t.Fatalf("characterization diagnostics leaked malformed artifact content:\n%s", got)
+	if listed.Scope == nil || string(*listed.Scope) != "history" {
+		t.Fatalf("history-only session list scope = %#v, want history", listed.Scope)
 	}
-	t.Logf("CLI failure followed external recording-home resolution for %q containing %q; public diagnostics redacted the path", externalHome, artifactReference)
+	if len(listed.Sessions) != 0 {
+		t.Fatalf("history-only session list returned live sessions: %#v", listed.Sessions)
+	}
+	if listed.RecordedSessions != nil && len(*listed.RecordedSessions) != 0 {
+		t.Fatalf("history-only session list consulted external recording state: %#v", listed.RecordedSessions)
+	}
+	if strings.Contains(string(output), artifactReference) || strings.Contains(string(output), malformedArtifact) {
+		t.Fatalf("history-only session list leaked external recording state:\n%s", output)
+	}
+	t.Logf("CLI history-only listing used isolated recording home %q and ignored external home %q containing %q", isolatedRecordingHome, externalHome, artifactReference)
 }
 
 // TestCLISessionPauseBuffersAndResumeDispatches proves you session pause keeps

@@ -68,7 +68,7 @@ func TestCLISharedRemoteScenarios(t *testing.T) {
 		{name: "TestCLIFactoryInitValidateAndShow", run: testCLIFactoryInitValidateAndShow},
 		{name: "TestCLIFactoryReplaceCurrentChangesSessionFactory", run: testCLIFactoryReplaceCurrentChangesSessionFactory},
 		{name: "TestCLISessionCreateListShowDelete", run: testCLISessionCreateListShowDelete},
-		{name: "TestCLISessionListCharacterizesExternalHomeRecordingState", run: testCLISessionListCharacterizesExternalHomeRecordingState},
+		{name: "TestCLISessionListUsesIsolatedRecordingHome", run: testCLISessionListUsesIsolatedRecordingHome},
 		{name: "TestCLISessionPauseBuffersAndResumeDispatches", run: testCLISessionPauseBuffersAndResumeDispatches},
 		{name: "TestCLISessionMissingIDReturnsNotFound", run: testCLISessionMissingIDReturnsNotFound},
 		{name: "TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors", run: testCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors},

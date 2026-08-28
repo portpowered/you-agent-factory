@@ -1,11 +1,12 @@
-# C07 Transport cleanup characterization evidence
+# C07 Transport cleanup characterization and repair evidence
 
 - Story: `functional-test-optimization-c07-cleanup-transport-runtime-orchestration-001`
 - Parent behavior: `BEH-TRANSPORT-CLEAN` — Transport behavior remains public and
   unchanged while owned processes, ports, sessions, streams, and temporary roots
   are made observable at their actual boundaries.
-- Status: `GATE-CHAR-TRANSPORT` passed on the current Windows host. This is a
-  pre-repair characterization; it does not claim repaired teardown.
+- Status: `GATE-CHAR-TRANSPORT` passed on the current Windows host. The
+  characterization below is the pre-repair record; the repair result and its
+  evidence are recorded after the census.
 - Recorded at UTC: `2026-08-28`.
 - Source plan status: `docs/temp/functional-test-optimization.md` and the
   referenced `tasks/todo` plan are absent from this checkout. The checked-in
@@ -122,7 +123,7 @@ that row unless a named exception is included.
 | --- | ---: | --- | --- |
 | `transport/acp/realclient` | 3 / 3 | Pinned `acpx` peer, child descendants, stdio, temporary config/home; command wait and test cleanup. | `isolated-with-reason`: real ACP client/process and optional prerequisite semantics. |
 | `transport/acp/stdio` | 8 / 8 | Root process, stdin/stdout pipes, ACP session/stream, wire transcript files; `t.Cleanup`, close, and process shutdown. | `isolated-with-reason`: ACP prompt/control/close and owner-readable transcript behavior. |
-| `transport/cli/commands` | 14 / 56 | Shared service-mode API server, reusable root, temporary Factories/homes/files, remote Factory Sessions; harness/server cleanup and session terminate/delete callbacks. The external-home characterization owns a second server and dated artifact. | `shareable-with-controlled-edge` for ordinary command behavior; `isolated-with-reason` for server-backed session/recording lifecycle and the external-home scenario. |
+| `transport/cli/commands` | 14 / 56 | Shared service-mode API server, reusable root, temporary Factories/homes/files, remote Factory Sessions; harness/server cleanup and session terminate/delete callbacks. The external-home isolation witness owns a second server and dated artifact. | `shareable-with-controlled-edge` for ordinary command behavior; `isolated-with-reason` for server-backed session/recording lifecycle and the external-home scenario. |
 | `transport/cli/output` | 14 / 27 | Root invocations, response streams, slow/failing writers, temporary Factory/home; per-test process/stream closure. | `shareable-with-controlled-edge` for controlled providers and streams; writer cancellation remains isolated to its invocation. |
 | `transport/cli/parameters` | 18 / 24 | Root invocations, temporary Factory/working-directory assets, parameter streams; process cleanup and scenario-local files. | `shareable-with-controlled-edge`; the reusable parameter spine is serialized and uses fresh invocation inputs. |
 | `transport/cli/process` | 4 / 9 | Direct root process, controlled provider command edge, ACP pipe, and process-free PID parser; `support.CleanupProcess`/pipe cleanup where applicable. | Mixed: `isolated-with-reason` for ACP cancellation; `shareable-with-controlled-edge` for provider outcomes; `shareable` for PID parsing. |
@@ -289,7 +290,7 @@ The full run observed 159 nested identities. Dynamic rows are recorded here by
 their complete parent/name forms so the runtime count can be reconciled with
 the package table:
 
-- `transport/cli/commands`: `TestCLIDocsEveryTopicRendersNonEmptyContent/{agents,authoring-factories,packaged-factories,run,config,factory-validation,mock-workers,record-replay,guards,relationships,operations,work,sessions,metrics,orchestrators,javascript-workflows,mcp,workstations,workers,providers,serve-acp,resources,models,batch-inputs,templates}`; `TestCLIRunNamedFactory/{named_from_unrelated_working_directory,packaged_goal_summary_primary_result}`; and `TestCLISharedRemoteScenarios/{TestCLISubmitBatchInlineJSON,TestCLISubmitBatchFile,TestCLISubmitUnavailableServer,TestCLISubmitBackendErrorPreservesPublicMessage,TestCLIWorkListAndShowReflectSubmittedWork,TestCLIWorkMoveChangesState,TestCLIWorkShowMissingReturnsNotFound,TestCLIFactoryInitValidateAndShow,TestCLIFactoryReplaceCurrentChangesSessionFactory,TestCLISessionCreateListShowDelete,TestCLISessionListCharacterizesExternalHomeRecordingState,TestCLISessionPauseBuffersAndResumeDispatches,TestCLISessionMissingIDReturnsNotFound,TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors,TestCLIExplicitSessionIsolation}`. Total nested rows: 42.
+- `transport/cli/commands`: `TestCLIDocsEveryTopicRendersNonEmptyContent/{agents,authoring-factories,packaged-factories,run,config,factory-validation,mock-workers,record-replay,guards,relationships,operations,work,sessions,metrics,orchestrators,javascript-workflows,mcp,workstations,workers,providers,serve-acp,resources,models,batch-inputs,templates}`; `TestCLIRunNamedFactory/{named_from_unrelated_working_directory,packaged_goal_summary_primary_result}`; and `TestCLISharedRemoteScenarios/{TestCLISubmitBatchInlineJSON,TestCLISubmitBatchFile,TestCLISubmitUnavailableServer,TestCLISubmitBackendErrorPreservesPublicMessage,TestCLIWorkListAndShowReflectSubmittedWork,TestCLIWorkMoveChangesState,TestCLIWorkShowMissingReturnsNotFound,TestCLIFactoryInitValidateAndShow,TestCLIFactoryReplaceCurrentChangesSessionFactory,TestCLISessionCreateListShowDelete,TestCLISessionListUsesIsolatedRecordingHome,TestCLISessionPauseBuffersAndResumeDispatches,TestCLISessionMissingIDReturnsNotFound,TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors,TestCLIExplicitSessionIsolation}`. Total nested rows: 42.
 - `transport/cli/output`: `TestCLIJSONContainsNoPrivateRuntimeFields/{success_stdout_stays_on_public_InvocationResponse_fields,terminal_failure_stdout_and_stderr_stay_on_public_contract_fields}`; `TestCLIJSONFailureRemainsValidJSON/{pre-terminal_failure_leaves_stdout_empty_with_one_stderr_ErrorResponse,terminal_failure_emits_failed_InvocationResponse_and_one_stderr_ErrorResponse}`; `TestCLIInvocationArgumentFailuresAreBadRequest/{unknown_argument_in_normal_JSON_mode,unknown_argument_in_quiet_mode,missing_value_before_next_invocation_flag,missing_value_for_run_flag}`; `TestCLIJSONOutputSelectionFailsBeforeProductActivation/{quiet_and_global_JSON,quiet_and_explicit_output,unsupported_explicit_output}`; `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise/{human_response-stream_lifecycle_presentation,quiet_clean_primary_result}`. Total nested rows: 13.
 - `transport/cli/parameters`: `TestRunMalformedKeyValueFailsWithoutDispatch/{missing_named_value_after_key,bare_key=value_without_named_prefix}`; `TestCLIParameterReusableProcessSpine/{observer_root_parses_generic_flags,full_handler_submits_combined_signature_once}`; `TestOptionalSessionIDUsesDefaultWhenOmitted/{omitted_session_positional_targets_default_session,explicit_session_positional_overrides_default_targeting}`. Total nested rows: 6.
 - `transport/cli/process`: `TestContextCancellationPIDReadinessIgnoresPartialPublication/{empty_publication,whitespace_publication,partial_publication,non_numeric_publication,complete_publication}`. Total nested rows: 5.
@@ -337,9 +338,79 @@ story with the smallest safe repair direction: preserve public session-list
 behavior while making the durable-listing home explicit/isolated at the
 package-owned boundary.
 
+## GATE-TRANSPORT repair result
+
+Story `functional-test-optimization-c07-cleanup-transport-runtime-orchestration-002`
+repaired the confirmed package-local isolation gap without changing product or
+shared-support code. The real server is composed with an explicit
+`FactorySessionResolveHomeDirectory` edge pointing to a disposable recording
+home. The public CLI still receives a different external `HOME`/
+`USERPROFILE` containing the malformed dated artifact, so a successful empty
+history response proves that the external home is not consulted.
+
+Focused procedure and result:
+
+```text
+go test -count=1 -timeout=5m ./tests/functional/transport/cli/commands \
+  -run '^TestCLISharedRemoteScenarios$/^TestCLISessionListUsesIsolatedRecordingHome$' -v
+```
+
+The command exited `0`. The isolated real-server/public-CLI witness returned a
+`history` response with no live or recorded rows and no external artifact
+reference or malformed payload. Its `t.Cleanup`/server stop path completed
+without a shutdown diagnostic.
+
+The full current-platform Transport procedure also exited `0`:
+
+```text
+go list ./tests/functional/transport/...
+go test -count=1 -timeout=10m -v <each resolved package>
+```
+
+All 15 packages ran: 271 runtime `=== RUN` identities, 111 top-level passes,
+one expected optional skip (`TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt`),
+and zero failures. Existing CLI, HTTP, ACP, MCP, stream, ordering, and
+listener assertions remained active.
+
+### Repeat, race, platform, and real-client boundaries
+
+- `GATE-REPEAT`: the package-by-package `go test -count=3 -timeout=10m -v`
+  sweep passed every package except the untouched `transport/cli/output`
+  package, whose stream-start tests timed out under host contention. Its one
+  bounded exact rerun exited `0` across three counts; no output-package code
+  or shared support changed. The repaired `transport/cli/commands` package
+  passed 168 runtime runs with 42 top-level passes.
+- `GATE-RACE`: `-race -count=1` passed `acp/stdio`, the changed
+  `cli/commands` package, `cli/process`, `http/server`, `mcp/stdio`, and
+  `run_scoped_server`. The untouched `cli/output` rerun still timed out in
+  `TestCLIWriterFailureCancelsInvocation`,
+  `TestCLITextStreamSurfacesIncrementalMessages`,
+  `TestCLISlowWriterDoesNotReorderResponseEvents`, and
+  `TestCLITextStreamInterruptedRunDoesNotClaimCompletion`; the output showed
+  no race detector report. This remains an unproven host/platform edge, not a
+  repair regression.
+- `GATE-PLATFORM`: the local-real platform evidence is `windows/amd64` on
+  `go1.25.0`; Unix-specific execution remains owned by its supported CI job.
+- `GATE-REALCLIENT`: the optional ACPX selector retained its skip semantics.
+  `acpx` was unavailable on `PATH`, and Node.js was `v22.12.0` while the
+  pinned client requires `22.13.0` or later, so the required-enabled scenario
+  was not claimed.
+- `GATE-CLEANUP`: the repaired witness has paired ownership for the external
+  fixture, isolated recording home, server listener/process, CLI invocation,
+  and temporary Factory. The repair adds no process start; the supplemental
+  server is required to compare external and composed homes at the real
+  boundary. `server.Stop`, root-process close, `t.Setenv`, and `t.TempDir`
+  provide the teardown paths.
+
+The Transport story proves the changed package and local repair at Windows
+fidelity. It does not prove Unix cleanup, enabled pinned ACPX behavior,
+Runtime API/Orchestration stories, clean-room validation, terminal CI, or
+merge. The untouched `cli/output` repeat/race timing failures are retained as
+host-contended evidence for later review rather than repaired in this story.
+
 ## Evidence limits and next story
 
-This gate proves:
+The characterization section proves:
 
 - all 15 currently resolved Transport packages and all 112 top-level test
   identities are enumerated;
@@ -351,10 +422,14 @@ This gate proves:
 - the new characterization has no payload leakage and all test-owned temporary
   resources are cleanup-scoped.
 
-This gate does not prove:
+The repair section above additionally proves the changed CLI command package's
+explicit home isolation and current-platform Transport teardown paths at the
+declared local fidelity.
 
-- deterministic teardown after the Transport repair;
-- `-count=3`, race-detector, Unix-specific, or hosted Windows cleanup gates;
+The Transport story does not prove:
+
+- Unix-specific cleanup or the host-contended untouched `cli/output` repeat and
+  race rows;
 - optional pinned ACPX behavior with its prerequisite enabled;
 - Runtime API or Orchestration packages;
 - PR-level package latency, clean-room validation, terminal CI, or merge;
@@ -364,9 +439,9 @@ This gate does not prove:
   mutating that profile.
 
 The next retained story is
-`functional-test-optimization-c07-cleanup-transport-runtime-orchestration-002`:
-repair only this and any other confirmed package-local Transport gaps, then
-rerun the same public witnesses and cleanup census.
+`functional-test-optimization-c07-cleanup-transport-runtime-orchestration-003`:
+characterize Runtime API and Orchestration cleanup before repair, while keeping
+the Transport repair and its evidence unchanged.
 
 ## Follow-up host observation
 
