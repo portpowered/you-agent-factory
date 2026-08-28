@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -12,6 +13,46 @@ import (
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// ControlWorkerSession maps one exact top-level Worker Session control to the
+// corresponding Worker Sessions root operation. The action is selected by
+// the route, so callers cannot submit an arbitrary action payload or identity.
+func (a *Adapter) ControlWorkerSession(
+	ctx context.Context,
+	workerSessionID string,
+	action workersessions.ControlAction,
+) (factoryapi.WorkerSessionControlResponse, error) {
+	if a == nil || a.controller == nil {
+		return factoryapi.WorkerSessionControlResponse{}, errors.New("Worker Sessions control service is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request := workersessions.ControlRequest{ID: strings.TrimSpace(workerSessionID)}
+	if err := request.Validate(); err != nil {
+		return factoryapi.WorkerSessionControlResponse{}, err
+	}
+	var (
+		result workersessions.ControlResult
+		err    error
+	)
+	switch action {
+	case workersessions.ControlActionPause:
+		result, err = a.controller.Pause(ctx, request)
+	case workersessions.ControlActionResume:
+		result, err = a.controller.Resume(ctx, request)
+	case workersessions.ControlActionCancel:
+		result, err = a.controller.Cancel(ctx, request)
+	case workersessions.ControlActionTerminate:
+		result, err = a.controller.Terminate(ctx, request)
+	default:
+		return factoryapi.WorkerSessionControlResponse{}, fmt.Errorf("unsupported Worker Session control action %q", action)
+	}
+	if err != nil {
+		return factoryapi.WorkerSessionControlResponse{}, err
+	}
+	return WorkerSessionControlResponseToAPI(result), nil
+}
 
 // InterruptWorkerSession handles one source-addressed asynchronous Worker
 // Session interrupt-and-replace operation. The source identity is supplied by
@@ -135,6 +176,16 @@ func (h *Handler) writeMappedInterruptError(
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
+	result := interruptResultForError(err, sourceWorkerSessionID, request)
+	status, code, message := interruptErrorResponse(err)
+	writeInterruptError(w, status, code, message, result.Phase, result)
+}
+
+func interruptResultForError(
+	err error,
+	sourceWorkerSessionID string,
+	request factoryapi.WorkerSessionInterruptRequest,
+) workersessions.InterruptResult {
 	result := workersessions.InterruptResult{
 		RequestID:                strings.TrimSpace(request.RequestId),
 		SourceWorkerSessionID:    strings.TrimSpace(sourceWorkerSessionID),
@@ -155,32 +206,36 @@ func (h *Handler) writeMappedInterruptError(
 			result.Phase = workersessions.InterruptPhaseSuccessorAdmission
 		}
 	}
+	return result
+}
+
+func interruptErrorResponse(err error) (int, string, string) {
 	switch {
 	case errors.Is(err, workersessions.ErrInvalidInterruptRequestID),
 		errors.Is(err, workersessions.ErrInvalidInterruptLineage),
 		errors.Is(err, workersessions.ErrInvalidInterruptMessage),
 		errors.Is(err, workersessions.ErrInterruptValidation):
-		writeInterruptError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid Worker Session interrupt request", result.Phase, result)
+		return http.StatusBadRequest, "BAD_REQUEST", "invalid Worker Session interrupt request"
 	case errors.Is(err, workersessions.ErrInterruptSourceNotFound):
-		writeInterruptError(w, http.StatusNotFound, "NOT_FOUND", "Worker Session interrupt source not found", result.Phase, result)
+		return http.StatusNotFound, "NOT_FOUND", "Worker Session interrupt source not found"
 	case errors.Is(err, workersessions.ErrInterruptRequestIDConflict):
-		writeInterruptError(w, http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTREQUESTIDCONFLICT), "Worker Session interrupt requestId was reused with different inputs", result.Phase, result)
+		return http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTREQUESTIDCONFLICT), "Worker Session interrupt requestId was reused with different inputs"
 	case errors.Is(err, workersessions.ErrInterruptSourceNotActive),
 		errors.Is(err, workersessions.ErrInterruptSourceConflict),
 		errors.Is(err, workersessions.ErrInterruptProviderSessionMissing),
 		errors.Is(err, workersessions.ErrInterruptProviderSessionInvalid):
-		writeInterruptError(w, http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT), "Worker Session interrupt conflicts with existing state", result.Phase, result)
+		return http.StatusConflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTCONFLICT), "Worker Session interrupt conflicts with existing state"
 	case errors.Is(err, workersessions.ErrInterruptSourceCancellation),
 		errors.Is(err, workersessions.ErrInterruptSourceCancellationFailed):
-		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSOURCECANCELLATIONFAILED), "Workers could not cancel the Worker Session interrupt source", result.Phase, result)
+		return http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSOURCECANCELLATIONFAILED), "Workers could not cancel the Worker Session interrupt source"
 	case errors.Is(err, workersessions.ErrInterruptSuccessorAdmission),
 		errors.Is(err, workersessions.ErrInterruptSuccessorAdmissionFailed):
-		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSUCCESSORADMISSIONFAILED), "Workers could not admit the Worker Session interrupt successor", result.Phase, result)
+		return http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTSUCCESSORADMISSIONFAILED), "Workers could not admit the Worker Session interrupt successor"
 	case errors.Is(err, workersessions.ErrInterruptExecutionUnavailable),
 		errors.Is(err, workersessions.ErrInterruptServerStopping):
-		writeInterruptError(w, http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED), "Workers could not admit the Worker Session interrupt", result.Phase, result)
+		return http.StatusServiceUnavailable, string(factoryapi.ErrorResponseCodeWORKERSESSIONINTERRUPTADMISSIONFAILED), "Workers could not admit the Worker Session interrupt"
 	default:
-		writeInterruptError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to interrupt Worker Session", result.Phase, result)
+		return http.StatusInternalServerError, "INTERNAL_ERROR", "failed to interrupt Worker Session"
 	}
 }
 
