@@ -534,8 +534,8 @@ test-unit-latency-budget:
 regenerate-shared-ci-baselines:
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget -mode regenerate -root . -budget "$(UNIT_LATENCY_BUDGET)" -samples "$(UNIT_LATENCY_SAMPLES)" $(if $(strip $(BASELINE_REGEN_DEADCODE_REPORT)),-deadcode-report "$(BASELINE_REGEN_DEADCODE_REPORT)",)
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze
-	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run '^TestWriteProductionInventoryBaseline$$' -count=1
-	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run '^TestWriteProductionInputsInventoryBaseline$$' -count=1
+	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/commandidentity -run "^TestWriteProductionInventoryBaseline$$" -count=1
+	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run "^TestWriteProductionInputsInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .
 
 # Merge-base-aware changed-test flake prevention. The caller must provide the
