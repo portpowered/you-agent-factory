@@ -1,9 +1,8 @@
 # C06 HTTP-server functional characterization evidence
 
 This artifact freezes the HTTP-server behavior and process/listener topology
-before the shared-process migration. It is owned by
-`functional-test-optimization-c06-transport-http-server-001` until the final
-lifecycle story updates it.
+before the shared-process migration and records the staged migration evidence.
+Stories 001 through 004 update it within the package-owned surface.
 
 ## Scope and source note
 
@@ -64,6 +63,35 @@ they do not inspect source topology or replace an existing assertion.
   instead observed through status and Work detail. Story 003 owns migrating
   this witness to explicit sessions and preserving the observed event shape.
 
+## Story 003 migration evidence
+
+The terminal Work success and provider-failure cells now use the package-owned
+shared root-built process. Each cell creates a unique non-default Factory
+Session, registers a selector-scoped controlled command runner, submits Work
+through the session-scoped HTTP API, reads the session-scoped Work list/detail
+and Factory Event history, and lets scenario cleanup prove session absence,
+zero active calls, zero registrations, zero response streams, and temporary
+Factory-root removal.
+
+Required story procedure, observed on 2026-08-28 on the shared Windows
+workstation:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/transport/http/server -run 'Test(GeneratedClient|WorkTerminal)'
+go test -count=1 -timeout=10m ./tests/functional/transport/http/server
+```
+
+Both commands exited 0. The focused run took 3.831 s; the assembled package
+gate took 22.943 s. The focused run proves generated-client recovery plus
+terminal success/failure Work/Event/session lineage, ordered typed content,
+controlled provider failure classification, and route invocation. The
+assembled gate additionally proves those cells coexist with the remaining
+package cases and package fixture cleanup. The shared fixture ledger asserted
+exactly one shared API process start; the two pre-migration terminal process
+constructions now contribute no additional process starts. Local real-listener
+lifecycle, repeat/race safety, and CI contention timing remain later-story
+edges.
+
 ## Top-level test and public-witness inventory
 
 Every top-level test observed by `go test -list .` is listed. The CASE matrix
@@ -108,15 +136,15 @@ it is still mapped so migration cannot silently lose it.
 | CASE-05 | `TestAPIUnsupportedContentTypeReturns415` | `text/plain` request returns structured 415 `UNSUPPORTED_MEDIA_TYPE`; live Factory Session IDs do not change | Shareable — covered |
 | CASE-06 | `TestAPIMalformedJSONReturnsStructured400` | Malformed `application/json` returns structured 400 `BAD_REQUEST`, not 415; live Factory Session IDs do not change | Shareable — covered |
 | CASE-07 | `TestAPIJSONRequestsAndResponsesUseDocumentedContentType` | Valid documented JSON opens a unique non-default session with documented response type; terminate/delete/typed GET proves absence | Shareable — covered |
-| CASE-08 | `TestGeneratedClientStatusAndSessionRoundTrip`; `TestGeneratedClientAndServerSchemaStayAligned`; Work terminal tests | Caller-owned generated-client HTTP transport is used; typed status/events/session responses and terminal Work observation remain available | Shareable / controlled edge — covered; explicit-session migration deferred |
+| CASE-08 | `TestGeneratedClientStatusAndSessionRoundTrip`; `TestGeneratedClientAndServerSchemaStayAligned`; Work terminal tests | Caller-owned generated-client HTTP transport is used; typed status/events/session responses and terminal Work observation remain available | Shareable / controlled edge — covered on shared process with explicit sessions |
 | CASE-09 | `TestGeneratedClientStatusAndSessionRoundTrip/deadline` | Outstanding generated-client response ends with `context.DeadlineExceeded` and no typed success | Shareable — covered; direct active-stream counter deferred |
 | CASE-10 | `TestGeneratedClientDecodesRepresentativeStructuredError` | Missing session produces generated-client typed 404, `NOT_FOUND`, `RESPONSE_EVENT_SESSION_NOT_FOUND`, and message | Shareable — covered |
 | CASE-11 | `TestGeneratedClientStatusAndSessionRoundTrip` cancellation subcases | In-flight and pre-canceled generated-client calls return cancellation without a typed response | Shareable — covered; direct call/stream ledger deferred |
-| CASE-12 | `TestGeneratedClientAndServerSchemaStayAligned` recovery subcase | Completed Work/status is typed; stale cursor recovery returns `CURSOR_STALE` and retry omits the stale cursor | Controlled edge — covered; explicit-session migration deferred |
+| CASE-12 | `TestGeneratedClientAndServerSchemaStayAligned` recovery subcase | Completed Work/status is typed; stale cursor recovery returns `CURSOR_STALE` and retry omits the stale cursor | Controlled edge — covered on shared process with explicit session |
 | CASE-13 | `TestAPIConcurrentSessionRequestsRemainIsolated` | Overlapping requests return the correct session identities and non-empty state for two sessions | Controlled edge — covered in separate processes; one shared-process proof deferred |
 | CASE-14 | `TestAPICancelledRequestDoesNotCancelUnrelatedSession` | Canceling one blocking request does not change the unrelated session identity/status | Controlled edge — covered in separate processes; shared-session cleanup deferred |
-| CASE-15 | `TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary/terminal success keeps ordered typed parts` | One terminal/zero failed; list/detail retain text then JSON type, payload, and order; correlated `DISPATCH_RESPONSE` is `ACCEPTED` in `~default` | Controlled edge — covered; explicit-session migration deferred |
-| CASE-16 | `TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary/terminal failure is not reported as success` | One failed/zero terminal; Work is FAILED; content remains readable/ordered; correlated `DISPATCH_RESPONSE` is `FAILED` in `~default` | Controlled edge — covered; explicit-session migration deferred |
+| CASE-15 | `TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary/terminal success keeps ordered typed parts` | One terminal/zero failed; list/detail retain text then JSON type, payload, and order; correlated `DISPATCH_RESPONSE` is `ACCEPTED` in a unique explicit session | Controlled edge — covered on shared process |
+| CASE-16 | `TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary/terminal failure is not reported as success` | One failed/zero terminal; Work is FAILED; content remains readable/ordered; correlated `DISPATCH_RESPONSE` is `FAILED` in a unique explicit session | Controlled edge — covered on shared process |
 | CASE-17 | `TestAPIServerPprofIsOptInThroughThePublicRunPath` default subcase | Pprof/debug probes are absent or typed 404; status/runtime and metrics remain available; process stops | Isolated diagnostics mode — covered |
 | CASE-18 | Same test enabled subcase | Index, heap, named/CPU/delta/trace/text profiles and invalid/unknown probes preserve status/header/body/error witnesses; process stops | Isolated diagnostics mode — covered |
 | CASE-19 | `TestAPIServerStartsOnConfiguredListenerAndServesStatus` | Public startup returns loopback URL and populated `/status`; the support transport is `httptest`, so exact OS-port ownership is separately covered by CASE-21 | Isolated startup/configuration — covered with this boundary note |
@@ -183,18 +211,15 @@ Already observed:
 - Terminal success/failure cases prove correlated public Factory Event outcome,
   Work state, and ordered typed content.
 
-Not yet proved by this characterization and intentionally left for later
+Not yet proved by this staged migration and intentionally left for later
 stories:
 
-- one package-owned shared `root.BuildProcess`/HTTP fixture serving eligible
-  scenarios;
-- unique explicit non-default sessions and deterministic session/call/stream
-  cleanup for concurrent, generated-client, and terminal-Work scenarios;
-- registration, active-call, response-stream, process, listener, and temporary
-  Factory-root zero ledgers, including the bind-failure process path;
-- three-repeat isolation, race execution, post-migration topology, and PR CI
-  package timing;
+- local real-listener and process lifecycle cleanup ledgers, including the
+  bind-failure process path;
+- package-wide three-repeat isolation, race execution, final post-migration
+  topology, and PR CI package timing;
 - clean-room VAL-001 assembly.
 
-The smallest next step is Story 002: introduce the package-owned shared
-HTTP/session spine while retaining the isolated cells and this CASE mapping.
+The smallest next step is Story 004: retain and directly prove the isolated
+local listener/process lifecycle witnesses, then run the repeat, race, CI, and
+clean-room validation gates.
