@@ -35,9 +35,10 @@ var OperatorSettingsThinRootContractFiles = []string{
 // OperatorSettingsRootContractFoldTarget names one excess root contract/helper cluster
 // for CLN-SET-CONTRACT-ROOTS without performing the fold in INV-SET-TOPLEVEL.
 type OperatorSettingsRootContractFoldTarget struct {
-	Cluster     string
-	Files       []string
-	Destination string
+	Cluster        string
+	Files          []string
+	Destination    string
+	Classification string
 }
 
 // OperatorSettingsExcessRootContractFolds inventories excess root contract/helper

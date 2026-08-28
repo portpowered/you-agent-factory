@@ -157,6 +157,9 @@ func validateOperatorSettingsTopLevelInventory(inventory OperatorSettingsTopLeve
 	if inventory.OwnerPackage != OperatorSettingsOwnerPackagePath {
 		return fmt.Errorf("operator settings top-level inventory ownerPackage = %q, want %s", inventory.OwnerPackage, OperatorSettingsOwnerPackagePath)
 	}
+	if inventory.SortKey != topLevelDirectorySortKeyDescription {
+		return fmt.Errorf("operator settings top-level inventory sortKey = %q, want %s", inventory.SortKey, topLevelDirectorySortKeyDescription)
+	}
 	if len(inventory.Children) == 0 {
 		return fmt.Errorf("operator settings top-level inventory has no children")
 	}

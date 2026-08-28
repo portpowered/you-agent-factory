@@ -12,15 +12,15 @@ import (
 const (
 	OperatorSettingsRootGoInventoryRelativePath = "docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json"
 
-	OperatorSettingsRootGoThinContract              = "thin_root_contract"
-	OperatorSettingsRootGoThinContractTest          = "thin_root_contract_test"
-	OperatorSettingsRootGoFoldTargetConstruction    = "fold_target_construction_port"
-	OperatorSettingsRootGoFoldTargetDocument        = "fold_target_document"
-	OperatorSettingsRootGoFoldTargetResolution      = "fold_target_resolution"
-	OperatorSettingsRootGoFoldTargetIdentity          = "fold_target_identity"
+	OperatorSettingsRootGoThinContract                 = "thin_root_contract"
+	OperatorSettingsRootGoThinContractTest             = "thin_root_contract_test"
+	OperatorSettingsRootGoFoldTargetConstruction       = "fold_target_construction_port"
+	OperatorSettingsRootGoFoldTargetDocument           = "fold_target_document"
+	OperatorSettingsRootGoFoldTargetResolution         = "fold_target_resolution"
+	OperatorSettingsRootGoFoldTargetIdentity           = "fold_target_identity"
 	OperatorSettingsRootGoFoldTargetProvidersConstruct = "fold_target_providers_construct"
-	OperatorSettingsRootGoFoldTargetImplementation    = "fold_target_implementation"
-	OperatorSettingsRootGoFoldTargetImplTest          = "fold_target_implementation_test"
+	OperatorSettingsRootGoFoldTargetImplementation     = "fold_target_implementation"
+	OperatorSettingsRootGoFoldTargetImplTest           = "fold_target_implementation_test"
 )
 
 // OperatorSettingsRootGoCluster records one excess root contract/helper cluster
@@ -44,11 +44,11 @@ type OperatorSettingsRootGoFile struct {
 // OperatorSettingsRootGoInventory is the INV-SET-TOPLEVEL root .go freeze for
 // Operator Settings thin contract vs fold/consolidation targets.
 type OperatorSettingsRootGoInventory struct {
-	FormatVersion string                        `json:"formatVersion"`
-	OwnerPackage  string                        `json:"ownerPackage"`
-	SortKey       string                        `json:"sortKey"`
+	FormatVersion string                          `json:"formatVersion"`
+	OwnerPackage  string                          `json:"ownerPackage"`
+	SortKey       string                          `json:"sortKey"`
 	Clusters      []OperatorSettingsRootGoCluster `json:"clusters"`
-	Files         []OperatorSettingsRootGoFile  `json:"files"`
+	Files         []OperatorSettingsRootGoFile    `json:"files"`
 }
 
 // LoadOperatorSettingsRootGoInventory reads the committed Operator Settings
@@ -132,6 +132,9 @@ func validateOperatorSettingsRootGoInventory(inventory OperatorSettingsRootGoInv
 	}
 	if inventory.OwnerPackage != OperatorSettingsOwnerPackagePath {
 		return fmt.Errorf("operator settings root go inventory ownerPackage = %q, want %s", inventory.OwnerPackage, OperatorSettingsOwnerPackagePath)
+	}
+	if inventory.SortKey != rootGoFileSortKeyDescription {
+		return fmt.Errorf("operator settings root go inventory sortKey = %q, want %s", inventory.SortKey, rootGoFileSortKeyDescription)
 	}
 	if len(inventory.Files) == 0 {
 		return fmt.Errorf("operator settings root go inventory has no files")

@@ -173,6 +173,9 @@ func validateProviderSessionsTopLevelInventory(inventory ProviderSessionsTopLeve
 	if inventory.OwnerPackage != ProviderSessionsOwnerPackagePath {
 		return fmt.Errorf("provider sessions top-level inventory ownerPackage = %q, want %s", inventory.OwnerPackage, ProviderSessionsOwnerPackagePath)
 	}
+	if inventory.SortKey != topLevelDirectorySortKeyDescription {
+		return fmt.Errorf("provider sessions top-level inventory sortKey = %q, want %s", inventory.SortKey, topLevelDirectorySortKeyDescription)
+	}
 	if len(inventory.Children) == 0 {
 		return fmt.Errorf("provider sessions top-level inventory has no children")
 	}
