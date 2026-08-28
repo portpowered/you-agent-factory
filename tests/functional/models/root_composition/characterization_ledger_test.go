@@ -42,6 +42,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "C06-002 shared Models fixture cleanup failed: %v\n", err)
 		exitCode = 1
 	}
+	if err := writeForcedModelsCleanupReport(); err != nil {
+		fmt.Fprintf(os.Stderr, "write forced Models cleanup report: %v\n", err)
+		exitCode = 1
+	}
 	sharedRootBuilds, sharedAPIStarts, sharedSessionOpens, sharedSessionCloses := sharedModelsFixtureCounters()
 	fmt.Fprintf(
 		os.Stderr,
@@ -72,6 +76,9 @@ func TestMain(m *testing.M) {
 func characterizationBuildProcess(t testing.TB, edges serviceedges.Edges) support.ApplicationProcess {
 	t.Helper()
 	process := support.BuildProcess(t, edges)
+	// Every caller-owned root process must remain closable if a public
+	// assertion fails before the scenario reaches its explicit close point.
+	support.CleanupProcess(t, process)
 	c06Ledger.rootBuilds.Add(1)
 	return process
 }
