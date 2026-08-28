@@ -29,7 +29,10 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /branches: \[main\]/);
 	assert.match(workflow, /group: shared-ci-baseline-regeneration/);
 	assert.match(workflow, /cancel-in-progress: true/);
-	assert.match(workflow, /GH_TOKEN: \$\{\{ secrets\.SHARED_BASELINE_BOT_TOKEN \}\}/);
+	assert.match(workflow, /uses: actions\/create-github-app-token@v2/);
+	assert.match(workflow, /app-id: \$\{\{ secrets\.BASELINE_BOT_APP_ID \}\}/);
+	assert.match(workflow, /private-key: \$\{\{ secrets\.BASELINE_BOT_APP_PRIVATE_KEY \}\}/);
+	assert.match(workflow, /echo \"GH_TOKEN=\$BOT_TOKEN\" >> \"\$GITHUB_ENV\"/);
 	assert.match(workflow, /SHARED_BASELINE_PR_TITLE: [\"]?chore\(ci\): reconcile shared CI baselines[\"]?/);
 	assert.match(workflow, /gh run download \"\$SOURCE_RUN_ID\"/);
 	assert.match(workflow, /backend-unit-latency-evidence/);
