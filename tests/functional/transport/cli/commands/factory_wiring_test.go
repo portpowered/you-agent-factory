@@ -25,24 +25,19 @@ const (
 	factoryFlattenExpandWorkstation  = "execute-task"
 	factoryFlattenExpandExpandMarker = "Expanded factory config into"
 
-	factoryReplaceCurrentName   = "cli-replace-current"
 	factoryReplaceSuccessMarker = "Replaced current factory"
 )
 
 // TestCLIFactoryInitValidateAndShow proves you factory create authors a named
-// Factory, you factory config validate reports validation success, and you
-// factory show against a running session prints observable Factory identity
+// Factory, you factory config validate reports validation success, and the
+// default-session-only factory show command prints observable Factory identity
 // markers without asserting definitions-domain validation internals.
-func TestCLIFactoryInitValidateAndShow(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI factory wiring")
-	}
-
+func testCLIFactoryInitValidateAndShow(t *testing.T, remote *sharedRemoteCLI) {
 	sourceDir := support.ScaffoldFactory(t, factoryWiringFactoryConfig())
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	processHarness := newRootProcessHarness(t)
+	processHarness := remote.process
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -84,18 +79,9 @@ func TestCLIFactoryInitValidateAndShow(t *testing.T) {
 		t.Fatalf("factory validate output missing success marker:\n%s", validateOut)
 	}
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     createdFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	queryCmd := processHarness.CommandContext(ctx,
-		"--server", server.URL(),
-		"factory", "show",
-	)
-	queryCmd.Dir = createdFactoryDir
-	queryOut, err := queryCmd.CombinedOutput()
+	// factory show is intentionally characterized against the server's named
+	// default session: its public CLI contract has no --session selector.
+	queryOut, err := remote.run(ctx, remote.hostFactoryDir, "", "factory", "show")
 	if err != nil {
 		t.Fatalf("you factory show: %v\noutput:\n%s", err, queryOut)
 	}
@@ -127,7 +113,7 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 		t.Fatalf("write factory.json: %v", err)
 	}
 
-	processHarness := newRootProcessHarness(t)
+	processHarness := newLocalReusableProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -163,49 +149,25 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 }
 
 // TestCLIFactoryReplaceCurrentChangesSessionFactory proves you factory
-// replace-current re-persists the live session Factory with the documented
-// success marker and you factory show reports the same Factory identity with
-// an advanced version after persistence without asserting definitions save
-// orchestration internals.
-func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow CLI factory wiring")
-	}
-
-	sourceDir := support.ScaffoldFactory(t, factoryReplaceFactoryConfig(factoryReplaceCurrentName))
-	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
-	sourcePath := filepath.Join(sourceDir, "factory.json")
-
-	processHarness := newRootProcessHarness(t)
+// replace-current re-persists the named default-session Factory with the
+// documented success marker and you factory show reports the same Factory
+// identity with an advanced version after persistence without asserting
+// definitions save orchestration internals.
+func testCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T, remote *sharedRemoteCLI) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	factoryDir := createNamedFactoryViaCLI(
-		t, ctx, processHarness, sourceDir,
-		factoryReplaceCurrentName, sourcePath, namedFactoriesRoot,
-	)
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	preReplace := queryFactoryViaCLIJSON(t, ctx, processHarness, server.URL(), factoryDir)
-	if preReplace.Id == nil || *preReplace.Id != factoryReplaceCurrentName {
-		t.Fatalf("pre-replace factory id = %#v, want %q", preReplace.Id, factoryReplaceCurrentName)
+	factoryDir := remote.hostFactoryDir
+	preReplace := queryFactoryViaCLIJSON(t, ctx, remote.process, remote.baseURL, factoryDir)
+	if preReplace.Id == nil || *preReplace.Id != factoryWiringName {
+		t.Fatalf("pre-replace factory id = %#v, want %q", preReplace.Id, factoryWiringName)
 	}
 	if preReplace.Version == nil {
 		t.Fatal("pre-replace factory version missing")
 	}
 	preReplaceLogical := preReplace.Version.Logical.Int64()
 
-	replaceCmd := processHarness.CommandContext(ctx,
-		"--server", server.URL(),
-		"factory", "replace-current",
-	)
-	replaceCmd.Dir = factoryDir
-	replaceOut, err := replaceCmd.CombinedOutput()
+	replaceOut, err := remote.run(ctx, factoryDir, "", "factory", "replace-current")
 	if err != nil {
 		t.Fatalf("you factory replace-current: %v\noutput:\n%s", err, replaceOut)
 	}
@@ -214,9 +176,9 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 		t.Fatalf("replace-current output missing success marker %q:\n%s", factoryReplaceSuccessMarker, replaceOutput)
 	}
 
-	postReplace := queryFactoryViaCLIJSON(t, ctx, processHarness, server.URL(), factoryDir)
-	if postReplace.Id == nil || *postReplace.Id != factoryReplaceCurrentName {
-		t.Fatalf("post-replace factory id = %#v, want %q", postReplace.Id, factoryReplaceCurrentName)
+	postReplace := queryFactoryViaCLIJSON(t, ctx, remote.process, remote.baseURL, factoryDir)
+	if postReplace.Id == nil || *postReplace.Id != factoryWiringName {
+		t.Fatalf("post-replace factory id = %#v, want %q", postReplace.Id, factoryWiringName)
 	}
 	if postReplace.Version == nil {
 		t.Fatal("post-replace factory version missing")
@@ -228,42 +190,6 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 			preReplaceLogical,
 		)
 	}
-}
-
-func createNamedFactoryViaCLI(
-	t *testing.T,
-	ctx context.Context,
-	processHarness *builtcliacceptance.Harness,
-	workDir, name, sourcePath, namedFactoriesRoot string,
-) string {
-	t.Helper()
-
-	createCmd := processHarness.CommandContext(ctx,
-		"factory", "create", name,
-		"--from", sourcePath,
-		"--dir", namedFactoriesRoot,
-	)
-	createCmd.Dir = workDir
-	createOut, err := createCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("you factory create %q: %v\noutput:\n%s", name, err, createOut)
-	}
-	createOutput := string(createOut)
-	for _, marker := range []string{
-		"Created factory " + name,
-		"Directory:",
-	} {
-		if !strings.Contains(createOutput, marker) {
-			t.Fatalf("factory create %q output missing %q:\n%s", name, marker, createOutput)
-		}
-	}
-
-	createdFactoryDir := filepath.Join(namedFactoriesRoot, name)
-	createdFactoryPath := filepath.Join(createdFactoryDir, "factory.json")
-	if _, err := os.Stat(createdFactoryPath); err != nil {
-		t.Fatalf("created factory.json missing at %s: %v", createdFactoryPath, err)
-	}
-	return createdFactoryDir
 }
 
 func queryFactoryViaCLIJSON(
@@ -365,35 +291,6 @@ func portableFlattenExpandFixtureJSON() []byte {
     }
   ]
 }`)
-}
-
-func factoryReplaceFactoryConfig(name string) map[string]any {
-	return map[string]any{
-		"name": name,
-		"id":   name,
-		"workTypes": []map[string]any{
-			{
-				"name": factoryWiringWorkType,
-				"states": []map[string]any{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
-			},
-		},
-		"workers": []map[string]string{
-			{"name": "mock-worker"},
-		},
-		"workstations": []map[string]any{
-			{
-				"name":      "process-task",
-				"worker":    "mock-worker",
-				"inputs":    []map[string]string{{"workType": factoryWiringWorkType, "state": "init"}},
-				"outputs":   []map[string]string{{"workType": factoryWiringWorkType, "state": "complete"}},
-				"onFailure": []map[string]string{{"workType": factoryWiringWorkType, "state": "failed"}},
-			},
-		},
-	}
 }
 
 func factoryWiringFactoryConfig() map[string]any {

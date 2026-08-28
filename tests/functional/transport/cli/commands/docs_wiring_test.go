@@ -1,14 +1,14 @@
 package commands_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 )
 
 var packagedDocsIndexTopicPattern = regexp.MustCompile(`(?m)^- ` + "`" + `([a-z][a-z0-9-]*)` + "`" + ` - `)
@@ -18,8 +18,9 @@ var packagedDocsIndexTopicPattern = regexp.MustCompile(`(?m)^- ` + "`" + `([a-z]
 // can discover reference topics without reading repository source trees.
 func TestCLIDocsListsPackagedTopics(t *testing.T) {
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
+	processHarness := newLocalReusableProcessHarness(t)
 
-	output := executeDocsWiringCommand(t, workingDir, "docs")
+	output := executeDocsWiringCommand(t, processHarness, workingDir, "docs")
 	if strings.TrimSpace(output) == "" {
 		t.Fatal("you docs index stdout is empty")
 	}
@@ -50,8 +51,9 @@ func TestCLIDocsListsPackagedTopics(t *testing.T) {
 // so discovery and retrieval stay consistent for customers.
 func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
+	processHarness := newLocalReusableProcessHarness(t)
 
-	index := executeDocsWiringCommand(t, workingDir, "docs")
+	index := executeDocsWiringCommand(t, processHarness, workingDir, "docs")
 	topics := parsePackagedDocsIndexTopics(index)
 	if len(topics) == 0 {
 		t.Fatalf("docs index did not expose any discoverable packaged topics:\n%s", index)
@@ -60,7 +62,7 @@ func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
 	for _, topic := range topics {
 		topic := topic
 		t.Run(topic, func(t *testing.T) {
-			output := executeDocsWiringCommand(t, workingDir, "docs", topic)
+			output := executeDocsWiringCommand(t, processHarness, workingDir, "docs", topic)
 			if strings.TrimSpace(output) == "" {
 				t.Fatalf("you docs %s stdout is empty", topic)
 			}
@@ -73,9 +75,10 @@ func TestCLIDocsEveryTopicRendersNonEmptyContent(t *testing.T) {
 // write misleading success content to stdout.
 func TestCLIDocsUnknownTopicReturnsActionableFailure(t *testing.T) {
 	workingDir := isolatedWorkingDirectoryWithoutDocsTree(t)
+	processHarness := newLocalReusableProcessHarness(t)
 	const unknownTopic = "unknown"
 
-	stdout, err := executeDocsWiringCommandResult(t, workingDir, "docs", unknownTopic)
+	stdout, err := executeDocsWiringCommandResult(t, processHarness, workingDir, "docs", unknownTopic)
 	if err == nil {
 		t.Fatal("expected unknown docs topic to fail")
 	}
@@ -98,24 +101,36 @@ func isolatedWorkingDirectoryWithoutDocsTree(t *testing.T) string {
 	return workingDir
 }
 
-func executeDocsWiringCommand(t *testing.T, workingDir string, args ...string) string {
+func executeDocsWiringCommand(
+	t *testing.T,
+	processHarness *builtcliacceptance.Harness,
+	workingDir string,
+	args ...string,
+) string {
 	t.Helper()
 
-	stdout, err := executeDocsWiringCommandResult(t, workingDir, args...)
+	stdout, err := executeDocsWiringCommandResult(t, processHarness, workingDir, args...)
 	if err != nil {
 		t.Fatalf("execute root command %v: %v\nstdout:\n%s", args, err, stdout)
 	}
 	return stdout
 }
 
-func executeDocsWiringCommandResult(t *testing.T, workingDir string, args ...string) (stdout string, err error) {
+func executeDocsWiringCommandResult(
+	t *testing.T,
+	processHarness *builtcliacceptance.Harness,
+	workingDir string,
+	args ...string,
+) (stdout string, err error) {
 	t.Helper()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
-	inputs.WorkingDirectory = workingDir
-	err = process.Execute(inputs.Input)
-	return inputs.Stdout(), err
+	command := processHarness.CommandContext(t.Context(), args...)
+	command.Dir = workingDir
+	var stdoutBuffer, stderrBuffer bytes.Buffer
+	command.Stdout = &stdoutBuffer
+	command.Stderr = &stderrBuffer
+	err = command.Run()
+	return stdoutBuffer.String(), err
 }
 
 func parsePackagedDocsIndexTopics(index string) []string {

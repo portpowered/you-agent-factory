@@ -9,18 +9,15 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
-func TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors(t *testing.T) {
+func testCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, humanApprovalCLIWorkFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: factoryDir})
-	defer server.Stop(t)
-	processHarness := newRootProcessHarness(t)
+	sessionID := remote.openSession(t, factoryDir)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	emptyOut, err := runYouCLI(ctx, processHarness, factoryDir, server.URL(), "--json", "work", "approval", "list")
+	emptyOut, err := remote.run(ctx, factoryDir, sessionID, "--json", "work", "approval", "list")
 	if err != nil {
 		t.Fatalf("empty you work approval list: %v\noutput:\n%s", err, emptyOut)
 	}
@@ -32,21 +29,21 @@ func TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors(t *te
 		t.Fatalf("empty approval list = %#v, want no pending approvals", empty.Approvals)
 	}
 
-	unknownOut, err := runYouCLI(ctx, processHarness, factoryDir, server.URL(), "--json", "work", "approval", "show", "approval-does-not-exist")
+	unknownOut, err := remote.run(ctx, factoryDir, sessionID, "--json", "work", "approval", "show", "approval-does-not-exist")
 	if err == nil {
 		t.Fatalf("unknown approval unexpectedly succeeded: %s", unknownOut)
 	}
 	if strings.Contains(string(unknownOut), "release") || strings.Contains(string(unknownOut), "secret") {
 		t.Fatalf("unknown approval output leaked Work content: %s", unknownOut)
 	}
-	invalidOut, err := runYouCLI(ctx, processHarness, factoryDir, server.URL(), "--json", "work", "approval", "show")
+	invalidOut, err := remote.run(ctx, factoryDir, sessionID, "--json", "work", "approval", "show")
 	if err == nil {
 		t.Fatalf("approval show without an ID unexpectedly succeeded: %s", invalidOut)
 	}
 	if strings.Contains(string(invalidOut), "release") || strings.Contains(string(invalidOut), "secret") {
 		t.Fatalf("argument error leaked Work content: %s", invalidOut)
 	}
-	functionalevidence.Covers(t, "cli/you.work.approval.list", "cli/you.work.approval.show")
+	remote.assertHealthy(t, remote.hostFactoryDir)
 }
 
 func humanApprovalCLIWorkFactoryConfig() map[string]any {

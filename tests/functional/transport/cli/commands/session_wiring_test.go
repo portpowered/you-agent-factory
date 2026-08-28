@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -26,16 +25,10 @@ const (
 // delete work as a thin CLI lifecycle against a running Factory Session server,
 // yielding observable session identity and success or failure exit behavior.
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func TestCLISessionCreateListShowDelete(t *testing.T) {
-	primaryFactoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     primaryFactoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
+func testCLISessionCreateListShowDelete(t *testing.T, remote *sharedRemoteCLI) {
+	primaryFactoryDir := remote.hostFactoryDir
+	processHarness := remote.process
+	baseURL := remote.baseURL
 
 	newFactoryDir := filepath.Join(t.TempDir(), "cli-session-wiring-factory")
 	if err := os.Mkdir(newFactoryDir, 0o755); err != nil {
@@ -66,6 +59,12 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session folder path = %q, want %q", created.Session.FolderPath, newFactoryDir)
 	}
 	sessionID := created.Session.Id
+	sessionDeleted := false
+	t.Cleanup(func() {
+		if !sessionDeleted {
+			remote.closeSession(t, primaryFactoryDir, sessionID)
+		}
+	})
 
 	listOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL, "session", "list")
 	if err != nil {
@@ -129,15 +128,16 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("you session delete: %v\noutput:\n%s", err, deleteOut)
 	}
-	var deleted struct {
+	var deletedResponse struct {
 		SessionID string `json:"sessionId"`
 	}
-	if err := json.Unmarshal(bytesTrimSpace(deleteOut), &deleted); err != nil {
+	if err := json.Unmarshal(bytesTrimSpace(deleteOut), &deletedResponse); err != nil {
 		t.Fatalf("decode session delete JSON: %v\noutput:\n%s", err, deleteOut)
 	}
-	if deleted.SessionID != sessionID {
-		t.Fatalf("session delete confirmation = %q, want %q", deleted.SessionID, sessionID)
+	if deletedResponse.SessionID != sessionID {
+		t.Fatalf("session delete confirmation = %q, want %q", deletedResponse.SessionID, sessionID)
 	}
+	sessionDeleted = true
 
 	showAfterDeleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
@@ -156,22 +156,17 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 // TestCLISessionPauseBuffersAndResumeDispatches proves you session pause keeps
 // accepted work buffered and you session resume restores dispatch through the
 // public CLI against a running Factory Session server.
-func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
+func testCLISessionPauseBuffersAndResumeDispatches(t *testing.T, remote *sharedRemoteCLI) {
 	factoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
+	sessionID := remote.openSession(t, factoryDir)
+	baseURL := remote.baseURL
+	processHarness := remote.process
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	pauseResponse := runSessionLifecycleCLIJSON(
-		t, ctx, processHarness, factoryDir, baseURL, "pause", factorysessions.DefaultSessionID,
+		t, ctx, processHarness, factoryDir, baseURL, "pause", sessionID,
 	)
 	if pauseResponse.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
 		pauseResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
@@ -181,7 +176,7 @@ func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
 		t.Fatalf("session pause status = %q, want PAUSED", pauseResponse.Status)
 	}
 
-	pausedSession := runSessionShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, factorysessions.DefaultSessionID)
+	pausedSession := runSessionShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, sessionID)
 	if pausedSession.Runtime.LifecycleControlStatus == nil ||
 		*pausedSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf("session show after pause missing paused lifecycle marker: %#v", pausedSession.Runtime)
@@ -192,7 +187,7 @@ func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
 		sessionPauseWiringRequestID,
 		sessionPauseWiringWorkName,
 	)
-	submitOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+	submitOut, err := remote.run(ctx, factoryDir, sessionID,
 		"--json",
 		"submit", "batch",
 		inlineBatch,
@@ -209,10 +204,10 @@ func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
 	}
 	workID := submitted.Works[0].WorkID
 
-	assertWorkNotDispatchedViaCLI(t, ctx, processHarness, factoryDir, baseURL, workID, sessionPauseWiringWorkName)
+	assertWorkNotDispatchedViaCLI(t, ctx, processHarness, factoryDir, baseURL, sessionID, workID, sessionPauseWiringWorkName)
 
 	resumeResponse := runSessionLifecycleCLIJSON(
-		t, ctx, processHarness, factoryDir, baseURL, "resume", factorysessions.DefaultSessionID,
+		t, ctx, processHarness, factoryDir, baseURL, "resume", sessionID,
 	)
 	if resumeResponse.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
 		resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
@@ -222,28 +217,22 @@ func TestCLISessionPauseBuffersAndResumeDispatches(t *testing.T) {
 		t.Fatalf("session resume status = %q, want RUNNING", resumeResponse.Status)
 	}
 
-	resumedSession := runSessionShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, factorysessions.DefaultSessionID)
+	resumedSession := runSessionShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, sessionID)
 	if resumedSession.Runtime.LifecycleControlStatus == nil ||
 		*resumedSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("session show after resume missing running lifecycle marker: %#v", resumedSession.Runtime)
 	}
 
-	waitForWorkStateViaCLI(t, ctx, processHarness, factoryDir, baseURL, workID, "complete", 30*time.Second)
+	waitForWorkStateViaCLI(t, ctx, processHarness, factoryDir, baseURL, sessionID, workID, "complete", 30*time.Second)
 }
 
 // TestCLISessionMissingIDReturnsNotFound proves you session show and delete against
 // an unknown session ID exit non-success with actionable not-found diagnostics and
 // no false success session payload through the public CLI wiring boundary.
-func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	baseURL := server.URL()
-	processHarness := newRootProcessHarness(t)
+func testCLISessionMissingIDReturnsNotFound(t *testing.T, remote *sharedRemoteCLI) {
+	factoryDir := remote.hostFactoryDir
+	baseURL := remote.baseURL
+	processHarness := remote.process
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
@@ -266,6 +255,7 @@ func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
 		)
 		assertCLISessionNotFoundFailure(t, operation, controlOut, controlErr, sessionWiringMissingSessionID, false)
 	}
+	remote.assertHealthy(t, factoryDir)
 }
 
 func sessionWiringFactoryConfig() map[string]any {
@@ -433,6 +423,7 @@ func runWorkShowCLIJSON(
 	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
+	sessionID string,
 	workID string,
 ) (factoryapi.Work, error) {
 	t.Helper()
@@ -440,6 +431,7 @@ func runWorkShowCLIJSON(
 	out, err := runYouCLI(ctx, processHarness, workingDir, serverURL,
 		"--json",
 		"work", "show", workID,
+		"--session", sessionID,
 	)
 	if err != nil {
 		return factoryapi.Work{}, err
@@ -457,6 +449,7 @@ func runWorkListCLIJSON(
 	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
+	sessionID string,
 	workName string,
 ) factoryapi.ListWorkResponse {
 	t.Helper()
@@ -465,6 +458,7 @@ func runWorkListCLIJSON(
 	if strings.TrimSpace(workName) != "" {
 		args = append(args, "--name", workName)
 	}
+	args = append(args, "--session", sessionID)
 	out, err := runYouCLI(ctx, processHarness, workingDir, serverURL, args...)
 	if err != nil {
 		t.Fatalf("you work list: %v\noutput:\n%s", err, out)
@@ -482,18 +476,19 @@ func assertWorkNotDispatchedViaCLI(
 	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
+	sessionID string,
 	workID string,
 	workName string,
 ) {
 	t.Helper()
 
-	if work, err := runWorkShowCLIJSON(t, ctx, processHarness, workingDir, serverURL, workID); err == nil {
+	if work, err := runWorkShowCLIJSON(t, ctx, processHarness, workingDir, serverURL, sessionID, workID); err == nil {
 		if work.State != nil && work.State.Name == "complete" {
 			t.Fatalf("work %q reached complete while session was paused: %#v", workID, work)
 		}
 	}
 
-	listed := runWorkListCLIJSON(t, ctx, processHarness, workingDir, serverURL, workName)
+	listed := runWorkListCLIJSON(t, ctx, processHarness, workingDir, serverURL, sessionID, workName)
 	if support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
 		t.Fatalf("work %q reached task:complete before resume: %#v", workID, listed.Results)
 	}
@@ -508,6 +503,7 @@ func waitForWorkStateViaCLI(
 	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
+	sessionID string,
 	workID string,
 	wantState string,
 	timeout time.Duration,
@@ -516,7 +512,7 @@ func waitForWorkStateViaCLI(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work, err := runWorkShowCLIJSON(t, ctx, processHarness, workingDir, serverURL, workID)
+		work, err := runWorkShowCLIJSON(t, ctx, processHarness, workingDir, serverURL, sessionID, workID)
 		if err == nil && work.State != nil && work.State.Name == wantState {
 			return
 		}
@@ -526,7 +522,7 @@ func waitForWorkStateViaCLI(
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	work, err := runWorkShowCLIJSON(t, ctx, processHarness, workingDir, serverURL, workID)
+	work, err := runWorkShowCLIJSON(t, ctx, processHarness, workingDir, serverURL, sessionID, workID)
 	if err != nil {
 		t.Fatalf("work %q missing after resume: %v", workID, err)
 	}

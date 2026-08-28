@@ -11,19 +11,40 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
 
 const (
-	defaultMaxLogTailBytes = 8192
+	defaultMaxLogTailBytes        = 8192
+	reusableHarnessCloseTimeout   = 5 * time.Second
+	reusableHarnessBusyMessage    = "reusable CLI harness rejects overlapping invocations: another command is active"
+	reusableHarnessClosedMessage  = "reusable CLI harness is closed"
+	reusableHarnessUnreadyMessage = "reusable CLI harness has no invocation state"
 )
+
+type reusableProcess interface {
+	Execute(root.Input) error
+	Close(context.Context) error
+}
+
+type reusableHarnessState struct {
+	invocationGate chan struct{}
+	mu             sync.Mutex
+	closed         bool
+	closeOnce      sync.Once
+	closeErr       error
+}
 
 // Harness constructs isolated root processes for hermetic acceptance scenarios.
 type Harness struct {
 	RepoRoot string
 	Edges    serviceedges.Edges
+
+	process       reusableProcess
+	reusableState *reusableHarnessState
 }
 
 // Session is one hermetic acceptance run with isolated home and log directories.
@@ -82,6 +103,10 @@ func (c *Command) Start() error {
 	if c.done != nil {
 		return errors.New("command already started")
 	}
+	release, err := c.harness.acquireInvocation()
+	if err != nil {
+		return err
+	}
 	parent := c.ctx
 	if parent == nil {
 		parent = context.Background()
@@ -89,10 +114,11 @@ func (c *Command) Start() error {
 	c.ctx, c.cancel = context.WithCancel(parent)
 	c.done = make(chan struct{})
 	go func() {
-		err := c.Run()
+		err := c.execute()
 		if c.pipeWriter != nil {
 			_ = c.pipeWriter.CloseWithError(err)
 		}
+		release()
 		c.mu.Lock()
 		c.err = err
 		c.mu.Unlock()
@@ -129,8 +155,21 @@ func (h *Harness) Command(args ...string) *Command {
 	return h.CommandContext(context.Background(), args...)
 }
 
-// Run executes the command through root.BuildProcess.
+// Run executes the command through root.BuildProcess or the retained reusable
+// process, depending on how the harness was constructed.
 func (c *Command) Run() error {
+	if c == nil || c.harness == nil {
+		return errors.New("command root process harness is nil")
+	}
+	release, err := c.harness.acquireInvocation()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return c.execute()
+}
+
+func (c *Command) execute() error {
 	if c == nil || c.harness == nil {
 		return errors.New("command root process harness is nil")
 	}
@@ -160,13 +199,20 @@ func (c *Command) Run() error {
 	}
 	stdinIsTTY := false
 	stdoutIsTTY := false
+	if c.harness.process != nil {
+		return c.harness.process.Execute(root.Input{
+			Args: append([]string{"you"}, c.args...), Env: append([]string(nil), env...), Stdin: stdin,
+			Stdout: stdout, Stderr: stderr, Context: ctx, WorkingDirectory: dir,
+			StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
+		})
+	}
 	process, err := root.BuildProcess(ctx, c.harness.Edges)
 	if err != nil {
 		return fmt.Errorf("build root process: %w", err)
 	}
 	defer func() { _ = process.Close(context.Background()) }()
 	return process.Execute(root.Input{
-		Args: append([]string{"you"}, c.args...), Env: env, Stdin: stdin,
+		Args: append([]string{"you"}, c.args...), Env: append([]string(nil), env...), Stdin: stdin,
 		Stdout: stdout, Stderr: stderr, Context: ctx, WorkingDirectory: dir,
 		StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
 	})
@@ -225,12 +271,98 @@ func (f *ScenarioFailure) Error() string {
 // NewHarness prepares isolated production root-process invocations.
 func NewHarness(t testing.TB, repoRoot string) *Harness {
 	t.Helper()
+	return newHarness(repoRoot)
+}
+
+// NewReusableHarness prepares one root-built process for serialized CLI
+// invocations. Each Command still executes a fresh command tree with
+// invocation-local inputs.
+func NewReusableHarness(t testing.TB, repoRoot string) *Harness {
+	t.Helper()
+	harness := newHarness(repoRoot)
+	// Build from a value snapshot. The process retains the injected edge
+	// implementations, so later mutations of Harness.Edges cannot alter it.
+	harness.Edges = serviceedges.Merge(serviceedges.Edges{}, harness.Edges)
+	process, err := root.BuildProcess(context.Background(), harness.Edges)
+	if err != nil {
+		t.Fatalf("builtcliacceptance.NewReusableHarness: build root process: %v", err)
+		return nil
+	}
+	harness.process = process
+	harness.reusableState = newReusableHarnessState()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), reusableHarnessCloseTimeout)
+		defer cancel()
+		if err := harness.Close(ctx); err != nil {
+			t.Errorf("builtcliacceptance.NewReusableHarness cleanup: %v", err)
+		}
+	})
+	return harness
+}
+
+func newHarness(repoRoot string) *Harness {
 	return &Harness{
 		RepoRoot: repoRoot,
 		Edges: serviceedges.Edges{
 			BrowserOpener: func(context.Context, string) error { return nil },
 		},
 	}
+}
+
+func newReusableHarnessState() *reusableHarnessState {
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	return &reusableHarnessState{invocationGate: gate}
+}
+
+func (h *Harness) acquireInvocation() (func(), error) {
+	if h == nil || h.process == nil {
+		return func() {}, nil
+	}
+	state := h.reusableState
+	if state == nil {
+		return nil, errors.New(reusableHarnessUnreadyMessage)
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.closed {
+		return nil, errors.New(reusableHarnessClosedMessage)
+	}
+	select {
+	case <-state.invocationGate:
+		return func() { state.invocationGate <- struct{}{} }, nil
+	default:
+		return nil, errors.New(reusableHarnessBusyMessage)
+	}
+}
+
+// Close closes a reusable root process exactly once. It waits for an active
+// command to release the invocation gate, while the caller controls the
+// cleanup bound through ctx.
+func (h *Harness) Close(ctx context.Context) error {
+	if h == nil || h.process == nil {
+		return nil
+	}
+	state := h.reusableState
+	if state == nil {
+		return errors.New(reusableHarnessUnreadyMessage)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	state.closeOnce.Do(func() {
+		state.mu.Lock()
+		state.closed = true
+		state.mu.Unlock()
+
+		select {
+		case <-state.invocationGate:
+			state.closeErr = h.process.Close(ctx)
+		case <-ctx.Done():
+			state.closeErr = fmt.Errorf("close reusable CLI harness: wait for active invocation: %w", ctx.Err())
+		}
+	})
+	return state.closeErr
 }
 
 // NewSession allocates isolated home and log directories for one scenario.

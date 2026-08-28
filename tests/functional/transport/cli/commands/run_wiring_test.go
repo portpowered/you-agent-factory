@@ -609,7 +609,7 @@ func writeRunWiringMockWorkersConfig(t *testing.T) string {
 
 func newRunWiringRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	return builtcliacceptance.NewReusableHarness(t, testutil.MustRepoRoot(t))
 }
 
 func reserveRunWiringLocalTCPPort() (int, error) {

@@ -461,7 +461,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile",
+          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         },
         {
@@ -500,7 +500,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         }
       ]
@@ -515,7 +515,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         }
       ]
@@ -540,7 +540,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState",
+          "test": "tests/functional/transport/cli/commands/shared_remote_harness_test.go::TestCLISharedRemoteScenarios",
           "boundary": "cli"
         }
       ]
