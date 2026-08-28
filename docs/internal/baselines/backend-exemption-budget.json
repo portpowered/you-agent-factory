@@ -729,12 +729,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/transport/cli/process/stdout_stderr_test.go#TestCLIQuietModeSuppressesNonResultNoise",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/work/relationships/dependencies_test.go#testFanInReleasesOnlyAfterEveryPrerequisite",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."

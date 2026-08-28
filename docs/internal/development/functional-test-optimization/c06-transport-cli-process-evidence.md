@@ -1,21 +1,29 @@
 # C06 transport CLI-process characterization evidence
 
-- Story: `functional-test-optimization-c06-transport-cli-process-001`
+- Stories: `functional-test-optimization-c06-transport-cli-process-001` through
+  `functional-test-optimization-c06-transport-cli-process-003`
 - Parent behavior: `BEH-001` — CLI-process behavior remains at the boundary it
   actually proves while eligible `Process.Execute` scenarios are prepared for
   bounded reuse.
-- Status: GATE-CHAR passed; characterization is complete and migration remains
-  owned by story 002.
+- Status: GATE-CHAR passed; the review correction below relocates built-binary
+  witnesses to the integration lane and supersedes the pre-correction lane
+  notes.
 - Recorded at UTC: `2026-08-28T07:56:06.2303024Z`
 - Recorded commit: `67710223e327d02c0de93a6ad826c754fe5c1702`
-- Owned package: `tests/functional/transport/cli/process`
+- Characterized package: `tests/functional/transport/cli/process`
+- Current c06 lanes: `tests/functional/transport/cli/process` for
+  `Process.Execute`/process-free cases and `tests/integration/transport/cli/process`
+  for built-binary/OS-process cases.
 - Top-level test inventory: 15
 - Classification reconciliation: `15 = 12 isolated-with-reason + 2
   shareable-with-mock + 1 shareable/process-free`
 
 This is a characterization artifact, not a source-scanning test or a runtime
-contract. The rows below were reconciled against the test bodies and the
-current call paths in `internal/builtcliacceptance/harness.go`.
+contract. The rows below were reconciled against the pre-change test bodies and
+the call paths in `internal/builtcliacceptance/harness.go`. The review-correction
+section at the end is authoritative for current source placement and verification;
+it does not relabel the historical in-process characterization as executable
+evidence.
 
 ## Environment and GATE-CHAR result
 
@@ -179,7 +187,7 @@ The characterization commit changed no shared support, production CLI
 behavior, contracts, generated artifacts, baselines, CI workflows, adjacent
 packages, or excluded cleanup surfaces.
 
-## GATE-FUNC — story 002 implementation result
+## GATE-FUNC — story 002 pre-review implementation result
 
 - Story: `functional-test-optimization-c06-transport-cli-process-002`
 - Tested implementation commit: `c30105bb9`
@@ -293,3 +301,60 @@ GATE-PR-PERF, and VAL-001.
 - Remaining edges: required Unix/Windows hosted CI semantics and same-head
   Backend Functional Coverage timing are recorded in the PR conversation;
   this artifact does not claim those results before CI reports them.
+
+## Review correction — current lane placement and lint result
+
+The review identified that the pre-correction implementation placed built CLI
+and OS-process witnesses under the functional package. The normative backend
+testing rule requires those witnesses under the integration lane. This correction
+preserves the 15 top-level names and CASE-001 through CASE-028 assertions while
+moving only the tests whose bodies require a built executable, OS streams,
+signals, or child-process cleanup.
+
+### Current source ownership
+
+The current body-to-lane reconciliation is:
+
+| Lane | Tests | Boundary |
+| --- | --- | --- |
+| Functional | `TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess`, `TestContextCancellationPIDReadinessIgnoresPartialPublication`, `TestCLIWorkerFailureExitCode`, `TestCLISuccessExitCode` | Dedicated or shared `root.BuildProcess` + `Process.Execute`, or pure parser; no executable construction or OS child. |
+| Integration | `TestCLIContextCancellationStopsExternalWork`, `TestCLIContextCancellationEmitsNoSuccessResult`, `TestBuiltCLIInterruptedResponseStreamExitCode`, `TestCLIHelpListsPublicCommandFamilies`, `TestCLISubcommandHelpUsesStableUsageAndExitZero`, `TestCLIVersionWritesOneMachineReadableVersion`, `TestCLISuccessWritesPrimaryResultOnlyToStdout`, `TestCLIFailureWritesDiagnosticToStderr`, `TestCLIQuietModeSuppressesNonResultNoise`, `TestCLIUnknownCommandWritesSafeCodedStderr`, `TestCLIUnknownCommandReturnsUsageExitCode` | Existing integration package's compile-once artifact and fresh built children; real OS streams, exit status, signal, environment, and descendant cleanup where each body requires them. |
+
+The two worker outcome tests still use one package-owned functional root with
+fresh `root.Input` values and synchronized `ProviderCommandRunner` routes. ACP
+shutdown remains a dedicated functional root, and the PID parser remains
+process-free. The integration package reuses its existing `TestMain` artifact
+fixture, but does not share a live child, stream, environment, session, PID
+file, or scenario route between invocations. The three Unix-only cases retain
+their explicit Windows skips, and the Windows helper files compile in the
+integration package.
+
+### Current verification
+
+- Functional lane command: `go test -count=1 -timeout=10m
+  ./tests/functional/transport/cli/process`; local Windows result: pass,
+  exit code `0`, four top-level tests, and no platform skips. This proves the
+  shared `Process.Execute` failure/success recovery, dedicated ACP cancellation,
+  and process-free parser at the required functional boundary.
+- Integration c06 focused command:
+  `go test -count=1 -timeout=10m ./tests/integration/transport/cli/process
+  -run '^(TestCLIContextCancellationStopsExternalWork|TestCLIContextCancellationEmitsNoSuccessResult|TestBuiltCLIInterruptedResponseStreamExitCode|TestCLIHelpListsPublicCommandFamilies|TestCLISubcommandHelpUsesStableUsageAndExitZero|TestCLIVersionWritesOneMachineReadableVersion|TestCLISuccessWritesPrimaryResultOnlyToStdout|TestCLIFailureWritesDiagnosticToStderr|TestCLIQuietModeSuppressesNonResultNoise|TestCLIUnknownCommandWritesSafeCodedStderr|TestCLIUnknownCommandReturnsUsageExitCode)$'`; local Windows result: pass, exit code `0`, elapsed `26.248s`. The three Unix-only tests are explicit skips on this host; their Unix signal/descendant properties remain unclaimed locally.
+- Integration package command: `go test -count=1 -timeout=10m
+  ./tests/integration/transport/cli/process`; local Windows result: pass,
+  exit code `0`, elapsed `75.878s`, including the pre-existing integration
+  matrix and all relocated c06 witnesses.
+- Lint correction: `make backend-size` passed. The moved quiet-mode test is
+  now below the 100-line function limit after helper extraction, so its stale
+  functional exemption was removed; no new exemption was added.
+- Current c06 application-start ledger remains `25` Windows / `28` Unix:
+  `2` migrated worker scenarios share one functional root, `1` parser scenario
+  remains process-free, and `12` retained executable/OS/lifecycle witnesses
+  remain isolated in the two appropriate test lanes. These counts exclude the
+  integration package's unrelated pre-existing tests and all compiler/provider
+  descendants.
+
+This correction proves lane-compliant current-platform behavior and preserves
+the declared dependency fidelity. It does not prove Unix signal/descendant
+reaping on this Windows host, three-repeat stability after relocation, same-head
+PR package timing, or independent clean-room reconciliation; those remain
+GATE-UNIX/GATE-WINDOWS, GATE-REPEAT, GATE-PR-PERF, and VAL-001 edges.

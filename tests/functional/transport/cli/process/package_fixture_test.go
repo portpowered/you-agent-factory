@@ -3,12 +3,9 @@ package process_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -20,14 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-var processCLIBinary struct {
-	once     sync.Once
-	tempDir  string
-	path     string
-	err      error
-	buildLog []byte
-}
-
 var sharedWorkerOutcome struct {
 	process support.ApplicationProcess
 	router  *workerOutcomeCommandRouter
@@ -35,11 +24,8 @@ var sharedWorkerOutcome struct {
 	mu      sync.Mutex
 }
 
-// TestMain owns package-scoped resources that are intentionally shared across
-// the two eligible worker outcomes and all retained built-CLI witnesses. The
-// resources are released only after every test has finished, so a test cleanup
-// cannot invalidate a sibling test that is still using the shared root or
-// executable.
+// TestMain owns the package-scoped root shared by the two eligible worker
+// outcomes. It is released only after every test has finished.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
@@ -54,66 +40,10 @@ func TestMain(m *testing.M) {
 		}
 		cancel()
 	}
-	if processCLIBinary.tempDir != "" {
-		if err := os.RemoveAll(processCLIBinary.tempDir); err != nil && exitCode == 0 {
-			fmt.Fprintf(os.Stderr, "remove reusable CLI binary directory %s: %v\n", processCLIBinary.tempDir, err)
-			exitCode = 1
-		}
-	}
 	os.Exit(exitCode)
 }
 
 const packageResourceCloseTimeout = 5 * time.Second
-
-func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
-	t.Helper()
-	processCLIBinary.once.Do(func() {
-		processCLIBinary.tempDir, processCLIBinary.err = os.MkdirTemp("", "you-cli-process-package-")
-		if processCLIBinary.err != nil {
-			return
-		}
-		binaryName := "you"
-		if runtime.GOOS == "windows" {
-			binaryName += ".exe"
-		}
-		processCLIBinary.path = filepath.Join(processCLIBinary.tempDir, binaryName)
-		command := exec.CommandContext(ctx, "go", "build", "-o", processCLIBinary.path, "./cmd/factory")
-		command.Dir = repoRoot
-		processCLIBinary.buildLog, processCLIBinary.err = command.CombinedOutput()
-	})
-	if processCLIBinary.err != nil {
-		t.Fatalf("build you CLI: %v\n%s", processCLIBinary.err, processCLIBinary.buildLog)
-	}
-	return processCLIBinary.path
-}
-
-func runBuiltYouBinary(
-	ctx context.Context,
-	binaryPath string,
-	session *builtcliacceptance.Session,
-	args ...string,
-) (builtcliacceptance.RunResult, error) {
-	command := exec.CommandContext(ctx, binaryPath, args...)
-	command.Dir = session.WorkDir
-	command.Env = session.ProcessEnv()
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	err := command.Run()
-	result := builtcliacceptance.RunResult{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-	}
-	if err == nil {
-		return result, nil
-	}
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		return result, err
-	}
-	result.ExitCode = exitErr.ExitCode()
-	return result, err
-}
 
 type workerOutcomeCommandRouter struct {
 	mu     sync.Mutex
