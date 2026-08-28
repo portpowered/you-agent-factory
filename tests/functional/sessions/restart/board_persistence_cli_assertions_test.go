@@ -318,3 +318,54 @@ func boardPersistenceDispatchIncludesWork(state boardPersistenceDispatchState, w
 	_, ok := state.WorkIDs[workID]
 	return ok
 }
+
+func assertBoardList(t *testing.T, listed factoryapi.ListWorkResponse, expected map[string]boardPersistenceExpectedWork) {
+	t.Helper()
+	if len(listed.Results) != len(expected) {
+		t.Fatalf("Work list count = %d, want %d: %#v", len(listed.Results), len(expected), listed.Results)
+	}
+	seen := make(map[string]struct{}, len(listed.Results))
+	for _, item := range listed.Results {
+		workID := support.StringPointerValue(item.WorkId)
+		if _, duplicate := seen[workID]; duplicate {
+			t.Fatalf("Work list duplicated Work ID %q", workID)
+		}
+		want, ok := expected[workID]
+		if !ok {
+			t.Fatalf("Work list returned unexpected Work ID %q: %#v", workID, item)
+		}
+		seen[workID] = struct{}{}
+		assertBoardWork(t, item, want)
+	}
+}
+
+func assertBoardCLIListAndShows(
+	t *testing.T,
+	ctx context.Context,
+	daemon *boardPersistenceDaemon,
+	binaryPath, factoryDir, homeDir string,
+	expected map[string]boardPersistenceExpectedWork,
+) {
+	t.Helper()
+	listOutput, err := runBoardPersistenceCLI(ctx, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "work", "list")
+	if err != nil {
+		t.Fatalf("you work list: %v\noutput:\n%s", err, listOutput)
+	}
+	var listed factoryapi.ListWorkResponse
+	if err := json.Unmarshal(bytes.TrimSpace(listOutput), &listed); err != nil {
+		t.Fatalf("decode you work list: %v\noutput:\n%s", err, listOutput)
+	}
+	assertBoardList(t, listed, expected)
+
+	for workID, want := range expected {
+		showOutput, err := runBoardPersistenceCLI(ctx, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "work", "show", workID)
+		if err != nil {
+			t.Fatalf("you work show %s: %v\noutput:\n%s", workID, err, showOutput)
+		}
+		var shown factoryapi.Work
+		if err := json.Unmarshal(bytes.TrimSpace(showOutput), &shown); err != nil {
+			t.Fatalf("decode you work show %s: %v\noutput:\n%s", workID, err, showOutput)
+		}
+		assertBoardWork(t, shown, want)
+	}
+}
