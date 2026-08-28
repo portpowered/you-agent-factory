@@ -52,13 +52,18 @@ func (noopClient) WaitForTerminalExit(context.Context, acpsdk.WaitForTerminalExi
 // tests can wait on a real Go channel instead of any sleep-based timing.
 type fakeSessionPeer struct {
 	received chan acpsdk.CancelNotification
+	done     chan struct{}
 }
 
 func newFakeSessionPeer() *fakeSessionPeer {
-	return &fakeSessionPeer{received: make(chan acpsdk.CancelNotification, 8)}
+	return &fakeSessionPeer{
+		received: make(chan acpsdk.CancelNotification, 8),
+		done:     make(chan struct{}),
+	}
 }
 
 func (peer *fakeSessionPeer) run(from io.Reader) {
+	defer close(peer.done)
 	scanner := bufio.NewScanner(from)
 	for scanner.Scan() {
 		var message struct {
@@ -85,7 +90,11 @@ func newPipedConnection(t *testing.T, peer *fakeSessionPeer) *acpsdk.ClientSideC
 	t.Helper()
 	outboundReader, outboundWriter := io.Pipe()
 	go peer.run(outboundReader)
-	t.Cleanup(func() { _ = outboundWriter.Close() })
+	t.Cleanup(func() {
+		_ = outboundWriter.Close()
+		_ = outboundReader.Close()
+		waitForCancelWindowCleanup(t, "fake session peer", peer.done)
+	})
 	return acpsdk.NewClientSideConnection(noopClient{}, outboundWriter, io.MultiReader())
 }
 
@@ -271,77 +280,51 @@ func (g *gatedWriter) Write(p []byte) (int, error) {
 // own session ID and never the replacement generation that reused the
 // identity in the meantime.
 func TestWindowEndReachesTerminalResultAndReleasesIdentityWhileATryCancelSendIsStuckPastTheSendBound(t *testing.T) {
-	peer := newFakeSessionPeer()
-	outboundReader, outboundWriter := io.Pipe()
-	gate := &gatedWriter{w: outboundWriter, entered: make(chan struct{}), release: make(chan struct{})}
-	go peer.run(outboundReader)
-	t.Cleanup(func() { _ = outboundWriter.Close() })
-	connection := acpsdk.NewClientSideConnection(noopClient{}, gate, io.MultiReader())
-
-	w := &Window{}
-	sessionA := w.Begin("attempt-1", acpsdk.SessionId("session-A"), connection)
-	claimedA, ok := w.Claim("attempt-1")
-	if !ok || claimedA != sessionA {
-		t.Fatalf("Claim(attempt-1) = (%v, %v), want the open session and true", claimedA, ok)
-	}
-
-	type outcome struct {
-		accepted bool
-		err      error
-	}
-	tryCancelDone := make(chan outcome, 1)
-	go func() {
-		accepted, err := claimedA.TryCancel(context.Background())
-		tryCancelDone <- outcome{accepted: accepted, err: err}
-	}()
+	fixture := newBlockedSendFixture(t, &Window{})
+	sessionA := fixture.beginA("attempt-1", acpsdk.SessionId("session-A"))
+	claimedA := requireCancelWindowClaim(t, fixture.window, "attempt-1", sessionA, "", "the open session and true")
+	fixture.startTryCancel(claimedA)
 
 	// TryCancel has won ownership of A and is now blocked mid-send, well past
 	// what sendTimeout would bound if the SDK actually honored it.
-	<-gate.entered
-	time.Sleep(2 * sendTimeout)
+	fixture.waitPastSendBound(t, sendTimeout)
 
-	endDone := make(chan struct{})
-	go func() {
-		// A's real Execute() outcome was not a cancellation - the daemon's
-		// own response raced ahead of the (still in-flight) cancel send.
-		w.End(sessionA, false)
-		close(endDone)
-	}()
-
-	select {
-	case <-endDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("End() did not reach a terminal result while TryCancel's send was stuck; a blocked peer write must never block End")
-	}
+	// A's real Execute() outcome was not a cancellation - the daemon's own
+	// response raced ahead of the (still in-flight) cancel send.
+	endDone := fixture.endA()
+	waitForCancelWindowSignal(
+		t,
+		endDone,
+		cancelWindowCleanupTimeout,
+		"End() did not reach a terminal result while TryCancel's send was stuck; a blocked peer write must never block End",
+	)
 
 	// The identity must be free for reuse immediately - not just eventually.
-	sessionB := w.Begin("attempt-1", acpsdk.SessionId("session-B"), connection)
-	claimedB, ok := w.Claim("attempt-1")
-	if !ok || claimedB != sessionB {
-		t.Fatalf("Claim(attempt-1) after A's End = (%v, %v), want the fresh session B and true", claimedB, ok)
-	}
-	w.End(sessionB, false)
+	sessionB := fixture.beginB("attempt-1", acpsdk.SessionId("session-B"))
+	requireCancelWindowClaim(t, fixture.window, "attempt-1", sessionB, " after A's End", "the fresh session B and true")
+	fixture.endB()
 
 	// Now let A's long-stuck send finally land.
-	close(gate.release)
+	fixture.releaseSend()
 
-	result := <-tryCancelDone
-	if result.err != nil {
-		t.Fatalf("TryCancel() error = %v, want nil", result.err)
-	}
-	if result.accepted {
-		t.Fatal("TryCancel() accepted = true, want false: End already recorded A's outcome before this call could observe cancellation")
-	}
-
-	notification := <-peer.received
-	if notification.SessionId != "session-A" {
-		t.Fatalf("late notification SessionId = %q, want session-A (A's own identity), never B's", notification.SessionId)
-	}
-	select {
-	case extra := <-peer.received:
-		t.Fatalf("received an unexpected second notification %#v, want exactly one (A's stale send, never one addressed to B)", extra)
-	default:
-	}
+	result := fixture.waitForTryCancel(t)
+	requireCancelWindowOutcome(
+		t,
+		result,
+		false,
+		"TryCancel() accepted = true, want false: End already recorded A's outcome before this call could observe cancellation",
+	)
+	requireCancelWindowNotification(
+		t,
+		fixture.peer,
+		acpsdk.SessionId("session-A"),
+		"session-A (A's own identity), never B's",
+	)
+	requireNoCancelWindowNotification(
+		t,
+		fixture.peer,
+		"received an unexpected second notification, want exactly one (A's stale send, never one addressed to B)",
+	)
 }
 
 // TestWindowTryCancelLosesRaceToNaturalCompletionReportsUnsupportedNotCompleted
