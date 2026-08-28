@@ -118,6 +118,15 @@ func (service *rootService) prepareGenericCLIInputs(
 	operation string,
 	catalog modelinference.Detail,
 ) ([]modelinference.InferenceInput, error) {
+	return prepareGenericCLIInputsWithReader(cfg, operation, catalog, service.inputFileReader)
+}
+
+func prepareGenericCLIInputsWithReader(
+	cfg InvokeConfig,
+	operation string,
+	catalog modelinference.Detail,
+	inputFileReader InputFileReader,
+) ([]modelinference.InferenceInput, error) {
 	rawValues := append([]string(nil), cfg.InputMappings...)
 	rawValues = append(rawValues, cfg.InputSpecs...)
 	if len(rawValues) == 0 {
@@ -145,7 +154,7 @@ func (service *rootService) prepareGenericCLIInputs(
 		if err := validateMissingGenericCLIInputSlots(selected.Inputs, counts, validNames); err != nil {
 			return nil, err
 		}
-		inputs, err = service.bindGenericCLIInputs(cfg, mappings, slots)
+		inputs, err = bindGenericCLIInputsWithReader(cfg, mappings, slots, inputFileReader)
 		if err != nil {
 			return nil, err
 		}
@@ -240,12 +249,21 @@ func (service *rootService) bindGenericCLIInputs(
 	mappings []genericCLIInputMapping,
 	slots map[string]modelinference.OperationSlot,
 ) ([]modelinference.InferenceInput, error) {
+	return bindGenericCLIInputsWithReader(cfg, mappings, slots, service.inputFileReader)
+}
+
+func bindGenericCLIInputsWithReader(
+	cfg InvokeConfig,
+	mappings []genericCLIInputMapping,
+	slots map[string]modelinference.OperationSlot,
+	inputFileReader InputFileReader,
+) ([]modelinference.InferenceInput, error) {
 	inputs := make([]modelinference.InferenceInput, 0, len(mappings))
 	for _, mapping := range mappings {
 		if err := cfg.Context.Err(); err != nil {
 			return nil, err
 		}
-		input, err := service.genericCLIInput(cfg, mapping, slots[mapping.slot])
+		input, err := genericCLIInputWithReader(cfg, mapping, slots[mapping.slot], inputFileReader)
 		if err != nil {
 			return nil, err
 		}
@@ -287,6 +305,15 @@ func (service *rootService) genericCLIInput(
 	mapping genericCLIInputMapping,
 	slot modelinference.OperationSlot,
 ) (modelinference.InferenceInput, error) {
+	return genericCLIInputWithReader(cfg, mapping, slot, service.inputFileReader)
+}
+
+func genericCLIInputWithReader(
+	cfg InvokeConfig,
+	mapping genericCLIInputMapping,
+	slot modelinference.OperationSlot,
+	inputFileReader InputFileReader,
+) (modelinference.InferenceInput, error) {
 	value := mapping.value
 	trimmed := strings.TrimSpace(value)
 	if strings.HasPrefix(trimmed, "@") {
@@ -297,17 +324,22 @@ func (service *rootService) genericCLIInput(
 				fmt.Sprintf("input slot %q requires a file path after @", mapping.slot), mapping.slot, nil,
 			)
 		}
-		if service.inputFileReader == nil {
+		if inputFileReader == nil {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(
 				"--input", path, errors.New("Models CLI input filesystem is not configured"),
 			)
 		}
-		data, err := service.inputFileReader(cfg.Context, path, genericCLIInputMaxFileBytes)
+		data, err := inputFileReader(cfg.Context, path, genericCLIInputMaxFileBytes)
 		if err != nil {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure("--input", path, err)
 		}
 		if err := cfg.Context.Err(); err != nil {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure("--input", path, err)
+		}
+		if len(data) == 0 {
+			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(
+				"--input", path, errors.New("file is empty"),
+			)
 		}
 		if int64(len(data)) > genericCLIInputMaxFileBytes {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(

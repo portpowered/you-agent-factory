@@ -6283,11 +6283,14 @@ type ModelInvocationFailureClass string
 
 // ModelInvocationInput One ordered value supplied to a named model-operation input slot.
 type ModelInvocationInput struct {
-	// ArtifactRef Opaque Models-owned input artifact reference when content is not inline.
+	// ArtifactRef Opaque Models-owned input artifact reference when content is not inline. Do not combine with content or contentBase64.
 	ArtifactRef *string `json:"artifactRef,omitempty"`
 
-	// Content Inline content. JSON values are carried as their canonical JSON text.
+	// Content Inline UTF-8 content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64 or artifactRef.
 	Content *string `json:"content,omitempty"`
+
+	// ContentBase64 Base64-encoded inline binary content. Do not combine with content or artifactRef.
+	ContentBase64 *[]byte `json:"contentBase64,omitempty"`
 
 	// ContentType Logical content type retained for compatibility with prepared invocation inputs.
 	ContentType *string `json:"contentType,omitempty"`

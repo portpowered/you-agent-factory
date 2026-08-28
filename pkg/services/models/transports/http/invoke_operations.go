@@ -241,6 +241,22 @@ func GenericInvocationFailureToGenerated(
 func genericInferenceInputFromGenerated(
 	input factoryapi.ModelInvocationInput,
 ) (models.InferenceInput, error) {
+	carrierCount := 0
+	if input.Content != nil {
+		carrierCount++
+	}
+	if input.ContentBase64 != nil {
+		carrierCount++
+	}
+	if input.ArtifactRef != nil {
+		carrierCount++
+	}
+	if carrierCount > 1 {
+		return models.InferenceInput{}, newGenericMappingFailure(
+			models.InvocationFailureClassInvalidParameter,
+			"input must set only one of content, contentBase64, or artifactRef",
+		)
+	}
 	mapped := models.InferenceInput{
 		Name:     input.Name,
 		Modality: models.Modality(input.Modality),
@@ -253,6 +269,9 @@ func genericInferenceInputFromGenerated(
 	}
 	if input.Content != nil {
 		mapped.Content = *input.Content
+	}
+	if input.ContentBase64 != nil {
+		mapped.Content = string(*input.ContentBase64)
 	}
 	if input.ArtifactRef != nil {
 		artifact, err := (models.InferenceArtifactRef{}).Parse(*input.ArtifactRef)

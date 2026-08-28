@@ -150,6 +150,7 @@ type httpService struct {
 	models           modelinference.Service
 	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	inputFileReader  InputFileReader
 }
 
 // New constructs the composition-stable Models CLI service injected into Cobra
@@ -285,6 +286,9 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("model name is required")
 	}
 	operation := strings.TrimSpace(cfg.Operation)
+	if operation == "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
+		operation = inferGenericCLIModelOperation(modelName)
+	}
 	if operation == "" {
 		return fmt.Errorf("--operation is required")
 	}
@@ -292,8 +296,16 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
 		return fmt.Errorf("--text is required")
 	}
+	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
+		return clidiag.NewFlagConflictFailure(
+			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
+		)
+	}
 	if err := validateHTTPInvokeBindings(cfg); err != nil {
 		return err
+	}
+	if len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0 {
+		return service.invokeRemoteGeneric(cfg, modelName, operation)
 	}
 
 	if validationOnlyModelInvoke(cfg) {
@@ -331,10 +343,6 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 
 func validateHTTPInvokeBindings(cfg InvokeConfig) error {
 	switch {
-	case len(cfg.InputMappings) > 0:
-		return fmt.Errorf("explicit input mappings require the local Models composition")
-	case len(cfg.InputSpecs) > 0:
-		return fmt.Errorf("explicit generic inputs require the local Models composition")
 	case len(cfg.ParameterSpecs) > 0:
 		return fmt.Errorf("explicit generic parameters require the local Models composition")
 	case len(cfg.OutputMappings) > 0:
@@ -701,16 +709,22 @@ func logModelsRequest(diagnostics requestDiagnostics, endpoint url.URL) {
 	clidiag.Printf(
 		diagnostics.Output,
 		diagnostics.Enabled,
-		"%s request endpointPath=%s endpoint=%s server=%s modelName=%q operation=%q outputPath=%s requestBytes=%d",
+		"%s request endpointPath=%s server=%s modelName=%q operation=%q outputPath=%s requestBytes=%d",
 		diagnostics.Command,
 		endpoint.Path,
-		endpoint.String(),
-		diagnostics.Server,
+		safeModelsServerLabel(endpoint),
 		diagnostics.ModelName,
 		diagnostics.Operation,
 		diagnostics.OutputPath,
 		diagnostics.RequestBytes,
 	)
+}
+
+func safeModelsServerLabel(endpoint url.URL) string {
+	if endpoint.Scheme == "" || endpoint.Host == "" {
+		return "<unknown>"
+	}
+	return endpoint.Scheme + "://" + endpoint.Host
 }
 
 func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusCode int, elapsed time.Duration, summary string) {
