@@ -224,4 +224,3 @@ cleanup. This story does not claim the stronger post-migration resource census.
   process-sensitive and forced-unwind cleanup -> `PROV-ISO-003`; repeat/package
   outcome -> `PROV-REPEAT-004`; tagged long proof -> `PROV-LONG-005`; PR timing
   -> `PR-CI-006`; integrated clean-room report -> `VAL-007`.
-
