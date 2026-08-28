@@ -437,7 +437,7 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-The seventeen first-party packaged Factories also use the named-factory path.
+The nineteen first-party packaged Factories also use the named-factory path.
 `you factory list` is the discovery source for their descriptions and runnable
 examples.
 
@@ -448,6 +448,7 @@ examples.
 | `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
 | `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
 | `@you/factory-builder` | Graph | Create and install one validated graph or JavaScript Factory from a request. |
+| `@you/fix` | Graph | Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure. |
 | `@you/full-flow` | Graph | Plan implementation waves, work in isolated worktrees, merge, and replan until complete. |
 | `@you/fusion` | Graph | Produce a draft with one worker and refine it with another. |
 | `@you/goal` | Graph | Repeat bounded work on a goal until the executor reports completion. |
@@ -455,6 +456,7 @@ examples.
 | `@you/plan-execute` | Graph | Write matching Markdown and JSON PRDs, then execute and verify their stories in the current workspace. |
 | `@you/plan-parallel` | Graph | Plan a Work dependency graph, execute ready tasks concurrently, and merge results. |
 | `@you/quorum` | Graph | Run independent assessments concurrently and merge them. |
+| `@you/ralph` | Graph | Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete. |
 | `@you/review` | Graph | Repeat writing and independent review until approval or exhaustion. |
 | `@you/spawn` | JavaScript | Plan an exact number of tasks, execute them concurrently, and merge ordered results. |
 | `@you/subagent` | Graph | Run one bounded read-only subagent and return its result. |
