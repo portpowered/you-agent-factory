@@ -42,9 +42,9 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	sourceServer := characterizationNewHTTPServer(t, source)
 	t.Cleanup(sourceServer.Close)
 
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(sourceServer.URL))
-	cacheDirectory := t.TempDir()
-	homeDirectory := t.TempDir()
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(sourceServer.URL))
+	cacheDirectory := characterizationTempDir(t)
+	homeDirectory := characterizationTempDir(t)
 	environment := append(
 		os.Environ(),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
@@ -205,9 +205,9 @@ func assertStory003ListAfterPull(
 
 // TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal proves removal reclaims unused assets and refuses assets still in use.
 func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T) {
-	cacheDirectory := t.TempDir()
+	cacheDirectory := characterizationTempDir(t)
 	writeCachedOmniVoiceAssets(t, cacheDirectory)
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	environment := append(
 		functionalHomeEnvironment(cacheDirectory),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
@@ -296,9 +296,9 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 	}))
 	t.Cleanup(failureSource.Close)
 
-	failureFactoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(failureSource.URL))
-	failureCacheDirectory := t.TempDir()
-	failureHomeDirectory := t.TempDir()
+	failureFactoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(failureSource.URL))
+	failureCacheDirectory := characterizationTempDir(t)
+	failureHomeDirectory := characterizationTempDir(t)
 	failureEnvironment := append(
 		os.Environ(),
 		runcli.ModelCacheDirEnvironment+"="+failureCacheDirectory,

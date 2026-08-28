@@ -170,7 +170,7 @@ func assertGenericRuntimeFailures(t *testing.T) {
 func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	dir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
 	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
 
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -230,7 +230,7 @@ func TestModelsRootCompositionModelScenarios(t *testing.T) {
 // keeping a Factory declaration ahead of the built-in definition with the same
 // model name.
 func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
-	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	dir := characterizationScaffoldFactory(t, richCatalogFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -301,7 +301,7 @@ func runModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *
 // keeping a Factory declaration ahead of the built-in definition with the same
 // model name.
 func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t *testing.T) {
-	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	dir := characterizationScaffoldFactory(t, richCatalogFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -346,7 +346,7 @@ func TestModelsCatalogDiscoveryProjectsWorkerCapabilitiesAndFactoryPrecedence(t 
 // root-composed catalog keeps an unknown model on the public not-found
 // contract instead of exposing an internal runtime failure.
 func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
-	dir := support.ScaffoldFactory(t, richCatalogFactoryConfig())
+	dir := characterizationScaffoldFactory(t, richCatalogFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -402,7 +402,7 @@ func TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP(t *testing.T) {
 // the effective built-in catalog rejects an operation outside the selected
 // model definition before any model host or provider effect is attempted.
 func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T) {
-	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -442,7 +442,7 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 // a scoped cache-inspection failure stays on the public model-unavailable
 // contract for both collection and detail reads.
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
-	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	dir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -480,7 +480,7 @@ func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.
 // cancellation returned by the scoped readiness collaborator cannot produce
 // a plausible successful catalog response through the public Models CLI.
 func TestModelsCatalogReadinessCancellationReturnsPublicFailure(t *testing.T) {
-	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	dir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -512,7 +512,7 @@ func TestModelsCatalogReadinessCancellationReturnsPublicFailure(t *testing.T) {
 // proves direct invocation does not turn a second readiness lookup failure
 // into a backend or filesystem diagnostic.
 func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
 	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
@@ -544,7 +544,7 @@ func TestModelsInvokeReadinessDependencyFailureIsUnavailableAfterCatalogSuccess(
 // readiness cancellation returned by the composed catalog does not reach the
 // provider or expose the dependency's error text through Process.Execute.
 func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
 		return nil, context.Canceled
@@ -568,7 +568,7 @@ func TestModelsInvokeCatalogDependencyCancellationIsSafeThroughProcess(t *testin
 // between scope opening and catalog discovery stops GetCatalogModel before it
 // can return a partial detail or invoke a provider.
 func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -610,7 +610,7 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 // cancellation from the direct readiness preflight remains typed and safe
 // after catalog discovery has already succeeded.
 func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	var inspections atomic.Int32
 	process := characterizationBuildProcess(t, cache.edges(func(string) (os.FileInfo, error) {
@@ -638,7 +638,7 @@ func TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe(t *testing.T
 // collaborator cancels the caller while returning a normal missing-cache
 // observation.
 func TestModelsInvokeReadinessCancellationAfterSuccessfulObservationIsSafe(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	cache := prepareModelsReadinessCache(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
@@ -683,7 +683,7 @@ func (cache modelsReadinessCache) edges(
 
 func prepareModelsReadinessCache(t *testing.T) modelsReadinessCache {
 	t.Helper()
-	homeDirectory := t.TempDir()
+	homeDirectory := characterizationTempDir(t)
 	cacheDirectory := filepath.Join(homeDirectory, ".agent-factory", "models")
 	writeCachedOmniVoiceAssets(t, cacheDirectory)
 	environment := functionalHomeEnvironment(homeDirectory)
@@ -732,7 +732,7 @@ func findCatalogModel(
 func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	dir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -785,7 +785,7 @@ func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
 func TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	dir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -826,7 +826,7 @@ func TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP(t *testing.T) 
 func TestModelsCatalogProjectsCustomModelThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, catalogCustomModelFactoryConfig())
+	dir := characterizationScaffoldFactory(t, catalogCustomModelFactoryConfig())
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,

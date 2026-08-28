@@ -37,7 +37,7 @@ func TestModelsPublicRemoveMissingCachePreservesJSONDiagnostic(t *testing.T) {
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "--server", server.URL, "models", "remove", "not-cached-model",
 	})
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.WorkingDirectory = characterizationTempDir(t)
 	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatal("Process.Execute(json models remove) error = nil, want missing-cache failure")

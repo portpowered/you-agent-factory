@@ -21,9 +21,9 @@ import (
 // Process.Execute rather than calling a service or building the CLI binary.
 func TestLocalAICLIConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
 	fixture := characterizationStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericConformanceCaches(t, home)
-	dir := support.ScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
+	dir := characterizationScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
 	server, _ := startLocalAIConformanceServer(t, dir, home, fixture)
 	edges, rejectingNetwork, compatibility, hostLauncher := localAIConformanceEdges(home, fixture)
 	process := characterizationBuildProcess(t, edges)

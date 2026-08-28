@@ -89,7 +89,7 @@ func TestModelsGenericCLIProcessPublishesSingleOutputToStdoutOnly(t *testing.T) 
 func TestModelsGenericCLIProcessRollsBackMappedOutputsThroughEdges(t *testing.T) {
 	t.Parallel()
 
-	outputDirectory := t.TempDir()
+	outputDirectory := characterizationTempDir(t)
 	textPath := filepath.Join(outputDirectory, "text.out")
 	usagePath := filepath.Join(outputDirectory, "usage.out")
 	if err := os.WriteFile(textPath, []byte("old text"), 0o644); err != nil {
@@ -237,7 +237,7 @@ func buildGenericCLIProcess(
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	selection := genericLlamaBackendSelection()
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
@@ -252,7 +252,7 @@ func buildGenericCLIProcess(
 	}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	config := configFactory(modelServer.URL)
-	directory := support.ScaffoldFactory(t, config)
+	directory := characterizationScaffoldFactory(t, config)
 	edges := serviceedges.Edges{
 		ModelAssetHTTPClient: &rejectingModelAssetHTTP{},
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {

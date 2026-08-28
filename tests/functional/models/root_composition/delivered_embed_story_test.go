@@ -20,7 +20,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const deliveredEmbedBackendName = "localai-backend-localai-llamacpp-functional.tar.gz"
@@ -32,8 +31,8 @@ const deliveredEmbedBackendName = "localai-backend-localai-llamacpp-functional.t
 func TestDeliveredEmbedCLIArtifactReachesProtocolFixture(t *testing.T) {
 	fixture := newDeliveredEmbedFixture(t)
 	binary := buildDeliveredEmbedYouBinary(t)
-	workDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	home := t.TempDir()
+	workDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	home := characterizationTempDir(t)
 
 	first := runDeliveredEmbedCLI(t, binary, workDir, home, fixture.server.URL,
 		"models", "invoke", "embed", "--input", "text=Find similar work")
@@ -86,7 +85,7 @@ func TestDeliveredEmbedCLIArtifactReachesProtocolFixture(t *testing.T) {
 func TestDeliveredEmbedHTTPArtifactReachesProtocolFixture(t *testing.T) {
 	fixture := newDeliveredEmbedFixture(t)
 	binary := buildDeliveredEmbedYouBinary(t)
-	serverRoot := t.TempDir()
+	serverRoot := characterizationTempDir(t)
 	factoryDir := filepath.Join(serverRoot, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("create delivered server factory directory: %v", err)
@@ -106,7 +105,7 @@ func TestDeliveredEmbedHTTPArtifactReachesProtocolFixture(t *testing.T) {
 	listenAddress := listener.Addr().String()
 	_ = listener.Close()
 
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	command := exec.CommandContext(t.Context(), binary, "server", "--listen", listenAddress)
 	command.Dir = serverRoot
 	command.Env = deliveredEmbedCLIEnvironment(home, fixture.server.URL)
@@ -202,7 +201,7 @@ func buildDeliveredEmbedYouBinary(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		binaryName += ".exe"
 	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	binaryPath := filepath.Join(characterizationTempDir(t), binaryName)
 	command := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binaryPath, "./cmd/factory")
 	command.Dir = testutil.MustRepoRoot(t)
 	if output, err := command.CombinedOutput(); err != nil {

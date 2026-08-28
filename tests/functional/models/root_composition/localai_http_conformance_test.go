@@ -28,9 +28,9 @@ import (
 // production operation vertical, registry, or artifact path is introduced.
 func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
 	fixture := characterizationStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericConformanceCaches(t, home)
-	dir := support.ScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
+	dir := characterizationScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
 	server, compatibility := startLocalAIConformanceServer(t, dir, home, fixture)
 
 	matrix := conformance.Build(models.GenericOperationCatalog{})

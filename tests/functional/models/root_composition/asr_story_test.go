@@ -66,18 +66,18 @@ func setupASRStory(t *testing.T) asrStory {
 	if !ok {
 		t.Fatal("built-in catalog did not publish the ASR model definition")
 	}
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericBuiltinModelCache(t, home, modelDefinition.Source)
 	selection, backendBody := fixtureBackendSelection(modelDefinition.Backend)
 	writeGenericBackendCache(t, home, modelDefinition.Backend, selection, backendBody)
 
 	inputBytes := []byte{0x00, 0xff, 0x10, 0x80, 0x7f, 0x01}
-	inputPath := filepath.Join(t.TempDir(), "meeting.wav")
+	inputPath := filepath.Join(characterizationTempDir(t), "meeting.wav")
 	if err := os.WriteFile(inputPath, inputBytes, 0o644); err != nil {
 		t.Fatalf("write ASR input fixture: %v", err)
 	}
-	transcriptPath := filepath.Join(t.TempDir(), "transcript.txt")
-	segmentsPath := filepath.Join(t.TempDir(), "segments.json")
+	transcriptPath := filepath.Join(characterizationTempDir(t), "transcript.txt")
+	segmentsPath := filepath.Join(characterizationTempDir(t), "segments.json")
 	const wantSegments = `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXTURE_SEGMENT"}]`
 
 	received := &models.ASRBackendRequest{}
@@ -105,7 +105,7 @@ func setupASRStory(t *testing.T) asrStory {
 	compatibility := &joinedCompatibilityChecker{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	var backendSelections []serviceedges.ModelBackendArtifactSelectionRequest
-	dir := support.ScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
+	dir := characterizationScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
 	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,

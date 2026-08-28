@@ -35,7 +35,7 @@ func TestModelsPublicRemoveMissingCacheRendersServerDiagnostic(t *testing.T) {
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", "not-cached-model",
 	})
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.WorkingDirectory = characterizationTempDir(t)
 	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatal("Process.Execute(models remove) error = nil, want missing-cache failure")

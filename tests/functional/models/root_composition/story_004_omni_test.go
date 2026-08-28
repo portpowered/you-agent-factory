@@ -79,11 +79,11 @@ func buildCoordinatedOmniEnvironmentWithLauncher(
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	selection := genericLlamaBackendSelection()
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
-	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	promptPath := filepath.Join(dir, "timing.txt")
 	videoPath := filepath.Join(dir, "clip.mp4")
 	inputFiles := map[string][]byte{promptPath: []byte("What happens at 0:30?"), videoPath: []byte("MP4-CLIP")}

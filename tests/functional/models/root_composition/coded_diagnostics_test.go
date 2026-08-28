@@ -90,7 +90,7 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "remove", codedDiagnosticModelName,
 	})
-	remoteInputs.Input.WorkingDirectory = t.TempDir()
+	remoteInputs.Input.WorkingDirectory = characterizationTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelCacheNotFound) {
 		t.Fatalf("remote Process.Execute(models remove) error = %v, want ErrModelCacheNotFound", remoteErr)
@@ -176,7 +176,7 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 	remoteInputs := support.FakeInputs(t.Context(), []string{
 		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
 	})
-	remoteInputs.Input.WorkingDirectory = t.TempDir()
+	remoteInputs.Input.WorkingDirectory = characterizationTempDir(t)
 	remoteErr := process.Execute(remoteInputs.Input)
 	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelNotFound) {
 		t.Fatalf("remote Process.Execute(models inspect) error = %v, want ErrModelNotFound", remoteErr)
@@ -195,13 +195,13 @@ func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
 
 func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedInputs, error) {
 	t.Helper()
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	cacheDirectory := t.TempDir()
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	cacheDirectory := characterizationTempDir(t)
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "remove", codedDiagnosticModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
 	inputs.Input.Env = append(
-		functionalHomeEnvironment(t.TempDir()),
+		functionalHomeEnvironment(characterizationTempDir(t)),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
 	)
 	inputs.Input.WorkingDirectory = factoryDir
@@ -213,11 +213,11 @@ func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedIn
 
 func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedInputs, error) {
 	t.Helper()
-	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	factoryDir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
 	inputsArgs := append([]string{"you"}, flags...)
 	inputsArgs = append(inputsArgs, "models", "inspect", codedDiagnosticUnknownModelName)
 	inputs := support.FakeInputs(t.Context(), inputsArgs)
-	inputs.Input.Env = functionalHomeEnvironment(t.TempDir())
+	inputs.Input.Env = functionalHomeEnvironment(characterizationTempDir(t))
 	inputs.Input.WorkingDirectory = factoryDir
 
 	process := characterizationBuildProcess(t, serviceedges.Edges{})

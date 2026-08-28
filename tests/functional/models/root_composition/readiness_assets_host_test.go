@@ -71,15 +71,15 @@ func TestModelsReadinessAssetsHostActivateThroughRootBuildProcessAfterLifecycle(
 	}))
 	t.Cleanup(modelServer.Close)
 
-	cacheDirectory := t.TempDir()
+	cacheDirectory := characterizationTempDir(t)
 	writeCachedOmniVoiceAssets(t, cacheDirectory)
 
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	assetFiles := functionalModelAssetFileSystem{home: home}
 
-	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
+	dir := characterizationScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(modelServer.URL))
 	environment := append(os.Environ(), runcli.ModelCacheDirEnvironment+"="+cacheDirectory)
 	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
