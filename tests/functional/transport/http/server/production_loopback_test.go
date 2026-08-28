@@ -19,7 +19,6 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -30,8 +29,7 @@ import (
 // HTTP functional tests; this cell reaches the real bind, Serve, and shutdown
 // lifecycle so those host-network branches remain in the functional profile.
 func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
 
 	for _, test := range []struct {
 		name  string
@@ -41,14 +39,26 @@ func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
 		{name: "enabled by opt-in", pprof: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			serverURL := startProductionLoopbackAPIServer(t, dir, test.pprof)
-			assertLiveStatusAndRuntimeDiagnostics(t, serverURL)
+			lifecycleID := "c06-production-diagnostics-disabled"
 			if test.pprof {
-				assertLivePprofHeap(t, serverURL)
-				assertLivePprofDiagnostics(t, serverURL)
+				lifecycleID = "c06-production-diagnostics-enabled"
+			}
+			server := startProductionLoopbackServerWithID(
+				t,
+				factory.factoryDir,
+				test.pprof,
+				lifecycleID,
+				"diagnostics mode changes production listener startup configuration",
+			)
+			assertLiveStatusAndRuntimeDiagnostics(t, server.url)
+			if test.pprof {
+				assertLivePprofHeap(t, server.url)
+				assertLivePprofDiagnostics(t, server.url)
+				server.close(t)
 				return
 			}
-			assertPprofUnavailable(t, serverURL)
+			assertPprofUnavailable(t, server.url)
+			server.close(t)
 		})
 	}
 }
@@ -57,22 +67,35 @@ func TestAPIServerDiagnosticsUseProductionLoopbackStarter(t *testing.T) {
 // delivered server-stop path drains a public long-lived response, returns its
 // serve lifecycle, and leaves the real loopback listener unavailable.
 func TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := startProductionLoopbackServer(t, dir, false)
+	// The stop path mutates the hosted process and must observe a real listener,
+	// active stream termination, and process join in its own lifecycle.
+	factory := scaffoldC06IsolatedFactory(t, startupShutdownTestFactoryConfig())
+	server := startProductionLoopbackServerWithID(
+		t,
+		factory.factoryDir,
+		false,
+		"c06-production-graceful-shutdown",
+		"graceful stop mutates the process and drains its real listener",
+	)
 	session := getFactorySession(t, server.url, factorysessions.DefaultSessionID)
 	stream := support.OpenFactoryResponseEventStreamAt(
 		t,
 		support.SessionResponseEventsURL(server.url, session.Id),
 	)
 
-	stopProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, stopProcess)
+	stopProcess := c06BuildIsolatedProcess(
+		t,
+		"c06-production-stop-caller",
+		"server stop uses an independent root-built caller process",
+		c06IsolationExpectation{},
+		serviceedges.Edges{},
+	)
 	stopContext, cancelStop := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancelStop()
 	stopInputs := support.FakeInputs(stopContext, []string{
 		"you", "--server", server.url, "server", "stop",
 	})
-	stopInputs.Input.WorkingDirectory = dir
+	stopInputs.Input.WorkingDirectory = factory.factoryDir
 	home := t.TempDir()
 	stopInputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 
@@ -84,6 +107,8 @@ func TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle(t *testing.
 			stopInputs.Stderr(),
 		)
 	}
+	stopProcess.markJoined()
+	stopProcess.close(t)
 	if !strings.Contains(stopInputs.Stdout(), "Server stopped:") {
 		t.Fatalf("server stop stdout = %q, want successful stop confirmation", stopInputs.Stdout())
 	}
@@ -105,15 +130,29 @@ func TestAPIServerGracefulShutdownThroughProductionLoopbackLifecycle(t *testing.
 	if err := observer.Wait(t.Context(), server.address, 5*time.Second); err != nil {
 		t.Fatalf("listener stop observation after server stop = %v, want success", err)
 	}
+	server.close(t)
 }
 
 // TestListenerStopObserverReportsBoundedOpenListenerOutcomes proves the
 // observer distinguishes an open listener's deadline from caller cancellation.
+// This is an isolated listener-only witness because the open OS listener and
+// accept goroutine are the behavior under test, not an application process.
 func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen for listener observer: %v", err)
 	}
+	const lifecycleID = "c06-listener-stop-observer"
+	if err := c06IsolatedLifecycle.register(
+		lifecycleID,
+		"the listener observer owns an open OS listener and accept goroutine",
+		c06IsolationExpectation{listener: true, portRelease: true},
+	); err != nil {
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+	c06IsolatedLifecycle.listenerBound(lifecycleID)
+	listenerAddress := listener.Addr().String()
 	acceptDone := make(chan struct{})
 	var acceptedMu sync.Mutex
 	acceptedConnections := make([]net.Conn, 0, 128)
@@ -129,15 +168,23 @@ func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 			acceptedMu.Unlock()
 		}
 	}()
-	defer func() {
-		_ = listener.Close()
+	t.Cleanup(func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close listener observer fixture: %v", err)
+		}
 		acceptedMu.Lock()
 		for _, connection := range acceptedConnections {
 			_ = connection.Close()
 		}
 		acceptedMu.Unlock()
 		<-acceptDone
-	}()
+		c06IsolatedLifecycle.listenerClosed(lifecycleID)
+		if err := rebindC06Listener(listenerAddress); err != nil {
+			t.Errorf("listener observer port cleanup: %v", err)
+			return
+		}
+		c06IsolatedLifecycle.portReleased(lifecycleID)
+	})
 
 	dialContext := func(ctx context.Context, network string, address string) (net.Conn, error) {
 		// A real open listener can transiently reject a probe while the accept
@@ -167,7 +214,7 @@ func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 		dialContext,
 		1*time.Millisecond,
 	)
-	address := listener.Addr().String()
+	address := listenerAddress
 	if err := observer.Wait(context.Background(), address, 100*time.Millisecond); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("open-listener observation error = %v, want context deadline exceeded", err)
 	}
@@ -179,26 +226,22 @@ func TestListenerStopObserverReportsBoundedOpenListenerOutcomes(t *testing.T) {
 	}
 }
 
-func startProductionLoopbackAPIServer(
-	t *testing.T,
-	dir string,
-	pprofEnabled bool,
-) string {
-	t.Helper()
-	return startProductionLoopbackServer(t, dir, pprofEnabled).url
-}
-
 type productionLoopbackServer struct {
-	url     string
-	address string
-	command *support.ProcessCommand
+	url         string
+	address     string
+	command     *support.ProcessCommand
+	process     *c06IsolatedProcess
+	lifecycleID string
+	closeOnce   sync.Once
 }
 
-func startProductionLoopbackServer(
+func startProductionLoopbackServerWithID(
 	t *testing.T,
 	dir string,
 	pprofEnabled bool,
-) productionLoopbackServer {
+	lifecycleID string,
+	reason string,
+) *productionLoopbackServer {
 	t.Helper()
 
 	bound := make(chan platformhttpserver.Binding, 1)
@@ -214,8 +257,10 @@ func startProductionLoopbackServer(
 	edges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("live diagnostics"), nil)
 	edges.APIServerStarter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		c06IsolatedLifecycle.processHosted(lifecycleID)
 		originalOnBound := request.OnBound
 		request.OnBound = func(binding platformhttpserver.Binding) {
+			c06IsolatedLifecycle.listenerBound(lifecycleID)
 			select {
 			case bound <- binding:
 			default:
@@ -227,8 +272,10 @@ func startProductionLoopbackServer(
 		return starter(ctx, request)
 	}
 
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
+	process := c06BuildIsolatedProcess(t, lifecycleID, reason, c06IsolationExpectation{
+		listener:    true,
+		portRelease: true,
+	}, edges)
 	requestedURL := reserveConfiguredLoopbackURL(t)
 	requestedEndpoint, err := url.Parse(requestedURL)
 	if err != nil {
@@ -251,6 +298,14 @@ func startProductionLoopbackServer(
 	home := t.TempDir()
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	command := support.StartProcessCommand(t, process, inputs.Input)
+	server := &productionLoopbackServer{
+		command:     command,
+		process:     process,
+		lifecycleID: lifecycleID,
+	}
+	// The cleanup is registered after StartProcessCommand so it stops the
+	// invocation, closes the root process, and then verifies the listener.
+	t.Cleanup(func() { server.close(t) })
 
 	var binding platformhttpserver.Binding
 	select {
@@ -268,11 +323,41 @@ func startProductionLoopbackServer(
 	support.WaitForStatus(t, serverURL, 15*time.Second, func(status factoryapi.StatusResponse) bool {
 		return status.RuntimeStatus != ""
 	})
-	return productionLoopbackServer{
-		url:     serverURL,
-		address: net.JoinHostPort(binding.Host, strconv.Itoa(binding.Port)),
-		command: command,
+	server.url = serverURL
+	server.address = net.JoinHostPort(binding.Host, strconv.Itoa(binding.Port))
+	return server
+}
+
+func (server *productionLoopbackServer) close(t testing.TB) {
+	if server == nil {
+		return
 	}
+	server.closeOnce.Do(func() {
+		if server.command != nil {
+			server.command.Stop(t)
+			server.process.markJoined()
+		}
+		server.process.close(t)
+		if server.address == "" {
+			return
+		}
+		// This bounded observer is the lifecycle witness: deterministic request
+		// completion cannot replace checking that the OS listener has stopped.
+		observer := platformhttpserver.NewListenerStopObserver(
+			(&net.Dialer{}).DialContext,
+			platformhttpserver.DefaultListenerStopObservationInterval,
+		)
+		if err := observer.Wait(context.Background(), server.address, 5*time.Second); err != nil {
+			t.Errorf("production listener %s stop observation: %v", server.address, err)
+			return
+		}
+		c06IsolatedLifecycle.listenerClosed(server.lifecycleID)
+		if err := assertC06ListenerReleased(server.url); err != nil {
+			t.Errorf("production listener %s cleanup: %v", server.address, err)
+			return
+		}
+		c06IsolatedLifecycle.portReleased(server.lifecycleID)
+	})
 }
 
 func assertLiveStatusAndRuntimeDiagnostics(t *testing.T, serverURL string) {

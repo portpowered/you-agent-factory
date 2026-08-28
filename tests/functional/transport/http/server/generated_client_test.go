@@ -7,15 +7,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/restclient"
@@ -32,22 +30,15 @@ const generatedClientDeadline = 2 * time.Second
 // decoding against the live functional server, use a caller-owned HTTP dependency for
 // public requests, and honor caller-owned cancellation and deadline context bounds.
 func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, generatedClientStreamingRunner{}, nil)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "generated-client-round-trip", dir)
+	server.registerRunner(t, []string{dir}, generatedClientStreamingRunner{})
+	sessionID := server.openSession(t, dir)
 
 	var requests atomic.Int32
 	httpClient := &http.Client{Transport: generatedClientCountingRoundTripper{
 		count: &requests,
-		base:  http.DefaultTransport,
+		base:  server.trackingTransport(http.DefaultTransport),
 	}}
 	adapter, err := restclient.New(server.URL(), httpClient)
 	if err != nil {
@@ -79,7 +70,7 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 	missingCursor := generatedclient.AfterEventId("generated-client-missing-cursor")
 	sessionEvents, err := generatedClient.GetEventsBySessionIdWithResponse(
 		context.Background(),
-		factorysessions.DefaultSessionID,
+		sessionID,
 		&generatedclient.GetEventsBySessionIdParams{AfterEventId: &missingCursor},
 		setGeneratedClientAcceptJSON,
 	)
@@ -96,17 +87,17 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 		t.Fatalf("generated session events outcome = %#v, want documented reconnect outcome", sessionEvents.JSON200)
 	}
 
-	traceID := submitGeneratedClientWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedClientWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("generated-client-status-session"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated client status and session"},
 	})
-	waitForGeneratedClientWorkComplete(t, server.URL(), traceID, generatedClientTestTimeout)
+	waitForGeneratedClientWorkComplete(t, server.URL(), sessionID, traceID, generatedClientTestTimeout)
 
 	t.Run("cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		started, result := startOutstandingGeneratedClientCall(t, server.URL(), ctx)
+		started, result := startOutstandingGeneratedClientCall(t, server, sessionID, ctx)
 		waitForGeneratedClientResponseStart(t, started, result)
 
 		cancel()
@@ -116,7 +107,7 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 	t.Run("deadline", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), generatedClientDeadline)
 		defer cancel()
-		started, result := startOutstandingGeneratedClientCall(t, server.URL(), ctx)
+		started, result := startOutstandingGeneratedClientCall(t, server, sessionID, ctx)
 		waitForGeneratedClientResponseStart(t, started, result)
 
 		assertGeneratedClientContextError(t, result, context.DeadlineExceeded)
@@ -128,16 +119,13 @@ func TestGeneratedClientStatusAndSessionRoundTrip(t *testing.T) {
 // typed failure results with documented HTTP status and error family/code, not
 // opaque transport errors or unstructured response bodies.
 func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "generated-client-errors", dir)
+	httpClient := &http.Client{Transport: server.trackingTransport(http.DefaultTransport)}
 
 	generatedClient, err := generatedclient.NewClientWithResponses(
 		server.URL(),
-		generatedclient.WithHTTPClient(http.DefaultClient),
+		generatedclient.WithHTTPClient(httpClient),
 	)
 	if err != nil {
 		t.Fatalf("construct published generated HTTP client: %v", err)
@@ -165,11 +153,12 @@ func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
 		t.Fatalf("generated API error message = %#v, want documented structured message", failure.JSON404.Message)
 	}
 
+	sessionID := server.openSession(t, dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cancelled, cancelErr := generatedClient.GetFactoryResponseEventsBySessionIdWithResponse(
 		ctx,
-		factorysessions.DefaultSessionID,
+		sessionID,
 		nil,
 	)
 	if cancelled != nil {
@@ -185,23 +174,21 @@ func TestGeneratedClientDecodesRepresentativeStructuredError(t *testing.T) {
 // demonstrating typed success decoding for status and session-visible observations
 // after a representative work submission against the live runtime.
 func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
-	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	defer server.Stop(t)
+	dir := scaffoldC06HTTPFactory(t, startupShutdownTestFactoryConfig())
+	server := c06SharedHTTPServer(t).newScenario(t, "generated-client-schema", dir)
+	server.registerRunner(t, []string{dir}, generatedClientStreamingRunner{})
+	sessionID := server.openSession(t, dir)
+	httpClient := &http.Client{Transport: server.trackingTransport(http.DefaultTransport)}
 
 	generatedClient, err := generatedclient.NewClientWithResponses(
 		server.URL(),
-		generatedclient.WithHTTPClient(http.DefaultClient),
+		generatedclient.WithHTTPClient(httpClient),
 	)
 	if err != nil {
 		t.Fatalf("construct published generated HTTP client: %v", err)
 	}
 
-	traceID := submitGeneratedClientWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedClientWork(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("generated-client-schema-alignment"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated client schema alignment"},
@@ -209,29 +196,23 @@ func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
 	if traceID == "" {
 		t.Fatal("POST /work returned an empty trace_id")
 	}
-	waitForGeneratedClientWorkComplete(t, server.URL(), traceID, generatedClientTestTimeout)
+	waitForGeneratedClientWorkComplete(t, server.URL(), sessionID, traceID, generatedClientTestTimeout)
 
-	status, err := generatedClient.GetStatusWithResponse(context.Background())
-	if err != nil {
-		t.Fatalf("request status through generated HTTP client: %v", err)
+	status := getGeneratedClientJSON[factoryapi.StatusResponse](t, c06SessionWorkURL(server.URL(), sessionID, "/status"))
+	if status.FactoryState == "" || status.RuntimeStatus == "" {
+		t.Fatalf("generated status = %#v, want populated factoryState and runtimeStatus", status)
 	}
-	if status.StatusCode() != http.StatusOK || status.JSON200 == nil {
-		t.Fatalf("generated status response = %#v, want typed 200", status)
+	if status.TotalTokens < 1 {
+		t.Fatalf("generated status total_tokens = %d, want at least 1 after completed work", status.TotalTokens)
 	}
-	if status.JSON200.FactoryState == "" || status.JSON200.RuntimeStatus == "" {
-		t.Fatalf("generated status = %#v, want populated factoryState and runtimeStatus", status.JSON200)
-	}
-	if status.JSON200.TotalTokens < 1 {
-		t.Fatalf("generated status total_tokens = %d, want at least 1 after completed work", status.JSON200.TotalTokens)
-	}
-	if status.JSON200.Categories.Terminal < 1 {
-		t.Fatalf("generated status terminal count = %d, want at least 1 after completed work", status.JSON200.Categories.Terminal)
+	if status.Categories.Terminal < 1 {
+		t.Fatalf("generated status terminal count = %d, want at least 1 after completed work", status.Categories.Terminal)
 	}
 
 	staleCursor := generatedclient.AfterEventId("generated-client-schema-stale-cursor")
 	sessionEvents, err := generatedClient.GetEventsBySessionIdWithResponse(
 		context.Background(),
-		factorysessions.DefaultSessionID,
+		sessionID,
 		&generatedclient.GetEventsBySessionIdParams{AfterEventId: &staleCursor},
 		setGeneratedClientAcceptJSON,
 	)
@@ -248,11 +229,11 @@ func TestGeneratedClientAndServerSchemaStayAligned(t *testing.T) {
 			generatedclient.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE,
 		)
 	}
-	if sessionEvents.JSON200.FactorySessionId != factorysessions.DefaultSessionID {
+	if sessionEvents.JSON200.FactorySessionId != sessionID {
 		t.Fatalf(
 			"generated session events factorySessionId = %q, want %q",
 			sessionEvents.JSON200.FactorySessionId,
-			factorysessions.DefaultSessionID,
+			sessionID,
 		)
 	}
 	if !sessionEvents.JSON200.Retry.OmitAfterEventId {
@@ -280,14 +261,15 @@ type generatedClientCallResult struct {
 
 func startOutstandingGeneratedClientCall(
 	t *testing.T,
-	baseURL string,
+	scenario *c06SharedHTTPScenario,
+	sessionID string,
 	ctx context.Context,
 ) (<-chan struct{}, <-chan generatedClientCallResult) {
 	t.Helper()
 	started := make(chan struct{}, 1)
-	adapter, err := restclient.New(baseURL, &http.Client{Transport: generatedClientResponseStartedRoundTripper{
+	adapter, err := restclient.New(scenario.URL(), &http.Client{Transport: generatedClientResponseStartedRoundTripper{
 		started: started,
-		base:    http.DefaultTransport,
+		base:    scenario.trackingTransport(http.DefaultTransport),
 	}})
 	if err != nil {
 		t.Fatalf("construct generated REST adapter: %v", err)
@@ -295,7 +277,7 @@ func startOutstandingGeneratedClientCall(
 
 	result := make(chan generatedClientCallResult, 1)
 	go func() {
-		response, callErr := adapter.GetFactoryResponseEventsBySessionID(ctx, factorysessions.DefaultSessionID, nil)
+		response, callErr := adapter.GetFactoryResponseEventsBySessionID(ctx, sessionID, nil)
 		result <- generatedClientCallResult{response: response, err: callErr}
 	}()
 	return started, result
@@ -335,7 +317,11 @@ func assertGeneratedClientContextError(
 	}
 }
 
-func submitGeneratedClientWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
+func submitGeneratedClientWork(
+	t *testing.T,
+	baseURL, sessionID string,
+	req factoryapi.SubmitWorkRequest,
+) string {
 	t.Helper()
 	if req.Name == nil || *req.Name == "" {
 		req.Name = stringPtr("generated-client-submit")
@@ -344,9 +330,10 @@ func submitGeneratedClientWork(t *testing.T, baseURL string, req factoryapi.Subm
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work"), "application/json", bytes.NewReader(body))
+	endpoint := c06SessionWorkURL(baseURL, sessionID, "/work")
+	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		t.Fatalf("POST /work: %v", err)
+		t.Fatalf("POST %s: %v", endpoint, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
@@ -359,20 +346,27 @@ func submitGeneratedClientWork(t *testing.T, baseURL string, req factoryapi.Subm
 	return out.TraceId
 }
 
-func waitForGeneratedClientWorkComplete(t *testing.T, baseURL, traceID string, timeout time.Duration) {
+func waitForGeneratedClientWorkComplete(
+	t *testing.T,
+	baseURL, sessionID, traceID string,
+	timeout time.Duration,
+) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		work := getGeneratedClientJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
-		for _, item := range work.Results {
-			if stringPointerValue(item.TraceId) == traceID && generatedClientWorkPlaceID(item) == "task:complete" {
-				return
-			}
+	// The session-scoped status contract is the deterministic public completion
+	// boundary; use it instead of sleeping between Work list observations, then
+	// retain the trace-specific Work assertion on the public HTTP response.
+	support.WaitForSessionTerminalStatus(t, baseURL, sessionID, timeout)
+	work := getGeneratedClientJSON[factoryapi.ListWorkResponse](t, c06SessionWorkURL(baseURL, sessionID, "/work"))
+	for _, item := range work.Results {
+		if stringPointerValue(item.TraceId) == traceID && generatedClientWorkPlaceID(item) == "task:complete" {
+			return
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedClientJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 	t.Fatalf("timed out waiting for trace %q at task:complete; last work response: %#v", traceID, work)
+}
+
+func c06SessionWorkURL(baseURL, sessionID, path string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + path
 }
 
 func getGeneratedClientJSON[T any](t *testing.T, endpoint string) T {

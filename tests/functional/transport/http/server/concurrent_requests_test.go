@@ -14,8 +14,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -27,21 +25,15 @@ import (
 func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
 	dir := scaffoldConcurrentRequestsFactory(t)
 	blocking := newBlockingInvocationRunner()
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, blocking, nil)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
-	defer server.Stop(t)
+	server := c06SharedHTTPServer(t).newScenario(t, "concurrent-session-isolation", dir)
+	server.registerRunner(t, []string{dir}, blocking)
 
-	defaultSession := getFactorySession(t, server.URL(), factorysessions.DefaultSessionID)
-	secondSessionID := openFactorySession(t, server.URL(), dir)
-	if defaultSession.Id == secondSessionID {
-		t.Fatalf("default session id %q equals second session id %q", defaultSession.Id, secondSessionID)
+	firstSessionID := server.openSession(t, dir)
+	secondSessionID := server.openSession(t, dir)
+	if firstSessionID == secondSessionID {
+		t.Fatalf("Factory Session id %q was reused", firstSessionID)
 	}
-	sessionIDs := []string{defaultSession.Id, secondSessionID}
+	sessionIDs := []string{firstSessionID, secondSessionID}
 
 	type invocationHandle struct {
 		cancel context.CancelFunc
@@ -122,19 +114,13 @@ func TestAPIConcurrentSessionRequestsRemainIsolated(t *testing.T) {
 func TestAPICancelledRequestDoesNotCancelUnrelatedSession(t *testing.T) {
 	dir := scaffoldConcurrentRequestsFactory(t)
 	blocking := newBlockingInvocationRunner()
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, blocking, nil)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
-	defer server.Stop(t)
+	server := c06SharedHTTPServer(t).newScenario(t, "cancelled-session-isolation", dir)
+	server.registerRunner(t, []string{dir}, blocking)
 
-	cancelTargetSession := getFactorySession(t, server.URL(), factorysessions.DefaultSessionID)
-	unrelatedSessionID := openFactorySession(t, server.URL(), dir)
-	if cancelTargetSession.Id == unrelatedSessionID {
-		t.Fatalf("cancel target session id %q equals unrelated session id %q", cancelTargetSession.Id, unrelatedSessionID)
+	cancelTargetSessionID := server.openSession(t, dir)
+	unrelatedSessionID := server.openSession(t, dir)
+	if cancelTargetSessionID == unrelatedSessionID {
+		t.Fatalf("cancel target session id %q equals unrelated session id %q", cancelTargetSessionID, unrelatedSessionID)
 	}
 
 	unrelatedBefore := getFactorySession(t, server.URL(), unrelatedSessionID)
@@ -149,7 +135,7 @@ func TestAPICancelledRequestDoesNotCancelUnrelatedSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelledDone := make(chan error, 1)
 	go func() {
-		cancelledDone <- postBlockingInvocation(ctx, server.URL(), cancelTargetSession.Id, blocking)
+		cancelledDone <- postBlockingInvocation(ctx, server.URL(), cancelTargetSessionID, blocking)
 	}()
 
 	select {
@@ -215,32 +201,6 @@ func concurrentRequestsTestConfig() map[string]any {
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
 	}
-}
-
-func openFactorySession(t *testing.T, baseURL, folderPath string) string {
-	t.Helper()
-
-	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: folderPath})
-	if err != nil {
-		t.Fatalf("marshal open factory session request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("POST /factory-sessions: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST /factory-sessions status = %d, want 200", response.StatusCode)
-	}
-	var opened factoryapi.OpenFactorySessionResponse
-	if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
-		t.Fatalf("decode open factory session response: %v", err)
-	}
-	if opened.Session == nil || opened.Session.Id == "" {
-		t.Fatalf("open factory session response = %#v, want session id", opened)
-	}
-	return opened.Session.Id
 }
 
 func getFactorySession(t *testing.T, baseURL, sessionID string) factoryapi.FactorySession {

@@ -16,7 +16,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractinventory"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -51,13 +50,16 @@ const routingArtifactWorkflowSource = `return (async function () {
 
 type routingReachabilityContext struct {
 	t                        *testing.T
-	server                   *support.FunctionalAPIServer
+	scenario                 *c06SharedHTTPScenario
 	baseURL                  string
 	factoryDir               string
 	liveJavaScriptFactoryDir string
 	jsLive                   string
 	durable                  routingDurableSessionContext
 	opened                   string
+	closeTarget              string
+	terminateTarget          string
+	cancelTarget             string
 	workID                   string
 }
 
@@ -70,15 +72,27 @@ type routingDurableSessionContext struct {
 func (ctx *routingReachabilityContext) prepareSessions() {
 	ctx.t.Helper()
 
+	// Durable sessions are historical records used by the artifact/result route
+	// witnesses. The HTTP surface has no durable-session deletion or live-status
+	// lifecycle, so package-process/root teardown owns this record rather than
+	// treating it as a deletable live Factory Session.
 	ctx.durable = startRoutingArtifactDurableSession(ctx.t, ctx.baseURL)
 	ctx.opened = openRoutingFactorySession(ctx.t, ctx.baseURL, ctx.factoryDir)
+	ctx.scenario.trackSession(ctx.t, ctx.opened)
+	ctx.closeTarget = openRoutingFactorySession(ctx.t, ctx.baseURL, ctx.factoryDir)
+	ctx.scenario.trackSession(ctx.t, ctx.closeTarget)
+	ctx.terminateTarget = openRoutingFactorySession(ctx.t, ctx.baseURL, ctx.factoryDir)
+	ctx.scenario.trackSession(ctx.t, ctx.terminateTarget)
+	ctx.cancelTarget = openRoutingFactorySession(ctx.t, ctx.baseURL, ctx.factoryDir)
+	ctx.scenario.trackSession(ctx.t, ctx.cancelTarget)
 	ctx.jsLive = openRoutingLiveJavaScriptFactorySession(ctx.t, ctx.baseURL, ctx.liveJavaScriptFactoryDir)
+	ctx.scenario.trackSession(ctx.t, ctx.jsLive)
 }
 
 func (ctx *routingReachabilityContext) prepareWork() {
 	ctx.t.Helper()
 
-	submitted := support.SubmitDefaultSessionWork(ctx.t, ctx.baseURL, factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitSessionWorkAt(ctx.t, ctx.baseURL, ctx.opened, factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("routing-reachability-work"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "routing reachability"},
@@ -112,9 +126,9 @@ func (ctx *routingReachabilityContext) safeRequest(operation contractinventory.O
 	case "startDurableFactorySessionAsync", "startDurableFactorySessionSync":
 		return newJSONRequest(http.MethodPost, endpoint, map[string]any{})
 	case "closeFactorySession":
-		return http.NewRequest(http.MethodDelete, sessionEndpoint(ctx.baseURL, ctx.opened), nil)
+		return http.NewRequest(http.MethodDelete, sessionEndpoint(ctx.baseURL, ctx.closeTarget), nil)
 	case "submitWorkBySessionId":
-		return newJSONRequest(http.MethodPost, sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/work", factoryapi.SubmitWorkRequest{
+		return newJSONRequest(http.MethodPost, sessionEndpoint(ctx.baseURL, ctx.opened)+"/work", factoryapi.SubmitWorkRequest{
 			Name:         stringPtr("routing-reachability-submit"),
 			WorkTypeName: "task",
 			Payload:      map[string]string{"title": "routing reachability submit"},
@@ -122,21 +136,21 @@ func (ctx *routingReachabilityContext) safeRequest(operation contractinventory.O
 	case "upsertWorkRequestBySessionId":
 		return newJSONRequest(
 			http.MethodPut,
-			sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/work-requests/routing-reachability",
+			sessionEndpoint(ctx.baseURL, ctx.opened)+"/work-requests/routing-reachability",
 			map[string]any{},
 		)
 	case "stageSubmitWorkFileBySessionId":
-		return newJSONRequest(http.MethodPost, sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/work/staged-files", map[string]any{})
+		return newJSONRequest(http.MethodPost, sessionEndpoint(ctx.baseURL, ctx.opened)+"/work/staged-files", map[string]any{})
 	case "moveWorkBySessionId":
 		return newJSONRequest(
 			http.MethodPost,
-			sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/work/"+url.PathEscape(ctx.workID)+"/move",
+			sessionEndpoint(ctx.baseURL, ctx.opened)+"/work/"+url.PathEscape(ctx.workID)+"/move",
 			map[string]any{},
 		)
 	case "saveCurrentFactoryBySessionId":
-		return newJSONRequest(http.MethodPut, sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/factory", map[string]any{})
+		return newJSONRequest(http.MethodPut, sessionEndpoint(ctx.baseURL, ctx.opened)+"/factory", map[string]any{})
 	case "invokeFactorySessionBySessionId":
-		return newJSONRequest(http.MethodPost, sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/invocations", map[string]any{})
+		return newJSONRequest(http.MethodPost, sessionEndpoint(ctx.baseURL, ctx.opened)+"/invocations", map[string]any{})
 	case "pauseFactorySession", "resumeFactorySession", "terminateFactorySession", "cancelFactorySession", "approveFactorySession",
 		"interruptFactorySessionDispatch", "retryFactorySessionDispatch":
 		endpoint, err := sessionScopedEndpoint(ctx, operation)
@@ -151,7 +165,7 @@ func (ctx *routingReachabilityContext) safeRequest(operation contractinventory.O
 	case "validateCurrentFactoryWorkstationPromptTemplateBySessionId":
 		return newJSONRequest(
 			http.MethodPost,
-			sessionEndpoint(ctx.baseURL, factorysessions.DefaultSessionID)+"/factory/workstations/"+routingReachabilityWorkstation+"/prompt-template-validation",
+			sessionEndpoint(ctx.baseURL, ctx.opened)+"/factory/workstations/"+routingReachabilityWorkstation+"/prompt-template-validation",
 			map[string]any{},
 		)
 	case "invokeModel":
@@ -222,9 +236,17 @@ func (ctx *routingReachabilityContext) resolveOperationPath(operation contractin
 
 func (ctx *routingReachabilityContext) sessionIDFor(operation contractinventory.Operation) string {
 	switch operation.OperationID {
-	case "closeFactorySession", "terminateFactorySession", "cancelFactorySession":
-		if ctx.opened != "" {
-			return ctx.opened
+	case "closeFactorySession":
+		if ctx.closeTarget != "" {
+			return ctx.closeTarget
+		}
+	case "terminateFactorySession":
+		if ctx.terminateTarget != "" {
+			return ctx.terminateTarget
+		}
+	case "cancelFactorySession":
+		if ctx.cancelTarget != "" {
+			return ctx.cancelTarget
 		}
 	case "getFactorySessionResult", "getFactorySessionPartialResult":
 		if ctx.jsLive != "" {
@@ -241,7 +263,10 @@ func (ctx *routingReachabilityContext) sessionIDFor(operation contractinventory.
 			return ctx.durable.sessionID
 		}
 	}
-	return factorysessions.DefaultSessionID
+	if ctx.opened != "" {
+		return ctx.opened
+	}
+	return ""
 }
 
 func sessionScopedEndpoint(ctx *routingReachabilityContext, operation contractinventory.Operation) (string, error) {

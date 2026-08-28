@@ -6,8 +6,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -28,24 +26,27 @@ const (
 // reported as success.
 func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t *testing.T) {
 	t.Run("terminal success keeps ordered typed parts", func(t *testing.T) {
-		server := startWorkTerminalResponseServer(
-			t,
-			support.NewStaticSuccessCommandRunner(workTerminalResponseAccepted),
-		)
-		workID := submitOrderedTypedWork(t, server.URL())
+		dir := scaffoldC06HTTPFactory(t, workTerminalResponseFactoryConfig())
+		fixture := c06SharedHTTPServer(t)
+		scenario := fixture.newScenario(t, "work-terminal-success", dir)
+		scenario.registerRunner(t, []string{dir}, support.NewStaticSuccessCommandRunner(workTerminalResponseAccepted))
+		sessionID := scenario.openSession(t, dir)
+		workID := submitOrderedTypedWork(t, scenario.URL(), sessionID)
 
-		status := support.WaitForTerminalStatus(t, server.URL(), workTerminalResponseWaitLimit)
+		status := support.WaitForSessionTerminalStatus(t, scenario.URL(), sessionID, workTerminalResponseWaitLimit)
 		if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
 			t.Fatalf("status categories = %+v, want one terminal and zero failed", status.Categories)
 		}
+		assertTerminalWorkFactoryEvent(t, scenario.URL(), sessionID, workID, factoryapi.WorkOutcomeAccepted)
+		assertScenarioRunnerCalled(t, scenario)
 
-		listed := support.ListDefaultSessionWork(t, server.URL())
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, c06SessionWorkURL(scenario.URL(), sessionID, "/work"))
 		if len(listed.Results) != 1 {
 			t.Fatalf("listed work = %#v, want exactly one work item", listed.Results)
 		}
 		assertOrderedTypedTerminalContent(t, listed.Results[0].Content, "GET /work content")
 
-		terminal := support.GetDefaultSessionWorkByID(t, server.URL(), workID)
+		terminal := support.GetJSON[factoryapi.Work](t, c06SessionWorkURL(scenario.URL(), sessionID, "/work/"+workID))
 		assertOrderedTypedTerminalContent(t, terminal.Content, "GET /work/{id} content")
 		if terminal.State == nil || terminal.State.Type != factoryapi.WorkStateTypeTERMINAL {
 			t.Fatalf("terminal work state = %#v, want a TERMINAL state type", terminal.State)
@@ -53,20 +54,26 @@ func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t
 	})
 
 	t.Run("terminal failure is not reported as success", func(t *testing.T) {
-		server := startWorkTerminalResponseServer(t, support.NewShapedProviderCommandRunner(
+		dir := scaffoldC06HTTPFactory(t, workTerminalResponseFactoryConfig())
+		fixture := c06SharedHTTPServer(t)
+		scenario := fixture.newScenario(t, "work-terminal-failure", dir)
+		scenario.registerRunner(t, []string{dir}, support.NewShapedProviderCommandRunner(
 			platformprocess.CommandResult{
 				ExitCode: 1,
 				Stderr:   []byte("provider refused the ordered content dispatch"),
 			},
 		))
-		workID := submitOrderedTypedWork(t, server.URL())
+		sessionID := scenario.openSession(t, dir)
+		workID := submitOrderedTypedWork(t, scenario.URL(), sessionID)
 
-		status := support.WaitForTerminalStatus(t, server.URL(), workTerminalResponseWaitLimit)
+		status := support.WaitForSessionTerminalStatus(t, scenario.URL(), sessionID, workTerminalResponseWaitLimit)
 		if status.Categories.Failed != 1 || status.Categories.Terminal != 0 {
 			t.Fatalf("status categories = %+v, want one failed and zero terminal", status.Categories)
 		}
+		assertTerminalWorkFactoryEvent(t, scenario.URL(), sessionID, workID, factoryapi.WorkOutcomeFailed)
+		assertScenarioRunnerCalled(t, scenario)
 
-		failed := support.GetDefaultSessionWorkByID(t, server.URL(), workID)
+		failed := support.GetJSON[factoryapi.Work](t, c06SessionWorkURL(scenario.URL(), sessionID, "/work/"+workID))
 		if failed.State == nil || failed.State.Type != factoryapi.WorkStateTypeFAILED {
 			t.Fatalf("work state after provider failure = %#v, want a FAILED state type", failed.State)
 		}
@@ -75,6 +82,52 @@ func TestWorkTerminalResponsePreservesOrderedTypedContentThroughPublicBoundary(t
 		// than content loss.
 		assertOrderedTypedTerminalContent(t, failed.Content, "failed GET /work/{id} content")
 	})
+}
+
+func assertScenarioRunnerCalled(t *testing.T, scenario *c06SharedHTTPScenario) {
+	t.Helper()
+	if scenario == nil || scenario.route == nil {
+		t.Fatal("c06 scenario has no controlled provider route")
+	}
+	if calls := scenario.route.calls.Load(); calls == 0 {
+		t.Fatal("c06 controlled provider runner received no calls")
+	}
+}
+
+func assertTerminalWorkFactoryEvent(
+	t *testing.T,
+	baseURL, sessionID, workID string,
+	targetOutcome factoryapi.WorkOutcome,
+) {
+	t.Helper()
+
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse ||
+			event.Context.SessionId == nil ||
+			*event.Context.SessionId != sessionID ||
+			event.Context.WorkIds == nil {
+			continue
+		}
+		containsWork := false
+		for _, eventWorkID := range *event.Context.WorkIds {
+			if eventWorkID == workID {
+				containsWork = true
+				break
+			}
+		}
+		if !containsWork {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode terminal DISPATCH_RESPONSE event %q: %v", event.Id, err)
+		}
+		if payload.Outcome == targetOutcome {
+			return
+		}
+	}
+	t.Fatalf("Factory Event stream has no %s DISPATCH_RESPONSE for Work %q in session %q", targetOutcome, workID, sessionID)
 }
 
 func assertOrderedTypedTerminalContent(t *testing.T, content *factoryapi.WorkContent, surface string) {
@@ -119,10 +172,10 @@ func assertOrderedTypedTerminalContent(t *testing.T, content *factoryapi.WorkCon
 // submitOrderedTypedWork submits one Work through the public session-scoped
 // admission route with a text content part followed by a JSON content part and
 // returns the public Work identity the submission was accepted under.
-func submitOrderedTypedWork(t *testing.T, baseURL string) string {
+func submitOrderedTypedWork(t *testing.T, baseURL, sessionID string) string {
 	t.Helper()
 
-	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+	submitted := support.SubmitSessionWorkAt(t, baseURL, sessionID, factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task",
 		Content:      workTerminalOrderedTypedContent(t),
 	})
@@ -133,30 +186,6 @@ func submitOrderedTypedWork(t *testing.T, baseURL string) string {
 		t.Fatalf("submit work response = %#v, want a public work identity", submitted)
 	}
 	return *submitted.WorkId
-}
-
-func startWorkTerminalResponseServer(
-	t *testing.T,
-	runner platformprocess.CommandRunner,
-) *support.FunctionalAPIServer {
-	t.Helper()
-
-	dir := support.ScaffoldFactory(t, workTerminalResponseFactoryConfig())
-	support.WriteAgentConfig(
-		t,
-		dir,
-		"worker-a",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-	)
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     edges,
-	})
-	t.Cleanup(func() { server.Stop(t) })
-	return server
 }
 
 // workTerminalResponseFactoryConfig authors PRESERVE_INPUT propagation so the
