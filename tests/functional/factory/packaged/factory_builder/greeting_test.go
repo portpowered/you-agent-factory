@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -57,12 +59,86 @@ func (runner *greetingCommandRunner) snapshot() (routing int, help, build []stri
 
 func TestFactoryBuilder(t *testing.T) {
 	fixture := newFactoryBuilderSharedFixture(t)
+	// The shared host keeps the production application alive while each child
+	// uses its own explicit session. The public CLI has no selector for an
+	// already-open live session, so session invocations use the API-owned
+	// invocation contract below while Builder-issued customer commands still
+	// use Process.Execute.
+	fixture.prepareExistingInvalidScenario(t)
+	fixture.startServer(t)
 	t.Run("TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding", func(t *testing.T) {
 		testFactoryBuilderVagueFirstTurnAnswersWithoutBuilding(t, fixture)
 	})
 	t.Run("TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing", func(t *testing.T) {
 		testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t, fixture)
 	})
+	t.Run("TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory", func(t *testing.T) {
+		testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t, fixture)
+	})
+	t.Run("TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory", func(t *testing.T) {
+		testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t, fixture)
+	})
+	t.Run("TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation", func(t *testing.T) {
+		testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t, fixture)
+	})
+	// Close the explicit sessions before releasing the host. This leaves the
+	// reusable process available for the installed-artifact CLI checks without
+	// creating a second process or API server.
+	fixture.closeAllScenarios(t)
+	runtimeArtifacts, isolatedRows := fixture.assertDurableSessionsClean(t)
+	fixture.stopServer(t)
+	fixture.assertInstalledArtifacts(t)
+	fixture.removeAllScenarioRoots(t)
+	fixture.lifecycle.assertClean(t, runtimeArtifacts, isolatedRows)
+}
+
+func (fixture *factoryBuilderSharedFixture) prepareExistingInvalidScenario(t *testing.T) {
+	t.Helper()
+	runner := newInvalidCandidateRunner(invalidFactoryExistingName)
+	scenario := fixture.newScenario(t, runner)
+	runner.process = fixture.process
+	runner.environment = scenario.environment
+	runner.operatorRoot = scenario.operatorRoot
+	installedPath := filepath.Join(scenario.operatorRoot, invalidFactoryExistingName)
+	installExistingGraphFactory(t, fixture.process, scenario.environment, scenario.workingDirectory, runner.operatorRoot, invalidFactoryExistingName)
+	assertInstalledGraphFactoryRuns(t, scenario, installedPath)
+	if got := runner.InstalledFactoryCallCount(); got != 1 {
+		t.Fatalf("existing Factory setup provider command call count = %d, want one baseline invocation", got)
+	}
+	scenario.installedKind = "existing-invalid"
+	scenario.installedPath = installedPath
+	scenario.existingBefore = readInstalledFactoryConfig(t, installedPath)
+	fixture.invalidExistingScenario = scenario
+}
+
+func (fixture *factoryBuilderSharedFixture) assertInstalledArtifacts(t testing.TB) {
+	t.Helper()
+	for _, scenario := range fixture.scenarios {
+		switch scenario.installedKind {
+		case "graph":
+			assertInstalledGraphFactory(t, fixture.process, scenario.environment, scenario.installedPath, scenario.runner.operatorRoot)
+			assertInstalledGraphFactoryRuns(t, scenario, scenario.installedPath)
+			if got := scenario.runner.InstalledFactoryCallCount(); got != 1 {
+				t.Fatalf("installed Graph Factory provider command call count = %d, want one customer invocation", got)
+			}
+		case "javascript":
+			assertInstalledJavaScriptFactory(t, fixture.process, scenario.environment, scenario.installedPath, scenario.runner.operatorRoot)
+			assertInstalledJavaScriptFactoryRuns(t, scenario, scenario.installedPath)
+			if got := scenario.runner.InstalledFactoryCallCount(); got != 2 {
+				t.Fatalf("installed JavaScript Factory provider command call count = %d, want two intended analysis calls", got)
+			}
+		case "existing-invalid":
+			after := readInstalledFactoryConfig(t, scenario.installedPath)
+			if !bytes.Equal(scenario.existingBefore, after) {
+				t.Fatalf("installed Factory changed after rejected candidate\nbefore:\n%s\nafter:\n%s", scenario.existingBefore, after)
+			}
+			assertInstalledGraphFactoryRuns(t, scenario, scenario.installedPath)
+		default:
+			if scenario.installedKind != "" {
+				t.Fatalf("unknown installed Factory assertion kind %q", scenario.installedKind)
+			}
+		}
+	}
 }
 
 // TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding proves problems.md
@@ -132,24 +208,42 @@ func invokeFactoryBuilder(
 	args map[string]any,
 ) factoryapi.InvocationResponse {
 	t.Helper()
-	requestID := fmt.Sprintf("factory-builder-greeting-%d", scenario.fixture.nextRequestID())
+	return invokeFactorySession(t, scenario, args)
+}
+
+func invokeFactorySession(
+	t *testing.T,
+	scenario *factoryBuilderScenario,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	requestID := fmt.Sprintf("factory-builder-session-%d", scenario.fixture.nextRequestID())
 	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
 	if err != nil {
-		t.Fatalf("marshal Factory Builder invocation: %v", err)
+		t.Fatalf("marshal Factory Session invocation: %v", err)
 	}
 	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
 		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/invocations"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
-		t.Fatalf("POST Factory Builder invocation: %v", err)
+		t.Fatalf("build Factory Session invocation request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST Factory Session invocation: %v", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST Factory Builder invocation status = %d", response.StatusCode)
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST Factory Session invocation status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var decoded factoryapi.InvocationResponse
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode Factory Builder invocation: %v", err)
+		t.Fatalf("decode Factory Session invocation: %v", err)
+	}
+	if err := scenario.fixture.recordInvocationRequestID(decoded.RequestId); err != nil {
+		t.Fatalf("Factory Builder invocation request ID: %v", err)
 	}
 	return decoded
 }
