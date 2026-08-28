@@ -2,8 +2,10 @@
 
 ## Environment and artifact
 
-- Commit/build identifier: `cbd175dd74b98776c8fb284ff35975df41d44a6f`; all
-  runtime checks below ran from detached clean worktrees at this exact head.
+- Validated source commit: `790f897e8dbfb6bec813bb4fcf79fdd9af19fb0e`; all
+  runtime checks below ran from a detached clean worktree at this exact code
+  head. This report refresh is documentation-only and does not change that
+  validated source.
 - Environment and configuration: Windows `10.0.26100`, `go1.25.0
   windows/amd64`, PowerShell `7.6.5`, repository `go.mod`, no remote or paid
   provider credentials used.
@@ -21,13 +23,13 @@
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
 | Final executable denominator | PASS | Clean checkout `go test -list '^Test'` for lifecycle, routing, and chat reported 12 + 1 + 25 = 38 top-level tests. The exact names remain in the c07 characterization artifact. | Whole-project denominator and source-plan full-suite results remain governing-project work. |
-| Package behavior and cleanup | PASS | Clean checkout `go test -count=1 -timeout=30m` passed for all three packages. The verbose count-one census reported zero residue for every owned resource class. | Remote provider behavior and crash/restart cleanup. |
-| Repeat-safe teardown | PASS | Clean checkout `go test -count=3 -timeout=30m` passed for lifecycle, routing, and chat; all three package bodies completed on every repeat. | Host-wide resources outside the package-owned census. |
-| Supported race paths | PASS | Lifecycle supported race passed; routing passed on one bounded rerun after a transient first attempt; full supported chat race passed. No source change was made for the rerun. | Unsupported race-prohibitive paths and remote dependencies. |
+| Package behavior and cleanup | PASS | Clean checkout `go test -count=1 -timeout=30m` passed for all three packages: lifecycle `4.717s`, routing `1.625s`, and chat `23.981s`. The verbose count-one census reported zero residue for every owned resource class. | Remote provider behavior and crash/restart cleanup. |
+| Repeat-safe teardown | PASS | Clean checkout `go test -count=3 -timeout=30m` passed for lifecycle, routing, and chat at `26.647s/3.814s/70.280s`; all three package bodies completed on every repeat. | Host-wide resources outside the package-owned census. |
+| Supported race paths | PASS | Review-follow-up clean-room race commands passed for lifecycle `9.396s`, routing `3.068s`, and full supported chat `59.558s`. No source change was made for any bounded rerun. | Unsupported race-prohibitive paths and remote dependencies. |
 | Functional-test construction policy | PASS | Clean checkout `make test-lane-audit` passed and reported `contract=8 functional=140 integration=10 maintenance=106 release=1 stress=1 unit=446`. | CI-only policy enforcement on a future head. |
 | Diff hygiene | PASS | Clean detached checkout `git diff --check` passed; the final tracked diff is checked again before commit. | Review-owned merge/conflict state. |
-| Performance direction | PASS (directional) | Accepted topology remains measurable: lifecycle uses 2 root processes for 12 tests, routing uses 1 root process for 16 nested scenarios, and chat uses shared cohorts plus 24 owned processes for 25 top-level tests. Clean package results were lifecycle/routing/chat `3.892s/1.307s/21.187s` at count one and `15.080s/3.674s/58.863s` at count three. | Local Windows timing is noisy and has no portable threshold; REV-CI-001 must provide the same-head package timing verdict. |
-| VAL-001 clean-room journey | PASS | Detached clean worktrees had empty status before removal; discovery, repeats, supported races, policy audit, diff check, public witnesses, and final censuses passed. | Remote availability, paid behavior, and restart semantics. |
+| Performance direction | PASS (directional) | Accepted topology remains measurable: lifecycle uses 2 root processes for 12 tests, routing uses 1 root process for 16 nested scenarios, and chat uses shared cohorts plus 24 owned processes for 25 top-level tests. Review-follow-up clean package results were lifecycle/routing/chat `4.717s/1.625s/23.981s` at count one and `26.647s/3.814s/70.280s` at count three. | Local Windows timing is noisy and has no portable threshold; REV-CI-001 must provide the same-head package timing verdict. |
+| VAL-001 clean-room journey | PASS | The detached clean worktree had empty status before removal; discovery, repeats, supported races, policy audit, diff check, public witnesses, final censuses, and the exact full-suite rerun passed. | Remote availability, paid behavior, and restart semantics. |
 | Implementation-stage delivery | PENDING HANDOFF | This report is the pre-push validation artifact. Final head push, open PR, required CI start, and review feedback state are recorded at handoff. | Review owns terminal CI, conflicts, and merge. |
 
 ## Denominator
@@ -37,7 +39,7 @@ The clean-room discovery commands were:
 ```text
 go test -list '^Test' ./tests/functional/sessions/lifecycle
 go test -list '^Test' ./tests/functional/work/routing
-go test -list '^Test' ./tests/functional/chat_sessions/root_composition
+go test -list '^Test' ./tests/functional/sessions/chat_sessions/root_composition
 ```
 
 The observed top-level denominator was exactly 38:
@@ -46,12 +48,14 @@ The observed top-level denominator was exactly 38:
 | --- | ---: |
 | `./tests/functional/sessions/lifecycle` | 12 |
 | `./tests/functional/work/routing` | 1 |
-| `./tests/functional/chat_sessions/root_composition` | 25 |
+| `./tests/functional/sessions/chat_sessions/root_composition` | 25 |
 | **Total** | **38** |
 
 The routing top-level test retains 16 nested scenarios, and the chat package
-retains the 25 names listed in the characterization artifact. No test was
-added, removed, renamed, or moved by this lane's cleanup work.
+retains the 25 names listed in the characterization artifact. The review
+correction relocated the existing Chat root-composition package under the
+approved `sessions` functional domain; no test was added, removed, or renamed,
+and test behavior remained unchanged.
 
 ## Customer journey
 
@@ -64,10 +68,10 @@ added, removed, renamed, or moved by this lane's cleanup work.
    ```text
    go test -count=1 -timeout=30m ./tests/functional/sessions/lifecycle
    go test -count=1 -timeout=30m ./tests/functional/work/routing
-   go test -count=1 -timeout=30m ./tests/functional/chat_sessions/root_composition
+   go test -count=1 -timeout=30m ./tests/functional/sessions/chat_sessions/root_composition
    go test -count=3 -timeout=30m ./tests/functional/sessions/lifecycle
    go test -count=3 -timeout=30m ./tests/functional/work/routing
-   go test -count=3 -timeout=30m ./tests/functional/chat_sessions/root_composition
+   go test -count=3 -timeout=30m ./tests/functional/sessions/chat_sessions/root_composition
    ```
 
 3. The final verbose count-one run exposed the package-local cleanup evidence:
@@ -83,6 +87,11 @@ added, removed, renamed, or moved by this lane's cleanup work.
    lineage, dispatch, rejection, failure, capacity, ordering, and replay;
    and ACP Chat Session turns, target selection, errors, streams, usage,
    child attribution, duplicate suppression, and retained replay.
+5. The exact clean-room `make test` rerun exited `0` with 146 passing tests,
+   zero failures, and one supported environment skip. An earlier full-suite
+   attempt had one unrelated local-real Git fixture assertion; its focused
+   replay passed all 30 tests in that file, and the immediate exact rerun
+   passed. No source change was made for either rerun.
 
 ## Cross-task integration and usability
 
@@ -102,10 +111,9 @@ added, removed, renamed, or moved by this lane's cleanup work.
 
 ## Performance and optimization follow-up
 
-The local Go package times are directional only. The count-one package results
-were lifecycle `3.892s`, routing `1.307s`, and chat `21.187s`; count three
-reported `15.080s`, `3.674s`, and `58.863s`. The verbose census pass reported
-chat `92.180s`, demonstrating output and host sensitivity. These values do not
+The local Go package times are directional only. The review-follow-up count-one
+package results were lifecycle `4.717s`, routing `1.625s`, and chat `23.981s`;
+count three reported `26.647s`, `3.814s`, and `70.280s`. These values do not
 establish a portable timing threshold and are not used to overrule the accepted
 topology.
 
@@ -122,6 +130,7 @@ performance verdict.
 | --- | --- | --- | --- | --- | --- |
 | C07-F001 | non-blocking, bounded rerun passed | `go test -race -count=1 -timeout=30m -run=^TestSharedProcessWorkRouting$ ./tests/functional/work/routing` from a clean detached worktree | The supported race path exits `0` and reports a clean census. | The first bounded attempt exited `1` with `race detected during execution of test`; its final census still closed 16/16 sessions, roots, paths, readers, and 18/18 routes with zero active calls. One immediate rerun of the same command exited `0` with no race diagnostic and the same clean behavior. No source was changed. | First attempt and rerun output; prior story-003 focused race evidence also passed. If CI reproduces the failure, review should treat it as blocking rather than infer a pass from this rerun. |
 | C07-F002 | informational | Package runs exercise fixture discovery against transient child directories. | Existing diagnostics may be emitted without changing customer-visible behavior. | Routing emitted the known `logicaltarget/discovery.go` missing-root diagnostics; all public assertions and cleanup censuses passed. No shared-support defect was localized and no protected support file was edited. | Existing characterization note and clean package output. |
+| C07-F003 | non-blocking, reproduced cleanly on rerun | Exact clean-room `make test` at the validated source commit | The repository suite exits `0`. | The first full attempt had one unrelated local-real Git fixture assertion; the focused replay passed all 30 tests in that file, and the immediate exact full-suite rerun exited `0` with 146 passes, 0 failures, and 1 supported skip. No source changed between runs. | Clean-room command output from the validated source commit; review should use the final rerun result. |
 
 ## Verdict
 
