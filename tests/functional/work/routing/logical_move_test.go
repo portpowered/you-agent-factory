@@ -4,36 +4,120 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	workservice "github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const logicalMoveRouterWorkstation = "router"
 
-// TestLogicalMoveCompletesWithoutWorkerDispatch proves that Work submitted into
+type workRoutingScenarioCase struct {
+	name string
+	run  func(*testing.T)
+}
+
+// TestSharedProcessWorkRouting establishes the logical-move executable spine.
+// Independent top-level groups run concurrently after fixture construction;
+// each child owns one explicit Factory Session while the package fixture keeps
+// the root-built service-mode process and controlled command edge shared.
+func TestSharedProcessWorkRouting(t *testing.T) {
+	fixture := ensureWorkRoutingPackageFixture(t)
+
+	runWorkRoutingScenarioCases(t, []workRoutingScenarioCase{
+		{
+			name: "LogicalMove/CompletesWithoutWorkerDispatch",
+			run:  func(t *testing.T) { runLogicalMoveCompletesWithoutWorkerDispatch(t, fixture) },
+		},
+		{
+			name: "LogicalMove/PreservesWorkPayloadAndLineage",
+			run:  func(t *testing.T) { runLogicalMovePreservesWorkPayloadAndLineage(t, fixture) },
+		},
+		{
+			name: "LogicalMove/MultipleOutputsCreatesEveryExpectedWork",
+			run:  func(t *testing.T) { runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t, fixture) },
+		},
+		{
+			name: "ClassifierSuccess/RoutesEveryKnownDecision",
+			run:  func(t *testing.T) { runClassifierRoutesEveryKnownDecision(t, fixture) },
+		},
+		{
+			name: "ClassifierFanout/PreservesPayload",
+			run:  func(t *testing.T) { runClassifierMultiOutputPreservesPayload(t, fixture) },
+		},
+		{
+			name: "RoutingGuard/SelectorFailureClosesSession",
+			run:  func(t *testing.T) { runClassifierRoutingSelectorGuard(t, fixture) },
+		},
+		{
+			name: "ClassifierFailure/UnknownAndMalformedDecision",
+			run:  func(t *testing.T) { runClassifierUnknownAndMalformedDecisionFailures(t, fixture) },
+		},
+		{
+			name: "ClassifierFailure/ReworkFailureTerminatesWithoutCompletion",
+			run:  func(t *testing.T) { runClassifierReworkFailureTerminatesWithoutCompletion(t, fixture) },
+		},
+		{
+			name: "ClassifierRejection/RoutesToFailedTerminal",
+			run:  func(t *testing.T) { runClassifierRejectionWithoutArcsRoutesToFailedTerminal(t, fixture) },
+		},
+		{
+			name: "ClassifierRejection/RecordsDispatchFeedback",
+			run:  func(t *testing.T) { runClassifierRejectionWithoutArcsRecordsDispatchFeedback(t, fixture) },
+		},
+		{
+			name: "ClassifierRejection/ReleasesResourcesForSubsequentWork",
+			run:  func(t *testing.T) { runClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t, fixture) },
+		},
+	})
+}
+
+func runWorkRoutingScenarioCases(t *testing.T, cases []workRoutingScenarioCase) {
+	t.Helper()
+	jobs := make(chan workRoutingScenarioCase)
+	var workers sync.WaitGroup
+	workerCount := routingScenarioConcurrency
+	if len(cases) < workerCount {
+		workerCount = len(cases)
+	}
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for scenario := range jobs {
+				t.Run(scenario.name, scenario.run)
+			}
+		}()
+	}
+	for _, scenario := range cases {
+		jobs <- scenario
+	}
+	close(jobs)
+	workers.Wait()
+}
+
+// runLogicalMoveCompletesWithoutWorkerDispatch proves that Work submitted into
 // a LOGICAL_MOVE workstation advances to the authored terminal output state
 // without any worker or provider dispatch attributable to that routing step.
-func TestLogicalMoveCompletesWithoutWorkerDispatch(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_dir"))
-	configureLogicalMoveWorkstation(t, dir, logicalMoveRouterWorkstation)
-	testutil.WriteSeedFile(t, dir, "task", []byte("my-payload"))
+func runLogicalMoveCompletesWithoutWorkerDispatch(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	runner := newWorkRoutingScenarioCommandRunner("logical-move-completes", nil, nil)
+	scenario := fixture.newScenario(t, "logical-move-completes", "logical_move_dir", runner)
+	configureLogicalMoveWorkstation(t, scenario.factoryDir, logicalMoveRouterWorkstation)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, "logical-move-completes", "my-payload")
+	scenario.open(t)
 
-	provider := testutil.NewMockProvider()
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
-
-	if provider.CallCount() != 0 {
-		t.Fatalf("provider call count = %d, want 0 for workerless logical move", provider.CallCount())
+	_, listed, events := scenario.observe(t, 10*time.Second)
+	if got := runner.callCount(); got != 0 {
+		t.Fatalf("provider command count = %d, want 0 for workerless logical move", got)
 	}
 	assertWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "done"): 1,
@@ -47,68 +131,94 @@ func TestLogicalMoveCompletesWithoutWorkerDispatch(t *testing.T) {
 	)
 }
 
-// TestLogicalMovePreservesWorkPayloadAndLineage proves that Work payload and
+// runLogicalMovePreservesWorkPayloadAndLineage proves that Work payload and
 // observable lineage identity survive a LOGICAL_MOVE routing step so the next
 // worker-backed workstation still receives the same customer content and Work ID.
-func TestLogicalMovePreservesWorkPayloadAndLineage(t *testing.T) {
-	const wantPayload = "preserved-payload"
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_pipeline_dir"))
-	configureLogicalMoveWorkstation(t, dir, logicalMoveRouterWorkstation)
-	testutil.WriteSeedFile(t, dir, "task", []byte(wantPayload))
-
-	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "done COMPLETE"})
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
+func runLogicalMovePreservesWorkPayloadAndLineage(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	const (
+		wantPayload = "logical-move-pipeline-payload"
+		wantWorkID  = "logical-move-pipeline-work"
 	)
+	runner := newWorkRoutingScenarioCommandRunner(
+		"logical-move-pipeline",
+		[]platformprocess.CommandResult{{Stdout: support.CodexSuccessStdout("done COMPLETE")}},
+		nil,
+	)
+	scenario := fixture.newScenario(t, "logical-move-pipeline", "logical_move_pipeline_dir", runner)
+	configureLogicalMoveWorkstation(t, scenario.factoryDir, logicalMoveRouterWorkstation)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, wantWorkID, wantPayload)
+	scenario.open(t)
 
+	_, listed, events := scenario.observe(t, 10*time.Second)
 	assertWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "done"):    1,
 		support.WorkCustomerLocation("task", "init"):    0,
 		support.WorkCustomerLocation("task", "staging"): 0,
 	})
 
-	calls := provider.Calls()
+	calls := runner.requestsSnapshot()
 	if len(calls) != 1 {
-		t.Fatalf("provider call count = %d, want 1 worker dispatch after logical move", len(calls))
+		t.Fatalf("provider command count = %d, want 1 worker dispatch after logical move", len(calls))
 	}
-	if got := string(support.FirstInputPayload(calls[0].Dispatch.InputTokens)); got != wantPayload {
-		t.Fatalf("worker-bound payload = %q, want %q preserved across logical move", got, wantPayload)
+	admittedWork := workRoutingAdmissionWork(t, events, wantWorkID)
+	if got := workRoutingPublicWorkText(admittedWork); got != wantPayload {
+		t.Fatalf("WORK_REQUEST payload = %q, want %q preserved across logical move", got, wantPayload)
 	}
-	workID := support.FirstInputWorkID(calls[0].Dispatch.InputTokens)
-	if workID == "" {
-		t.Fatal("worker-bound Work ID missing, want observable lineage after logical move")
+	publicWork := getWorkRoutingWorkByID(t, scenario.fixture.baseURL, scenario.sessionID, wantWorkID)
+	if got := support.StringPointerValue(publicWork.WorkId); got != wantWorkID {
+		t.Fatalf("public Work ID = %q, want %q preserved across logical move", got, wantWorkID)
 	}
-	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "done")) {
+	if got := support.StringPointerValue(publicWork.RequestId); got != wantWorkID+"-request" {
+		t.Fatalf("public Work request ID = %q, want %q preserved across logical move", got, wantWorkID+"-request")
+	}
+	if got := support.StringPointerValue(publicWork.TraceId); got != wantWorkID+"-trace" {
+		t.Fatalf("public Work trace ID = %q, want %q preserved across logical move", got, wantWorkID+"-trace")
+	}
+	if !support.HasWorkAtCustomerState(listed, wantWorkID, support.WorkCustomerLocation("task", "done")) {
 		t.Fatalf(
 			"listed Work %q missing at task:done, want same Work identity after logical move; listed=%#v",
-			workID,
+			wantWorkID,
 			listed,
 		)
 	}
+	workerDispatches := support.ObserveDispatchEvents(t, events)
+	workerDispatchFound := false
+	for _, dispatch := range workerDispatches {
+		if dispatch.Request.TransitionId != "process" {
+			continue
+		}
+		if !support.DispatchObservationIncludesWork(dispatch, wantWorkID) {
+			continue
+		}
+		workerDispatchFound = true
+		break
+	}
+	if !workerDispatchFound {
+		t.Fatalf("worker dispatch missing Work ID %q after logical move; dispatches=%#v", wantWorkID, workerDispatches)
+	}
 }
 
-// TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork proves that a
+// runLogicalMoveMultipleOutputsCreatesEveryExpectedWork proves that a
 // LOGICAL_MOVE workstation with multiple authored outputs creates Work in every
 // expected downstream workType:state pair without dropping any fan-out branch.
-func TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "logical_move_multi_output_dir"))
-	configureLogicalMoveWorkstation(t, dir, logicalMoveRouterWorkstation)
-	testutil.WriteSeedFile(t, dir, "task", []byte("fan-out-payload"))
+func runLogicalMoveMultipleOutputsCreatesEveryExpectedWork(
+	t *testing.T,
+	fixture *workRoutingPackageFixture,
+) {
+	t.Helper()
+	runner := newWorkRoutingScenarioCommandRunner("logical-move-fanout", nil, nil)
+	scenario := fixture.newScenario(t, "logical-move-fanout", "logical_move_multi_output_dir", runner)
+	configureLogicalMoveWorkstation(t, scenario.factoryDir, logicalMoveRouterWorkstation)
+	writeLogicalMoveSeedRequest(t, scenario.factoryDir, "logical-move-fanout", "logical-move-fanout-payload")
+	scenario.open(t)
 
-	provider := testutil.NewMockProvider()
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderOverride: provider},
-		10*time.Second,
-	)
-
-	if provider.CallCount() != 0 {
-		t.Fatalf("provider call count = %d, want 0 for workerless logical move fan-out", provider.CallCount())
+	_, listed, events := scenario.observe(t, 10*time.Second)
+	if got := runner.callCount(); got != 0 {
+		t.Fatalf("provider command count = %d, want 0 for workerless logical move fan-out", got)
 	}
 	assertWorkCustomerStates(t, listed, map[string]int{
 		support.WorkCustomerLocation("task", "init"):     0,
@@ -124,6 +234,58 @@ func TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t *testing.T) {
 		support.ObserveDispatchEvents(t, events),
 		logicalMoveRouterWorkstation,
 	)
+}
+
+func writeLogicalMoveSeedRequest(t *testing.T, dir, workID, payload string) {
+	t.Helper()
+	testutil.WriteSeedRequest(t, dir, workservice.SubmitRequest{
+		RequestID:  workID + "-request",
+		WorkID:     workID,
+		Name:       workID,
+		WorkTypeID: "task",
+		TraceID:    workID + "-trace",
+		Payload:    []byte(payload),
+	})
+}
+
+func workRoutingPublicWorkText(item factoryapi.Work) string {
+	if item.Content != nil && len(*item.Content) > 0 {
+		if part, err := (*item.Content)[0].AsWorkTextContentPart(); err == nil {
+			return part.Text
+		}
+	}
+	switch payload := item.Payload.(type) {
+	case string:
+		return payload
+	case []byte:
+		return string(payload)
+	default:
+		return ""
+	}
+}
+
+func workRoutingAdmissionWork(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	workID string,
+) factoryapi.Work {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
+			continue
+		}
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode WORK_REQUEST event %q: %v", event.Id, err)
+		}
+		for _, work := range support.FactoryWorksValue(payload.Works) {
+			if support.StringPointerValue(work.WorkId) == workID {
+				return work
+			}
+		}
+	}
+	t.Fatalf("WORK_REQUEST event missing Work ID %q", workID)
+	return factoryapi.Work{}
 }
 
 func configureLogicalMoveWorkstation(t *testing.T, dir, workstationName string) {
