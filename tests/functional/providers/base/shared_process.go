@@ -1,4 +1,7 @@
-package providers
+// Package base contains the reusable root-built process fixture for the
+// provider functional scenarios. The parent providers package consumes this
+// approved subsection fixture without constructing a second application root.
+package base
 
 import (
 	"context"
@@ -16,25 +19,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const sharedProviderFixtureTimeout = 15 * time.Second
+const FixtureTimeout = 15 * time.Second
 
-const (
-	sharedMockAgentAcceptWorkID   = "shared-mock-agent-accept"
-	sharedMockAgentRejectWorkID   = "shared-mock-agent-reject"
-	sharedMockScriptAcceptWorkID  = "shared-mock-script-accept"
-	sharedMockScriptRejectWorkID  = "shared-mock-script-reject"
-	sharedMockServiceModelWorkID  = "shared-mock-service-model"
-	sharedMockServiceScriptWorkID = "shared-mock-service-script"
-)
+const commandRunnerCompletedLogEvent = "command_runner.completed"
 
 var sharedProviderRouteSequence atomic.Uint64
 
@@ -107,7 +101,7 @@ func (constructor *sharedProviderProcessConstructor) count() int {
 	return constructor.builds
 }
 
-type sharedProviderProcessFixture struct {
+type ProcessFixture struct {
 	rootDir     string
 	bootstrap   string
 	homeDir     string
@@ -129,28 +123,13 @@ type sharedProviderProcessFixture struct {
 
 var sharedProviderGlobal struct {
 	mu      sync.Mutex
-	fixture *sharedProviderProcessFixture
+	fixture *ProcessFixture
 	initErr error
 }
 
-func TestMain(m *testing.M) {
-	code := m.Run()
-
-	sharedProviderGlobal.mu.Lock()
-	fixture := sharedProviderGlobal.fixture
-	sharedProviderGlobal.mu.Unlock()
-	if fixture != nil {
-		if err := fixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared provider fixture: %v\n", err)
-			if code == 0 {
-				code = 1
-			}
-		}
-	}
-	os.Exit(code)
-}
-
-func sharedProviderFixtureFor(t *testing.T) *sharedProviderProcessFixture {
+// FixtureFor returns the package-shared root process fixture. The caller's
+// package TestMain must call CloseGlobalFixture after its tests complete.
+func FixtureFor(t *testing.T) *ProcessFixture {
 	t.Helper()
 
 	sharedProviderGlobal.mu.Lock()
@@ -170,13 +149,13 @@ func sharedProviderFixtureFor(t *testing.T) *sharedProviderProcessFixture {
 		t.Fatal("build shared provider fixture returned nil")
 	}
 
-	support.WaitForStatus(t, fixture.baseURL, sharedProviderFixtureTimeout, func(status factoryapi.StatusResponse) bool {
+	support.WaitForStatus(t, fixture.baseURL, FixtureTimeout, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 	return fixture
 }
 
-func newSharedProviderProcessFixture(t *testing.T) (*sharedProviderProcessFixture, error) {
+func newSharedProviderProcessFixture(t *testing.T) (*ProcessFixture, error) {
 	rootDir, err := os.MkdirTemp("", "you-functional-providers-shared-")
 	if err != nil {
 		return nil, fmt.Errorf("create fixture root: %w", err)
@@ -207,11 +186,6 @@ func newSharedProviderProcessFixture(t *testing.T) (*sharedProviderProcessFixtur
 			return nil, fmt.Errorf("create shared provider path %q: %w", path, err)
 		}
 	}
-	mockConfigPath := filepath.Join(rootDir, "mock-workers.json")
-	if err := writeSharedMockWorkersConfig(mockConfigPath); err != nil {
-		return nil, err
-	}
-
 	api := newSharedProviderHTTPServer()
 	router := newSharedProviderCommandRouter()
 	constructor := &sharedProviderProcessConstructor{}
@@ -232,13 +206,12 @@ func newSharedProviderProcessFixture(t *testing.T) (*sharedProviderProcessFixtur
 		"--with-server",
 		"--quiet",
 		"--no-record",
-		"--with-mock-workers", mockConfigPath,
 		"--runtime-log-dir", runtimeLogs,
 	})
 	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
 	inputs.Input.WorkingDirectory = bootstrap
 
-	fixture := &sharedProviderProcessFixture{
+	fixture := &ProcessFixture{
 		rootDir: rootDir, bootstrap: bootstrap, homeDir: homeDir,
 		runtimeLogs: runtimeLogs, process: process, cancel: cancel,
 		done: make(chan struct{}), api: api, router: router,
@@ -249,7 +222,7 @@ func newSharedProviderProcessFixture(t *testing.T) (*sharedProviderProcessFixtur
 		close(fixture.done)
 	}()
 
-	baseURL, err := api.server.WaitForBaseURL(sharedProviderFixtureTimeout)
+	baseURL, err := api.server.WaitForBaseURL(FixtureTimeout)
 	if err != nil {
 		_ = fixture.close()
 		return nil, err
@@ -280,47 +253,19 @@ func copySharedProviderDirectory(source, destination string) error {
 	})
 }
 
-func writeSharedMockWorkersConfig(path string) error {
-	exitSeven := 7
-	exitNine := 9
-	config := workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{
-			sharedMockEntry("worker", "process", sharedMockAgentRejectWorkID, workers.MockWorkerRunTypeReject, &workers.MockWorkerRejectConfig{
-				Stdout: "configured stdout", Stderr: "configured stderr", ExitCode: &exitSeven,
-			}),
-			sharedMockEntry("worker", "process", sharedMockAgentAcceptWorkID, workers.MockWorkerRunTypeAccept, nil),
-			sharedMockEntry("script-worker", "run-script", sharedMockScriptRejectWorkID, workers.MockWorkerRunTypeReject, &workers.MockWorkerRejectConfig{
-				Stdout: "script configured stdout", Stderr: "script configured stderr", ExitCode: &exitNine,
-			}),
-			sharedMockEntry("script-worker", "run-script", sharedMockScriptAcceptWorkID, workers.MockWorkerRunTypeAccept, nil),
-			sharedMockEntry("worker", "process", sharedMockServiceModelWorkID, workers.MockWorkerRunTypeAccept, nil),
-			sharedMockEntry("script-worker", "run-script", sharedMockServiceScriptWorkID, workers.MockWorkerRunTypeAccept, nil),
-		},
+// CloseGlobalFixture shuts down the package-shared root process and verifies
+// that its listener, routes, sessions, and temporary files are gone.
+func CloseGlobalFixture() error {
+	sharedProviderGlobal.mu.Lock()
+	fixture := sharedProviderGlobal.fixture
+	sharedProviderGlobal.mu.Unlock()
+	if fixture == nil {
+		return nil
 	}
-	payload, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("marshal shared mock-worker config: %w", err)
-	}
-	if err := os.WriteFile(path, payload, 0o600); err != nil {
-		return fmt.Errorf("write shared mock-worker config: %w", err)
-	}
-	return nil
+	return fixture.close()
 }
 
-func sharedMockEntry(
-	workerName, workstationName, workID string,
-	runType workers.MockWorkerRunType,
-	reject *workers.MockWorkerRejectConfig,
-) workers.MockWorkerConfig {
-	return workers.MockWorkerConfig{
-		WorkerName: workerName, WorkstationName: workstationName,
-		WorkInputs: []workers.MockWorkInputSelector{{WorkID: workID}},
-		RunType:    runType, RejectConfig: reject,
-	}
-}
-
-func (fixture *sharedProviderProcessFixture) close() error {
+func (fixture *ProcessFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
@@ -331,11 +276,14 @@ func (fixture *sharedProviderProcessFixture) close() error {
 		if fixture.executeErr != nil && !strings.Contains(fixture.executeErr.Error(), "context canceled") {
 			closeErr = fmt.Errorf("Process.Execute: %w", fixture.executeErr)
 		}
-	case <-time.After(sharedProviderFixtureTimeout):
+	case <-time.After(FixtureTimeout):
+		// Process.Execute normally reports shutdown through done after the
+		// cancellation signal. Keep this safety bound so a broken process
+		// implementation cannot strand the test process during finalization.
 		closeErr = fmt.Errorf("timed out waiting for Process.Execute shutdown")
 	}
 
-	closeCtx, cancel := context.WithTimeout(context.Background(), sharedProviderFixtureTimeout)
+	closeCtx, cancel := context.WithTimeout(context.Background(), FixtureTimeout)
 	defer cancel()
 	if err := fixture.process.Close(closeCtx); err != nil && closeErr == nil {
 		closeErr = fmt.Errorf("close application process: %w", err)
@@ -460,23 +408,23 @@ func cloneSharedProviderCommandRequest(
 	return request
 }
 
-type sharedProviderScenario struct {
-	fixture     *sharedProviderProcessFixture
+type Scenario struct {
+	fixture     *ProcessFixture
 	factoryDir  string
 	sessionID   string
 	routeSelect string
 	closeOnce   sync.Once
 }
 
-func (fixture *sharedProviderProcessFixture) openScenario(
+func (fixture *ProcessFixture) OpenScenario(
 	t *testing.T,
 	factoryDir, workDir string,
 	runner platformprocess.CommandRunner,
-) *sharedProviderScenario {
+) *Scenario {
 	t.Helper()
 
 	routeSelector := ""
-	var scenario *sharedProviderScenario
+	var scenario *Scenario
 	if runner != nil {
 		routeSelector = fmt.Sprintf("providers-shared-route-%d", sharedProviderRouteSequence.Add(1))
 		if err := fixture.router.register(routeSelector, workDir, runner); err != nil {
@@ -495,7 +443,7 @@ func (fixture *sharedProviderProcessFixture) openScenario(
 	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
 		t.Fatalf("shared Factory Session for %q = %#v, want identity", factoryDir, opened)
 	}
-	scenario = &sharedProviderScenario{
+	scenario = &Scenario{
 		fixture: fixture, factoryDir: factoryDir, sessionID: opened.Session.Id,
 		routeSelect: routeSelector,
 	}
@@ -506,7 +454,7 @@ func (fixture *sharedProviderProcessFixture) openScenario(
 	return scenario
 }
 
-func (scenario *sharedProviderScenario) close(t testing.TB) {
+func (scenario *Scenario) close(t testing.TB) {
 	t.Helper()
 	scenario.closeOnce.Do(func() {
 		support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
@@ -525,7 +473,7 @@ func (scenario *sharedProviderScenario) close(t testing.TB) {
 	})
 }
 
-func (fixture *sharedProviderProcessFixture) markSessionDeleted(sessionID string) {
+func (fixture *ProcessFixture) markSessionDeleted(sessionID string) {
 	fixture.sessionMu.Lock()
 	defer fixture.sessionMu.Unlock()
 	for _, existing := range fixture.deletedSessionIDs {
@@ -536,51 +484,39 @@ func (fixture *sharedProviderProcessFixture) markSessionDeleted(sessionID string
 	fixture.deletedSessionIDs = append(fixture.deletedSessionIDs, sessionID)
 }
 
-func (scenario *sharedProviderScenario) waitForTerminal(t testing.TB, timeout time.Duration) {
+func (scenario *Scenario) WaitForTerminal(t testing.TB, timeout time.Duration) {
 	t.Helper()
 	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, timeout)
 }
 
-func (scenario *sharedProviderScenario) listWork(t testing.TB) factoryapi.ListWorkResponse {
+func (scenario *Scenario) ListWork(t testing.TB) factoryapi.ListWorkResponse {
 	t.Helper()
 	endpoint := strings.TrimSuffix(scenario.fixture.baseURL, "/") +
 		"/factory-sessions/" + url.PathEscape(scenario.sessionID) + "/work"
 	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 }
 
-func (scenario *sharedProviderScenario) factoryEvents(t testing.TB) []factoryapi.FactoryEvent {
+func (scenario *Scenario) FactoryEvents(t testing.TB) []factoryapi.FactoryEvent {
 	t.Helper()
 	return support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
 }
 
-func (scenario *sharedProviderScenario) stop(t *testing.T) {
+func (scenario *Scenario) Stop(t *testing.T) {
 	t.Helper()
 	scenario.close(t)
 }
 
-func runSharedProviderFactory(
+func RunFactory(
 	t *testing.T,
 	dir, workDir string,
 	runner platformprocess.CommandRunner,
 	timeout time.Duration,
-) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
+) (*Scenario, factoryapi.ListWorkResponse) {
 	t.Helper()
-	fixture := sharedProviderFixtureFor(t)
-	scenario := fixture.openScenario(t, dir, workDir, runner)
-	scenario.waitForTerminal(t, timeout)
-	return scenario, scenario.listWork(t)
-}
-
-func runSharedMockFactory(
-	t *testing.T,
-	dir string,
-	timeout time.Duration,
-) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
-	t.Helper()
-	fixture := sharedProviderFixtureFor(t)
-	scenario := fixture.openScenario(t, dir, "", nil)
-	scenario.waitForTerminal(t, timeout)
-	return scenario, scenario.listWork(t)
+	fixture := FixtureFor(t)
+	scenario := fixture.OpenScenario(t, dir, workDir, runner)
+	scenario.WaitForTerminal(t, timeout)
+	return scenario, scenario.ListWork(t)
 }
 
 func assertSharedFactorySessionDeleted(t testing.TB, baseURL, sessionID string) {
@@ -597,7 +533,7 @@ func assertSharedFactorySessionDeleted(t testing.TB, baseURL, sessionID string) 
 	}
 }
 
-func (fixture *sharedProviderProcessFixture) assertTopology(t testing.TB) {
+func (fixture *ProcessFixture) AssertTopology(t testing.TB) {
 	t.Helper()
 	if got := fixture.constructor.count(); got != 1 {
 		t.Fatalf("shared provider root constructions = %d, want one", got)
@@ -607,14 +543,14 @@ func (fixture *sharedProviderProcessFixture) assertTopology(t testing.TB) {
 	}
 }
 
-func (fixture *sharedProviderProcessFixture) assertSessionTopology(t testing.TB) {
+func (fixture *ProcessFixture) AssertSessionTopology(t testing.TB) {
 	t.Helper()
 	if err := fixture.validateSessionTopology(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func (fixture *sharedProviderProcessFixture) validateSessionTopology() error {
+func (fixture *ProcessFixture) validateSessionTopology() error {
 	fixture.sessionMu.Lock()
 	opened := append([]string(nil), fixture.openedSessionIDs...)
 	deleted := append([]string(nil), fixture.deletedSessionIDs...)
@@ -637,13 +573,13 @@ func (fixture *sharedProviderProcessFixture) validateSessionTopology() error {
 	return nil
 }
 
-func (fixture *sharedProviderProcessFixture) runtimeLogDir() string {
+func (fixture *ProcessFixture) RuntimeLogDir() string {
 	return fixture.runtimeLogs
 }
 
-func findSharedRuntimeLogRecord(
+func FindRuntimeLogRecord(
 	t *testing.T,
-	fixture *sharedProviderProcessFixture,
+	fixture *ProcessFixture,
 	workDir string,
 	exitCode int,
 ) map[string]any {
@@ -692,169 +628,18 @@ func findSharedRuntimeLogRecord(
 	return found
 }
 
-func TestProvidersSharedProcessTopology(t *testing.T) {
-	fixture := sharedProviderFixtureFor(t)
-	fixture.assertTopology(t)
-
-	firstDir := testutilCopySharedFixture(t, "script_executor_dir")
-	secondDir := testutilCopySharedFixture(t, "script_executor_dir")
-	testutil.WriteSeedFile(t, firstDir, "task", []byte("first shared payload"))
-	testutil.WriteSeedFile(t, secondDir, "task", []byte("second shared payload"))
-	first := fixture.openScenario(t, firstDir, firstDir, support.NewStaticSuccessCommandRunner("first-shared-output"))
-	second := fixture.openScenario(t, secondDir, secondDir, support.NewStaticSuccessCommandRunner("second-shared-output"))
-	if got := fixture.router.routeCount(); got != 2 {
-		t.Fatalf("shared provider active routes = %d, want two", got)
+// Fixture returns the root process that owns this scenario.
+func (scenario *Scenario) Fixture() *ProcessFixture {
+	if scenario == nil {
+		return nil
 	}
-
-	var wait sync.WaitGroup
-	wait.Add(2)
-	go func() {
-		defer wait.Done()
-		first.waitForTerminal(t, sharedProviderFixtureTimeout)
-	}()
-	go func() {
-		defer wait.Done()
-		second.waitForTerminal(t, sharedProviderFixtureTimeout)
-	}()
-	wait.Wait()
-	firstWork := first.listWork(t)
-	secondWork := second.listWork(t)
-	assertSessionPlaces(t, firstWork, map[string]int{"task:done": 1, "task:init": 0})
-	assertSessionPlaces(t, secondWork, map[string]int{"task:done": 1, "task:init": 0})
-	assertDispatchOutput(t, first.factoryEvents(t), "first-shared-output")
-	assertDispatchOutput(t, second.factoryEvents(t), "second-shared-output")
-	first.stop(t)
-	second.stop(t)
-	if got := fixture.router.routeCount(); got != 0 {
-		t.Fatalf("shared provider routes after cleanup = %d, want zero", got)
-	}
-	fixture.assertSessionTopology(t)
+	return scenario.fixture
 }
 
-func TestProvidersSharedProcessRoutes(t *testing.T) {
-	fixture := sharedProviderFixtureFor(t)
-	fixture.assertTopology(t)
-	baselineCalls := fixture.router.callCount()
-
-	workDir := filepath.Join(fixture.rootDir, "route-test-workdir")
-	routeSelector := fmt.Sprintf("providers-shared-route-test-%d", sharedProviderRouteSequence.Add(1))
-	runner := support.NewStaticSuccessCommandRunner("registered-route-output")
-	if err := fixture.router.register(routeSelector, workDir, runner); err != nil {
-		t.Fatalf("register shared provider test route: %v", err)
+// RootDir returns the temporary root containing the shared process artifacts.
+func (fixture *ProcessFixture) RootDir() string {
+	if fixture == nil {
+		return ""
 	}
-	defer func() {
-		if err := fixture.router.unregister(routeSelector); err != nil {
-			t.Errorf("unregister shared provider test route: %v", err)
-		}
-	}()
-
-	if err := fixture.router.register(routeSelector, workDir, support.NewStaticSuccessCommandRunner("duplicate-output")); err == nil {
-		t.Fatal("duplicate shared provider route registration succeeded")
-	}
-	if got := fixture.router.routeCount(); got != 1 {
-		t.Fatalf("shared provider route count after duplicate registration = %d, want one", got)
-	}
-
-	result, err := fixture.router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "echo", WorkDir: workDir, Stdin: []byte("registered route input"),
-	})
-	if err != nil {
-		t.Fatalf("registered shared provider route: %v", err)
-	}
-	if string(result.Stdout) != "registered-route-output" {
-		t.Fatalf("registered shared provider route output = %q, want registered output", result.Stdout)
-	}
-	if got := fixture.router.callCount(); got != baselineCalls+1 {
-		t.Fatalf("shared provider route calls after registered route = %d, want %d", got, baselineCalls+1)
-	}
-
-	unknownWorkDir := filepath.Join(fixture.rootDir, "unknown-route-workdir")
-	_, err = fixture.router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "echo", WorkDir: unknownWorkDir, Stdin: []byte("must not cross a route"),
-	})
-	if err == nil || !strings.Contains(err.Error(), "no provider route matched WorkDir") {
-		t.Fatalf("unknown shared provider route error = %v, want explicit route failure", err)
-	}
-	if got := fixture.router.callCount(); got != baselineCalls+1 {
-		t.Fatalf("shared provider route calls after unknown route = %d, want %d", got, baselineCalls+1)
-	}
-}
-
-func TestProvidersSharedProcessAdverseRecovery(t *testing.T) {
-	fixture := sharedProviderFixtureFor(t)
-
-	t.Run("invalid_template", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		writeFixtureFile(t, dir, []string{"workstations", "run-script", "AGENTS.md"}, "---\ntype: MODEL_WORKSTATION\n---\n{{")
-		testutil.WriteSeedFile(t, dir, "task", []byte("invalid-template-payload"))
-		runner := &captureCommandRunner{}
-		scenario, listed := runSharedProviderFactory(t, dir, dir, runner, 5*time.Second)
-		assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-		if got := runner.CallCount(); got != 0 {
-			t.Fatalf("invalid-template provider calls = %d, want zero", got)
-		}
-		assertDispatchErrorContains(t, scenario.factoryEvents(t), "prompt render failed")
-		scenario.stop(t)
-	})
-
-	t.Run("dependency_failure", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		testutil.WriteSeedFile(t, dir, "task", []byte("dependency-failure-payload"))
-		scenario, listed := runSharedProviderFactory(t, dir, dir, failureRunner("adverse dependency failure"), 5*time.Second)
-		assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-		assertDispatchErrorContains(t, scenario.factoryEvents(t), "adverse dependency failure")
-		scenario.stop(t)
-	})
-
-	t.Run("timeout", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		support.WriteWorkstationConfig(t, dir, "run-script", "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n")
-		testutil.WriteSeedFile(t, dir, "task", []byte("timeout-payload"))
-		runner := newTimeoutThenSuccessCommandRunner()
-		scenario, listed := runSharedProviderFactory(t, dir, dir, runner, 10*time.Second)
-		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		if got := runner.CallCount(); got < 2 {
-			t.Fatalf("timeout recovery provider calls = %d, want at least two", got)
-		}
-		scenario.stop(t)
-	})
-
-	t.Run("cancellation", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		testutil.WriteSeedFile(t, dir, "task", []byte("cancellation-payload"))
-		scenario, listed := runSharedProviderFactory(t, dir, dir, canceledCommandRunner{}, 5*time.Second)
-		assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-		assertDispatchErrorContains(t, scenario.factoryEvents(t), "execution cancelled: context canceled")
-		scenario.stop(t)
-	})
-
-	t.Run("unknown_route", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		testutil.WriteSeedFile(t, dir, "task", []byte("unknown-route-payload"))
-		scenario := fixture.openScenario(t, dir, "", nil)
-		scenario.waitForTerminal(t, 5*time.Second)
-		listed := scenario.listWork(t)
-		assertSessionPlaces(t, listed, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
-		assertDispatchErrorContains(t, scenario.factoryEvents(t), "script command execution failed")
-		scenario.stop(t)
-	})
-
-	t.Run("known_good_after_adverse_cases", func(t *testing.T) {
-		dir := testutilCopySharedFixture(t, "script_executor_dir")
-		testutil.WriteSeedFile(t, dir, "task", []byte("known-good-payload"))
-		scenario, listed := runSharedProviderFactory(t, dir, dir, support.NewStaticSuccessCommandRunner("known-good-output"), 5*time.Second)
-		assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-		assertDispatchOutput(t, scenario.factoryEvents(t), "known-good-output")
-		scenario.stop(t)
-	})
-
-	if got := fixture.router.routeCount(); got != 0 {
-		t.Fatalf("shared provider routes after adverse recovery = %d, want zero", got)
-	}
-}
-
-func testutilCopySharedFixture(t *testing.T, name string) string {
-	t.Helper()
-	source := support.LegacyFixtureDir(t, name)
-	return testutil.CopyFixtureDir(t, source)
+	return fixture.rootDir
 }

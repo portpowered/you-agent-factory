@@ -27,10 +27,10 @@ func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testin
 		Payload:    []byte("mock script accept payload"),
 	})
 
-	scenario, listed := runSharedMockFactory(t, dir, 5*time.Second)
+	scenario, listed := runSharedMockFactory(t, dir, support.NewStaticSuccessCommandRunner("mock worker accepted"), 5*time.Second)
 	assertScriptMockPlaces(t, listed, "done")
 	assertListedWorkText(t, listed, "task", "done", "mock worker accepted")
-	scenario.stop(t)
+	scenario.Stop(t)
 }
 
 func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
@@ -42,10 +42,10 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 		TraceID:    "trace-shared-mock-script-reject",
 		Payload:    []byte("mock script reject payload"),
 	})
-	scenario, _ := runSharedMockFactory(t, dir, 5*time.Second)
+	scenario, _ := runSharedMockFactory(t, dir, sharedScriptFailureRunner(), 5*time.Second)
 	assertScriptMockRejected(t, scenario)
-	fixture := scenario.fixture
-	scenario.stop(t)
+	fixture := scenario.Fixture()
+	scenario.Stop(t)
 
 	record := findSharedRuntimeLogRecord(t, fixture, dir, 9)
 	if record["exit_code"] != float64(9) {
@@ -144,8 +144,8 @@ func assertScriptMockPlaces(t *testing.T, listed factoryapi.ListWorkResponse, te
 
 func assertScriptMockRejected(t *testing.T, scenario *sharedProviderScenario) {
 	t.Helper()
-	assertScriptMockPlaces(t, scenario.listWork(t), "failed")
-	for _, event := range scenario.factoryEvents(t) {
+	assertScriptMockPlaces(t, scenario.ListWork(t), "failed")
+	for _, event := range scenario.FactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}

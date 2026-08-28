@@ -34,7 +34,7 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	}, executionTemplateWantPrompt(dir)))
 	assertProviderStdin(t, req, "")
 	assertProviderExecutionFields(t, dir, req)
-	scenario.stop(t)
+	scenario.Stop(t)
 }
 
 func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *testing.T) {
@@ -54,5 +54,5 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	assertCommandArgs(t, req, []string{"exec", "--model", "test-codex-model", "-"})
 	assertProviderStdin(t, req, executionTemplateWantPrompt(dir))
 	assertProviderExecutionFields(t, dir, req)
-	scenario.stop(t)
+	scenario.Stop(t)
 }

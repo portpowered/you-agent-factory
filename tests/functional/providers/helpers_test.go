@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,13 +12,64 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	providerbase "github.com/portpowered/infinite-you/tests/functional/providers/base"
 )
 
 const commandRunnerCompletedLogEvent = "command_runner.completed"
+
+const sharedProviderFixtureTimeout = providerbase.FixtureTimeout
+
+const (
+	sharedMockAgentAcceptWorkID   = "shared-mock-agent-accept"
+	sharedMockAgentRejectWorkID   = "shared-mock-agent-reject"
+	sharedMockScriptAcceptWorkID  = "shared-mock-script-accept"
+	sharedMockScriptRejectWorkID  = "shared-mock-script-reject"
+	sharedMockServiceModelWorkID  = "shared-mock-service-model"
+	sharedMockServiceScriptWorkID = "shared-mock-service-script"
+)
+
+type sharedProviderProcessFixture = providerbase.ProcessFixture
+type sharedProviderScenario struct {
+	*providerbase.Scenario
+}
+
+func (scenario *sharedProviderScenario) stop(t *testing.T) {
+	t.Helper()
+	scenario.Stop(t)
+}
+
+func (scenario *sharedProviderScenario) waitForTerminal(t testing.TB, timeout time.Duration) {
+	t.Helper()
+	scenario.WaitForTerminal(t, timeout)
+}
+
+func (scenario *sharedProviderScenario) listWork(t testing.TB) factoryapi.ListWorkResponse {
+	t.Helper()
+	return scenario.ListWork(t)
+}
+
+func (scenario *sharedProviderScenario) factoryEvents(t testing.TB) []factoryapi.FactoryEvent {
+	t.Helper()
+	return scenario.FactoryEvents(t)
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if err := providerbase.CloseGlobalFixture(); err != nil {
+		fmt.Fprintf(os.Stderr, "close shared provider fixture: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
 
 type fakeCommandRunner struct {
 	stdout   string
@@ -133,6 +185,73 @@ func (r *templateCaptureCommandRunner) LastRequest() platformprocess.CommandRequ
 
 func failureRunner(stderr string) platformprocess.CommandRunner {
 	return &fakeCommandRunner{stderr: stderr, exitCode: 1}
+}
+
+func sharedProviderFixtureFor(t *testing.T) *sharedProviderProcessFixture {
+	t.Helper()
+	return providerbase.FixtureFor(t)
+}
+
+type providerResultCommandRunner struct {
+	result platformprocess.CommandResult
+	err    error
+}
+
+func (runner providerResultCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner.result, runner.err
+}
+
+func sharedProviderRefusalRunner() platformprocess.CommandRunner {
+	return providerResultCommandRunner{result: platformprocess.CommandResult{
+		ExitCode: 7,
+	}, err: providercontract.ExecuteFailure{
+		Kind:    providercontract.ExecuteFailureKindInvalidRequest,
+		Message: "provider error: permanent_bad_request: provider rejected the execution request",
+	}}
+}
+
+func sharedScriptFailureRunner() platformprocess.CommandRunner {
+	return providerResultCommandRunner{result: platformprocess.CommandResult{
+		Stdout:   []byte("script configured stdout"),
+		Stderr:   []byte("script configured stderr"),
+		ExitCode: 9,
+	}}
+}
+
+func configureSharedCodexWorker(t *testing.T, dir string) {
+	t.Helper()
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+}
+
+func runSharedProviderFactory(
+	t *testing.T,
+	dir, workDir string,
+	runner platformprocess.CommandRunner,
+	timeout time.Duration,
+) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
+	t.Helper()
+	scenario, listed := providerbase.RunFactory(t, dir, workDir, runner, timeout)
+	return &sharedProviderScenario{Scenario: scenario}, listed
+}
+
+func runSharedMockFactory(
+	t *testing.T,
+	dir string,
+	runner platformprocess.CommandRunner,
+	timeout time.Duration,
+) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
+	t.Helper()
+	return runSharedProviderFactory(t, dir, dir, runner, timeout)
+}
+
+func findSharedRuntimeLogRecord(
+	t *testing.T,
+	fixture *sharedProviderProcessFixture,
+	workDir string,
+	exitCode int,
+) map[string]any {
+	t.Helper()
+	return providerbase.FindRuntimeLogRecord(t, fixture, workDir, exitCode)
 }
 
 func updateScriptFixtureFactory(t *testing.T, dir string, mutate func(map[string]any)) {

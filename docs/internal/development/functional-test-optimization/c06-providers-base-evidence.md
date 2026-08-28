@@ -11,6 +11,9 @@
 - Dependency fidelity: controlled command-runner edges plus the existing local
   real process, executable, filesystem, replay, environment, and logging edges
   already exercised by the tests.
+- Source-plan authority: the named `docs/temp/functional-test-optimization.md`
+  is absent from the checkout and `origin/main`; the tracked replacement and
+  conflict record are [c06-providers-base-plan.md](c06-providers-base-plan.md).
 - Contract/configuration status: no OpenAPI, CLI grammar, Factory Event,
   persisted schema, product configuration, generated output, or shared-support
   change was made.
@@ -29,6 +32,25 @@ and `PROV-LONG-005` remain truthfully **BLOCKED-BY-PRE-EXISTING** for this PR;
 their assertions are unchanged and are not being converted into passes. The
 directive authorizes the final rebase, push, PR creation, and review-owned CI
 handoff with those two criteria recorded as waived-as-blocked.
+
+## Source-plan conflict and replacement
+
+The PRD task packet references `docs/temp/functional-test-optimization.md`, but
+that file is not present in this checkout or in `origin/main`. The exact
+read-only checks on 2026-08-28 were:
+
+- `Test-Path docs/temp/functional-test-optimization.md` -> `False`;
+- `git ls-tree -r origin/main -- docs/temp/functional-test-optimization.md` ->
+  no entry; and
+- `git log --all --full-history --oneline --
+  docs/temp/functional-test-optimization.md` -> no entry.
+
+The conflict is resolved explicitly by the tracked replacement
+[c06-providers-base-plan.md](c06-providers-base-plan.md). The PRD
+`sourcePlan` and every C06 story `sourcePlanRef` now point to that document,
+which is the authoritative scope/spine mapping for this lane. This evidence
+ledger remains the executable observation record; it is not being used as a
+silent substitute for the missing source plan.
 
 ## Discovery and source reconciliation
 
@@ -252,8 +274,8 @@ cleanup. This story does not claim the stronger post-migration resource census.
 ## PROV-MIG-002 evidence record
 
 Story 002 migrated the eligible controlled-edge cases to the package-local
-shared fixture in `tests/functional/providers/shared_process_test.go`. The
-fixture builds one `root.BuildProcess` application, starts one loopback
+shared fixture in `tests/functional/providers/base/shared_process.go` and its
+subsection test package. The fixture builds one `root.BuildProcess` application, starts one loopback
 listener, runs one continuously executing process, and exposes explicit
 Factory Session open/submit/read/close/delete helpers. Every controlled
 provider request is selected by an immutable cleaned `WorkDir` route; duplicate
@@ -304,6 +326,41 @@ application constructions (`9` listeners) and `11` Windows constructions
 fixture and adding no second construction. No provider credentials, remote
 calls, customer data, or paid calls were used.
 
+The aggregate `tests/functional/providers` package consumes the exported
+fixture API from `tests/functional/providers/base`; new fixture and dependent
+scenario sources are therefore under the approved `base` subsection. The
+root-package and subsection commands are both part of the affected-package
+verification surface.
+
+### Review-loopback verification
+
+After the review-required subsection move and command-runner conversion, the
+affected package checks were rerun:
+
+1. The migrated eligible selector exited `0` in `6.055s`; the preserved
+   eligible public assertions all pass.
+2. `go test ./tests/functional/providers/base -count=1` exited `0` in
+   `2.556s`, including the moved shared topology/routes/recovery and forced
+   assertion-cleanup tests.
+3. `go test ./tests/functional/providers -count=1` exited `1` in `23.634s`
+   only at the retained mixed-worker `unknown` versus
+   `permanent_bad_request` assertion; the clean-base blocker is unchanged.
+4. The unblocked tagged timeout-companion selector exited `0` in `0.931s`;
+   the operator-waived Claude/Codex rows remain unchanged.
+5. `go run ./cmd/functionalboundarycheck`, `make pkg-structure`, and
+   `make test` exited `0`.
+6. `make deadcode` reports no new fixture findings after the 34 intentional
+   `tests/functional/providers/base/shared_process.go` test-helper symbols were
+   added to the committed backend deadcode baseline. On this Windows host the
+   checker still exits `1` because the baseline contains the six Unix-specific
+   lock/helper findings while the host reports the four Windows counterparts
+   (`baseline findings: 3137, current findings: 3135`); this is the existing
+   cross-OS baseline difference, not a new provider finding. The full `make
+   lint` run therefore remains host-limited: `vet`, all backend structure and
+   boundary checks, formatting, and contracts passed, while `ui-lint` and
+   `ui-deadcode` could not run without the missing UI binaries and `deadcode`
+   retained the Unix/Windows baseline mismatch.
+
 - Property proved: controlled eligible default behavior is exercised through
   one production root/process/listener with explicit-session isolation,
   immutable routing, adverse-case recovery, and success/failure/cancellation
@@ -332,7 +389,7 @@ Verification procedures and observations:
 1. Retained process and cleanup selectors:
    `go test -count=1 -timeout=10m ./tests/functional/providers -run
    '^(TestScriptExecutor_MissingCommandFailsStartup|TestIntegrationSmoke_(TimeoutCancelsProcessTreeAndClearsActiveExecution|TimeoutRequeuesWorkAndSucceedsOnLaterAttempt|ProcessTreeHelper)|TestMockWorkers_(AgentRejectConfigWithZeroExitCodeIsRejectedAtCustomerBoundary|ScriptRejectConfigWithZeroExitCodeStillRoutesFailure|ScriptConfigExecutesCommandRunnerSideEffect|ScriptHelper)|TestPackagedScriptRuntime_(FreshInstallExecutesFactoryRelativeScript|NonZeroExitUsesStandardFailureOutcome)|TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies|TestProviders_ForcedAssertionFailureCleansOwnedResources)$' -v`
-   exited `0` in `18.851s` on `go1.25.0` `windows/amd64`. All selected
+  exited `0` in `18.851s` on `go1.25.0` `windows/amd64`. All selected
    non-Unix cases passed. The two packaged shebang cases skipped before
    construction with `executable shebang scripts are not supported on
    Windows`; Linux PR CI owns those real Unix cells.
@@ -371,6 +428,12 @@ inside that child and is closed before the parent reads the cleanup report.
   parity -> `PROV-LONG-005`; PR timing -> `PR-CI-006`; integrated clean-room
   report -> `VAL-007`.
 
+The Windows evidence is not a complete PROV-ISO-003 pass: the two Unix-only
+packaged-script cells were unavailable on this host and skipped before
+construction. Their Linux process/executable cleanup edge remains explicitly
+unproven and is owned by Linux PR CI. The criterion is therefore recorded as
+**BLOCKED / UNPROVEN UNIX CELL**, not PASS.
+
 ## VAL-007 validation loopback report
 
 ### Environment and artifact
@@ -397,13 +460,13 @@ inside that child and is closed before the parent reads the cleanup report.
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
 | PROV-CHAR-001 | PASS | The characterization ledger maps all 40 scenario rows and five cleanup rows one-to-one and preserves the public witness matrix. | No new characterization beyond the recorded ledger. |
-| PROV-ISO-003 | PASS | The retained selector passed in 18.851s on Windows; forced assertion cleanup proved closed listener, deleted sessions, zero routes, and absent owned paths. Unix shebang rows explicitly skip before construction. | Unix executable/process behavior remains owned by Linux PR CI. |
+| PROV-ISO-003 | BLOCKED / UNPROVEN UNIX CELL | The retained selector passed in 18.851s on Windows; forced assertion cleanup proved closed listener, deleted sessions, zero routes, and absent owned paths. Unix shebang rows explicitly skip before construction. | Unix executable/process behavior and its cleanup remain owned by Linux PR CI. |
 | PROV-MIG-002 | PASS | Shared fixture census reported one root/listener and zero routes/owned root after cleanup; static post-migration counts are 13 Linux and 11 Windows constructions, with no additional long construction. | Runtime counts on the PR runner remain for review confirmation. |
 | PROV-REPEAT-004 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On the rebased head, the exact once command exited 1 in 24.432s and the exact `-count=3` command exited 1 in 74.461s. The unchanged mixed-refusal assertion reproduced once per run with no new failure or state contamination; the operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Package success past the pre-declared mismatch. |
 | PROV-LONG-005 | BLOCKED-BY-PRE-EXISTING (operator-waived) | On the rebased head, the exact tagged command exited 1 in 28.942s. Timeout and timeout-companion cases passed; Claude, Codex, and the same mixed-refusal assertion failed exactly as characterized. The operator accepted the clean-base reproduction and waived this gate as blocked for the PR. | Four-case long parity and Linux long topology. |
 | PR-CI-006 | REVIEW HANDOFF | The operator authorized the PR/CI handoff with the two pre-existing blockers recorded as waived-as-blocked. Review must record final-head Backend Functional Coverage timing and topology in a PR comment using the procedure below. | Final-head CI timing/direction and review topology confirmation. |
 | Security/privacy | PASS | All runs used controlled local fixtures, zero credentials, zero customer data, and zero paid/remote calls; test-owned temporary roots were cleaned by the fixture and retained cleanup proofs. | Host-wide artifact/process state outside test ownership. |
-| Compatibility | PASS | The branch diff is limited to the owned direct-provider tests and c06 evidence document; no API, CLI grammar, event schema, generated output, shared support, workflow, Makefile, baseline, or stability-cleanup surface changed. | Full repository verification and merge-base review. |
+| Compatibility | PASS | The branch diff is limited to the owned direct-provider tests, c06 evidence/plan documents, and the backend deadcode baseline entry required for the approved non-test fixture file; no API, CLI grammar, event schema, generated output, shared support, workflow, Makefile, or stability-cleanup surface changed. | Full repository verification and merge-base review; the Windows host reports the existing Unix/Windows deadcode-baseline difference. |
 | VAL-007 | PASS | This read-only report follows the validation-loopback template and records the blocked findings plus a delta-plan request without changing product/runtime assertions. | Independent integrated validation and review disposition. |
 | PROJECT-AC1/2/3 | BLOCKED | These are explicitly later lane-wide gates and are not claimed by this slice. | Lane-wide timing, global isolation inventory, and full-suite parity. |
 | Implementation delivery | REVIEW HANDOFF | The operator-authorized disposition permits implementation handoff with `PROV-REPEAT-004` and `PROV-LONG-005` blocked-by-pre-existing. The final push, open PR, started CI, and review feedback are session handoff actions. | Review-owned terminal CI, conflict resolution, and merge. |

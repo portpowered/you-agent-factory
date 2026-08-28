@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	providerbase "github.com/portpowered/infinite-you/tests/functional/providers/base"
 )
 
 func TestScriptExecutor_Success(t *testing.T) {
@@ -395,9 +396,8 @@ func runScriptFactoryAt(
 	timeout time.Duration,
 ) (*sharedProviderScenario, factoryapi.ListWorkResponse) {
 	t.Helper()
-	scenario := sharedProviderFixtureFor(t).openScenario(t, dir, workDir, runner)
-	scenario.waitForTerminal(t, timeout)
-	return scenario, scenario.listWork(t)
+	scenario, listed := providerbase.RunFactory(t, dir, workDir, runner, timeout)
+	return &sharedProviderScenario{Scenario: scenario}, listed
 }
 
 func assertListedWorkIdentity(

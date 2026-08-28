@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	providerbase "github.com/portpowered/infinite-you/tests/functional/providers/base"
 )
 
 const (
@@ -41,23 +42,23 @@ Execute the script.
 	})
 
 	runner := newTimeoutThenReleaseCommandRunner()
-	scenario := sharedProviderFixtureFor(t).openScenario(t, dir, dir, runner)
+	scenario := providerbase.FixtureFor(t).OpenScenario(t, dir, dir, runner)
 
 	waitForTimeoutCompanionRetryStarted(t, runner)
 
 	close(runner.releaseCh)
-	scenario.waitForTerminal(t, timeoutCompanionRunTimeout)
-	listed := scenario.listWork(t)
+	scenario.WaitForTerminal(t, timeoutCompanionRunTimeout)
+	listed := scenario.ListWork(t)
 	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 	assertListedWorkIdentity(t, listed, "done", workID, "task", traceID, nil)
-	assertDispatchOutcomeSequence(t, scenario.factoryEvents(t), []factoryapi.WorkOutcome{
+	assertDispatchOutcomeSequence(t, scenario.FactoryEvents(t), []factoryapi.WorkOutcome{
 		factoryapi.WorkOutcomeFailed,
 		factoryapi.WorkOutcomeAccepted,
 	}, "execution timeout")
 	if runner.CallCount() < 2 {
 		t.Fatalf("timeout companion runner call count = %d, want at least 2", runner.CallCount())
 	}
-	scenario.stop(t)
+	scenario.Stop(t)
 }
 
 type timeoutThenReleaseCommandRunner struct {

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -30,7 +32,14 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 				Payload:    []byte("mock-worker service payload"),
 			})
 
-			scenario, listed := runSharedMockFactory(t, dir, 5*time.Second)
+			var runner platformprocess.CommandRunner = support.NewStaticSuccessCommandRunner("mock worker accepted")
+			if test.fixture == "executor_success" {
+				support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+				runner = support.NewShapedProviderCommandRunner(
+					platformprocess.CommandResult{Stdout: []byte("mock worker accepted\nCOMPLETE")},
+				)
+			}
+			scenario, listed := runSharedMockFactory(t, dir, runner, 5*time.Second)
 			if len(listed.Results) != 1 || listed.Results[0].State == nil ||
 				listed.Results[0].State.Type != factoryapi.WorkStateTypeTERMINAL {
 				t.Fatalf("GET /work results = %#v, want one terminal work", listed.Results)
@@ -39,8 +48,8 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 				t.Fatalf("task:failed token count = %d, want zero", got)
 			}
 
-			fixture := scenario.fixture
-			scenario.stop(t)
+			fixture := scenario.Fixture()
+			scenario.Stop(t)
 			record := findSharedRuntimeLogRecord(t, fixture, dir, 0)
 			if _, ok := record["stdout"]; ok {
 				t.Fatal("command runner completion should omit stdout on success")

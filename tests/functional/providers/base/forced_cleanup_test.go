@@ -1,4 +1,4 @@
-package providers
+package base
 
 import (
 	"context"
@@ -112,8 +112,8 @@ func runForcedProviderCleanupChild(t *testing.T) {
 		t.Fatal("forced cleanup child report path is required")
 	}
 
-	var fixture *sharedProviderProcessFixture
-	var scenario *sharedProviderScenario
+	var fixture *ProcessFixture
+	var scenario *Scenario
 	paths := forcedProviderCleanupPaths{}
 	t.Cleanup(func() {
 		if err := writeForcedProviderCleanupReport(reportPath, fixture, scenario, paths); err != nil {
@@ -133,7 +133,7 @@ func runForcedProviderCleanupChild(t *testing.T) {
 	})
 
 	paths = prepareForcedProviderCleanupPaths(t, fixture)
-	scenario = fixture.openScenario(
+	scenario = fixture.OpenScenario(
 		t,
 		paths.Factory,
 		paths.WorkDir,
@@ -153,7 +153,7 @@ type forcedProviderCleanupPaths struct {
 
 func prepareForcedProviderCleanupPaths(
 	t *testing.T,
-	fixture *sharedProviderProcessFixture,
+	fixture *ProcessFixture,
 ) forcedProviderCleanupPaths {
 	t.Helper()
 
@@ -205,8 +205,8 @@ type forcedProviderCleanupPathReport struct {
 
 func writeForcedProviderCleanupReport(
 	path string,
-	fixture *sharedProviderProcessFixture,
-	scenario *sharedProviderScenario,
+	fixture *ProcessFixture,
+	scenario *Scenario,
 	paths forcedProviderCleanupPaths,
 ) error {
 	if scenario == nil {
@@ -239,7 +239,7 @@ func writeForcedProviderCleanupReport(
 	return nil
 }
 
-func forcedProviderSessionIDs(fixture *sharedProviderProcessFixture) ([]string, []string) {
+func forcedProviderSessionIDs(fixture *ProcessFixture) ([]string, []string) {
 	if fixture == nil {
 		return nil, nil
 	}
@@ -248,7 +248,7 @@ func forcedProviderSessionIDs(fixture *sharedProviderProcessFixture) ([]string, 
 	return append([]string(nil), fixture.openedSessionIDs...), append([]string(nil), fixture.deletedSessionIDs...)
 }
 
-func fixtureDone(fixture *sharedProviderProcessFixture) <-chan struct{} {
+func fixtureDone(fixture *ProcessFixture) <-chan struct{} {
 	if fixture == nil {
 		closed := make(chan struct{})
 		close(closed)
@@ -257,14 +257,14 @@ func fixtureDone(fixture *sharedProviderProcessFixture) <-chan struct{} {
 	return fixture.done
 }
 
-func fixtureBaseURL(fixture *sharedProviderProcessFixture) string {
+func fixtureBaseURL(fixture *ProcessFixture) string {
 	if fixture == nil {
 		return ""
 	}
 	return fixture.baseURL
 }
 
-func forcedProviderRouteCount(fixture *sharedProviderProcessFixture) int {
+func forcedProviderRouteCount(fixture *ProcessFixture) int {
 	if fixture == nil || fixture.router == nil {
 		return 0
 	}
@@ -284,6 +284,9 @@ func forcedProviderListenerClosed(baseURL string) bool {
 	if strings.TrimSpace(baseURL) == "" {
 		return false
 	}
+	// The fixture's shutdown signal proves Process.Execute returned; this
+	// bounded HTTP probe additionally proves the public listener is no longer
+	// reachable after the server's close path completed.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(

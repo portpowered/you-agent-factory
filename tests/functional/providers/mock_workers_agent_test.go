@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -23,14 +25,17 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 		TraceID:    "trace-shared-mock-agent-accept",
 		Payload:    []byte("mock accept payload"),
 	})
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
 
-	scenario, listed := runSharedMockFactory(t, dir, 5*time.Second)
+	scenario, listed := runSharedMockFactory(t, dir, support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("mock worker accepted\nCOMPLETE")},
+	), 5*time.Second)
 	for placeID, want := range map[string]int{"task:done": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	scenario.stop(t)
+	scenario.Stop(t)
 }
 
 func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t *testing.T) {
@@ -41,10 +46,11 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 		TraceID:    "trace-shared-mock-agent-reject",
 		Payload:    []byte("mock reject payload"),
 	})
-	scenario, _ := runSharedMockFactory(t, dir, 5*time.Second)
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"))
+	scenario, _ := runSharedMockFactory(t, dir, sharedProviderRefusalRunner(), 5*time.Second)
 	assertMockAgentRejected(t, scenario)
-	fixture := scenario.fixture
-	scenario.stop(t)
+	fixture := scenario.Fixture()
+	scenario.Stop(t)
 
 	record := findSharedRuntimeLogRecord(t, fixture, dir, 7)
 	if record["exit_code"] != float64(7) {
@@ -93,13 +99,13 @@ func rejectedAgentMockConfig(exitCode int) *workers.MockWorkersConfig {
 
 func assertMockAgentRejected(t *testing.T, scenario *sharedProviderScenario) {
 	t.Helper()
-	listed := scenario.listWork(t)
+	listed := scenario.ListWork(t)
 	for placeID, want := range map[string]int{"task:failed": 1, "task:init": 0} {
 		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
 			t.Errorf("%s token count = %d, want %d", placeID, got, want)
 		}
 	}
-	for _, event := range scenario.factoryEvents(t) {
+	for _, event := range scenario.FactoryEvents(t) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}
