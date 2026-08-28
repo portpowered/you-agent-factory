@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,39 @@ const workflow = readFileSync(
 	"utf8",
 );
 const ciWorkflow = readFileSync(join(repositoryRoot, ".github", "workflows", "ci.yml"), "utf8");
+const makefile = readFileSync(join(repositoryRoot, "Makefile"), "utf8");
+const helper = join(repositoryRoot, "scripts", "ci", "shared-baseline-regeneration-workflow.mjs");
+
+test("enumerates exactly the classified snapshots and wires every merged writer", () => {
+	assert.deepEqual(SHARED_BASELINE_PATHS, [
+		"docs/internal/baselines/deadcode-baseline.txt",
+		"docs/internal/baselines/go-unit-lane-latency-budget.v1.json",
+		"docs/internal/baselines/ownership-inventory.json",
+		"docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json",
+		"docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json",
+		"docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json",
+		"docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json",
+		"docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json",
+		"contracts/testdata/baseline/cli-commands.json",
+		"contracts/testdata/baseline/cli-command-inputs.json",
+		"contracts/testdata/baseline/mcp-tools.json",
+	]);
+	assert.equal(new Set(SHARED_BASELINE_PATHS).size, 11);
+
+	const listed = spawnSync(process.execPath, [helper, "list-paths"], { encoding: "utf8" });
+	assert.equal(listed.status, 0, listed.stderr);
+	assert.deepEqual(listed.stdout.trimEnd().split(/\r?\n/), SHARED_BASELINE_PATHS);
+
+	for (const command of [
+		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/unitlanebudget',
+		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/ownershipinventoryfreeze',
+		"UPDATE_CLI_BASELINES=1 $(GO) test ./pkg/transports/cli/commandidentity -run '^TestWriteProductionInventoryBaseline$$' -count=1",
+		"UPDATE_CLI_BASELINES=1 $(GO) test ./pkg/transports/cli/cliinputs -run '^TestWriteProductionInputsInventoryBaseline$$' -count=1",
+		'cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .',
+	]) {
+		assert.ok(makefile.includes(command), `Makefile is missing canonical writer command: ${command}`);
+	}
+});
 
 test("the delivered workflow follows successful main CI and owns only the bot PR path", () => {
 	assert.match(workflow, /workflow_run:\s+workflows: \[CI\]/);
@@ -38,6 +72,8 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /backend-unit-latency-evidence/);
 	assert.match(workflow, /backend-deadcode-evidence/);
 	assert.match(workflow, /DEADCODE_REPORT_PATH/);
+	assert.match(workflow, /mapfile -t snapshot_paths < <\(node scripts\/ci\/shared-baseline-regeneration-workflow\.mjs list-paths\)/);
+	assert.match(workflow, /git add -- "\$\{snapshot_paths\[@\]\}"/);
 	assert.match(workflow, /BASELINE_REGEN_DEADCODE_REPORT=\"\$DEADCODE_REPORT_PATH\"/);
 	assert.match(workflow, /SOURCE_EVENT: \$\{\{ github\.event\.workflow_run\.event \}\}/);
 	assert.match(workflow, /SOURCE_REPOSITORY: \$\{\{ github\.event\.workflow_run\.head_repository\.full_name \}\}/);
@@ -50,6 +86,7 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /git push origin --delete \"\$BOT_BRANCH\"/);
 	assert.match(workflow, /gh pr merge .*--auto .*--match-head-commit/);
 	assert.match(workflow, /automation\/shared-ci-baselines/);
+	assert.doesNotMatch(workflow, /for path in "\$DEADCODE_BASELINE"/);
 	assert.doesNotMatch(workflow, /7438/);
 });
 
@@ -139,11 +176,13 @@ test("fails before publication for generation errors and invalid revisions", () 
 	}
 });
 
-test("parses status output and rejects every path outside the two-file allowlist", () => {
+test("parses status output and rejects every path outside the eleven-file allowlist", () => {
+	const status = [
+		...SHARED_BASELINE_PATHS.map((path) => ` M ${path}`),
+		`R  old.txt -> ${SHARED_BASELINE_PATHS[0]}`,
+	].join("\n");
 	assert.deepEqual(
-		parsePorcelainPaths(
-			` M ${SHARED_BASELINE_PATHS[0]}\n?? ${SHARED_BASELINE_PATHS[1]}\nR  old.txt -> ${SHARED_BASELINE_PATHS[0]}\n`,
-		),
+		parsePorcelainPaths(status),
 		["old.txt", ...SHARED_BASELINE_PATHS].sort(),
 	);
 	assert.throws(

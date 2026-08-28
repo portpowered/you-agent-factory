@@ -38,7 +38,6 @@ jobs:
       DEFAULT_BRANCH: main
       BOT_BRANCH: automation/shared-ci-baselines
       SHARED_BASELINE_PR_TITLE: "chore(ci): reconcile shared CI baselines"
-      DEADCODE_BASELINE: docs/internal/baselines/deadcode-baseline.txt
       UNIT_BUDGET_BASELINE: docs/internal/baselines/go-unit-lane-latency-budget.v1.json
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
@@ -174,7 +173,7 @@ jobs:
             echo "reconcile=true"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Regenerate both shared baselines from delivered checks
+      - name: Regenerate all classified snapshots from canonical inputs
         if: steps.prepare.outputs.reconcile == 'true'
         shell: bash
         run: |
@@ -234,12 +233,13 @@ jobs:
           set -euo pipefail
           node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-working-tree --require-changes
 
+          mapfile -t snapshot_paths < <(node scripts/ci/shared-baseline-regeneration-workflow.mjs list-paths)
           candidate_matches_remote=false
           if [[ "$BOT_BRANCH_EXISTS" == "true" ]]; then
             remote_paths="$(git diff --name-only "$MAIN_SHA" "origin/$BOT_BRANCH" | sort -u)"
             if printf '%s\n' "$remote_paths" | node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-paths >/dev/null; then
               candidate_matches_remote=true
-              for path in "$DEADCODE_BASELINE" "$UNIT_BUDGET_BASELINE"; do
+              for path in "${snapshot_paths[@]}"; do
                 if ! git diff --quiet "origin/$BOT_BRANCH" -- "$path"; then
                   candidate_matches_remote=false
                   break
@@ -261,7 +261,7 @@ jobs:
             fi
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- "$DEADCODE_BASELINE" "$UNIT_BUDGET_BASELINE"
+            git add -- "${snapshot_paths[@]}"
             node scripts/ci/shared-baseline-regeneration-workflow.mjs validate-staged
             git commit -m "$SHARED_BASELINE_PR_TITLE"
             gh auth setup-git --hostname github.com

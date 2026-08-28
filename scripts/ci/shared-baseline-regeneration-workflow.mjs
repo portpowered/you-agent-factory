@@ -6,6 +6,15 @@ import { fileURLToPath } from "node:url";
 export const SHARED_BASELINE_PATHS = Object.freeze([
 	"docs/internal/baselines/deadcode-baseline.txt",
 	"docs/internal/baselines/go-unit-lane-latency-budget.v1.json",
+	"docs/internal/baselines/ownership-inventory.json",
+	"docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json",
+	"docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json",
+	"docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json",
+	"docs/internal/projects/packaged-service-structure/provider-sessions-root-go-inventory.json",
+	"docs/internal/projects/packaged-service-structure/provider-sessions-top-level-inventory.json",
+	"contracts/testdata/baseline/cli-commands.json",
+	"contracts/testdata/baseline/cli-command-inputs.json",
+	"contracts/testdata/baseline/mcp-tools.json",
 ]);
 
 export const SHARED_BASELINE_BOT_BRANCH = "automation/shared-ci-baselines";
@@ -122,8 +131,8 @@ export function planReconciliation({
 			action: existingPullRequest ? "close-existing" : "noop",
 			publish: false,
 			reason: existingPullRequest
-				? "main already contains both generated baselines; the open automation PR is obsolete"
-				: "main already contains both generated baselines",
+				? "main already contains all classified shared baselines; the open automation PR is obsolete"
+				: "main already contains all classified shared baselines",
 		};
 	}
 	if (candidateMatchesRemote) {
@@ -151,7 +160,7 @@ export function renderPullRequestBody({
 		SHARED_BASELINE_COMMENT_MARKER,
 		"## Automated shared CI baseline reconciliation",
 		"",
-		"This pull request was generated from the completed main-branch CI run below. Its hosted unit-latency artifact and the current deadcode report passed the generator gates. It is intentionally limited to the two self-maintaining shared baselines:",
+		"This pull request was generated from the completed main-branch CI run below. Its hosted unit-latency artifact and the current deadcode report passed the generator gates. It is intentionally limited to the classified self-maintaining shared baseline snapshots:",
 		"",
 		...paths.map((path) => "- " + "\x60" + path + "\x60"),
 		"",
@@ -236,6 +245,10 @@ function runCli(args) {
 	const options = parseArguments(args);
 	if (options.command === "validate-working-tree") {
 		runValidateWorkingTree(options);
+		return;
+	}
+	if (options.command === "list-paths") {
+		process.stdout.write(`${SHARED_BASELINE_PATHS.join("\n")}\n`);
 		return;
 	}
 	if (options.command === "validate-staged") {
