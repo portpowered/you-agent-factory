@@ -131,20 +131,20 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutAnnotationConte
 	tests := []struct {
 		name        string
 		annotations string
-		wantPath    string
+		wantError   string
 	}{
-		{"overlong note title", layoutNoteAnnotation("note", strings.Repeat("t", 161), "safe"), "layout.annotations[0].note.title"},
-		{"whitespace-only note body", layoutNoteAnnotation("note", "", " \n\t "), "layout.annotations[0].note.body"},
-		{"overlong note body", layoutNoteAnnotation("note", "", strings.Repeat("b", 4001)), "layout.annotations[0].note.body"},
-		{"blank alternative text", layoutImageAnnotation("image", "", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].image.alternativeText"},
-		{"whitespace-only alternative text", layoutImageAnnotation("image", "   ", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].image.alternativeText"},
-		{"blank annotation id", layoutImageAnnotation("", "Example", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].id"},
-		{"whitespace-only annotation id", layoutImageAnnotation("   ", "Example", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].id"},
-		{"overlong alternative text", layoutImageAnnotation("image", strings.Repeat("a", 501), "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].image.alternativeText"},
-		{"invalid base64", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/png", "AQI"), "layout.annotations[0].image.source.data"},
-		{"unsupported svg media type", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/svg+xml", "AQID"), "layout.annotations[0].image.source.mediaType"},
-		{"unsupported remote source", layoutImageAnnotation("image", "Example", "REMOTE", "image/png", "AQID"), "layout.annotations[0].image.source.kind"},
-		{"individual image exceeds byte limit", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/png", overlargeImageData), "layout.annotations[0].image.source.data"},
+		{"overlong note title", layoutNoteAnnotation("note", strings.Repeat("t", 161), "safe"), "decode factory generated-schema boundary: layout.annotations[0].note.title must contain no more than 160 characters"},
+		{"whitespace-only note body", layoutNoteAnnotation("note", "", " \n\t "), "decode factory generated-schema boundary: layout.annotations[0].note.body must contain at least 1 character"},
+		{"overlong note body", layoutNoteAnnotation("note", "", strings.Repeat("b", 4001)), "decode factory generated-schema boundary: layout.annotations[0].note.body must contain no more than 4000 characters"},
+		{"blank alternative text", layoutImageAnnotation("image", "", "EMBEDDED", "image/png", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].image.alternativeText must contain at least 1 character"},
+		{"whitespace-only alternative text", layoutImageAnnotation("image", "   ", "EMBEDDED", "image/png", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].image.alternativeText must contain at least 1 character"},
+		{"blank annotation id", layoutImageAnnotation("", "Example", "EMBEDDED", "image/png", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].id must contain a non-whitespace character"},
+		{"whitespace-only annotation id", layoutImageAnnotation("   ", "Example", "EMBEDDED", "image/png", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].id must contain a non-whitespace character"},
+		{"overlong alternative text", layoutImageAnnotation("image", strings.Repeat("a", 501), "EMBEDDED", "image/png", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].image.alternativeText must contain no more than 500 characters"},
+		{"invalid base64", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/png", "AQI"), "decode factory generated-schema boundary: layout.annotations[0].image.source.data must be non-empty strict padded base64"},
+		{"unsupported svg media type", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/svg+xml", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].image.source.mediaType must be image/png, image/jpeg, or image/webp"},
+		{"unsupported remote source", layoutImageAnnotation("image", "Example", "REMOTE", "image/png", "AQID"), "decode factory generated-schema boundary: layout.annotations[0].image.source.kind must be EMBEDDED"},
+		{"individual image exceeds byte limit", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/png", overlargeImageData), "decode factory generated-schema boundary: layout.annotations[0].image.source.data exceeds the 2097152-byte embedded-image limit"},
 		{
 			"factory image budget exceeded",
 			strings.Join([]string{
@@ -154,7 +154,7 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutAnnotationConte
 				layoutImageAnnotation("four", "Four", "EMBEDDED", "image/png", maximumImageData),
 				layoutImageAnnotation("five", "Five", "EMBEDDED", "image/png", maximumImageData),
 			}, ","),
-			"layout.annotations[4].image.source.data",
+			"decode factory generated-schema boundary: layout.annotations[4].image.source.data exceeds the 8388608-byte Factory embedded-image budget",
 		},
 	}
 
@@ -164,8 +164,8 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutAnnotationConte
 			if err == nil {
 				t.Fatal("expected unsafe layout annotation to be rejected")
 			}
-			if !strings.Contains(err.Error(), test.wantPath) {
-				t.Fatalf("error = %v, want path %q", err, test.wantPath)
+			if got := err.Error(); got != test.wantError {
+				t.Fatalf("error = %q, want %q", got, test.wantError)
 			}
 		})
 	}
@@ -175,27 +175,27 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutEmptyStates(t *
 	const maxEmbeddedImageBytes = 2 * 1024 * 1024
 	maximumImageData := base64.StdEncoding.EncodeToString(make([]byte, maxEmbeddedImageBytes))
 	tests := []struct {
-		name  string
-		nodes string
-		path  string
+		name      string
+		nodes     string
+		wantError string
 	}{
-		{"missing variant", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{}}`, "layout.nodes[0].emptyState"},
-		{"multiple variants", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here","image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Empty"}}}`, "layout.nodes[0].emptyState"},
-		{"empty text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":""}}`, "layout.nodes[0].emptyState.text"},
-		{"whitespace-only text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"   "}}`, "layout.nodes[0].emptyState.text"},
-		{"blank canonical node id", `{"id":"","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`, "layout.nodes[0].id"},
-		{"whitespace-only canonical node id", `{"id":"   ","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`, "layout.nodes[0].id"},
-		{"overlong text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"` + strings.Repeat("x", 501) + `"}}`, "layout.nodes[0].emptyState.text"},
-		{"empty image alternative text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":""}}}`, "layout.nodes[0].emptyState.image.alternativeText"},
-		{"unsupported image source", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/svg+xml","data":"AQID"},"alternativeText":"Empty"}}}`, "layout.nodes[0].emptyState.image.source.mediaType"},
-		{"duplicate node empty state", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"First"}},{"id":"workstation:review","position":{"x":20,"y":30},"emptyState":{"text":"Second"}}`, "layout.nodes[1].emptyState"},
+		{"missing variant", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState must contain exactly one of text or image"},
+		{"multiple variants", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here","image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Empty"}}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState must contain exactly one of text or image"},
+		{"empty text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":""}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState.text must contain at least 1 character"},
+		{"whitespace-only text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"   "}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState.text must contain at least 1 character"},
+		{"blank canonical node id", `{"id":"","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`, "decode factory generated-schema boundary: layout.nodes[0].id must contain a non-whitespace character"},
+		{"whitespace-only canonical node id", `{"id":"   ","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`, "decode factory generated-schema boundary: layout.nodes[0].id must contain a non-whitespace character"},
+		{"overlong text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"` + strings.Repeat("x", 501) + `"}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState.text must contain no more than 500 characters"},
+		{"empty image alternative text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":""}}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState.image.alternativeText must contain at least 1 character"},
+		{"unsupported image source", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/svg+xml","data":"AQID"},"alternativeText":"Empty"}}}`, "decode factory generated-schema boundary: layout.nodes[0].emptyState.image.source.mediaType must be image/png, image/jpeg, or image/webp"},
+		{"duplicate node empty state", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"First"}},{"id":"workstation:review","position":{"x":20,"y":30},"emptyState":{"text":"Second"}}`, "decode factory generated-schema boundary: layout.nodes[1].emptyState duplicates an empty state for canonical node \"workstation:review\""},
 		{"factory image budget includes empty states", strings.Join([]string{
 			`{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"One"}}}`,
 			`{"id":"workstation:approve","position":{"x":20,"y":30},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Two"}}}`,
 			`{"id":"workstation:publish","position":{"x":30,"y":40},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Three"}}}`,
 			`{"id":"workstation:archive","position":{"x":40,"y":50},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Four"}}}`,
 			`{"id":"workstation:notify","position":{"x":50,"y":60},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Five"}}}`,
-		}, ","), "layout.nodes[4].emptyState.image.source.data"},
+		}, ","), "decode factory generated-schema boundary: layout.nodes[4].emptyState.image.source.data exceeds the 8388608-byte Factory embedded-image budget"},
 	}
 
 	for _, test := range tests {
@@ -204,8 +204,8 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutEmptyStates(t *
 			if err == nil {
 				t.Fatal("expected unsafe layout empty state to be rejected")
 			}
-			if !strings.Contains(err.Error(), test.path) {
-				t.Fatalf("error = %v, want path %q", err, test.path)
+			if got := err.Error(); got != test.wantError {
+				t.Fatalf("error = %q, want %q", got, test.wantError)
 			}
 		})
 	}
