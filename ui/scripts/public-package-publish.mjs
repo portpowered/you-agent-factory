@@ -269,15 +269,49 @@ async function registryShasum(packageName, version) {
   }
 }
 
-async function verifyRegistryVersion(packageName, version, expectedShasum) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const shasum = await registryShasum(packageName, version);
+const registryVisibilityPolicy = Object.freeze({
+  timeoutMs: 300_000,
+  initialDelayMs: 5_000,
+  maximumDelayMs: 30_000,
+});
+
+export async function verifyRegistryVersion(
+  packageName,
+  version,
+  expectedShasum,
+  {
+    lookup = registryShasum,
+    sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)),
+    now = Date.now,
+    log = console.log,
+    policy = registryVisibilityPolicy,
+  } = {},
+) {
+  const startedAt = now();
+  let attempt = 1;
+  let delayMs = policy.initialDelayMs;
+
+  while (now() - startedAt < policy.timeoutMs) {
+    const shasum = await lookup(packageName, version);
     if (shasum === expectedShasum) return;
     if (shasum !== null) {
       throw new Error(`Registry digest conflict for ${packageName}@${version}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 5_000));
+
+    const elapsedMs = now() - startedAt;
+    const remainingMs = policy.timeoutMs - elapsedMs;
+    if (remainingMs <= 0) break;
+    const nextDelayMs = Math.min(delayMs, remainingMs);
+    log(
+      `Registry version not visible for ${packageName}@${version}; ` +
+        `retry attempt ${attempt}, elapsed ${elapsedMs}ms, ` +
+        `next delay ${nextDelayMs}ms`,
+    );
+    await sleep(nextDelayMs);
+    delayMs = Math.min(delayMs * 2, policy.maximumDelayMs);
+    attempt += 1;
   }
+
   throw new Error(
     `Published version did not become visible: ${packageName}@${version}`,
   );
