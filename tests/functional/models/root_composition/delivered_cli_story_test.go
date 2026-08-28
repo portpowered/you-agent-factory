@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
@@ -30,17 +29,17 @@ const deliveredASRSegments = `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXT
 // endpoint is disabled for ordinary production invocations; this test uses a
 // JSON bridge that forwards to the pinned LocalAI gRPC fixture.
 func TestDeliveredCLIArtifactReachesProtocolFixture(t *testing.T) {
-	fixture := localai.Start(t)
+	fixture := characterizationStartLocalAI(t)
 	bridge := newDeliveredModelBridge(t, fixture)
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	prepareDeliveredModelCaches(t, home)
 	binary := buildDeliveredYouBinary(t)
-	workDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	workDir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 
 	assertDeliveredModelsReady(t, binary, workDir, home, bridge.server.URL)
 	inputPath := writeDeliveredASRInput(t)
-	transcriptPath := filepath.Join(t.TempDir(), "transcript.txt")
-	segmentsPath := filepath.Join(t.TempDir(), "segments.json")
+	transcriptPath := filepath.Join(characterizationTempDir(t), "transcript.txt")
+	segmentsPath := filepath.Join(characterizationTempDir(t), "segments.json")
 	asr := runDeliveredCLI(t, binary, workDir, home, bridge.server.URL,
 		"models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@"+inputPath,
 		"--output", "transcript="+transcriptPath, "--output", "segments="+segmentsPath,
@@ -64,7 +63,7 @@ func TestDeliveredCLIArtifactReachesProtocolFixture(t *testing.T) {
 	}
 	t.Logf("delivered TTS pipe command exit=%d raw-audio-bytes=%d sha256=%x stderr=%q", generic.exitCode, len(generic.stdout), sha256.Sum256(generic.stdout), generic.stderr)
 
-	aliasPath := filepath.Join(t.TempDir(), "alias.wav")
+	aliasPath := filepath.Join(characterizationTempDir(t), "alias.wav")
 	alias := runDeliveredCLI(t, binary, workDir, home, bridge.server.URL,
 		"models", "invoke", "tts", "--operation", "TTS", "--text", "hello", "--output", aliasPath,
 	)
@@ -110,7 +109,7 @@ func assertDeliveredModelsReady(t *testing.T, binary, workDir, home, endpoint st
 
 func writeDeliveredASRInput(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "meeting.wav")
+	path := filepath.Join(characterizationTempDir(t), "meeting.wav")
 	if err := os.WriteFile(path, []byte{0x00, 0xff, 0x10, 0x80, 0x7f, 0x01}, 0o644); err != nil {
 		t.Fatalf("write delivered ASR input: %v", err)
 	}
@@ -141,7 +140,7 @@ func buildDeliveredYouBinary(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		binaryName += ".exe"
 	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	binaryPath := filepath.Join(characterizationTempDir(t), binaryName)
 	command := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", binaryPath, "./cmd/factory")
 	command.Dir = testutil.MustRepoRoot(t)
 	if output, err := command.CombinedOutput(); err != nil {
@@ -194,7 +193,7 @@ type deliveredModelBridge struct {
 func newDeliveredModelBridge(t *testing.T, fixture *localai.Fixture) *deliveredModelBridge {
 	t.Helper()
 	bridge := &deliveredModelBridge{fixture: fixture}
-	bridge.server = httptest.NewServer(http.HandlerFunc(bridge.serveHTTP))
+	bridge.server = characterizationNewHTTPServer(t, http.HandlerFunc(bridge.serveHTTP))
 	t.Cleanup(bridge.server.Close)
 	return bridge
 }

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,8 +43,8 @@ type ttsStory struct {
 
 func setupTTSStory(t *testing.T) ttsStory {
 	t.Helper()
-	fixture := localai.Start(t)
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	fixture := characterizationStartLocalAI(t)
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -54,7 +53,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 	}))
 	t.Cleanup(modelServer.Close)
 
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericBuiltinTTSCache(t, home)
 	writeGenericBuiltinTTSManagedRuntimeCache(t, home)
 	writeGenericBuiltinTTSBackendCache(t, home)
@@ -64,7 +63,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
-	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 
 	var requests []models.InvokeModelRequest
 	backend := func(ctx context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
@@ -78,7 +77,7 @@ func setupTTSStory(t *testing.T) ttsStory {
 		}
 		return fixture.InvocationBackend(ctx, request)
 	}
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,
@@ -154,7 +153,7 @@ func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 
 func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	t.Helper()
-	aliasPath := filepath.Join(t.TempDir(), "alias.wav")
+	aliasPath := filepath.Join(characterizationTempDir(t), "alias.wav")
 	var aliasStdout, aliasStderr bytes.Buffer
 	aliasInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "hello", "--output", aliasPath,
@@ -182,7 +181,7 @@ func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 
 func runFailedAndRecoveredTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	t.Helper()
-	failurePath := filepath.Join(t.TempDir(), "failure.wav")
+	failurePath := filepath.Join(characterizationTempDir(t), "failure.wav")
 	var failureStdout, failureStderr bytes.Buffer
 	failureInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "backend failure", "--output", failurePath,
@@ -204,7 +203,7 @@ func runFailedAndRecoveredTTS(t *testing.T, story ttsStory, wantAudio []byte) {
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --text backend-failure --output %s", failurePath)
 	t.Logf("runtime proof exitCode=1 stdout=%q stderr=%q error=%q outputExists=false", failureStdout.String(), failureStderr.String(), failureErr.Error())
 
-	recoveryPath := filepath.Join(t.TempDir(), "recovery.wav")
+	recoveryPath := filepath.Join(characterizationTempDir(t), "recovery.wav")
 	var recoveryStdout, recoveryStderr bytes.Buffer
 	recoveryInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "after failure", "--output", recoveryPath,

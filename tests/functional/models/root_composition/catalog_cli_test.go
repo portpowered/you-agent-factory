@@ -18,8 +18,8 @@ import (
 func TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	factoryDir := support.ScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	factoryDir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     serviceedges.Edges{},

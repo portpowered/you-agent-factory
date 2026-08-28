@@ -3,7 +3,6 @@ package root_composition_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -14,7 +13,7 @@ import (
 func TestOmniProtocolTransportRoundTripsThroughNetworkDialer(t *testing.T) {
 	t.Parallel()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := characterizationListen(t, "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen for protocol fixture: %v", err)
 	}

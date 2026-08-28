@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
@@ -103,7 +102,7 @@ type omniFileInputFixture struct {
 
 func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixture {
 	t.Helper()
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -112,7 +111,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 	}))
 	t.Cleanup(modelServer.Close)
 
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	selection := serviceedges.ModelBackendArtifactSelection{
 		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
@@ -124,7 +123,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 
 	fixture := &omniFileInputFixture{
 		home:     home,
-		dir:      support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
+		dir:      characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
 		protocol: &omniTextProtocolFixture{response: response},
 		network:  &rejectingModelAssetHTTP{},
 	}
@@ -139,7 +138,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
-	fixture.process = support.BuildProcess(t, serviceedges.Edges{
+	fixture.process = characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient: fixture.network, ModelAssetMakeDirectories: assetFiles.MkdirAll,
 		ModelAssetInspectPath: assetFiles.Stat, ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
 		ModelAssetResolveEnvironment: func(string) string { return "" }, ModelAssetWriteFile: assetFiles.WriteFile,

@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,8 +52,8 @@ type asrStory struct {
 
 func setupASRStory(t *testing.T) asrStory {
 	t.Helper()
-	fixture := localai.Start(t)
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	fixture := characterizationStartLocalAI(t)
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -67,18 +66,18 @@ func setupASRStory(t *testing.T) asrStory {
 	if !ok {
 		t.Fatal("built-in catalog did not publish the ASR model definition")
 	}
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericBuiltinModelCache(t, home, modelDefinition.Source)
 	selection, backendBody := fixtureBackendSelection(modelDefinition.Backend)
 	writeGenericBackendCache(t, home, modelDefinition.Backend, selection, backendBody)
 
 	inputBytes := []byte{0x00, 0xff, 0x10, 0x80, 0x7f, 0x01}
-	inputPath := filepath.Join(t.TempDir(), "meeting.wav")
+	inputPath := filepath.Join(characterizationTempDir(t), "meeting.wav")
 	if err := os.WriteFile(inputPath, inputBytes, 0o644); err != nil {
 		t.Fatalf("write ASR input fixture: %v", err)
 	}
-	transcriptPath := filepath.Join(t.TempDir(), "transcript.txt")
-	segmentsPath := filepath.Join(t.TempDir(), "segments.json")
+	transcriptPath := filepath.Join(characterizationTempDir(t), "transcript.txt")
+	segmentsPath := filepath.Join(characterizationTempDir(t), "segments.json")
 	const wantSegments = `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXTURE_SEGMENT"}]`
 
 	received := &models.ASRBackendRequest{}
@@ -106,8 +105,8 @@ func setupASRStory(t *testing.T) asrStory {
 	compatibility := &joinedCompatibilityChecker{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	var backendSelections []serviceedges.ModelBackendArtifactSelectionRequest
-	dir := support.ScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
-	process := support.BuildProcess(t, serviceedges.Edges{
+	dir := characterizationScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
+	process := characterizationBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
 		ModelAssetInspectPath:          assetFiles.Stat,

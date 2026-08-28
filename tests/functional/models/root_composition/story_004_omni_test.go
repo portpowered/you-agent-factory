@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -46,7 +45,7 @@ func TestModelsOmniCancellationReleasesHostAcrossRootProcesses(t *testing.T) {
 	runCancelledOmniInvocation(t, first)
 	closeRootProcess(t, first.process, "close cancelled Omni process")
 
-	secondProcess := support.BuildProcess(t, first.edges)
+	secondProcess := characterizationBuildProcess(t, first.edges)
 	support.CleanupProcess(t, secondProcess)
 	second := *first
 	second.process = secondProcess
@@ -72,7 +71,7 @@ func buildCoordinatedOmniEnvironmentWithLauncher(
 	responses ...string,
 ) *coordinatedOmniEnvironment {
 	t.Helper()
-	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	modelServer := characterizationNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
 			return
@@ -80,11 +79,11 @@ func buildCoordinatedOmniEnvironmentWithLauncher(
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
-	home := t.TempDir()
+	home := characterizationTempDir(t)
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	selection := genericLlamaBackendSelection()
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
-	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	promptPath := filepath.Join(dir, "timing.txt")
 	videoPath := filepath.Join(dir, "clip.mp4")
 	inputFiles := map[string][]byte{promptPath: []byte("What happens at 0:30?"), videoPath: []byte("MP4-CLIP")}
@@ -109,7 +108,7 @@ func buildCoordinatedOmniEnvironmentWithLauncher(
 		return selection, nil
 	}
 	edges.ModelInvocationProtocolClient = fixture
-	process := support.BuildProcess(t, edges)
+	process := characterizationBuildProcess(t, edges)
 	support.CleanupProcess(t, process)
 	return &coordinatedOmniEnvironment{
 		process: process, home: home, dir: dir, videoPath: videoPath, edges: edges, fixture: fixture,

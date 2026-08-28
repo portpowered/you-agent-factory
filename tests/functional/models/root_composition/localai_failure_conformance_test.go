@@ -57,10 +57,10 @@ func TestLocalAIFailureDiagnosticsReachHTTPAndCLI(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			fixture := localai.Start(t, localai.Options{Mode: test.mode, EmbeddingDimensions: 5})
-			home := t.TempDir()
+			fixture := characterizationStartLocalAI(t, localai.Options{Mode: test.mode, EmbeddingDimensions: 5})
+			home := characterizationTempDir(t)
 			writeGenericConformanceCaches(t, home)
-			dir := support.ScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
+			dir := characterizationScaffoldFactory(t, genericConformanceFactoryConfig(fixture.Endpoint()))
 			server, _ := startLocalAIConformanceServer(t, dir, home, fixture)
 
 			row := embeddingConformanceRow(t)
@@ -84,7 +84,7 @@ func TestLocalAIFailureDiagnosticsReachHTTPAndCLI(t *testing.T) {
 			}
 
 			edges, _, _, _ := localAIConformanceEdges(home, fixture)
-			process := support.BuildProcess(t, edges)
+			process := characterizationBuildProcess(t, edges)
 			support.CleanupProcess(t, process)
 			_, cliErr := executeLocalAICLIConformanceRow(
 				t, process, dir, functionalHomeEnvironment(home), row,

@@ -35,7 +35,7 @@ const (
 func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	assetBody := []byte("network-free ASR asset")
 	assetClient := newPullToReadyAssetClient(assetBody)
-	homeDirectory := t.TempDir()
+	homeDirectory := characterizationTempDir(t)
 	edges := serviceedges.Edges{
 		ModelAssetHTTPClient: assetClient,
 		ModelAssetEndpoints: modelsservice.RuntimeAssetEndpoints{
@@ -118,7 +118,7 @@ func executePullToReadyCommand(
 		"USERPROFILE="+homeDirectory,
 		runcli.ModelCacheDirEnvironment+"="+filepath.Join(homeDirectory, "managed-cache"),
 	)
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.WorkingDirectory = characterizationTempDir(t)
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(%s) error = %v\nstdout:\n%s\nstderr:\n%s",
@@ -268,6 +268,7 @@ func newPullToReadyAssetClient(body []byte) *pullToReadyAssetClient {
 }
 
 func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response, error) {
+	c06Ledger.assetHTTPCalls.Add(1)
 	client.calls.Add(1)
 	var body io.Reader
 	switch request.URL.Path {

@@ -39,9 +39,9 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	}
 
 	command := resolveRealOmniVoiceCommand(t)
-	cacheDir := stringsTrimSpaceOrDefault(os.Getenv(realOmniVoiceLongTestCacheDirEnv), filepath.Join(t.TempDir(), "managed-model-cache"))
+	cacheDir := stringsTrimSpaceOrDefault(os.Getenv(realOmniVoiceLongTestCacheDirEnv), filepath.Join(characterizationTempDir(t), "managed-model-cache"))
 	t.Logf("real local inference diagnostics: platform=%s/%s backend=%q cachePath=%q", runtime.GOOS, runtime.GOARCH, command, cacheDir)
-	dir := support.ScaffoldFactory(t, realLocalInferenceFactoryConfig(command))
+	dir := characterizationScaffoldFactory(t, realLocalInferenceFactoryConfig(command))
 	writeRealLocalInferenceWorkstationConfig(t, dir)
 
 	environment := append(
@@ -49,7 +49,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 		runcli.ModelCacheDirEnvironment+"="+cacheDir,
 	)
 	unexpectedProvider := support.NewRecordingCommandRunner("unexpected cloud-provider invocation")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       environment,
