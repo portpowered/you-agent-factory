@@ -1,8 +1,10 @@
 # C06 Provider Sessions CLI evidence
 
 Status: TASK-001 and TASK-002 review-correction witnesses are exercised on the
-shared fixture, including deterministic provider-route close; TASK-003 final
-clean-room validation and PR handoff remain.
+shared fixture, including deterministic provider-route close. TASK-003 final
+clean-room validation is complete; the final implementation handoff is recorded
+below and review owns the PR-host timing verdict, terminal CI, conflicts, and
+merge.
 
 ## Baseline identity
 
@@ -330,3 +332,55 @@ cleanup, and route lifecycle on the local Windows host. They do not prove a
 fresh final checkout, PR-host package timing, remote provider behavior, the
 Unix interrupt edge unavailable on Windows, terminal CI, conflict resolution,
 or merge.
+
+## TASK-003 final clean-room validation
+
+The final validation used a newly created detached clean worktree after syncing
+the branch onto the current `origin/main`. The validated source head was
+`4aa8f9df5785bce28e47513ff1b174c0ca6eeb76`; the subsequent evidence commit is
+documentation-only and does not alter the package implementation or its
+runtime dependencies.
+
+Environment and fidelity matched the declared gate:
+`go version go1.25.0 windows/amd64`; Windows 11 build `26200`; `amd64`; production
+`root.BuildProcess`/API/service composition; controlled local provider and HTTP
+fixtures; real built CLI children for executable, redirection, exit-code, and
+signal witnesses; 0 remote calls and `$0` paid cost.
+
+Required final-head commands and results:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; package time 8.808s; exit code 0
+
+go test -count=3 -timeout=30m ./tests/functional/provider_sessions/cli
+PASS; package time 20.616s; exit code 0
+
+go test -race -count=1 -timeout=10m -run '^TestWorkerSessionsFleetListCLIConcurrent$' ./tests/functional/provider_sessions/cli
+PASS; package time 3.964s; exit code 0; no race report
+
+go test -v -count=1 -timeout=10m ./tests/functional/provider_sessions/cli
+PASS; package time 11.678s; exit code 0
+C06 TASK-002 topology: root-builds=1 api-host-starts=1 cli-builds=1
+C06 TASK-002 cleanup: active-provider-routes=0
+```
+
+The verbose run retained the Windows-only skip with the exact diagnostic
+`os.Interrupt is not supported for child processes on Windows`; the Unix
+interrupt edge remains assigned to the Unix PR/platform gate. All supported
+tests passed, including the direct matrix witnesses, repeated identity/history
+reads, fleet order/parity checks, route lifecycle, and deterministic cleanup.
+
+The local diagnostic package result improved directionally from the baseline
+`18.410s` to `8.808s`. This is a local sample, not a portable threshold; the
+review-owned Backend Functional Coverage package row supplies the PR-host
+directional verdict. `git diff --check` and the allowed-path audit against
+`origin/main` `bb37276f74e9e904e637931c2c13a37a67b54ca8` passed, with only the
+six permitted C06 package/evidence paths changed. No source, support,
+generated, contract, baseline, UI, CI, or unrelated functional-test path was
+modified.
+
+This validation promotes TASK-003 for review handoff. The final PR head is
+the evidence-updated branch head pushed to PR #2382; CI start, the PR-host
+package timing, terminal required checks, conflict resolution, and merge are
+review-owned and are not claimed by this artifact.
