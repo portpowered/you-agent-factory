@@ -23,6 +23,9 @@ import (
 func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	traceID := "trace-executor-panic"
+	if err := recordIsolatedPetriPanicProcessStarted(t.Name(), dir); err != nil {
+		t.Fatalf("record isolated Petri panic runtime row: %v", err)
+	}
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    traceID,
@@ -39,6 +42,9 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 		serviceedges.Edges{ProviderOverride: provider},
 		10*time.Second,
 	)
+	if err := recordIsolatedPetriPanicScenarioCompleted(t.Name(), session.Id); err != nil {
+		t.Fatalf("record isolated Petri panic runtime row completion: %v", err)
+	}
 
 	failedTerminal := support.WorkCustomerLocation("task", "failed")
 	successTerminal := support.WorkCustomerLocation("task", "done")
@@ -49,7 +55,7 @@ func TestPetriExecutorPanicRoutesToFailedTerminal(t *testing.T) {
 	})
 	assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
 	assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
-	assertQuiescentSession(t, session, 0, 1)
+	assertQuiescentFactorySession(t, session, 0, 1)
 
 	failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
 	if !ok {

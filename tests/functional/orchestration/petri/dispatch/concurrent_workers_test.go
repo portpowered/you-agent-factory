@@ -3,15 +3,15 @@ package dispatch
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,21 +24,11 @@ import (
 // availability after quiescence.
 func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 	t.Run("capacity_limited_concurrency_completes_all_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
-		var responses []workerexecution.InferenceResponse
-		for range 15 {
-			responses = append(responses, workerexecution.InferenceResponse{
-				Content: "Done. COMPLETE ACCEPTED",
-			})
-		}
-		provider := testutil.NewMockProvider(responses...)
-
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		session, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("story", "complete"):  3,
@@ -49,29 +39,21 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		})
 		assertCompletedStoryTraces(t, listed, traceIDs)
 
-		if provider.CallCount() != 9 {
-			t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 9)
+		dispatches := assertPublicDispatchEvents(t, events, 9)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "plan-idea", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 3)
 
 		assertResourceAvailability(t, session, "agent-slot", 2)
 	})
 
 	t.Run("serial_concurrency_limit_completes_all_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "serial_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
-		var responses []workerexecution.InferenceResponse
-		for range 15 {
-			responses = append(responses, workerexecution.InferenceResponse{
-				Content: "Done. COMPLETE ACCEPTED",
-			})
-		}
-		provider := testutil.NewMockProvider(responses...)
-
-		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 30*time.Second)
+		session, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 30*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			support.WorkCustomerLocation("story", "complete"):  3,
@@ -82,9 +64,16 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		})
 		assertCompletedStoryTraces(t, listed, traceIDs)
 
-		if provider.CallCount() != 9 {
-			t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
-		}
+		assertSharedPetriProviderCalls(t, dir, 9)
+		dispatches := assertPublicDispatchEvents(t, events, 9)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "plan-idea", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 3)
+		assertDispatchesDoNotOverlap(t, dispatches, map[string]struct{}{
+			"plan-idea":     {},
+			"execute-story": {},
+			"review-story":  {},
+		})
 
 		assertResourceAvailability(t, session, "agent-slot", 1)
 	})
@@ -98,42 +87,38 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 // collapsing, swapping, or duplicating identities.
 func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	t.Run("single_seed_correlates_to_terminal_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceID := "trace-single-seed"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
+		assertSharedPetriProviderCalls(t, dir, 3)
 	})
 
 	t.Run("two_concurrent_seeds_each_reach_terminal_work", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceIDs := seedIdeas(t, dir, []seedIdea{
 			{traceID: "trace-alpha", title: "feature-alpha"},
 			{traceID: "trace-beta", title: "feature-beta"},
 		})
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(6)...)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 10*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, traceIDs)
 		assertDistinctTerminalWorkIDs(t, listed, terminal, 2)
+		assertSharedPetriProviderCalls(t, dir, 6)
 	})
 
 	t.Run("multi_seed_completions_remain_distinct", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		const n = 5
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		ideas := make([]seedIdea, n)
@@ -145,42 +130,31 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 		}
 		traceIDs := seedIdeas(t, dir, ideas)
 
-		runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(n * 3)...)
-		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-			ProviderCommandRunner: runner,
-		}, 15*time.Second)
+		listed := runSharedPetriFactoryToCompletionWithEdgesAndListedWork(t, dir, serviceedges.Edges{}, 15*time.Second)
 
 		terminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: n})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, traceIDs)
 		assertDistinctTerminalWorkIDs(t, listed, terminal, n)
+		assertSharedPetriProviderCalls(t, dir, n*3)
 	})
 
 	t.Run("concurrent_execution_pool_keeps_distinct_work_identities", func(t *testing.T) {
-		t.Parallel()
+		enterSharedPetriScenario(t)
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedIdeas(t, dir, []seedIdea{
 			{traceID: "trace-iso-1", title: "file-1"},
 			{traceID: "trace-iso-2", title: "file-2"},
 		})
 
-		var responses []workerexecution.InferenceResponse
-		for range 10 {
-			responses = append(responses, workerexecution.InferenceResponse{
-				Content: "Done. COMPLETE ACCEPTED",
-			})
-		}
-		provider := testutil.NewMockProvider(responses...)
-
-		_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-			ProviderOverride: provider,
-		}, 10*time.Second)
+		_, listed, events := runSharedPetriFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{}, 10*time.Second)
 
 		terminal := support.WorkCustomerLocation("story", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, traceIDs)
 		assertDistinctTerminalWorkIDs(t, listed, terminal, 2)
 		assertDispatchEventsReferenceTerminalWork(t, events, listed, terminal, traceIDs)
+		assertSharedPetriProviderCalls(t, dir, 6)
 	})
 }
 
@@ -189,6 +163,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 // the failing identity to the Factory-configured failed location without a
 // second successful dispatch or completion path for that same Work.
 func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
+	enterSharedPetriScenario(t)
 	const (
 		failTraceID = "trace-will-fail"
 		passTraceID = "trace-will-pass"
@@ -197,20 +172,40 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 	failedTerminal := support.WorkCustomerLocation("story", "failed")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
+	support.UpdateFactoryConfig(t, dir, func(cfg map[string]any) {
+		workstations, ok := cfg["workstations"].([]any)
+		if !ok {
+			t.Fatal("batch fixture workstations have unexpected shape")
+		}
+		for _, raw := range workstations {
+			workstation, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			if workstation["name"] == "execute-story" {
+				workstation["workingDirectory"] = "runtime/{{ (index .Inputs 0).TraceID }}"
+				return
+			}
+		}
+		t.Fatal("batch fixture is missing execute-story workstation")
+	})
 	seedIdeas(t, dir, []seedIdea{
 		{traceID: failTraceID, title: "will-fail"},
 		{traceID: passTraceID, title: "will-pass"},
 	})
 
-	provider := &traceAwareReviewInferenceProvider{
-		rejectTraceID: failTraceID,
-		reviewCounts:  make(map[string]int),
+	provider := &traceAwareConcurrentFailureCommandResponder{
+		failureTraceID: failTraceID,
+		passTraceID:    passTraceID,
+		executionCalls: make(map[string]int),
 	}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderOverride: provider,
-	}, 15*time.Second)
-
+	route := sharedPetriRouteConfig{provider: provider.respond}
+	_, listed, events := runSharedPetriFactoryToCompletionWithRouteAndObservations(
+		t,
+		dir,
+		route,
+		15*time.Second,
+	)
 	assertWorkAtCustomerStates(t, listed, map[string]int{
 		successTerminal: 1,
 		failedTerminal:  1,
@@ -222,58 +217,74 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 	assertTerminalWorkCorrelatesToTraceIDs(t, listed, successTerminal, []string{passTraceID})
 	assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{failTraceID})
 	assertTraceAbsentAtCustomerState(t, listed, successTerminal, failTraceID)
+	assertTraceAbsentAtCustomerState(t, listed, failedTerminal, passTraceID)
 
 	failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, failTraceID)
 	if !ok {
 		t.Fatalf("missing failed Work for trace %q at %s", failTraceID, failedTerminal)
 	}
+	dispatchObservations := support.ObserveDispatchEvents(t, events)
+	assertFailedDispatchResponseErrorForWork(t, dispatchObservations, failedWorkID)
 	assertNoAcceptedDispatchMovesWorkToCustomerState(t, events, failedWorkID, successTerminal)
 	assertDispatchEventsReferenceTerminalWork(t, events, listed, successTerminal, []string{passTraceID})
+	dispatches := assertPublicDispatchEvents(t, events, 5)
+	assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeAccepted, 1)
+	assertDispatchTransitionOutcomeCount(t, dispatches, "execute-story", factoryapi.WorkOutcomeFailed, 1)
+	assertDispatchTransitionOutcomeCount(t, dispatches, "review-story", factoryapi.WorkOutcomeAccepted, 1)
 
 	provider.mu.Lock()
-	failReviewCalls := provider.reviewCounts[failTraceID]
-	passReviewCalls := provider.reviewCounts[passTraceID]
+	failExecutionCalls := provider.executionCalls[failTraceID]
+	passExecutionCalls := provider.executionCalls[passTraceID]
+	executionCallCounts := map[string]int{
+		failTraceID: failExecutionCalls,
+		passTraceID: passExecutionCalls,
+	}
 	provider.mu.Unlock()
-	if failReviewCalls != 3 {
-		t.Errorf("review calls for failing trace = %d, want 3", failReviewCalls)
-	}
-	if passReviewCalls != 1 {
-		t.Errorf("review calls for passing trace = %d, want 1", passReviewCalls)
+	if failExecutionCalls != 1 || passExecutionCalls != 1 {
+		t.Errorf("concurrent execute provider calls = %#v, want one call per trace", executionCallCounts)
 	}
 }
 
-type traceAwareReviewInferenceProvider struct {
-	testutil.NativeProvider
-	rejectTraceID string
-	mu            sync.Mutex
-	reviewCounts  map[string]int
+type traceAwareConcurrentFailureCommandResponder struct {
+	mu             sync.Mutex
+	failureTraceID string
+	passTraceID    string
+	executionCalls map[string]int
 }
 
-func (p *traceAwareReviewInferenceProvider) Execute(
-	_ context.Context,
-	req providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	traceID := req.Correlation.TraceID
-	if req.WorkerType == "reviewer" {
+func (p *traceAwareConcurrentFailureCommandResponder) respond(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	if strings.TrimSpace(string(request.Stdin)) == "Execute the story." {
+		traceID := ""
+		switch {
+		case strings.Contains(request.WorkDir, p.failureTraceID):
+			traceID = p.failureTraceID
+		case strings.Contains(request.WorkDir, p.passTraceID):
+			traceID = p.passTraceID
+		default:
+			return platformprocess.CommandResult{}, fmt.Errorf(
+				"execute request is missing stable trace identity in working directory %q",
+				request.WorkDir,
+			)
+		}
 		p.mu.Lock()
-		p.reviewCounts[traceID]++
+		p.executionCalls[traceID]++
 		p.mu.Unlock()
-		if traceID == p.rejectTraceID {
-			return traceAwareReviewResponse("needs revision"), nil
+		if traceID == p.failureTraceID {
+			return platformprocess.CommandResult{
+				Stderr:   []byte("executor command failed"),
+				ExitCode: 1,
+			}, nil
 		}
 	}
-	return traceAwareReviewResponse("Done. COMPLETE ACCEPTED"), nil
-}
-
-func traceAwareReviewResponse(content string) providers.ExecuteResult {
-	return providers.ExecuteResult{
-		Content: content,
-		Diagnostics: &providers.ExecuteDiagnostics{
-			Metadata: map[string]string{
-				"completion_evidence": "provider_response",
-			},
-		},
-	}
+	return platformprocess.CommandResult{
+		Stdout: sharedPetriProviderStdout(request.Command, "Done. COMPLETE ACCEPTED"),
+	}, nil
 }
 
 type seedIdea struct {
@@ -497,9 +508,13 @@ func assertNoAcceptedDispatchMovesWorkToCustomerState(
 	}
 }
 
-func assertResourceAvailability(t *testing.T, session factoryapi.FactorySession, name string, want int) {
+func assertResourceAvailability(t *testing.T, status factoryapi.StatusResponse, name string, want int) {
 	t.Helper()
-	for _, resource := range session.Runtime.Usage.Resources {
+	if status.Resources == nil {
+		t.Errorf("session status missing resource usage, want %s=%d", name, want)
+		return
+	}
+	for _, resource := range *status.Resources {
 		if resource.Name == name {
 			if resource.Available != want || resource.Total != want {
 				t.Errorf("resource %s usage = %#v, want %d available and total", name, resource, want)
