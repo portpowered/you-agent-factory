@@ -14,7 +14,6 @@ import (
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -22,6 +21,77 @@ import (
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// These aliases let the shared process fixture consume the public provider
+// registration contract without importing the Providers wire package from the
+// harness itself. The composition edge remains serviceedges.Edges at the root
+// boundary.
+type (
+	sharedInferenceProviderRegistration          = inference.Registration
+	sharedInferenceProviderIntegration           = inference.Integration
+	sharedInferenceProviderIdentity              = inference.Identity
+	sharedInferenceProviderCapabilitySet         = inference.CapabilitySet
+	sharedInferenceProviderDiscovery             = inference.Discovery
+	sharedInferenceProviderInvocationRequest     = inference.InvocationRequest
+	sharedInferenceProviderResponseWriter        = inference.ResponseWriter
+	sharedInferenceProviderExecutionCapabilities = inference.ExecutionCapabilities
+	sharedInferenceProviderManifest              = inference.Manifest
+)
+
+const (
+	sharedInferenceImplementationExternallySupplied = inference.ImplementationExternallySupplied
+	sharedInferenceSupportProduction                = inference.SupportProduction
+)
+
+func sharedInferencePromptCapabilities() sharedInferenceProviderCapabilitySet {
+	return inference.NewCapabilitySet(inference.CapabilityPromptSubmission)
+}
+
+func TestSharedInferenceCommandRouterRejectsUnknownSelector(t *testing.T) {
+	validDir := filepath.Join(t.TempDir(), "valid")
+	var calls int
+	runner := inferenceSelectorProbeRunner{calls: &calls}
+	router := &inferenceCommandRouter{routes: make(map[string]inferenceCommandRoute)}
+	if err := router.set(validDir, runner, nil, inferenceRouteContext{
+		scenarioName: "selector-probe",
+		sessionID:    "selector-probe-session",
+	}); err != nil {
+		t.Fatalf("register valid selector: %v", err)
+	}
+	if err := router.set(validDir, runner, nil, inferenceRouteContext{
+		scenarioName: "duplicate-probe",
+		sessionID:    "duplicate-probe-session",
+	}); err == nil {
+		t.Fatal("duplicate selector registration succeeded, want explicit registration error")
+	}
+
+	_, err := router.Run(t.Context(), platformprocess.CommandRequest{
+		Command: "provider",
+		WorkDir: filepath.Join(t.TempDir(), "unknown"),
+	})
+	if err == nil {
+		t.Fatal("unknown selector succeeded, want exact-route failure")
+	}
+	if !strings.Contains(err.Error(), "selector-probe") ||
+		!strings.Contains(err.Error(), "selector-probe-session") {
+		t.Fatalf("unknown selector error = %q, want scenario and session context", err)
+	}
+	if calls != 0 {
+		t.Fatalf("valid command runner calls = %d after unknown selector, want 0", calls)
+	}
+}
+
+type inferenceSelectorProbeRunner struct {
+	calls *int
+}
+
+func (runner inferenceSelectorProbeRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	(*runner.calls)++
+	return platformprocess.CommandResult{}, nil
+}
 
 // TestExplicitProviderAndModelReachSelectedProviderEdge proves that when a worker
 // declares an explicit provider and model, root.BuildProcess dispatch invokes the
@@ -53,8 +123,8 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 	selectedManifest := externalProviderManifest(t, selectedProviderID, selectedProviderAlias)
 	alternateManifest := externalProviderManifest(t, alternateProviderID, alternateProviderAlias)
 
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderRegistrations: []inference.Registration{
+	_, listed, _ := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		providerRegistrations: []inference.Registration{
 			{Manifest: selectedManifest, Integration: selectedIntegration},
 			{Manifest: alternateManifest, Integration: alternateIntegration},
 		},
@@ -130,8 +200,8 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 	defaultManifest := externalProviderManifest(t, defaultProviderID, defaultProviderAlias)
 	workerManifest := externalProviderManifest(t, workerProviderID, workerProviderAlias)
 
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderRegistrations: []inference.Registration{
+	_, listed, _ := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		providerRegistrations: []inference.Registration{
 			{Manifest: defaultManifest, Integration: defaultIntegration},
 			{Manifest: workerManifest, Integration: workerIntegration},
 		},
@@ -196,68 +266,66 @@ func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
 	)
 	registeredManifest := externalProviderManifest(t, registeredProviderID, registeredProviderAlias)
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderRegistrations: []inference.Registration{
-			{Manifest: registeredManifest, Integration: registeredIntegration},
-		},
+	withSharedInferenceProcess(t, sharedInferenceScenario{
+		providerRegistrations: []inference.Registration{{
+			Manifest: registeredManifest, Integration: registeredIntegration,
+		}},
+	}, func(process support.ApplicationProcess) {
+		constructionStats := registeredIntegration.Stats()
+		if constructionStats.InvokeCalls != 0 || constructionStats.ProgressWrites != 0 ||
+			constructionStats.TerminalCloses != 0 || constructionStats.DiscoverCalls != 0 ||
+			constructionStats.CapabilityCalls != 0 {
+			t.Fatalf(
+				"construction side effects = %#v, want inert registry composition",
+				constructionStats,
+			)
+		}
+
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "run",
+			"--dir", dir,
+			"--continuously",
+			"--quiet",
+			"--no-record",
+		})
+		homeDir := t.TempDir()
+		inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+		inputs.Input.WorkingDirectory = dir
+
+		executeErr := process.Execute(inputs.Input)
+		if executeErr == nil {
+			t.Fatalf(
+				"Process.Execute(run unknown provider) error = nil, want validation failure; stdout=%q stderr=%q",
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+		errorText := executeErr.Error()
+		if !strings.Contains(errorText, `provider "`+unknownProviderAlias+`" is unknown`) &&
+			!strings.Contains(errorText, "validate Factory provider selections") {
+			t.Fatalf(
+				"unknown provider error = %q, want stable unknown-provider validation diagnostic; stdout=%q stderr=%q",
+				errorText,
+				inputs.Stdout(),
+				inputs.Stderr(),
+			)
+		}
+
+		runStats := registeredIntegration.Stats()
+		if runStats.InvokeCalls != 0 {
+			t.Fatalf(
+				"registered provider invoke calls after failed startup = %d, want 0",
+				runStats.InvokeCalls,
+			)
+		}
+		if runStats.ProgressWrites != 0 || runStats.TerminalCloses != 0 {
+			t.Fatalf(
+				"registered provider side effects after failed startup = progress:%d terminal:%d, want inert",
+				runStats.ProgressWrites,
+				runStats.TerminalCloses,
+			)
+		}
 	})
-
-	constructionStats := registeredIntegration.Stats()
-	if constructionStats.InvokeCalls != 0 || constructionStats.ProgressWrites != 0 ||
-		constructionStats.TerminalCloses != 0 || constructionStats.DiscoverCalls != 0 ||
-		constructionStats.CapabilityCalls != 0 {
-		t.Fatalf(
-			"construction side effects = %#v, want inert registry composition",
-			constructionStats,
-		)
-	}
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run",
-		"--dir", dir,
-		"--continuously",
-		"--with-server",
-		"--server", "http://127.0.0.1:1",
-		"--quiet",
-		"--no-record",
-	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = dir
-
-	executeErr := process.Execute(inputs.Input)
-	if executeErr == nil {
-		t.Fatalf(
-			"Process.Execute(run unknown provider) error = nil, want validation failure; stdout=%q stderr=%q",
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	errorText := executeErr.Error()
-	if !strings.Contains(errorText, `provider "`+unknownProviderAlias+`" is unknown`) &&
-		!strings.Contains(errorText, "validate Factory provider selections") {
-		t.Fatalf(
-			"unknown provider error = %q, want stable unknown-provider validation diagnostic; stdout=%q stderr=%q",
-			errorText,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-
-	runStats := registeredIntegration.Stats()
-	if runStats.InvokeCalls != 0 {
-		t.Fatalf(
-			"registered provider invoke calls after failed startup = %d, want 0",
-			runStats.InvokeCalls,
-		)
-	}
-	if runStats.ProgressWrites != 0 || runStats.TerminalCloses != 0 {
-		t.Fatalf(
-			"registered provider side effects after failed startup = progress:%d terminal:%d, want inert",
-			runStats.ProgressWrites,
-			runStats.TerminalCloses,
-		)
-	}
 }
 
 func writeExplicitSelectionWorker(t *testing.T, factoryDir, provider, model string) {
@@ -265,6 +333,7 @@ func writeExplicitSelectionWorker(t *testing.T, factoryDir, provider, model stri
 	workerPath := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
 	worker := strings.Join([]string{
 		"---",
+		"executorProvider: ACP",
 		"model: " + model,
 		"modelProvider: " + provider,
 		"stopToken: COMPLETE",

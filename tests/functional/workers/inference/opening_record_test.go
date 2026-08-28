@@ -10,7 +10,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -29,7 +28,10 @@ import (
 func TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession(t *testing.T) {
 	loaded := loadOpeningRecordFixture(t, "agy", "final-only-success")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, loaded.Process.Model))
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, loaded.Process.Model),
+		"ANTIGRAVITY",
+	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-003 provider-neutral lifecycle"}`))
 
 	exitCode := 0
@@ -41,10 +43,10 @@ func TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession(t *testing.
 		Stderr:   []byte(loaded.Stderr),
 		ExitCode: exitCode,
 	})
-	_, listed, factoryEvents, responseEvents, workerEvents := support.RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
+	_, listed, factoryEvents, responseEvents, workerEvents := runSharedInferenceFactoryWithStreams(
 		t,
 		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
+		sharedInferenceScenario{commandRunner: runner},
 		30*time.Second,
 	)
 

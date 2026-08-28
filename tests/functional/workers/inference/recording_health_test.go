@@ -1,7 +1,6 @@
 package inference_test
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -153,12 +152,14 @@ func runWSRFT007RootRecording(
 	probe.failFailureMarker = failFailureMarker
 	runner := newWSRFT004ProviderRunner(t, probe)
 	dir := wsrFT004FactoryForFixture(t, fixture)
-	reader, execErr := runWSRFT008FactoryWithProcess(t, dir, runner, probe, exitCode)
-	if execErr != nil {
-		t.Fatalf("root-composed Process.Execute error = %v", execErr)
-	}
+	queueWSRFT004ProviderResult(t, runner, exitCode)
+	runSharedInferenceFactory(t, dir, sharedInferenceScenario{
+		commandRunner:         runner,
+		workerRecordingWriter: probe,
+	}, sharedInferenceScenarioTimeout)
+	reader := recordings.WorkerRecordingReader(probe)
 	recordingID, _ := probe.RecordingIdentity(t)
-	snapshot, err := reader.LoadWorkerRecording(context.Background(), recordingID)
+	snapshot, err := reader.LoadWorkerRecording(t.Context(), recordingID)
 	if err != nil {
 		t.Fatalf("LoadWorkerRecording(%q) error = %v", recordingID, err)
 	}
@@ -170,7 +171,10 @@ func wsrFT004FactoryForFixture(t *testing.T, fixture string) string {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, fixture))
 	support.ClearSeedInputs(t, dir)
 	loaded := loadOpeningRecordFixture(t, "codex", "success")
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model))
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
+		"CODEX",
+	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"WSR-FT-007 recording health"}`))
 	return dir
 }
