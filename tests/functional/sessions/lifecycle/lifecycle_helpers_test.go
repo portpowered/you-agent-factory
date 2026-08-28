@@ -70,8 +70,12 @@ func registerLifecycleSessionCleanupAt(
 	t.Helper()
 
 	ledger := lifecycleLedgerForTest(t)
-	if err := ledger.registerSession(t.Name(), sessionID, folderPath); err != nil {
+	registered, err := ledger.registerSession(t.Name(), sessionID, folderPath)
+	if err != nil {
 		t.Fatalf("register lifecycle cleanup census: %v", err)
+	}
+	if !registered {
+		return func() {}
 	}
 
 	var cleanupOnce sync.Once

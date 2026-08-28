@@ -126,19 +126,22 @@ func (ledger *lifecycleResourceLedger) registerSession(
 	owner string,
 	sessionID string,
 	folderPath string,
-) error {
+) (bool, error) {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return fmt.Errorf("owner=%q resource=session id is empty", owner)
+		return false, fmt.Errorf("owner=%q resource=session id is empty", owner)
 	}
-	if _, exists := ledger.sessions[sessionID]; exists {
-		return fmt.Errorf("owner=%q resource=session id=%q registered more than once", owner, sessionID)
+	if existing, exists := ledger.sessions[sessionID]; exists {
+		if existing.durable && existing.closeCount == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("owner=%q resource=session id=%q registered more than once", owner, sessionID)
 	}
 	if strings.TrimSpace(folderPath) != "" {
 		if !filepath.IsAbs(folderPath) {
-			return fmt.Errorf("owner=%q resource=temporary-factory path=%q is not absolute", owner, folderPath)
+			return false, fmt.Errorf("owner=%q resource=temporary-factory path=%q is not absolute", owner, folderPath)
 		}
 		folderPath = filepath.Clean(folderPath)
 	}
@@ -148,7 +151,7 @@ func (ledger *lifecycleResourceLedger) registerSession(
 		folderPath: folderPath,
 		durable:    isLifecycleDurableSession(sessionID),
 	}
-	return nil
+	return true, nil
 }
 
 func (ledger *lifecycleResourceLedger) closeSession(
@@ -171,6 +174,13 @@ func (ledger *lifecycleResourceLedger) closeSession(
 	resource.terminalObserved = terminalObserved
 	resource.pathRemoved = pathRemoved
 	return nil
+}
+
+func (ledger *lifecycleResourceLedger) sessionClosed(sessionID string) bool {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	resource, ok := ledger.sessions[strings.TrimSpace(sessionID)]
+	return ok && resource.closeCount == 1
 }
 
 func (ledger *lifecycleResourceLedger) summary() string {
