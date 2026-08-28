@@ -20,9 +20,9 @@ import (
 const crossSharedFixtureShutdownTimeout = 15 * time.Second
 
 // crossSharedProcessFixture owns the immutable root process used by the
-// shareable cross-package scenarios. Its API starter is routed to a fresh
-// local test server for each hosted command; no server or session state is
-// shared across scenarios.
+// shareable cross-package scenarios. The parity cases share one routed local
+// API server while the inspect and idle lifecycle cases retain isolated
+// servers; Factory Session state remains scoped to each explicit session.
 type crossSharedProcessFixture struct {
 	rootDir    string
 	factoryDir string
@@ -51,7 +51,12 @@ func (router *crossAPIServerRouter) start(
 	if server == nil {
 		return errors.New("cross shared API server is not selected")
 	}
-	return server.Start(ctx, request)
+	crossCharacterization.recordServerStart()
+	err := server.Start(ctx, request)
+	if err == nil {
+		crossCharacterization.recordServerClose()
+	}
+	return err
 }
 
 var (
@@ -69,6 +74,15 @@ func TestMain(m *testing.M) {
 				code = 1
 			}
 		}
+	}
+	if err := crossCharacterization.validateAfterSuite(); err != nil {
+		fmt.Fprintf(os.Stderr, "packaged cross characterization: %v\n", err)
+		if code == 0 {
+			code = 1
+		}
+	}
+	if crossCharacterization.scenarioMatrixComplete() {
+		fmt.Fprintf(os.Stderr, "packaged cross characterization: %s\n", crossCharacterization.summary())
 	}
 	os.Exit(code)
 }
@@ -106,7 +120,8 @@ func startCrossSharedProcessFixture() (*crossSharedProcessFixture, error) {
 
 	router := &crossAPIServerRouter{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter: router.start,
+		APIServerStarter:      router.start,
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(packagedGoalAcceptedProviderOutput),
 	})
 	if err != nil {
 		cleanupRoot()
@@ -180,6 +195,13 @@ func (fixture *crossSharedProcessFixture) close() error {
 		}
 		return fmt.Errorf("remove fixture root: %w", removeErr)
 	}
+	if _, statErr := os.Stat(fixture.rootDir); !os.IsNotExist(statErr) {
+		if err != nil {
+			return errors.Join(err, fmt.Errorf("fixture root %q remains; stat error: %v", fixture.rootDir, statErr))
+		}
+		return fmt.Errorf("fixture root %q remains; stat error: %v", fixture.rootDir, statErr)
+	}
+	crossCharacterization.recordSharedFixtureCleanup()
 	return err
 }
 
