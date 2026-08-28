@@ -416,6 +416,9 @@ func registerPlacementResponseCleanup(
 	}
 	sessionID := strings.TrimSpace(*response.SessionId)
 	if sessionID != "" {
+		if lifecycleFixture != nil && lifecycleFixture.ledger != nil && lifecycleFixture.ledger.sessionClosed(sessionID) {
+			return
+		}
 		registerLifecycleSessionCleanup(t, serverURL, sessionID)
 	}
 }
