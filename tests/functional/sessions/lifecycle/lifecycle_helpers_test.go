@@ -58,15 +58,58 @@ func cleanupSessionViaAPI(t *testing.T, baseURL, sessionID string) {
 }
 
 func registerLifecycleSessionCleanup(t *testing.T, baseURL, sessionID string) func() {
+	return registerLifecycleSessionCleanupAt(t, baseURL, sessionID, "")
+}
+
+func registerLifecycleSessionCleanupAt(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	folderPath string,
+) func() {
 	t.Helper()
 
-	cleanupNeeded := true
+	ledger := lifecycleLedgerForTest(t)
+	if err := ledger.registerSession(t.Name(), sessionID, folderPath); err != nil {
+		t.Fatalf("register lifecycle cleanup census: %v", err)
+	}
+
+	var cleanupOnce sync.Once
+	finish := func(cleanupAlreadyCompleted bool) {
+		cleanupOnce.Do(func() {
+			if !cleanupAlreadyCompleted {
+				cleanupLifecycleSession(t, baseURL, sessionID)
+			}
+
+			publicAbsent := false
+			terminalObserved := false
+			if isLifecycleDurableSession(sessionID) {
+				terminalObserved = assertDurableSessionTerminal(t, baseURL, sessionID)
+			} else {
+				assertAPISessionNotFound(t, baseURL, sessionID)
+				publicAbsent = true
+			}
+			pathRemoved := removeLifecycleSessionPath(t, folderPath)
+			if err := ledger.closeSession(sessionID, publicAbsent, terminalObserved, pathRemoved); err != nil {
+				t.Errorf("record lifecycle session cleanup census: %v", err)
+			}
+		})
+	}
 	t.Cleanup(func() {
-		if cleanupNeeded {
-			cleanupSessionViaAPI(t, baseURL, sessionID)
-		}
+		finish(false)
 	})
-	return func() { cleanupNeeded = false }
+	return func() { finish(true) }
+}
+
+func cleanupLifecycleSession(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	if isLifecycleDurableSession(sessionID) {
+		if err := terminateRemoteFunctionalSession(baseURL, sessionID); err != nil {
+			t.Errorf("terminate durable lifecycle cell session %s: %v", sessionID, err)
+		}
+		return
+	}
+	cleanupSessionViaAPI(t, baseURL, sessionID)
 }
 
 func (client *lifecycleClientProcess) executeCLI(
@@ -88,7 +131,14 @@ func (client *lifecycleClientProcess) executeCLI(
 	inputs := support.FakeInputs(ctx, cmdArgs)
 	inputs.Input.Env = append([]string(nil), client.env...)
 	inputs.Input.WorkingDirectory = workingDir
+	var invocationID string
+	if lifecycleFixture != nil && lifecycleFixture.ledger != nil {
+		invocationID = lifecycleFixture.ledger.beginInvocation("shared lifecycle client Process.Execute")
+	}
 	err := client.process.Execute(inputs.Input)
+	if invocationID != "" {
+		err = errors.Join(err, lifecycleFixture.ledger.closeInvocation(invocationID))
+	}
 	combined := inputs.Stdout()
 	if stderrText := inputs.Stderr(); strings.TrimSpace(stderrText) != "" {
 		combined += "\n" + stderrText

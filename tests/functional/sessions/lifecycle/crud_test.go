@@ -27,17 +27,19 @@ const lifecycleFixtureShutdownTimeout = 5 * time.Second
 // sessions they create, so public list/get observations show no unintended
 // state across cells.
 type sharedLifecycleFixture struct {
-	rootDir          string
-	baseURL          string
-	factoryDir       string
-	clientWorkingDir string
-	homeDir          string
-	cancel           context.CancelFunc
-	done             chan error
-	process          support.ApplicationProcess
-	client           *lifecycleClientProcess
-	api              *lifecycleHTTPServer
-	constructor      *lifecycleProcessConstructor
+	rootDir            string
+	baseURL            string
+	factoryDir         string
+	clientWorkingDir   string
+	homeDir            string
+	cancel             context.CancelFunc
+	done               chan error
+	serverInvocationID string
+	process            support.ApplicationProcess
+	client             *lifecycleClientProcess
+	api                *lifecycleHTTPServer
+	constructor        *lifecycleProcessConstructor
+	ledger             *lifecycleResourceLedger
 }
 
 var lifecycleFixture *sharedLifecycleFixture
@@ -99,8 +101,9 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		return nil, fmt.Errorf("write shared remote lifecycle factory: %w", err)
 	}
 
-	api := newLifecycleHTTPServer()
-	constructor := &lifecycleProcessConstructor{}
+	ledger := newLifecycleResourceLedger()
+	api := newLifecycleHTTPServer(ledger)
+	constructor := &lifecycleProcessConstructor{ledger: ledger}
 	resolveHome := func() (string, error) { return homeDir, nil }
 	process, err := constructor.build(ctx, "server", serviceedges.Edges{
 		BrowserOpener:                      func(context.Context, string) error { return nil },
@@ -118,6 +121,7 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 	inputs.Input.Env = lifecycleEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
 	done := make(chan error, 1)
+	serverInvocationID := ledger.beginInvocation("shared server Process.Execute")
 	go func() { done <- process.Execute(inputs.Input) }()
 	baseURL, err := api.waitForBaseURL(15 * time.Second)
 	if err != nil {
@@ -134,16 +138,18 @@ func startSharedLifecycleServer() (*sharedLifecycleFixture, error) {
 		return nil, fmt.Errorf("build shared client root process: %w", err)
 	}
 	return &sharedLifecycleFixture{
-		rootDir:          rootDir,
-		baseURL:          baseURL,
-		factoryDir:       factoryDir,
-		clientWorkingDir: clientWorkingDir,
-		homeDir:          homeDir,
-		cancel:           cancel,
-		done:             done,
-		process:          process,
-		api:              api,
-		constructor:      constructor,
+		rootDir:            rootDir,
+		baseURL:            baseURL,
+		factoryDir:         factoryDir,
+		clientWorkingDir:   clientWorkingDir,
+		homeDir:            homeDir,
+		cancel:             cancel,
+		done:               done,
+		serverInvocationID: serverInvocationID,
+		process:            process,
+		api:                api,
+		constructor:        constructor,
+		ledger:             ledger,
 		client: &lifecycleClientProcess{
 			process: clientProcess,
 			env:     lifecycleEnvironment(homeDir),
@@ -169,14 +175,20 @@ func (fixture *sharedLifecycleFixture) stop() error {
 	}
 	var cleanupErrors []error
 	fixture.cancel()
-	if err := waitForLifecycleProcess(fixture.done); err != nil && !errors.Is(err, context.Canceled) {
-		cleanupErrors = append(cleanupErrors, fmt.Errorf("wait for shared server: %w", err))
+	serverWaitErr := waitForLifecycleProcess(fixture.done)
+	if serverWaitErr != nil && !errors.Is(serverWaitErr, context.Canceled) {
+		cleanupErrors = append(cleanupErrors, fmt.Errorf("wait for shared server: %w", serverWaitErr))
 	}
-	if err := closeLifecycleProcess(fixture.process); err != nil {
+	if fixture.ledger != nil && (serverWaitErr == nil || errors.Is(serverWaitErr, context.Canceled)) {
+		if err := fixture.ledger.closeInvocation(fixture.serverInvocationID); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared server invocation census: %w", err))
+		}
+	}
+	if err := closeLifecycleProcessForRole(fixture.process, fixture.ledger, "server"); err != nil {
 		cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared server process: %w", err))
 	}
 	if fixture.client != nil {
-		if err := closeLifecycleProcess(fixture.client.process); err != nil {
+		if err := closeLifecycleProcessForRole(fixture.client.process, fixture.ledger, "client"); err != nil {
 			cleanupErrors = append(cleanupErrors, fmt.Errorf("close shared client process: %w", err))
 		}
 	}
@@ -221,7 +233,25 @@ func (fixture *sharedLifecycleFixture) stop() error {
 		"LIFECYCLE-005 evidence: root-built-roles=%d roles=%v http-listener-starts=%d listener-closed=%t fixture-root-removed=%t\n",
 		len(roles), roles, listenerStarts, listenerClosed, rootRemoved,
 	)
+	if fixture.ledger != nil {
+		fmt.Fprintf(os.Stderr, "LIFECYCLE-006 evidence: %s\n", fixture.ledger.summary())
+		if err := fixture.ledger.validate(listenerClosed, rootRemoved); err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("lifecycle resource census: %w", err))
+		}
+	}
 	return errors.Join(cleanupErrors...)
+}
+
+func closeLifecycleProcessForRole(
+	process support.ApplicationProcess,
+	ledger *lifecycleResourceLedger,
+	role string,
+) error {
+	err := closeLifecycleProcess(process)
+	if ledger != nil {
+		err = errors.Join(err, ledger.closeProcess(role))
+	}
+	return err
 }
 
 func waitForLifecycleProcess(done chan error) error {
@@ -300,7 +330,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session folder path = %q, want %q", created.Session.FolderPath, newFactoryDir)
 	}
 	sessionID := created.Session.Id
-	markSessionClean := registerLifecycleSessionCleanup(t, baseURL, sessionID)
+	markSessionClean := registerLifecycleSessionCleanupAt(t, baseURL, sessionID, newFactoryDir)
 
 	listOut, err := client.executeCLI(ctx, lifecycleWorkingDir(t), baseURL, "session", "list")
 	if err != nil {
@@ -404,14 +434,14 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 		t.Fatalf("create first factory directory: %v", err)
 	}
 	firstSession := createSessionViaCLI(t, ctx, client, lifecycleWorkingDir(t), baseURL, firstFactoryDir)
-	markFirstSessionClean := registerLifecycleSessionCleanup(t, baseURL, firstSession.id)
+	markFirstSessionClean := registerLifecycleSessionCleanupAt(t, baseURL, firstSession.id, firstFactoryDir)
 
 	secondFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory-b")
 	if err := os.Mkdir(secondFactoryDir, 0o755); err != nil {
 		t.Fatalf("create second factory directory: %v", err)
 	}
 	secondSession := createSessionViaCLI(t, ctx, client, lifecycleWorkingDir(t), baseURL, secondFactoryDir)
-	registerLifecycleSessionCleanup(t, baseURL, secondSession.id)
+	registerLifecycleSessionCleanupAt(t, baseURL, secondSession.id, secondFactoryDir)
 
 	if firstSession.id == secondSession.id {
 		t.Fatalf("session ids must be distinct: first=%q second=%q", firstSession.id, secondSession.id)
@@ -472,7 +502,7 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 		t.Fatalf("create isolation factory directory: %v", err)
 	}
 	openSession := createSessionViaCLI(t, ctx, client, lifecycleWorkingDir(t), baseURL, isolationFactoryDir)
-	t.Cleanup(func() { cleanupSessionViaAPI(t, baseURL, openSession.id) })
+	registerLifecycleSessionCleanupAt(t, baseURL, openSession.id, isolationFactoryDir)
 
 	showOut, err := client.executeCLI(ctx, lifecycleWorkingDir(t), baseURL,
 		"--json",
@@ -551,7 +581,7 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 		t.Fatalf("open session folder path = %q, want %q", opened.Session.FolderPath, newFactoryDir)
 	}
 	sessionID := opened.Session.Id
-	markSessionClean := registerLifecycleSessionCleanup(t, baseURL, sessionID)
+	markSessionClean := registerLifecycleSessionCleanupAt(t, baseURL, sessionID, newFactoryDir)
 
 	listed := support.GetJSON[factoryapi.ListFactorySessionsResponse](t, baseURL+"/factory-sessions")
 	if !sessionListContains(listed.Sessions, sessionID, newFactoryDir) {
@@ -615,7 +645,7 @@ func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
 	if openSessionID == sessionLifecycleCRUDMissingSessionID {
 		t.Fatalf("open session id = %q, want distinct from missing probe id %q", openSessionID, sessionLifecycleCRUDMissingSessionID)
 	}
-	registerLifecycleSessionCleanup(t, baseURL, openSessionID)
+	registerLifecycleSessionCleanupAt(t, baseURL, openSessionID, openFactoryDir)
 
 	assertAPISessionNotFound(t, baseURL, sessionLifecycleCRUDMissingSessionID)
 
@@ -660,14 +690,14 @@ func TestAPIMultipleFactorySessionsRemainIsolated(t *testing.T) {
 		t.Fatalf("create first factory directory: %v", err)
 	}
 	firstSession := openSessionViaAPI(t, baseURL, firstFactoryDir)
-	markFirstSessionClean := registerLifecycleSessionCleanup(t, baseURL, firstSession.id)
+	markFirstSessionClean := registerLifecycleSessionCleanupAt(t, baseURL, firstSession.id, firstFactoryDir)
 
 	secondFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-factory-b")
 	if err := os.Mkdir(secondFactoryDir, 0o755); err != nil {
 		t.Fatalf("create second factory directory: %v", err)
 	}
 	secondSession := openSessionViaAPI(t, baseURL, secondFactoryDir)
-	registerLifecycleSessionCleanup(t, baseURL, secondSession.id)
+	registerLifecycleSessionCleanupAt(t, baseURL, secondSession.id, secondFactoryDir)
 
 	if firstSession.id == secondSession.id {
 		t.Fatalf("session ids must be distinct: first=%q second=%q", firstSession.id, secondSession.id)

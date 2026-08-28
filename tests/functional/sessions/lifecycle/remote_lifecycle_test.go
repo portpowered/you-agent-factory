@@ -633,6 +633,15 @@ func (client *lifecycleClientProcess) startCLI(
 		inputs.Input.Stdout = output
 		inputs.Input.Stderr = output
 	}
+	var invocationID string
+	if lifecycleFixture != nil && lifecycleFixture.ledger != nil {
+		invocationID = lifecycleFixture.ledger.beginInvocation(t.Name() + " Process.Execute")
+		t.Cleanup(func() {
+			if err := lifecycleFixture.ledger.closeInvocation(invocationID); err != nil {
+				t.Errorf("record lifecycle invocation cleanup census: %v", err)
+			}
+		})
+	}
 	command := support.StartProcessCommand(t, client.process, inputs.Input)
 	go func() {
 		<-command.Done()

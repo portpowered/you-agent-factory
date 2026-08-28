@@ -28,13 +28,15 @@ type lifecycleHTTPServer struct {
 
 	mu       sync.Mutex
 	starts   int
+	ledger   *lifecycleResourceLedger
 	done     chan struct{}
 	doneOnce sync.Once
 }
 
-func newLifecycleHTTPServer() *lifecycleHTTPServer {
+func newLifecycleHTTPServer(ledger *lifecycleResourceLedger) *lifecycleHTTPServer {
 	return &lifecycleHTTPServer{
 		server: support.NewProcessAPIServer(),
+		ledger: ledger,
 		done:   make(chan struct{}),
 	}
 }
@@ -45,8 +47,17 @@ func (server *lifecycleHTTPServer) start(
 ) error {
 	server.mu.Lock()
 	server.starts++
+	ledger := server.ledger
 	server.mu.Unlock()
-	defer server.doneOnce.Do(func() { close(server.done) })
+	if ledger != nil {
+		ledger.recordListenerStart()
+	}
+	defer server.doneOnce.Do(func() {
+		if ledger != nil {
+			ledger.recordListenerClose()
+		}
+		close(server.done)
+	})
 	return server.server.Start(ctx, request)
 }
 
@@ -98,6 +109,7 @@ func (server *lifecycleHTTPServer) probeClosed() error {
 type lifecycleProcessConstructor struct {
 	mu        sync.Mutex
 	roleNames []string
+	ledger    *lifecycleResourceLedger
 }
 
 func (constructor *lifecycleProcessConstructor) build(
@@ -108,6 +120,9 @@ func (constructor *lifecycleProcessConstructor) build(
 	process, err := support.BuildProcessWithContext(ctx, edges)
 	if err != nil {
 		return nil, err
+	}
+	if constructor.ledger != nil {
+		constructor.ledger.recordProcessBuild(role)
 	}
 	constructor.mu.Lock()
 	constructor.roleNames = append(constructor.roleNames, role)
@@ -148,7 +163,7 @@ func TestFactorySessionCleanupRunsAfterEarlySubtestExit(t *testing.T) {
 			t.Fatalf("cleanup probe response missing session id: %#v", opened)
 		}
 		sessionID = opened.Session.Id
-		registerLifecycleSessionCleanup(t, baseURL, sessionID)
+		registerLifecycleSessionCleanupAt(t, baseURL, sessionID, factoryDir)
 
 		// Returning here models a setup/assertion exit before the normal explicit
 		// close path. The registered cleanup must still run before t.Run returns.
