@@ -63,6 +63,15 @@ func TestFactoryBuilder(t *testing.T) {
 	t.Run("TestFactoryBuilderWithNoRequestGreetsInsteadOfFailing", func(t *testing.T) {
 		testFactoryBuilderWithNoRequestGreetsInsteadOfFailing(t, fixture)
 	})
+	t.Run("TestFactoryBuilderCreatesAndInstallsValidatedGraphFactory", func(t *testing.T) {
+		testFactoryBuilderCreatesAndInstallsValidatedGraphFactory(t, fixture)
+	})
+	t.Run("TestFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory", func(t *testing.T) {
+		testFactoryBuilderCreatesAndInstallsValidatedJavaScriptFactory(t, fixture)
+	})
+	t.Run("TestFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation", func(t *testing.T) {
+		testFactoryBuilderRejectsInvalidGeneratedCandidateWithoutInstallation(t, fixture)
+	})
 }
 
 // TestFactoryBuilderVagueFirstTurnAnswersWithoutBuilding proves problems.md

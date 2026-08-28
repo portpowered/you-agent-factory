@@ -24,10 +24,10 @@ import (
 
 const factoryBuilderSharedFixtureTimeout = 15 * time.Second
 
-const factoryBuilderExpectedSessions = 2
+const factoryBuilderExpectedSessions = 6
 
 // factoryBuilderSharedFixture owns one root-built process and one continuous
-// API host for the two session-safe greeting scenarios. Each child copies the
+// API host for all six Factory Builder scenarios. Each child copies the
 // packaged Factory into a private home and opens a non-default Factory Session.
 type factoryBuilderSharedFixture struct {
 	rootDir    string
@@ -163,7 +163,7 @@ func (ledger *factoryBuilderLifecycleLedger) assertClean(t testing.TB) {
 		t.Errorf("explicit sessions closed = %d, want %d", closed, len(resources))
 	}
 	t.Logf(
-		"Factory Builder lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=3",
+		"Factory Builder lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=0",
 		processStarts, len(resources), closed, len(sessions), len(roots),
 	)
 }
@@ -241,7 +241,9 @@ func factoryBuilderPathContains(root, candidate string) bool {
 type factoryBuilderScenario struct {
 	fixture          *factoryBuilderSharedFixture
 	rootDir          string
+	homeDir          string
 	factoryDir       string
+	operatorRoot     string
 	environment      []string
 	workingDirectory string
 	selectorPaths    []string
@@ -372,7 +374,7 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 	}
 	factoryDir := support.CopyFactoryAsNamed(t, fixture.factoryDir, homeDir, factoryBuilderName)
 	environment := factoryBuilderCustomerEnvironment(homeDir)
-	selectorPaths := []string{factoryDir, workingDirectory, fixture.factoryDir}
+	selectorPaths := []string{factoryDir, workingDirectory, fixture.factoryDir, filepath.Join(homeDir, ".you-agent-factory", "factories")}
 	fixture.provider.register(selectorPaths, runner)
 	t.Cleanup(func() {
 		fixture.provider.unregister(selectorPaths)
@@ -380,7 +382,9 @@ func (fixture *factoryBuilderSharedFixture) newScenario(
 	return &factoryBuilderScenario{
 		fixture:          fixture,
 		rootDir:          rootDir,
+		homeDir:          homeDir,
 		factoryDir:       factoryDir,
+		operatorRoot:     filepath.Join(homeDir, ".you-agent-factory", "factories"),
 		environment:      environment,
 		workingDirectory: workingDirectory,
 		selectorPaths:    selectorPaths,
