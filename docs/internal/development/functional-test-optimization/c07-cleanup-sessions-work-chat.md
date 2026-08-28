@@ -286,3 +286,23 @@ close/absence probes using this vocabulary. It must preserve the 38-test
 denominator, keep shared support read-only, and treat any missing public close
 capability as an explicit isolated-with-reason boundary rather than inventing a
 new ACP contract.
+
+## VAL-001 clean-room validation
+
+Story `functional-test-optimization-c07-cleanup-sessions-work-chat-005` ran the
+final integrated proof from detached clean worktrees at
+`cbd175dd74b98776c8fb284ff35975df41d44a6f`. Discovery retained the exact
+12 + 1 + 25 = 38 top-level denominator. Count-one and count-three runs passed
+for all three packages, the supported lifecycle/routing/chat race paths passed
+(routing required one bounded rerun after a transient first attempt), and
+`make test-lane-audit` reported the expected ownership counts.
+
+The final verbose clean-room censuses were zero-residue: lifecycle closed
+2/2 processes, 30/30 invocation streams, 12/12 sessions, and removed 12/12
+temporary Factory paths; routing closed 16/16 sessions, 139/139 readers,
+18/18 routes, and removed 16/16 scenario roots; chat closed 24/24 processes,
+58/58 connections, 58/58 response streams, 56/56 pipes, 29/29 sessions,
+30/30 turns, 34/34 active calls, 4/4 peer processes, and removed 97/97 paths
+with zero violations. The full report, exact commands, timing caveats, and
+remaining review-owned edges are in
+[`validation/c07-cleanup-sessions-work-chat.md`](validation/c07-cleanup-sessions-work-chat.md).
