@@ -25,7 +25,7 @@ import (
 
 const loopSharedFixtureTimeout = 15 * time.Second
 
-const loopExpectedSessions = 2
+const loopExpectedSessions = 8
 
 // loopSharedFixture owns one root-built process and one continuous API host
 // for the package's compatible scheduler scenarios. Each child copies the

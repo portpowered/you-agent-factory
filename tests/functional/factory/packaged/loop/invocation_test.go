@@ -28,6 +28,9 @@ func TestPackagedLoop(t *testing.T) {
 	t.Run("TestPackagedLoopRejectsInvalidDurationBeforeWorkAdmission", func(t *testing.T) {
 		testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t, fixture)
 	})
+	t.Run("TestPackagedLoopDurationBoundaries", func(t *testing.T) {
+		testPackagedLoopDurationBoundaries(t, fixture)
+	})
 }
 
 func testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T, fixture *loopSharedFixture) {
@@ -79,6 +82,60 @@ func testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t *testing.T, fix
 	select {
 	case record := <-fixture.submissions:
 		t.Fatalf("invalid duration admitted Work = %#v", record)
+	default:
+	}
+}
+
+func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture) {
+	cases := []struct {
+		name     string
+		every    string
+		accepted bool
+	}{
+		{name: "minimum_1s", every: "1s", accepted: true},
+		{name: "maximum_168h", every: "168h", accepted: true},
+		{name: "empty", every: "", accepted: false},
+		{name: "below_minimum_999ms", every: "999ms", accepted: false},
+		{name: "above_maximum_168h1s", every: "168h1s", accepted: false},
+		{name: "malformed_tomorrow", every: "tomorrow", accepted: false},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			scenario := fixture.newScenario(t, support.NewRecordingCommandRunner("duration boundary"))
+			scenario.open(t)
+			args := map[string]any{
+				"request":                "check dependency updates",
+				"every":                  testCase.every,
+				"triggerAtStart":         "true",
+				"maxConsecutiveFailures": "0",
+			}
+			if !testCase.accepted {
+				status := postLoopInvocation(t, scenario, args, nil)
+				if status != http.StatusBadRequest {
+					t.Fatalf("duration %q status = %d, want 400", testCase.every, status)
+				}
+				assertNoLoopSubmission(t, fixture.submissions)
+				return
+			}
+
+			start := fixture.clock.Now()
+			timeoutMillis := int64(20)
+			status := postLoopInvocation(t, scenario, args, nil, &timeoutMillis)
+			if status != http.StatusOK {
+				t.Fatalf("duration %q status = %d, want 200", testCase.every, status)
+			}
+			submission := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
+			assertLoopSubmission(t, submission, "init", "SCHEDULED", "1", start, start)
+		})
+	}
+}
+
+func assertNoLoopSubmission(t *testing.T, submissions <-chan work.FactorySubmissionRecord) {
+	t.Helper()
+	select {
+	case record := <-submissions:
+		t.Fatalf("duration validation admitted Work = %#v", record)
 	default:
 	}
 }
