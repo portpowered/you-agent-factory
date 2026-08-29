@@ -322,31 +322,32 @@ func writeAgyWorkerConfig(factoryDir, model string) error {
 }
 
 func copyAgyFactoryDirectory(sourceDir, targetDir string) error {
-	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		relative, err := filepath.Rel(sourceDir, path)
+	// The worker file is authored immediately afterward for the case-specific
+	// model, and the checked-in fixture contains no other runtime assets. Copy
+	// only the immutable topology and workstation prompt to avoid walking and
+	// rewriting unused fixture entries for each shared-process scenario.
+	for _, relative := range []string{
+		"factory.json",
+		filepath.Join("workstations", "process", "AGENTS.md"),
+	} {
+		sourcePath := filepath.Join(sourceDir, relative)
+		info, err := os.Stat(sourcePath)
 		if err != nil {
 			return err
 		}
-		if relative == "." {
-			return os.MkdirAll(targetDir, 0o755)
+		data, err := os.ReadFile(sourcePath)
+		if err != nil {
+			return err
 		}
 		targetPath := filepath.Join(targetDir, relative)
-		info, err := entry.Info()
-		if err != nil {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return err
 		}
-		if entry.IsDir() {
-			return os.MkdirAll(targetPath, info.Mode().Perm())
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
+		if err := os.WriteFile(targetPath, data, info.Mode().Perm()); err != nil {
 			return err
 		}
-		return os.WriteFile(targetPath, data, info.Mode().Perm())
-	})
+	}
+	return nil
 }
 
 func readAgyResponseEvents(

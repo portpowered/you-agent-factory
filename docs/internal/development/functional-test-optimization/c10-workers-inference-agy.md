@@ -407,6 +407,14 @@ fallback. The exact response-stream EOF/no-extra-frame assertion, cleanup
 census, route ledger, and local functional behavior remained passing. A fresh
 hosted measurement for the new head is handed to review after the final push.
 
+The next bounded pass narrows fixture staging to the immutable `factory.json`
+topology and workstation prompt. The case-specific worker prompt is authored
+immediately afterward, so recursively walking and rewriting that unused copied
+worker file is unnecessary. This changes no checked-in fixture or public
+runtime witness; the exact package and repeated shared-process behavior remain
+passing. Local elapsed times remain diagnostic, and hosted package timing is
+still the review-owned verdict.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
