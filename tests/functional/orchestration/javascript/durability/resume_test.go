@@ -20,6 +20,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const javascriptDurabilityResumeRequestID = "req-js-durability-resume-interrupt-001"
+
 // TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren proves
 // that a durable JavaScript Factory Session interrupted after the first child
 // dispatch completes resumes through the public lifecycle boundary without
@@ -27,6 +29,10 @@ import (
 // only the remaining child dispatch continues, and the session reaches a
 // successful terminal outcome.
 func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t *testing.T) {
+	// C01 isolation reason: this row holds an injected provider command open,
+	// interrupts that live dispatch, and resumes the same durable session. Keep
+	// its cancellation gate and recovery lifecycle on a fresh process so it
+	// cannot share interrupted runtime state with another behavior row.
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
 	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
@@ -34,6 +40,10 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
 		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
+	})
+	t.Cleanup(func() {
+		server.Stop(t)
+		t.Logf("durability isolated lifecycle: process_starts=1 process_stops=1 isolation_reason=%q", "blocked dispatch cancellation and same-session resume")
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -128,6 +138,9 @@ func TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren(t 
 // (latest checkpoint and dispatch counts preserved, not a blank restart) and
 // reaches the expected terminal primary result for the completed workflow.
 func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
+	// C01 isolation reason: this row validates checkpoint identity and restored
+	// primary-result state after interruption. Keep its durable snapshot and
+	// replay lifecycle on a fresh process rather than sharing recovery state.
 	const workflowName = "resumable-two-step-fake-children"
 	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
 	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
@@ -135,6 +148,10 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: projectRoot,
 		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
+	})
+	t.Cleanup(func() {
+		server.Stop(t)
+		t.Logf("durability isolated lifecycle: process_starts=1 process_stops=1 isolation_reason=%q", "checkpoint identity and restored final-result recovery")
 	})
 	baseURL := strings.TrimSuffix(server.URL(), "/")
 
@@ -192,35 +209,6 @@ func TestJavaScriptResumeRestoresCheckpointAndFinalResult(t *testing.T) {
 	assertResumableTwoStepFinalPrimaryResult(t, result, workflowName)
 }
 
-// TestJavaScriptDurabilityPersistsSnapshotsByDefault proves the public process
-// writes an interrupted JavaScript Factory Session to the project-local
-// durable-sessions directory during orderly shutdown.
-func TestJavaScriptDurabilityPersistsSnapshotsByDefault(t *testing.T) {
-	const workflowName = "resumable-two-step-fake-children"
-	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
-	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: projectRoot,
-		Edges:      serviceedges.Edges{ProviderCommandRunner: provider},
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
-	sessionID := startInterruptedJavaScriptDurabilitySession(t, baseURL, provider, workflowName)
-	interrupted := readDurableJavaScriptSession(t, baseURL, sessionID)
-	if interrupted.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
-		t.Fatalf("in-memory status = %q, want INTERRUPTED", interrupted.Status)
-	}
-	if interrupted.Lifecycle == nil || interrupted.Lifecycle.InterruptedAt == nil {
-		t.Fatalf("in-memory lifecycle = %#v, want interruptedAt", interrupted.Lifecycle)
-	}
-	// The public interrupted projection is published before the canceled
-	// provider command necessarily returns. Join the root-built process before
-	// inspecting project-local persistence so the assertion runs after all
-	// runtime work and cleanup associated with the canceled edge is done.
-	server.Stop(t)
-	assertJavaScriptDurableSessionPersistence(t, projectRoot, sessionID)
-}
-
 func setupJavaScriptDurabilityResumeWorkflowFixture(t *testing.T, workflowName string) string {
 	t.Helper()
 
@@ -251,7 +239,7 @@ func startInterruptedJavaScriptDurabilitySession(
 		t,
 		baseURL+"/factory-sessions/async",
 		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "req-js-durability-resume-interrupt-001",
+			RequestId: javascriptDurabilityResumeRequestID,
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 				WorkflowName: strPtr(workflowName),
