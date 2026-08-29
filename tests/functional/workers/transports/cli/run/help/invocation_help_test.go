@@ -76,6 +76,28 @@ func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 	if strings.Contains(got, "Load workflow and run the factory engine") {
 		t.Fatalf("expected signature-aware help instead of generic Cobra help:\n%s", got)
 	}
+
+	duplicateInputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--named", invocationHelpNamedFactoryName,
+		"--help", "--help",
+	})
+	duplicateInputs.Input.Env = append(duplicateInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	duplicateInputs.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(duplicateInputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(duplicate --help) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			duplicateInputs.Stdout(),
+			duplicateInputs.Stderr(),
+		)
+	}
+	if duplicateInputs.Stdout() != got {
+		t.Fatalf("duplicate --help output = %q, want idempotent output %q", duplicateInputs.Stdout(), got)
+	}
+	if duplicateInputs.Stderr() != inputs.Stderr() {
+		t.Fatalf("duplicate --help stderr = %q, want %q", duplicateInputs.Stderr(), inputs.Stderr())
+	}
 }
 
 // TestCLIRunHelpDistinguishesRequiredAndOptionalParameters proves you run --named
@@ -189,6 +211,26 @@ func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 	}
 	if !strings.Contains(got, "Selected factory: "+invocationHelpFactoryConfigName+" (named factory "+invocationHelpNamedFactoryName+")") {
 		t.Fatalf("run --named %s --help missing selected factory line:\n%s", invocationHelpNamedFactoryName, got)
+	}
+
+	conflictInputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--named", invocationHelpNamedFactoryName,
+		"--factory", filepath.Join(sourceDir, interfaces.FactoryConfigFile),
+		"--help",
+	})
+	conflictInputs.Input.Env = append(conflictInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	conflictInputs.Input.WorkingDirectory = workingDirectory
+	conflictErr := process.Execute(conflictInputs.Input)
+	if conflictErr == nil || !strings.Contains(conflictErr.Error(), "--named cannot be used with --factory") {
+		t.Fatalf("conflicting --named/--factory error = %v, want stable selection conflict", conflictErr)
+	}
+	if conflictInputs.Stdout() != "" {
+		t.Fatalf("conflicting --named/--factory stdout = %q, want empty", conflictInputs.Stdout())
+	}
+	support.RequireSafeCLIDiagnostic(t, conflictInputs.Stderr())
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count after help conflict = %d, want 0", runner.CallCount())
 	}
 }
 
