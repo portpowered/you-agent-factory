@@ -4,6 +4,7 @@ import {
 	existsSync,
 	mkdtempSync,
 	mkdirSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -42,6 +43,8 @@ const BOT_BRANCH_SHA = SHA("b");
 const GENERATED_SHA = SHA("c");
 const SOURCE_RUN_URL = "https://github.example/actions/runs/42";
 const makeCommand = process.platform === "win32" ? "make.exe" : "make";
+const NODE_DEFAULT_CHILD_OUTPUT_BUFFER_BYTES = 1024 * 1024;
+const OVERSIZED_TEST_INVENTORY_COUNT = 20_000;
 
 function workflowRunScript(stepName) {
 	const stepStart = workflow.indexOf("      - name: " + stepName);
@@ -298,16 +301,29 @@ function createWorkingTreeValidationFixture({
 	candidate = "identity",
 	staged = false,
 	sourceTopology = "single-parent",
+	sourceOperation = "modify",
+	sourceDestinationPath = "docs/internal/baselines/source-renamed-or-copied.txt",
+	oversized = false,
 } = {}) {
 	const temporaryDirectory = mkdtempSync(join(tmpdir(), "shared-baseline-validation-"));
 	const repository = join(temporaryDirectory, "repository");
 	const githubOutput = join(temporaryDirectory, "github-output.txt");
+	const blobTemporaryDirectory = join(temporaryDirectory, "blob-tmp");
 	const currentBudget = {
 		version: 1,
 		owner: "backend-unit-lane",
 		reference: {
 			baseCommit: SHA("a"),
 			runnerImage: "ubuntu-24.04",
+			...(oversized
+				? {
+					testInventory: Array.from(
+						{ length: OVERSIZED_TEST_INVENTORY_COUNT },
+						(_, index) =>
+							`github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime::TestOversizedBudget/${String(index).padStart(5, "0")}`,
+					),
+				}
+				: {}),
 		},
 	};
 
@@ -315,16 +331,33 @@ function createWorkingTreeValidationFixture({
 		requireLocalGit(temporaryDirectory, ["init", repository]);
 		requireLocalGit(repository, ["config", "user.name", "shared-baseline-validation"]);
 		requireLocalGit(repository, ["config", "user.email", "shared-baseline-validation@example.invalid"]);
+		mkdirSync(blobTemporaryDirectory, { recursive: true });
 		writeLocalGitFile(repository, SHARED_BASELINE_UNIT_BUDGET_PATH, JSON.stringify(currentBudget, null, 2) + "\n");
 		writeLocalGitFile(repository, sourcePath, "before source change\n");
 		requireLocalGit(repository, ["add", "--", SHARED_BASELINE_UNIT_BUDGET_PATH, sourcePath]);
 		requireLocalGit(repository, ["commit", "-m", "validation fixture base"]);
 		requireLocalGit(repository, ["branch", "-M", "main"]);
 		if (sourceTopology === "single-parent") {
-			writeLocalGitFile(repository, sourcePath, "after source change\n");
-			requireLocalGit(repository, ["add", "--", sourcePath]);
+			if (sourceOperation === "modify") {
+				writeLocalGitFile(repository, sourcePath, "after source change\n");
+				requireLocalGit(repository, ["add", "--", sourcePath]);
+			} else if (sourceOperation === "rename") {
+				requireLocalGit(repository, ["mv", sourcePath, sourceDestinationPath]);
+			} else if (sourceOperation === "copy") {
+				writeLocalGitFile(
+					repository,
+					sourceDestinationPath,
+					readFileSync(join(repository, sourcePath), "utf8"),
+				);
+				requireLocalGit(repository, ["add", "--", sourceDestinationPath]);
+			} else {
+				throw new Error(`unsupported validation fixture source operation: ${sourceOperation}`);
+			}
 			requireLocalGit(repository, ["commit", "-m", "validation fixture source"]);
 		} else if (sourceTopology === "two-parent-merge") {
+			if (sourceOperation !== "modify") {
+				throw new Error(`source operation ${sourceOperation} is not supported for a two-parent merge fixture`);
+			}
 			requireLocalGit(repository, ["switch", "-c", "source-change"]);
 			writeLocalGitFile(repository, sourcePath, "after source change\n");
 			requireLocalGit(repository, ["add", "--", sourcePath]);
@@ -356,6 +389,7 @@ function createWorkingTreeValidationFixture({
 			temporaryDirectory,
 			repository,
 			githubOutput,
+			blobTemporaryDirectory,
 			sourceSha,
 			currentBudgetContents: JSON.stringify(currentBudget, null, 2) + "\n",
 			cleanup() {
@@ -368,21 +402,28 @@ function createWorkingTreeValidationFixture({
 	}
 }
 
-function runWorkingTreeValidation(fixture, extraArguments = []) {
+function runWorkingTreeValidation(fixture, extraArguments = [], { sourceSha = fixture.sourceSha, env = {} } = {}) {
 	return spawnSync(
 		process.execPath,
 		[
 			helper,
 			"validate-working-tree",
 			"--source-sha",
-			fixture.sourceSha,
+			sourceSha,
 			"--github-output",
 			fixture.githubOutput,
 			...extraArguments,
 		],
 		{
 			cwd: fixture.repository,
-			env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
+			env: {
+				...process.env,
+				GIT_CONFIG_NOSYSTEM: "1",
+				TMPDIR: fixture.blobTemporaryDirectory,
+				TMP: fixture.blobTemporaryDirectory,
+				TEMP: fixture.blobTemporaryDirectory,
+				...env,
+			},
 			encoding: "utf8",
 			windowsHide: true,
 		},
@@ -1274,6 +1315,193 @@ test("F-01 accepts only a deterministic two-parent first-parent source merge", (
 		assert.equal(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
 	} finally {
 		fixture.cleanup();
+	}
+});
+
+test("F-01 validates an oversized identity-only budget through the real helper CLI", () => {
+	const fixture = createWorkingTreeValidationFixture({
+		sourceTopology: "two-parent-merge",
+		oversized: true,
+	});
+	try {
+		const budgetContents = readFileSync(
+			join(fixture.repository, SHARED_BASELINE_UNIT_BUDGET_PATH),
+			"utf8",
+		);
+		assert.ok(
+			Buffer.byteLength(budgetContents, "utf8") > NODE_DEFAULT_CHILD_OUTPUT_BUFFER_BYTES,
+			`oversized fixture must exceed Node's ${NODE_DEFAULT_CHILD_OUTPUT_BUFFER_BYTES}-byte child-output buffer; received ${Buffer.byteLength(budgetContents, "utf8")} bytes`,
+		);
+
+		const result = runWorkingTreeValidation(fixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.doesNotMatch(`${result.stdout}${result.stderr}`, /ENOBUFS/);
+		assert.match(
+			result.stdout,
+			/SHARED_BASELINE_CHANGED=false paths=\(none\) quiescent=true reason=.*reference\.baseCommit/,
+		);
+		assert.equal(readFileSync(fixture.githubOutput, "utf8"), "changed=false\npaths=\nquiescent=true\nreason=source revision changed only allowlisted snapshots and the unit-latency budget differs only at reference.baseCommit; restored the identity-only candidate\n");
+		assert.equal(
+			readFileSync(join(fixture.repository, SHARED_BASELINE_UNIT_BUDGET_PATH), "utf8"),
+			fixture.currentBudgetContents,
+		);
+		assert.equal(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		assert.deepEqual(readdirSync(fixture.blobTemporaryDirectory), []);
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-02 retains oversized material budget drift for normal publication", () => {
+	const fixture = createWorkingTreeValidationFixture({
+		sourceTopology: "two-parent-merge",
+		candidate: "material",
+		oversized: true,
+	});
+	try {
+		const budgetContents = readFileSync(
+			join(fixture.repository, SHARED_BASELINE_UNIT_BUDGET_PATH),
+			"utf8",
+		);
+		assert.ok(Buffer.byteLength(budgetContents, "utf8") > NODE_DEFAULT_CHILD_OUTPUT_BUFFER_BYTES);
+		const result = runWorkingTreeValidation(fixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.doesNotMatch(`${result.stdout}${result.stderr}`, /ENOBUFS/);
+		assert.match(
+			result.stdout,
+			new RegExp(
+				`SHARED_BASELINE_CHANGED=true paths=${SHARED_BASELINE_UNIT_BUDGET_PATH.replaceAll("/", "\\/")} quiescent=false reason=.*material JSON drift`,
+			),
+		);
+		assert.match(readFileSync(fixture.githubOutput, "utf8"), /changed=true/);
+		assert.match(readFileSync(fixture.githubOutput, "utf8"), /quiescent=false/);
+		assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		assert.deepEqual(readdirSync(fixture.blobTemporaryDirectory), []);
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-03 rejects unexpected and untracked candidate paths before restore or output", () => {
+	for (const { path, add, message } of [
+		{
+			path: "docs/internal/baselines/unexpected.txt",
+			add: true,
+			message: /unexpected path\(s\).*unexpected\.txt/,
+		},
+		{
+			path: "untracked-candidate.txt",
+			add: false,
+			message: /untracked path\(s\).*untracked-candidate\.txt/,
+		},
+	]) {
+		const fixture = createWorkingTreeValidationFixture();
+		try {
+			writeLocalGitFile(fixture.repository, path, "invalid candidate\n");
+			if (add) requireLocalGit(fixture.repository, ["add", "--", path]);
+			const result = runWorkingTreeValidation(fixture);
+			assert.notEqual(result.status, 0);
+			assert.match(result.stderr, message);
+			assert.equal(existsSync(fixture.githubOutput), false);
+			assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		} finally {
+			fixture.cleanup();
+		}
+	}
+});
+
+test("F-04 rejects source renames and copies involving the allowlist", () => {
+	for (const sourceOperation of ["rename", "copy"]) {
+		const fixture = createWorkingTreeValidationFixture({ sourceOperation });
+		try {
+			const result = runWorkingTreeValidation(fixture);
+			assert.notEqual(result.status, 0, `${sourceOperation}: ${result.stdout}${result.stderr}`);
+			assert.match(result.stderr, /rename or copy path record/);
+			assert.equal(existsSync(fixture.githubOutput), false);
+			assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		} finally {
+			fixture.cleanup();
+		}
+	}
+});
+
+test("F-05 rejects a source revision that is not the checked-out HEAD before mutation", () => {
+	const fixture = createWorkingTreeValidationFixture();
+	try {
+		const wrongSource = requireLocalGit(fixture.repository, ["rev-parse", `${fixture.sourceSha}^`]);
+		const result = runWorkingTreeValidation(fixture, [], { sourceSha: wrongSource });
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /checked-out HEAD .* does not match source revision/);
+		assert.equal(existsSync(fixture.githubOutput), false);
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-07 keeps malformed budget candidates dirty and writes no classification output", () => {
+	for (const contents of ["{ malformed\n", '{"reference":[]}', '{"reference":{"baseCommit":"ABC"}}']) {
+		const fixture = createWorkingTreeValidationFixture();
+		try {
+			writeLocalGitFile(fixture.repository, SHARED_BASELINE_UNIT_BUDGET_PATH, contents);
+			const result = runWorkingTreeValidation(fixture);
+			assert.notEqual(result.status, 0);
+			assert.match(result.stderr, /generated unit-latency budget/);
+			assert.equal(existsSync(fixture.githubOutput), false);
+			assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		} finally {
+			fixture.cleanup();
+		}
+	}
+});
+
+test("F-08 cleans the blob-transfer temporary root after a failed run and a clean retry", () => {
+	const fixture = createWorkingTreeValidationFixture({ oversized: true });
+	const invalidTemporaryRoot = join(fixture.temporaryDirectory, "not-a-directory");
+	try {
+		writeFileSync(invalidTemporaryRoot, "not a directory\n", "utf8");
+		const failed = runWorkingTreeValidation(fixture, [], {
+			env: {
+				TMPDIR: invalidTemporaryRoot,
+				TMP: invalidTemporaryRoot,
+				TEMP: invalidTemporaryRoot,
+			},
+		});
+		assert.notEqual(failed.status, 0);
+		assert.doesNotMatch(`${failed.stdout}${failed.stderr}`, /testInventory|TestOversizedBudget/);
+		assert.equal(existsSync(fixture.githubOutput), false);
+		assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+
+		const retry = runWorkingTreeValidation(fixture);
+		assert.equal(retry.status, 0, retry.stderr);
+		assert.match(retry.stdout, /SHARED_BASELINE_CHANGED=false.*quiescent=true/);
+		assert.equal(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		assert.deepEqual(readdirSync(fixture.blobTemporaryDirectory), []);
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-12 retains sorted material paths for empty, single-snapshot, and multi-snapshot candidates", () => {
+	const emptyFixture = createWorkingTreeValidationFixture();
+	try {
+		requireLocalGit(emptyFixture.repository, ["restore", "--source=HEAD", "--staged", "--worktree", "--", SHARED_BASELINE_UNIT_BUDGET_PATH]);
+		const result = runWorkingTreeValidation(emptyFixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.match(result.stdout, /SHARED_BASELINE_CHANGED=false paths=\(none\) quiescent=false reason=no generated shared baseline changes/);
+	} finally {
+		emptyFixture.cleanup();
+	}
+
+	const multiFixture = createWorkingTreeValidationFixture();
+	try {
+		writeLocalGitFile(multiFixture.repository, LOCAL_GIT_SNAPSHOT_PATH, "another generated snapshot\n");
+		const result = runWorkingTreeValidation(multiFixture);
+		assert.equal(result.status, 0, result.stderr);
+		const expectedPaths = [SHARED_BASELINE_UNIT_BUDGET_PATH, LOCAL_GIT_SNAPSHOT_PATH].sort().join(",");
+		assert.match(result.stdout, new RegExp(`SHARED_BASELINE_CHANGED=true paths=${expectedPaths.replaceAll("/", "\\/")} quiescent=false`));
+		assert.notEqual(requireLocalGit(multiFixture.repository, ["status", "--porcelain"]), "");
+	} finally {
+		multiFixture.cleanup();
 	}
 });
 
