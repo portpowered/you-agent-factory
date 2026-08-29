@@ -124,6 +124,7 @@ The lifecycle witness inventory is also frozen for the lane:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Plan-time pre-edit denominator | 1 | 11 | 2 | **14** | **5** |
 | Story-001 head | 1 | 9 | 2 | **12** | **5** |
+| Story-002 head | 1 | 0 | 2 | **3** | **5** |
 | Planned final C10 topology | 1 | 0 | 2 | **3** | **5** |
 
 The story-001 shared host has 14 named scenario selectors: the original 12
@@ -169,16 +170,92 @@ The controlled edge implementation remains package-local to the relationship
 test package. No production, OpenAPI, generated, shared-support, inventory,
 baseline, workflow, or stability-cleanup file changed.
 
-### Remaining gates and unproven edges
+### Story-001 handoff gates (resolved or carried by Story 002)
 
-- GATE-MIGRATION: REL-001 through REL-002, REL-004, and REL-006 through
-  REL-013 remain for story 002; the two isolated rows remain intentionally
-  process-boundary tests.
-- GATE-REPEAT and GATE-RACE: touched repeat and race evidence is story 002.
+- GATE-MIGRATION, GATE-REPEAT, and GATE-RACE are closed by the Story-002
+  evidence below; REL-006 and REL-007 remain intentionally process-boundary
+  tests.
 - GATE-PACKAGE: the exact final-head full package command is story 003 and is
-  not run in this story.
+  not run in Stories 001 or 002.
 - GATE-SCOPE and GATE-LOOPBACK: final owned-surface audit and clean-room
   validation are story 003.
 - GATE-PR-CI: review-owned CI and PR timing direction are not claimed here.
 - Project-level AC3: three uncached full functional-suite runs remain owned by
   the project gate after relevant slices merge.
+
+## Story 002 — complete remaining migration and lifecycle isolation
+
+Status: PASS for `functional-test-optimization-c10-work-relationships-002`.
+
+The remaining eligible rows now use the same root-built host as the Story-001
+representatives. Every scenario opens a unique explicit Factory Session, and
+the provider override routes controlled responses by normalized Factory
+directory so parallel sessions cannot consume one another's response state.
+The shared host also injects the package-local static script edge required by
+the existing SCRIPT_WORKER fixtures. REL-006 and REL-007 remain unchanged as
+the two real built-CLI process-boundary proofs, with inline isolation reasons.
+
+### GATE-MIGRATION — before and after evidence
+
+Before editing the two remaining migration groups, their current top-level
+selectors were run once at the Story-001 head. No pre-change full package run
+was used:
+
+| Group | Before command | Before result and material assertion |
+| --- | --- | --- |
+| Cross-batch admission | `go test -count=1 -timeout=10m -run '^(TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically\|TestCrossBatchDependsOnCompletedTargetReleasesAtAdmission\|TestCrossBatchDependsOnMixedTerminalFanInCascades)$' ./tests/functional/work/relationships` | exit 0; package 3.980s; the three public cross-session, completed-target, and mixed terminal/fan-in witnesses passed. |
+| Parent/dependency boundaries | `go test -count=1 -timeout=10m -run '^(TestDispatchPreservesSubmittedWorkPayloadTagsAndType\|TestRejectionFeedbackSurfacesOnExecutorRetry\|TestParentAndDependsOnLineageSurviveOnChildDispatch\|TestDependentWorkFailsWhenDirectPrerequisiteFails\|TestTransitiveDependencyFailureCascadesToFailedTerminals\|TestCompletedPrerequisiteIsNotCascadedWhenDependentFails)$' ./tests/functional/work/relationships` | exit 0; package 3.992s; payload/tags/type, retry feedback, lineage, direct/transitive failure, and completed-prerequisite witnesses passed. |
+
+The post-migration mapping is complete: REL-014 is the shared umbrella, its
+23 child selectors cover REL-001 through REL-005, REL-008 through REL-013,
+and REL-015 through REL-026, and REL-006/REL-007 are the only top-level
+scenario selectors. All migrated
+public Work, Factory Session, dispatch, Factory Event, ordering, relation,
+failure, retry, payload, and count assertions remain in their owning test
+functions. The native provider migrations for REL-011 through REL-013 retain
+the controlled-edge proof by asserting non-empty transition, Work correlation,
+and Factory-directory request identity in addition to the unchanged public
+projections and call counts.
+
+| After evidence | Command | Result and property proved |
+| --- | --- | --- |
+| Complete shared behavior | `go test -count=1 -run '^TestSharedServerRelationships$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 4.368s; all 23 eligible child scenarios plus the lifecycle probe group pass on one host, with unique explicit sessions and session-scoped observations. |
+| Retained process proofs | `go test -count=1 -run '^(TestParentChildLineageSurvivesDispatchAndReplay\|TestChildFailureProjectsToDocumentedParentView)$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 2.436s; both built-CLI cases preserve their public CLI, event/replay, lineage, and parent-failure projections. |
+| Final discovery | `go test ./tests/functional/work/relationships -list '^Test'` | exit 0; exactly three top-level tests: the two retained built-CLI tests and `TestSharedServerRelationships`. |
+
+### LIFE-001 through LIFE-010 — lifecycle and isolation evidence
+
+The shared umbrella runs its 23 behavior children in parallel. Each fixture
+directory is unique, each session is opened with `OpenFactorySessionAt`, each
+session is closed through the public terminate/wait/delete sequence, and the
+provider router is checked for zero remaining routes after child cleanup. The
+following non-row lifecycle probes run on that same host:
+
+- `CancellationReleasesGatedAttempt` terminates a session while a controlled
+  finish attempt is blocked, observes the provider context cancellation and
+  stopped session, deletes it, and completes a reuse probe.
+- `BoundedObservationTimeoutPreservesDiagnostic` uses a 100ms bounded public
+  Work observation, requires the timeout diagnostic and still-processing gated
+  state, then closes the session and proves host reuse.
+- `EarlyReturnRetainsPrimaryDiagnostic` returns a synthetic assertion error
+  through a helper with deferred session cleanup, verifies the exact primary
+  error survives, and proves host reuse afterward.
+
+These probes exercise session cancellation, timeout diagnostics, early-return
+cleanup, successful and failed scenario cleanup, route ownership, overlapping
+session isolation, retry/dispatch counts, and representative fan-in capacity.
+They do not claim a host-wide process census, universal race freedom, or a new
+capacity maximum. The two retained built-CLI rows continue to own their child
+process, isolated provider state, and temporary-artifact proof.
+
+### GATE-REPEAT and GATE-RACE
+
+| Gate | Command | Result and property proved |
+| --- | --- | --- |
+| GATE-REPEAT | `go test -count=3 -run '^TestSharedServerRelationships$/(CrossBatchDependsOnRejectsCrossSessionTargetAtomically\|CrossBatchDependsOnFailedTargetCascadesAtAdmission\|DependentWorkDoesNotDispatchAfterPrerequisiteFailure\|FanInReleasesOnlyAfterEveryPrerequisite\|CrossBatchDependsOnActivePrerequisiteReleasesAfterCompletion)$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 8.257s; all five gated/failure/cross-session selectors pass three times with their existing Work, dispatch, and cleanup assertions. |
+| GATE-RACE | `go test -race -count=1 -run '^TestSharedServerRelationships$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 10.098s; no exercised race in shared routing, parallel sessions, gates, cancellation, or cleanup probes. |
+| Lifecycle focused selector | `go test -count=1 -run '^TestSharedServerRelationships$/LifecycleCleanupProbes$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 2.777s; cancellation, bounded timeout, early-return diagnostic preservation, and host reuse pass. |
+
+The package-level result is intentionally not claimed here. GATE-PACKAGE,
+GATE-SCOPE, GATE-LOOPBACK, GATE-PR-CI, and the project-level AC3 suite remain
+owned by Story 003 or the review/project gates.
