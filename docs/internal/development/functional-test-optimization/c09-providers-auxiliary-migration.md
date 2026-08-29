@@ -1,9 +1,11 @@
 # C09 Auxiliary Provider Characterization Ledger
 
 Status: stories `functional-test-optimization-c09-providers-auxiliary-migration-001`,
-`-002`, `-003`, and `-004` complete. The Claude golden migration, discovery/
-permission functional evidence, and final validation-loopback evidence are
-recorded below. Terminal CI and merge remain review-owned.
+`-002`, and `-003` complete; story `-004` is blocked in review follow-up. The
+Claude golden migration, discovery/permission functional evidence, and final
+validation-loopback evidence are recorded below. The remaining blockers are
+the absent governing source-plan authority and an unrelated flaky unit-lane
+sample; terminal CI and merge remain review-owned.
 
 ## Authority and scope
 
@@ -405,7 +407,9 @@ PR Backend Functional Coverage timing; those remain story 004 gates.
 
 ## Environment and artifact
 
-- Commit/build identifier: `9a7d256a40` executable final head before this documentation-only loopback report; the report does not change executable sources.
+- Commit/build identifier: `e990a1c87175f780d2b063682586cf1a40fc33c1` executable
+  final head before this review-follow-up report; the report does not change
+  executable sources.
 - Environment and configuration: Windows PowerShell on the shared local host; tracked worktree clean (`git status --porcelain --untracked-files=no` empty); ignored `prd.json` and `progress.txt` remain local scaffolding.
 - Customer entry point: real `root.BuildProcess`/`Process.Execute` functional paths and public Factory Session HTTP boundaries exercised by the owned tests.
 - Real and substituted dependencies: real repository root/provider composition; controlled local `ProviderCommandRunner` and permission edges; checked-in sanitized, checksum-validated Claude streams; no remote provider or paid dependency.
@@ -421,7 +425,8 @@ PR Backend Functional Coverage timing; those remain story 004 gates.
 | Process disposition | PASS | Source-derived application starts are Claude `4 -> 2`, discovery `1 -> 1`, permission `2 -> 2`. The shared Claude fixture has one root-built process, three explicit sessions, and three pre-start immutable routes; discovery and permission retain their justified topologies. | Package PR timing is supplied by Backend Functional Coverage rather than contaminated local wall-clock observations. |
 | Exclusions and ancestry | PASS | `git diff --name-only origin/main...HEAD` contains only the ledger plus the four owned test files; `git diff --check` passed. Neither PR #2316 commit (`66430639c09a...`, `d7c545090d4...`) is an ancestor of `HEAD`; no AGY, ACP, Codex, root Providers, shared support, inventory, baseline, or workflow file is changed. | Review may still report a merge conflict after new main commits. |
 | Security/privacy and compatibility | PASS | All provider outputs are sanitized checked-in streams validated by fixture shape and SHA-256; route errors are bounded and do not include request/environment values. No API, CLI, Factory Event, persisted schema, production, generated, or configuration file changed. | Real credentials, customer data, and remote-provider behavior are intentionally untested. |
-| `VAL-006` validation-loopback | PASS | This report records exact procedures, artifacts, observed results, and remaining edges without modifying implementation in response to the host wrapper behavior. No FAIL/BLOCKED finding or delta plan is required. | Terminal required CI, conflict resolution, merge, and lane-wide project gates remain review-owned. |
+| Required unit/full gate | BLOCKED | Hosted run [33231285001](https://github.com/portpowered/you-agent-factory/actions/runs/33231285001) had one failed fresh unit sample in untouched package `pkg/services/providers/internal/services/acp/internal/service`, test `TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession`, with `ExecuteFailure.Kind = "unknown", want "session_not_found"`; samples 1 and 3 passed. The exact test passed 20/20 on current `e990a1c871` and 20/20 at clean review base `177ebdd07a`; the base hosted run [33227539317](https://github.com/portpowered/you-agent-factory/actions/runs/33227539317) passed all three 444-package samples. | A final-head hosted rerun must establish the required check; this C09 diff does not touch the failing package and no unrelated ACP repair is authorized. |
+| `VAL-006` validation-loopback | BLOCKED | This report records the adverse Claude evidence and exact unit-lane reproduction without modifying unrelated implementation. The governing `docs/temp/functional-test-optimization.md` remains absent from `HEAD`, `origin/main`, and reachable history, so the source-plan conflict cannot be declared resolved. | Project Lead/operator source-plan resolution, the final required checks, conflict resolution, and merge remain review-owned. |
 | `PR-CI-005` handoff | PASS | The final implementation head is ready for a PR; Backend Functional Coverage is the authoritative source for final package timing and full functional-gate output. The handoff records the local directional topology improvement and does not substitute local timing for the PR comment. | The workflow comment cannot exist until the PR is opened and CI starts; implementation stops at that boundary. |
 
 ## Customer journey
@@ -457,15 +462,28 @@ PR Backend Functional Coverage timing; those remain story 004 gates.
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | ENV-WIN-GO-WRAPPER | Informational | Run either declared Go command on this shared Windows host. | The wrapper exits after printing package results. | Package binaries print `ok`, but the wrapper remains alive for more than 60 seconds and is canceled with Ctrl+C; no C09 test/server/provider process remains. | Integrated and focused command output plus post-cancel process-tree queries. |
+| REVIEW-UNIT-001 | Blocking | Run the hosted Backend Unit Latency samples on `e990a1c871`; inspect the failed package output. | Every fresh sample completes all 444 packages and the required unit/full gate remains green. | Sample 2 stopped at 320/444 after `TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession` returned `Kind = "unknown"` instead of `"session_not_found"`; the package is outside this diff. The same selector passed 20/20 on current and review-base worktrees. | [Failed hosted job](https://github.com/portpowered/you-agent-factory/actions/runs/33231285001/job/99044466103), [base hosted run](https://github.com/portpowered/you-agent-factory/actions/runs/33227539317), and repeated current/base targeted runs. |
+| PLAN-AUTH-001 | Blocking | Resolve the PRD source plan reference `docs/temp/functional-test-optimization.md` from a clean checkout. | Scope 10 and each `sourcePlanRef` are independently comparable to the governing plan. | The file is absent from `HEAD`, `origin/main`, and reachable history; no operator amendment or resolution is present in `prd.json`. | `git ls-tree`, `git log --all --full-history`, and `Test-Path` checks recorded in progress; no plan was reconstructed. |
 
 ## Verdict
 
-PASS — the owned behavior, topology, cleanup boundary, exclusions, and
-read-only validation loopback are complete. The final handoff is ready once
-the branch is pushed, the PR is opened, and required CI has started. Review
-owns terminal CI, any conflict, and merge.
+BLOCKED — the owned behavior, topology, cleanup boundary, exclusions, and
+adverse cleanup evidence are complete, but the governing source-plan authority
+is missing and the required unit-lane check has an unrelated intermittent
+failure. The branch must not claim final review readiness until the authority
+is resolved and the required check is green on the final head. Review owns
+terminal CI, any conflict, and merge.
 
 ## Delta-plan request [Required for FAIL/BLOCKED]
 
-Not applicable: no FAIL or BLOCKED finding was observed, so no implementation
-delta is requested.
+- Affected behavior and criterion: `VAL-006`, the implementation-stage
+  delivery criterion, and the required unit/full gate.
+- Root-cause evidence or remaining uncertainty: the source-plan file is absent
+  from all inspected refs; the hosted unit-latency failure is an intermittent
+  failure in an untouched ACP package and passed repeated current/base runs.
+- Smallest recommended correction/prerequisite: obtain and record the
+  Project Lead/operator source-plan resolution (or authoritative plan), then
+  rerun the failed hosted unit job once on the final head; do not alter ACP
+  production/test code from this C09 lane.
+- Dependencies and retest scope: source-plan authority; final PR CI for the
+  three owned packages, unit/full gate, and verification policy.
