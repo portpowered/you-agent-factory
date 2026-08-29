@@ -328,12 +328,113 @@ three-sample performance target, isolated lifecycle synchronization changes,
 clean exact-head loopback, terminal CI, or merge; those remain owned by
 GATE-LIFECYCLE, GATE-PERF, VAL-001, and review.
 
+## Story 004 — GATE-LIFECYCLE
+
+The four independent lifecycle roots remain unchanged: slow stdout,
+writer-failure cancellation, continuous listener startup/shutdown, and
+interrupted human output. The shared gated human-output witness also retains
+its existing root and assertions. Four polling loops were replaced with
+one-shot notifications emitted by the exact observed test boundary:
+
+| Witness | Notification boundary | Assertion preserved |
+| --- | --- | --- |
+| `TestCLISlowWriterDoesNotReorderResponseEvents` | `gatedStdoutWriter.Write` entry, before the gate blocks | Invocation is not complete while stdout is blocked; release still yields monotonic records and one terminal result. |
+| `TestCLITextStreamSurfacesIncrementalMessages` | First non-empty `firstChunkGatedStdoutWriter.Write` completes its buffer write | Lifecycle output is observable before completion; release still yields canonical human output and stable stderr progress. |
+| `TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet` | `interruptibleStdoutCapture.Write` has buffered both required startup messages | One real `/work` reachability request follows startup output; cancellation joins and the reserved port rebinds. |
+| `TestCLITextStreamInterruptedRunDoesNotClaimCompletion` | `interruptibleStdoutCapture.Write` has buffered a canonical lifecycle line | Cancellation remains interruptible only after lifecycle output, joins external work, and never claims success. |
+
+The existing external-work start, buffered-record, invocation-completion,
+and cleanup channels remain one-shot synchronization boundaries. No isolated
+root was shared, no production readiness hook was added, no listener was
+faked, and no timeout was broadened. The continuous test now performs exactly
+one real local HTTP readiness request after its startup notification; a
+request error fails the witness rather than retrying through elapsed-time
+polling.
+
+### Post-edit source hashes
+
+| Source | SHA-256 |
+| --- | --- |
+| `tests/functional/transport/cli/output/json_result_test.go` | `F9CC26CA3AF3B2643DED8FEF94BBA71FFB1CB53E5FAA9D1C11F95F9B51748940` |
+| `tests/functional/transport/cli/output/ndjson_stream_test.go` | `48F8DB2C3CFA0D97D6DE4BE6924B2BE5412F7B6070FA0520F379254E5941AEC2` |
+| `tests/functional/transport/cli/output/shared_fixture_test.go` | `0BADA8079152BF3F69B8ED0532568E0770C22C6B7DFF6BBFAB7FCE5C2F68C03A` |
+| `tests/functional/transport/cli/output/stream_backpressure_test.go` | `53E9D04E8FD209FC49096C16C6562ADB23E77706C6524F606178BAB73C7223C5` |
+| `tests/functional/transport/cli/output/text_stream_test.go` | `926AC9582358C7C90655ED2A0E6E83813CC588472228D8264DEF959292B3586A` |
+
+### Synchronization and topology reconciliation
+
+The package remains at five application roots and 19 `Process.Execute`
+journeys: 15 shared-root journeys and four isolated lifecycle journeys. The
+post-edit source census has zero `time.Sleep` sites and zero `time.Now`
+deadline loops. The 16 remaining `time.After` sites are bounded failure
+ceilings for completion, cleanup, external-work, buffered-write, and startup
+guards; none drives success synchronization. The four former polling loops
+now wait on test-owned notifications, and the continuous listener retains its
+2-second HTTP client timeout as a single request guard.
+
+### Verification evidence
+
+The following commands exercised the real in-process CLI through
+`support.BuildProcess`/`Process.Execute`, with controlled command-runner edges
+and the actual local listener where applicable:
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLIWriterFailureCancelsInvocation$' -count=1 -v
+```
+
+PASS, package-reported 17.737 s. The writer error remained primary, no
+terminal record was emitted, and canceled external work joined.
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLITextStreamSurfacesIncrementalMessages$' -count=3
+```
+
+PASS, package-reported 18.970 s. The first-chunk notification preserved the
+in-flight lifecycle assertion across all three repetitions.
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet$' -count=3
+```
+
+PASS, package-reported 6.073 s. All three repetitions observed the startup
+notification, completed one real local readiness request, canceled and joined
+the continuous run, and successfully rebound the same port.
+
+```text
+go test -race ./tests/functional/transport/cli/output/... -run '^TestCLITextStreamSurfacesIncrementalMessages$' -count=1
+```
+
+PASS, package-reported 12.884 s. No race was detected in the changed gated
+writer notification or shared fixture execution path.
+
+The corrected lifecycle selector command was also run at `-count=1`; each
+changed witness passed at least once. The slow-writer pass was in that corrected
+mixed selector run (5.01 s); the gated-human pass was 5.173 s, the continuous
+pass was 1.917 s, the writer-failure pass was 17.737 s, and the interruption
+pass was 4.455 s at package-reported time. A combined run reproduced the
+unchanged host-contended packaged-factory startup guard for writer failure and
+passed interruption; the failures occurred before the controlled writer or
+external-work boundary.
+
+The required `-count=3` slow-writer, writer-failure, and interruption attempts
+were retained as diagnostics rather than retried to reduce variance: concurrent
+host activity blocked packaged-factory staging or initialization before the
+owned notification boundary. The targeted combined `-race` command likewise
+failed before the slow-writer boundary under the same contention; the isolated
+gated-human race run passed. These diagnostics do not weaken the lifecycle
+assertions or claim race coverage for the blocked paths. A compile-only package
+run passed, and the post-edit sleep/deadline census returned zero sites.
+
+This story proves deterministic success synchronization for the changed gated
+writers, one-request real listener readiness, cancellation/join behavior,
+isolated-root preservation, and the absence of polling sleeps. It does not
+prove the final three-sample performance target, exact-head loopback, terminal
+CI, or merge; those remain owned by GATE-PERF, VAL-001, and review.
+
 ## Later-gate inputs and remaining edges
 
 - `GATE-SUCCESS`: consolidate duplicate successful output evidence while
   preserving every row above.
-- `GATE-LIFECYCLE`: replace eligible polling with deterministic test-owned
-  notifications without removing isolated roots or adding sleeps.
 - `GATE-PERF`: record three comparable final samples and compare their median
   with the 59.921 s baseline; if the 40% target is not reached, add the
   quantified profile-backed irreducible-floor explanation after the bounded
