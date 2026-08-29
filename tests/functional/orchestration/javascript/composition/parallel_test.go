@@ -1,4 +1,4 @@
-package composition
+package composition_test
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -57,26 +56,13 @@ const parallelPartialFailureWorkflow = `return (async function () {
 // keeps more than one external child call in flight at the same time through the
 // public Factory Session and dispatch surfaces, using controllable provider edges
 // instead of wall-clock sleeps to observe concurrency.
-func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
-	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
-	homeDir := writeParallelCompositionGlobalConfig(t)
-
+func runJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T, fixture *compositionFixture) {
 	provider := newGatedParallelChildProvider()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-		),
-		Edges: serviceedges.Edges{ProviderOverride: provider},
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	registerCompositionProvider(t, fixture, provider)
 
 	started := startParallelCompositionWorkflowAsync(
 		t,
-		baseURL,
+		fixture.baseURL,
 		"parallel-composition-concurrent-dispatch",
 		parallelConcurrentDispatchWorkflow,
 	)
@@ -84,13 +70,14 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("session id unexpectedly empty")
 	}
+	fixture.trackLiveSession(t, sessionID)
 
 	provider.waitForConcurrentCalls(t, 5*time.Second)
 	provider.releaseAll()
 
 	completed := waitForParallelCompositionSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		sessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
 		10*time.Second,
@@ -102,7 +89,7 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		baseURL+"/factory-sessions/"+sessionID+"/dispatches",
+		fixture.baseURL+"/factory-sessions/"+sessionID+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want 2 public child dispatches", len(dispatches.Dispatches))
@@ -120,28 +107,13 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 // TestJavaScriptParallelPreservesDeclaredResultOrdering proves JavaScript parallel
 // returns child results in declared input order on the public Factory Session result
 // surface even when controllable external edges complete children in a different order.
-func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
-	homeDir := writeParallelCompositionGlobalConfig(t)
-
+func runJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T, fixture *compositionFixture) {
 	provider := newLabelGatedParallelChildProvider(parallelDeclaredResultOrderingLabels)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-		),
-		Edges: serviceedges.Edges{ProviderOverride: provider},
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	registerCompositionProvider(t, fixture, provider)
 
 	started := startParallelCompositionWorkflowAsync(
 		t,
-		baseURL,
+		fixture.baseURL,
 		"parallel-composition-declared-ordering",
 		parallelDeclaredResultOrderingWorkflow,
 	)
@@ -149,8 +121,9 @@ func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("session id unexpectedly empty")
 	}
+	fixture.trackLiveSession(t, sessionID)
 
-	waitForParallelCompositionInFlightDispatches(t, baseURL, sessionID, 3, 5*time.Second)
+	waitForParallelCompositionInFlightDispatches(t, fixture.baseURL, sessionID, 3, 5*time.Second)
 	for _, label := range []string{"child-gamma", "child-beta", "child-alpha"} {
 		provider.releaseLabel(label)
 		waitForParallelCompositionLabelCompletion(t, provider, label, 5*time.Second)
@@ -158,7 +131,7 @@ func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
 
 	completed := waitForParallelCompositionSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		sessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
 		10*time.Second,
@@ -173,12 +146,12 @@ func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
 		t.Fatalf("provider completion order = %v, want %v", got, wantCompletionOrder)
 	}
 
-	resultPayload := readParallelCompositionFinalResult(t, baseURL, sessionID)
+	resultPayload := readParallelCompositionFinalResult(t, fixture.baseURL, sessionID)
 	assertParallelCompositionResultLabels(t, resultPayload, parallelDeclaredResultOrderingLabels)
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		baseURL+"/factory-sessions/"+sessionID+"/dispatches",
+		fixture.baseURL+"/factory-sessions/"+sessionID+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
@@ -190,28 +163,13 @@ func TestJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T) {
 // surfaces one failed child as an explicit failed result with a stable diagnostic while
 // successful siblings still complete, matching the documented partial-failure policy rather
 // than aborting the whole workflow call.
-func TestJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
-	homeDir := writeParallelCompositionGlobalConfig(t)
-
+func runJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T, fixture *compositionFixture) {
 	provider := newPartialFailureParallelChildProvider()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Env: append(os.Environ(),
-			"HOME="+homeDir,
-			"USERPROFILE="+homeDir,
-		),
-		Edges: serviceedges.Edges{ProviderOverride: provider},
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	registerCompositionProvider(t, fixture, provider)
 
 	started := startParallelCompositionWorkflowAsync(
 		t,
-		baseURL,
+		fixture.baseURL,
 		"parallel-composition-partial-failure",
 		parallelPartialFailureWorkflow,
 	)
@@ -219,10 +177,11 @@ func TestJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T) {
 	if sessionID == "" {
 		t.Fatal("session id unexpectedly empty")
 	}
+	fixture.trackLiveSession(t, sessionID)
 
 	completed := waitForParallelCompositionSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		sessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
 		15*time.Second,
@@ -238,12 +197,12 @@ func TestJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T) {
 		t.Fatalf("progress = %#v, want three dispatches with two completed and one failed", completed.Progress)
 	}
 
-	resultPayload := readParallelCompositionFinalResult(t, baseURL, sessionID)
+	resultPayload := readParallelCompositionFinalResult(t, fixture.baseURL, sessionID)
 	assertParallelCompositionPartialFailureResults(t, resultPayload, parallelDeclaredResultOrderingLabels)
 
 	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
 		t,
-		baseURL+"/factory-sessions/"+sessionID+"/dispatches",
+		fixture.baseURL+"/factory-sessions/"+sessionID+"/dispatches",
 	)
 	if len(dispatches.Dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
@@ -278,9 +237,8 @@ func parallelCompositionFactoryConfig() map[string]any {
 	}
 }
 
-func writeParallelCompositionGlobalConfig(t *testing.T) string {
+func writeParallelCompositionGlobalConfig(t *testing.T, homeDir string) {
 	t.Helper()
-	homeDir := t.TempDir()
 	configDir := filepath.Join(homeDir, ".you-agent-factory")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("mkdir global config directory: %v", err)
@@ -291,7 +249,6 @@ func writeParallelCompositionGlobalConfig(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
 		t.Fatalf("write global config: %v", err)
 	}
-	return homeDir
 }
 
 func startParallelCompositionWorkflowAsync(

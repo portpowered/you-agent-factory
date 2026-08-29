@@ -3,15 +3,12 @@
 package composition_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -97,28 +94,18 @@ const (
 // dispatches exactly one child per input, observable on the public Factory
 // Session dispatch listing and primary result surfaces without inspecting
 // private runtime state.
-func TestJavaScriptForEachDispatchesEveryInputOnce(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptForEachDispatchesEveryInputOnce(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldForEachCardinalityWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startForEachCardinalityWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.provider.callCount()
+	started := startForEachCardinalityWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.provider.callCount(); got != providerCalls {
+		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
 	}
 
-	dispatches := listForEachCardinalityDispatches(t, server.URL(), started.SessionId)
+	dispatches := listForEachCardinalityDispatches(t, fixture, started.SessionId)
 	assertExactlyOneDispatchPerForEachInput(t, dispatches.Dispatches)
 	assertForEachCardinalityPrimaryResult(t, started.Result)
 }
@@ -128,28 +115,18 @@ func TestJavaScriptForEachDispatchesEveryInputOnce(t *testing.T) {
 // correlated to its originating input identity on the public primary result
 // and Factory Session dispatch listing surfaces, even when input order would
 // otherwise make completion-order guessing unreliable.
-func TestJavaScriptForEachPreservesInputResultCorrelation(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptForEachPreservesInputResultCorrelation(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldForEachCorrelationWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startForEachCorrelationWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.provider.callCount()
+	started := startForEachCorrelationWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.provider.callCount(); got != providerCalls {
+		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
 	}
 
-	dispatches := listForEachCorrelationDispatches(t, server.URL(), started.SessionId)
+	dispatches := listForEachCorrelationDispatches(t, fixture, started.SessionId)
 	assertForEachInputResultCorrelation(t, dispatches.Dispatches, started.Result)
 }
 
@@ -158,28 +135,18 @@ func TestJavaScriptForEachPreservesInputResultCorrelation(t *testing.T) {
 // completes without child dispatch on the public Factory Session dispatch
 // listing and primary result surfaces, without unresolved hangs or private
 // runtime leakage in public diagnostics.
-func TestJavaScriptForEachEmptyInputDoesNotDispatch(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptForEachEmptyInputDoesNotDispatch(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldForEachEmptyInputWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startForEachEmptyInputWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.provider.callCount()
+	started := startForEachEmptyInputWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for empty for-each run", runner.CallCount())
+	if got := fixture.provider.callCount(); got != providerCalls {
+		t.Fatalf("provider call count = %d, want unchanged at %d for empty for-each run", got, providerCalls)
 	}
 
-	dispatches := listForEachEmptyInputDispatches(t, server.URL(), started.SessionId)
+	dispatches := listForEachEmptyInputDispatches(t, fixture, started.SessionId)
 	assertNoForEachChildDispatches(t, dispatches.Dispatches)
 	assertForEachEmptyInputPrimaryResult(t, started.Result)
 }
@@ -216,161 +183,56 @@ func scaffoldForEachEmptyInputWorkflow(t *testing.T) string {
 
 func startForEachCardinalityWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-for-each-cardinality-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal for-each cardinality workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build for-each cardinality workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start for-each cardinality workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start for-each cardinality workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode for-each cardinality workflow response: %v", err)
-	}
-	return started
+	return fixture.startFakeSync(t, "javascript-for-each-cardinality-composition", dir)
 }
 
 func startForEachCorrelationWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-for-each-correlation-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal for-each correlation workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build for-each correlation workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start for-each correlation workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start for-each correlation workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode for-each correlation workflow response: %v", err)
-	}
-	return started
+	return fixture.startFakeSync(t, "javascript-for-each-correlation-composition", dir)
 }
 
 func startForEachEmptyInputWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-for-each-empty-input-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal for-each empty-input workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build for-each empty-input workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start for-each empty-input workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start for-each empty-input workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode for-each empty-input workflow response: %v", err)
-	}
-	return started
+	return fixture.startFakeSync(t, "javascript-for-each-empty-input-composition", dir)
 }
 
 func listForEachCardinalityDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.fakeDispatches(t, sessionID)
 }
 
 func listForEachCorrelationDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.fakeDispatches(t, sessionID)
 }
 
 func listForEachEmptyInputDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.fakeDispatches(t, sessionID)
 }
 
 func assertNoForEachChildDispatches(

@@ -3,15 +3,12 @@
 package composition_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -86,63 +83,43 @@ const (
 // Factory that runs a multi-stage pipeline completes with evidence that
 // stage-one child output is passed into and observed by the next stage on
 // the public primary result and Factory Session dispatch listing surfaces.
-func TestJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldPipelineStageOutputWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startPipelineStageOutputWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.provider.callCount()
+	started := startPipelineStageOutputWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.provider.callCount(); got != providerCalls {
+		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
 	}
 
-	dispatches := listPipelineStageOutputDispatches(t, server.URL(), started.SessionId)
+	dispatches := listPipelineStageOutputDispatches(t, fixture, started.SessionId)
 	stageOneDispatch, stageTwoDispatch := assertTwoCompletedPipelineChildDispatches(t, dispatches.Dispatches)
 	assertPipelineStageOutputPrimaryResult(t, started.Result, stageOneDispatch.Id, stageTwoDispatch.Id)
-	assertPipelineFactoryEventProjection(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId),
+	assertPipelineFactoryEventProjection(t, fixture.fakeEvents(t, started.SessionId),
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, stageOneDispatch.Id, stageTwoDispatch.Id)
 }
 
 // TestJavaScriptPipelineStopsAfterStageFailure proves a JavaScript Factory
 // pipeline stops later child dispatch after an early stage fails and records
 // the stage failure on the public primary result and dispatch listing surfaces.
-func TestJavaScriptPipelineStopsAfterStageFailure(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptPipelineStopsAfterStageFailure(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldPipelineStageFailureWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startPipelineStageFailureWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.provider.callCount()
+	started := startPipelineStageFailureWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if got := fixture.provider.callCount(); got != providerCalls {
+		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
 	}
 
-	dispatches := listPipelineStageFailureDispatches(t, server.URL(), started.SessionId)
+	dispatches := listPipelineStageFailureDispatches(t, fixture, started.SessionId)
 	stageOneDispatch := assertSingleFailedPipelineStageOneDispatch(t, dispatches.Dispatches)
 	assertNoLaterPipelineStageDispatch(t, dispatches.Dispatches, pipelineStageTwoLabel)
 	assertPipelineStageFailurePrimaryResult(t, started.Result, stageOneDispatch.Id)
-	assertPipelineFactoryEventProjection(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId),
+	assertPipelineFactoryEventProjection(t, fixture.fakeEvents(t, started.SessionId),
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, "edit rejected")
 }
 
@@ -168,108 +145,38 @@ func scaffoldPipelineStageFailureWorkflow(t *testing.T) string {
 
 func startPipelineStageOutputWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-pipeline-stage-output-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal pipeline stage-output workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build pipeline stage-output workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start pipeline stage-output workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start pipeline stage-output workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode pipeline stage-output workflow response: %v", err)
-	}
-	return started
+	return fixture.startFakeSync(t, "javascript-pipeline-stage-output-composition", dir)
 }
 
 func startPipelineStageFailureWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *compositionFixture,
+	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-
-	workflowPath := filepath.Join(dir, "workflow.js")
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-pipeline-stage-failure-composition",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-			WorkflowFile: &workflowPath,
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal pipeline stage-failure workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build pipeline stage-failure workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start pipeline stage-failure workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start pipeline stage-failure workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode pipeline stage-failure workflow response: %v", err)
-	}
-	return started
+	return fixture.startFakeSync(t, "javascript-pipeline-stage-failure-composition", dir)
 }
 
 func listPipelineStageOutputDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.fakeDispatches(t, sessionID)
 }
 
 func listPipelineStageFailureDispatches(
 	t *testing.T,
-	serverURL string,
+	fixture *compositionFixture,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-
-	return support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	return fixture.fakeDispatches(t, sessionID)
 }
 
 func assertTwoCompletedPipelineChildDispatches(
