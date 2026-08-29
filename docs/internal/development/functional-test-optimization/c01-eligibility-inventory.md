@@ -1279,10 +1279,10 @@ Every C01 row has exactly one mapping record. Final rows use `mapped-from-c01` l
 
 ## Verification boundary
 
-`go list` completed with 77 package identities at the pinned source commit. The current-head per-package `go test -list '^Test'` sweep was attempted but was stopped after bounded waits with no partial output under shared-host compilation contention; source declarations and the exact-head C07 report tables are retained as discovery context, while the missing current-head executable confirmation remains explicit.
+`go list` completed with 77 package identities at the pinned source commit. The current-head per-package `go test -list '^Test' -count=0` sweep completed successfully for every resolved package and confirmed all 595 top-level declarations. The 217 named scenarios remain source-declared identities; their focused runtime confirmation belongs to Story 002.
 
 Classification, exact isolation reasons, focused runtime witnesses, clean-room validation, and PR CI are intentionally deferred to the dependent stories. This artifact contains no package migration, shared-support change, test rewrite, or PR #2331 content.
 
 ## Current-head executable-list attempt
 
-`go list` resolved 77 package identities. The real command `go test $RESOLVED_PACKAGES -list '^Test' -count=0` exited `1` after listing 544 top-level identities. The existing `TestMain` fixtures in `tests/functional/sessions/lifecycle` and `tests/functional/runtime_api/factory_transformation` both failed before emitting their lists with `process API server starter was never invoked; --with-server was probably omitted`. The source spine retains 595 declarations, but the 51 rows from those two packages are not promoted to executable-list evidence.
+`go list` resolved 77 package identities. Running the real command per package — `go test $RESOLVED_PACKAGE -list '^Test' -count=0` — exited `0` for all packages and listed all 595 top-level identities, including the 51 declarations in `tests/functional/sessions/lifecycle` and `tests/functional/runtime_api/factory_transformation`. The five zero-test directories remain explicit empty facts. Named `t.Run` scenarios are retained from the source scan and are not represented as top-level `-list` observations.
