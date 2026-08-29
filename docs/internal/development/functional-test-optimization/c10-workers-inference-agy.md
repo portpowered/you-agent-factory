@@ -415,6 +415,20 @@ runtime witness; the exact package and repeated shared-process behavior remain
 passing. Local elapsed times remain diagnostic, and hosted package timing is
 still the review-owned verdict.
 
+The subsequent bounded pass starts the same retained-plus-live Factory Event
+observer before Work submission, allowing exact Factory Event decoding to
+overlap the response-frame read. The normal path waits for the full expected
+event count before cancelling the observer; cancellation is reserved for
+failure cleanup, which runs before session and response-stream release. This
+preserves the exact event order/count, Work projection, response frames and
+EOF witness while removing the serial observation tail. The final local exact
+package run passed after the helper-size relocation (`1.936s` package time),
+the focused three-repeat run passed (`4.653s` package time), the race run
+passed (`3.911s` package time), and the short repository gate remained `160`
+passed / `1` skipped / `0` failed. The clean-room package timing remains
+diagnostic until the fresh hosted Backend Functional Coverage result is
+recorded on the pushed head.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
