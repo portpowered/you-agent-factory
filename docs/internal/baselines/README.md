@@ -367,9 +367,8 @@ generated-file, schema, baseline, or code rollback.
 
 ### GATE-LOOPBACK and GATE-PR-CI
 
-GATE-LOOPBACK result: PASS for the final documentation content at delivered head
-`b905584c77172e7fa23ffaa611a2988e2111ca20`. A second fresh detached checkout at
-that head had empty `git status --porcelain`. The source-first traversal and
+GATE-LOOPBACK result: PASS for the delivered documentation content. A fresh
+detached checkout of that head had empty `git status --porcelain`. The source-first traversal and
 reverse row parser each produced 28 unique paths. Their set difference was
 empty, with zero duplicate paths, zero duplicate classes, zero missing files,
 and zero SHA mismatches. The S-04 witness reached `PathLeaseFreezeRelativePath`
