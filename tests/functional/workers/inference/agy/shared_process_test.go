@@ -164,6 +164,7 @@ func (daemon *agySharedDaemon) stop(ctx context.Context) error {
 
 type agySharedScenario struct {
 	selector   string
+	folderDir  string
 	factoryDir string
 	loaded     support.ProviderSessionCase
 	request    agyGoldenRequest
@@ -184,12 +185,14 @@ type agyProcessFixture struct {
 	finalOnce sync.Once
 	finalErr  error
 
-	rootDir    string
-	homeDir    string
-	hostDir    string
-	baseURL    string
-	successDir string
-	timeoutDir string
+	rootDir          string
+	homeDir          string
+	hostDir          string
+	baseURL          string
+	successFolderDir string
+	timeoutFolderDir string
+	successDir       string
+	timeoutDir       string
 
 	process support.ApplicationProcess
 	api     *agySharedHTTPServer
@@ -261,9 +264,16 @@ func (fixture *agyProcessFixture) setup(t *testing.T) (setupErr error) {
 func (fixture *agyProcessFixture) createDirectories(rootDir string) error {
 	fixture.homeDir = filepath.Join(rootDir, "home")
 	fixture.hostDir = filepath.Join(rootDir, "host")
-	fixture.successDir = filepath.Join(rootDir, "success")
-	fixture.timeoutDir = filepath.Join(rootDir, "timeout")
-	for _, path := range []string{fixture.homeDir, fixture.hostDir, fixture.successDir, fixture.timeoutDir} {
+	fixture.successFolderDir = filepath.Join(rootDir, "success")
+	fixture.timeoutFolderDir = filepath.Join(rootDir, "timeout")
+	fixture.successDir = filepath.Join(fixture.successFolderDir, agySharedSuccessSelector)
+	fixture.timeoutDir = filepath.Join(fixture.timeoutFolderDir, agySharedTimeoutSelector)
+	for _, path := range []string{
+		fixture.homeDir,
+		fixture.hostDir,
+		fixture.successDir,
+		fixture.timeoutDir,
+	} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return fmt.Errorf("create package fixture path %q: %w", path, err)
 		}
@@ -298,11 +308,11 @@ func (fixture *agyProcessFixture) loadScenarios(t *testing.T) error {
 	}
 	fixture.scenarios = map[string]*agySharedScenario{
 		agyFinalOnlySuccessGoldenCase: {
-			selector: agySharedSuccessSelector, factoryDir: fixture.successDir,
+			selector: agySharedSuccessSelector, folderDir: fixture.successFolderDir, factoryDir: fixture.successDir,
 			loaded: successLoaded, request: successRequest,
 		},
 		agyTimeoutGoldenCase: {
-			selector: agySharedTimeoutSelector, factoryDir: fixture.timeoutDir,
+			selector: agySharedTimeoutSelector, folderDir: fixture.timeoutFolderDir, factoryDir: fixture.timeoutDir,
 			loaded: timeoutLoaded, request: timeoutRequest,
 		},
 	}
@@ -335,16 +345,16 @@ func (fixture *agyProcessFixture) registerRoutes() error {
 		successExitCode = *success.loaded.Process.ExitCode
 	}
 	router := newAgySharedCommandRouter()
-	if err := router.register(agySharedSuccessSelector, fixture.successDir, newAgyStaticCommandRunner(platformprocess.CommandResult{
+	if err := router.register(agySharedSuccessSelector, fixture.successFolderDir, newAgyStaticCommandRunner(platformprocess.CommandResult{
 		Stdout: append([]byte(nil), success.loaded.Stdout.Raw...),
 		Stderr: []byte(success.loaded.Stderr), ExitCode: successExitCode,
 	})); err != nil {
 		return fmt.Errorf("register success route: %w", err)
 	}
-	if err := router.register(agySharedTimeoutSelector, fixture.timeoutDir, newAgyDeadlineExceededCommandRunner(append([]byte(nil), timeout.loaded.Stdout.Raw...))); err != nil {
+	if err := router.register(agySharedTimeoutSelector, fixture.timeoutFolderDir, newAgyDeadlineExceededCommandRunner(append([]byte(nil), timeout.loaded.Stdout.Raw...))); err != nil {
 		return fmt.Errorf("register timeout route: %w", err)
 	}
-	if err := assertAgyRoutesRejectInvalidRegistrations(router, fixture.rootDir, fixture.successDir); err != nil {
+	if err := assertAgyRoutesRejectInvalidRegistrations(router, fixture.rootDir, fixture.successFolderDir); err != nil {
 		return err
 	}
 	if err := router.freeze(); err != nil {
@@ -406,7 +416,7 @@ func (fixture *agyProcessFixture) runScenario(
 	workTitle string,
 ) agySharedReplay {
 	t.Helper()
-	opened := support.OpenFactorySessionAt(t, fixture.baseURL, scenario.factoryDir)
+	opened := openAgyFactorySessionAt(t, fixture.baseURL, scenario.folderDir, scenario.selector)
 	if opened.Session == nil {
 		t.Fatalf("AGY %q open response missing session: %#v", scenario.selector, opened)
 	}
@@ -414,8 +424,12 @@ func (fixture *agyProcessFixture) runScenario(
 	if strings.TrimSpace(session.Id) == "" || session.Id == factorysessions.DefaultSessionID || session.IsDefault {
 		t.Fatalf("AGY %q session = %#v, want unique non-default explicit session", scenario.selector, session)
 	}
-	if session.FolderPath != scenario.factoryDir || session.FactoryDir != scenario.factoryDir {
-		t.Fatalf("AGY %q session paths = folder:%q factory:%q, want %q", scenario.selector, session.FolderPath, session.FactoryDir, scenario.factoryDir)
+	if session.FolderPath != scenario.folderDir || session.FactoryDir != scenario.factoryDir {
+		t.Fatalf("AGY %q session paths = folder:%q factory:%q, want folder:%q factory:%q", scenario.selector, session.FolderPath, session.FactoryDir, scenario.folderDir, scenario.factoryDir)
+	}
+	if session.Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
+		session.Target.Name == nil || *session.Target.Name != scenario.selector {
+		t.Fatalf("AGY %q session target = %#v, want named target %q", scenario.selector, session.Target, scenario.selector)
 	}
 	if err := fixture.recordSessionOpened(session.Id); err != nil {
 		t.Fatalf("AGY %q session identity: %v", scenario.selector, err)
@@ -706,13 +720,13 @@ func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *ag
 	if scenario.selector == agySharedTimeoutSelector {
 		want = 9
 	}
-	requests := fixture.router.requestsSinceForWorkDir(start, scenario.factoryDir)
+	requests := fixture.router.requestsSinceForWorkDir(start, scenario.folderDir)
 	if len(requests) != want {
 		t.Fatalf("AGY %q routed requests = %d, want %d", scenario.selector, len(requests), want)
 	}
 	for index, request := range requests {
-		if request.Command != agySharedCommand || request.WorkDir != scenario.factoryDir {
-			t.Fatalf("AGY %q routed request[%d] = command:%q workdir:%q, want command:%q workdir:%q", scenario.selector, index, request.Command, request.WorkDir, agySharedCommand, scenario.factoryDir)
+		if request.Command != agySharedCommand || request.WorkDir != scenario.folderDir {
+			t.Fatalf("AGY %q routed request[%d] = command:%q workdir:%q, want command:%q workdir:%q", scenario.selector, index, request.Command, request.WorkDir, agySharedCommand, scenario.folderDir)
 		}
 	}
 	return len(requests)

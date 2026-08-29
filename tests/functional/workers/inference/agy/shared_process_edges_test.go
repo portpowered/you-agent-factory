@@ -2,6 +2,7 @@ package agy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,40 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func openAgyFactorySessionAt(
+	t testing.TB,
+	baseURL string,
+	folderPath string,
+	targetName string,
+) factoryapi.OpenFactorySessionResponse {
+	t.Helper()
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
+		FolderPath: folderPath,
+		Target: &factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKindNamed,
+			Name: &targetName,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal open AGY Factory Session request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
+		t.Fatalf("decode POST %s: %v", endpoint, err)
+	}
+	return opened
+}
 
 func waitForAgyRuntimeReady(baseURL string, timeout time.Duration) error {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/status"
