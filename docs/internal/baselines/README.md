@@ -15,7 +15,7 @@ entries and lowering accepted debt over expanding a baseline.
 
 This is the source-backed provenance inventory for required repository-state comparisons.
 It was audited from a clean detached checkout of `origin/main` at commit
-`022888528c6b3ae6192a9936db235bd4102fe597` on 2026-08-28.
+`0c3bb857910bf4e356b01942954e7272572510f9` on 2026-08-28.
 The checkout had an empty `git status --porcelain`.
 One row represents one committed comparison file.
 Shared consumers do not collapse rows.
@@ -113,7 +113,7 @@ repository path and show the same 28-path set.
 
 GATE-AUDIT result: both ledgers contain 28 entries.
 Both ledgers have zero duplicate rows and zero unclassified active comparison files.
-Their set difference is empty at audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`.
+Their set difference is empty at audit SHA `0c3bb857910bf4e356b01942954e7272572510f9`.
 The consumer blocker in GATE-BLOCKER does not change this set result.
 
 ### Repository quality and coverage comparisons
@@ -127,7 +127,7 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 | `docs/internal/baselines/functional-undocumented-tests.json` | `make verify-tests` → `test-maintenance` | `internal/functionaltestmetadata/baseline_repo_test.go:TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests` | Functional test metadata | Relative test file and `Test*` name | `go test ./internal/functionaltestmetadata -run TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests -count=1` | R-04 | `sha256:b78da501e4a36a1b497be1f2a5f8988ac50706db38d0c0ace17b7eb5d553c8b6` |
 | `docs/internal/baselines/go-functional-coverage-package-minimums.json` | `make functional-test-viz` → backend functional coverage | `cmd/functionaltestviz/main.go:packageManifestPath`, `Makefile:GO_FUNCTIONAL_COVERAGE_MANIFEST` | Functional coverage gate | Go import package and minimum statement-coverage percentage | `make functional-test-viz` | R-05 | `sha256:79e77099a74fe8065b9af69a53622303196353b77ef55d373def3f52adb12dc5` |
 | `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `make test-unit-coverage` → backend unit coverage | `cmd/unitcoverage/main.go`, `Makefile:GO_UNIT_COVERAGE_MANIFEST` | Unit coverage gate | Go import package and minimum statement-coverage percentage | `make test-unit-coverage` | R-06 | `sha256:ee1faa58bad1f07903868c3eb791184ea299c10250cfddb5478adfbecb299eb3` |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:b5f46eb81459d7d97f9958a174a195c4676b29e39f25933e65c76bdf8cc39711` |
+| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | `cmd/unitlanebudget/main.go`, `cmd/unitlanebudget/budget.go` | Unit-lane performance gate | Three unit-lane wall samples plus package and test inventories | `make test-unit-latency-budget` | S-02 | `sha256:d06b0c0a7f952b98c57b90c7b4e9d5b2ec7099eecdfd964595613ff1493d11dc` |
 | `docs/internal/baselines/hardcoded-ui-copy-baseline.txt` | `make lint` → `ui-lint` | `ui/scripts/check-hardcoded-ui-copy.ts`, `ui/package.json:check:localized-copy` | Dashboard localization gate | Source location and literal finding | `cd ui && bun run check:localized-copy` | R-07 | `sha256:bb6ee7e94bc96d013f164dc81004471112e457fa8a22d11ab17c1804982c609a` |
 | `docs/internal/baselines/package-structure-baseline.json` | `make lint` → `pkg-structure` | `cmd/pkgstructurecheck/main.go` | Packaged Service Structure | Package path and exact recorded structure finding | `make pkg-structure` | R-08 | `sha256:a75bbca7df83dda6c422e8ff0b0892dc7d23b0a1ff96f03415677da9f4787a7e` |
 | `docs/internal/baselines/package-target-test-only-baseline.json` | `make lint` → `package-target-manifest-check` | `cmd/packagetargetmanifestcheck/manifest.go` | Package-target migration gate | Open-move package path and test-only source identity | `make package-target-manifest-check` | R-09 | `sha256:64c98e7f5ee3b25d74bda79ee50a571b1b3a21e985946bc34688b330df5af40a` |
@@ -164,7 +164,7 @@ The consumer blocker in GATE-BLOCKER does not change this set result.
 These values were parsed from committed files at the audit SHA. They are
 content observations, not permission to rewrite a ratchet or snapshot.
 
-| Class | Comparison file | Current scalar observation at `022888528c6b3ae6192a9936db235bd4102fe597` |
+| Class | Comparison file | Current scalar observation at `0c3bb857910bf4e356b01942954e7272572510f9` |
 | --- | --- | --- |
 | R-01 | `backend-exemption-budget.json` | 457 exemption-budget entries |
 | R-02 | `backend-package-file-count.json` | 61 package-file-count entries |
@@ -319,18 +319,18 @@ generated contract.
 
 The protected-main source path requires the hosted unit-latency artifacts and
 normalized dead-code report before the shared generator can run. The matching
-source CI observation was run 33228272233 for audit SHA
-`022888528c6b3ae6192a9936db235bd4102fe597`.
+source CI observation was run 33230017359 for audit SHA
+`0c3bb857910bf4e356b01942954e7272572510f9`.
 The run URL is
-https://github.com/portpowered/you-agent-factory/actions/runs/33228272233.
-`gh run view 33228272233 --json databaseId,headSha,status,conclusion,url,jobs`
+https://github.com/portpowered/you-agent-factory/actions/runs/33230017359.
+`gh run view 33230017359 --json databaseId,headSha,status,conclusion,url,jobs`
 reported `success`. Backend Unit Latency retained three hosted samples and
 enforced the latency budget. Backend Lint uploaded the normalized dead-code
 evidence, and Verification Policy completed successfully.
 
-The matching regeneration run was 33228682483 at the same main SHA.
+The matching regeneration run was 33230539939 at the same main SHA.
 The run URL is
-https://github.com/portpowered/you-agent-factory/actions/runs/33228682483.
+https://github.com/portpowered/you-agent-factory/actions/runs/33230539939.
 Its log recorded successful downloads of both hosted artifacts, the canonical
 `make regenerate-shared-ci-baselines` path, allowlist validation, and
 `SHARED_BASELINE_RECONCILIATION action=merge-requested publish=true`.
@@ -342,8 +342,8 @@ GATE-HOSTED passes for this audit revision. Local timing remains diagnostic.
 
 | ID | Owning gate and owner | Reproduction and observed result | Smallest separate correction |
 | --- | --- | --- | --- |
-| C11-R04-001 | `GATE-CONSUMERS`, `internal/functionaltestmetadata` maintainers | At audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`, run `go test ./internal/functionaltestmetadata -run ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`. The checker returned exit 1 with 330 committed identities and 296 discovered identities. | Review the 34-entry set difference, document any still-undocumented test, and manually remove only resolved baseline rows. Rerun the checker in a separately owned correction. This lane makes no baseline edit. |
-| C11-CONTRACT-002 | `GATE-CONSUMERS`, CLI contract owner | At audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`, run `make test-contract`. The command returned exit 1 at `contracts/session_command_family_test.go:116`: `you.session.list --scope default = all, want live`. Focused S-09 and S-10 comparisons still passed. | Confirm the intended default at the contract and production-command sources, then correct the owning contract surface and rerun `make test-contract`. This lane makes no fixture or generated-file edit. |
+| C11-R04-001 | `GATE-CONSUMERS`, `internal/functionaltestmetadata` maintainers | At audit SHA `0c3bb857910bf4e356b01942954e7272572510f9`, run `go test ./internal/functionaltestmetadata -run ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`. The checker returned exit 1 with 330 committed identities and 296 discovered identities. | Review the 34-entry set difference, document any still-undocumented test, and manually remove only resolved baseline rows. Rerun the checker in a separately owned correction. This lane makes no baseline edit. |
+| C11-CONTRACT-002 | `GATE-CONSUMERS`, CLI contract owner | At audit SHA `0c3bb857910bf4e356b01942954e7272572510f9`, run `make test-contract`. The command returned exit 1 at `contracts/session_command_family_test.go:116`: `you.session.list --scope default = all, want live`. Focused S-09 and S-10 comparisons still passed. | Confirm the intended default at the contract and production-command sources, then correct the owning contract surface and rerun `make test-contract`. This lane makes no fixture or generated-file edit. |
 
 These blockers remain assigned to separate correction lanes. The local dead-code,
 component-runner, and missing latency-artifact results are environment
@@ -374,7 +374,7 @@ empty, with zero duplicate paths, zero duplicate classes, zero missing files,
 and zero SHA mismatches. The S-04 witness reached `PathLeaseFreezeRelativePath`
 from `make ownership-inventory-check` through `VerifyFreeze`. Recomputed scalar
 values matched the catalog at audit SHA
-`022888528c6b3ae6192a9936db235bd4102fe597`.
+`0c3bb857910bf4e356b01942954e7272572510f9`.
 
 The loopback used the report shape from
 `factory/docs/standards/validation-loopback-template.md`. Its project criteria
@@ -386,7 +386,7 @@ were:
 | C2 S-04 and row provenance | PASS | Ownership consumer reached `PathLeaseFreezeRelativePath`, and 28 rows had source metadata | Future consumer changes |
 | C3 revision-pinned hashes and scalars | PASS | All 28 raw SHA-256 values and scalar observations matched | Future artifact changes |
 | C4 ratchet procedures | PASS | R-* rows retained deliberate shrink or manual-repin procedures | Semantic review of future procedures |
-| C5 hosted writer evidence | PASS | Source run 33228272233 and regeneration run 33228682483 both matched audit SHA and succeeded | Future protected-main runs |
+| C5 hosted writer evidence | PASS | Source run 33230017359 and regeneration run 33230539939 both matched audit SHA and succeeded | Future protected-main runs |
 | C6 defect handling | PASS | R-04 and contract defects were reproduced and left unchanged | Separately owned corrections |
 | C7 performance scope | PASS | Hosted latency remained authoritative, while local timing and UI wall time remained diagnostic | Future hosted samples |
 | C8 security, scope, and rollback | PASS | Clean status, one README diff, no secrets, and one-file revert path | Review-time merge state |
@@ -410,7 +410,7 @@ terminal CI, merge conflicts, and merge after that handoff.
 The unit-lane budget contains two deliberately different inventory units that
 must remain visible. The checked-in comparison file has **444 packages and
 18,223 current test identities** at the audit commit. Its internal
-`reference.baseCommit` is `177ebdd07a176863221f11410ab84fd075f1eb80`, the
+`reference.baseCommit` is `06763a831c13053cbfd31718d009f0e7e9bf0786`, the
 historical source revision used for the accepted timing sample. It is not the
 catalog audit SHA. The accepted historical sample evidence records **444
 packages and 18,122 tests** in each of its three captures. The latter is not
@@ -419,7 +419,7 @@ while the budget's `testInventory` is the current final-mode identity set.
 
 | Evidence source | Reproduction command | Unit and observed value | SHA-256 |
 | --- | --- | --- | --- |
-| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | Current final-mode reference at the audit SHA: 444 packages, 18,223 test identities. Artifact `reference.baseCommit` is historical `177ebdd07a176863221f11410ab84fd075f1eb80` | `b5f46eb81459d7d97f9958a174a195c4676b29e39f25933e65c76bdf8cc39711` |
+| `docs/internal/baselines/go-unit-lane-latency-budget.v1.json` | `make test-unit-latency-budget` | Current final-mode reference at the audit SHA: 444 packages, 18,223 test identities. Artifact `reference.baseCommit` is historical `06763a831c13053cbfd31718d009f0e7e9bf0786` | `d06b0c0a7f952b98c57b90c7b4e9d5b2ec7099eecdfd964595613ff1493d11dc` |
 | `docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-summary.md` and its three linked `baseline-make-run-*.v2.json` captures | `go run ./cmd/unitlanebudget -mode baseline -samples docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-1-replacement.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-2.v2.json,docs/internal/development/plans/unit-test-optimization-c01-wire-timeout-witness/baseline-make-run-3.v2.json` | Historical baseline distribution: 444 packages, 18,122 tests per capture. The three wall samples are 222.006s, 239.612s, and 258.271s | Summary `801e62cbff17729f7c256309f058fc961ed0959a321de86e3783933049d43a93`, captures `ba7e1364ed5c88d66071d4cac4b2bf027571044ef7d159b16d25435f7fc95d8a`, `d30fdc0215d50a14c0a4cef65b234fde68a680e4015e37b5d9a463c9f361723f`, `e4288d9085e19ea3e7f8a87e0ad67ca52b38a255e0bc1e1a569ad59fbd008d98` |
 
 The mapping is therefore **same package unit, different test-inventory
