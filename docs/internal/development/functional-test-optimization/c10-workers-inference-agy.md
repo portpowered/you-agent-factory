@@ -481,10 +481,19 @@ The latest bounded pass gives the immutable route and command doubles an
 optional streaming implementation. The production provider path now receives
 the fixture output directly instead of taking the completed-output fallback
 copy on each controlled call, while the returned result and observer-visible
-stdout/stderr remain unchanged. The exact package run passed (`2.892s`), the
-focused `-count=3` repeat passed (`5.535s`), and the race package passed
-(`5.643s`), all with exit status `0`. The hosted timing verdict remains
-review-owned and no CI result is claimed by this local evidence.
+stdout/stderr remain unchanged. The final exact package run on committed head
+`1a26cc39d2a32a5e83184081fc9bf56a6ec72f56` passed (`2.905s`); the focused
+`-count=3` repeat passed (`5.535s`), and the race package passed (`5.643s`),
+all with exit status `0`. The hosted timing verdict remains review-owned and
+no CI result is claimed by this local evidence.
+
+The next bounded pass removes the timeout double's per-attempt mutex from its
+retry-call witness. The output remains immutable and the atomic counter still
+proves the same nine streaming invocations (with the non-streaming fallback
+preserved); the focused `-count=3` package run passed (`5.462s`), the race
+package passed (`6.532s`), and backend-size plus `git diff --check` passed.
+The final exact package run is part of the committed-head delivery handoff;
+hosted timing remains authoritative.
 
 ### Scope and ancestry audit
 

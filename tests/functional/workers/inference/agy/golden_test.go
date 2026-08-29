@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -137,9 +137,8 @@ func TestAgyGoldenTimeout(t *testing.T) {
 // command adapter's native context.DeadlineExceeded classification, including
 // partial-output publication, matches the recorded timeout golden contract.
 type agyDeadlineExceededCommandRunner struct {
-	mu     sync.Mutex
 	stdout []byte
-	starts int
+	starts atomic.Int64
 }
 
 func newAgyDeadlineExceededCommandRunner(stdout []byte) *agyDeadlineExceededCommandRunner {
@@ -150,9 +149,7 @@ func (r *agyDeadlineExceededCommandRunner) Run(
 	_ context.Context,
 	_ platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.starts++
+	r.starts.Add(1)
 	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, context.DeadlineExceeded
 }
 
@@ -164,10 +161,8 @@ func (r *agyDeadlineExceededCommandRunner) RunStreaming(
 	_ platformprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	r.starts++
+	r.starts.Add(1)
 	stdout := r.stdout
-	r.mu.Unlock()
 	if observer != nil && len(stdout) > 0 {
 		observer(platformprocess.OutputStreamStdout, stdout)
 	}
@@ -175,9 +170,7 @@ func (r *agyDeadlineExceededCommandRunner) RunStreaming(
 }
 
 func (r *agyDeadlineExceededCommandRunner) callCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.starts
+	return int(r.starts.Load())
 }
 
 type agyGoldenRequest struct {
