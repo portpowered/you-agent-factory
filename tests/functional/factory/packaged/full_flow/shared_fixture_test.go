@@ -25,12 +25,12 @@ import (
 
 const fullFlowSharedFixtureTimeout = 15 * time.Second
 
-const fullFlowExpectedSessions = 3
+const fullFlowExpectedSessions = 4
 
 // fullFlowSharedFixture owns one root-built process and one continuous API
-// host for the three bounded/failure scenarios. The parallel worktree/merge
-// witness remains an isolated local-real test because its repository and
-// process lifecycle are part of the behavior under test.
+// host for all compatible Full Flow scenarios. Each child keeps its Factory,
+// repository, worktrees, and Factory Session private while only the immutable
+// process wiring and API listener are reused.
 type fullFlowSharedFixture struct {
 	rootDir    string
 	process    support.ApplicationProcess

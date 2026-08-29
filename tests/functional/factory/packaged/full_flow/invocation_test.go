@@ -16,24 +16,35 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t *testing.T) {
-	repository := initializeFullFlowRepository(t)
-	home := t.TempDir()
-	factoryDir := support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
-	runner := &fullFlowRunner{repository: repository, detectConcurrentImplementations: true}
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir, WorkingDirectory: repository, WaitForServiceModeRuntime: true,
-		Args:  []string{"--provider", "CODEX", "--model", "gpt-5"},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+func TestPackagedFullFlow(t *testing.T) {
+	fixture := newFullFlowSharedFixture(t)
+	t.Run("TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion", func(t *testing.T) {
+		testPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t, fixture)
 	})
-	response := invokeFullFlow(t, server, map[string]any{
+	t.Run("TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject", func(t *testing.T) {
+		testPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t, fixture)
+	})
+	t.Run("TestPackagedFullFlowEnforcesCallerSelectedTaskBound", func(t *testing.T) {
+		testPackagedFullFlowEnforcesCallerSelectedTaskBound(t, fixture)
+	})
+	t.Run("TestPackagedFullFlowEnforcesCallerSelectedCycleBound", func(t *testing.T) {
+		testPackagedFullFlowEnforcesCallerSelectedCycleBound(t, fixture)
+	})
+}
+
+func testPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(
+	t *testing.T,
+	fixture *fullFlowSharedFixture,
+) {
+	runner := &fullFlowRunner{detectConcurrentImplementations: true}
+	scenario := fixture.newScenario(t, runner)
+	runner.repository = scenario.repository
+	scenario.open(t)
+	response := invokeFullFlowSession(t, scenario, map[string]any{
 		"request": "Deliver two independent changes", "baseBranch": "main",
 		"maxCycles": "3", "maxTasksPerCycle": "2",
 	})
@@ -41,12 +52,12 @@ func TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t *te
 		t.Fatalf("response = %#v, message = %q, unexpected prompt = %q", response, optionalString(response.Message), runner.UnexpectedPrompt())
 	}
 	for _, task := range []string{"task-a", "task-b"} {
-		content, err := os.ReadFile(filepath.Join(repository, task+".txt"))
+		content, err := os.ReadFile(filepath.Join(scenario.repository, task+".txt"))
 		if err != nil || string(content) != task+"\n" {
 			t.Fatalf("merged %s = %q, %v", task, content, err)
 		}
 	}
-	longPaths, err := fullFlowGit(repository, "config", "--get", "core.longpaths")
+	longPaths, err := fullFlowGit(scenario.repository, "config", "--get", "core.longpaths")
 	if err != nil || longPaths != "true" {
 		t.Fatalf("repository core.longpaths = %q, %v, want persisted true for isolated-HOME task agents", longPaths, err)
 	}
@@ -60,34 +71,12 @@ func TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t *te
 	if strings.Join(merges, ",") != "task-a,task-b" && strings.Join(merges, ",") != "task-b,task-a" {
 		t.Fatalf("merged branches = %v", merges)
 	}
-	assertFullFlowReplay(t, server)
+	assertFullFlowReplay(t, scenario)
 }
 
-func invokeFullFlow(t *testing.T, server *support.FunctionalAPIServer, args map[string]any) factoryapi.InvocationResponse {
+func assertFullFlowReplay(t *testing.T, scenario *fullFlowScenario) {
 	t.Helper()
-	requestID := fmt.Sprintf("full-flow-%d", time.Now().UnixNano())
-	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
-	if err != nil {
-		t.Fatalf("marshal invocation: %v", err)
-	}
-	response, err := http.Post(server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations", "application/json", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("POST invocation: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST invocation status = %d", response.StatusCode)
-	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode invocation: %v", err)
-	}
-	return decoded
-}
-
-func assertFullFlowReplay(t *testing.T, server *support.FunctionalAPIServer) {
-	t.Helper()
-	events := server.GetFactoryEvents(t)
+	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
 	waves := 0
 	var observed []string
 	for _, event := range events {
@@ -136,23 +125,15 @@ func assertFullFlowReplay(t *testing.T, server *support.FunctionalAPIServer) {
 		t.Fatalf("replayed merge dispatches = %d, want 2", mergeCount)
 	}
 	sequence := support.ReconnectSequenceForFactoryEvent(events[0])
-	replayed := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{AfterEventID: events[0].Id, AfterSequence: &sequence})
+	replayed := support.GetFactoryEventsAfterForSessionAt(
+		t,
+		scenario.fixture.baseURL,
+		scenario.sessionID,
+		support.FactoryEventReadCursor{AfterEventID: events[0].Id, AfterSequence: &sequence},
+	)
 	if len(replayed) != len(events)-1 {
 		t.Fatalf("retained replay events = %d, want %d", len(replayed), len(events)-1)
 	}
-}
-
-func TestPackagedFullFlow(t *testing.T) {
-	fixture := newFullFlowSharedFixture(t)
-	t.Run("TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject", func(t *testing.T) {
-		testPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t, fixture)
-	})
-	t.Run("TestPackagedFullFlowEnforcesCallerSelectedTaskBound", func(t *testing.T) {
-		testPackagedFullFlowEnforcesCallerSelectedTaskBound(t, fixture)
-	})
-	t.Run("TestPackagedFullFlowEnforcesCallerSelectedCycleBound", func(t *testing.T) {
-		testPackagedFullFlowEnforcesCallerSelectedCycleBound(t, fixture)
-	})
 }
 
 func testPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(
@@ -384,11 +365,6 @@ func (runner *fullFlowRunner) Observations() (int, int, []string, int) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.plannerCalls, runner.maxActive, append([]string(nil), runner.merges...), runner.implementationCalls
-}
-
-func initializeFullFlowRepository(t *testing.T) string {
-	t.Helper()
-	return initializeFullFlowRepositoryAt(t, t.TempDir())
 }
 
 func initializeFullFlowRepositoryAt(t *testing.T, repository string) string {
