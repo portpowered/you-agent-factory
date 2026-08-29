@@ -28,6 +28,7 @@ type claudeDefaultLaneFixture struct {
 	router        *claudeCommandRouter
 	identities    *claudeIdentityGenerator
 	apiStarts     *atomic.Int32
+	processClosed atomic.Bool
 	scenarios     []claudeScenario
 	opened        atomic.Int32
 	closed        atomic.Int32
@@ -39,20 +40,21 @@ type claudeDefaultLaneFixture struct {
 }
 
 type claudeScenario struct {
-	name              string
-	factoryDir        string
-	model             string
-	workID            string
-	requestID         string
-	traceID           string
-	providerSessionID string
-	runner            *claudeScenarioCommandRunner
-	golden            *support.ProviderSessionCase
-	wantWorkState     string
-	wantOutcome       factoryapi.WorkOutcome
-	wantFailure       string
-	wantProviderCalls int
-	wantDispatches    int
+	name                  string
+	factoryDir            string
+	model                 string
+	workID                string
+	requestID             string
+	traceID               string
+	providerSessionID     string
+	runner                *claudeScenarioCommandRunner
+	golden                *support.ProviderSessionCase
+	wantWorkState         string
+	wantOutcome           factoryapi.WorkOutcome
+	wantFailure           string
+	wantProviderCalls     int
+	wantDispatches        int
+	forceAssertionFailure bool
 }
 
 type claudeScenarioObservation struct {

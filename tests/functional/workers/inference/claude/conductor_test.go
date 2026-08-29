@@ -38,6 +38,35 @@ func TestClaudeDefaultLaneSharedProcess(t *testing.T) {
 	})
 }
 
+// TestClaudeSameProcessRecoveryAfterAdverseSession proves that a canceled
+// explicit Factory Session can be deleted before a fresh explicit session
+// succeeds on the same root-built process. The shared-process parent covers
+// the concurrent matrix; this ordered probe covers the post-adverse boundary.
+func TestClaudeSameProcessRecoveryAfterAdverseSession(t *testing.T) {
+	fixture := newClaudeDefaultLaneFixture(t)
+	t.Cleanup(func() {
+		fixture.assertSharedIdentityLedger(t)
+	})
+	t.Cleanup(func() {
+		fixture.assertSharedProcessCleanup(t)
+	})
+
+	if !t.Run("Cancellation", func(t *testing.T) {
+		fixture.runScenario(t, claudeScenarioNamed(t, fixture.scenarios, "Cancellation"))
+	}) {
+		t.Fatal("cancellation recovery prerequisite failed")
+	}
+	if !t.Run("FreshSuccess", func(t *testing.T) {
+		fixture.runScenario(t, claudeScenarioNamed(t, fixture.scenarios, "Success"))
+	}) {
+		t.Fatal("fresh success recovery probe failed")
+	}
+
+	if got := fixture.apiStarts.Load(); got != 1 {
+		t.Fatalf("recovery API server starts = %d, want exactly one shared process server", got)
+	}
+}
+
 // TestClaudeCommandRouterFailsClosed proves that the package-local command
 // edge cannot silently fall back to another scenario when its immutable
 // selector is absent or duplicated.
@@ -71,4 +100,23 @@ func TestClaudeCommandRouterFailsClosed(t *testing.T) {
 	if got := first.CallCount(); got != 0 {
 		t.Fatalf("known route calls after unknown selector = %d, want 0", got)
 	}
+
+	for _, selector := range []string{"", " ", "."} {
+		if _, err := newClaudeCommandRouter([]claudeCommandRoute{
+			{selector: selector, runner: first},
+		}); err == nil || !strings.Contains(err.Error(), "Claude scenario selector is required") {
+			t.Fatalf("empty route selector %q error = %v, want required-selector error", selector, err)
+		}
+	}
+}
+
+func claudeScenarioNamed(t *testing.T, scenarios []claudeScenario, name string) claudeScenario {
+	t.Helper()
+	for _, scenario := range scenarios {
+		if scenario.name == name {
+			return scenario
+		}
+	}
+	t.Fatalf("Claude scenario %q is not configured", name)
+	return claudeScenario{}
 }

@@ -352,3 +352,52 @@ Remaining unproven edges are revived behavior (`CLAUDE-DEFAULT-C10-01`), cleanup
 and recovery (`CLEAN-C10-01`), the complete final package
 (`PACKAGE-FINAL-C10-01`), tagged golden behavior (`CLAUDE-LONG-C10-01`), and
 successor CI contention/performance (`CI-C10-01`).
+
+## Story 002 — revived package evidence
+
+The approved series was cherry-picked in audit order onto current `origin/main`.
+The resulting commits are `97212a30ce`, `dd8ab75087`, `6dcab7ea76`,
+`a9611e5f9a`, and `0df4793a10`, corresponding respectively to the five
+recovered commits listed above. No conflict or excluded-path change occurred.
+
+The package now constructs one production-composed process and one injected API
+server for the four concurrent default scenarios. Each scenario selects an
+immutable Factory-directory route, opens a unique non-default Factory Session,
+submits unique Work/request/trace identities, and collects its own
+session-scoped Factory Events and Response Events. The public assertions prove:
+
+- success, cancellation, structured failure, and timeout parity, including
+  one call for success/cancellation/structured failure and nine timeout calls
+  across three failed dispatches;
+- command, model, `stream-json`, Work, dispatch, Provider Session, failure,
+  response-stream terminal, session/request scope, and response-event ID/order
+  witnesses;
+- empty, whitespace, and `.` route selectors rejected at construction,
+  duplicate selectors rejected at construction, and unknown selectors rejected
+  without consuming a known route;
+- cancellation followed by a fresh successful explicit session on the same
+  process, with exactly one API-server start; and
+- normal/adverse stream, session, process, listener, active-call, and
+  test-owned Factory-directory cleanup. The forced child-test exits at an
+  intentional assertion after acquisition; its parent observed the expected
+  non-zero child exit, one session and stream opened/closed, zero active calls,
+  a stopped listener, and absent owned directories.
+
+### Story-002 verification
+
+All procedures used local production composition through `support.BuildProcess`
+and controlled `edges.Edges.ProviderCommandRunner` effects. No remote Claude
+call or credential was used.
+
+| Scope | Exact procedure | Result and property proved |
+| --- | --- | --- |
+| Functional focused | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/claude -run '^(TestClaudeDefaultLaneSharedProcess\|TestClaudeSameProcessRecoveryAfterAdverseSession\|TestClaudeCommandRouterFailsClosed\|TestClaudeForcedAssertionFailureCleansOwnedResources)$'` | Exit `0`; package reported `7.890s`. Revived default matrix, recovery, fail-closed routing, and forced adverse cleanup passed. |
+| Functional repeat | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/claude -run '^(TestClaudeDefaultLaneSharedProcess\|TestClaudeSameProcessRecoveryAfterAdverseSession\|TestClaudeCommandRouterFailsClosed)$'` | Exit `0`; package reported `18.623s`. Three repetitions preserved route/session/recovery/cleanup determinism. |
+| Functional race | `go test -race -count=1 -timeout=10m ./tests/functional/workers/inference/claude -run '^(TestClaudeDefaultLaneSharedProcess\|TestClaudeSameProcessRecoveryAfterAdverseSession\|TestClaudeCommandRouterFailsClosed)$'` | Exit `0`; package reported `14.158s`. No race was detected in the exercised shared-process path. |
+| Adverse cleanup | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/claude -run '^TestClaudeForcedAssertionFailureCleansOwnedResources$' -v` | Exit `0`; package reported `1.889s`. The child intentionally failed; the parent verified original failure visibility and zero owned residue after cleanup. |
+| Ownership | `git diff --check`, `git diff --name-only origin/main...HEAD`, protected-file comparison, and excluded-path filter | Whitespace check passed; only the c10 evidence file and Claude package are owned. Tagged full-stream/tool sources, fixtures, protected baselines, and excluded surfaces remain unchanged. |
+
+This evidence proves the local revived behavior and exercised deterministic
+cleanup. It does not prove tagged full-stream/tool goldens, the exact final
+package command, GitHub-hosted contention/performance, independent loopback
+convergence, or remote Claude compatibility; those remain story-003 gates.

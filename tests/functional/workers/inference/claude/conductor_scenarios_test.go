@@ -43,6 +43,17 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 		support.SessionResponseEventsURL(fixture.baseURL, sessionID),
 	)
 	fixture.streamsOpened.Add(1)
+	responseStreamClosed := false
+	closeResponseStream := func() {
+		if responseStreamClosed {
+			return
+		}
+		responseStream.Close()
+		responseStream.WaitClosed(claudeConductorRunTimeout)
+		responseStreamClosed = true
+		fixture.streamsClosed.Add(1)
+	}
+	t.Cleanup(closeResponseStream)
 	// Fast controlled outcomes, especially context.Canceled, can publish their
 	// terminal response event before a just-opened SSE subscription is attached.
 	// Release the external command edge only after the public stream is ready so
@@ -61,10 +72,12 @@ func (fixture *claudeDefaultLaneFixture) runScenario(t *testing.T, scenario clau
 	assertClaudeEventScope(t, scenario, sessionID, events)
 	responseEventIDs := assertClaudeResponseEvents(t, scenario, sessionID, responseEvents)
 	assertClaudeGoldenScenario(t, scenario, events, responseEvents)
+	if scenario.forceAssertionFailure {
+		t.Fatal("intentional Claude cleanup assertion after acquiring session, stream, route, and command")
+	}
 
 	closeSession()
-	responseStream.WaitClosed(claudeConductorRunTimeout)
-	fixture.streamsClosed.Add(1)
+	closeResponseStream()
 	assertClaudeSessionDeleted(t, fixture.baseURL, sessionID)
 	fixture.recordObservation(claudeScenarioObservation{
 		sessionID:         session.Id,
@@ -85,6 +98,7 @@ func (fixture *claudeDefaultLaneFixture) assertSharedProcessCleanup(t *testing.T
 	if err := fixture.process.Close(closeCtx); err != nil {
 		t.Fatalf("close shared Claude application process: %v", err)
 	}
+	fixture.processClosed.Store(true)
 	select {
 	case <-fixture.apiStopped:
 	case <-time.After(claudeConductorRunTimeout):
