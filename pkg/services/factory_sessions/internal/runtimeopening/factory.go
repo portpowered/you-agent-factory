@@ -118,6 +118,7 @@ type FactorySessionsPorts struct {
 	FactoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
 	EditableFactoryValidator       factorysessions.EditableFactoryValidator
 	ProcessRuntimeFactory          roles.ProcessRuntimeFactory
+	GenerateSessionID              factorysessions.SessionIDGenerator
 	GenerateRuntimeInstanceID      factorysessions.RuntimeInstanceIDGenerator
 	ResolveHome                    factorysessions.HomeDirectoryResolver
 	ProviderIdentities             factorysessions.ProviderIdentityResolver
@@ -216,6 +217,7 @@ type Factory struct {
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
 	processRuntimeFactory            roles.ProcessRuntimeFactory
 	ensureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
+	generateSessionID                factorysessions.SessionIDGenerator
 	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
 	resolveHome                      factorysessions.HomeDirectoryResolver
 	providerIdentities               factorysessions.ProviderIdentityResolver
@@ -299,6 +301,7 @@ func NewFactory(
 		baseLogger:                       factoryRuntime.Logger,
 		providerFromCommandRunnerFactory: workersPorts.ProviderFromCommandRunnerFactory,
 		processRuntimeFactory:            factorySessions.ProcessRuntimeFactory,
+		generateSessionID:                factorySessions.GenerateSessionID,
 		ensureOperatorBackendScope:       operatorSettings.EnsureBackendScope,
 		generateRuntimeInstanceID:        factorySessions.GenerateRuntimeInstanceID,
 		resolveHome:                      factorySessions.ResolveHome,
@@ -411,6 +414,7 @@ func validateFactorySessions(group *FactorySessionsPorts) error {
 		runtimeOpeningRequirement{"factory scaffold initializer", group.FactoryScaffoldInitializer},
 		runtimeOpeningRequirement{"editable factory validator", group.EditableFactoryValidator},
 		runtimeOpeningRequirement{"process runtime factory", group.ProcessRuntimeFactory},
+		runtimeOpeningRequirement{"session ID generator", group.GenerateSessionID},
 		runtimeOpeningRequirement{"runtime instance ID generator", group.GenerateRuntimeInstanceID},
 		runtimeOpeningRequirement{"home directory resolver", group.ResolveHome},
 		runtimeOpeningRequirement{"provider identity resolver", group.ProviderIdentities},

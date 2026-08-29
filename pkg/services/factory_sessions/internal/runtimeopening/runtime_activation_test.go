@@ -649,17 +649,10 @@ func TestActivationRequestAllocatesCanonicalIdentityForFreshDefault(t *testing.T
 	t.Parallel()
 
 	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
-	generated := []string{
-		canonicalID,
-		"runtime-1",
-	}
 	factory := &Factory{
-		generateRuntimeInstanceID: func() string {
-			identity := generated[0]
-			generated = generated[1:]
-			return identity
-		},
-		factoryDefinitions: activationDefinitionsStub{snapshot: activationSnapshot()},
+		generateSessionID:         func() string { return canonicalID },
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
 	activation, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},

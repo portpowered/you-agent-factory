@@ -172,9 +172,9 @@ type RuntimeScopeRequest struct {
 	RecordPath       string
 	FlushInterval    time.Duration
 	FactorySessionID string
-	// CanonicalSessionID is the internal identity written into a new
-	// append-only recording header when it is available. FactorySessionID
-	// remains the public event/routing scope and may intentionally be ~default.
+	// CanonicalSessionID is the internal identity written into a new recording
+	// header and event scope when it is available. FactorySessionID remains the
+	// public live-ledger/routing scope and may intentionally be ~default.
 	CanonicalSessionID string
 }
 

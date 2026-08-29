@@ -739,7 +739,11 @@ func (service *combinedService) bindRuntimeRecorder(
 }
 
 func requestScope(request recordings.RuntimeScopeRequest) recordings.CanonicalEventScope {
-	return recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(request.FactorySessionID)}
+	sessionID := strings.TrimSpace(request.CanonicalSessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(request.FactorySessionID)
+	}
+	return recordings.CanonicalEventScope{FactorySessionID: sessionID}
 }
 
 func runtimeStreamGenerationID(request recordings.RuntimeScopeRequest) string {

@@ -438,7 +438,15 @@ func (f *Factory) activationOpening(
 	}
 	opening := *request
 	canonicalSessionIDProvided := strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
-	if err := ensureDefaultCanonicalSessionID(&opening, f.generateRuntimeInstanceID); err != nil {
+	var canonicalIDGenerator func() string
+	if f.generateSessionID != nil {
+		canonicalIDGenerator = f.generateSessionID
+	} else {
+		// Keep direct internal callers compatible while the process graph adopts
+		// the dedicated Factory Session identity edge.
+		canonicalIDGenerator = f.generateRuntimeInstanceID
+	}
+	if err := ensureDefaultCanonicalSessionID(&opening, canonicalIDGenerator); err != nil {
 		return factorysessions.RuntimeOpeningRequest{}, "", err
 	}
 	opening.FactorySession.CanonicalSessionIDGenerated = !canonicalSessionIDProvided &&
@@ -460,7 +468,7 @@ func (f *Factory) activationOpening(
 
 func ensureDefaultCanonicalSessionID(
 	request *factorysessions.RuntimeOpeningRequest,
-	generateID factorysessions.RuntimeInstanceIDGenerator,
+	generateID func() string,
 ) error {
 	if request == nil || strings.TrimSpace(request.Recordings.ReplayPath) != "" {
 		return nil
