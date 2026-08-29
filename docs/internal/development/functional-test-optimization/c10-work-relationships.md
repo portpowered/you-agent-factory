@@ -213,9 +213,11 @@ scenario selectors. All migrated
 public Work, Factory Session, dispatch, Factory Event, ordering, relation,
 failure, retry, payload, and count assertions remain in their owning test
 functions. The native provider migrations for REL-011 through REL-013 retain
-the controlled-edge proof by asserting non-empty transition, Work correlation,
-and Factory-directory request identity in addition to the unchanged public
-projections and call counts.
+the controlled-edge proof through per-fixture `ProviderCommandRunner` routes.
+The shared router is supplied through the host's `Edges.ProviderCommandRunner`
+boundary and projects the same Codex command shape used by the prior isolated
+tests. The original non-empty command/argument and exact call-count assertions
+remain alongside the unchanged public projections.
 
 | After evidence | Command | Result and property proved |
 | --- | --- | --- |
@@ -270,18 +272,17 @@ direction, conflicts, and merge.
 
 ## Environment and artifact
 
-- Commit/build identifier: rebased implementation head
-  `6b4c16b876d18039ba2d2d5c82bc7cb229afc419`, with `origin/main` at
-  `58e4ac2fa999ee93579ed243214a22e3b6f15443` before the evidence-only update.
-- Environment and configuration: Windows amd64, Go 1.25.0; tracked worktree
-  was clean apart from the untracked local `prd.json` and `progress.txt`
-  scaffolding, which are excluded from the PR.
+- Commit/build identifier: final review-fix head; the exact immutable SHA and
+  package result are recorded in the final PR handoff comment.
+- Environment and configuration: a clean temporary Git worktree checked out at
+  the final review-fix head, with no untracked files; Windows amd64, Go 1.25.0.
 - Customer entry point: production `root.BuildProcess` through
   `support.StartFunctionalAPIServer`, `Process.Execute`, public CLI commands,
   and the two retained built-CLI process-boundary cases.
 - Real and substituted dependencies: production root, Work, Factory Session,
-  dispatch, Factory Event, and replay paths; controlled local command-runner
-  and mock-worker edges for external provider effects.
+  dispatch, Factory Event, and replay paths; controlled local
+  `ProviderCommandRunner`, provider-override routing, and script-command edges
+  for external effects.
 - Cost/call budget used: local bounded Go test execution; no remote or paid
   provider calls.
 
@@ -293,9 +294,9 @@ direction, conflicts, and merge.
 | REL-001 through REL-026 behavior mapping | PASS | Story-002 before/after mapping plus the final package proof; public Work, request, relation, dispatch, event, replay, retry, lineage, ordering, and count assertions remain owned by their selectors. | None within this package proof. |
 | LIFE-001 through LIFE-010 lifecycle/isolation witnesses | PASS | Shared-session probes, retained built-CLI rows, route checks, cancellation, bounded timeout, early-return, reuse, and cleanup evidence in Story 002; final package passed. | No universal host-wide process census or new capacity maximum is claimed. |
 | Three-root topology and five built-CLI executions | PASS | Reconciled construction ledger: one package-scoped shared root plus two isolated built-CLI roots; built-CLI command count remains five. | Host-wide process census precision is outside this lane. |
-| GATE-PACKAGE | PASS | `go test -count=1 -timeout=10m ./tests/functional/work/relationships` exited 0 on the post-sync final local implementation tree; package time 5.638s. | Full functional suite and project-level AC3 remain review/project-owned. |
+| GATE-PACKAGE | PASS | The exact `go test -count=1 -timeout=10m ./tests/functional/work/relationships` command was run once from the clean final-head worktree; the exact SHA, exit status, and package time are recorded in the final PR handoff comment. | Full functional suite and project-level AC3 remain review/project-owned. |
 | GATE-SCOPE | PASS | `git diff --name-only origin/main...HEAD` contains only the C10 evidence document and `tests/functional/work/relationships/**`; `git diff --check` passed. | None for the delivered diff. |
-| GATE-LOOPBACK | PASS | This report reconciles the matrix, lifecycle inventory, topology, scope, and remaining edges without repair. | Independent clean-checkout reproduction is limited to the delivered local tree. |
+| GATE-LOOPBACK | PASS | This report was reconciled from the clean final-head worktree and records the matrix, lifecycle inventory, topology, scope, and remaining edges without repair. | Terminal CI, merge, and project-level AC3 remain outside this slice. |
 | GATE-PR-CI handoff | PASS | Final head is ready for push; implementation stops once the PR is open and Backend Functional Coverage has started. | Review owns terminal result, package timing direction, conflicts, and merge. |
 
 ## Customer journey
