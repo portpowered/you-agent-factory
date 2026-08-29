@@ -1,16 +1,16 @@
 # C14 Models root-composition characterization
 
-Status: `CHAR-C14-001 PASS` for characterization. This report freezes the
-pre-change witness inventory and records the measured setup profile for
-`fto-c14-pkg-models-root-composition-001`. It does not claim that the default
-package is green on this host, approve a shared-process migration, claim a
-post-change performance result, or satisfy the later clean-room and delivery
-gates.
+Status: `CHAR-C14-001 PASS`; `OPT-C14-002 PASS` for the retained candidate's
+behavior, cleanup, repeat, race, and profile-backed performance disposition.
+This report freezes the pre-change witness inventory, records the retained
+test-only optimization, and leaves clean-room and delivery ownership to the
+next story.
 
 ## Scope and evidence boundary
 
 - Parent behavior: `BEH-C14-INTRINSIC-SPEED`.
 - Story: `fto-c14-pkg-models-root-composition-001`.
+- Optimization story: `fto-c14-pkg-models-root-composition-002`.
 - Frozen head: `fea2e30a499384182d2fabe7038767e3c2f9c5e5`.
 - Branch state before measurement: clean, at `origin/main`; no operator
   amendment was present in `prd.json`.
@@ -25,9 +25,10 @@ gates.
 
 The baseline commands failed in the existing catalog CLI scenario on this
 machine. That is retained evidence, not a weakened assertion or a fix hidden
-in the characterization story. The later optimization story must either make
-the named suite pass without changing its witness or return a structured
-blocker with the smallest required delta.
+in the characterization story. The retained optimization makes the named
+suite pass without changing its witness. A later broader candidate was
+bounded, profiled, and reverted after full-package timeout/cancellation
+diagnostics under host saturation; it is not part of the retained evidence.
 
 ## Environment and executable inventory
 
@@ -203,6 +204,116 @@ server-backed tests also request `WaitForServiceModeRuntime` through their
 existing support configuration. These are synchronization boundaries to
 preserve, not blind waits authorized for removal.
 
+## Retained optimization and performance disposition
+
+The retained candidate shares the catalog-discovery, built-in-catalog, and
+catalog-CLI scenarios through one `sync.Once` process/API fixture. The fixture
+uses one immutable `catalogDiscoveryFactoryConfig`, a fixture-owned Factory
+directory, and the existing controlled lifecycle/status observations. The CLI
+scenario still executes through `Process.Execute` with the fixture's explicit
+environment and working directory. Custom-model, readiness-failure,
+cancellation, host, asset, artifact, reconstruction, and real-local rows stay
+isolated. No assertion, failure mode, cleanup path, or timing witness was
+removed or weakened.
+
+Three final-candidate samples used the exact requested command and the same
+wrapper/environment class as the baseline. The retained candidate source tree
+is content-identical to `19bd1158ea` apart from the explanatory comment in the
+shared fixture; the later broader candidate was reverted before final
+confirmation.
+
+| Sample | Exit | Wall elapsed | Package elapsed | Result |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 0 | 54.186s | 50.030s | pass |
+| 2 | 0 | 55.709s | 51.969s | pass |
+| 3 | 0 | 53.092s | 49.095s | pass |
+
+Sorted medians and comparison with the baseline are:
+
+```text
+wall:    53.092s, 54.186s, 55.709s => median 54.186s (8.97% lower)
+package: 49.095s, 50.030s, 51.969s => median 50.030s (9.90% lower)
+```
+
+Raw sample logs:
+
+```text
+C:\Users\andre\AppData\Local\Temp\c14-postchange-20260829-124459-run-1.log
+C:\Users\andre\AppData\Local\Temp\c14-postchange-20260829-124459-run-2.log
+C:\Users\andre\AppData\Local\Temp\c14-postchange-20260829-124459-run-3.log
+```
+
+The final exact package confirmation after the revert also passed:
+
+```text
+go test ./tests/functional/models/root_composition/... -count=1
+=> exit 0; package 60.667s
+=> raw log: C:\Users\andre\AppData\Local\Temp\c14-final-candidate-full-20260829-131000.log
+```
+
+The setup-count delta is measured at the package-local boundaries:
+
+| Operation | Baseline | Retained candidate | Delta |
+| --- | ---: | ---: | ---: |
+| Direct process roots | 51 | 52 | +1 |
+| Functional API starts | 22 | 20 | -2 |
+| Aggregate root-backed constructions | 73 | 72 | -1 |
+| Factory scaffolds | 58 | 56 | -2 |
+| Managed host starts | 31 | 31 | 0 |
+| LocalAI starts | 8 | 8 | 0 |
+| Package `httptest` servers | 33 | 33 | 0 |
+| Asset HTTP calls | 14 | 14 | 0 |
+| Package temp directories | 85 | 85 | 0 |
+
+The direct-root increase is the one shared caller-owned process replacing two
+server-owned root constructions; the aggregate root-backed count and API
+starts are lower. The candidate profile pass was:
+
+```text
+go test ./tests/functional/models/root_composition/... -count=1 -v
+=> exit 0; wrapper wall 55.717s; package 52.143s
+=> raw log: C:\Users\andre\AppData\Local\Temp\c14-postchange-profile-20260829-124800.log
+```
+
+That profile leaves the named built-in and custom rows, LocalAI/EMBED rows,
+generic HTTP rows, and mutable host/asset/cancellation/recovery rows as the
+dominant remaining work. Their Factory definitions, fixture-owned caches,
+leases, protocols, output/artifact state, or reconstruction boundaries differ;
+sharing them would couple the very state their assertions observe. This is
+the reviewer-verifiable floor disposition after the bounded follow-up pass:
+the only safe immutable catalog cluster was removed, while the remaining
+profile cost is owned by distinct mutable or external-effect witnesses. The
+measured reduction is therefore below the 40% target, but the accepted
+profile-backed floor alternative is satisfied without claiming portable
+absolute timing.
+
+The broader follow-up candidate's raw diagnostics are retained outside the
+repository for audit:
+
+```text
+C:\Users\andre\AppData\Local\Temp\c14-final-post-20260829-130126\run-1.log
+C:\Users\andre\AppData\Local\Temp\c14-final-post-20260829-130126\run-2.log
+C:\Users\andre\AppData\Local\Temp\c14-final-post-20260829-130126\run-3.log
+```
+
+Those runs failed in the unchanged generic CLI timeout/cancellation witnesses
+while other unrelated `go test` jobs and a long-lived `you run` process were
+occupying the host. The timeout witness passes in isolation; the broader
+candidate was reverted and is not used for the performance claim.
+
+Final retained-candidate stability evidence:
+
+```text
+go test ./tests/functional/models/root_composition -run '^(TestModelsSharedProcessEligibleScenarios|TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle|TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP|TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess|TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess)$' -count=3
+=> exit 0; package 4.305s
+
+go test -race ./tests/functional/models/root_composition -run '^(TestModelsSharedProcessEligibleScenarios|TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle|TestModelsCatalogDiscoveryMapsUnknownDetailThroughHTTP|TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess|TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess)$' -count=1
+=> exit 0; package 16.123s; no race report
+```
+
+The three standalone exact package samples above also serve as the package
+repeat: each was a separate `-count=1` process invocation and each passed.
+
 ## Candidate eligibility and isolation rule
 
 `shareable` means detached or pure behavior with no process-scoped external
@@ -290,24 +401,27 @@ stronger mapping after its change.
 | C14-058 | `shared_process_test.go:141` `TestModelsSharedProcessEligibleScenarios`, two parallel subtests | One root/API serves two distinct sessions; route isolation, one-start topology, five opens/five closes, and cleanup all hold. | `P/A/F`, `sync.Once` fixture, explicit session cleanup; candidate-controlled |
 | C14-059 | `forced_cleanup_test.go:33` `TestModels_ForcedAssertionFailureCleansOwnedResources`, child at `:110` | Intentional child failure still proves nonzero exit, host stop, cancellation, listener/process closure, and absent paths. | Local child process and controlled host/artifact; isolated forced-failure cleanup |
 | C14-060 | `characterization_ledger_test.go:39` `TestMain`, three exact runs, JSON profile pass | Baseline samples, medians, exits, counter topology, wait census, hot spots, and eligibility are recorded here. | Test-only evidence; story 001 characterization gate |
-| C14-061 | No current optimized row; owned by story `...-002` | Post-change every frozen assertion maps equal-or-stronger and none is deleted/skipped. | Deferred optimization/behavior gate |
-| C14-062 | No current repeat/race row; owned by story `...-002` | Focused/package repeats and supported race prove reuse, cleanup, and no observed race. | Deferred repeat/race gate |
+| C14-061 | `catalog_discovery_test.go`, `catalog_cli_test.go`, and `shared_process_test.go` retained candidate | Post-change every frozen assertion maps equal-or-stronger; the catalog cluster reuses one immutable process/API fixture and all other mutable witnesses remain isolated. | Focused selector and final exact package pass; no deleted/skipped/weak assertion |
+| C14-062 | Retained candidate focused selector and shared-process target | Three-run changed-topology repeat and supported race pass; shared session opens/closes remain balanced and no Go race is observed. | `-count=3` selector and `-race` selector above; package samples also pass |
 | C14-063 | No current final row; owned by story `...-003` | Clean rebased package passes with final median reduction or profile-backed floor. | Deferred clean-room/delivery gate |
 
 This gives each matrix ID an exact current row or an explicit later-story
 owner. Rows C14-001 through C14-059 are the frozen behavioral denominator;
-C14-060 is the characterization evidence row, and C14-061 through C14-063
-are explicitly deferred rather than claimed by this story.
+C14-060 is the characterization evidence row; C14-061 and C14-062 are
+complete for the retained optimization; and C14-063 remains owned by the
+clean-room/delivery story.
 
 ## Cleanup and external-effect result
 
-The baseline and profile processes reached `TestMain` cleanup. The existing
-counter helper reported balanced shared-session opens/closes (`5/5`), and the
-forced-failure parent remained able to observe its child cleanup witness. The
-package's caller-owned processes use `support.CleanupProcess` or an equivalent
-close path; servers, listeners, LocalAI fixtures, temporary directories,
-hosts, caches, and artifacts retain their existing test-owned cleanup. No
-cleanup assertion was removed or weakened.
+The baseline, profile, focused repeat/race, and final package processes
+reached `TestMain` cleanup. The retained shared rich-catalog fixture reported
+balanced shared-session opens/closes (`5/5`); the shared catalog fixture
+reported one root and one API start; and the forced-failure parent remained
+able to observe its child cleanup witness. The package's caller-owned
+processes use `support.CleanupProcess` or an equivalent close path; servers,
+listeners, LocalAI fixtures, temporary directories, hosts, caches, and
+artifacts retain their existing test-owned cleanup. No cleanup assertion was
+removed or weakened.
 
 No host HTTP calls or uncontrolled network calls were observed. Local TCP,
 loopback HTTP, LocalAI, asset HTTP, and process-level artifact tests remain
@@ -315,10 +429,6 @@ isolated because their external state is itself part of the witness.
 
 ## Remaining unproven edges
 
-- Optimized topology and behavior, including the current catalog CLI timeout:
-  `GATE-C14-BEHAVIOR` and `GATE-C14-PERF` in story `...-002`.
-- Three-run repeat and supported race evidence: `GATE-C14-REPEAT` and
-  `GATE-C14-RACE` in story `...-002`.
 - Independent clean-room proof on the final rebased head:
   `GATE-C14-CLEANROOM` in story `...-003`.
 - PR CI-start comment and final delivery handoff:

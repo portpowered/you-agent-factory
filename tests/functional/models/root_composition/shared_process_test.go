@@ -34,14 +34,15 @@ const (
 	sharedModelsUnknownSessionFactoryName = "models-shared-unknown-session"
 )
 
-// sharedModelsFixture owns the one root-built process and API transport for
-// the identical rich-catalog scenarios. Each scenario still opens and closes
-// its own explicit Factory Session in a distinct test-owned Factory directory;
-// the session-scoped current-Factory route proves those two routed inputs stay
-// distinct while the scenarios overlap. Only immutable process wiring and the
-// read-only catalog fixture are shared. The public Models routes are bound to
-// the process runtime and have no session selector, so they intentionally remain
-// the behavior witness for the original process-level model contract.
+// sharedModelsFixture owns one root-built process and API transport for a
+// candidate-controlled immutable catalog fixture. The rich-catalog scenario
+// pair still opens and closes its own explicit Factory Session in a distinct
+// test-owned Factory directory; the session-scoped current-Factory route proves
+// those two routed inputs stay distinct while the scenarios overlap. Only
+// immutable process wiring and read-only catalog state are shared. The public
+// Models routes are bound to the process runtime and have no session selector,
+// so they intentionally remain the behavior witness for the original
+// process-level model contract.
 type sharedModelsFixture struct {
 	rootDir  string
 	homeDir  string
