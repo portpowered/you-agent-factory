@@ -83,13 +83,14 @@ func runJavaScriptMissingRequiredInputFailsBeforeChildDispatch(
 	fixture *contractFixture,
 ) {
 	dir := scaffoldMissingRequiredInputMappingFactory(t)
+	providerCalls := fixture.providerCallCount()
 	run := runMissingRequiredInputJavaScriptInvocation(t, fixture, dir)
 
 	assertMissingRequiredInputInvocationOutcome(t, run.outcome)
-	if got := fixture.providerCallCount(); got != 0 {
+	if got := fixture.providerCallCount(); got != providerCalls {
 		t.Fatalf(
-			"provider command runner call count = %d, want 0 before missing-required-input validation",
-			got,
+			"provider command runner call count = %d, want unchanged at %d before missing-required-input validation",
+			got, providerCalls,
 		)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, run.outcome.diagnostic)

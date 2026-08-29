@@ -480,9 +480,9 @@ func (fixture *policyFixture) shutdown() error {
 	if tracked != closed {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy sessions closed = %d/%d", closed, tracked))
 	}
-	if tracked > policyBehaviorSessionCount {
-		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy tracked sessions = %d, want no more than %d", tracked, policyBehaviorSessionCount))
-	}
+	// Go's -count flag repeats m.Run inside one TestMain process. Retain every
+	// closed session in this ledger so repeated executions still prove unique
+	// identities and balanced cleanup; a single-run count is not a leak limit.
 
 	if strings.TrimSpace(fixture.baseURL) != "" {
 		client := http.Client{Timeout: time.Second}

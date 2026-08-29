@@ -44,12 +44,13 @@ func runJavaScriptChildProgressPublishesCanonicalResponseEvents(
 	fixture *contractFixture,
 ) {
 	dir := scaffoldChildProgressWorkflow(t)
+	providerCalls := fixture.providerCallCount()
 	started := startChildProgressWorkflow(t, fixture, dir, fixture.nextRequestID("child-progress"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.providerCallCount(); got != 1 {
-		t.Fatalf("provider command runner calls = %d, want 1 live child invocation", got)
+	if got := fixture.providerCallCount(); got != providerCalls+1 {
+		t.Fatalf("provider command runner calls = %d, want one live child invocation after %d prior calls", got, providerCalls)
 	}
 	responseEvents := fixture.responseEvents(t, started.SessionId)
 	assertJavaScriptChildProgressResponseEvents(t, responseEvents)
@@ -63,6 +64,7 @@ func runJavaScriptTerminalResultFollowsFinalResponseEvent(
 	fixture *contractFixture,
 ) {
 	dir := scaffoldChildProgressWorkflow(t)
+	providerCalls := fixture.providerCallCount()
 	started := startChildProgressWorkflowAsync(t, fixture, dir, fixture.nextRequestID("terminal-result"))
 	if started.SessionId == "" {
 		t.Fatal("async session id is empty")
@@ -72,8 +74,8 @@ func runJavaScriptTerminalResultFollowsFinalResponseEvent(
 		t,
 		started.SessionId,
 	)
-	if got := fixture.providerCallCount(); got != 2 {
-		t.Fatalf("provider command runner calls = %d, want 2 live child invocations across response-event scenarios", got)
+	if got := fixture.providerCallCount(); got != providerCalls+1 {
+		t.Fatalf("provider command runner calls = %d, want one live child invocation after %d prior calls", got, providerCalls)
 	}
 	assertJavaScriptChildProgressResponseEvents(t, responseEvents)
 	assertTerminalResultFollowsFinalResponseEvent(t, observations, terminalResult)

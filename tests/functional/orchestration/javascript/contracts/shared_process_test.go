@@ -232,13 +232,19 @@ func newContractFixture(t *testing.T) *contractFixture {
 		_ = os.RemoveAll(homeDir)
 		t.Fatalf("write contract host factory: %v", err)
 	}
+	childResult := platformprocess.CommandResult{
+		Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
+	}
+	// Go's -count flag repeats m.Run inside one test process, so TestMain's
+	// package fixture serves every repetition. Queue one valid child response
+	// for each response-event scenario in the aggregate -count=3 gate.
 	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{
-			Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
-		},
-		platformprocess.CommandResult{
-			Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
-		},
+		childResult,
+		childResult,
+		childResult,
+		childResult,
+		childResult,
+		childResult,
 	)
 	api := support.NewProcessAPIServer()
 	apiStarter := &contractAPIServerStarter{
