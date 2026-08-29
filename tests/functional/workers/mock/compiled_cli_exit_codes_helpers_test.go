@@ -28,6 +28,12 @@ var compiledCLIBinary struct {
 	buildLog []byte
 }
 
+var configuredGoalOperatorConfigSeed struct {
+	once sync.Once
+	body []byte
+	err  error
+}
+
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	if compiledCLIBinary.tempDir != "" {
@@ -122,26 +128,107 @@ func newConfiguredGoalSession(
 	scenario string,
 ) *builtcliacceptance.Session {
 	t.Helper()
+	configBody := configuredGoalOperatorConfig(t, ctx, harness)
 	session := harness.NewSession(t).WithNoExternalServer(t)
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
-	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
-	result, err := session.Run(ctx, "run", "--factory", missingFactory)
-	if err == nil {
-		t.Fatalf("%s: run missing Factory unexpectedly succeeded: stdout=%q stderr=%q", scenario, result.Stdout, result.Stderr)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("%s: create isolated operator config directory: %v", scenario, err)
 	}
-	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
+	if err := os.WriteFile(configPath, configBody, 0o600); err != nil {
+		t.Fatalf("%s: write isolated operator config %q: %v", scenario, configPath, err)
 	}
-	configBody := []byte(`{
+	return session
+}
+
+// configuredGoalOperatorConfig materializes the initializer-owned operator
+// config once, validates that the real initializer created readable JSON, and
+// then retains only an immutable value snapshot. Each target session receives
+// a fresh restrictive-permission copy, so sessions never share HOME state.
+func configuredGoalOperatorConfig(
+	t testing.TB,
+	ctx context.Context,
+	harness *builtcliacceptance.Harness,
+) []byte {
+	t.Helper()
+	configuredGoalOperatorConfigSeed.once.Do(func() {
+		seedSession := harness.NewSession(t).WithNoExternalServer(t)
+		configPath := filepath.Join(seedSession.HomeDir, ".you-agent-factory", "config.json")
+		missingFactory := filepath.Join(seedSession.WorkDir, "missing-initialization-factory.json")
+		result, err := seedSession.Run(ctx, "run", "--factory", missingFactory)
+		if err == nil {
+			configuredGoalOperatorConfigSeed.err = fmt.Errorf(
+				"run missing Factory unexpectedly succeeded: stdout=%q stderr=%q",
+				result.Stdout,
+				result.Stderr,
+			)
+			return
+		}
+		materialized, err := os.ReadFile(configPath)
+		if err != nil {
+			configuredGoalOperatorConfigSeed.err = fmt.Errorf(
+				"read initializer-owned config %q: %w",
+				configPath,
+				err,
+			)
+			return
+		}
+		var materializedConfig map[string]json.RawMessage
+		if err := json.Unmarshal(materialized, &materializedConfig); err != nil {
+			configuredGoalOperatorConfigSeed.err = fmt.Errorf(
+				"decode initializer-owned config %q: %w",
+				configPath,
+				err,
+			)
+			return
+		}
+		if materializedConfig == nil {
+			configuredGoalOperatorConfigSeed.err = fmt.Errorf(
+				"initializer-owned config %q is not a JSON object",
+				configPath,
+			)
+			return
+		}
+
+		configured := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
     "workerModel": "gpt-5-codex"
   }
 }`)
-	if err := os.WriteFile(configPath, configBody, 0o600); err != nil {
-		t.Fatalf("WriteFile(%q): %v", configPath, err)
+		if err := validateConfiguredGoalOperatorConfig(configured); err != nil {
+			configuredGoalOperatorConfigSeed.err = err
+			return
+		}
+		if err := os.WriteFile(configPath, configured, 0o600); err != nil {
+			configuredGoalOperatorConfigSeed.err = fmt.Errorf(
+				"write configured operator config %q: %w",
+				configPath,
+				err,
+			)
+			return
+		}
+		configuredGoalOperatorConfigSeed.body = append([]byte(nil), configured...)
+	})
+	if configuredGoalOperatorConfigSeed.err != nil {
+		t.Fatalf("materialize configured operator config: %v", configuredGoalOperatorConfigSeed.err)
 	}
-	return session
+	return append([]byte(nil), configuredGoalOperatorConfigSeed.body...)
+}
+
+func validateConfiguredGoalOperatorConfig(body []byte) error {
+	var config struct {
+		Defaults struct {
+			WorkerModelProvider string `json:"workerModelProvider"`
+			WorkerModel         string `json:"workerModel"`
+		} `json:"defaults"`
+	}
+	if err := json.Unmarshal(body, &config); err != nil {
+		return fmt.Errorf("validate configured operator config: %w", err)
+	}
+	if config.Defaults.WorkerModelProvider != "codex" || config.Defaults.WorkerModel != "gpt-5-codex" {
+		return fmt.Errorf("validate configured operator config: worker defaults changed")
+	}
+	return nil
 }
 
 func writeAcceptingGoalMockWorkers(t *testing.T) string {
