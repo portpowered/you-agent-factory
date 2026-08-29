@@ -1,10 +1,11 @@
 # C10 AGY Worker-Inference Characterization Ledger
 
-Stories `functional-test-optimization-c10-workers-inference-agy-001`, `-002`,
-and `-003` are complete for implementation-stage handoff. This ledger records
-the frozen baseline, bounded migrated evidence, final clean-room validation,
-and the review-owned CI/merge boundary. It does not claim live AGY behavior,
-excluded provider recovery, terminal CI, or merge.
+Stories `functional-test-optimization-c10-workers-inference-agy-001` and `-002`
+are complete for implementation-stage handoff. Story `-003` is the active
+delivery validation loopback; its fresh hosted timing verdict remains pending.
+This ledger records the frozen baseline, bounded migrated evidence, clean-room
+validation, and the review-owned CI/merge boundary. It does not claim live AGY
+behavior, excluded provider recovery, terminal CI, or merge.
 
 ## Authority and scope
 
@@ -395,15 +396,16 @@ it does not claim an OS process-tree census after a forcibly killed child.
 
 The hosted AGY package result remained above the comparison, so one bounded
 follow-up was applied: after the exact response frames arrive, the scenario
-waits for the expected retained Factory Event count as the public publication
-barrier before reading Work. This removes a redundant status-endpoint poll
-while retaining the exact public Factory Event and Work witnesses. The cleanup
-path treats the public session `DELETE` status (`204` or idempotent `404`) as
-the deletion witness and avoids a redundant serialized post-delete `GET`;
-active-session conflicts retain the existing terminate/status/delete fallback.
-The exact response-stream EOF/no-extra-frame assertion, cleanup census, route
-ledger, and local functional behavior remained passing. A fresh hosted
-measurement for the new head is handed to review after the final push.
+keeps one public retained-plus-live Factory Event SSE subscription open until
+the expected event count is observed, then cancels that observer before reading
+Work. This removes repeated 10 ms subscription and retained-ledger decoding
+work while retaining the exact public Factory Event and Work witnesses. The
+cleanup path treats the public session `DELETE` status (`204` or idempotent
+`404`) as the deletion witness and avoids a redundant serialized post-delete
+`GET`; active-session conflicts retain the existing terminate/status/delete
+fallback. The exact response-stream EOF/no-extra-frame assertion, cleanup
+census, route ledger, and local functional behavior remained passing. A fresh
+hosted measurement for the new head is handed to review after the final push.
 
 ### Scope and ancestry audit
 
