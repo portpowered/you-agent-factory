@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -132,6 +134,82 @@ func cloneDiagnostics(values map[string]string) factoryapi.StringMap {
 	return cloned
 }
 
+// genericCLIModelDetailFromGenerated projects the remote catalog detail back
+// into the Models-owned operation vocabulary used by the shared CLI input
+// preparation helpers. It intentionally maps only detached catalog facts; the
+// remote runtime remains authoritative for scope, readiness, and invocation.
+func genericCLIModelDetailFromGenerated(model factoryapi.ModelDetail) models.Detail {
+	detail := models.Detail{Summary: models.Summary{
+		Name:             model.Name,
+		ProviderLocality: models.Locality(model.ProviderLocality),
+		Status:           models.Status(model.Status),
+		LoadState:        models.LoadState(model.LoadState),
+	}}
+	detail.Operations = genericCLIOperationsFromGenerated(model.Operations)
+	if len(detail.Operations) == 0 {
+		detail.Operations = genericCLIOperationsFromGenerated(model.ManagedRuntime.SupportedOperations)
+	}
+	detail.Capabilities = make([]models.Capability, 0, len(model.Capabilities))
+	for _, capability := range model.Capabilities {
+		detail.Capabilities = append(detail.Capabilities, models.Capability{
+			Worker:           capability.Worker,
+			ProviderLocality: models.Locality(capability.ProviderLocality),
+			Operations:       genericCLIOperationsFromGenerated(capability.Operations),
+			ResourceNames:    append([]string(nil), capability.ResourceNames...),
+		})
+	}
+	return detail
+}
+
+func genericCLIOperationsFromGenerated(
+	operations []factoryapi.ModelInvocationOperation,
+) []models.Operation {
+	converted := make([]models.Operation, 0, len(operations))
+	for _, operation := range operations {
+		item := models.Operation{Name: operation.Name}
+		if operation.Inputs != nil {
+			item.Inputs = genericCLISlotsFromGenerated(*operation.Inputs)
+		}
+		if operation.Outputs != nil {
+			item.Outputs = genericCLISlotsFromGenerated(*operation.Outputs)
+		}
+		converted = append(converted, item)
+	}
+	return converted
+}
+
+func genericCLISlotsFromGenerated(
+	slots []factoryapi.ModelInvocationSlot,
+) []models.OperationSlot {
+	converted := make([]models.OperationSlot, 0, len(slots))
+	for _, slot := range slots {
+		item := models.OperationSlot{
+			Name:         slot.Name,
+			Modality:     models.Modality(stringValue(slot.Modality)),
+			Required:     slot.Required,
+			ContentTypes: make([]string, 0, len(slot.ContentTypes)),
+		}
+		for _, contentType := range slot.ContentTypes {
+			item.ContentTypes = append(item.ContentTypes, string(contentType))
+		}
+		if slot.Repeatable != nil {
+			item.Repeatable = *slot.Repeatable
+		}
+		if slot.MediaTypes != nil {
+			item.MediaTypes = append([]string(nil), (*slot.MediaTypes)...)
+		}
+		converted = append(converted, item)
+	}
+	return converted
+}
+
+func stringValue(value *factoryapi.ModelInvocationContentType) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
 func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime {
 	diagnostics := factoryapi.StringMap{}
 	for key, value := range runtime.Diagnostics {
@@ -145,4 +223,56 @@ func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime
 		Locality:            factoryapi.WorkerModelLocality(runtime.Locality),
 		SupportedOperations: operationsToGenerated(runtime.SupportedOperations), Diagnostics: &diagnostics,
 	}
+}
+
+func genericCLIResultFromGenerated(
+	response factoryapi.GenericModelInvocationResponse,
+	modelName string,
+	operation string,
+) (models.InvokeModelResult, error) {
+	result := models.InvokeModelResult{
+		ModelName: modelName,
+		Operation: operation,
+		Outputs:   make([]models.InferenceOutput, len(response.Outputs)),
+	}
+	for index, output := range response.Outputs {
+		mapped := models.InferenceOutput{
+			Name:     output.Name,
+			Modality: models.Modality(output.Modality),
+		}
+		if output.ContentType != nil {
+			mapped.ContentType = *output.ContentType
+		}
+		if output.MediaType != nil {
+			mapped.MediaType = *output.MediaType
+		}
+		if output.Content != nil {
+			mapped.Content = *output.Content
+		}
+		if output.Artifact != nil {
+			artifactRef, err := (models.InferenceArtifactRef{}).Parse(output.Artifact.ArtifactRef)
+			if err != nil {
+				return models.InvokeModelResult{}, fmt.Errorf("malformed models invocation response: output artifact reference is invalid")
+			}
+			artifact := &models.InferenceArtifact{Artifact: artifactRef}
+			if output.Artifact.Name != nil {
+				artifact.Name = *output.Artifact.Name
+			}
+			if output.Artifact.MediaType != nil {
+				artifact.MediaType = *output.Artifact.MediaType
+			}
+			if output.Artifact.SizeBytes != nil {
+				artifact.SizeBytes = *output.Artifact.SizeBytes
+			}
+			if output.Artifact.Properties != nil {
+				artifact.Properties = make(map[string]string, len(*output.Artifact.Properties))
+				for key, value := range *output.Artifact.Properties {
+					artifact.Properties[key] = value
+				}
+			}
+			mapped.Artifact = artifact
+		}
+		result.Outputs[index] = mapped
+	}
+	return result, nil
 }

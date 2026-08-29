@@ -374,8 +374,17 @@ func (p *protocol) doJSON(
 		return result, nil
 	}
 	if dst != nil {
-		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		decoder := json.NewDecoder(resp.Body)
+		if err := decoder.Decode(dst); err != nil {
 			_ = resp.Body.Close()
+			return result, WithHTTPResponse(resp, fmt.Errorf("parse response: %w", err))
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			_ = resp.Body.Close()
+			if err == nil {
+				err = fmt.Errorf("response contains multiple JSON values")
+			}
 			return result, WithHTTPResponse(resp, fmt.Errorf("parse response: %w", err))
 		}
 	}

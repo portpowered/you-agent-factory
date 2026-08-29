@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -180,6 +181,7 @@ func TestGenericInvocationMappingPreservesRepeatedOMNIInputsAndJSONOrder(t *test
 	}
 	assertGenericInvocationMapping(t, mapped)
 	assertGenericInvocationRequestJSON(t, generated)
+	assertGenericInvocationMappingDecodesBinaryInput(t)
 }
 
 func TestGenericInvocationMappingPreservesEmbedInputsAndOmittedOperation(t *testing.T) {
@@ -500,6 +502,67 @@ func TestGenericInvocationRequestMappingRejectsInvalidArtifactAsTypedFailure(t *
 	var failure *models.InvocationFailure
 	if err == nil || !asInvocationFailure(err, &failure) || failure.Class != models.InvocationFailureClassArtifact {
 		t.Fatalf("error = %v, failure = %#v, want typed artifact failure", err, failure)
+	}
+	assertGenericInvocationMappingRejectsMultipleInputCarriers(t)
+}
+
+func assertGenericInvocationMappingDecodesBinaryInput(t *testing.T) {
+	t.Helper()
+	want := []byte{0x00, 0xff, 0x89, 0x50, 0x4e, 0x47}
+	inputs := []factoryapi.ModelInvocationInput{{
+		Name:          "image",
+		Modality:      factoryapi.ModelInvocationContentTypeImage,
+		MediaType:     stringPointer("image/png"),
+		ContentBase64: &want,
+	}}
+	operation := factoryapi.ModelOperationName(models.OperationOMNI)
+	mapped, err := GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
+		Scope:     "scope-http-binary",
+		Holder:    "http",
+		Model:     factoryapi.ModelReference{NameOrUri: "llm"},
+		Operation: &operation,
+		Inputs:    &inputs,
+	})
+	if err != nil {
+		t.Fatalf("GenericInvocationRequestFromGenerated() error = %v", err)
+	}
+	if len(mapped.Inputs) != 1 || !bytes.Equal([]byte(mapped.Inputs[0].Content), want) {
+		t.Fatalf("mapped binary input = %#v, want exact bytes", mapped.Inputs)
+	}
+	if mapped.Inputs[0].ContentType != "" || mapped.Inputs[0].MediaType != "image/png" {
+		t.Fatalf("mapped binary metadata = %#v, want media type only", mapped.Inputs[0])
+	}
+
+	encoded, err := json.Marshal(factoryapi.GenericModelInvocationRequest{
+		Scope: "scope-http-binary", Holder: "http", Model: factoryapi.ModelReference{NameOrUri: "llm"}, Inputs: &inputs,
+	})
+	if err != nil {
+		t.Fatalf("marshal binary request = %v", err)
+	}
+	var decoded factoryapi.GenericModelInvocationRequest
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal binary request = %v", err)
+	}
+	if decoded.Inputs == nil || len(*decoded.Inputs) != 1 || !bytes.Equal(*(*decoded.Inputs)[0].ContentBase64, want) {
+		t.Fatalf("round-tripped binary input = %#v, want exact bytes", decoded.Inputs)
+	}
+}
+
+func assertGenericInvocationMappingRejectsMultipleInputCarriers(t *testing.T) {
+	t.Helper()
+	content := "inline"
+	binary := []byte{0x01}
+	inputs := []factoryapi.ModelInvocationInput{{
+		Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage,
+		Content: &content, ContentBase64: &binary,
+	}}
+	_, err := GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
+		Scope: "scope-http-carrier", Holder: "http", Model: factoryapi.ModelReference{NameOrUri: "llm"}, Inputs: &inputs,
+	})
+	var failure *models.InvocationFailure
+	if err == nil || !asInvocationFailure(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter ||
+		!strings.Contains(failure.Message, "only one of content, contentBase64, or artifactRef") {
+		t.Fatalf("multiple input carriers error = %v, failure = %#v, want typed validation failure", err, failure)
 	}
 }
 

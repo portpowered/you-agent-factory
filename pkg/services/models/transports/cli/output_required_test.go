@@ -616,15 +616,16 @@ func TestHTTPServiceInvokeRejectsLocalOnlyGenericBindings(t *testing.T) {
 	t.Parallel()
 
 	service := &httpService{}
-	base := InvokeConfig{
-		Context: context.Background(), ModelName: "model", Operation: "OMNI", Text: "prompt", Output: io.Discard,
-	}
+	base := InvokeConfig{Context: context.Background(), ModelName: "model", Operation: "OMNI", Text: "prompt", Output: io.Discard}
 	for _, testCase := range []struct {
 		name   string
 		mutate func(*InvokeConfig)
 		want   string
 	}{
-		{name: "inputs", mutate: func(cfg *InvokeConfig) { cfg.InputSpecs = []string{"{}"} }, want: "explicit generic inputs"},
+		{name: "inputs", mutate: func(cfg *InvokeConfig) {
+			cfg.Text = ""
+			cfg.InputSpecs = []string{"{}"}
+		}, want: "CLI HTTP protocol is required"},
 		{name: "parameters", mutate: func(cfg *InvokeConfig) { cfg.ParameterSpecs = []string{"{}"} }, want: "explicit generic parameters"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -2348,9 +2348,14 @@ export interface components {
       contentType?: string;
       /** @description Concrete MIME type for media or file-backed content, when known. */
       mediaType?: string;
-      /** @description Inline content. JSON values are carried as their canonical JSON text. */
+      /** @description Inline UTF-8 content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64 or artifactRef. */
       content?: string;
-      /** @description Opaque Models-owned input artifact reference when content is not inline. */
+      /**
+       * Format: byte
+       * @description Base64-encoded inline binary content. Do not combine with content or artifactRef.
+       */
+      contentBase64?: string;
+      /** @description Opaque Models-owned input artifact reference when content is not inline. Do not combine with content or contentBase64. */
       artifactRef?: string;
     };
     /** @description One ordered, slot-named output of a generic model invocation. */
