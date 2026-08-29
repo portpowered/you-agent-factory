@@ -24,11 +24,10 @@ import (
 const controlHarnessProviderResult = "control fixture result COMPLETE"
 
 // TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt proves that
-// a provider-side failure still closes the accepted ACP turn. The provider
-// command edge reports its return through a channel, the public ACP response
-// supplies the terminal client outcome, and a second prompt proves the failed
-// turn released the Chat Session instead of leaving it busy behind a live
-// Worker drain.
+// a provider-side failure still closes the accepted ACP turn. The public ACP
+// response supplies the terminal client outcome, and a second prompt proves
+// the failed turn released the Chat Session instead of leaving it busy behind
+// a live Worker drain.
 func TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving you server acp provider failure through root.BuildProcess")
@@ -38,7 +37,6 @@ func TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt(t *testing.T
 	sessionID := harness.openSession(t)
 
 	harness.sendPrompt(t, 3, sessionID, "fail this provider invocation")
-	harness.runner.waitForCompletion(t, 1)
 	response := harness.response(t, 3)
 	if response.Error == nil {
 		t.Fatalf("failed session/prompt response error = nil, want a bounded ACP JSON-RPC failure; result=%s", response.Result)
@@ -49,9 +47,9 @@ func TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt(t *testing.T
 
 	// The first terminal failure must release the same Chat Session for a later
 	// turn. The runner succeeds on its default second result, so this proves a
-	// fresh dispatch rather than a stranded busy-session rejection.
+	// fresh dispatch rather than a stranded busy-session rejection. response()
+	// has already observed the first prompt's public terminal response.
 	harness.sendPrompt(t, 4, sessionID, "complete after provider failure")
-	harness.runner.waitForCompletion(t, 2)
 	secondResponse := harness.response(t, 4)
 	assertPromptStopReason(t, secondResponse, acpsdk.StopReasonEndTurn)
 	if got := harness.runner.CallCount(); got != 2 {
@@ -113,15 +111,14 @@ func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T)
 	harness.runner.waitForStart(t, 1)
 	harness.sendClose(t, 4, sessionID)
 
-	responses := harness.responses(t, "3", "4")
+	responses := harness.responsesThroughPromptTerminal(t, "3", "4")
 	assertPromptStopReason(t, responses["3"], acpsdk.StopReasonCancelled)
 	assertCloseResponse(t, responses["4"])
 	harness.runner.waitForCancellation(t, 1)
-	// session/close waits for the Factory Session control effect, while the
-	// canceled provider call can still be unwinding. Wait for the exact
-	// command-return edge before admitting a later request so no late worker
-	// event can contend with the post-close assertion.
-	harness.runner.waitForCompletion(t, 1)
+	// The helper intentionally gates on the final session/prompt response,
+	// rather than on session/close or the provider runner's return. The next
+	// request is therefore admitted only after the public dispatch-completion
+	// edge that drains the provider result and downstream worker events.
 
 	callsBeforeRejectedPrompt := harness.runner.CallCount()
 	harness.sendPrompt(t, 5, sessionID, "this must not restart a closed session")
@@ -166,14 +163,13 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 	harness.sendPrompt(t, 4, sessionID, "close this later active prompt")
 	harness.runner.waitForStart(t, 2)
 	harness.sendClose(t, 5, sessionID)
-	responses := harness.responses(t, "4", "5")
+	responses := harness.responsesThroughPromptTerminal(t, "4", "5")
 	assertPromptStopReason(t, responses["4"], acpsdk.StopReasonCancelled)
 	assertCloseResponse(t, responses["5"])
 	harness.runner.waitForCancellation(t, 2)
-	// The close response and provider cancellation are separate observable
-	// edges. Join the controlled command before session/load opens the retained
-	// stream, otherwise a late canceled-dispatch record can race replay.
-	harness.runner.waitForCompletion(t, 2)
+	// session/load follows the final session/prompt response, which is the
+	// public dispatch-completion edge. A provider command return is earlier
+	// than Codex result decoding and the response bridge's downstream drain.
 
 	harness.sendLoad(t, 6, sessionID)
 	loadResponse, loadedUpdates := harness.responseWithUpdates(t, 6)
@@ -369,6 +365,43 @@ func (h *serveACPControlHarness) responses(t *testing.T, ids ...string) map[stri
 	return responses
 }
 
+// responsesThroughPromptTerminal waits for the requested response set and
+// explicitly observes the final session/prompt response before returning.
+// That response is written only after handleSessionPrompt's dispatch has
+// returned, including provider-result decoding, response-event draining, and
+// turn terminalization. It is the public protocol barrier for a follow-up
+// request; a provider command's Run return is intentionally not used as a
+// proxy for that downstream completion.
+func (h *serveACPControlHarness) responsesThroughPromptTerminal(t *testing.T, promptID string, ids ...string) map[string]rpcFrame {
+	t.Helper()
+	pending := make(map[string]struct{}, len(ids)+1)
+	pending[promptID] = struct{}{}
+	for _, id := range ids {
+		pending[id] = struct{}{}
+	}
+	responses := make(map[string]rpcFrame, len(pending))
+	promptTerminalSeen := false
+	for len(pending) > 0 {
+		frame := readRPCFrame(t, h.stdout)
+		if frame.Method != "" {
+			continue
+		}
+		id := string(bytes.TrimSpace(frame.ID))
+		if _, ok := pending[id]; !ok {
+			t.Fatalf("unexpected ACP response id %s while waiting for %v", id, ids)
+		}
+		responses[id] = frame
+		delete(pending, id)
+		if id == promptID {
+			promptTerminalSeen = true
+		}
+	}
+	if !promptTerminalSeen {
+		t.Fatalf("session/prompt response id %s was not observed before returning", promptID)
+	}
+	return responses
+}
+
 func (h *serveACPControlHarness) finish(t *testing.T) {
 	t.Helper()
 	if err := h.stdinWrite.Close(); err != nil {
@@ -455,7 +488,6 @@ type controlProviderCommandRunner struct {
 	calls     atomic.Int32
 	started   chan int
 	cancelled chan int
-	completed chan int
 }
 
 func newControlProviderCommandRunner(blockCalls ...int) *controlProviderCommandRunner {
@@ -467,24 +499,17 @@ func newControlProviderCommandRunner(blockCalls ...int) *controlProviderCommandR
 		blocks:    blocks,
 		started:   make(chan int, len(blockCalls)),
 		cancelled: make(chan int, len(blockCalls)),
-		completed: make(chan int, 64),
 	}
 }
 
 func newControlProviderFailureCommandRunner() *controlProviderCommandRunner {
 	return &controlProviderCommandRunner{
-		failures:  map[int]error{1: errors.New("controlled provider failure")},
-		completed: make(chan int, 64),
+		failures: map[int]error{1: errors.New("controlled provider failure")},
 	}
 }
 
 func (r *controlProviderCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	call := int(r.calls.Add(1))
-	// Signal only from the return path. The cancellation observation below is
-	// intentionally earlier: callers use waitForCancellation to prove the
-	// control reached the provider, then waitForCompletion to join the command
-	// before issuing another protocol request that consumes the same session.
-	defer func() { r.completed <- call }()
 	if _, blocked := r.blocks[call]; blocked {
 		r.started <- call
 		<-ctx.Done()
@@ -523,31 +548,6 @@ func (r *controlProviderCommandRunner) waitForCancellation(t *testing.T, want in
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("provider command call %d did not observe cancellation", want)
-	}
-}
-
-func (r *controlProviderCommandRunner) waitForCompletion(t *testing.T, want int) {
-	t.Helper()
-	// The channel is the synchronization mechanism. This bounded branch is
-	// only a diagnostic guard for a regression that drops the provider return;
-	// it does not pace or otherwise make the test pass. A previous successful
-	// call may have completed before its caller needed to wait, so match the
-	// call identity instead of treating the shared channel as a FIFO request
-	// barrier.
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case got := <-r.completed:
-			if got == want {
-				return
-			}
-			if got > want {
-				t.Fatalf("provider command completion = %d, want %d", got, want)
-			}
-		case <-timer.C:
-			t.Fatalf("provider command call %d did not return", want)
-		}
 	}
 }
 
