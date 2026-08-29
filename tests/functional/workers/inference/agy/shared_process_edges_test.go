@@ -261,20 +261,20 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string, term
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
 	if terminalObserved {
-		// The preceding public status read proves this session is terminal. The
-		// control response is enough to authorize deletion, so skip the initial
-		// DELETE/CONFLICT round trip used by cleanup after an unknown state.
-		terminateStatus, terminateBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodPost, endpoint+"/terminate")
+		// The preceding public status read proves this session is terminal, so
+		// try the cheap public DELETE before sending a redundant terminate
+		// control request. A conflict still falls through to the active-session
+		// termination path below if the state changed between observations.
+		deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
 		if err != nil {
 			return err
 		}
-		if terminateStatus < http.StatusOK || terminateStatus >= http.StatusMultipleChoices {
-			if terminateStatus != http.StatusNotFound &&
-				!(terminateStatus == http.StatusConflict && strings.Contains(string(terminateBody), `"outcome":"TERMINAL_SESSION"`)) {
-				return fmt.Errorf("terminate status=%d body=%q", terminateStatus, strings.TrimSpace(string(terminateBody)))
-			}
+		if deleteStatus == http.StatusNoContent || deleteStatus == http.StatusNotFound {
+			return nil
 		}
-		return deleteAgyFactorySession(cleanupCtx, client, endpoint)
+		if deleteStatus != http.StatusConflict {
+			return fmt.Errorf("delete status=%d body=%q", deleteStatus, strings.TrimSpace(string(deleteBody)))
+		}
 	}
 	deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
 	if err != nil {
