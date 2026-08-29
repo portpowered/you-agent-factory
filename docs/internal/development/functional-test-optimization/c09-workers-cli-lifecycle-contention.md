@@ -1,7 +1,8 @@
 # C09 Worker CLI lifecycle contention characterization ledger
 
 Status: CHAR-C09-01 complete for story
-functional-test-optimization-c09-workers-cli-lifecycle-contention-001.
+functional-test-optimization-c09-workers-cli-lifecycle-contention-001. The
+later story status and verification sections are appended below.
 
 This is a current-head discovery and characterization record. It freezes the
 existing Worker CLI lifecycle contract and the cited jobs=16 failure before a
@@ -269,3 +270,77 @@ behavior and deterministic representative ordering; they do not prove the
 adverse cancellation/timeout matrix, race instrumentation, full-package
 coexistence, raised-parallelism CI, or clean-room loopback owned by stories
 003-004.
+
+## Story 003 adverse lifecycle and cleanup extension
+
+Status: `ADVERSE-C09-01` and `CLEANUP-C09-01` are partially evidenced for
+`functional-test-optimization-c09-workers-cli-lifecycle-contention-003`.
+The package-local adverse matrix is implemented, but the live-runtime
+cancellation projection described below remains unproven and keeps the story
+open. No production, shared-support, public-contract, workflow, or excluded
+surface was changed.
+
+The adverse cases extend the existing failure selector so the package retains
+its six top-level selector denominator:
+
+- A partial Codex JSONL stream reaches the real provider boundary, produces a
+  failed/rejected Work and failed Worker Session, retains one correlated
+  dispatch request without a fabricated `ACCEPTED` response, emits no success
+  stdout, and closes after the public failure is inspected.
+- A shaped exit-7 provider failure retains the public ErrorResponse, failed
+  Work/Worker Session, one correlated failed dispatch response with an error,
+  one provider call, and a closed listener/process.
+- An intentionally absent terminal observation expires its local 250ms phase
+  budget, reports the terminal phase and last observation, releases every
+  tracked gate, cancels and joins the command, emits no stdout, and closes the
+  listener/process.
+- A forced child assertion after acquiring a factory, artifact, root process,
+  listener, provider, command, gate, and Factory Session writes a parent report
+  proving the expected non-zero child exit, process close, command join,
+  provider start/finish/cancel, gate/listener close, session observation, and
+  removal of the artifact and factory paths.
+- A cancellation followed by recovery uses the supported live Factory Session
+  `cancel` route. The provider is canceled exactly once, the public Factory
+  Session reaches `FINISHED`, `/status` reports `COMPLETED`/`FINISHED` with no
+  active Work categories, stdout remains empty, the command stays blocked until
+  the listener gate is released, and a fresh recovery invocation succeeds with
+  distinct Work and Worker Session identities.
+
+The cancellation witness also found a bounded runtime projection edge that the
+test does not conceal: after the accepted live-session cancel and provider join,
+the public Work remains `PROCESSING`, its correlated Worker Session remains
+`RUNNING` with `OPERATOR_CANCELED`, and the retained dispatch has a request but
+no response. The command then returns a cancellation-compatible error and
+`Process.Close` closes the listener. The direct top-level Worker Session
+control route is not a valid substitute: it is not attached to this
+runtime-owned attempt and did not cancel the injected provider in the same
+experiment. Therefore LIFE-U07's terminal Work/Worker Session/dispatch proof
+is explicitly unproven, although no successful terminal result is fabricated.
+The smallest plan delta is a runtime-owned terminalization path (or a
+supported turn-scoped live-session control carrying the active Worker Session
+correlation); that belongs to the excluded production/runtime ownership and
+was not silently broadened into this test-only lane.
+
+## Story 003 verification
+
+The following commands used local-real root/process/session/listener wiring and
+deterministic provider edges:
+
+    go test -count=1 -timeout=5m ./tests/functional/workers/transports/cli/run/lifecycle -run '^TestCLIRunCleanInvocationFailurePreservesPublicError$'
+
+Observed result: `ok` in `28.401s`; the original public failure and all five
+adverse subcases passed once.
+
+    go test -race -count=1 -timeout=10m ./tests/functional/workers/transports/cli/run/lifecycle -run '^TestCLIRunCleanInvocationFailurePreservesPublicError$'
+
+Observed result: `ok` in `65.796s`; the touched adverse coordination path had
+no race report.
+
+    go test -count=3 -timeout=15m ./tests/functional/workers/transports/cli/run/lifecycle -run '^TestCLIRunCleanInvocationFailurePreservesPublicError$'
+
+Observed result: `ok` in `93.970s`; all three original-failure plus adverse
+matrix executions passed. These commands prove the implemented partial,
+dependency-failure, timeout, forced-cleanup, no-success cancellation, provider
+call, recovery, and listener/process cleanup witnesses. They do not prove the
+unresolved cancellation terminal projection, full six-selector package
+coexistence, raised-parallelism CI, or clean-room loopback.

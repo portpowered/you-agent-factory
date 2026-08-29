@@ -463,6 +463,10 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 // primary result on stdout.
 func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 	t.Parallel()
+	if os.Getenv(lifecycleForcedCleanupChildEnv) == "1" {
+		runForcedLifecycleCleanupChild(t)
+		return
+	}
 
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
@@ -502,6 +506,8 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 	if errorResponse.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("ErrorResponse family = %q, want %q", errorResponse.Family, factoryapi.ErrorFamilyInternalServerError)
 	}
+
+	t.Run("adverse lifecycle matrix", runLifecycleAdverseMatrix)
 }
 
 func scaffoldProviderBackedFactory(t *testing.T) string {

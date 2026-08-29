@@ -71,6 +71,68 @@ func (gate *lifecycleGate) release() bool {
 	return released
 }
 
+func (gate *lifecycleGate) released() bool {
+	if gate == nil {
+		return true
+	}
+	select {
+	case <-gate.ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// lifecycleCancelableCommand is the package-local equivalent of the shared
+// ProcessCommand for cases that must cancel an invocation before its
+// invocation-owned listener is released. The shared helper intentionally
+// keeps cancellation private; this wrapper keeps the same cleanup ordering
+// while exposing only the adverse-path cancellation operation this package
+// needs to prove.
+type lifecycleCancelableCommand struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	mu  sync.Mutex
+	err error
+}
+
+func (command *lifecycleCancelableCommand) Cancel() {
+	if command == nil || command.cancel == nil {
+		return
+	}
+	command.cancel()
+}
+
+func (command *lifecycleCancelableCommand) Done() <-chan struct{} {
+	if command == nil {
+		closed := make(chan struct{})
+		close(closed)
+		return closed
+	}
+	return command.done
+}
+
+func (command *lifecycleCancelableCommand) Err() error {
+	if command == nil {
+		return nil
+	}
+	command.mu.Lock()
+	defer command.mu.Unlock()
+	return command.err
+}
+
+func (command *lifecycleCancelableCommand) stop() {
+	if command == nil {
+		return
+	}
+	command.Cancel()
+	select {
+	case <-command.done:
+	case <-time.After(lifecycleCommandDoneTimeout):
+	}
+}
+
 type lifecycleCoordinator struct {
 	t       *testing.T
 	process support.ApplicationProcess
@@ -83,6 +145,9 @@ type lifecycleCoordinator struct {
 	transitions           []string
 	gates                 []*lifecycleGate
 	closeOnce             sync.Once
+	closeErr              error
+	closeDuration         time.Duration
+	closeCompleted        bool
 }
 
 func newLifecycleCoordinator(t *testing.T, process support.ApplicationProcess) *lifecycleCoordinator {
@@ -158,6 +223,39 @@ func (coordinator *lifecycleCoordinator) StartCommand(inputs *support.CapturedIn
 	return command
 }
 
+func (coordinator *lifecycleCoordinator) StartCancelableCommand(
+	inputs *support.CapturedInputs,
+) *lifecycleCancelableCommand {
+	coordinator.t.Helper()
+	coordinator.recordPhase(lifecyclePhaseExecute, "Process.Execute started", false)
+	parent := inputs.Input.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	commandContext, cancel := context.WithCancel(parent)
+	input := inputs.Input
+	input.Context = commandContext
+	command := &lifecycleCancelableCommand{cancel: cancel, done: make(chan struct{})}
+	go func() {
+		err := coordinator.process.Execute(input)
+		if err == nil {
+			coordinator.publicObservation(lifecyclePhaseTerminal, "Process.Execute returned successful terminal outcome")
+		} else {
+			coordinator.publicObservation(lifecyclePhaseTerminal, fmt.Sprintf("Process.Execute returned terminal error: %v", err))
+		}
+		coordinator.recordPhase(lifecyclePhaseCommandDone, fmt.Sprintf("asynchronous Process.Execute completed: %v", err), false)
+		command.mu.Lock()
+		command.err = err
+		command.mu.Unlock()
+		close(command.done)
+	}()
+	// Release gates before cancellation waits for Process.Execute, then close
+	// the reusable process after the invocation has joined.
+	coordinator.t.Cleanup(func() { command.stop() })
+	coordinator.t.Cleanup(coordinator.releaseAll)
+	return command
+}
+
 func (coordinator *lifecycleCoordinator) Execute(inputs *support.CapturedInputs) error {
 	coordinator.t.Helper()
 	coordinator.recordPhase(lifecyclePhaseExecute, "Process.Execute started", false)
@@ -193,13 +291,23 @@ func (coordinator *lifecycleCoordinator) WaitCommand(command *support.ProcessCom
 }
 
 func (coordinator *lifecycleCoordinator) WaitForReadiness(server *support.ProcessAPIServer) (string, error) {
+	return coordinator.WaitForReadinessWithin(server, lifecycleReadinessTimeout)
+}
+
+func (coordinator *lifecycleCoordinator) WaitForReadinessWithin(
+	server *support.ProcessAPIServer,
+	timeout time.Duration,
+) (string, error) {
 	coordinator.t.Helper()
 	coordinator.recordPhase(lifecyclePhaseReadiness, "waiting for the invocation-owned API listener to bind", false)
 	if server == nil {
 		return "", coordinator.phaseFailure(lifecyclePhaseReadiness, "process API server is nil")
 	}
+	if timeout <= 0 {
+		return "", coordinator.phaseFailure(lifecyclePhaseReadiness, fmt.Sprintf("readiness deadline is not positive: %s", timeout))
+	}
 	started := time.Now()
-	baseURL, err := server.WaitForBaseURL(lifecycleReadinessTimeout)
+	baseURL, err := server.WaitForBaseURL(timeout)
 	if err != nil {
 		return "", coordinator.phaseFailure(
 			lifecyclePhaseReadiness,
@@ -268,6 +376,40 @@ func (coordinator *lifecycleCoordinator) releaseAll() {
 	}
 }
 
+func (coordinator *lifecycleCoordinator) unreleasedGates() []string {
+	if coordinator == nil {
+		return nil
+	}
+	coordinator.mu.Lock()
+	gates := append([]*lifecycleGate(nil), coordinator.gates...)
+	coordinator.mu.Unlock()
+	var unreleased []string
+	for _, gate := range gates {
+		if gate != nil && !gate.released() {
+			unreleased = append(unreleased, gate.name)
+		}
+	}
+	return unreleased
+}
+
+func (coordinator *lifecycleCoordinator) closeResult() (error, time.Duration) {
+	if coordinator == nil {
+		return nil, 0
+	}
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	return coordinator.closeErr, coordinator.closeDuration
+}
+
+func (coordinator *lifecycleCoordinator) closed() bool {
+	if coordinator == nil {
+		return false
+	}
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	return coordinator.closeCompleted
+}
+
 func (coordinator *lifecycleCoordinator) close() {
 	if coordinator == nil {
 		return
@@ -278,9 +420,15 @@ func (coordinator *lifecycleCoordinator) close() {
 		closeContext, cancel := context.WithTimeout(context.Background(), lifecycleProcessCloseTimeout)
 		err := coordinator.process.Close(closeContext)
 		cancel()
+		closeDuration := time.Since(started)
+		coordinator.mu.Lock()
+		coordinator.closeErr = err
+		coordinator.closeDuration = closeDuration
+		coordinator.closeCompleted = true
+		coordinator.mu.Unlock()
 		coordinator.recordPhase(
 			lifecyclePhaseProcessClose,
-			fmt.Sprintf("Process.Close completed after %s", time.Since(started)),
+			fmt.Sprintf("Process.Close completed after %s", closeDuration),
 			false,
 		)
 		if err != nil {
@@ -316,8 +464,29 @@ func (coordinator *lifecycleCoordinator) ObserveHostedServerAttached(
 	releaseWorker func(),
 	done <-chan struct{},
 ) (factoryapi.FactorySession, string, bool, error) {
+	return coordinator.ObserveHostedServerAttachedWithin(
+		baseURL,
+		wantWorkText,
+		releaseWorker,
+		done,
+		lifecycleObservationTimeout,
+	)
+}
+
+func (coordinator *lifecycleCoordinator) ObserveHostedServerAttachedWithin(
+	baseURL, wantWorkText string,
+	releaseWorker func(),
+	done <-chan struct{},
+	timeout time.Duration,
+) (factoryapi.FactorySession, string, bool, error) {
 	coordinator.t.Helper()
-	deadline := time.NewTimer(lifecycleObservationTimeout)
+	if timeout <= 0 {
+		return factoryapi.FactorySession{}, "", false, coordinator.phaseFailure(
+			lifecyclePhaseTerminal,
+			fmt.Sprintf("observation deadline is not positive: %s", timeout),
+		)
+	}
+	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(lifecyclePollInterval)
 	defer ticker.Stop()
