@@ -603,6 +603,8 @@ jobs:
           cache: true
       - name: Run offline backend conformance guard
         run: make test-backend-conformance
+      - name: Verify pinned backend release assets
+        run: make test-backend-conformance-live
 
   backend-lint:
     name: Backend Lint
