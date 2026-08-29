@@ -6,31 +6,31 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	s8WorkerASuccessorID = "s8-successor-a"
-	s8InterruptRequestID = "s8-interrupt-request"
 	s8ReplacementMessage = "replace repository A instruction only"
 	s8ReplacementOutput  = "S8 repository A replacement provider output"
 )
 
 type s8InterruptScenario struct {
 	ctx         context.Context
+	fixture     *invokeContinuePackageFixture
 	manager     support.Process
 	env         []string
 	factoryDir  string
 	serverURL   string
+	session     *invokeContinueFactorySession
 	repositoryA s8Repository
 	repositoryB s8Repository
 	runner      *s8InterruptProviderRunner
+	ids         s8ScenarioIdentities
 }
 
 // TestDWROS8ManagerInterruptsOnlyOneRemoteWorker proves the second S8 story
@@ -42,69 +42,56 @@ type s8InterruptScenario struct {
 func TestDWROS8ManagerInterruptsOnlyOneRemoteWorker(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
+	scenario := newS8InterruptScenario(t, ctx)
+	defer scenario.runner.releaseAll()
+	ids := scenario.ids
 
-	factoryDir := support.ScaffoldSingleStepFactory(t, "s8-manager-interrupt-scenario")
-	support.WriteAgentConfig(t, factoryDir, "processor", support.BuildModelWorkerConfig("codex", "functional-model"))
-	repositoryA := newS8Repository(t, "repository-a", "S8_REPOSITORY_A")
-	repositoryB := newS8Repository(t, "repository-b", "S8_REPOSITORY_B")
-	homeDir := t.TempDir()
-	env := s8FunctionalEnvironment(homeDir)
-
-	stdout := readS8ProviderFixture(t, "stdout.jsonl")
-	rollout := readS8ProviderFixture(t, "rollout.jsonl")
-	runner := newS8InterruptProviderRunner(stdout, repositoryA, repositoryB)
-	defer runner.releaseAll()
-	writeS8CodexRollout(t, homeDir, s8ProviderSessionA, rollout, s8ReplacementOutput)
-	writeS8CodexRollout(t, homeDir, s8ProviderSessionB, rollout, s8OutputB)
-
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		Env:                       env,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: runner,
-			ProviderSessionResolveHomeDirectory: func() (string, error) {
-				return homeDir, nil
-			},
-		},
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestA, workerSessionID: ids.workerA, dispatchID: ids.dispatchA,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, workID: ids.workA, message: s8MessageA,
 	})
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallAInitial, scenario.fixture.router.requests)
 
-	manager := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
+	invokeS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8RemoteWorkerInvocation{
+		requestID: ids.requestB, workerSessionID: ids.workerB, dispatchID: ids.dispatchB,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryB.path, workID: ids.workB, message: s8MessageB,
 	})
-	support.CleanupProcess(t, manager)
-	scenario := s8InterruptScenario{
-		ctx: ctx, manager: manager, env: env, factoryDir: factoryDir, serverURL: server.URL(),
-		repositoryA: repositoryA, repositoryB: repositoryB, runner: runner,
-	}
+	scenario.runner.waitStarted(t, scenario.repositoryB.path, s8InterruptCallBInitial, scenario.fixture.router.requests)
 
-	invokeS8RemoteWorker(t, ctx, manager, env, repositoryA.path, server.URL(), s8RemoteWorkerInvocation{
-		requestID: s8RequestAID, workerSessionID: s8WorkerAID, dispatchID: s8DispatchAID,
-		repository: repositoryA.path, message: s8MessageA,
-	})
-	runner.waitStarted(t, repositoryA.path, s8InterruptCallAInitial)
+	streamA := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.session.id, ids.workerA, s8InterruptProviderSessionA)
+	streamA.writer.waitWorkerSessionFrame(t, ids.workerA)
+	streamB := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, scenario.session.id, ids.workerB, s8InterruptProviderSessionB)
+	streamB.writer.waitWorkerSessionFrame(t, ids.workerB)
 
-	invokeS8RemoteWorker(t, ctx, manager, env, repositoryB.path, server.URL(), s8RemoteWorkerInvocation{
-		requestID: s8RequestBID, workerSessionID: s8WorkerBID, dispatchID: s8DispatchBID,
-		repository: repositoryB.path, message: s8MessageB,
-	})
-	runner.waitStarted(t, repositoryB.path, s8InterruptCallBInitial)
-
-	streamA := startS8LiveStream(t, ctx, manager, env, repositoryA.path, server.URL(), s8WorkerAID)
-	streamA.writer.waitWorkerSessionFrame(t, s8WorkerAID)
-	streamB := startS8LiveStream(t, ctx, manager, env, repositoryB.path, server.URL(), s8WorkerBID)
-	streamB.writer.waitWorkerSessionFrame(t, s8WorkerBID)
-
-	active := listS8RemoteWorkers(t, ctx, manager, env, factoryDir, server.URL())
+	active := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, "STARTING", "RUNNING")
 	if len(active) != 2 {
 		t.Fatalf("active direct Worker Sessions = %d, want two: %#v", len(active), active)
 	}
-	assertS8Observation(t, findS8Observation(t, active, s8WorkerAID), s8WorkerAID, "RUNNING", s8ProviderSessionA, s8DispatchAID)
-	assertS8Observation(t, findS8Observation(t, active, s8WorkerBID), s8WorkerBID, "RUNNING", s8ProviderSessionB, s8DispatchBID)
+	assertS8Observation(t, findS8Observation(t, active, ids.workerA), ids.workerA, scenario.session.id, ids.workA, "RUNNING", s8InterruptProviderSessionA, ids.dispatchA)
+	assertS8Observation(t, findS8Observation(t, active, ids.workerB), ids.workerB, scenario.session.id, ids.workB, "RUNNING", s8InterruptProviderSessionB, ids.dispatchB)
 
 	successor, streamSuccessor := assertS8InterruptOverlap(t, scenario, streamA, streamB)
 	finishS8InterruptScenario(t, scenario, streamA, streamB, streamSuccessor, successor)
-	server.Stop(t)
+	scenario.close(t)
+}
+
+func newS8InterruptScenario(t *testing.T, ctx context.Context) s8InterruptScenario {
+	t.Helper()
+	fixture := ensureInvokeContinuePackageFixture(t)
+	ownedScenario := fixture.scenario(t, "manager-interrupt")
+	return s8InterruptScenario{
+		ctx: ctx, fixture: fixture, manager: fixture.process,
+		env: invokeContinueEnvironment(fixture.homeDir), factoryDir: fixture.hostDir,
+		serverURL: fixture.baseURL, session: ownedScenario.session,
+		repositoryA: fixture.interruptRepositoryA, repositoryB: fixture.interruptRepositoryB,
+		runner: fixture.interruptRunner, ids: newS8ScenarioIdentities("interrupt", ownedScenario.runNumber),
+	}
+}
+
+func (scenario s8InterruptScenario) close(t testing.TB) {
+	t.Helper()
+	scenario.session.close(t)
+	scenario.session.assertDeleted(t)
 }
 
 func assertS8InterruptOverlap(
@@ -113,29 +100,28 @@ func assertS8InterruptOverlap(
 	streamA, streamB s8StreamCapture,
 ) (s8WorkerObservation, s8StreamCapture) {
 	t.Helper()
-	interrupt := interruptS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL)
-	assertS8InterruptAdmission(t, interrupt)
+	ids := scenario.ids
+	interrupt := interruptS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
+	assertS8InterruptAdmission(t, interrupt, ids)
 	scenario.runner.waitCanceled(t, scenario.repositoryA.path, s8InterruptCallAInitial)
-	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
+	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, scenario.fixture.router.requests)
 	scenario.runner.assertOrder(t, "start:"+s8InterruptCallAInitial, "cancel:"+s8InterruptCallAInitial, "start:"+s8InterruptCallASuccessor)
 
-	streamSuccessor := startS8LiveStream(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerASuccessorID)
-	streamSuccessor.writer.waitWorkerSessionFrame(t, s8WorkerASuccessorID)
-	overlap := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
-	if len(overlap) != 3 {
-		t.Fatalf("overlap direct Worker Sessions = %d, want source, successor, and B: %#v", len(overlap), overlap)
-	}
-	assertS8Observation(t, findS8Observation(t, overlap, s8WorkerAID), s8WorkerAID, "CANCELED", s8ProviderSessionA, s8DispatchAID)
-	successor := findS8Observation(t, overlap, s8WorkerASuccessorID)
-	assertS8Observation(t, successor, s8WorkerASuccessorID, "RUNNING", s8ProviderSessionA, s8DispatchAID+"/continue/"+s8WorkerASuccessorID)
-	assertS8Observation(t, findS8Observation(t, overlap, s8WorkerBID), s8WorkerBID, "RUNNING", s8ProviderSessionB, s8DispatchBID)
+	streamSuccessor := startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.session.id, ids.successor, s8InterruptProviderSessionA)
+	streamSuccessor.writer.waitWorkerSessionFrame(t, ids.successor)
+	overlap := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, "CANCELED", "STARTING", "RUNNING")
+	assertS8NoUnexpectedActiveObservations(t, overlap, ids.workerA, ids.successor, ids.workerB)
+	assertS8Observation(t, findS8Observation(t, overlap, ids.workerA), ids.workerA, scenario.session.id, ids.workA, "CANCELED", s8InterruptProviderSessionA, ids.dispatchA)
+	successor := findS8Observation(t, overlap, ids.successor)
+	assertS8Observation(t, successor, ids.successor, scenario.session.id, ids.workA, "RUNNING", s8InterruptProviderSessionA, ids.dispatchA+"/continue/"+ids.successor)
+	assertS8Observation(t, findS8Observation(t, overlap, ids.workerB), ids.workerB, scenario.session.id, ids.workB, "RUNNING", s8InterruptProviderSessionB, ids.dispatchB)
 
-	showSource := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerAID)
-	showSuccessor := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerASuccessorID)
-	showB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8WorkerBID)
-	assertS8Observation(t, showSource, s8WorkerAID, "CANCELED", s8ProviderSessionA, s8DispatchAID)
-	assertS8Observation(t, showSuccessor, s8WorkerASuccessorID, "RUNNING", s8ProviderSessionA, successor.AttemptID)
-	assertS8Observation(t, showB, s8WorkerBID, "RUNNING", s8ProviderSessionB, s8DispatchBID)
+	showSource := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA)
+	showSuccessor := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
+	showB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB)
+	assertS8Observation(t, showSource, ids.workerA, scenario.session.id, ids.workA, "CANCELED", s8InterruptProviderSessionA, ids.dispatchA)
+	assertS8Observation(t, showSuccessor, ids.successor, scenario.session.id, ids.workA, "RUNNING", s8InterruptProviderSessionA, successor.AttemptID)
+	assertS8Observation(t, showB, ids.workerB, scenario.session.id, ids.workB, "RUNNING", s8InterruptProviderSessionB, ids.dispatchB)
 	if scenario.runner.cancellationCount(s8InterruptCallBInitial) != 0 {
 		t.Fatalf("Worker B provider cancellations = %d, want zero while B remains active", scenario.runner.cancellationCount(s8InterruptCallBInitial))
 	}
@@ -149,51 +135,49 @@ func finishS8InterruptScenario(
 	successor s8WorkerObservation,
 ) {
 	t.Helper()
+	ids := scenario.ids
 	scenario.runner.release(t, scenario.repositoryA.path, s8InterruptCallASuccessor)
-	waitS8Stream(t, streamSuccessor, s8WorkerASuccessorID)
-	stillActiveB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8WorkerBID)
-	assertS8Observation(t, stillActiveB, s8WorkerBID, "RUNNING", s8ProviderSessionB, s8DispatchBID)
+	waitS8Stream(t, streamSuccessor, ids.successor)
+	stillActiveB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB)
+	assertS8Observation(t, stillActiveB, ids.workerB, scenario.session.id, ids.workB, "RUNNING", s8InterruptProviderSessionB, ids.dispatchB)
 
 	scenario.runner.release(t, scenario.repositoryB.path, s8InterruptCallBInitial)
-	waitS8Stream(t, streamA, s8WorkerAID)
-	waitS8Stream(t, streamB, s8WorkerBID)
+	waitS8Stream(t, streamA, ids.workerA)
+	waitS8Stream(t, streamB, ids.workerB)
 	sourceCorrelation := s8Correlation{
-		repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: s8DispatchAID,
-		workerSessionID: s8WorkerAID, providerSessionID: s8ProviderSessionA, message: s8MessageA, output: s8OutputA,
-		successorWorkerSessionID: s8WorkerASuccessorID,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: ids.dispatchA,
+		workID: ids.workA, workerSessionID: ids.workerA, providerSessionID: s8InterruptProviderSessionA, message: s8MessageA, output: s8OutputA,
+		successorWorkerSessionID: ids.successor,
 	}
 	successorCorrelation := s8Correlation{
-		repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: successor.AttemptID,
-		workerSessionID: s8WorkerASuccessorID, providerSessionID: s8ProviderSessionA, message: s8ReplacementMessage, output: s8ReplacementOutput,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: successor.AttemptID,
+		workID: ids.workA, workerSessionID: ids.successor, providerSessionID: s8InterruptProviderSessionA, message: s8ReplacementMessage, output: s8ReplacementOutput,
 	}
 	bCorrelation := s8Correlation{
-		repository: scenario.repositoryB.path, marker: scenario.repositoryB.marker, dispatchID: s8DispatchBID,
-		workerSessionID: s8WorkerBID, providerSessionID: s8ProviderSessionB, message: s8MessageB, output: s8OutputB,
+		factorySessionID: scenario.session.id, repository: scenario.repositoryB.path, marker: scenario.repositoryB.marker, dispatchID: ids.dispatchB,
+		workID: ids.workB, workerSessionID: ids.workerB, providerSessionID: s8InterruptProviderSessionB, message: s8MessageB, output: s8OutputB,
 	}
 	assertS8StreamIsolation(t, streamB.writer.bytes(), bCorrelation, sourceCorrelation, successorCorrelation)
 	assertS8CanceledStreamIsolation(t, streamA.writer.bytes(), sourceCorrelation, successorCorrelation, bCorrelation)
 
-	retainedSource := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerAID)
-	retainedSuccessor := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerASuccessorID)
-	retainedB := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8WorkerBID)
+	retainedSource := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA)
+	retainedSuccessor := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
+	retainedB := replayS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB)
 	assertS8CanceledRetainedStream(t, retainedSource, sourceCorrelation, successorCorrelation, bCorrelation)
 	assertS8RetainedStream(t, retainedSuccessor, successorCorrelation, sourceCorrelation, bCorrelation)
 	assertS8RetainedStream(t, retainedB, bCorrelation, sourceCorrelation, successorCorrelation)
 
-	completed := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
-	if len(completed) != 3 {
-		t.Fatalf("completed direct Worker Sessions = %d, want source, successor, and B: %#v", len(completed), completed)
-	}
-	assertS8Observation(t, findS8Observation(t, completed, s8WorkerAID), s8WorkerAID, "CANCELED", s8ProviderSessionA, s8DispatchAID)
-	assertS8Observation(t, findS8Observation(t, completed, s8WorkerASuccessorID), s8WorkerASuccessorID, "COMPLETED", s8ProviderSessionA, successor.AttemptID)
-	assertS8Observation(t, findS8Observation(t, completed, s8WorkerBID), s8WorkerBID, "COMPLETED", s8ProviderSessionB, s8DispatchBID)
+	completed := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, "COMPLETED", "CANCELED")
+	assertS8Observation(t, findS8Observation(t, completed, ids.workerA), ids.workerA, scenario.session.id, ids.workA, "CANCELED", s8InterruptProviderSessionA, ids.dispatchA)
+	assertS8Observation(t, findS8Observation(t, completed, ids.successor), ids.successor, scenario.session.id, ids.workA, "COMPLETED", s8InterruptProviderSessionA, successor.AttemptID)
+	assertS8Observation(t, findS8Observation(t, completed, ids.workerB), ids.workerB, scenario.session.id, ids.workB, "COMPLETED", s8InterruptProviderSessionB, ids.dispatchB)
 
-	finalSource := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerAID)
-	finalSuccessor := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, s8WorkerASuccessorID)
-	finalB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, s8WorkerBID)
-	assertS8Observation(t, finalSource, s8WorkerAID, "CANCELED", s8ProviderSessionA, s8DispatchAID)
-	assertS8Observation(t, finalSuccessor, s8WorkerASuccessorID, "COMPLETED", s8ProviderSessionA, successor.AttemptID)
-	assertS8Observation(t, finalB, s8WorkerBID, "COMPLETED", s8ProviderSessionB, s8DispatchBID)
+	finalSource := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA)
+	finalSuccessor := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor)
+	finalB := showS8RemoteWorker(t, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB)
+	assertS8Observation(t, finalSource, ids.workerA, scenario.session.id, ids.workA, "CANCELED", s8InterruptProviderSessionA, ids.dispatchA)
+	assertS8Observation(t, finalSuccessor, ids.successor, scenario.session.id, ids.workA, "COMPLETED", s8InterruptProviderSessionA, successor.AttemptID)
+	assertS8Observation(t, finalB, ids.workerB, scenario.session.id, ids.workB, "COMPLETED", s8InterruptProviderSessionB, ids.dispatchB)
 
 	assertS8InterruptProviderRequests(t, scenario.runner.requests(), scenario.runner.markers(), sourceCorrelation, successorCorrelation, bCorrelation)
 	if scenario.runner.cancellationCount(s8InterruptCallAInitial) != 1 || scenario.runner.cancellationCount(s8InterruptCallBInitial) != 0 || scenario.runner.cancellationCount(s8InterruptCallASuccessor) != 0 {
@@ -222,26 +206,26 @@ func interruptS8RemoteWorker(
 	ctx context.Context,
 	process support.Process,
 	env []string,
-	workingDirectory, serverURL string,
+	workingDirectory, serverURL, sourceWorkerSessionID, requestID, successorWorkerSessionID string,
 ) s8InterruptResult {
 	t.Helper()
 	inputs := executeS8RemoteCLI(t, ctx, process, env, workingDirectory, serverURL,
-		"--json", "worker-sessions", "interrupt", s8WorkerAID,
-		"--request-id", s8InterruptRequestID,
-		"--successor-worker-session-id", s8WorkerASuccessorID,
+		"--json", "worker-sessions", "interrupt", sourceWorkerSessionID,
+		"--request-id", requestID,
+		"--successor-worker-session-id", successorWorkerSessionID,
 		"--replacement-message", s8ReplacementMessage, "--async")
 	var result s8InterruptResult
 	decodeS8JSON(t, inputs.Stdout(), &result)
 	return result
 }
 
-func assertS8InterruptAdmission(t *testing.T, result s8InterruptResult) {
+func assertS8InterruptAdmission(t *testing.T, result s8InterruptResult, ids s8ScenarioIdentities) {
 	t.Helper()
-	if !result.Accepted || result.RequestID != s8InterruptRequestID ||
-		result.SourceWorkerSessionID != s8WorkerAID || result.SuccessorWorkerSessionID != s8WorkerASuccessorID ||
+	if !result.Accepted || result.RequestID != ids.interruptRequest ||
+		result.SourceWorkerSessionID != ids.workerA || result.SuccessorWorkerSessionID != ids.successor ||
 		result.Phase != "SUCCESSOR_ADMISSION" ||
-		result.Source.WorkerSessionID != s8WorkerAID || result.Source.State != "CANCELED" || result.Source.EventTopic == "" ||
-		result.Successor.WorkerSessionID != s8WorkerASuccessorID || result.Successor.State != "RUNNING" || result.Successor.EventTopic == "" {
+		result.Source.WorkerSessionID != ids.workerA || result.Source.State != "CANCELED" || result.Source.EventTopic == "" ||
+		result.Successor.WorkerSessionID != ids.successor || result.Successor.State != "RUNNING" || result.Successor.EventTopic == "" {
 		t.Fatalf("interrupt result = %#v, want exact A cancellation and successor admission", result)
 	}
 }
@@ -249,12 +233,16 @@ func assertS8InterruptAdmission(t *testing.T, result s8InterruptResult) {
 func assertS8Observation(
 	t *testing.T,
 	observation s8WorkerObservation,
-	workerSessionID, state, providerSessionID, attemptID string,
+	workerSessionID, factorySessionID, workID, state, providerSessionID, attemptID string,
 ) {
 	t.Helper()
 	if observation.WorkerSessionID != workerSessionID || !observation.Direct || observation.State != state || observation.AttemptID != attemptID {
 		t.Fatalf("Worker Session observation = %#v, want %s/%s attempt %q", observation, workerSessionID, state, attemptID)
 	}
+	if observation.FactorySessionID != nil {
+		assertS8FactorySessionIfPresent(t, observation.FactorySessionID, factorySessionID)
+	}
+	assertS8WorkIDs(t, observation.WorkIDs, workID)
 	assertS8ProviderSession(t, observation.ProviderSession, observation.ProviderSessionAvailable, providerSessionID)
 }
 
@@ -337,25 +325,26 @@ type s8InterruptProviderRunner struct {
 	order              []string
 	invocationCounts   map[string]int
 	cancellationCounts map[string]int
+	active             atomic.Int32
 }
 
 func newS8InterruptProviderRunner(stdout []byte, repositoryA, repositoryB s8Repository) *s8InterruptProviderRunner {
-	return &s8InterruptProviderRunner{
+	runner := &s8InterruptProviderRunner{
 		stdout: append([]byte(nil), stdout...),
 		cases: map[string]*s8InterruptProviderCase{
 			repositoryA.path: {
 				repository: repositoryA.path,
 				marker:     repositoryA.marker,
 				calls: []*s8InterruptProviderCall{
-					newS8InterruptProviderCall(s8InterruptCallAInitial, s8ProviderSessionA, s8OutputA),
-					newS8InterruptProviderCall(s8InterruptCallASuccessor, s8ProviderSessionA, s8ReplacementOutput),
+					newS8InterruptProviderCall(s8InterruptCallAInitial, s8InterruptProviderSessionA, s8OutputA),
+					newS8InterruptProviderCall(s8InterruptCallASuccessor, s8InterruptProviderSessionA, s8ReplacementOutput),
 				},
 			},
 			repositoryB.path: {
 				repository: repositoryB.path,
 				marker:     repositoryB.marker,
 				calls: []*s8InterruptProviderCall{
-					newS8InterruptProviderCall(s8InterruptCallBInitial, s8ProviderSessionB, s8OutputB),
+					newS8InterruptProviderCall(s8InterruptCallBInitial, s8InterruptProviderSessionB, s8OutputB),
 				},
 			},
 		},
@@ -363,6 +352,34 @@ func newS8InterruptProviderRunner(stdout []byte, repositoryA, repositoryB s8Repo
 		cancellationCounts: make(map[string]int),
 		markerLog:          make(map[string][]string),
 	}
+	runner.reset()
+	return runner
+}
+
+func (runner *s8InterruptProviderRunner) reset() {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	for _, providerCase := range runner.cases {
+		providerCase.next = 0
+		for _, call := range providerCase.calls {
+			call.started = make(chan struct{})
+			call.release = make(chan struct{})
+			call.canceled = make(chan struct{})
+			call.startOnce = sync.Once{}
+			call.releaseOnce = sync.Once{}
+			call.cancelOnce = sync.Once{}
+		}
+	}
+	runner.requestLog = nil
+	runner.markerLog = make(map[string][]string)
+	runner.order = nil
+	runner.invocationCounts = make(map[string]int)
+	runner.cancellationCounts = make(map[string]int)
+	runner.active.Store(0)
+}
+
+func (runner *s8InterruptProviderRunner) ActiveCallCount() int {
+	return int(runner.active.Load())
 }
 
 func newS8InterruptProviderCall(kind, sessionID, output string) *s8InterruptProviderCall {
@@ -389,6 +406,8 @@ func (runner *s8InterruptProviderRunner) run(
 	request platformprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
+	runner.active.Add(1)
+	defer runner.active.Add(-1)
 	call, err := runner.nextCall(request)
 	if err != nil {
 		return platformprocess.CommandResult{}, err
@@ -489,13 +508,33 @@ func (runner *s8InterruptProviderRunner) callFor(repository, kind string) *s8Int
 	return nil
 }
 
-func (runner *s8InterruptProviderRunner) waitStarted(t *testing.T, repository, kind string) {
+func (runner *s8InterruptProviderRunner) waitStarted(
+	t *testing.T,
+	repository, kind string,
+	routeRequests ...func() []platformprocess.CommandRequest,
+) {
 	t.Helper()
 	call := runner.callFor(repository, kind)
 	if call == nil {
 		t.Fatalf("S8 interrupt provider call %q for %q is not configured", kind, repository)
 	}
-	runner.waitSignal(t, call.started, "provider start", kind)
+	watchdog := time.NewTimer(20 * time.Second)
+	defer watchdog.Stop()
+	select {
+	case <-call.started:
+	case <-watchdog.C:
+		var routed []platformprocess.CommandRequest
+		if len(routeRequests) > 0 && routeRequests[0] != nil {
+			routed = routeRequests[0]()
+		}
+		runner.mu.Lock()
+		requests := make([]platformprocess.CommandRequest, len(runner.requestLog))
+		for index, request := range runner.requestLog {
+			requests[index] = cloneS8CommandRequest(request)
+		}
+		runner.mu.Unlock()
+		t.Fatalf("deadlock watchdog expired waiting for S8 provider start %q in %q; runner requests=%#v route requests=%#v", kind, repository, requests, routed)
+	}
 }
 
 func (runner *s8InterruptProviderRunner) waitCanceled(t *testing.T, repository, kind string) {
@@ -543,6 +582,16 @@ func (runner *s8InterruptProviderRunner) requests() []platformprocess.CommandReq
 		requests[index] = cloneS8CommandRequest(request)
 	}
 	return requests
+}
+
+func (runner *s8InterruptProviderRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return len(runner.requestLog)
+}
+
+func (runner *s8InterruptProviderRunner) Requests() []platformprocess.CommandRequest {
+	return runner.requests()
 }
 
 func (runner *s8InterruptProviderRunner) markers() map[string][]string {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,20 +36,31 @@ const invokeContinuePackageFixtureTimeout = 15 * time.Second
 // after setup; scenario state is carried by explicit Factory Session IDs and
 // the provider runner's recorded calls.
 type invokeContinuePackageFixture struct {
-	rootDir       string
-	hostDir       string
-	homeDir       string
-	baseURL       string
-	process       support.ApplicationProcess
-	command       *invokeContinuePackageCommand
-	apiStopped    <-chan struct{}
-	apiStarts     *atomic.Int32
-	processBuilds *atomic.Int32
-	scenarioRuns  atomic.Uint64
-	scenarios     []invokeContinueScenario
+	rootDir              string
+	hostDir              string
+	homeDir              string
+	baseURL              string
+	process              support.ApplicationProcess
+	command              *invokeContinuePackageCommand
+	router               *invokeContinueStaticCommandRoute
+	apiStopped           <-chan struct{}
+	apiStarts            *atomic.Int32
+	processBuilds        *atomic.Int32
+	processClosed        atomic.Bool
+	streamsOpened        atomic.Int32
+	streamsClosed        atomic.Int32
+	scenarioRuns         atomic.Uint64
+	scenarios            []invokeContinueScenario
+	managerRunner        *s8RemoteProviderRunner
+	managerRepositoryA   s8Repository
+	managerRepositoryB   s8Repository
+	interruptRunner      *s8InterruptProviderRunner
+	interruptRepositoryA s8Repository
+	interruptRepositoryB s8Repository
 
 	sessionsMu        sync.Mutex
 	openedSessionIDs  []string
+	closedSessionIDs  []string
 	deletedSessionIDs []string
 }
 
@@ -279,6 +291,70 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 			return nil, err
 		}
 	}
+
+	managerRepositoryA, err := newS8RepositoryAt(
+		filepath.Join(rootDir, "routes", "manager-isolation-a"), s8RepositoryAMarker,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create manager isolation repository A: %w", err)
+	}
+	managerRepositoryB, err := newS8RepositoryAt(
+		filepath.Join(rootDir, "routes", "manager-isolation-b"), s8RepositoryBMarker,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create manager isolation repository B: %w", err)
+	}
+	stdout := readS8ProviderFixture(t, "stdout.jsonl")
+	rollout := readS8ProviderFixture(t, "rollout.jsonl")
+	managerRunner := newS8RemoteProviderRunner(stdout,
+		s8RemoteProviderCase{
+			repository: managerRepositoryA.path, marker: managerRepositoryA.marker,
+			sessionID: s8ProviderSessionA, output: s8OutputA,
+			release: make(chan struct{}), started: make(chan struct{}),
+		},
+		s8RemoteProviderCase{
+			repository: managerRepositoryB.path, marker: managerRepositoryB.marker,
+			sessionID: s8ProviderSessionB, output: s8OutputB,
+			release: make(chan struct{}), started: make(chan struct{}),
+		},
+	)
+	writeS8CodexRollout(t, homeDir, s8ProviderSessionA, rollout, s8OutputA)
+	writeS8CodexRollout(t, homeDir, s8ProviderSessionB, rollout, s8OutputB)
+	if err := addScenario("manager-isolation", managerRunner, managerRunner, nil, nil, nil, managerRunner.reset); err != nil {
+		return nil, err
+	}
+	// Manager requests execute in the repository-specific WorkDir, while the
+	// scenario session is opened against the host Factory. Keep both repository
+	// routes fixed before process construction so concurrent calls cannot select
+	// a runner from mutable session state or request order.
+	routes = append(routes,
+		invokeContinueStaticCommandRouteEntry{workingDirectory: managerRepositoryA.path, runner: managerRunner},
+		invokeContinueStaticCommandRouteEntry{workingDirectory: managerRepositoryB.path, runner: managerRunner},
+	)
+
+	interruptRepositoryA, err := newS8RepositoryAt(
+		filepath.Join(rootDir, "routes", "manager-interrupt-a"), s8RepositoryAMarker,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create manager interrupt repository A: %w", err)
+	}
+	interruptRepositoryB, err := newS8RepositoryAt(
+		filepath.Join(rootDir, "routes", "manager-interrupt-b"), s8RepositoryBMarker,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create manager interrupt repository B: %w", err)
+	}
+	interruptRunner := newS8InterruptProviderRunner(stdout, interruptRepositoryA, interruptRepositoryB)
+	writeS8CodexRollout(t, homeDir, s8InterruptProviderSessionA, rollout, s8ReplacementOutput)
+	writeS8CodexRollout(t, homeDir, s8InterruptProviderSessionB, rollout, s8OutputB)
+	if err := addScenario("manager-interrupt", interruptRunner, interruptRunner, nil, nil, nil, interruptRunner.reset); err != nil {
+		return nil, err
+	}
+	routes = append(routes,
+		invokeContinueStaticCommandRouteEntry{workingDirectory: interruptRepositoryA.path, runner: interruptRunner},
+		invokeContinueStaticCommandRouteEntry{workingDirectory: interruptRepositoryB.path, runner: interruptRunner},
+	)
+
 	route := &invokeContinueStaticCommandRoute{routes: routes}
 	fallbackProvider, err := providerswire.NewService(providerswire.WithCommandRunner(route))
 	if err != nil {
@@ -302,6 +378,9 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		// or session-based fallback after the process starts.
 		ProviderCommandRunner: route,
 		ProviderOverride:      providerOverride,
+		ProviderSessionResolveHomeDirectory: func() (string, error) {
+			return homeDir, nil
+		},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
 			err := api.Start(ctx, request)
@@ -336,16 +415,23 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 
 	keepRoot = true
 	return &invokeContinuePackageFixture{
-		rootDir:       rootDir,
-		hostDir:       hostDir,
-		homeDir:       homeDir,
-		baseURL:       baseURL,
-		process:       process,
-		command:       command,
-		apiStopped:    apiStopped,
-		apiStarts:     apiStarts,
-		processBuilds: processBuilds,
-		scenarios:     scenarios,
+		rootDir:              rootDir,
+		hostDir:              hostDir,
+		homeDir:              homeDir,
+		baseURL:              baseURL,
+		process:              process,
+		command:              command,
+		router:               route,
+		apiStopped:           apiStopped,
+		apiStarts:            apiStarts,
+		processBuilds:        processBuilds,
+		scenarios:            scenarios,
+		managerRunner:        managerRunner,
+		managerRepositoryA:   managerRepositoryA,
+		managerRepositoryB:   managerRepositoryB,
+		interruptRunner:      interruptRunner,
+		interruptRepositoryA: interruptRepositoryA,
+		interruptRepositoryB: interruptRepositoryB,
 	}, nil
 }
 
@@ -400,6 +486,8 @@ func closeInvokeContinuePackageFixture() error {
 	closeCtx, cancel := context.WithTimeout(context.Background(), invokeContinuePackageFixtureTimeout)
 	if err := fixture.process.Close(closeCtx); err != nil {
 		errs = append(errs, fmt.Errorf("close package fixture process: %w", err))
+	} else {
+		fixture.processClosed.Store(true)
 	}
 	cancel()
 	select {
@@ -415,10 +503,10 @@ func closeInvokeContinuePackageFixture() error {
 		errs = append(errs, fmt.Errorf("package fixture API starts = %d, want exactly one", got))
 	}
 	fixture.sessionsMu.Lock()
-	if len(fixture.openedSessionIDs) != len(fixture.deletedSessionIDs) {
+	if len(fixture.openedSessionIDs) != len(fixture.closedSessionIDs) || len(fixture.openedSessionIDs) != len(fixture.deletedSessionIDs) {
 		errs = append(errs, fmt.Errorf(
-			"package fixture Factory Sessions opened = %d, deleted = %d",
-			len(fixture.openedSessionIDs), len(fixture.deletedSessionIDs),
+			"package fixture Factory Sessions opened = %d, closed = %d, deleted = %d",
+			len(fixture.openedSessionIDs), len(fixture.closedSessionIDs), len(fixture.deletedSessionIDs),
 		))
 	} else {
 		deleted := make(map[string]struct{}, len(fixture.deletedSessionIDs))
@@ -432,12 +520,88 @@ func closeInvokeContinuePackageFixture() error {
 		}
 	}
 	fixture.sessionsMu.Unlock()
+	if got := fixture.streamsOpened.Load(); got != fixture.streamsClosed.Load() {
+		errs = append(errs, fmt.Errorf(
+			"package fixture streams opened = %d, closed = %d",
+			got, fixture.streamsClosed.Load(),
+		))
+	}
+	fixture.router.Close()
+	if got := fixture.router.routeCount(); got != 0 {
+		errs = append(errs, fmt.Errorf("package fixture routes remaining after close = %d", got))
+	}
+	if got := fixture.router.activeCallCount(); got != 0 {
+		errs = append(errs, fmt.Errorf("package fixture active provider calls after close = %d", got))
+	}
+	if got := fixture.activeProviderCallCount(); got != 0 {
+		errs = append(errs, fmt.Errorf("package fixture provider-runner calls after close = %d", got))
+	}
+	if reachable, err := invokeContinueListenerReachable(fixture.baseURL); err != nil {
+		errs = append(errs, fmt.Errorf("probe package fixture listener: %w", err))
+	} else if reachable {
+		errs = append(errs, errors.New("package fixture listener remained reachable after process close"))
+	}
+	if available, err := invokeContinuePortAvailable(fixture.baseURL); err != nil {
+		errs = append(errs, fmt.Errorf("probe package fixture port: %w", err))
+	} else if available {
+		errs = append(errs, errors.New("package fixture listener port remained available after process close"))
+	}
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
 		errs = append(errs, fmt.Errorf("remove package fixture root %q: %w", fixture.rootDir, err))
 	} else if _, err := os.Stat(fixture.rootDir); !errors.Is(err, os.ErrNotExist) {
 		errs = append(errs, fmt.Errorf("package fixture root %q remains after cleanup: %v", fixture.rootDir, err))
 	}
+	if err := writeInvokeContinueForcedCleanupReport(fixture); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
+}
+
+func (fixture *invokeContinuePackageFixture) activeProviderCallCount() int {
+	if fixture == nil {
+		return 0
+	}
+	active := 0
+	if fixture.managerRunner != nil {
+		active += fixture.managerRunner.ActiveCallCount()
+	}
+	if fixture.interruptRunner != nil {
+		active += fixture.interruptRunner.ActiveCallCount()
+	}
+	return active
+}
+
+func invokeContinueListenerReachable(baseURL string) (bool, error) {
+	parsed, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return false, err
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return false, fmt.Errorf("package fixture API URL %q has no scheme or host", baseURL)
+	}
+	client := http.Client{Timeout: time.Second}
+	response, err := client.Get(parsed.String() + "/status")
+	if err != nil {
+		return false, nil
+	}
+	defer response.Body.Close()
+	return true, nil
+}
+
+func invokeContinuePortAvailable(baseURL string) (bool, error) {
+	parsed, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
+	if err != nil {
+		return false, err
+	}
+	if parsed.Host == "" {
+		return false, fmt.Errorf("package fixture API URL %q has no host", baseURL)
+	}
+	connection, err := net.DialTimeout("tcp", parsed.Host, time.Second)
+	if err != nil {
+		return false, nil
+	}
+	_ = connection.Close()
+	return true, nil
 }
 
 func (fixture *invokeContinuePackageFixture) openSession(t *testing.T) *invokeContinueFactorySession {
@@ -480,6 +644,7 @@ func (session *invokeContinueFactorySession) close(t testing.TB) {
 	support.CloseFactorySessionAt(t, session.fixture.baseURL, session.id)
 	session.closed = true
 	session.fixture.sessionsMu.Lock()
+	session.fixture.closedSessionIDs = append(session.fixture.closedSessionIDs, session.id)
 	session.fixture.deletedSessionIDs = append(session.fixture.deletedSessionIDs, session.id)
 	session.fixture.sessionsMu.Unlock()
 }
@@ -534,7 +699,54 @@ type invokeContinueStaticCommandRouteEntry struct {
 }
 
 type invokeContinueStaticCommandRoute struct {
-	routes []invokeContinueStaticCommandRouteEntry
+	mu          sync.RWMutex
+	routes      []invokeContinueStaticCommandRouteEntry
+	requestLog  []platformprocess.CommandRequest
+	activeCalls atomic.Int32
+}
+
+func (route *invokeContinueStaticCommandRoute) Close() {
+	if route == nil {
+		return
+	}
+	route.mu.Lock()
+	route.routes = nil
+	route.mu.Unlock()
+}
+
+func (route *invokeContinueStaticCommandRoute) routeCount() int {
+	if route == nil {
+		return 0
+	}
+	route.mu.RLock()
+	defer route.mu.RUnlock()
+	return len(route.routes)
+}
+
+func (route *invokeContinueStaticCommandRoute) activeCallCount() int {
+	if route == nil {
+		return 0
+	}
+	return int(route.activeCalls.Load())
+}
+
+func (route *invokeContinueStaticCommandRoute) requests() []platformprocess.CommandRequest {
+	if route == nil {
+		return nil
+	}
+	route.mu.RLock()
+	defer route.mu.RUnlock()
+	requests := make([]platformprocess.CommandRequest, len(route.requestLog))
+	for index, request := range route.requestLog {
+		requests[index] = cloneS8CommandRequest(request)
+	}
+	return requests
+}
+
+func (route *invokeContinueStaticCommandRoute) recordRequest(request platformprocess.CommandRequest) {
+	route.mu.Lock()
+	route.requestLog = append(route.requestLog, cloneS8CommandRequest(request))
+	route.mu.Unlock()
 }
 
 // invokeContinueResettableProviderCommandRunner keeps the immutable route
@@ -594,6 +806,12 @@ func (route *invokeContinueStaticCommandRoute) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
+	if route == nil {
+		return platformprocess.CommandResult{}, errors.New("invoke/continue provider route is unavailable")
+	}
+	route.activeCalls.Add(1)
+	defer route.activeCalls.Add(-1)
+	route.recordRequest(request)
 	entry, err := route.entry(request)
 	if err != nil {
 		return platformprocess.CommandResult{}, err
@@ -610,6 +828,12 @@ func (route *invokeContinueStaticCommandRoute) RunStreaming(
 	request platformprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
+	if route == nil {
+		return platformprocess.CommandResult{}, errors.New("invoke/continue provider route is unavailable")
+	}
+	route.activeCalls.Add(1)
+	defer route.activeCalls.Add(-1)
+	route.recordRequest(request)
 	entry, err := route.entry(request)
 	if err != nil {
 		return platformprocess.CommandResult{}, err
@@ -637,6 +861,8 @@ func (route *invokeContinueStaticCommandRoute) entry(
 	if route == nil {
 		return invokeContinueStaticCommandRouteEntry{}, errors.New("invoke/continue provider route is unavailable")
 	}
+	route.mu.RLock()
+	defer route.mu.RUnlock()
 	for _, entry := range route.routes {
 		if filepath.Clean(request.WorkDir) != filepath.Clean(entry.workingDirectory) {
 			continue
