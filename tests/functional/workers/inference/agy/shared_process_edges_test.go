@@ -1,6 +1,7 @@
 package agy
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -114,6 +117,119 @@ func getAgySessionStatus(ctx context.Context, endpoint string) (factoryapi.Statu
 	return status, nil
 }
 
+type agySessionProjectionResult struct {
+	work   factoryapi.ListWorkResponse
+	events []factoryapi.FactoryEvent
+	err    error
+	isWork bool
+}
+
+func readAgySessionProjections(
+	ctx context.Context,
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, error) {
+	projectionContext, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	results := make(chan agySessionProjectionResult, 2)
+	go func() {
+		work, err := readAgySessionWork(projectionContext, baseURL, sessionID)
+		results <- agySessionProjectionResult{work: work, err: err, isWork: true}
+	}()
+	go func() {
+		events, err := readAgyFactoryEvents(projectionContext, baseURL, sessionID)
+		results <- agySessionProjectionResult{events: events, err: err}
+	}()
+
+	var work factoryapi.ListWorkResponse
+	var events []factoryapi.FactoryEvent
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			return factoryapi.ListWorkResponse{}, nil, result.err
+		}
+		if result.isWork {
+			work = result.work
+		} else {
+			events = result.events
+		}
+	}
+	return work, events, nil
+}
+
+func readAgySessionWork(ctx context.Context, baseURL, sessionID string) (factoryapi.ListWorkResponse, error) {
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
+	return readAgyJSON[factoryapi.ListWorkResponse](ctx, endpoint)
+}
+
+func readAgyJSON[T any](ctx context.Context, endpoint string) (T, error) {
+	var result T
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return result, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return result, err
+	}
+	body, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	if readErr != nil || closeErr != nil {
+		return result, errors.Join(readErr, closeErr)
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return result, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return result, fmt.Errorf("decode GET %s: %w", endpoint, err)
+	}
+	return result, nil
+}
+
+func readAgyFactoryEvents(ctx context.Context, baseURL, sessionID string) (events []factoryapi.FactoryEvent, err error) {
+	endpoint := support.SessionEventsURL(baseURL, sessionID)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = errors.Join(err, response.Body.Close())
+	}()
+	if response.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(response.Body)
+		return nil, errors.Join(readErr, fmt.Errorf("GET %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body))))
+	}
+	retainedCount, err := strconv.Atoi(strings.TrimSpace(response.Header.Get(factorysessionshttp.SessionEventStreamRetainedCountHeader)))
+	if err != nil {
+		return nil, fmt.Errorf("GET %s retained event count: %w", endpoint, err)
+	}
+	events = make([]factoryapi.FactoryEvent, 0, retainedCount)
+	scanner := bufio.NewScanner(response.Body)
+	for len(events) < retainedCount && scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			return nil, fmt.Errorf("decode factory event: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read factory events: %w", err)
+	}
+	if len(events) != retainedCount {
+		return nil, fmt.Errorf("read factory events: got %d of %d retained events", len(events), retainedCount)
+	}
+	return events, nil
+}
+
 func assertAgyFactorySessionDeleted(baseURL, sessionID string) error {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
 	// Keep the default transport pool reusable for the next public observation;
@@ -137,13 +253,29 @@ func assertAgyFactorySessionDeleted(baseURL, sessionID string) error {
 // closeAgyFactorySession first attempts the cheap common path for a terminal
 // session. An active session still follows the public terminate/status/delete
 // lifecycle, so cleanup remains valid after assertion or setup failures.
-func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) error {
+func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string, terminalObserved bool) error {
 	// http.Client{} uses http.DefaultTransport; keep its pool reusable across
 	// the scenario's lifecycle requests instead of evicting connections.
 	client := &http.Client{}
 	cleanupCtx, cancel := context.WithTimeout(ctx, agySharedScenarioTimeout)
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	if terminalObserved {
+		// The preceding public status read proves this session is terminal. The
+		// control response is enough to authorize deletion, so skip the initial
+		// DELETE/CONFLICT round trip used by cleanup after an unknown state.
+		terminateStatus, terminateBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodPost, endpoint+"/terminate")
+		if err != nil {
+			return err
+		}
+		if terminateStatus < http.StatusOK || terminateStatus >= http.StatusMultipleChoices {
+			if terminateStatus != http.StatusNotFound &&
+				!(terminateStatus == http.StatusConflict && strings.Contains(string(terminateBody), `"outcome":"TERMINAL_SESSION"`)) {
+				return fmt.Errorf("terminate status=%d body=%q", terminateStatus, strings.TrimSpace(string(terminateBody)))
+			}
+		}
+		return deleteAgyFactorySession(cleanupCtx, client, endpoint)
+	}
 	deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
 	if err != nil {
 		return err
@@ -159,13 +291,13 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 	if err != nil {
 		return err
 	}
-	terminalObserved := false
+	terminalFromControl := false
 	if terminateStatus < http.StatusOK || terminateStatus >= http.StatusMultipleChoices {
 		if terminateStatus == http.StatusNotFound ||
 			(terminateStatus == http.StatusConflict && strings.Contains(string(terminateBody), `"outcome":"TERMINAL_SESSION"`)) {
 			// The public control response already proves terminality; avoid a
 			// redundant status read before the retry DELETE.
-			terminalObserved = true
+			terminalFromControl = true
 		} else {
 			return fmt.Errorf("terminate status=%d body=%q", terminateStatus, strings.TrimSpace(string(terminateBody)))
 		}
@@ -174,7 +306,7 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 	// Termination is asynchronous and DELETE rejects an active Factory Session.
 	// This public status transition is the lifecycle boundary under test, so an
 	// edge-controlled result cannot replace this bounded polling observation.
-	if !terminalObserved {
+	if !terminalFromControl {
 		poll := time.NewTicker(10 * time.Millisecond)
 		defer poll.Stop()
 		for {
@@ -201,7 +333,11 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 			}
 		}
 	}
-	deleteStatus, deleteBody, err = requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
+	return deleteAgyFactorySession(cleanupCtx, client, endpoint)
+}
+
+func deleteAgyFactorySession(ctx context.Context, client *http.Client, endpoint string) error {
+	deleteStatus, deleteBody, err := requestAgyFactorySession(ctx, client, http.MethodDelete, endpoint)
 	if err != nil {
 		return err
 	}

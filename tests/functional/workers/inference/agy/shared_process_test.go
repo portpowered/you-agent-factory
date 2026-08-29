@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -454,8 +453,13 @@ func (fixture *agyProcessFixture) runScenario(
 	if _, err := waitForAgySessionTerminalStatus(context.Background(), fixture.baseURL, session.Id, agySharedScenarioTimeout); err != nil {
 		t.Fatalf("AGY %q terminal session status: %v", scenario.selector, err)
 	}
-	listed := listAgySessionWork(t, fixture.baseURL, session.Id)
-	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.Id)
+	run.terminalObserved = true
+	listed, factoryEvents, err := readAgySessionProjections(
+		context.Background(), fixture.baseURL, session.Id, agySharedScenarioTimeout,
+	)
+	if err != nil {
+		t.Fatalf("AGY %q session projections: %v", scenario.selector, err)
+	}
 	// Deletion followed by normal EOF proves no frame was hidden.
 	assertAgyResponseEventStreamClosed(t, run, agySharedScenarioTimeout, scenario.selector, len(responseEvents))
 	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)
@@ -480,12 +484,13 @@ type agySharedScenarioRun struct {
 	closeOnce sync.Once
 	closeErr  error
 
-	sessionOnce     sync.Once
-	sessionCloseErr error
-	streamOnce      sync.Once
-	streamState     sync.Mutex
-	streamReadErr   error
-	streamCloseErr  error
+	sessionOnce      sync.Once
+	sessionCloseErr  error
+	terminalObserved bool
+	streamOnce       sync.Once
+	streamState      sync.Mutex
+	streamReadErr    error
+	streamCloseErr   error
 }
 
 func (run *agySharedScenarioRun) close(t testing.TB) {
@@ -533,7 +538,7 @@ func (run *agySharedScenarioRun) closeSession(ctx context.Context) error {
 	}
 	run.sessionOnce.Do(func() {
 		var errs []error
-		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID); err != nil {
+		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID, run.terminalObserved); err != nil {
 			errs = append(errs, fmt.Errorf("close Factory Session %q: %w", run.sessionID, err))
 		}
 		if err := assertAgyFactorySessionDeleted(run.fixture.baseURL, run.sessionID); err != nil {
@@ -847,7 +852,7 @@ func (fixture *agyProcessFixture) closeUnclosedSessions(ctx context.Context) err
 			}
 			continue
 		}
-		if err := closeAgyFactorySession(ctx, fixture.baseURL, id); err != nil {
+		if err := closeAgyFactorySession(ctx, fixture.baseURL, id, false); err != nil {
 			errs = append(errs, fmt.Errorf("close unclosed session %q: %w", id, err))
 			continue
 		}
@@ -896,12 +901,6 @@ func assertAgyResponseEventTopology(t testing.TB, selector string, events []fact
 			t.Fatalf("AGY timeout run %q response pairs = %d, want three", runID, count)
 		}
 	}
-}
-
-func listAgySessionWork(t testing.TB, baseURL, sessionID string) factoryapi.ListWorkResponse {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
-	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 }
 
 func assertAgyListenerClosed(baseURL string) error {
