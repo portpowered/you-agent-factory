@@ -791,6 +791,10 @@ func (service *httpService) invokeRemoteGeneric(
 	if service.http == nil {
 		return fmt.Errorf("CLI HTTP protocol is required for remote models invoke")
 	}
+	inputFileReader, err := preflightGenericCLIInputsWithReader(cfg, service.inputFileReader)
+	if err != nil {
+		return err
+	}
 	model, err := queryModel(queryOptions{
 		Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
 		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
@@ -802,7 +806,7 @@ func (service *httpService) invokeRemoteGeneric(
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
 		return err
 	}
-	inputs, err := prepareGenericCLIInputsWithReader(cfg, operation, catalog, service.inputFileReader)
+	inputs, err := prepareGenericCLIInputsWithReader(cfg, operation, catalog, inputFileReader)
 	if err != nil {
 		return err
 	}

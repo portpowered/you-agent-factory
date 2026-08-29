@@ -22,7 +22,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestBuiltCLIExplicitServerAdverseInputMatrix keeps the adverse remote input
@@ -88,6 +87,10 @@ func runBuiltExplicitServerRecovery(t *testing.T, fixture *builtExplicitServerFi
 
 func runBuiltExplicitServerConcurrent(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, firstPath, secondPath string, firstImage, secondImage []byte) {
 	t.Helper()
+	// The channel is the deterministic server-side readiness signal. This
+	// bounded context is still required because the proof spans two real OS
+	// processes and must fail instead of leaking them if either process cannot
+	// reach the controlled server.
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	fixture.setMode(builtExplicitServerConcurrent)
@@ -127,6 +130,9 @@ func runConcurrentBuiltExplicitServerInvocations(t *testing.T, ctx context.Conte
 func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, imagePath string) {
 	t.Helper()
 	fixture.setMode(builtExplicitServerBlock)
+	// The request-start channel is the deterministic cancellation trigger. The
+	// bounded context is necessary only to bound a real child process that may
+	// otherwise outlive a failed process-boundary assertion.
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	resultChannel := make(chan builtExplicitServerCLIResult, 1)
 	go func() {
@@ -141,6 +147,9 @@ func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServ
 	var result builtExplicitServerCLIResult
 	select {
 	case result = <-resultChannel:
+		// The child observes context cancellation through the real HTTP request;
+		// this timeout bounds that OS/network handoff when the child or transport
+		// fails to converge.
 	case <-time.After(2 * time.Second):
 		t.Fatal("built cancellation invocation did not return after context cancellation")
 	}
@@ -150,6 +159,8 @@ func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServ
 	}
 	select {
 	case <-fixture.blockRequestDone:
+		// The handler's terminal channel is the deterministic cleanup signal;
+		// this timeout protects the test from a leaked keep-alive connection.
 	case <-time.After(2 * time.Second):
 		t.Fatal("built cancellation did not close the blocked request")
 	}
@@ -163,7 +174,7 @@ func runBuiltExplicitServerUnreachable(t *testing.T, fixture *builtExplicitServe
 	if result.err == nil || result.exitCode == 0 || len(result.stdout) != 0 || strings.Contains(string(result.stderr), "built-process-secret") {
 		t.Fatalf("built unreachable exit=%d err=%v stdout=%q stderr=%q, want safe non-success without token", result.exitCode, result.err, result.stdout, result.stderr)
 	}
-	support.RequireSafeCLIDiagnostic(t, string(result.stderr))
+	requireSafeCLIDiagnostic(t, string(result.stderr))
 }
 
 func invokeBuiltExplicitServer(t *testing.T, ctx context.Context, binary, workDir, homeDir, endpoint, prompt, imagePath string) builtExplicitServerCLIResult {
@@ -467,6 +478,18 @@ func assertBuiltExplicitServerFailure(t *testing.T, result builtExplicitServerCL
 	if wantMessage != "" && response.Message != wantMessage {
 		t.Fatalf("built failure message = %q, want %q", response.Message, wantMessage)
 	}
+}
+
+func requireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode safe CLI diagnostic: %v\\nstderr=%q", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("CLI_COMMAND_FAILED") || response.Message != "command failed" {
+		t.Fatalf("safe CLI diagnostic = %#v, want CLI_COMMAND_FAILED/command failed", response)
+	}
+	return response
 }
 
 func writeExplicitServerImage(t *testing.T, directory, name string, data []byte) string {

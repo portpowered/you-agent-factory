@@ -126,6 +126,10 @@ func TestInvoke_JSONFallbackValidatesModelAndOperationBeforeMetadata(t *testing.
 	}))
 	defer server.Close()
 
+	// Required-slot, duplicate-slot, and media-capability checks are owned by
+	// the server catalog. They may use its GET, but every rejected case must
+	// remain before the generic invocation POST; local syntax and file failures
+	// must not make even the catalog GET.
 	cases := []struct {
 		name      string
 		model     string
@@ -453,9 +457,10 @@ func (fixture *remoteRepeatedFixture) read(_ context.Context, path string, _ int
 
 func exerciseRemoteInputFailures(t *testing.T) {
 	t.Helper()
-	var postCalls int
+	var getCalls, postCalls int
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Method == http.MethodGet {
+			getCalls++
 			writeRemoteOMNICatalog(writer)
 			return
 		}
@@ -480,16 +485,18 @@ func exerciseRemoteInputFailures(t *testing.T) {
 		inputs []string
 		want   string
 		cause  string
+		gets   int
 	}{
 		{inputs: []string{"prompt"}, want: "expected slot=value"},
-		{inputs: []string{"prompt=hello"}, want: "required input slot is missing"},
-		{inputs: []string{"prompt=one", "prompt=two", "image=@ok.png"}, want: "at most one value"},
-		{inputs: []string{"prompt=hello", "image=inline"}, want: "requires a file value"},
+		{inputs: []string{"prompt=hello"}, want: "required input slot is missing", gets: 1},
+		{inputs: []string{"prompt=one", "prompt=two", "image=@ok.png"}, want: "at most one value", gets: 1},
+		{inputs: []string{"prompt=hello", "image=inline"}, want: "requires a file value", gets: 1},
 		{inputs: []string{"prompt=hello", "image=@missing.png"}, want: "failed to load --input input", cause: "file does not exist"},
 		{inputs: []string{"prompt=hello", "image=@empty.png"}, want: "failed to load --input input", cause: "file is empty"},
 		{inputs: []string{"prompt=hello", "image=@large.png"}, want: "failed to load --input input", cause: "exceeds"},
 	}
 	for _, testCase := range cases {
+		beforeGets := getCalls
 		var output bytes.Buffer
 		cfg := remoteInvokeConfig(context.Background(), server.URL, testCase.inputs, &output)
 		cfg.JSON = true
@@ -503,9 +510,12 @@ func exerciseRemoteInputFailures(t *testing.T) {
 				t.Fatalf("remote local failure = %#v, want cause %q", failure, testCase.cause)
 			}
 		}
+		if got := getCalls - beforeGets; got != testCase.gets {
+			t.Fatalf("catalog GETs for inputs %#v = %d, want %d", testCase.inputs, got, testCase.gets)
+		}
 	}
-	if postCalls != 0 {
-		t.Fatalf("generic POST calls after input failures = %d, want zero", postCalls)
+	if getCalls != 3 || postCalls != 0 {
+		t.Fatalf("input failure requests = GET:%d POST:%d, want catalog GET only for dynamic validation and zero invocation POSTs", getCalls, postCalls)
 	}
 }
 
@@ -518,7 +528,7 @@ func exerciseRemoteUnreachable(t *testing.T) {
 	cfg := remoteInvokeConfig(context.Background(), serverURL+"?token=do-not-log", []string{"prompt=hello", "image=@fixture.png"}, &output)
 	cfg.Verbose = true
 	cfg.Diagnostics = &diagnostics
-	err := remoteHTTPService(t, nil).Invoke(cfg)
+	err := remoteHTTPService(t, remoteStaticInputReader([]byte("PNG"))).Invoke(cfg)
 	if err == nil || !strings.Contains(err.Error(), "models endpoint not reachable") || output.Len() != 0 {
 		t.Fatalf("unreachable error/output = %v/%q, want safe endpoint failure and empty output", err, output.String())
 	}
