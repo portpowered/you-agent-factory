@@ -47,26 +47,42 @@ func TestCrossBatchDependsOnCompletedTargetReleasesAtAdmission(t *testing.T) {
 	}
 }
 
-// TestCrossBatchDependsOnFailedTargetCascadesAtAdmission proves that a later
+// testCrossBatchDependsOnFailedTargetCascadesAtAdmission proves that a later
 // batch submitted against a failed target is admitted, cascades to failed, and
-// never receives a worker dispatch.
-func TestCrossBatchDependsOnFailedTargetCascadesAtAdmission(t *testing.T) {
-	t.Parallel()
+// never receives a worker dispatch on the shared host.
+func testCrossBatchDependsOnFailedTargetCascadesAtAdmission(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+) {
+	t.Helper()
 
-	run := newTerminalCrossBatchFunctionalRun(t, crossBatchPrerequisiteName)
+	factoryDir := scaffoldCrossBatchFactory(t)
+	session, closeSession := openSharedRelationshipSession(t, server.URL(), factoryDir)
 
-	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchPrerequisiteBatchJSON())
-	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
-	assertCrossBatchTerminalState(t, support.ListDefaultSessionWork(t, run.baseURL), crossBatchPrerequisiteID, "failed")
+	executeCrossBatchSubmitForSessionOnServer(t, server, session.Id, crossBatchFailedPrerequisiteBatchJSON())
+	support.WaitForSessionTerminalStatus(t, server.URL(), session.Id, 15*time.Second)
+	assertCrossBatchTerminalState(
+		t,
+		listCrossBatchSessionWork(t, server.URL(), session.Id),
+		crossBatchFailedPrerequisiteID,
+		"failed",
+	)
 
-	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchDependentBatchJSON())
-	support.WaitForSessionTerminalStatus(t, run.baseURL, run.session.Id, 15*time.Second)
+	executeCrossBatchSubmitForSessionOnServer(t, server, session.Id, crossBatchFailedDependentBatchJSON())
+	support.WaitForSessionTerminalStatus(t, server.URL(), session.Id, 15*time.Second)
 
-	listed := support.ListDefaultSessionWork(t, run.baseURL)
-	assertCrossBatchTerminalState(t, listed, crossBatchPrerequisiteID, "failed")
-	assertCrossBatchTerminalState(t, listed, crossBatchDependentID, "failed")
-	assertCrossBatchCanonicalDependency(t, listed, crossBatchDependentID, crossBatchPrerequisiteID)
-	assertCrossBatchNoDispatchForWork(t, support.GetFactoryEventsAt(t, run.baseURL), crossBatchDependentID)
+	listed := listCrossBatchSessionWork(t, server.URL(), session.Id)
+	assertCrossBatchTerminalState(t, listed, crossBatchFailedPrerequisiteID, "failed")
+	assertCrossBatchTerminalState(t, listed, crossBatchFailedDependentID, "failed")
+	assertCrossBatchCanonicalDependency(t, listed, crossBatchFailedDependentID, crossBatchFailedPrerequisiteID)
+	assertCrossBatchNoDispatchForWork(
+		t,
+		support.GetFactoryEventsForSessionAt(t, server.URL(), session.Id),
+		crossBatchFailedDependentID,
+	)
+
+	closeSession()
+	runSharedHostReuseProbe(t, server.URL())
 }
 
 // TestCrossBatchDependsOnMixedTerminalFanInCascades proves that a later batch
@@ -108,6 +124,45 @@ func crossBatchDependentBatchByIDJSON() string {
 			"targetWorkId": %q
 		}]
 	}`, crossBatchDependentName, crossBatchDependentID, crossBatchDependentName, crossBatchPrerequisiteID)
+}
+
+const (
+	crossBatchFailedPrerequisiteName = "failed-admission-prerequisite"
+	crossBatchFailedPrerequisiteID   = "work-failed-admission-prerequisite"
+	crossBatchFailedDependentName    = "failed-admission-dependent"
+	crossBatchFailedDependentID      = "work-failed-admission-dependent"
+)
+
+func crossBatchFailedPrerequisiteBatchJSON() string {
+	return fmt.Sprintf(`{
+		"requestId": "cross-batch-failed-prerequisite",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{
+			"name": %q,
+			"workId": %q,
+			"workTypeName": "task",
+			"payload": {"title": "Cross-batch failed prerequisite"}
+		}]
+	}`, crossBatchFailedPrerequisiteName, crossBatchFailedPrerequisiteID)
+}
+
+func crossBatchFailedDependentBatchJSON() string {
+	return fmt.Sprintf(`{
+		"requestId": "cross-batch-failed-dependent",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{
+			"name": %q,
+			"workId": %q,
+			"workTypeName": "task",
+			"payload": {"title": "Cross-batch failed dependent"}
+		}],
+		"relations": [{
+			"type": "DEPENDS_ON",
+			"sourceWorkName": %q,
+			"targetWorkName": %q
+		}]
+	}`, crossBatchFailedDependentName, crossBatchFailedDependentID,
+		crossBatchFailedDependentName, crossBatchFailedPrerequisiteName)
 }
 
 func crossBatchMixedTargetsBatchJSON() string {

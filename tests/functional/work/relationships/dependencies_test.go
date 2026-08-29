@@ -1,7 +1,6 @@
 package relationships
 
 import (
-	"errors"
 	"net/url"
 	"os"
 	"strings"
@@ -90,17 +89,22 @@ func testDependentWorkWaitsForPrerequisiteTargetState(t *testing.T, baseURL stri
 	}
 }
 
-// TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure proves through public
-// Work listings and Factory Event dispatch observations that a DEPENDS_ON
-// dependent never receives a worker dispatch when its prerequisite reaches a
-// failed terminal outcome instead of the declared requiredState.
-func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
-	t.Parallel()
+const (
+	sharedDependencyFailurePrerequisiteID = "shared-failure-prerequisite"
+	sharedDependencyFailureDependentID    = "shared-failure-dependent"
+)
+
+// testDependentWorkDoesNotDispatchAfterPrerequisiteFailure proves through
+// public Work listings and Factory Event dispatch observations that a
+// DEPENDS_ON dependent never receives a worker dispatch when its prerequisite
+// reaches a failed terminal outcome instead of the declared requiredState.
+func testDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T, baseURL string) {
+	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
-	prerequisiteWorkID := "task-prerequisite-a"
-	dependentWorkID := "task-dependent-b"
+	prerequisiteWorkID := sharedDependencyFailurePrerequisiteID
+	dependentWorkID := sharedDependencyFailureDependentID
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
@@ -120,21 +124,10 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewNativeMockProviderWithErrors(
-		[]providers.ExecuteResult{
-			{Content: "COMPLETE"},
-			{Content: "COMPLETE"},
-		},
-		[]error{
-			nil,
-			errors.New("prerequisite finish failed"),
-		},
-	)
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+	session, listed, events := runSharedRelationshipFactoryToCompletionAndClose(
 		t,
+		baseURL,
 		dir,
-		serviceedges.Edges{ProviderOverride: provider},
 		15*time.Second,
 	)
 
@@ -151,17 +144,49 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		t.Fatalf("dependent work %q reached processing after prerequisite failure: %#v", dependentWorkID, listed)
 	}
 
-	if got := len(provider.CallsForWorker("starter")); got != 1 {
-		t.Fatalf("starter provider calls = %d, want 1 (prerequisite only)", got)
-	}
-	if got := len(provider.CallsForWorker("finisher")); got != 1 {
-		t.Fatalf("finisher provider calls = %d, want 1 (prerequisite only)", got)
-	}
-
-	assertNoDependentStartDispatch(t, events, dependentWorkID)
+	assertOnlyPrerequisiteDispatches(t, events, prerequisiteWorkID, dependentWorkID)
 
 	if session.Runtime.Progress.Categories.Terminal != 0 || session.Runtime.Progress.Categories.Failed != 2 {
 		t.Fatalf("session progress categories = %+v, want zero terminal and two failed", session.Runtime.Progress.Categories)
+	}
+	runSharedHostReuseProbe(t, baseURL)
+}
+
+func assertOnlyPrerequisiteDispatches(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	prerequisiteWorkID, dependentWorkID string,
+) {
+	t.Helper()
+	startDispatches := 0
+	finishDispatches := 0
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		if err != nil {
+			t.Fatalf("decode prerequisite dispatch event: %v", err)
+		}
+		if dispatchRequestIncludesWork(payload, dependentWorkID) {
+			t.Fatalf("dependent Work %q received a dispatch at sequence %d", dependentWorkID, event.Context.Sequence)
+		}
+		if !dispatchRequestIncludesWork(payload, prerequisiteWorkID) {
+			continue
+		}
+		switch payload.TransitionId {
+		case dependencyStartWorkstation:
+			startDispatches++
+		case dependencyFinishWorkstation:
+			finishDispatches++
+		}
+	}
+	if startDispatches != 1 || finishDispatches != 1 {
+		t.Fatalf(
+			"prerequisite dispatches = start:%d finish:%d, want one start and one finish",
+			startDispatches,
+			finishDispatches,
+		)
 	}
 }
 
