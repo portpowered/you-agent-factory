@@ -2,8 +2,8 @@
 
 ## Identity and count units
 
-- Format version: 2. story-002-classification-complete-story-003-witness-pending.
-- Source commit: bdb65eac0115e3d81a3dd55aba5365600e190e20.
+- Format version: 2. story-003-witness-complete-story-004-clean-room-pending.
+- Source commit: ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee.
 - Build: go version go1.25.0 windows/amd64, windows/amd64, CPU 24, GOAMD64 v1.
 - Input format-1 JSON SHA-256: aa56f631810e812f34ce167247c11e7741890862eccf2a7ef1475f530c9c1f80.
 - Input format-1 Markdown SHA-256: 1c4a73a1feb6aae330998121bae565bf2b38ced8933e95bd364177659a4025cf.
@@ -126,6 +126,57 @@ Every final row was source-hash checked before classification. Existing C01 row 
 - docs/internal/development/functional-test-optimization/c07-cleanup-workers-providers-models.md
 
 For `isolated-with-reason`, the row records the source reference and hash, exact property, behavioral witness, required fidelity, why sharing invalidates the property, startup/shutdown owner, and one distinct process observation ID. For `shareable-with-mock`, the row records the controlled edge and makes no real-process claim. Local runs remain bounded by the recovered package evidence; unsupported OS behavior is not guessed.
+
+## Public witness reconciliation (Story 003)
+
+The witness gate compares the retained C01 public-witness property and surfaces with every mapped final row, then checks every added final row against its exact current source body. A source line move is recorded as a location change, not as a changed assertion. The procedure also checks that each final `publicWitness.executableReference` and `evidence.sourceReference` equals `sourcePath:sourceLine`, each source hash matches the current file, each top-level reference lands on a declaration, and each named row lands on an exact parent `t.Run` identity.
+
+| Reconciliation unit | Count/result |
+| --- | ---: |
+| Final rows compared | 812 |
+| Mapped C01 rows compared | 200 |
+| Added-after-C01 rows compared | 612 |
+| Top-level declarations with exact source references | 595 |
+| Named scenarios with exact parent references | 217 |
+| Source-hash pairs checked | 812 |
+| Mapped rows with exact property and surface matches | 200 |
+| Removed or weakened assertions | 0 |
+| Consolidated mappings | 0 |
+| Expanded mappings | 0 |
+| Unresolved rows | 0 |
+
+The only one-to-one path move is `TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected`, from `tests/functional/providers/acp/javascript_factory_run_test.go:50` to `tests/functional/workers/mock/javascript_acp_test.go:21`. Its public witness remains: “The compatibility/mock route remains correctly selected when the ACP provider is present in the catalog.” The Work, Factory Session, Factory Event, provider-selection, and controlled-worker-edge surfaces match exactly. The focused final selector passed with exit code 0.
+
+The historical `tests/functional/work/relationships` package has 26 retired C01 rows and is not represented as a false one-to-one move. The current `tests/functional/work/routing::TestSharedProcessWorkRouting` identity is an added shared-parent witness with 11 dynamic runtime scenario groups. Its focused selector passed with exit code 0, and its source body retains Work, payload/lineage, dispatch, failure/rejection, resource-release, and Factory Event assertions.
+
+`TestPackagedACPUnexpectedCommand` remains an executable helper target owned by its sibling ACP protocol test. It has no standalone product assertion, so this is not a removed or weakened assertion.
+
+### Focused selector evidence
+
+These selectors were run against source commit `ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee` on `go1.25.0 windows/amd64`, with one process-sensitive or identity-ambiguous witness per relevant surface. All returned exit code 0.
+
+| Package | Selector | Fidelity | Public property |
+| --- | --- | --- | --- |
+| `./tests/functional/work/routing` | `^TestSharedProcessWorkRouting$` | local-real `root.BuildProcess`, controlled worker edges | Work routing and Factory Event/dispatch outcomes remain observable across logical move, classifier, failure, rejection, and resource-release scenarios. |
+| `./tests/functional/workers/mock` | `^TestJavaScriptMockWorkersRemainFakeWhenACPProviderIsSelected$` | local-real `root.BuildProcess`, controlled ACP command edge | The moved compatibility/mock route remains fake and does not invoke the live ACP provider. |
+| `./tests/functional/workers/inference` | `^TestProviderNonZeroExitMapsToPublicFailure$` | local-real worker/provider process edge | A provider non-zero exit retains its public failure classification. |
+| `./tests/functional/factory/packaged/cross` | `^TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable$` | local-real listener/server lifecycle | A packaged continuous server remains reachable without an invocation. |
+| `./tests/functional/workers/mock` | `^TestBuiltCLIBatchExitCodesReportSingleWorkOutcome$` | local-real built CLI process and exit-code boundary | The built CLI reports one public work outcome with the expected exit code. |
+| `./tests/functional/orchestration/javascript/workers` | `^TestJavaScriptSharedWorkerBehavior$` | controlled JavaScript worker edge through root composition | Shared JavaScript worker behavior retains its public workflow result. |
+| `./tests/functional/sessions/chat_sessions/root_composition` | `^TestACPWorkerChildStreamSurvivesRetainedReplay$` | local-real ACP/session stream with retained replay | An ACP child stream remains available through retained replay. |
+| `./tests/functional/runtime_api/factory_transformation` | `^TestCurrentFactoryPUT_RequiresAdvancedSaveVersion$` | public runtime API through root composition | The current Factory PUT retains its advanced-save-version contract. |
+
+### Fixture-only difference register
+
+| ID | Scope | Fixture-only difference | Public behavior retained |
+| --- | --- | --- | --- |
+| FIX-FACTORY-001 | Factory packaged/current/definitions and acceptance fixtures | Shared root/TestMain composition and per-case disposable paths/queues were retained or consolidated. | Work, Factory Event, dispatch, replay, CLI/API, persistence, and provider-call assertions remain active; no public assertion was weakened. |
+| FIX-SESSIONS-WORK-001 | Work routing and Chat Session root composition | Work uses one root/listener with unique scenario roots, Factory Sessions, routes, and command queues; Chat activation cohorts remain separately isolated where no narrower close boundary exists. | Work, Factory Event, session, ACP, replay, ordering, attribution, busy, error, and stream outcomes remain observed. |
+| FIX-TRANSPORT-001 | CLI/API/ACP/MCP and run-scoped server fixtures | The malformed recording-artifact case uses a disposable recording home; supplemental server/process fixtures remain explicit. | Public CLI, HTTP/API, ACP, and MCP assertions remain active, including the repaired focused selector. |
+| FIX-RUNTIME-ORCH-001 | Runtime API, JavaScript, and Petri orchestration fixtures | Shared contract fixtures remain grouped while panic and process-sensitive cases retain isolated setup. | Event, replay, dispatch, ordering, and failure assertions remain active. |
+| FIX-WORKERS-001 | Workers, providers, provider sessions, and models | Controlled command/provider/model edges and counters are shared where they are fixtures; real process, stream, readiness, signal, and cleanup witnesses retain local isolation. | Work, Factory Event, Worker Session, provider, CLI, replay, failure, cancellation, and cleanup assertions remain active; the known mixed mock failure is retained rather than masked. |
+
+The complete machine-readable reconciliation, including the two mapping records above, the helper-only exception, remaining unproven edges, and exact selector commands is in the paired JSON artifact under `witnessReconciliation` and `fixtureDifferenceRegister`.
 
 ## C01-to-final row mappings
 
@@ -1523,5 +1574,6 @@ The following table is the complete 812-row final denominator. `PSO-*` entries a
 - GATE-DISC-001: the real Go test executable listed 595 top-level identities across 77 resolved packages; five zero-test directories remain explicit facts.
 - GATE-MAP-002: all 354 C01 mappings and all 812 final identities remain in the paired inventory.
 - GATE-CLASS-003: source/hash pairs checked = 812; class counts sum to 812; unclassified rows = 0; process observations = 206.
-- The recovered C06/C07 package ledgers provide the process/property evidence cited by each row. Story 003 still owns direct final-body/public-witness parity, and unsupported Unix/remote behavior remains unproven.
+- GATE-WITNESS-004: all 812 final source references and hashes reconcile; all 200 mapped rows retain exact public-witness properties/surfaces; all 612 added rows have source-body witnesses; removed or weakened assertions = 0; fixture-only differences are registered.
+- The recovered C06/C07 package ledgers provide the process/property evidence cited by each row. Full-suite runtime parity, unsupported Unix/signal behavior, remote-provider behavior, clean-room VAL-001, and current-head PR CI remain unproven.
 - No package migration, shared-support change, production change, generated contract change, UI change, restart-surface change, remote-provider call, or PR #2331 content was added.
