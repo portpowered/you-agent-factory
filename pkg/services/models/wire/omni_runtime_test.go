@@ -2,18 +2,59 @@ package wire
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
 
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	"google.golang.org/protobuf/proto"
 )
 
 type recordingInvocationProtocolClient struct {
 	request  models.InvocationProtocolRequest
 	response models.InvocationProtocolResponse
 	err      error
+}
+
+type story001InvocationDialer struct {
+	endpoint string
+	calls    int
+	response []byte
+}
+
+func (dialer *story001InvocationDialer) Dial(
+	_ context.Context,
+	endpoint string,
+) (platformgrpc.Connection, error) {
+	dialer.endpoint = endpoint
+	dialer.calls++
+	return story001InvocationConnection{response: append([]byte(nil), dialer.response...)}, nil
+}
+
+type story001InvocationConnection struct {
+	response []byte
+}
+
+func (connection story001InvocationConnection) Invoke(context.Context, string, []byte) ([]byte, error) {
+	return append([]byte(nil), connection.response...), nil
+}
+
+func (story001InvocationConnection) Close() error { return nil }
+
+type story001InvocationObservation struct {
+	Operation       string
+	SelectedRuntime string
+	BackendBound    bool
+	BackendCalls    int
+	EndpointPresent bool
+	InputSHA256     string
+	OutputSHA256    string
+	OutputLineage   string
 }
 
 func (client *recordingInvocationProtocolClient) Predict(
@@ -56,6 +97,132 @@ func TestNewInvocationRuntimeFailsClosedWhenOmniProtocolIsUnbound(t *testing.T) 
 	if len(result.Content) != 0 {
 		t.Fatalf("Invoke result = %#v, want no fallback content", result)
 	}
+}
+
+func TestStory001ProductionDefaultRuntimeCharacterization(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{})
+	if err != nil {
+		t.Fatalf("inferenceRuntime: %v", err)
+	}
+	composed, ok := runtime.(operationInvocationRuntime)
+	if !ok {
+		t.Fatalf("inferenceRuntime type = %T, want operationInvocationRuntime", runtime)
+	}
+	if composed.asr != nil || composed.embedding != nil {
+		t.Fatalf("production default operation runtimes = asr:%T embed:%T, want unbound", composed.asr, composed.embedding)
+	}
+	if _, ok := composed.generic.(inference.InputEchoInvocationRuntime); !ok {
+		t.Fatalf("production default generic runtime = %T, want InputEchoInvocationRuntime", composed.generic)
+	}
+
+	catalog := models.GenericOperationCatalog{}
+	cases := []struct {
+		operation string
+		model     string
+		name      string
+		modality  models.Modality
+		mediaType string
+		content   string
+	}{
+		{operation: models.OperationASR, model: "asr", name: "audio", modality: models.ModalityAudio, mediaType: "audio/wav", content: string([]byte{0x00, 0xff, 0x01, 0x52, 0x49, 0x46, 0x46})},
+		{operation: models.OperationEMBED, model: "embed", name: "text", modality: models.ModalityText, mediaType: "text/plain", content: "Find similar work"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.operation, func(t *testing.T) {
+			operation, ok := catalog.GenericOperationContract(testCase.operation)
+			if !ok {
+				t.Fatalf("GenericOperationContract(%q) = false", testCase.operation)
+			}
+			request := models.InvokeModelRequest{
+				Scope: mustRoutingScope(t), Holder: "story-001", Model: models.ModelReference{NameOrURI: testCase.model},
+				Operation: testCase.operation,
+				Inputs:    []models.InferenceInput{{Name: testCase.name, Modality: testCase.modality, ContentType: testCase.mediaType, MediaType: testCase.mediaType, Content: testCase.content}},
+			}
+			result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: request, Operation: operation})
+			if err != nil {
+				t.Fatalf("Invoke error = %v", err)
+			}
+			if len(result.Content) != len(operation.Outputs) {
+				t.Fatalf("Invoke outputs = %#v, want %d declared outputs", result.Content, len(operation.Outputs))
+			}
+			outputValues := make([]string, len(result.Content))
+			allInputsEchoed := len(result.Content) > 0
+			for index, output := range result.Content {
+				outputValues[index] = output.Content
+				if output.Content != testCase.content {
+					allInputsEchoed = false
+				}
+			}
+			lineage := "backend-generated"
+			if allInputsEchoed {
+				lineage = "input-echo"
+			}
+			observation := story001InvocationObservation{
+				Operation: testCase.operation, SelectedRuntime: "InputEchoInvocationRuntime", BackendBound: false,
+				BackendCalls: 0, EndpointPresent: false, InputSHA256: story001SHA256(testCase.content),
+				OutputSHA256: story001SHA256(strings.Join(outputValues, "\n")), OutputLineage: lineage,
+			}
+			t.Logf("STORY-001-EVIDENCE ledger=%+v", observation)
+			if !allInputsEchoed {
+				t.Fatalf("default %s output lineage = %q, want input-echo characterization", testCase.operation, lineage)
+			}
+		})
+	}
+}
+
+func TestStory001PinnedOmniCharacterizationRecordsHostEndpointAndBackendCall(t *testing.T) {
+	t.Parallel()
+
+	response, err := proto.Marshal(&localai.Reply{Message: []byte("generated response")})
+	if err != nil {
+		t.Fatalf("marshal fixture LocalAI response: %v", err)
+	}
+	dialer := &story001InvocationDialer{response: response}
+	runtime := newInvocationRuntime(nil, dialer)
+	operation, ok := (models.GenericOperationCatalog{}).GenericOperationContract(models.OperationOMNI)
+	if !ok {
+		t.Fatal("GenericOperationContract(OMNI) = false")
+	}
+	input := "describe the image"
+	endpoint := "grpc://127.0.0.1:45901"
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Scope: mustRoutingScope(t), Holder: "story-001", Model: models.ModelReference{NameOrURI: "llm"},
+			Operation: models.OperationOMNI,
+			Inputs:    []models.InferenceInput{{Name: "prompt", Modality: models.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: input}},
+		},
+		Operation: operation,
+		HostSlot:  inference.HostHandleSlot{Endpoint: endpoint},
+	})
+	if err != nil {
+		t.Fatalf("OMNI Invoke error = %v", err)
+	}
+	if dialer.endpoint != endpoint {
+		t.Fatal("OMNI transport did not receive the selected host endpoint")
+	}
+	if dialer.calls != 1 {
+		t.Fatalf("OMNI backend calls = %d, want 1", dialer.calls)
+	}
+	if len(result.Content) != 1 || result.Content[0].Content != "generated response" {
+		t.Fatalf("OMNI output = %#v, want generated protocol response", result.Content)
+	}
+	observation := story001InvocationObservation{
+		Operation: models.OperationOMNI, SelectedRuntime: "omniInvocationRuntime", BackendBound: true,
+		BackendCalls: dialer.calls, EndpointPresent: strings.TrimSpace(dialer.endpoint) != "",
+		InputSHA256: story001SHA256(input), OutputSHA256: story001SHA256(result.Content[0].Content),
+		OutputLineage: "backend-generated",
+	}
+	t.Logf("STORY-001-EVIDENCE ledger=%+v", observation)
+	if !observation.EndpointPresent {
+		t.Fatal("OMNI characterization endpoint-present = false, want true")
+	}
+}
+
+func story001SHA256(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
 }
 
 func TestNewInvocationRuntimeForwardsOmniInputsAndDeclaredUsage(t *testing.T) {

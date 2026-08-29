@@ -648,6 +648,7 @@ func TestHandler_InvokeGenericModelMapsTypedRootFailure(t *testing.T) {
 func TestGeneratedClientGenericContractsPreserveOrderedValuesAndModelConfig(t *testing.T) {
 	t.Parallel()
 	assertGeneratedClientRequestRoundTrip(t)
+	assertGeneratedClientBinaryRequestRoundTrip(t)
 	assertGeneratedClientModelConfigRoundTrip(t)
 }
 
@@ -684,6 +685,54 @@ func assertGeneratedClientRequestRoundTrip(t *testing.T) {
 	}
 	if decoded.OutputMode == nil || *decoded.OutputMode != generatedclient.ModelInvocationOutputModeJSON || decoded.Offline == nil || !*decoded.Offline {
 		t.Fatalf("generated client controls = %#v", decoded)
+	}
+}
+
+func assertGeneratedClientBinaryRequestRoundTrip(t *testing.T) {
+	t.Helper()
+	firstImage := []byte{0x00, 0xff, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a}
+	secondImage := []byte{0x89, 0x50, 0x4e, 0x47, 0x00, 0x80, 0xfe}
+	operation := generatedclient.ModelOperationName(models.OperationOMNI)
+	inputs := []generatedclient.ModelInvocationInput{
+		{Name: "prompt", Modality: generatedclient.ModelInvocationContentTypeText, Content: stringPointer("compare images")},
+		{Name: "image", Modality: generatedclient.ModelInvocationContentTypeImage, MediaType: stringPointer("image/png"), ContentBase64: &firstImage},
+		{Name: "image", Modality: generatedclient.ModelInvocationContentTypeImage, MediaType: stringPointer("image/png"), ContentBase64: &secondImage},
+	}
+	request := generatedclient.GenericModelInvocationRequest{
+		Scope: "scope-client-binary-001", Holder: "generated-client", Model: generatedclient.ModelReference{NameOrUri: "llm"},
+		Operation: &operation, Inputs: &inputs,
+	}
+
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal generated client binary request: %v", err)
+	}
+	var serverRequest factoryapi.GenericModelInvocationRequest
+	if err := json.Unmarshal(encoded, &serverRequest); err != nil {
+		t.Fatalf("decode generated client request with server contract: %v", err)
+	}
+	if serverRequest.Inputs == nil || len(*serverRequest.Inputs) != len(inputs) {
+		t.Fatalf("server contract inputs = %#v, want ordered prompt and two images", serverRequest.Inputs)
+	}
+	serverInputs := *serverRequest.Inputs
+	if serverInputs[0].Name != "prompt" || serverInputs[1].Name != "image" || serverInputs[2].Name != "image" {
+		t.Fatalf("server contract input order = %#v, want prompt,image,image", serverInputs)
+	}
+	if serverInputs[1].MediaType == nil || *serverInputs[1].MediaType != "image/png" || serverInputs[2].MediaType == nil || *serverInputs[2].MediaType != "image/png" {
+		t.Fatalf("server contract media types = %#v, want image/png", serverInputs)
+	}
+	if serverInputs[1].ContentBase64 == nil || !bytes.Equal(*serverInputs[1].ContentBase64, firstImage) ||
+		serverInputs[2].ContentBase64 == nil || !bytes.Equal(*serverInputs[2].ContentBase64, secondImage) {
+		t.Fatalf("server contract binary values = %#v, want exact non-UTF-8 bytes", serverInputs)
+	}
+
+	mapped, err := GenericInvocationRequestFromGenerated(serverRequest)
+	if err != nil {
+		t.Fatalf("map generated client/server binary request: %v", err)
+	}
+	if len(mapped.Inputs) != 3 || mapped.Inputs[0].Content != "compare images" ||
+		!bytes.Equal([]byte(mapped.Inputs[1].Content), firstImage) || !bytes.Equal([]byte(mapped.Inputs[2].Content), secondImage) {
+		t.Fatalf("mapped binary values = %#v, want exact ordered values", mapped.Inputs)
 	}
 }
 
