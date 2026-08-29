@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,6 +36,7 @@ func TestLoopCleanupResourceMatrix(t *testing.T) {
 		validationRan   bool
 		blockedRan      bool
 		earlyFailureRan bool
+		streamOpenRan   bool
 	)
 
 	t.Run("validation-failure", func(t *testing.T) {
@@ -52,17 +54,55 @@ func TestLoopCleanupResourceMatrix(t *testing.T) {
 		runLoopEarlyAssertionCleanup(t, fixture)
 	})
 
+	t.Run("stream-open-failure", func(t *testing.T) {
+		streamOpenRan = true
+		runLoopStreamOpenFailureCleanup(t, fixture)
+	})
+
 	t.Run("partial-acquisition", func(t *testing.T) {
 		runLoopPartialAcquisitionCleanup(t, fixture)
 	})
 
 	sessions := 0
-	for _, ran := range []bool{validationRan, blockedRan, earlyFailureRan} {
+	for _, ran := range []bool{validationRan, blockedRan, earlyFailureRan, streamOpenRan} {
 		if ran {
 			sessions++
 		}
 	}
 	fixture.lifecycle.setExpectedSessions(sessions)
+}
+
+func runLoopStreamOpenFailureCleanup(t *testing.T, fixture *loopSharedFixture) {
+	t.Helper()
+	runner := support.NewRecordingCommandRunner("stream-open-failure")
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		// Deliberately withhold response headers. The stream opener must report
+		// its header-only budget instead of leaving the scenario before cleanup
+		// actions are registered and exercised.
+		<-request.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	stream, err := tryOpenLoopHTTPStream(t.Context(), server.URL)
+	if stream != nil {
+		_ = stream.Close()
+		t.Fatalf("stalled stream acquisition returned a stream")
+	}
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("stalled stream acquisition error = %v, want response-header deadline", err)
+	}
+
+	if err := scenario.cleanup.run(); err != nil {
+		t.Fatalf("stream-open failure cleanup: %v", err)
+	}
+	assertLoopScenarioResources(t, scenario, true, map[string]int{
+		loopCleanupActionRunner:  1,
+		loopCleanupActionSession: 1,
+		loopCleanupActionRoutes:  1,
+		loopCleanupActionRoot:    1,
+	})
 }
 
 func runLoopValidationCleanup(t *testing.T, fixture *loopSharedFixture) {
@@ -256,6 +296,7 @@ func waitForLoopRunnerDone(t *testing.T, runner *blockingLoopRunner) {
 
 type loopHTTPStream struct {
 	cancel        context.CancelFunc
+	client        *http.Client
 	body          io.ReadCloser
 	done          chan struct{}
 	closeOnce     sync.Once
@@ -266,29 +307,70 @@ type loopHTTPStream struct {
 
 func openLoopHTTPStream(t testing.TB, endpoint string) *loopHTTPStream {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := tryOpenLoopHTTPStream(t.Context(), endpoint)
+	if err != nil {
+		t.Fatalf("open cleanup stream: %v", err)
+	}
+	return stream
+}
+
+func tryOpenLoopHTTPStream(parent context.Context, endpoint string) (*loopHTTPStream, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	client, err := newLoopStreamHTTPClient()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		cancel()
-		t.Fatalf("build cleanup stream request: %v", err)
+		client.CloseIdleConnections()
+		return nil, fmt.Errorf("build cleanup stream request: %w", err)
 	}
-	response, err := http.DefaultClient.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		cancel()
-		t.Fatalf("open cleanup stream: %v", err)
+		client.CloseIdleConnections()
+		return nil, fmt.Errorf("open cleanup stream: %w", err)
 	}
 	if response.StatusCode != http.StatusOK || !strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
-		body, _ := io.ReadAll(response.Body)
-		response.Body.Close()
 		cancel()
-		t.Fatalf("cleanup stream status/content type = %d/%q, want 200/event-stream: %s", response.StatusCode, response.Header.Get("Content-Type"), strings.TrimSpace(string(body)))
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, loopStreamErrorBodyLimit))
+		closeErr := response.Body.Close()
+		client.CloseIdleConnections()
+		if errors.Is(readErr, context.Canceled) {
+			readErr = nil
+		}
+		if err := errors.Join(readErr, closeErr); err != nil {
+			return nil, fmt.Errorf(
+				"cleanup stream status/content type = %d/%q, want 200/event-stream: %s: %w",
+				response.StatusCode, response.Header.Get("Content-Type"), strings.TrimSpace(string(body)), err,
+			)
+		}
+		return nil, fmt.Errorf(
+			"cleanup stream status/content type = %d/%q, want 200/event-stream: %s",
+			response.StatusCode, response.Header.Get("Content-Type"), strings.TrimSpace(string(body)),
+		)
 	}
-	stream := &loopHTTPStream{cancel: cancel, body: response.Body, done: make(chan struct{})}
+	stream := &loopHTTPStream{cancel: cancel, client: client, body: response.Body, done: make(chan struct{})}
 	go func() {
 		_, _ = io.Copy(io.Discard, response.Body)
 		close(stream.done)
 	}()
-	return stream
+	return stream, nil
+}
+
+func newLoopStreamHTTPClient() (*http.Client, error) {
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("default HTTP transport has type %T, want *http.Transport", http.DefaultTransport)
+	}
+	streamTransport := transport.Clone()
+	streamTransport.ResponseHeaderTimeout = loopStreamOpenBudget
+	return &http.Client{Transport: streamTransport}, nil
 }
 
 func (stream *loopHTTPStream) Close() error {
@@ -302,6 +384,9 @@ func (stream *loopHTTPStream) Close() error {
 		}
 		if stream.body != nil {
 			stream.closeError = stream.body.Close()
+		}
+		if stream.client != nil {
+			stream.client.CloseIdleConnections()
 		}
 		closeTimer := time.NewTimer(loopStreamCloseBudget)
 		defer closeTimer.Stop()

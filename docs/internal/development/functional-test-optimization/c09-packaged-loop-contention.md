@@ -248,17 +248,28 @@ remaining provider registrations, a completed `Process.Execute` command, and
 the rejected post-close `/status` probe.
 
 `TestLoopCleanupResourceMatrix` now exercises the real package composition in
-four sequential subtests: invalid-duration validation after session
+five sequential subtests: invalid-duration validation after session
 acquisition, a timed-out invocation with a blocked provider and scheduler
 timer, an injected early assertion with live Factory Event and Response Event
-streams, and partial acquisition before session opening. The matrix counts
-each cleanup action, observes provider-route unregister calls, asserts public
-Factory Session absence, checks scheduler timer stop counts against
-registrations, retains both injected cleanup errors, waits for the blocked
-runner and stream readers to finish, and leaves fixture listener/process/root
-checks to the shared fixture cleanup. The runner-release unit test registers
-release and cancellation before launching `Run`, then asserts the goroutine
-exits on both its normal and cleanup paths.
+streams, a stalled stream-header acquisition, and partial acquisition before
+session opening. The matrix counts each cleanup action, observes provider-route
+unregister calls, asserts public Factory Session absence, checks scheduler timer
+stop counts against registrations, retains both injected cleanup errors, waits
+for the blocked runner and stream readers to finish, and leaves fixture
+listener/process/root checks to the shared fixture cleanup. The runner-release
+unit test registers release and cancellation before launching `Run`, then
+asserts the goroutine exits on both its normal and cleanup paths.
+
+The stream opener now derives its long-lived SSE cancellation context from the
+calling test context and uses a cloned default transport with
+`ResponseHeaderTimeout=loopStreamOpenBudget` only for response-header
+acquisition. It does not set `http.Client.Timeout`, so a successfully opened
+body remains available until scenario cleanup. Non-success diagnostics cancel
+the request before reading at most `loopStreamErrorBodyLimit` bytes and close
+the response/client transport. The `stream-open-failure` matrix row uses a
+local handler that withholds headers, asserts the opener returns a
+`context.DeadlineExceeded`, and then verifies session, runner, routes, and
+scenario-root cleanup still run.
 
 ### Story-owned corrected-run evidence
 
@@ -270,6 +281,8 @@ exits on both its normal and cleanup paths.
 | `GOMAXPROCS=2 go test -count=1 -run '^TestPackagedLoop$' -timeout=10m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 2.671s`. The complete run's fixture assertions require one process/API host, eight selected scenario sessions, public session absence, removed roots, and zero provider-route registrations; no failure output was present. | Complete current package behavior and lifecycle accounting after the correction, directionally below the characterized 2.988 s package result. | Final-head promotion, PR CI, and clean-room validation remain story `...-003`. |
 | `go test -count=1 -run '^(TestLoopCleanupResourceMatrix|TestBlockingLoopRunnerReleaseIsIdempotent|TestLoopCleanupStackRunsAllActionsOnceAndRetainsFailures)$' -timeout=10m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 1.914s` with all four resource-matrix subtests and cleanup-core tests passing. | Production-composed validation, blocked/canceled execution, early assertion with live streams, partial acquisition, idempotent release, public session absence, exact route/timer cleanup counts, and joined cleanup failures are observed without resource remainder. | This local evidence does not prove GitHub-hosted suite contention. |
 | `go test -race -count=1 -run '^TestLoopCleanupResourceMatrix$' -timeout=15m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 7.709s`; no race diagnostic or failure output was present. | The new stream, blocked-runner, timer-counter, route-counter, and fixture cleanup synchronization is race-clean in the package-owned matrix. | Other package tests and hosted contention remain outside this focused race run. |
+| `go test -count=1 -run '^TestLoopCleanupResourceMatrix$/stream-open-failure$' -timeout=10m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 3.780s`; the stalled header request returned a deadline error and the scenario cleanup assertions passed. | Stream header acquisition is bounded independently of the long-lived SSE body, and an open failure still reaches production-composed session, runner, route, and root cleanup. | Non-success stream status diagnostics and hosted contention remain outside this focused selector. |
+| `go test -count=1 -run '^TestLoopCleanupResourceMatrix$' -timeout=15m ./tests/functional/factory/packaged/loop` after the stream-open correction | Go test emitted `ok …/packaged/loop 3.871s` with all five cleanup rows passing and no failure output. | The complete package-owned resource matrix remains green after bounding stream acquisition. | The final pushed-head package and current-head CI remain promotion evidence. |
 | `GOMAXPROCS=2 go test -count=3 -run '^TestPackagedLoop/TestPackagedLoopUsesInvocationDurationAndSkipsOverlap$' -timeout=15m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 5.250s` for all three repetitions with no failure output. | The corrected phase budgets preserve valid-loop invocation, Work, overlap, dispatch, re-arm, timing, and terminal witnesses under representative local contention. | GitHub-hosted suite contention and portable latency thresholds. |
 | `go test -count=1 -timeout=15m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 5.518s` with no failure output. | The complete current package, including the resource cleanup matrix, passed once through the production-composed path. | Final pushed-head CI and clean-room validation remain story `...-003`. |
 | `go test -count=1 -timeout=10m ./tests/functional/factory/packaged/loop` after the required `origin/main` rebase | Go test emitted `ok …/packaged/loop 103.738s` with no failure output. The host was visibly contended during this run; the wall time is recorded as contaminated local timing, not a threshold. | The final rebased code head passed the complete production-composed package, including the resource cleanup matrix. | Hosted contention and portable latency thresholds remain review-owned. |

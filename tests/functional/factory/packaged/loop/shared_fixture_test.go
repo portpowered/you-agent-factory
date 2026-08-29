@@ -48,7 +48,12 @@ const (
 	// The HTTP request carries a 20 ms product timeout. This client ceiling only
 	// prevents a transport defect from hiding the requested terminal response.
 	loopInvocationRequestBudget = 2 * time.Second
-	loopStreamCloseBudget       = 1 * time.Second
+	// This applies only while opening a stream. Once response headers arrive,
+	// the stream uses its test-context-derived cancellation instead of a client
+	// timeout so a successful SSE body can remain open for the scenario.
+	loopStreamOpenBudget     = 2 * time.Second
+	loopStreamErrorBodyLimit = 4 << 10
+	loopStreamCloseBudget    = 1 * time.Second
 )
 
 const loopExpectedSessions = 8
