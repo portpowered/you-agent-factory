@@ -424,24 +424,6 @@ func (fixture *agyProcessFixture) runScenario(
 	fixture.recordRun(run)
 	t.Cleanup(func() { run.close(t) })
 
-	wantFactoryEvents := 11
-	if scenario.selector == agySharedTimeoutSelector {
-		wantFactoryEvents = 23
-	}
-	factoryEventObservation := newAgySharedFactoryEventObservation(
-		fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
-	)
-	// Start the retained-plus-live Factory Event observer before opening the
-	// response stream so the two independent public SSE handshakes overlap. Its
-	// retained history makes this safe if the observer connection finishes
-	// later; Work is submitted only after the response stream is open, and
-	// finish still waits for the exact Factory Event publication target.
-	t.Cleanup(func() {
-		result := factoryEventObservation.stop()
-		if result.err != nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
-			t.Errorf("AGY %q Factory Event observation cleanup: %v", scenario.selector, result.err)
-		}
-	})
 	stream := support.OpenFactoryResponseEventStreamAt(
 		t,
 		support.SessionResponseEventsURL(fixture.baseURL, session.Id),
@@ -463,11 +445,16 @@ func (fixture *agyProcessFixture) runScenario(
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	factoryEventResult := factoryEventObservation.finish()
-	if factoryEventResult.err != nil {
-		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, factoryEventResult.err)
+	wantFactoryEvents := 11
+	if scenario.selector == agySharedTimeoutSelector {
+		wantFactoryEvents = 23
 	}
-	factoryEvents := factoryEventResult.events
+	factoryEvents, err := readAgyFactoryEventsAfterResponse(
+		context.Background(), fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
+	)
+	if err != nil {
+		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, err)
+	}
 	run.terminalObserved = true
 	listed, err := readAgySessionWork(context.Background(), fixture.baseURL, session.Id)
 	if err != nil {

@@ -440,6 +440,20 @@ race run passed (`3.963s`), and `make test` passed with `160` passed / `1`
 skipped / `0` failed. The hosted package timing remains diagnostic until a
 fresh Backend Functional Coverage result is recorded on the pushed head.
 
+The next bounded pass makes the public Factory Event check snapshot-first:
+after the exact response frames arrive, it reads the retained event snapshot
+and closes that response immediately when the expected terminal count is
+already present. If publication is still short, the existing retained-plus-
+live SSE observation remains the exact fallback. This removes the always-on
+live observer and its goroutine from the normal path without relaxing the
+Factory Event count/order, Work projection, response EOF/no-extra-frame,
+route, cleanup, or zero-remote witnesses. The current local candidate passed
+the exact package once (`1.966s`), the focused three-repeat run (`5.158s`),
+the race package (`3.985s`), and `make test` (`160` passed, `1` skipped,
+`0` failed); backend-size, formatting, and `git diff --check` also passed.
+Hosted timing remains the authoritative comparison against `1.448s` and will
+be evaluated only from a fresh required CI run on the pushed head.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
