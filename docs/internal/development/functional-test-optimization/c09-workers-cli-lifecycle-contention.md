@@ -273,12 +273,14 @@ coexistence, raised-parallelism CI, or clean-room loopback owned by stories
 
 ## Story 003 adverse lifecycle and cleanup extension
 
-Status: `ADVERSE-C09-01` and `CLEANUP-C09-01` are partially evidenced for
-`functional-test-optimization-c09-workers-cli-lifecycle-contention-003`.
-The package-local adverse matrix is implemented, but the live-runtime
-cancellation projection described below remains unproven and keeps the story
-open. No production, shared-support, public-contract, workflow, or excluded
-surface was changed.
+Status: `ADVERSE-C09-01` and `CLEANUP-C09-01` are evidenced for
+`functional-test-optimization-c09-workers-cli-lifecycle-contention-003` under
+the operator disposition recorded in `prd.json`. The package-local adverse
+matrix proves every owned deterministic failure and cleanup witness. The
+live-runtime cancellation projection described below is retained as a
+characterized product gap, outside this test-only lane's proof obligation. No
+production, shared-support, public-contract, workflow, or excluded surface was
+changed.
 
 The adverse cases extend the existing failure selector so the package retains
 its six top-level selector denominator:
@@ -306,20 +308,25 @@ its six top-level selector denominator:
   the listener gate is released, and a fresh recovery invocation succeeds with
   distinct Work and Worker Session identities.
 
-The cancellation witness also found a bounded runtime projection edge that the
-test does not conceal: after the accepted live-session cancel and provider join,
-the public Work remains `PROCESSING`, its correlated Worker Session remains
+The cancellation witness found a bounded runtime projection edge that the test
+does not conceal: after the accepted live-session cancel and provider join, the
+public Work remains `PROCESSING`, its correlated Worker Session remains
 `RUNNING` with `OPERATOR_CANCELED`, and the retained dispatch has a request but
 no response. The command then returns a cancellation-compatible error and
 `Process.Close` closes the listener. The direct top-level Worker Session
 control route is not a valid substitute: it is not attached to this
 runtime-owned attempt and did not cancel the injected provider in the same
-experiment. Therefore LIFE-U07's terminal Work/Worker Session/dispatch proof
-is explicitly unproven, although no successful terminal result is fabricated.
-The smallest plan delta is a runtime-owned terminalization path (or a
-supported turn-scoped live-session control carrying the active Worker Session
-correlation); that belongs to the excluded production/runtime ownership and
-was not silently broadened into this test-only lane.
+experiment.
+
+The operator accepted this as a product gap and re-scoped LIFE-U07 for this
+lane. The cancellation test therefore asserts the currently guaranteed
+observables—exactly one provider cancellation, a `FINISHED` Factory Session,
+no stdout, recovery with distinct identities, and local cleanup—and logs the
+precise non-terminal Work/Worker Session/dispatch projections above. It does
+not assert terminal runtime projections or attempt runtime terminalization.
+The smallest product-side correction remains a runtime-owned terminalization
+path (or a supported turn-scoped live-session control carrying the active
+Worker Session correlation), which is operator-owned follow-up work.
 
 ## Story 003 verification
 
@@ -341,6 +348,8 @@ no race report.
 Observed result: `ok` in `93.970s`; all three original-failure plus adverse
 matrix executions passed. These commands prove the implemented partial,
 dependency-failure, timeout, forced-cleanup, no-success cancellation, provider
-call, recovery, and listener/process cleanup witnesses. They do not prove the
-unresolved cancellation terminal projection, full six-selector package
-coexistence, raised-parallelism CI, or clean-room loopback.
+call, recovery, and listener/process cleanup witnesses. They intentionally do
+not prove the operator-owned cancellation terminal projection; the observed
+non-terminal Work/Worker Session/dispatch states are recorded above as the
+product-gap characterization. Full six-selector package coexistence,
+raised-parallelism CI, and clean-room loopback remain Story 004 evidence.
