@@ -25,6 +25,9 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	if os.Getenv(boardPersistenceHelperEnv) != boardPersistenceHelperEnvValue {
 		return
 	}
+	if builds := boardPersistenceBinaryBuilds.Load(); builds != 0 {
+		t.Fatalf("SCRIPT_WORKER helper observed %d package CLI builds, want 0", builds)
+	}
 	releasePath := strings.TrimSpace(os.Getenv(boardPersistenceReleaseEnv))
 	if releasePath == "" {
 		t.Fatal("board persistence worker helper release path is empty")
