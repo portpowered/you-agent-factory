@@ -737,31 +737,73 @@ func (router *agySharedCommandRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
+	route, err := router.beginCall(ctx, request)
+	if err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	defer router.endCall()
+	return route.runner.Run(ctx, request)
+}
+
+// RunStreaming keeps the immutable AGY doubles on the streaming path. All
+// production routing and lifecycle checks remain shared with Run; only the
+// optional output-forwarding capability differs.
+func (router *agySharedCommandRouter) RunStreaming(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	route, err := router.beginCall(ctx, request)
+	if err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	defer router.endCall()
+	if streaming, ok := route.runner.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	}); ok {
+		return streaming.RunStreaming(ctx, request, observer)
+	}
+	result, err := route.runner.Run(ctx, request)
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if len(result.Stderr) > 0 {
+			observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	return result, err
+}
+
+func (router *agySharedCommandRouter) beginCall(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (agySharedCommandRoute, error) {
 	rawWorkDir := strings.TrimSpace(request.WorkDir)
 	if rawWorkDir == "" {
-		return platformprocess.CommandResult{}, fmt.Errorf("AGY command WorkDir is required")
+		return agySharedCommandRoute{}, fmt.Errorf("AGY command WorkDir is required")
 	}
 	workDir, err := filepath.Abs(filepath.Clean(rawWorkDir))
 	if err != nil {
-		return platformprocess.CommandResult{}, fmt.Errorf("normalize AGY command WorkDir: %w", err)
+		return agySharedCommandRoute{}, fmt.Errorf("normalize AGY command WorkDir: %w", err)
 	}
 	router.mu.Lock()
 	if router.released {
 		router.mu.Unlock()
-		return platformprocess.CommandResult{}, fmt.Errorf("AGY route table is released")
+		return agySharedCommandRoute{}, fmt.Errorf("AGY route table is released")
 	}
 	route, ok := router.routes[workDir]
 	if !ok {
 		router.mu.Unlock()
-		return platformprocess.CommandResult{}, fmt.Errorf("no AGY route matched WorkDir %q", workDir)
+		return agySharedCommandRoute{}, fmt.Errorf("no AGY route matched WorkDir %q", workDir)
 	}
 	if request.Command != agySharedCommand {
 		router.mu.Unlock()
-		return platformprocess.CommandResult{}, fmt.Errorf("AGY route %q received command %q", route.selector, request.Command)
+		return agySharedCommandRoute{}, fmt.Errorf("AGY route %q received command %q", route.selector, request.Command)
 	}
 	if err := ctx.Err(); err != nil {
 		router.mu.Unlock()
-		return platformprocess.CommandResult{}, err
+		return agySharedCommandRoute{}, err
 	}
 	router.requests = append(router.requests, agyRoutedCommandRequest{
 		command: request.Command,
@@ -769,12 +811,13 @@ func (router *agySharedCommandRouter) Run(
 	})
 	router.active++
 	router.mu.Unlock()
-	defer func() {
-		router.mu.Lock()
-		router.active--
-		router.mu.Unlock()
-	}()
-	return route.runner.Run(ctx, request)
+	return route, nil
+}
+
+func (router *agySharedCommandRouter) endCall() {
+	router.mu.Lock()
+	router.active--
+	router.mu.Unlock()
 }
 
 func assertAgyRoutesRejectInvalidRegistrations(router *agySharedCommandRouter, rootDir, registeredWorkDir string) error {

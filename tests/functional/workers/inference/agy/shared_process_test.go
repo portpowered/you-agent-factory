@@ -119,6 +119,28 @@ func (runner *agyStaticCommandRunner) Run(
 	return agyCloneCommandResult(runner.result), nil
 }
 
+// RunStreaming forwards the immutable fixture output directly to the provider
+// observer. The shared route chain otherwise takes its completed-output
+// fallback, which copies the same bytes before the AGY adapter can parse them.
+func (runner *agyStaticCommandRunner) RunStreaming(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	if observer != nil {
+		if len(runner.result.Stdout) > 0 {
+			observer(platformprocess.OutputStreamStdout, runner.result.Stdout)
+		}
+		if len(runner.result.Stderr) > 0 {
+			observer(platformprocess.OutputStreamStderr, runner.result.Stderr)
+		}
+	}
+	return runner.result, nil
+}
+
 func agyCloneCommandResult(result platformprocess.CommandResult) platformprocess.CommandResult {
 	result.Stdout = append([]byte(nil), result.Stdout...)
 	result.Stderr = append([]byte(nil), result.Stderr...)

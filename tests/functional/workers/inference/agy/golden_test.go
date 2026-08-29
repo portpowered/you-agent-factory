@@ -156,6 +156,24 @@ func (r *agyDeadlineExceededCommandRunner) Run(
 	return platformprocess.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, context.DeadlineExceeded
 }
 
+// RunStreaming forwards the immutable partial fixture output directly to the
+// provider observer. This avoids the completed-output fallback copy on every
+// one of the timeout golden's nine controlled retry calls.
+func (r *agyDeadlineExceededCommandRunner) RunStreaming(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	r.mu.Lock()
+	r.starts++
+	stdout := r.stdout
+	r.mu.Unlock()
+	if observer != nil && len(stdout) > 0 {
+		observer(platformprocess.OutputStreamStdout, stdout)
+	}
+	return platformprocess.CommandResult{Stdout: stdout}, context.DeadlineExceeded
+}
+
 func (r *agyDeadlineExceededCommandRunner) callCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()

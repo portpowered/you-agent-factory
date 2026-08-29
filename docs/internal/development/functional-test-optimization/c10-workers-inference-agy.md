@@ -477,6 +477,15 @@ of the assertion. The exact package run passed (`3.016s`), the required
 all with exit status `0`. These local timings are diagnostic; a fresh hosted
 Backend Functional Coverage result is still required for `PR-CI-004`.
 
+The latest bounded pass gives the immutable route and command doubles an
+optional streaming implementation. The production provider path now receives
+the fixture output directly instead of taking the completed-output fallback
+copy on each controlled call, while the returned result and observer-visible
+stdout/stderr remain unchanged. The exact package run passed (`2.892s`), the
+focused `-count=3` repeat passed (`5.535s`), and the race package passed
+(`5.643s`), all with exit status `0`. The hosted timing verdict remains
+review-owned and no CI result is claimed by this local evidence.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:
