@@ -215,16 +215,61 @@ func waitForWorkTypeComplete(
 	return factoryapi.Work{}
 }
 
+func waitForWorkByNameComplete(
+	t *testing.T,
+	baseURL string,
+	workName string,
+	workType string,
+	timeout time.Duration,
+) factoryapi.Work {
+	t.Helper()
+
+	var found factoryapi.Work
+	listed, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.ListDefaultSessionWork(t, baseURL), nil
+		},
+		func(listed factoryapi.ListWorkResponse) bool {
+			matches := 0
+			for _, item := range listed.Results {
+				if item.Name == workName &&
+					support.StringPointerValue(item.WorkTypeName) == workType &&
+					workStateName(item.State) == "complete" {
+					found = item
+					matches++
+				}
+			}
+			return matches == 1
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"timed out waiting for completed Work name %q type %q: %v; last work response: %#v",
+			workName,
+			workType,
+			err,
+			listed.Results,
+		)
+	}
+	return found
+}
+
 func requireWorkByTrace(t *testing.T, listed factoryapi.ListWorkResponse, traceID string) factoryapi.Work {
 	t.Helper()
 
+	matches := 0
+	var found factoryapi.Work
 	for _, item := range listed.Results {
 		if support.StringPointerValue(item.TraceId) == traceID {
-			return item
+			found = item
+			matches++
 		}
 	}
-	t.Fatalf("trace %q missing from work list: %#v", traceID, listed.Results)
-	return factoryapi.Work{}
+	if matches != 1 {
+		t.Fatalf("trace %q matched %d Work items, want exactly one: %#v", traceID, matches, listed.Results)
+	}
+	return found
 }
 
 func workStateName(state *factoryapi.WorkState) string {

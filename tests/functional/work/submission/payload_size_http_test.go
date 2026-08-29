@@ -26,13 +26,27 @@ const (
 	httpPayloadSizeBoundaryWorkName  = "http-payload-size-boundary"
 )
 
-// TestAPIBatchUpsertRejectsOversizedWorkAtomically proves the public batch HTTP
-// contract preserves the Work admission diagnostic and emits no request or
-// dispatch observation for a mixed batch that contains an oversized Work.
-func TestAPIBatchUpsertRejectsOversizedWorkAtomically(t *testing.T) {
+// TestPayloadSizeHTTPSubmission preserves the inclusive payload boundary and
+// atomic rejection witnesses on one serialized provider-backed fixture.
+func TestPayloadSizeHTTPSubmission(t *testing.T) {
 	server := startPayloadSizeHTTPServer(t)
 	defer server.Stop(t)
 
+	t.Run("TestAPIBatchUpsertRejectsOversizedWorkAtomically", func(t *testing.T) {
+		assertAPIBatchUpsertRejectsOversizedWorkAtomically(t, server)
+	})
+	t.Run("TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit", func(t *testing.T) {
+		assertAPIBatchUpsertAcceptsPayloadAtInclusiveLimit(t, server)
+	})
+}
+
+// assertAPIBatchUpsertRejectsOversizedWorkAtomically proves the public batch
+// HTTP contract preserves the Work admission diagnostic and emits no request
+// or dispatch observation for a mixed batch that contains an oversized Work.
+func assertAPIBatchUpsertRejectsOversizedWorkAtomically(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+) {
 	baseline := support.ListDefaultSessionWork(t, server.URL())
 	body := marshalHTTPBatch(t, httpPayloadSizeRequestID, []map[string]any{
 		httpBatchWork(t, httpPayloadSizeValidWorkName, httpPayloadSizeValidWorkID, json.RawMessage(`{"title":"valid sibling"}`)),
@@ -78,13 +92,13 @@ func TestAPIBatchUpsertRejectsOversizedWorkAtomically(t *testing.T) {
 	assertHTTPBatchHasNoPublicObservations(t, server, httpPayloadSizeRequestID, httpPayloadSizeValidWorkID, httpPayloadSizeOversizedWorkID)
 }
 
-// TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit proves a compact JSON Work
-// payload of exactly 65,536 bytes reaches the public session-scoped Work and
-// Factory Event observations.
-func TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit(t *testing.T) {
-	server := startPayloadSizeHTTPServer(t)
-	defer server.Stop(t)
-
+// assertAPIBatchUpsertAcceptsPayloadAtInclusiveLimit proves a compact JSON
+// Work payload of exactly 65,536 bytes reaches the public session-scoped Work
+// and Factory Event observations.
+func assertAPIBatchUpsertAcceptsPayloadAtInclusiveLimit(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+) {
 	body := marshalHTTPBatch(t, httpPayloadSizeBoundaryRequestID, []map[string]any{
 		httpBatchWork(t, httpPayloadSizeBoundaryWorkName, httpPayloadSizeBoundaryWorkID, workPayloadJSONOfSize(t, 65536)),
 	})

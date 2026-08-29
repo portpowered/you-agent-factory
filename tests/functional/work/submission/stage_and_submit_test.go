@@ -19,17 +19,13 @@ const (
 	stageAndSubmitMediaType = "image/png"
 )
 
-// TestAPIStageAndSubmitFileCreatesExpectedWork proves the public HTTP stage-then-
-// submit flow creates Work whose customer-visible content carries the staged file
-// reference and metadata returned by POST /work/staged-files.
-func TestAPIStageAndSubmitFileCreatesExpectedWork(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
+// assertAPIStageAndSubmitFileCreatesExpectedWork proves the public HTTP
+// stage-then-submit flow creates Work whose customer-visible content carries
+// the staged file reference and metadata returned by POST /work/staged-files.
+func assertAPIStageAndSubmitFileCreatesExpectedWork(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+) {
 	fileBytes := []byte("stage-and-submit-png-bytes")
 	staged := stageSubmitWorkFile(
 		t,

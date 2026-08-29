@@ -23,8 +23,19 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 		t.Skip("slow legacy unary retirement boundary smoke")
 	}
 
+	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
+	inputDir := filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+		t.Fatalf("create input dir: %v", err)
+	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
 	t.Run("direct_POST_and_idempotent_PUT", func(t *testing.T) {
-		assertLegacyUnaryDirectSubmitAndPut(t)
+		assertLegacyUnaryDirectSubmitAndPut(t, server)
 	})
 
 	t.Run("startup_work_file_batch", func(t *testing.T) {
@@ -32,7 +43,7 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	})
 
 	t.Run("file_watcher_non_batch_JSON", func(t *testing.T) {
-		assertLegacyUnaryFileWatcherBatchConversion(t)
+		assertLegacyUnaryFileWatcherBatchConversion(t, server, inputDir)
 	})
 
 	t.Run("cron_internal_time_work", func(t *testing.T) {
@@ -40,15 +51,8 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	})
 }
 
-func assertLegacyUnaryDirectSubmitAndPut(t *testing.T) {
+func assertLegacyUnaryDirectSubmitAndPut(t *testing.T, server *support.FunctionalAPIServer) {
 	t.Helper()
-
-	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
 
 	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("direct-post-canonical-submit"),
@@ -112,14 +116,13 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 	)
 }
 
-func assertLegacyUnaryFileWatcherBatchConversion(t *testing.T) {
+func assertLegacyUnaryFileWatcherBatchConversion(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	inputDir string,
+) {
 	t.Helper()
 
-	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	inputDir := filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
-	if err := os.MkdirAll(inputDir, 0o755); err != nil {
-		t.Fatalf("create input dir: %v", err)
-	}
 	if err := os.WriteFile(
 		filepath.Join(inputDir, "non-batch.json"),
 		[]byte(`{"title":"raw JSON file input"}`),
@@ -128,13 +131,7 @@ func assertLegacyUnaryFileWatcherBatchConversion(t *testing.T) {
 		t.Fatalf("write non-batch seed: %v", err)
 	}
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
-	defer server.Stop(t)
-
-	waitForWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	waitForWorkByNameComplete(t, server.URL(), "non-batch", "task", 10*time.Second)
 	support.AssertSingleWorkRequestEventByWorkName(t, server.GetFactoryEvents(t), "non-batch", "task")
 }
 
