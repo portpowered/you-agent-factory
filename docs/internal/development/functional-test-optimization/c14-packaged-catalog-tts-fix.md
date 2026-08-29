@@ -1,10 +1,10 @@
 # C14 packaged Catalog, TTS, and Fix baseline ledger
 
 Status: stories `fto-c14-pkg-factory-packaged-cluster-001` through
-`...-004` are complete. This ledger freezes the pre-change denominator and
-characterization for the three owned functional packages and records the
-bounded Catalog, TTS, and Fix optimizations. Story `...-005` owns final
-measurement, loopback, and review handoff.
+`...-005` are complete. This ledger freezes the pre-change denominator and
+characterization for the three owned functional packages, records the bounded
+Catalog, TTS, and Fix optimizations, and closes final measurement, loopback,
+and implementation-stage handoff evidence.
 
 ## Authority, scope, and artifact
 
@@ -14,6 +14,18 @@ measurement, loopback, and review handoff.
   source was read or cited.
 - Baseline source: `fea2e30a499384182d2fabe7038767e3c2f9c5e5`, equal to
   `origin/main` at capture time.
+- Rebased parent: `995137125a` (`origin/main` at final promotion). The
+  rebase applied cleanly, and `git diff --name-only
+  fea2e30a49..995137125a --
+  tests/functional/factory/packaged/catalog
+  tests/functional/factory/packaged/tts
+  tests/functional/factory/packaged/fix
+  docs/internal/development/functional-test-optimization/c14-packaged-catalog-tts-fix.md`
+  was empty, so no owned denominator or assertion inventory reconciliation was
+  required.
+- Final code head used for package, profile, and loopback evidence:
+  `2ee83f1bc3`; the later ledger-only handoff commit does not change test
+  sources.
 - Owned implementation surfaces characterized:
   `tests/functional/factory/packaged/catalog/**`,
   `tests/functional/factory/packaged/tts/**`, and
@@ -451,10 +463,197 @@ substitute outside `Edges`, or resource leak was introduced. Remaining
 unproven edges are the final three-run Fix median or measured floor, final
 rebase, clean-room loopback, current-head CI, PR review, and merge.
 
+## GATE-REBASE-C14 and GATE-PERF-C14: final promotion
+
+### Rebase and denominator reconciliation
+
+Promotion started from a clean worktree with the four implementation commits
+on top of the frozen baseline. The final base refresh ran:
+
+```text
+git fetch origin main
+git rebase origin/main
+```
+
+The rebase completed without conflicts and moved the parent from
+`fea2e30a49` to `995137125a`. The integration base changed only unrelated
+CI, shared baseline, Models root-composition, and Workers files; the owned
+Catalog, TTS, Fix, and ledger paths had no base delta. The assertion inventory
+therefore remains 13 Catalog top-level plus 22 named records, six TTS
+top-level plus eight named records, and five Fix top-level plus 16 named
+records: 70 records total. Final `go test -list .` discovery reported 13,
+six, and five top-level records with exit `0` for Catalog, TTS, and Fix.
+
+### Final integrated package witnesses
+
+Each command ran alone after the rebase through the same root-built local-real
+composition used by the baseline. The package elapsed value is Go's `ok`
+value; the wrapper wall value includes process startup and teardown.
+
+```text
+go test ./tests/functional/factory/packaged/catalog/... -count=1
+go test ./tests/functional/factory/packaged/tts/... -count=1
+go test ./tests/functional/factory/packaged/fix/... -count=1
+```
+
+| Package | Package elapsed | Wrapper wall | Exit |
+| --- | ---: | ---: | ---: |
+| Catalog | `46.160s` | `47.274s` | `0` |
+| TTS | `35.834s` | `37.574s` | `0` |
+| Fix | `27.247s` | `30.007s` | `0` |
+
+The touched shared-state repeat and race gates also passed:
+
+| Package | Repeat command/result | Race command/result | Exit |
+| --- | --- | --- | ---: |
+| Catalog | Required-input `-count=3`, `120.838s` | Required-input `-race -count=1`, `68.540s` | `0` |
+| TTS | Models live/replay `-count=3`, `30.854s` | Models live/replay `-race -count=1`, `25.492s` | `0` |
+| Fix | Five touched top-level selectors `-count=3`, `91.752s` | Same selectors `-race -count=1`, `47.522s` | `0` |
+
+No race report, leaked-resource assertion, false artifact, missing-input
+diagnostic, replay model call, provider-call bound, local Git/worktree
+failure, or cleanup-cause assertion failed. The full suites exercised the
+complete mapped 70-record inventory, including the delivered TTS binary,
+Catalog API loopback, local Models, controlled provider edges, and local-real
+Git/worktrees. Remote calls and paid calls were zero.
+
+### Three isolated final samples
+
+The exact package command was run three times per package, alone and
+sequentially, after the integrated and repeat/race gates. All nine commands
+exited `0`.
+
+| Package | Run 1 wall / package | Run 2 wall / package | Run 3 wall / package | Sorted median |
+| --- | --- | --- | --- | ---: |
+| Catalog | `40.019s / 37.510s` | `38.691s / 36.397s` | `44.110s / 41.995s` | `37.510s` |
+| TTS | `40.457s / 37.630s` | `47.013s / 44.631s` | `42.707s / 39.961s` | `39.961s` |
+| Fix | `30.003s / 25.519s` | `31.095s / 28.448s` | `29.350s / 24.626s` | `25.519s` |
+
+| Package | Frozen baseline median | Final median | Delta | Verdict |
+| --- | ---: | ---: | ---: | --- |
+| Catalog | `149.110s` | `37.510s` | `74.844% lower` | 40% gate PASS |
+| TTS | `27.699s` | `39.961s` | `44.269% higher` | Measured floor |
+| Fix | `22.266s` | `25.519s` | `14.610% higher` | Measured floor |
+| Combined median sum | `199.075s` | `102.990s` | `48.266% lower` | Informational; no quiet-host gate |
+
+The samples show expected shared-host contention and are not interpreted as a
+quiet-host threshold. TTS and Fix retain their profile-backed floor
+dispositions after one bounded optimization pass; the result does not claim
+that no future optimization is possible.
+
+### Operation-level trace/profile floor table
+
+One successful post-change `-test.trace` pass was collected per package
+outside the worktree and converted with separate `go tool trace -pprof=sync`,
+`-pprof=sched`, `-pprof=syscall`, and `-pprof=net` passes.
+The cumulative delay totals below are diagnostic totals across goroutines, not
+wall time. They corroborate the retained lifecycle boundaries and explain why
+the remaining setup reduction does not establish a 40% package median for TTS
+or Fix.
+
+| Package | Safe work removed in the bounded pass | Post-change profile evidence | Floor disposition |
+| --- | --- | --- | --- |
+| Catalog | Required-input bootstrap/install setup `18 -> 1`; one shared root retained; 18 fresh selected Factory/config/home boundaries retained. | Sync delay `151.30s`: `chanrecv1 80.18%`, `selectgo 19.81%`; syscall delay `31.55s`, with `Process.Execute` at `82.38%`. | 40% gate PASS; no floor needed. |
+| TTS | Models roots `4 -> 1`, packaged seed `2 -> 1`, cache seed `2 -> 1`, protocol/launcher fixture `4 -> 1`; two live host lifecycles, two live/replay pairs, delivered binary, artifacts, and concurrent isolation retained. | Sync delay `197.80s`: `chanrecv1 64.99%`, `selectgo 34.98%`; syscall delay `28.68s`, `Process.Execute 62.36%`; network delay `28.41s`, listener `Accept 83.36%`. | Measured floor after one bounded pass: remaining cost is required Process/Models lifecycle, host/listener observation, replay isolation, and retained delivered/concurrent boundaries; no safe cross-boundary reuse was identified. |
+| Fix | Fixture roots `5 -> 2`, one CLI packaged seed for six executions, and real Git init/config/commit setup `9 -> 1`; six fresh homes/config scopes, nine independent `.git` copies, local-real worktrees, and all cleanup causes retained. | Sync delay `207.70s`: `selectgo 51.91%`, `chanrecv1 43.68%`, `Cond.Wait 3.40%`; network delay `19.14s`, reads/accepts `76.41%`; syscall delay `16.56s`. | Measured floor after one bounded pass: remaining cost is required scheduler/session observation, local Git/worktree operations, and unique per-invocation cleanup; whole-package parallelism or identity consolidation would weaken isolation. |
+
+### Assertion parity and cleanup reconciliation
+
+The source diff retains the complete pre-change assertion inventory and adds no
+skip, weaker matcher, blanket timeout, or sleep. Final package runs and the
+clean-room loopback observed the same 35 Catalog, 14 TTS, and 21 Fix records;
+the existing operation and identity tables above remain the source-level
+parity handoff. Catalog required-input delegates reset between rows; TTS
+live/replay and model-host lifecycles remain balanced; Fix retains all six
+cleanup causes and zero residue. The final three-dot audit is limited to the
+three owned package roots and this ledger.
+
+## LOOPBACK-C14: clean-room validation report
+
+The report below follows `factory/docs/standards/validation-loopback-template.md`.
+It was executed read-only from a fresh detached worktree at final code head
+`2ee83f1bc3`; the temporary worktree was clean before execution and removed
+afterward. No implementation repair was made during loopback.
+
+### Environment and artifact
+
+- Commit/build identifier: `2ee83f1bc3` (rebased implementation head before
+  this ledger-only update).
+- Environment and configuration: Windows 11 Home `10.0.26200`,
+  `go1.25.0 windows/amd64`, `GOAMD64=v1`, `GOTOOLCHAIN=auto`, module
+  `go.mod`, `GOFLAGS` empty; shared-host contention was left visible.
+- Customer entry point: root-built `Process.Execute`; Catalog API-owned
+  loopback and delivered TTS binary retained where those cases own the
+  boundary.
+- Real and substituted dependencies: local-real filesystem, Models, Git, and
+  worktrees; controlled exact provider/model/launcher edges through
+  `serviceedges.Edges`.
+- Cost/call budget used: zero remote calls, zero paid calls, `$0`.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Rebased current integration base before final measurement | PASS | Clean rebase onto `995137125a`; no owned base delta. | Terminal hosted merge state. |
+| Catalog complete behavior and cleanup | PASS | Clean-room Catalog suite exited `0`; final package and required-input repeat/race gates passed. | Hosted CI topology. |
+| TTS complete behavior, delivered protocol, replay, and cleanup | PASS | Clean-room TTS suite exited `0`; delivered row, live/replay zero-second-call assertions, artifact lineage, and repeat/race gates passed. | Real VibeVoice availability is intentionally not claimed. |
+| Fix complete behavior, local-real Git/worktrees, parity, and cleanup | PASS | Clean-room Fix suite exited `0`; touched repeat/race gates passed and cleanup census remained asserted. | Hosted CI topology. |
+| Final medians, reduction/floor, and assertion parity | PASS | Nine isolated samples, operation counts, post-change profiles, 70-record inventory, and parity audit recorded above. | Quiet-host portability and future optimization. |
+| Owned three-dot diff | PASS | Final audit contains only Catalog/TTS/Fix test files and this ledger. | None within lane scope. |
+| Remote/paid validation | PASS | No remote or paid dependency is applicable; controlled local edges were used. | No real-remote property is claimed. |
+
+### Customer journey
+
+1. From the fresh detached worktree, run
+   `go test ./tests/functional/factory/packaged/catalog/... -count=1`,
+   `.../tts/... -count=1`, and `.../fix/... -count=1` sequentially. The
+   package results were Catalog `0`, TTS `0`, and Fix `0`; the actual assertions
+   retained the public Catalog/API, delivered TTS, replay/artifact, and
+   local-real Fix journeys.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the c14 ledger is the durable handoff under
+  `docs/internal/development/functional-test-optimization/` and names all
+  remaining review-owned edges.
+- Permission and error behavior: Catalog atomic failures/cancellation and
+  required-input diagnostics, TTS stable failures/no-artifact behavior, and
+  Fix validation/provider/Git failures remained passing.
+- Persistence/reload behavior: TTS recording/replay and Factory Event
+  projections remained passing; no production persistence contract changed.
+- Accessibility/keyboard/responsive behavior: not applicable to this
+  backend-functional-test lane.
+- Operational signals: root/process, host/provider/model/session, wait,
+  artifact, recording, Git/worktree, and cleanup counts remain documented;
+  no credentials or customer data were recorded.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| None | — | No finding requiring implementation repair. | All owned criteria remain observable and bounded. | All loopback criteria passed. | Clean-room package output and tables above. |
+
+### Verdict
+
+PASS
+
+## Implementation-stage handoff
+
+- Final local behavior, race/repeat, timing, profile, ownership, and
+  clean-room evidence is complete; no implementation blocker remains.
+- The final push must contain only the owned package tests and this ledger.
+  `prd.json` and `progress.txt` remain ignored scaffolding and are not PR
+  files.
+- Before review handoff, open or update the PR from the final head, start the
+  required CI, and place the current PR CI URL plus the before/after medians,
+  combined sum, assertion-parity statement, and floor dispositions in a PR
+  comment. CI evidence must remain out of commits; review owns terminal CI,
+  conflicts, and merge.
+
 ## Handoff artifacts
 
 - Durable ledger: `docs/internal/development/functional-test-optimization/c14-packaged-catalog-tts-fix.md`.
-- Ignored task state: `prd.json` marks stories `...-001` through `...-004`
+- Ignored task state: `prd.json` marks stories `...-001` through `...-005`
   `passes:true`; `progress.txt`
   records the concise iteration handoff and reusable patterns.
 - No generated, production, API, shared-support, workflow, baseline, CI, or
@@ -464,6 +663,6 @@ rebase, clean-room loopback, current-head CI, PR review, and merge.
   `tests/functional/factory/packaged/tts/{local_runtime_invocation_test.go,models_replay_helpers_test.go,models_replay_test.go}`.
   The Fix change is confined to
   `tests/functional/factory/packaged/fix/{invocation_test.go,shared_fixture_test.go}`.
-- Unproven edges handed to later gates: final three-run medians or
-  operation-level floors, clean-room loopback,
-  current-head CI, and merge.
+- Unproven edges handed to later gates: terminal current-head CI, review
+  conflict resolution, and merge; those are review-owned. No real-remote
+  property or unrelated package optimization is claimed.
