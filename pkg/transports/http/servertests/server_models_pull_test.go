@@ -23,7 +23,7 @@ func (api modelPullService) PullModelForScope(ctx context.Context, request model
 	return api.pull(ctx, request.Name)
 }
 
-func TestPullModel_ReturnsTypedSourceFetchFailure(t *testing.T) {
+func TestPullModel_ReturnsManagedRuntimeSourceFetchFailureOutcome(t *testing.T) {
 	models := modelPullService{pull: func(_ context.Context, modelName string) (modelcontract.PullResult, error) {
 		if modelName != "OMNIVOICE_Q4_K_M" {
 			t.Fatalf("model name = %q, want OMNIVOICE_Q4_K_M", modelName)
@@ -43,16 +43,19 @@ func TestPullModel_ReturnsTypedSourceFetchFailure(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
 	}
-	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
-	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR || response.Message == "" {
-		t.Fatalf("error response = %#v, want non-empty INTERNAL_ERROR", response)
+	response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+		t.Fatalf("pull outcome = %s, want SOURCE_FETCH_FAILED", response.ManagedRuntimePull.PullOutcome)
+	}
+	if response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("readiness = %s, want FAILED", response.ManagedRuntimePull.ReadinessState)
 	}
 }
 
-func TestPullModel_ReturnsTypedTimeoutFailure(t *testing.T) {
+func TestPullModel_ReturnsManagedRuntimeTimeoutOutcome(t *testing.T) {
 	models := modelPullService{pull: func(_ context.Context, modelName string) (modelcontract.PullResult, error) {
 		if modelName != "OMNIVOICE_Q4_K_M" {
 			t.Fatalf("model name = %q, want OMNIVOICE_Q4_K_M", modelName)
@@ -75,8 +78,8 @@ func TestPullModel_ReturnsTypedTimeoutFailure(t *testing.T) {
 	if rec.Code != http.StatusGatewayTimeout {
 		t.Fatalf("expected 504, got %d: %s", rec.Code, rec.Body.String())
 	}
-	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
-	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR || response.Message != "models request timed out" {
-		t.Fatalf("error response = %#v, want typed timeout error", response)
+	response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeTIMEDOUT {
+		t.Fatalf("pull outcome = %s, want TIMED_OUT", response.ManagedRuntimePull.PullOutcome)
 	}
 }

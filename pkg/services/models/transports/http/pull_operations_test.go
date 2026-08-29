@@ -63,7 +63,7 @@ func TestAdapter_PullModelRejectsEmptyNameBeforeFakeRoot(t *testing.T) {
 	assertCatalogHTTPError(t, recorder, http.StatusNotFound, "NOT_FOUND", "model not found")
 }
 
-func TestAdapter_PullModelMapsPullErrorToTypedError(t *testing.T) {
+func TestAdapter_PullModelEncodesPullErrorOutcome(t *testing.T) {
 	t.Parallel()
 
 	failure := models.PullResult{
@@ -81,10 +81,19 @@ func TestAdapter_PullModelMapsPullErrorToTypedError(t *testing.T) {
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
 
-	assertCatalogHTTPError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", pullFailedMessage)
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want 504 body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ModelPullResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeTIMEDOUT {
+		t.Fatalf("pull outcome = %q, want TIMED_OUT", response.ManagedRuntimePull.PullOutcome)
+	}
 }
 
-func TestAdapter_PullModelProjectsSourceFetchFailureAsTypedError(t *testing.T) {
+func TestAdapter_PullModelProjectsSourceFetchFailureAsFailed(t *testing.T) {
 	t.Parallel()
 
 	failure := models.PullResult{
@@ -105,7 +114,20 @@ func TestAdapter_PullModelProjectsSourceFetchFailureAsTypedError(t *testing.T) {
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
 
-	assertCatalogHTTPError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", pullFailedMessage)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ModelPullResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if string(response.Outcome) != "FAILED" {
+		t.Fatalf("response = %s, want top-level outcome FAILED", recorder.Body.String())
+	}
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
+		response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("managed runtime pull = %#v, want SOURCE_FETCH_FAILED/FAILED", response.ManagedRuntimePull)
+	}
 }
 
 func TestModelPullCompatibilityOutcomeProjectsManagedOutcomeTotally(t *testing.T) {

@@ -36,11 +36,6 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 	if err == nil {
 		return 0, factoryapi.ErrorResponse{}, false
 	}
-	if operation == modelsHTTPOperationPull {
-		if status, response, ok := pullFailureErrorResponse(err); ok {
-			return status, response, true
-		}
-	}
 	if operation == modelsHTTPOperationInvoke || operation == modelsHTTPOperationGenericInvoke {
 		if status, response, ok := classifiedInferenceErrorResponse(err); ok {
 			return status, response, ok
@@ -50,18 +45,6 @@ func RootErrorResponse(err error, operation modelsHTTPOperation) (int, factoryap
 		}
 	}
 	return rootSentinelErrorResponse(err, operation)
-}
-
-func pullFailureErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
-	var failure *models.PullError
-	if !errors.As(err, &failure) || failure == nil {
-		return 0, factoryapi.ErrorResponse{}, false
-	}
-	return http.StatusInternalServerError, factoryapi.ErrorResponse{
-		Message: pullFailedMessage,
-		Family:  factoryapi.ErrorFamilyInternalServerError,
-		Code:    factoryapi.ErrorResponseCodeINTERNALERROR,
-	}, true
 }
 
 func rootSentinelErrorResponse(err error, operation modelsHTTPOperation) (int, factoryapi.ErrorResponse, bool) {

@@ -57,6 +57,9 @@ func TestManagedRuntimePullMapping(t *testing.T) {
 	if !errors.As(err, &classified) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("pull error = %v, want classified deadline failure", err)
 	}
+	if got := managedRuntimePullHTTPStatus(failure); got != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want %d", got, http.StatusGatewayTimeout)
+	}
 	httpFailure := models.PullResult{
 		ModelName:          "voice",
 		ManagedPullOutcome: "SOURCE_FETCH_FAILED",

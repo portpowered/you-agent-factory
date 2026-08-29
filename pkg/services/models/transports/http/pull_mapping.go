@@ -1,9 +1,18 @@
 package http
 
 import (
+	"net/http"
+
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func managedRuntimePullHTTPStatus(result models.PullResult) int {
+	if factoryapi.ManagedRuntimePullOutcome(result.ManagedPullOutcome) == factoryapi.ManagedRuntimePullOutcomeTIMEDOUT {
+		return http.StatusGatewayTimeout
+	}
+	return http.StatusUnprocessableEntity
+}
 
 func modelPullResponseFromService(result models.PullResult) factoryapi.ModelPullResponse {
 	files := make([]factoryapi.ModelPullDownloadedFile, 0, len(result.DownloadedFiles))

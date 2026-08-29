@@ -79,17 +79,17 @@ func TestStory003FailedPullReturnsTypedResponseAndServerSurvives(t *testing.T) {
 	if pull.err != "" {
 		t.Fatalf("failed pull returned transport error: %s", summarizeHTTP(pull))
 	}
-	if pull.status != http.StatusInternalServerError {
-		t.Fatalf("failed pull status = %d, want 500: %s", pull.status, summarizeHTTP(pull))
+	if pull.status != http.StatusUnprocessableEntity {
+		t.Fatalf("failed pull status = %d, want 422: %s", pull.status, summarizeHTTP(pull))
 	}
-	var failure factoryapi.ErrorResponse
+	var failure factoryapi.ModelPullResponse
 	if err := json.Unmarshal(pull.body, &failure); err != nil {
 		t.Fatalf("decode failed pull response: %v; body=%s", err, pull.body)
 	}
-	if failure.Code != factoryapi.ErrorResponseCodeINTERNALERROR ||
-		failure.Family != factoryapi.ErrorFamilyInternalServerError ||
-		strings.TrimSpace(failure.Message) == "" {
-		t.Fatalf("failed pull response = %#v, want non-empty typed ErrorResponse", failure)
+	if failure.Outcome != factoryapi.ModelPullOutcomeFAILED ||
+		failure.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
+		failure.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("failed pull response = %#v, want FAILED/SOURCE_FETCH_FAILED/FAILED", failure)
 	}
 	afterHealth := callStory001HTTP(t, t.Context(), http.MethodGet, baseURL+"/status", nil)
 	laterRequest := callStory001HTTP(t, t.Context(), http.MethodGet, baseURL+"/models", nil)

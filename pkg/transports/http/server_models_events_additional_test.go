@@ -718,11 +718,13 @@ func assertInvokeModelErrors(t *testing.T, tests []invokeModelErrorCase) {
 
 func TestPullModel_ErrorMappings(t *testing.T) {
 	tests := []struct {
-		name       string
-		pullErr    error
-		wantStatus int
-		wantCode   string
-		wantMsg    string
+		name             string
+		pullErr          error
+		wantStatus       int
+		wantCode         string
+		wantMsg          string
+		wantManagedState factoryapi.ManagedRuntimeReadinessState
+		wantPullOutcome  factoryapi.ManagedRuntimePullOutcome
 	}{
 		{
 			name:       "model_not_found",
@@ -749,9 +751,9 @@ func TestPullModel_ErrorMappings(t *testing.T) {
 				},
 				Cause: context.DeadlineExceeded,
 			},
-			wantStatus: http.StatusGatewayTimeout,
-			wantCode:   "INTERNAL_ERROR",
-			wantMsg:    "models request timed out",
+			wantStatus:       http.StatusGatewayTimeout,
+			wantManagedState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+			wantPullOutcome:  factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
 		},
 		{
 			name:       "generic_internal_error",
@@ -772,7 +774,21 @@ func TestPullModel_ErrorMappings(t *testing.T) {
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 
-			assertJSONError(t, rec, tt.wantStatus, tt.wantCode, tt.wantMsg)
+			if tt.wantCode != "" {
+				assertJSONError(t, rec, tt.wantStatus, tt.wantCode, tt.wantMsg)
+				return
+			}
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+			if response.ManagedRuntimePull.ReadinessState != tt.wantManagedState {
+				t.Fatalf("managed runtime readiness = %s, want %s", response.ManagedRuntimePull.ReadinessState, tt.wantManagedState)
+			}
+			if response.ManagedRuntimePull.PullOutcome != tt.wantPullOutcome {
+				t.Fatalf("managed runtime pull outcome = %s, want %s", response.ManagedRuntimePull.PullOutcome, tt.wantPullOutcome)
+			}
 		})
 	}
 }
