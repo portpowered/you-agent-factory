@@ -12,27 +12,28 @@ import (
 )
 
 type config struct {
-	runSuite            bool
-	goBinary            string
-	repositoryRoot      string
-	functionalRoot      string
-	coverageSummaryPath string
-	timingSummaryPath   string
-	outputPath          string
-	logPath             string
-	profilePath         string
-	verdictPath         string
-	exitCodePath        string
-	tier                string
-	trigger             string
-	budget              string
-	short               bool
-	quarantinePath      string
-	jobs                int
-	minimumCoverage     float64
-	packageManifestPath string
-	packageFloorPolicy  string
-	testTimeout         string
+	runSuite                     bool
+	goBinary                     string
+	repositoryRoot               string
+	functionalRoot               string
+	coverageSummaryPath          string
+	timingSummaryPath            string
+	outputPath                   string
+	logPath                      string
+	profilePath                  string
+	coverageBuildDiagnosticsPath string
+	verdictPath                  string
+	exitCodePath                 string
+	tier                         string
+	trigger                      string
+	budget                       string
+	short                        bool
+	quarantinePath               string
+	jobs                         int
+	minimumCoverage              float64
+	packageManifestPath          string
+	packageFloorPolicy           string
+	testTimeout                  string
 }
 
 func main() {
@@ -58,6 +59,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.outputPath, "output", "", "Markdown output path (default: <root>/.artifacts/functional-test-viz/functional-tests.md)")
 	flag.StringVar(&cfg.logPath, "log", "", "complete command log path used by -run-suite")
 	flag.StringVar(&cfg.profilePath, "profile", "", "coverage profile path used by -run-suite")
+	flag.StringVar(&cfg.coverageBuildDiagnosticsPath, "coverage-build-diagnostics", "", "optional coverage compile-probe cache diagnostic path used by -run-suite")
 	flag.StringVar(&cfg.verdictPath, "verdict", "", "compact functional coverage verdict path used by -run-suite")
 	flag.StringVar(&cfg.exitCodePath, "exit-code-file", "", "optional gocoveragecheck exit-code handoff path")
 	flag.StringVar(&cfg.tier, "tier", "pr-short", "functional test tier label")

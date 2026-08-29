@@ -81,6 +81,7 @@ var functionalCoverageMakeOverrideVars = []string{
 	"FUNCTIONAL_TEST_VIZ_MARKDOWN",
 	"GO_FUNCTIONAL_COVERAGE_PROFILE",
 	"GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT",
+	"FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS",
 }
 
 func scrubMakeOverrideEnv(environ []string, dropNames ...string) []string {

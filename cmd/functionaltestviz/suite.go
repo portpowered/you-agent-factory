@@ -47,6 +47,7 @@ func runFunctionalSuite(cfg config, stdout, stderr io.Writer) error {
 		cfg.timingSummaryPath,
 		cfg.coverageSummaryPath,
 		cfg.profilePath,
+		cfg.coverageBuildDiagnosticsPath,
 		cfg.outputPath,
 		cfg.verdictPath,
 		cfg.exitCodePath,
@@ -240,6 +241,9 @@ func coverageCommandArguments(cfg config) []string {
 		"-profile", cfg.profilePath,
 		"-json-output", cfg.coverageSummaryPath,
 		"-timing-output", cfg.timingSummaryPath,
+	}
+	if strings.TrimSpace(cfg.coverageBuildDiagnosticsPath) != "" {
+		args = append(args, "-coverage-build-diagnostics-output", cfg.coverageBuildDiagnosticsPath)
 	}
 	if !cfg.short {
 		args = append(args, "-short=false")

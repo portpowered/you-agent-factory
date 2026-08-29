@@ -24,6 +24,42 @@ func TestRunRequiresCoverageSummary(t *testing.T) {
 	}
 }
 
+func TestCoverageCommandArgumentsKeepsProbeOptIn(t *testing.T) {
+	t.Parallel()
+
+	base := config{
+		jobs:                8,
+		minimumCoverage:     33.1,
+		packageManifestPath: "coverage-minimums.json",
+		packageFloorPolicy:  "blocking",
+		quarantinePath:      "quarantine.json",
+		testTimeout:         "10m",
+		profilePath:         "coverage.out",
+		coverageSummaryPath: "coverage-summary.json",
+		timingSummaryPath:   "timing-summary.json",
+	}
+	defaultArgs := coverageCommandArguments(base)
+	if slicesContainsString(defaultArgs, "-coverage-build-diagnostics-output") {
+		t.Fatalf("default coverage args = %v, want probe flag omitted", defaultArgs)
+	}
+
+	withProbe := base
+	withProbe.coverageBuildDiagnosticsPath = "coverage-build-diagnostics.json"
+	probeArgs := coverageCommandArguments(withProbe)
+	if !slicesContainsString(probeArgs, "-coverage-build-diagnostics-output") || !slicesContainsString(probeArgs, "coverage-build-diagnostics.json") {
+		t.Fatalf("probe coverage args = %v, want optional diagnostic path", probeArgs)
+	}
+}
+
+func slicesContainsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRenderConsoleSummaryOnlyPrintsPkgCoverageAndFunctionalPackageLatencies(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

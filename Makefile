@@ -172,6 +172,7 @@ FUNCTIONAL_TEST_VIZ_TIMING ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-timing-summa
 FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
 FUNCTIONAL_TEST_VIZ_LOG ?= $(FUNCTIONAL_TEST_VIZ_DIR)/command.log
 FUNCTIONAL_COVERAGE_VERDICT_FILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-coverage-verdict.txt
+FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS ?=
 FUNCTIONAL_TEST_GO ?= $(GO)
 # Hosted CI sets this optional handoff so an ordinary gocoveragecheck failure
 # can be reported by its compact terminal verdict step. An unset path preserves
@@ -601,7 +602,8 @@ functional-test-viz:
 		-minimum $(GO_FUNCTIONAL_COVERAGE_MIN) \
 		-package-manifest "$(GO_FUNCTIONAL_COVERAGE_MANIFEST)" \
 		-package-floor-policy "$(GO_COVERAGE_FLOOR_POLICY)" \
-		-test-timeout "$(GO_COVERAGE_TIMEOUT)"
+		-test-timeout "$(GO_COVERAGE_TIMEOUT)" \
+		$(if $(FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS),-coverage-build-diagnostics "$(FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS)",)
 
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
