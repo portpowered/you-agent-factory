@@ -209,6 +209,7 @@ func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 		server := startFixtureBackedMCPServer(t)
 		defer server.cleanup()
 		initializeMCPClient(t, server.client)
+		assertIncompleteMCPFrameTerminates(t, server)
 	})
 	t.Run("runtime-backed", func(t *testing.T) {
 		projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-stdio-discovery-runtime")
@@ -254,21 +255,25 @@ type stdioMCPClient struct {
 }
 
 type stdioMCPServer struct {
-	t            *testing.T
-	client       *stdioMCPClient
-	stdin        *os.File
-	stdinRead    *os.File
-	stdout       *bufio.Reader
-	stdoutRead   *os.File
-	stdoutWrite  *os.File
-	serveErr     <-chan error
-	cancel       context.CancelFunc
-	shutdownOnce sync.Once
-	shutdownDone chan struct{}
-	shutdownErr  error
-	streamsOnce  sync.Once
-	cleanupOnce  sync.Once
-	cleanupErr   error
+	t                   *testing.T
+	client              *stdioMCPClient
+	stdin               *os.File
+	stdinRead           *os.File
+	stdout              *bufio.Reader
+	stdoutRead          *os.File
+	stdoutWrite         *os.File
+	serveErr            <-chan error
+	cancel              context.CancelFunc
+	serveOnce           sync.Once
+	serveDone           chan struct{}
+	serveResult         error
+	serveResultAccepted bool
+	shutdownOnce        sync.Once
+	shutdownDone        chan struct{}
+	shutdownErr         error
+	streamsOnce         sync.Once
+	cleanupOnce         sync.Once
+	cleanupErr          error
 }
 
 type mcpJSONRPCResponse struct {
@@ -451,6 +456,7 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 		stdoutWrite:  stdoutWrite,
 		serveErr:     serveErr,
 		cancel:       cancel,
+		serveDone:    make(chan struct{}),
 		shutdownDone: make(chan struct{}),
 	}
 	t.Cleanup(server.cleanup)
@@ -508,6 +514,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 		stdoutWrite:  stdoutWrite,
 		serveErr:     serveErr,
 		cancel:       cancel,
+		serveDone:    make(chan struct{}),
 		shutdownDone: make(chan struct{}),
 	}
 	t.Cleanup(server.cleanup)
@@ -530,21 +537,43 @@ func (s *stdioMCPServer) cleanup() {
 	}
 }
 
+func (s *stdioMCPServer) awaitServe() error {
+	s.serveOnce.Do(func() {
+		// This bounded wait is only a hang guard. A returned serveErr is the
+		// deterministic completion signal; the timeout protects test cleanup
+		// from a genuine stuck stream without acting as synchronization.
+		select {
+		case err := <-s.serveErr:
+			s.serveResult = err
+		case <-time.After(mcpStdioStopTimeout):
+			s.serveResult = fmt.Errorf("MCP stdio server did not shut down after stdin closed")
+		}
+		close(s.serveDone)
+	})
+	<-s.serveDone
+	return s.serveResult
+}
+
+func (s *stdioMCPServer) closeInputAndAwait() error {
+	_ = s.stdin.Close()
+	return s.awaitServe()
+}
+
+func (s *stdioMCPServer) acceptServeResult() {
+	s.serveResultAccepted = true
+}
+
 func (s *stdioMCPServer) shutdown() error {
 	s.shutdownOnce.Do(func() {
 		s.cancel()
 		_ = s.stdin.Close()
 		mcpStdioTopology.recordContextCanceled()
-		select {
-		case err := <-s.serveErr:
-			if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
-				s.shutdownErr = fmt.Errorf("MCP stdio server: %w", err)
-			}
-		// This bounded wait is only a hang guard. Normal completion is the
-		// serveErr channel, and cancellation/EOF are never synchronized by a
-		// sleep or timeout-padded readiness delay.
-		case <-time.After(mcpStdioStopTimeout):
-			s.shutdownErr = fmt.Errorf("MCP stdio server did not shut down after stdin closed")
+		if err := s.awaitServe(); err != nil &&
+			!s.serveResultAccepted &&
+			!errors.Is(err, io.EOF) &&
+			!errors.Is(err, context.Canceled) &&
+			!strings.Contains(err.Error(), "file already closed") {
+			s.shutdownErr = fmt.Errorf("MCP stdio server: %w", err)
 		}
 		close(s.shutdownDone)
 	})
@@ -560,6 +589,25 @@ func (s *stdioMCPServer) closeStreams() {
 		_ = s.stdoutWrite.Close()
 		mcpStdioTopology.recordStreamsClosed()
 	})
+}
+
+func assertIncompleteMCPFrameTerminates(t *testing.T, server *stdioMCPServer) {
+	t.Helper()
+	if _, err := server.stdin.Write([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"`)); err != nil {
+		t.Fatalf("write incomplete MCP frame: %v", err)
+	}
+	serveErr := server.closeInputAndAwait()
+	if serveErr == nil {
+		t.Fatal("incomplete MCP frame returned nil, want invocation error")
+	}
+	server.acceptServeResult()
+
+	if err := server.stdoutWrite.Close(); err != nil {
+		t.Fatalf("close stdout after incomplete MCP frame: %v", err)
+	}
+	if _, err := server.stdout.ReadByte(); err != io.EOF {
+		t.Fatalf("read stdout after incomplete MCP frame = %v, want EOF without a success response", err)
+	}
 }
 
 func (l *mcpStdioTopologyLedger) recordRootBuild() {
