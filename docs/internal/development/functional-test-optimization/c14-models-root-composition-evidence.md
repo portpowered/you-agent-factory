@@ -1,10 +1,10 @@
 # C14 Models root-composition characterization
 
-Status: `CHAR-C14-001 PASS`; `OPT-C14-002 PASS` for the retained candidate's
-behavior, cleanup, repeat, race, and profile-backed performance disposition.
-This report freezes the pre-change witness inventory, records the retained
-test-only optimization, and leaves clean-room and delivery ownership to the
-next story.
+Status: `CHAR-C14-001 PASS`; `OPT-C14-002 PASS`; `CLEAN-C14-003 PASS` for the
+retained candidate's behavior, cleanup, repeat, race, profile-backed
+performance disposition, and independent clean-room package run. This report
+freezes the pre-change witness inventory, records the retained test-only
+optimization, and leaves PR delivery handoff to the implementation finish line.
 
 ## Scope and evidence boundary
 
@@ -403,13 +403,13 @@ stronger mapping after its change.
 | C14-060 | `characterization_ledger_test.go:39` `TestMain`, three exact runs, JSON profile pass | Baseline samples, medians, exits, counter topology, wait census, hot spots, and eligibility are recorded here. | Test-only evidence; story 001 characterization gate |
 | C14-061 | `catalog_discovery_test.go`, `catalog_cli_test.go`, and `shared_process_test.go` retained candidate | Post-change every frozen assertion maps equal-or-stronger; the catalog cluster reuses one immutable process/API fixture and all other mutable witnesses remain isolated. | Focused selector and final exact package pass; no deleted/skipped/weak assertion |
 | C14-062 | Retained candidate focused selector and shared-process target | Three-run changed-topology repeat and supported race pass; shared session opens/closes remain balanced and no Go race is observed. | `-count=3` selector and `-race` selector above; package samples also pass |
-| C14-063 | No current final row; owned by story `...-003` | Clean rebased package passes with final median reduction or profile-backed floor. | Deferred clean-room/delivery gate |
+| C14-063 | Detached clean-room worktree at `f0d25e510cf50ef9d0f35fb2ea7b91aba8d10ca7`; exact package command | The final rebased package passes every mapped default case and retains the profile-backed floor disposition. | `go test ./tests/functional/models/root_composition/... -count=1` exit 0; cleanup counters balanced; delivery remains `GATE-C14-PR-CI` |
 
 This gives each matrix ID an exact current row or an explicit later-story
 owner. Rows C14-001 through C14-059 are the frozen behavioral denominator;
 C14-060 is the characterization evidence row; C14-061 and C14-062 are
-complete for the retained optimization; and C14-063 remains owned by the
-clean-room/delivery story.
+complete for the retained optimization; and C14-063 is complete for the
+clean-room proof, with PR delivery remaining in `GATE-C14-PR-CI`.
 
 ## Cleanup and external-effect result
 
@@ -426,6 +426,96 @@ removed or weakened.
 No host HTTP calls or uncontrolled network calls were observed. Local TCP,
 loopback HTTP, LocalAI, asset HTTP, and process-level artifact tests remain
 isolated because their external state is itself part of the witness.
+
+## Validation report: C14 Models root-composition loopback
+
+## Environment and artifact
+
+- Commit/build identifier: `f0d25e510cf50ef9d0f35fb2ea7b91aba8d10ca7` (rebased
+  implementation head under validation; the later ledger commit is
+  documentation-only and does not alter the owned package).
+- Environment and configuration: Windows `10.0.26200`, `go1.25.0 windows/amd64`,
+  default module/build cache configuration, repository `go.mod`, no remote or
+  paid provider configuration.
+- Customer entry point: production `root.BuildProcess` and `Process.Execute`,
+  using the package's public CLI and loopback HTTP/API flows.
+- Real and substituted dependencies: real local filesystem, OS processes,
+  loopback HTTP/TCP, model-host, cache, listener, and artifact boundaries;
+  controlled external effects supplied through `edges.Edges`; no uncontrolled
+  host HTTP or remote inference.
+- Cost/call budget used: zero remote or paid calls; `$0`.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Final package behavior and cleanup | PASS | A detached clean-room worktree at `f0d25e510c` ran `go test ./tests/functional/models/root_composition/... -count=1` and exited 0 in 48.229s. The final output reported `root_builds=52`, `api_servers=20`, `httptest_servers=33`, `localai_starts=8`, `tcp_listeners=2`, `factory_roots=56`, `temp_dirs=85`, `host_starts=30`, `asset_http_calls=14`, `host_http_calls=0`, and `local_http_calls=36`; shared sessions were `5/5`; the catalog fixture was `1` root / `1` API start. | Terminal CI and merge; portable absolute timing. |
+| Assertion inventory, topology, and performance disposition | PASS | The committed inventory maps CASE-C14-001 through CASE-C14-063. The final candidate retains the equal-or-stronger assertion inventory and the bounded profile-backed floor: package median `55.527s -> 50.030s` (`9.90%` lower) and wall median `59.523s -> 54.186s` (`8.97%` lower), with the isolated mutable/external-effect rows preserved. | Other machines' timing and the explicitly rejected 40% threshold alternative. |
+| Loopback defect handling | PASS | The first detached run exposed an environment-contended timeout witness and is recorded in Findings; the isolated timeout selector passed in `1.240s`, and one bounded clean-room rerun passed without any source repair. | Host-wide process contention outside package ownership. |
+| Highest planned integrated runtime proof | PASS | The clean-room package exercised the complete owned local root, CLI, HTTP, process, listener, host, cache, and artifact boundaries with controlled edges; no remote runtime proof was attempted under the zero-call budget. | Real remote/local inference behavior owned by the active sibling lane. |
+| Implementation-stage delivery | PENDING HANDOFF | The final push, PR creation, CI-start observation, and PR-only median/CI comment follow this report; terminal CI and merge remain review-owned. | Current PR URL and CI run URL are established only after push. |
+
+## Customer journey
+
+1. A clean detached worktree was created at the rebased candidate and verified
+   clean before execution.
+2. The exact default package command ran through the real application root and
+   public `Process.Execute` CLI/API paths. All default tests passed, including
+   bad-input, dependency-failure, timeout, cancellation, recovery,
+   reconstruction, publication rollback, concurrency, and forced-cleanup
+   witnesses.
+3. The package's final output showed balanced shared Factory Session opens and
+   closes (`5/5`), one shared catalog root/API start, zero uncontrolled host
+   HTTP calls, and the expected owned topology counters. The detached worktree
+   had no tracked changes after the run and was removed.
+4. The first clean-room attempt's timeout result was not hidden: it is recorded
+   as an environmental finding, followed by the isolated reproduction and one
+   successful bounded clean-room rerun at the same commit.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: this ledger contains the frozen case matrix,
+  optimization evidence, final topology reconciliation, and this loopback
+  report; the PR description uses the task's `prd.json` as requested.
+- Permission and error behavior: existing public typed/sanitized diagnostics,
+  cancellation, timeout, dependency-failure, no-false-success, and forced
+  cleanup assertions remained executable and passed.
+- Persistence/reload behavior: cache, Factory, reconstruction, artifact, and
+  lease witnesses remain isolated and pass in the complete package.
+- Accessibility/keyboard/responsive behavior: not applicable; this lane changes
+  only Go functional-test topology and evidence documentation.
+- Operational signals: package counters, explicit shared-session cleanup,
+  process/server/host/listener cleanup assertions, controlled edge calls, and
+  absence of remote calls remain observable.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| C14-LB-001 | environmental, resolved | First detached run at `f0d25e510c` while an unrelated long-lived `you run --continuously --with-server` and other Go test jobs occupied the host; exact command | Complete package passes with deterministic timeout/cancellation witnesses | `TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing` returned before readiness negotiation start; the focused selector then passed in `1.240s`, and the single bounded clean-room rerun passed in `48.229s` | First-run output, focused reproduction, and rerun log outside the repository; no test or production source changed |
+| C14-LB-002 | informational | Compare retained-candidate samples with the independent clean-room counter line | Evidence ledger reconciles topology without inventing a fixed portable timing threshold | Clean-room `host_starts=30` versus prior retained samples at `31`; all other recorded cleanup/topology witnesses remained balanced, so the report records the observed run-specific value rather than changing behavior | Exact clean-room output and the committed candidate tables above |
+
+## Verdict
+
+PASS for the local implementation, evidence consistency, and independent
+clean-room validation. PR delivery remains the implementation-stage handoff
+described in the pending criterion above; terminal CI and merge are review-stage
+responsibilities.
+
+## Delta-plan request [Required for FAIL/BLOCKED]
+
+- Affected behavior and criterion: the first attempt at `GATE-C14-CLEANROOM`.
+- Root-cause evidence or remaining uncertainty: the timeout witness was
+  host-contended, not reproduced by its focused selector, and not reproduced
+  by the bounded clean-room rerun at the same code commit. The owned package is
+  byte-identical to the pre-rebase candidate; rebase changed no executable
+  package content.
+- Smallest recommended correction/prerequisite: none for this lane; preserve
+  the recorded environmental finding and let review rerun terminal CI on the
+  final pushed head. No source repair or assertion weakening is authorized.
+- Dependencies and retest scope: PR CI and merge are review-owned; if a
+  required check fails on the pushed head, follow the repository's one-rerun
+  baseline-flake rule and change only failures caused by this diff.
 
 ## Remaining unproven edges
 
