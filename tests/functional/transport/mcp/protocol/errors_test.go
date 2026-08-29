@@ -383,6 +383,9 @@ func (s *fixtureBackedMCPServer) shutdown() error {
 			if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
 				s.shutdownErr = fmt.Errorf("fixture-backed MCP server: %w", err)
 			}
+		// This bounded wait is only a hang guard. A returned serveErr is the
+		// deterministic completion signal; the timeout protects test cleanup
+		// from a genuinely stuck stream without acting as synchronization.
 		case <-time.After(mcpProtocolStopTimeout):
 			s.shutdownErr = fmt.Errorf("fixture-backed MCP server did not shut down after stdin closed")
 		}
@@ -487,6 +490,9 @@ func (l *mcpProtocolTopologyLedger) cleanupError() error {
 	var errs []error
 	if l.sharedRootBuilds != 0 && l.sharedRootCloses != 1 {
 		errs = append(errs, fmt.Errorf("shared application roots built/closed = %d/%d, want one close", l.sharedRootBuilds, l.sharedRootCloses))
+	}
+	if l.isolatedRootBuilds != l.isolatedRootCloses {
+		errs = append(errs, fmt.Errorf("isolated application roots built/closed = %d/%d", l.isolatedRootBuilds, l.isolatedRootCloses))
 	}
 	if l.invocationStarts != l.invocationReturns {
 		errs = append(errs, fmt.Errorf("MCP invocation starts/returns = %d/%d", l.invocationStarts, l.invocationReturns))
