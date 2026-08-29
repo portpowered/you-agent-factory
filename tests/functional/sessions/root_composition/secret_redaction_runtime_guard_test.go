@@ -88,9 +88,7 @@ func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing
 	})
 	replayInputs.Input.WorkingDirectory = dir
 	replayInputs.Input.Env = append(replayInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	replayProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, replayProcess)
-	if err := replayProcess.Execute(replayInputs.Input); err != nil {
+	if err := process.Execute(replayInputs.Input); err != nil {
 		t.Fatalf("replay persisted recording: %v\nstderr=%s", err, replayInputs.Stderr())
 	}
 }
@@ -212,7 +210,7 @@ func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
 	}
 	assertRecordedTwoWorkstationArtifact(t, artifactPath, secretControl, plainControl, output)
 
-	replayFunctionalRecording(t, artifactPath, dir, homeDir)
+	replayFunctionalRecording(t, process, artifactPath, dir, homeDir)
 }
 
 func scaffoldRecordedTwoWorkstationFactory(t *testing.T, inline bool, secretControl, plainControl string) string {
@@ -284,16 +282,14 @@ func scaffoldRecordedTwoWorkstationFactory(t *testing.T, inline bool, secretCont
 	})
 }
 
-func replayFunctionalRecording(t *testing.T, artifactPath, dir, homeDir string) {
+func replayFunctionalRecording(t *testing.T, process support.Process, artifactPath, dir, homeDir string) {
 	t.Helper()
 	replayInputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--replay", artifactPath, "--no-record", "--quiet",
 	})
 	replayInputs.Input.WorkingDirectory = dir
 	replayInputs.Input.Env = append(replayInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	replayProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, replayProcess)
-	if err := replayProcess.Execute(replayInputs.Input); err != nil {
+	if err := process.Execute(replayInputs.Input); err != nil {
 		t.Fatalf("replay two-workstation recording: %v\nstderr=%s", err, replayInputs.Stderr())
 	}
 }

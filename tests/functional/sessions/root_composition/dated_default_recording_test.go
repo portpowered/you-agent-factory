@@ -64,9 +64,11 @@ func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProc
 	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	wantDate := time.Now().UTC().Format("2006/01/02")
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 
-	firstReportedPath := executeDefaultRecordingRun(t, factoryDir, env)
-	secondReportedPath := executeDefaultRecordingRun(t, factoryDir, env)
+	firstReportedPath := executeDefaultRecordingRun(t, process, factoryDir, env)
+	secondReportedPath := executeDefaultRecordingRun(t, process, factoryDir, env)
 
 	recordingRoot := filepath.Join(homeDir, ".you-agent-factory", "recordings")
 	paths := listRecordingArtifacts(t, recordingRoot)
@@ -95,8 +97,8 @@ func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProc
 		t.Fatalf("shutdown-reported paths collided at %q", firstReportedPath)
 	}
 
-	firstReplayOutput, firstReplayError := replayRecordingThroughRoot(t, paths[0])
-	secondReplayOutput, secondReplayError := replayRecordingThroughRoot(t, paths[1])
+	firstReplayOutput, firstReplayError := replayRecordingThroughRoot(t, process, paths[0])
+	secondReplayOutput, secondReplayError := replayRecordingThroughRoot(t, process, paths[1])
 	if firstReplayError != nil || secondReplayError != nil {
 		t.Fatalf("replay errors = %v, %v; outputs = %q, %q", firstReplayError, secondReplayError, firstReplayOutput, secondReplayOutput)
 	}
@@ -145,11 +147,9 @@ func TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess(t *testing.T)
 	}
 }
 
-func executeDefaultRecordingRun(t *testing.T, factoryDir string, env []string) string {
+func executeDefaultRecordingRun(t *testing.T, process support.Process, factoryDir string, env []string) string {
 	t.Helper()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", factoryDir})
 	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = factoryDir
@@ -249,11 +249,9 @@ func assertWholeFileReplayArtifact(t *testing.T, path, canonicalSessionID string
 	}
 }
 
-func replayRecordingThroughRoot(t *testing.T, path string) (string, error) {
+func replayRecordingThroughRoot(t *testing.T, process support.Process, path string) (string, error) {
 	t.Helper()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 	workingDirectory := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", workingDirectory, "--replay", path, "--no-record", "--quiet",
