@@ -33,6 +33,13 @@
       "propertyProved": "All 812 final rows have an exact final source reference and source hash; all 200 mapped rows retain exact public-witness property/surface pairs; all 612 added rows have source-confirmed body witnesses; no assertion was removed or weakened; fixture-only differences are registered with their public-behavior rationale.",
       "propertyNotProved": "This gate does not claim a full-suite rerun, unsupported Unix/signal fidelity, remote-provider behavior, or clean-room VAL-001; those remain explicit boundary items.",
       "status": "pass"
+    },
+    {
+      "gateId": "GATE-AUDIT-005",
+      "procedure": "From a detached clean worktree at the delivered implementation head, run the recorded go list pattern sets; run go test $RESOLVED_PACKAGE -list '^Test' -count=0 once for each of the 77 resolved packages; run the portable jq structural filters and the PowerShell source/hash/Markdown audit; run the eight focused selectors in witnessReconciliation; run make test-lane-audit, the inventory Markdown linter, and git diff --check. The validation report records the exact source and artifact head/build.",
+      "propertyProved": "The clean checkout reproduced the format-2 inventory: 77 package directories (72 executable candidates plus five zero-test facts), 595 top-level declarations, 217 named scenarios, 206 process-start observations, 812 classified rows (44 shareable, 537 shareable-with-mock, 231 isolated-with-reason, 0 unclassified), 354 unique C01 mappings, exact source SHA-256/reference pairs, and the exact Markdown count summary; all eight focused selectors exited 0.",
+      "propertyNotProved": "Full-suite runtime execution of every final row, unsupported Unix/signal process behavior, remote-provider or live AGY behavior, and terminal current-head PR CI.",
+      "status": "pass"
     }
   ],
   "fixtureDifferenceRegister": [
@@ -233,7 +240,6 @@
       "full-suite runtime parity for every final row",
       "unsupported Unix/signal process fidelity on this Windows host",
       "remote-provider and live AGY behavior",
-      "clean-room VAL-001",
       "current-head PR CI"
     ]
   },
@@ -22118,14 +22124,13 @@
       "unproven": "The artifact does not substitute package-level ledger evidence for full-suite runtime parity or unsupported OS behavior."
     }
   },
-  "recordedAtUtc": "2026-08-29T03:54:22.3095679Z",
+  "recordedAtUtc": "2026-08-29T04:34:14.142Z",
   "recordedCommit": "ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee",
   "remainingUnprovenEdges": [
     "direct local-real reruns for rows not covered by the recovered exact-head package ledgers",
     "full-suite runtime parity for every final row",
     "unsupported Unix/signal process fidelity on this Windows host",
     "remote-provider and live AGY behavior",
-    "clean-room VAL-001",
     "current-head PR CI"
   ],
   "scope": {
@@ -22243,7 +22248,7 @@
       }
     ],
     "finalDenominator": {
-      "classificationStatus": "complete-story-003-witness",
+      "classificationStatus": "complete-story-004-clean-room",
       "finalRowCount": 812,
       "historicalExecutableCandidateDirectories": 72,
       "namedScenarios": 217,
@@ -22258,7 +22263,7 @@
     "note": "The current repository-root plan was read from the operator workspace; it is ignored and is not added to this PR. The task PRD remains the delivered authority.",
     "status": "operator-root-authority-not-present-in-clean-worktree"
   },
-  "status": "story-003-witness-complete-story-004-clean-room-pending",
+  "status": "story-004-clean-room-pass",
   "testRows": [
     {
       "classification": {

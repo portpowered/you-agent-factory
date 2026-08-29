@@ -2,7 +2,7 @@
 
 ## Identity and count units
 
-- Format version: 2. story-003-witness-complete-story-004-clean-room-pending.
+- Format version: 2. story-004-clean-room-pass.
 - Source commit: ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee.
 - Build: go version go1.25.0 windows/amd64, windows/amd64, CPU 24, GOAMD64 v1.
 - Input format-1 JSON SHA-256: aa56f631810e812f34ce167247c11e7741890862eccf2a7ef1475f530c9c1f80.
@@ -23,6 +23,47 @@ The inventory keeps top-level Go test declarations, named `t.Run` scenarios, and
 | shareable-with-mock | 537 | Root/process composition remains real while provider, command, or protocol effects are controlled at the accepted edge. |
 | isolated-with-reason | 231 | A real process, child, listener, stdio, signal, environment, filesystem, readiness, crash, or persistence edge is the tested property. |
 | **Total** | **812** | **All final rows classified.** |
+
+## Clean-room validation (Story 004)
+
+Status: **PASS**. The paired artifacts and representative runtime witnesses
+were reproduced from a detached clean checkout at the delivered implementation
+head. The executable source content is pinned to
+`ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee`; the validation report records the
+exact checkout head, build, commands, results, and remaining edges:
+[`validation/c07-isolation-inventory-reconciliation.md`](validation/c07-isolation-inventory-reconciliation.md).
+
+The clean checkout had no tracked or untracked changes. The recorded five
+`go list` pattern sets resolved the same 77 package directories as this
+inventory. One separate `go test $RESOLVED_PACKAGE -list '^Test' -count=0`
+run per package returned exit code 0 and listed all 595 top-level
+declarations. The portable jq structural audit and PowerShell source,
+identity, hash, observation-reference, and Markdown-count audit both passed:
+
+| Check | Result |
+| --- | --- |
+| Format and count-unit agreement | 77 resolved directories; 72 executable candidates; 595 top-level declarations; 217 named scenarios; 206 process-start observations; 812 final rows |
+| Classification sum | 44 shareable + 537 shareable-with-mock + 231 isolated-with-reason = 812; unclassified = 0 |
+| C01 mapping identity | 354 unique C01 rows; 200 mapped final identities; 154 retired rows with no final identity; no duplicate or missing mapping |
+| Source and witness references | 812 source/hash pairs, exact source references, declaration/named-parent locations, and observation references; all matched |
+| Representative local-real selectors | 8 of 8 exited 0, covering listener/start/shutdown, malformed configuration, port binding, executable selection, provider crash/exit, process environment, Work, Factory Event, ACP replay, CLI, and runtime API witnesses |
+| Repository quality gates | `make test-lane-audit`, the inventory Markdown linter, and `git diff --check` exited 0 |
+
+The source signal categories are separate from the process-start count unit.
+The focused selector set includes `TestPackagedFactoryContinuousServerWithoutInvocationRemainsReachable`
+for start, shutdown, malformed-configuration, port-binding, and process-environment
+signals; `TestBuiltCLIBatchExitCodesReportSingleWorkOutcome` for executable
+selection; and `TestProviderNonZeroExitMapsToPublicFailure` for the provider
+crash/exit path. The other five selectors retain Work, JavaScript, ACP replay,
+and public runtime API witnesses. No signal category is promoted to a process
+observation without the row's separate observation ledger entry.
+
+The available before/after identity counts are directional, not a timing
+threshold: C01 format 1 recorded 39 packages, 342 top-level declarations, and
+354 rows without a separate process-observation unit; the final C01-C07 spine
+records 77 resolved directories, 595 top-level declarations, 812 classified
+rows, and 206 process-start observations. Actual topology remains represented
+by the row-level isolation reasons and the recovered package ledgers.
 
 ## Candidate directory census
 
@@ -1575,5 +1616,6 @@ The following table is the complete 812-row final denominator. `PSO-*` entries a
 - GATE-MAP-002: all 354 C01 mappings and all 812 final identities remain in the paired inventory.
 - GATE-CLASS-003: source/hash pairs checked = 812; class counts sum to 812; unclassified rows = 0; process observations = 206.
 - GATE-WITNESS-004: all 812 final source references and hashes reconcile; all 200 mapped rows retain exact public-witness properties/surfaces; all 612 added rows have source-body witnesses; removed or weakened assertions = 0; fixture-only differences are registered.
-- The recovered C06/C07 package ledgers provide the process/property evidence cited by each row. Full-suite runtime parity, unsupported Unix/signal behavior, remote-provider behavior, clean-room VAL-001, and current-head PR CI remain unproven.
+- GATE-AUDIT-005: the detached clean checkout reproduced all count units, mappings, source hashes, observation references, the exact Markdown summary, and all eight focused selectors; `make test-lane-audit`, the inventory Markdown linter, and `git diff --check` passed.
+- The recovered C06/C07 package ledgers provide the process/property evidence cited by each row. Full-suite runtime parity, unsupported Unix/signal behavior, remote-provider behavior, and current-head PR CI remain unproven.
 - No package migration, shared-support change, production change, generated contract change, UI change, restart-surface change, remote-provider call, or PR #2331 content was added.
