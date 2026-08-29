@@ -27,6 +27,7 @@ type FactoryRuntimeAssembler interface {
 		string,
 		string,
 		string,
+		string,
 		factorydefinitions.WorkstationLoader,
 		factoryruntime.LoadedFactoryLoader,
 		providers.Service,

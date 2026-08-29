@@ -30,14 +30,18 @@ type RuntimeActivationDefinitionInputs struct {
 
 type RuntimeActivationSessionInputs struct {
 	// CanonicalSessionID is the preallocated runtime identity for an automatic
-	// default recording; the public session alias remains separate.
+	// default recording and its runtime metrics; the public session alias
+	// remains separate.
 	CanonicalSessionID string
-	PersistencePolicy  string
-	BackendScopeID     string
-	SystemConfigHome   string
-	SystemConfigPath   string
-	WorkFile           string
-	Host               RuntimeActivationHostInputs
+	// CanonicalSessionIDGenerated preserves whether Factory Sessions allocated
+	// the canonical identity before Runtime activation.
+	CanonicalSessionIDGenerated bool
+	PersistencePolicy           string
+	BackendScopeID              string
+	SystemConfigHome            string
+	SystemConfigPath            string
+	WorkFile                    string
+	Host                        RuntimeActivationHostInputs
 }
 
 type RuntimeActivationHostInputs struct {

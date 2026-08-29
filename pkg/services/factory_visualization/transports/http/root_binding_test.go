@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -125,12 +126,12 @@ func (fake *httpVisualizationRootFake) ClosePresentation(
 	panic("unexpected ClosePresentation call in HTTP adapter root seam test")
 }
 
-type metricsScopeResolverFunc func(string) (factoryvisualizationhttp.MetricsSessionScope, error)
+type metricsScopeResolverFunc func(string) (factorysessions.RuntimeMetricsScope, error)
 
-func (resolver metricsScopeResolverFunc) ResolveMetricsSessionScope(
+func (resolver metricsScopeResolverFunc) ResolveRuntimeMetricsScope(
 	_ context.Context,
 	sessionID string,
-) (factoryvisualizationhttp.MetricsSessionScope, error) {
+) (factorysessions.RuntimeMetricsScope, error) {
 	return resolver(sessionID)
 }
 
@@ -143,13 +144,13 @@ func TestMetricsHandlerResolvesPublicSessionBeforeQueryAndPreservesEmptyReport(t
 		gotRequest = request
 		return factoryvisualization.RuntimeMetricsQueryResult{}, nil
 	})
-	resolver := metricsScopeResolverFunc(func(sessionID string) (factoryvisualizationhttp.MetricsSessionScope, error) {
+	resolver := metricsScopeResolverFunc(func(sessionID string) (factorysessions.RuntimeMetricsScope, error) {
 		if sessionID != "public-live-id" {
 			t.Fatalf("resolver session ID = %q, want public-live-id", sessionID)
 		}
-		return factoryvisualizationhttp.MetricsSessionScope{
-			RequestedID: "public-live-id",
-			RetainedIDs: []string{"runtime-scope-id", "logical-scope-id"},
+		return factorysessions.RuntimeMetricsScope{
+			RequestedFactorySessionID: "public-live-id",
+			RetainedFactorySessionIDs: []string{"runtime-scope-id", "logical-scope-id"},
 		}, nil
 	})
 	handler := factoryvisualizationhttp.NewMetricsHandler(
@@ -208,8 +209,8 @@ func TestMetricsHandlerMapsTypedSessionScopeFailures(t *testing.T) {
 				t.Fatal("query invoked after scope resolution failed")
 				return factoryvisualization.RuntimeMetricsQueryResult{}, nil
 			})
-			resolver := metricsScopeResolverFunc(func(string) (factoryvisualizationhttp.MetricsSessionScope, error) {
-				return factoryvisualizationhttp.MetricsSessionScope{}, test.err
+			resolver := metricsScopeResolverFunc(func(string) (factorysessions.RuntimeMetricsScope, error) {
+				return factorysessions.RuntimeMetricsScope{}, test.err
 			})
 			handler := factoryvisualizationhttp.NewMetricsHandler(factoryvisualizationhttp.NewMetricsAdapter(query, resolver, "/tmp/metrics"), zap.NewNop())
 			recorder := httptest.NewRecorder()

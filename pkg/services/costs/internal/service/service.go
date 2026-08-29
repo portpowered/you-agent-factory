@@ -96,6 +96,7 @@ func (service *Service) QueryCosts(
 	metrics, err := service.metrics.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
 		MetricsRoot:       strings.TrimSpace(request.MetricsRoot),
 		SessionID:         sessionID,
+		SessionIDs:        normalizedRetainedFactorySessionIDs(request.RetainedFactorySessionIDs),
 		RuntimeInstanceID: runtimeID,
 	})
 	if err != nil {
@@ -191,6 +192,30 @@ func scopeForRequest(request costs.QueryRequest) costs.Scope {
 		return costs.Scope{Kind: costs.ScopeAllFactorySessions}
 	}
 	return costs.Scope{Kind: costs.ScopeFactorySession, FactorySessionID: sessionID}
+}
+
+func normalizedRetainedFactorySessionIDs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || containsFactorySessionID(result, value) {
+			continue
+		}
+		result = append(result, value)
+	}
+	return result
+}
+
+func containsFactorySessionID(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func queryErrorKind(err error) string {

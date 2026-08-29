@@ -107,7 +107,7 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		t.Fatalf("loadedFactoryFixture: %v", err)
 	}
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -165,7 +165,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
 		nil,
 	).Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,

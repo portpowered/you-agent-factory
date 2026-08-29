@@ -374,6 +374,13 @@ func (a *Assembly) Complete(
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
+	// A fresh default runtime now receives its canonical metrics identity before
+	// construction. Keep the legacy session-identity edge at its historical
+	// completion boundary so cancellation and other caller-visible effects do
+	// not move earlier in the opening lifecycle.
+	if startupSpec.CanonicalSessionIDGenerated && a.sessionIDs != nil {
+		_ = a.sessionIDs()
+	}
 	session := livesession.NewWithRuntimeID(
 		identity.id,
 		startupRuntime.Directory(),
@@ -497,8 +504,13 @@ func selectCompletionSessionIdentity(factorySessionID string, startupSpec factor
 		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
 	}
 	runtimeID := ""
-	if isDefault && livesession.IsUUIDID(startupSpec.SessionID) {
-		runtimeID = strings.TrimSpace(startupSpec.SessionID)
+	if isDefault {
+		metricsSessionID := strings.TrimSpace(startupSpec.MetricsSessionID)
+		if metricsSessionID != "" && metricsSessionID != factorysessions.DefaultSessionID {
+			runtimeID = metricsSessionID
+		} else if livesession.IsUUIDID(startupSpec.SessionID) {
+			runtimeID = strings.TrimSpace(startupSpec.SessionID)
+		}
 	}
 	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
 }

@@ -127,13 +127,14 @@ func runtimeOpeningRequestFromActivation(
 		),
 		FactoryRuntime: request.Runtime,
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			FactorySessionID:   request.FactorySessionID,
-			CanonicalSessionID: request.Inputs.Session.CanonicalSessionID,
-			PersistencePolicy:  factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
-			BackendScopeID:     request.Inputs.Session.BackendScopeID,
-			SystemConfigHome:   request.Inputs.Session.SystemConfigHome,
-			SystemConfigPath:   request.Inputs.Session.SystemConfigPath,
-			WorkFile:           request.Inputs.Session.WorkFile,
+			FactorySessionID:            request.FactorySessionID,
+			CanonicalSessionID:          request.Inputs.Session.CanonicalSessionID,
+			CanonicalSessionIDGenerated: request.Inputs.Session.CanonicalSessionIDGenerated,
+			PersistencePolicy:           factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
+			BackendScopeID:              request.Inputs.Session.BackendScopeID,
+			SystemConfigHome:            request.Inputs.Session.SystemConfigHome,
+			SystemConfigPath:            request.Inputs.Session.SystemConfigPath,
+			WorkFile:                    request.Inputs.Session.WorkFile,
 			Host: factorysessions.RuntimeHostRequest{
 				Directory:   request.Inputs.Session.Host.Directory,
 				RuntimeMode: request.Inputs.Session.Host.RuntimeMode,
@@ -436,6 +437,12 @@ func (f *Factory) activationOpening(
 		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime opening request is required")
 	}
 	opening := *request
+	canonicalSessionIDProvided := strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
+	if err := ensureDefaultCanonicalSessionID(&opening, f.generateRuntimeInstanceID); err != nil {
+		return factorysessions.RuntimeOpeningRequest{}, "", err
+	}
+	opening.FactorySession.CanonicalSessionIDGenerated = !canonicalSessionIDProvided &&
+		strings.TrimSpace(opening.FactorySession.CanonicalSessionID) != ""
 	runtimeID := strings.TrimSpace(opening.FactoryRuntime.RuntimeInstanceID)
 	if runtimeID != "" {
 		return opening, runtimeID, nil
@@ -449,6 +456,31 @@ func (f *Factory) activationOpening(
 	}
 	opening.FactoryRuntime.RuntimeInstanceID = runtimeID
 	return opening, runtimeID, nil
+}
+
+func ensureDefaultCanonicalSessionID(
+	request *factorysessions.RuntimeOpeningRequest,
+	generateID factorysessions.RuntimeInstanceIDGenerator,
+) error {
+	if request == nil || strings.TrimSpace(request.Recordings.ReplayPath) != "" || strings.TrimSpace(request.Recordings.ResumePath) != "" {
+		return nil
+	}
+	sessionID := strings.TrimSpace(request.FactorySession.FactorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "" {
+		return nil
+	}
+	if generateID == nil {
+		return fmt.Errorf("open Factory Session: canonical session ID generator is required")
+	}
+	canonicalID := strings.TrimSpace(generateID())
+	if canonicalID == "" {
+		return fmt.Errorf("open Factory Session: canonical session ID generator returned an empty identity")
+	}
+	request.FactorySession.CanonicalSessionID = canonicalID
+	return nil
 }
 
 func (f *Factory) resolveActivationSnapshot(
@@ -789,12 +821,13 @@ func runtimeActivationInputs(
 			ExecutionBaseDir: request.FactoryDefinition.ExecutionBaseDir,
 		},
 		Session: factoryruntime.RuntimeActivationSessionInputs{
-			CanonicalSessionID: request.FactorySession.CanonicalSessionID,
-			PersistencePolicy:  string(request.FactorySession.PersistencePolicy),
-			BackendScopeID:     request.FactorySession.BackendScopeID,
-			SystemConfigHome:   request.FactorySession.SystemConfigHome,
-			SystemConfigPath:   request.FactorySession.SystemConfigPath,
-			WorkFile:           request.FactorySession.WorkFile,
+			CanonicalSessionID:          request.FactorySession.CanonicalSessionID,
+			CanonicalSessionIDGenerated: request.FactorySession.CanonicalSessionIDGenerated,
+			PersistencePolicy:           string(request.FactorySession.PersistencePolicy),
+			BackendScopeID:              request.FactorySession.BackendScopeID,
+			SystemConfigHome:            request.FactorySession.SystemConfigHome,
+			SystemConfigPath:            request.FactorySession.SystemConfigPath,
+			WorkFile:                    request.FactorySession.WorkFile,
 			Host: factoryruntime.RuntimeActivationHostInputs{
 				Directory:   request.FactorySession.Host.Directory,
 				RuntimeMode: request.FactorySession.Host.RuntimeMode,

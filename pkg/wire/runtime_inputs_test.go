@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,7 +22,6 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -69,7 +69,7 @@ func (stub *metricsSessionProjectionReaderStub) GetFactorySession(
 	return stub.projection, stub.err
 }
 
-func TestMetricsSessionScopeResolverUsesRetainedProjectionIdentities(t *testing.T) {
+func TestRuntimeMetricsScopeResolverUsesOnlyCanonicalProjectionIdentity(t *testing.T) {
 	reader := &metricsSessionProjectionReaderStub{
 		projection: factorysessions.SessionProjection{
 			Context: factorysessions.ProjectionContext{
@@ -87,42 +87,37 @@ func TestMetricsSessionScopeResolverUsesRetainedProjectionIdentities(t *testing.
 			},
 		},
 	}
-	resolver := newMetricsFactorySessionScopeResolver(reader)
-	got, err := resolver.ResolveMetricsSessionScope(context.Background(), " public-live-id ")
+	resolver := factorysessionwire.NewRuntimeMetricsScopeResolver(reader)
+	got, err := resolver.ResolveRuntimeMetricsScope(context.Background(), " public-live-id ")
 	if err != nil {
-		t.Fatalf("ResolveMetricsSessionScope() error = %v", err)
+		t.Fatalf("ResolveRuntimeMetricsScope() error = %v", err)
 	}
 	if reader.gotID != "public-live-id" {
 		t.Fatalf("reader selector = %q, want trimmed selector", reader.gotID)
 	}
-	want := []string{
-		"retained-runtime-id", "public-live-id", factorysessions.DefaultSessionID,
+	want := []string{"retained-runtime-id"}
+	if got.RequestedFactorySessionID != "public-live-id" {
+		t.Fatalf("requested Factory Session ID = %q, want public-live-id", got.RequestedFactorySessionID)
 	}
-	if len(got.RetainedIDs) != len(want) {
-		t.Fatalf("retained IDs = %#v, want %#v", got.RetainedIDs, want)
-	}
-	for index := range want {
-		if got.RetainedIDs[index] != want[index] {
-			t.Fatalf("retained IDs = %#v, want %#v", got.RetainedIDs, want)
-		}
+	if !reflect.DeepEqual(got.RetainedFactorySessionIDs, want) {
+		t.Fatalf("retained IDs = %#v, want %#v", got.RetainedFactorySessionIDs, want)
 	}
 }
 
-func TestMetricsSessionScopeResolverRejectsDiscoverableProjectionWithoutRetainedIdentity(t *testing.T) {
-	resolver := newMetricsFactorySessionScopeResolver(&metricsSessionProjectionReaderStub{
+func TestRuntimeMetricsScopeResolverRejectsDiscoverableProjectionWithoutRetainedIdentity(t *testing.T) {
+	resolver := factorysessionwire.NewRuntimeMetricsScopeResolver(&metricsSessionProjectionReaderStub{
 		projection: factorysessions.SessionProjection{
 			Context: factorysessions.ProjectionContext{
 				FactorySessionID: "public-live-id",
 			},
 		},
 	})
-	_, err := resolver.ResolveMetricsSessionScope(context.Background(), "public-live-id")
+	_, err := resolver.ResolveRuntimeMetricsScope(context.Background(), "public-live-id")
 	if err == nil || !strings.Contains(err.Error(), "no retained metrics scope") {
-		t.Fatalf("ResolveMetricsSessionScope() error = %v, want retained-scope failure", err)
+		t.Fatalf("ResolveRuntimeMetricsScope() error = %v, want retained-scope failure", err)
 	}
-	var typed *factoryvisualizationhttp.MetricsScopeError
-	if !errors.As(err, &typed) {
-		t.Fatalf("error = %T, want typed MetricsScopeError", err)
+	if !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
+		t.Fatalf("error = %v, want ErrRuntimeNotAvailable", err)
 	}
 }
 

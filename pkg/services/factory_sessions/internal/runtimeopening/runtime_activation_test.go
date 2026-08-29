@@ -645,6 +645,36 @@ func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 	}
 }
 
+func TestActivationRequestAllocatesCanonicalIdentityForFreshDefault(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	generated := []string{
+		canonicalID,
+		"runtime-1",
+	}
+	factory := &Factory{
+		generateRuntimeInstanceID: func() string {
+			identity := generated[0]
+			generated = generated[1:]
+			return identity
+		},
+		factoryDefinitions: activationDefinitionsStub{snapshot: activationSnapshot()},
+	}
+	activation, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+	})
+	if err != nil {
+		t.Fatalf("activationRequest() error = %v", err)
+	}
+	if activation.FactorySessionID != factorysessions.DefaultSessionID || activation.RuntimeID != "runtime-1" {
+		t.Fatalf("activation identity = %#v, want default/runtime-1", activation)
+	}
+	if activation.Inputs.Session.CanonicalSessionID != canonicalID {
+		t.Fatalf("canonical session identity = %q, want generated UUID", activation.Inputs.Session.CanonicalSessionID)
+	}
+}
+
 func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 	t.Parallel()
 

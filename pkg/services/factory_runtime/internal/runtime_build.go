@@ -381,6 +381,7 @@ func buildBundle(
 	if err != nil {
 		return nil, err
 	}
+	metricsSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
 	workerSessionsFactory, err = prepareBundleExecution(
 		workerSessionsFactory,
 		providerSessionProgress,
@@ -403,6 +404,7 @@ func buildBundle(
 		spec.Dir,
 		spec.FolderPath,
 		sessionID,
+		metricsSessionID,
 		factoryRunnerID,
 		runtimeMode,
 		verbose,

@@ -89,6 +89,16 @@ func openRuntime(
 	if recordingsRuntime == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime opening is required")
 	}
+	providedCanonicalSessionID := strings.TrimSpace(request.FactorySession.CanonicalSessionID)
+	canonicalSessionIDGenerated := request.FactorySession.CanonicalSessionIDGenerated
+	if err := ensureDefaultCanonicalSessionID(
+		request,
+		generateRuntimeInstanceID,
+	); err != nil {
+		return runtimeProducts{}, err
+	}
+	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
+		(providedCanonicalSessionID == "" && strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "")
 	definitionRequest := request.FactoryDefinition
 	runtimeRequest := request.FactoryRuntime
 	sessionRequest := request.FactorySession
@@ -96,10 +106,9 @@ func openRuntime(
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
-	canonicalSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
-	effectiveSessionID := sessionID
-	if canonicalSessionID != "" {
-		effectiveSessionID = canonicalSessionID
+	metricsSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
+	if metricsSessionID == "" {
+		metricsSessionID = sessionID
 	}
 	sessionRequest.FactorySessionID = sessionID
 	workerRequest := request.Workers
@@ -297,12 +306,13 @@ func openRuntime(
 	// direct live opening should restore the current board recording; applying
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
-	if load.ReplayArtifact == nil && resumeInput == nil && canonicalSessionID == "" {
+	canonicalSessionIDWasProvided := providedCanonicalSessionID != "" && !canonicalSessionIDGenerated
+	if load.ReplayArtifact == nil && resumeInput == nil && !canonicalSessionIDWasProvided {
 		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
 			boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
 				durableExecution.Service,
-				effectiveSessionID,
+				sessionID,
 			)
 			if err != nil {
 				return runtimeProducts{}, err
@@ -312,7 +322,7 @@ func openRuntime(
 		restoredBoard, err = restoreCurrentBoardHistory(
 			recordingsService,
 			configured.Recordings.RecordPath,
-			effectiveSessionID,
+			sessionID,
 			boardHistoryOpening.allowMissingHistory,
 		)
 		if err != nil {
@@ -337,7 +347,8 @@ func openRuntime(
 			configured.Recordings.ReplayPath == "",
 			configured.Recordings.RecordPath,
 			configured.Recordings.WorkflowID,
-			effectiveSessionID,
+			sessionID,
+			metricsSessionID,
 			nil,
 			loadFactory,
 			providerOverride,
@@ -388,6 +399,9 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	startupSpec.CanonicalSessionIDGenerated = canonicalSessionIDGenerated &&
+		sessionID == factorysessions.DefaultSessionID &&
+		metricsSessionID != factorysessions.DefaultSessionID
 	if boardHistoryOpening.hasDurableState && restoredWorldState == nil {
 		if runtimeLogger := startupRuntime.RuntimeLogger(); runtimeLogger != nil {
 			runtimeLogger.Warn(
@@ -417,7 +431,7 @@ func openRuntime(
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
-		effectiveSessionID,
+		sessionID,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -518,7 +532,7 @@ func openRuntime(
 		resourceLeaseAdmission = admission
 	}
 	if err := bindDurableExecutionCapabilities(
-		effectiveSessionID,
+		sessionID,
 		durableExecution.Service,
 		workerService,
 		rootRuntime,
@@ -555,7 +569,7 @@ func openRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
 		cleanup.Close,
-		effectiveSessionID,
+		sessionID,
 	)
 	opened.engine = startupRuntime.RuntimeService()
 	opened.application.Resources.Clock = clock

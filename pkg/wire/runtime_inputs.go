@@ -25,7 +25,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -654,73 +653,6 @@ func newDurableExecutionHTTPHandler(
 
 type workerSessionsFactorySessionScopeResolver struct {
 	sessions factorysessions.Service
-}
-
-type metricsFactorySessionScopeResolver struct {
-	sessions metricsFactorySessionReader
-}
-
-type metricsFactorySessionReader interface {
-	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-}
-
-func newMetricsFactorySessionScopeResolver(
-	sessions metricsFactorySessionReader,
-) factoryvisualizationhttp.MetricsSessionScopeResolver {
-	if sessions == nil {
-		return nil
-	}
-	return metricsFactorySessionScopeResolver{sessions: sessions}
-}
-
-func (resolver metricsFactorySessionScopeResolver) ResolveMetricsSessionScope(
-	ctx context.Context,
-	sessionID string,
-) (factoryvisualizationhttp.MetricsSessionScope, error) {
-	requestedID := strings.TrimSpace(sessionID)
-	if requestedID == "" {
-		return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsScopeUnavailableError(requestedID, errors.New("session id is required"))
-	}
-	projection, err := resolver.sessions.GetFactorySession(ctx, requestedID)
-	if err != nil {
-		if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
-			return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsSessionNotFoundError(requestedID, err)
-		}
-		return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsScopeUnavailableError(requestedID, err)
-	}
-
-	// A detail projection with no stream identity is discoverable but cannot
-	// truthfully address retained metrics. Do not fall back to the public ID or
-	// current definition in that case.
-	if projection.Runtime.StreamIdentity == nil {
-		return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsScopeUnavailableError(requestedID, nil)
-	}
-	retainedIDs := make([]string, 0, 3)
-	add := func(value string) {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return
-		}
-		for _, existing := range retainedIDs {
-			if existing == value {
-				return
-			}
-		}
-		retainedIDs = append(retainedIDs, value)
-	}
-	identity := projection.Runtime.StreamIdentity
-	add(identity.FactorySessionID)
-	add(projection.Context.FactorySessionID)
-	if projection.Context.Session != nil && projection.Context.Session.IsDefault {
-		add(factorysessions.DefaultSessionID)
-	}
-	if len(retainedIDs) == 0 {
-		return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsScopeUnavailableError(requestedID, nil)
-	}
-	return factoryvisualizationhttp.MetricsSessionScope{
-		RequestedID: requestedID,
-		RetainedIDs: retainedIDs,
-	}, nil
 }
 
 func newWorkerSessionsFactorySessionScopeResolver(

@@ -46,7 +46,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 	}
 
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -84,7 +84,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	bundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
@@ -134,7 +134,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		func() { events = append(events, "log.close") },
 		func() { events = append(events, "metrics.close") },
 	).Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
@@ -161,7 +161,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	bundle, err := testRuntimeFactoryWithSinks(logDir, metricsDir).Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
@@ -197,7 +197,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 
 	disabledBundle, err := testRuntimeFactory().Build(
-		context.Background(), dir, dir, "~default",
+		context.Background(), dir, dir, "~default", "",
 		"", interfaces.RuntimeModeBatch, false, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
