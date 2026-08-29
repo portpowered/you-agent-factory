@@ -247,3 +247,96 @@ go test -race -count=1 -timeout=15m -run '^(TestServeACP_RootBuildProcessProvide
 Observed result: exit 0, package `ok`, `13.311s`; no race was reported. The
 race run does not prove scheduler fairness, leak freedom outside these
 selectors, or the hosted runner edge.
+
+## Story 003: clean-room validation and implementation handoff
+
+### LOOPBACK-01: validation report
+
+## Environment and artifact
+
+- Commit/build identifier: `1c339cf04a90f7f283f2e459d8849c46894b2fa3`, the
+  clean implementation head used for the package run. The report append is
+  documentation-only and does not change the tested implementation.
+- Environment and configuration: detached clean Git worktree on Windows,
+  `go1.25.0 windows/amd64`; the checkout status was empty before execution.
+- Customer entry point: the functional package's `root.BuildProcess` and
+  `Process.Execute` path starting `you server acp` with real ACP stdio pipes.
+- Real and substituted dependencies: production root composition, asynchronous
+  process execution, and actual `os.Pipe` stdin/stdout boundaries are real;
+  only the provider command edge is controlled through the test-owned
+  `edges.Edges` command runner.
+- Cost/call budget used: one clean package execution; no paid provider calls.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| EVIDENCE-RAW-01 and CHAR-01 | PASS | The hosted selector, truncated raw warning, provenance, hashes, local phase observation, and structured uncertainty are recorded above before the correction. | The hosted warning still does not identify the later assertion. |
+| Eight P039 preservation | PASS | The exact eight selectors remain present; the c01 inventory hashes remain `AA56F631810E812F34CE167247C11E7741890862ECCF2A7EF1475F530C9C1F80` and `1C4A73A1FEB6AAE330998121BAE565BF2B38CED8933E95BD364177659A4025CF`; the package run exercised the full set. | Hosted raised-parallelism coexistence remains CI-owned. |
+| MATRIX-01 through MATRIX-15 | PASS | The retained applicable cases and explicit broader-lane ownership are recorded in the matrix above; no non-applicable case was silently claimed by P039. | The broader ACP matrix is not re-run by this lane. |
+| ACP behavior and scope preservation | PASS | The diff remains test-local plus this evidence document; the package passed with unchanged envelopes, ordering, errors, streams, exit behavior, replay assertions, diagnostics, transcript permissions, and public surfaces. | This local run does not replace hosted jobs=8 evidence. |
+| REPEAT-01 | PASS | The exact four-selector `go test -count=3` control repeat passed at the local-real root/pipe boundary; result and command are recorded above. | Whole-package and hosted interaction are outside this focused gate. |
+| RACE-01 | PASS | The exact four-selector `go test -race -count=1` run passed with no race report; result and command are recorded above. | Leak freedom and scheduler fairness outside those selectors are unproven. |
+| PACKAGE-01 | PASS | From the clean detached worktree, `go test -count=1 -timeout=15m ./tests/functional/transport/acp/stdio` exited 0 and reported `ok github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio 19.620s`; all eight selectors passed and no leaked-resource symptom was printed. | Hosted raised-parallelism and later jobs=12-16 configurations remain unproven. |
+| LOOPBACK-01 | PASS | This report records the tested artifact, environment, dependency fidelity, exact journey, findings, verdict, and remaining edges without repairing the checkout during validation. | It does not prove terminal CI or merge. |
+| CI-JOBS8-01 implementation handoff | PASS | The implementation handoff is ready once the final documentation head is pushed, the PR is open, and matching-head CI has started; terminal package status is explicitly review-owned. | The matching-head Backend Functional Coverage package verdict is not claimed here. |
+| Excluded surfaces | PASS | No `providers/acp`, realclient, shared-support, c01 inventory, workflow, OpenAPI, CLI grammar, event, schema, configuration, UI, paid-provider, or customer-data change entered the diff. | None within this story's declared exclusions. |
+
+## Customer journey
+
+1. Created a detached worktree at the implementation head and confirmed an
+   empty status.
+2. Ran exactly:
+
+   ```text
+   go test -count=1 -timeout=15m ./tests/functional/transport/acp/stdio
+   ```
+
+3. The package completed with exit status 0 and output
+   `ok github.com/portpowered/infinite-you/tests/functional/transport/acp/stdio
+   19.620s`. The package contains the eight named P039 selectors, including
+   the corrected close/load replay journey, and the process returned without a
+   leaked-resource diagnostic.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the lane evidence remains in this canonical
+  internal development record; no public customer contract changed.
+- Permission and error behavior: provider failure, cancellation, close, wire
+  transcript, and owner-readable permission assertions remain in the eight
+  executable witnesses.
+- Persistence/reload behavior: the close/load selector passed in the complete
+  package and retained its item-identity and no-reexecution assertions.
+- Accessibility/keyboard/responsive behavior: not applicable; this is a
+  backend ACP stdio functional lane with no UI surface.
+- Operational signals: the clean package's exit status and package timing are
+  captured above; terminal raised-parallelism diagnostics are delegated to the
+  matching-head PR run and review.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| FINDING-01 | Informational / review-owned | Inspect the immutable jobs=8 artifact from run `33220840795`, job `99014418744`. | The retained reason identifies the failed assertion or complete lifecycle trace. | The retained reason ends at a `ProjectWorkerChild` projection warning; the same warning can precede a local pass. | EVIDENCE-RAW-01 and CHAR-01 above. |
+| FINDING-02 | Informational / review-owned | Observe the next matching-head PR run. | Backend Functional Coverage reports the ACP stdio package result for jobs=8. | Terminal status is intentionally not observed during implementation. | CI-JOBS8-01 above; review owns terminal CI. |
+
+## Verdict
+
+PASS for the implementation-stage clean-room loopback and handoff preparation.
+The local-real package proof is complete. The matching-head hosted jobs=8
+package verdict is an explicitly unproven, review-owned edge and is not being
+represented as passed by this report.
+
+## Review-owned follow-up
+
+- Affected behavior and criterion: raised-parallelism ACP stdio coexistence,
+  `CI-JOBS8-01`.
+- Root-cause evidence or remaining uncertainty: the implementation correction
+  passes the complete local package, but the original hosted artifact retained
+  only a truncated warning and cannot establish the hosted final assertion.
+- Smallest recommended correction/prerequisite: inspect the matching-head
+  Backend Functional Coverage package diagnostics; if the ACP stdio package is
+  red, apply one bounded test-local optimization pass against its attributable
+  phase. If green, record the terminal package evidence in the PR.
+- Dependencies and retest scope: review-owned matching-head CI; no additional
+  local package timing loop is requested by this implementation report.
