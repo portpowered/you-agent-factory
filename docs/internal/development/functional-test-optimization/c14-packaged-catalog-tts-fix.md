@@ -1,9 +1,9 @@
 # C14 packaged Catalog, TTS, and Fix baseline ledger
 
-Status: stories `fto-c14-pkg-factory-packaged-cluster-001` and
-`...-002` are complete. This ledger freezes the pre-change denominator and
+Status: stories `fto-c14-pkg-factory-packaged-cluster-001` through
+`...-003` are complete. This ledger freezes the pre-change denominator and
 characterization for the three owned functional packages and records the
-bounded Catalog optimization. Stories `...-003` through `...-005` own TTS,
+bounded Catalog and TTS optimizations. Stories `...-004` and `...-005` own
 Fix, final measurement, loopback, and review handoff.
 
 ## Authority, scope, and artifact
@@ -316,15 +316,86 @@ and no sleep or timeout was added. The retained unproven edges are final
 three-run medians or a measured floor, TTS and Fix optimization, touched
 integrated loopback, current-head CI, and merge.
 
+## GATE-TTS-OPT: shared Models live/replay fixture and result
+
+The TTS profile selected the four Models live/replay root-built executions and
+their repeated packaged-install/model-host setup. This bounded slice reuses
+one root-built `Process.Execute` graph, one public packaged-Factory seed, one
+ready-model cache seed, and one model protocol/launcher edge. Each success or
+failure pair still receives a fresh customer home, copied `@you/tts` Factory,
+unique backend scope, cache copy, recording, and artifact boundary; replay
+uses its live pair's recording and makes no second model call. The delivered
+binary row and shared concurrent scenario were not changed.
+
+### Procedure and measured result
+
+The focused command was run against the current source after the fixture
+change. The repeat, race, and full-package commands exercised the same local
+root composition and controlled Models edge. Expected failure logs in the
+failure witness are part of the assertion and did not affect the exit status.
+
+```text
+go test ./tests/functional/factory/packaged/tts \
+  -run '^TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections$' \
+  -count=1 -v
+go test ./tests/functional/factory/packaged/tts \
+  -run '^TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections$' \
+  -count=3
+go test -race ./tests/functional/factory/packaged/tts/... \
+  -run '^TestFactoryTTSModelsSuccessAndFailureReplayPreservePublicProjections$' \
+  -count=1
+go test ./tests/functional/factory/packaged/tts/... -count=1
+```
+
+| Evidence | Before | After | Exit |
+| --- | ---: | ---: | ---: |
+| Models live/replay focused elapsed | `~10.63s` characterization sample | `8.105s` | `0` |
+| Focused repeat gate | four independent executions | `27.539s` for `-count=3` | `0` |
+| Focused race gate | not applicable before edit | `19.234s` for `-race -count=1` | `0` |
+| Complete TTS package | `34.767s` characterization sample | `29.488s` | `0` |
+
+The elapsed values are observed host samples, not the final three-run TTS
+median or a quiet-host threshold. The structural reduction and behavior
+evidence are the gate result for this story; `GATE-PERF-C14` owns the final
+median/floor verdict.
+
+### TTS operation and identity handoff
+
+The TTS assertion inventory remains unchanged at six top-level and eight named
+records. The focused test still proves completed audio Work/event correlation,
+digest, metadata, lineage, recording order, host lifecycle, replay projection
+equivalence, zero replay model calls, failure status, and no failure artifact.
+The run log observed one backend call for each live scenario and none during
+replay; the fixture cleanup observed balanced model-host starts/stops (`2/2`).
+
+| Operation or identity boundary | Before | After | Ownership/isolation retained |
+| --- | ---: | ---: | --- |
+| Root builds for the Models live/replay helper | `4` | `1` | One root remains public and is closed by fixture cleanup |
+| Public packaged-Factory seed installs | `2` | `1` | Seed is materialized through `InstallPackagedFactoryWithProcess` |
+| Model-ready cache initialization | `2` | `1` seed | Two pair-local cache copies remain, one per success/failure pair |
+| Model protocol/launcher fixture instances | `4` | `1` | Shared health server/client and launcher edge; live host lifecycle remains `2/2` |
+| Models inference calls | `2` live + `0` replay | `2` live + `0` replay | Mutable backend resets per pair; replay cannot call the backend |
+| Factory sessions | `4` | `4` | Live/replay success and failure sessions remain independently observed |
+| Factory/cache/recording/artifact pair boundaries | `2` pairs | `2` pairs | Fresh homes, Factory copies, caches, recordings, and artifact paths remain |
+| Delivered binary build/launch | `1` build / `2` launches | unchanged | Actual delivered protocol witness remains separate |
+
+No assertion was removed or weakened, no production/shared-support file
+changed, and no sleep, remote call, paid call, or real VibeVoice claim was
+introduced. Remaining unproven edges are the final three-run TTS median or
+measured floor, Fix optimization, final rebase, clean-room loopback,
+current-head CI, PR review, and merge.
+
 ## Handoff artifacts
 
 - Durable ledger: `docs/internal/development/functional-test-optimization/c14-packaged-catalog-tts-fix.md`.
-- Ignored task state: `prd.json` marks stories `...-001` and `...-002`
+- Ignored task state: `prd.json` marks stories `...-001` through `...-003`
   `passes:true`; `progress.txt`
   records the concise iteration handoff and reusable patterns.
 - No generated, production, API, shared-support, workflow, baseline, CI, or
   sibling-package file changed; the Catalog change is confined to
-  `tests/functional/factory/packaged/catalog/required_inputs_test.go`.
+  `tests/functional/factory/packaged/catalog/required_inputs_test.go`, and the
+  TTS change is confined to
+  `tests/functional/factory/packaged/tts/{local_runtime_invocation_test.go,models_replay_helpers_test.go,models_replay_test.go}`.
 - Unproven edges handed to later gates: final three-run medians or
-  operation-level floors, TTS root/model setup reduction, Fix root/Git setup
-  reduction, clean-room loopback, current-head CI, and merge.
+  operation-level floors, Fix root/Git setup reduction, clean-room loopback,
+  current-head CI, and merge.
