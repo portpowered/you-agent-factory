@@ -21,6 +21,7 @@ import (
 // Isolation: isolated-with-reason - persistent connection count; the packaged
 // workflow must use one real ACP stdio peer across all four agent sessions.
 func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *testing.T) {
+	t.Parallel()
 	fixture := functionalACPFixture("spawn")
 	var starts atomic.Int32
 	homeDir := t.TempDir()

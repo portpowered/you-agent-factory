@@ -14,6 +14,7 @@ import (
 // Isolation: isolated-with-reason - connection serialization; two concurrent
 // prompts must contend for one real ACP stdio connection and one peer.
 func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.T) {
+	t.Parallel()
 	signals := t.TempDir()
 	promptHeld := filepath.Join(signals, "prompt-started")
 	release := filepath.Join(signals, "release")

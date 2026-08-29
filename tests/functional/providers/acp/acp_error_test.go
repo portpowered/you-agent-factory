@@ -25,6 +25,7 @@ import (
 // Isolation: isolated-with-reason - OS start failure; sharing would replace
 // the refused real command boundary with an already-started peer.
 func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -57,6 +58,7 @@ func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 // Isolation: isolated-with-reason - subprocess stderr; sharing would make the
 // configured secret and peer-owned diagnostic stream non-independent.
 func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP stderr redaction"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -104,6 +106,7 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 		{mode: "version", want: factoryapi.WorkFailureTypeMisconfigured},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
+			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP failure"}`))
 			writeACPWorker(t, dir, "cursor-acp")
@@ -128,6 +131,7 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 // Isolation: isolated-with-reason - executable lookup; sharing would remove
 // the zero-start proof that lookup fails before the ACP process boundary.
 func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"missing ACP executable"}`))
 	writeACPWorker(t, dir, "cursor-acp")

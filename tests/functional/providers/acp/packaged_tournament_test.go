@@ -19,6 +19,7 @@ import (
 // Isolation: isolated-with-reason - persistent connection count; competitors
 // and judge must share one real ACP stdio peer for the packaged workflow.
 func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *testing.T) {
+	t.Parallel()
 	fixture := functionalACPFixture("tournament")
 	var starts atomic.Int32
 	homeDir := t.TempDir()

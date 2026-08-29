@@ -11,6 +11,7 @@ import (
 // Isolation: isolated-with-reason - process and connection identity; two
 // sequential executions must use one retained real OS peer and stdio stream.
 func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing.T) {
+	t.Parallel()
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts, functionalACPFixture("persistent"))
 	defer server.Stop(t)
@@ -29,6 +30,7 @@ func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing
 // Isolation: isolated-with-reason - initialization negotiation; the durable
 // execution must observe an incompatible version from a fresh stdio peer.
 func TestProvidersACPRejectsIncompatibleProtocolVersionAtStdioBoundary(t *testing.T) {
+	t.Parallel()
 	var starts atomic.Int32
 	server := startACPDaemonProcess(t, &starts, functionalACPFixture("version"))
 	defer server.Stop(t)

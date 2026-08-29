@@ -48,6 +48,7 @@ type packagedACPInitializeFixture struct {
 // portion must launch the exact allowlisted executable boundary. The profile
 // fixture checks remain root-free shareable asset evidence.
 func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
+	t.Parallel()
 	var catalog packagedACPConformanceCatalog
 	if err := json.Unmarshal(modelproviders.RuntimeACPJSON(), &catalog); err != nil {
 		t.Fatalf("decode generated ACP runtime catalog: %v", err)

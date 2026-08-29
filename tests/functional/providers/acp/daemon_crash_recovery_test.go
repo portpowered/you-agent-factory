@@ -14,6 +14,7 @@ import (
 // Isolation: isolated-with-reason - crash and replacement; the failed first
 // child and successful second child must remain distinct real ACP processes.
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
+	t.Parallel()
 	marker := filepath.Join(t.TempDir(), "crashed")
 	fixture := functionalACPFixture("crash-once")
 	fixture.CrashMarkerPath = marker
@@ -36,6 +37,7 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 // Isolation: isolated-with-reason - connection retirement; a live child closes
 // stdout and a replacement must be selected rather than reusing stale stdio.
 func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	disconnectMarker := filepath.Join(dir, "disconnected")
 	readyMarker := filepath.Join(dir, "response-ready")

@@ -32,6 +32,7 @@ import (
 // Isolation: isolated-with-reason - restart and session continuation; the two
 // real ACP process identities and exact opaque session load are the witness.
 func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
+	t.Parallel()
 	const sessionID = "acp-session-retry-resume"
 	const providerID = "retry-acp"
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
