@@ -78,14 +78,38 @@ func startHostedLifecycleInvocation(
 	runner platformprocess.CommandRunner,
 	prompt string,
 ) *hostedLifecycleInvocation {
+	return startHostedLifecycleInvocationWithReuse(t, factoryDir, runner, prompt, false)
+}
+
+func startSharedHostedLifecycleInvocation(
+	t *testing.T,
+	factoryDir string,
+	runner platformprocess.CommandRunner,
+	prompt string,
+) *hostedLifecycleInvocation {
+	return startHostedLifecycleInvocationWithReuse(t, factoryDir, runner, prompt, true)
+}
+
+func startHostedLifecycleInvocationWithReuse(
+	t *testing.T,
+	factoryDir string,
+	runner platformprocess.CommandRunner,
+	prompt string,
+	shared bool,
+) *hostedLifecycleInvocation {
 	t.Helper()
 	api := newLifecycleAPIServer()
 	shutdownGate := newLifecycleGate("adverse listener shutdown")
 	api.HoldShutdownUntilSignaled(shutdownGate.channel())
-	coordinator := buildLifecycleProcess(t, serviceedges.Edges{
-		APIServerStarter:      api.Start,
-		ProviderCommandRunner: runner,
-	})
+	var coordinator *lifecycleCoordinator
+	if shared {
+		coordinator = buildSharedAdverseLifecycleProcess(t, runner, api.Start)
+	} else {
+		coordinator = buildLifecycleProcess(t, serviceedges.Edges{
+			APIServerStarter:      api.Start,
+			ProviderCommandRunner: runner,
+		})
+	}
 	coordinator.TrackGate(shutdownGate)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	inputs := coordinator.Inputs([]string{
@@ -157,7 +181,7 @@ func runLifecyclePartialProviderOutput(t *testing.T) {
 	runner := &lifecycleResultRunner{result: platformprocess.CommandResult{
 		Stdout: []byte(lifecyclePartialCodexStdout),
 	}}
-	invocation := startHostedLifecycleInvocation(
+	invocation := startSharedHostedLifecycleInvocation(
 		t,
 		factoryDir,
 		runner,
@@ -195,7 +219,7 @@ func runLifecycleServerAttachedProviderFailure(t *testing.T) {
 		ExitCode: deterministicProviderFailureExit,
 		Stderr:   []byte(deterministicProviderFailureStderr),
 	})
-	invocation := startHostedLifecycleInvocation(
+	invocation := startSharedHostedLifecycleInvocation(
 		t,
 		factoryDir,
 		runner,

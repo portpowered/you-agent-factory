@@ -53,14 +53,6 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(
-		t,
-		&edges,
-		support.NewStaticSuccessCommandRunner(wantCleanInvocationPrimaryResult),
-		nil,
-	)
-
 	args := []string{
 		"you", "run",
 		"--factory", factoryPath,
@@ -68,9 +60,12 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 		"--quiet",
 		"prove workers-owned clean invocation lifecycle",
 	}
-	process := buildLifecycleProcess(t, edges)
-	inputs := process.Inputs(args, factoryDir)
-	if err := process.Execute(inputs); err != nil {
+	inputs, err := executeSharedLifecycleInvocation(
+		t,
+		args,
+		support.NewStaticSuccessCommandRunner(wantCleanInvocationPrimaryResult),
+	)
+	if err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,
@@ -119,19 +114,13 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("file prompt accepted COMPLETE"),
 	})
-	edges := serviceedges.Edges{
-		ProviderCommandRunner:          runner,
-		WorkSubmittedFileReader:        os.ReadFile,
-		WorkSubmittedFilePathInspector: os.Stat,
-	}
 	args := []string{
 		"you", "run", "--factory", factoryPath,
 		"--provider", "codex", "--worker-reasoning-effort", "xhigh",
 		"--to-file", promptPath, "--no-record", "--quiet",
 	}
-	process := buildLifecycleProcess(t, edges)
-	inputs := process.Inputs(args, factoryDir)
-	if err := process.Execute(inputs); err != nil {
+	inputs, err := executeSharedLifecycleInvocation(t, args, runner)
+	if err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	if runner.CallCount() != 1 {
@@ -147,11 +136,11 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 	support.AssertArgsContainSequence(t, request.Args, []string{
 		"--config", `model_reasoning_effort="xhigh"`,
 	})
-	assertFilePromptConflicts(t, factoryDir, factoryPath, promptPath, args)
-	assertUnreadableFilePrompt(t, factoryDir, factoryPath, promptDir)
+	assertFilePromptConflicts(t, factoryPath, promptPath, args)
+	assertUnreadableFilePrompt(t, factoryPath, promptDir)
 }
 
-func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath string, fileArgs []string) {
+func assertFilePromptConflicts(t *testing.T, factoryPath, promptPath string, fileArgs []string) {
 	t.Helper()
 	for _, test := range []struct {
 		name        string
@@ -177,15 +166,10 @@ func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			runner := support.NewShapedProviderCommandRunner()
-			process := buildLifecycleProcess(t, serviceedges.Edges{
-				ProviderCommandRunner:          runner,
-				WorkSubmittedFileReader:        os.ReadFile,
-				WorkSubmittedFilePathInspector: os.Stat,
-			})
-			inputs := process.Inputs(test.args, factoryDir)
+			inputs := newSharedLifecycleInputs(t, test.args)
 			inputs.Input.Stdin = strings.NewReader(test.stdin)
 			inputs.Input.StdinIsTTY = &test.stdinIsTTY
-			err := process.Execute(inputs)
+			err := executeSharedLifecycleInputs(t, inputs, runner)
 			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
 			}
@@ -201,7 +185,7 @@ func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath
 	}
 }
 
-func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir string) {
+func assertUnreadableFilePrompt(t *testing.T, factoryPath, promptDir string) {
 	t.Helper()
 	missingPath := filepath.Join(promptDir, "missing prompt.txt")
 	runner := support.NewShapedProviderCommandRunner()
@@ -209,13 +193,7 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 		"you", "run", "--factory", factoryPath,
 		"--to-file", missingPath, "--no-record", "--quiet",
 	}
-	process := buildLifecycleProcess(t, serviceedges.Edges{
-		ProviderCommandRunner:          runner,
-		WorkSubmittedFileReader:        os.ReadFile,
-		WorkSubmittedFilePathInspector: os.Stat,
-	})
-	inputs := process.Inputs(missingArgs, factoryDir)
-	err := process.Execute(inputs)
+	_, err := executeSharedLifecycleInvocation(t, missingArgs, runner)
 	if err == nil || !strings.Contains(err.Error(), missingPath) {
 		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
 	}
@@ -227,13 +205,7 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 		"you", "run", "--factory", factoryPath,
 		"--to-file", promptDir, "--no-record", "--quiet",
 	}
-	directoryProcess := buildLifecycleProcess(t, serviceedges.Edges{
-		ProviderCommandRunner:          runner,
-		WorkSubmittedFileReader:        os.ReadFile,
-		WorkSubmittedFilePathInspector: os.Stat,
-	})
-	directoryInputs := directoryProcess.Inputs(directoryArgs, factoryDir)
-	err = directoryProcess.Execute(directoryInputs)
+	_, err = executeSharedLifecycleInvocation(t, directoryArgs, runner)
 	if err == nil || !strings.Contains(err.Error(), "regular file") {
 		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
 	}
@@ -253,9 +225,6 @@ func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("reasoning effort override COMPLETE"),
 	})
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-
 	args := []string{
 		"you", "run",
 		"--factory", factoryPath,
@@ -265,9 +234,8 @@ func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
 		"--quiet",
 		"prove the explicit reasoning effort path",
 	}
-	process := buildLifecycleProcess(t, edges)
-	inputs := process.Inputs(args, factoryDir)
-	if err := process.Execute(inputs); err != nil {
+	inputs, err := executeSharedLifecycleInvocation(t, args, runner)
+	if err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 
@@ -294,9 +262,6 @@ func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: []byte("must not dispatch"),
 	})
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-
 	args := []string{
 		"you", "run",
 		"--factory", factoryPath,
@@ -306,9 +271,7 @@ func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *
 		"--quiet",
 		"reject the unsupported reasoning effort",
 	}
-	process := buildLifecycleProcess(t, edges)
-	inputs := process.Inputs(args, factoryDir)
-	err := process.Execute(inputs)
+	_, err := executeSharedLifecycleInvocation(t, args, runner)
 	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
 		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
 	}
@@ -475,9 +438,6 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 		ExitCode: deterministicProviderFailureExit,
 		Stderr:   []byte(deterministicProviderFailureStderr),
 	})
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-
 	args := []string{
 		"you", "run",
 		"--factory", factoryPath,
@@ -485,9 +445,8 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 		"--quiet",
 		"prove workers-owned clean invocation failure lifecycle",
 	}
-	process := buildLifecycleProcess(t, edges)
-	inputs := process.Inputs(args, factoryDir)
-	if err := process.Execute(inputs); err == nil {
+	inputs, executeErr := executeSharedLifecycleInvocation(t, args, runner)
+	if executeErr == nil {
 		t.Fatal("Process.Execute error = nil, want terminal clean invocation failure")
 	}
 

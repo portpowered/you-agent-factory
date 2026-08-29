@@ -134,10 +134,11 @@ func (command *lifecycleCancelableCommand) stop() {
 }
 
 type lifecycleCoordinator struct {
-	t       *testing.T
-	process support.ApplicationProcess
-	homeDir string
-	started time.Time
+	t            *testing.T
+	process      support.Process
+	closeProcess func(context.Context) error
+	homeDir      string
+	started      time.Time
 
 	mu                    sync.Mutex
 	phase                 lifecyclePhase
@@ -150,7 +151,7 @@ type lifecycleCoordinator struct {
 	closeCompleted        bool
 }
 
-func newLifecycleCoordinator(t *testing.T, process support.ApplicationProcess) *lifecycleCoordinator {
+func newLifecycleCoordinator(t *testing.T, process support.Process) *lifecycleCoordinator {
 	t.Helper()
 	if process == nil {
 		t.Fatal("lifecycle coordinator requires a process")
@@ -160,6 +161,9 @@ func newLifecycleCoordinator(t *testing.T, process support.ApplicationProcess) *
 		process: process,
 		homeDir: t.TempDir(),
 		started: time.Now(),
+	}
+	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
+		coordinator.closeProcess = closer.Close
 	}
 	t.Cleanup(coordinator.close)
 	return coordinator
@@ -416,9 +420,16 @@ func (coordinator *lifecycleCoordinator) close() {
 	}
 	coordinator.closeOnce.Do(func() {
 		coordinator.releaseAll()
+		if coordinator.closeProcess == nil {
+			coordinator.mu.Lock()
+			coordinator.closeCompleted = true
+			coordinator.mu.Unlock()
+			coordinator.recordPhase(lifecyclePhaseProcessClose, "shared Process.Close is owned by the package fixture", false)
+			return
+		}
 		started := time.Now()
 		closeContext, cancel := context.WithTimeout(context.Background(), lifecycleProcessCloseTimeout)
-		err := coordinator.process.Close(closeContext)
+		err := coordinator.closeProcess(closeContext)
 		cancel()
 		closeDuration := time.Since(started)
 		coordinator.mu.Lock()
