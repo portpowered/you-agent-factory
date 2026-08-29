@@ -22,6 +22,9 @@ func TestPackagedQuorum(t *testing.T) {
 	t.Run("TestPackagedQuorumInsufficientSuccessfulMembersFails", func(t *testing.T) {
 		testPackagedQuorumInsufficientSuccessfulMembersFails(t, fixture)
 	})
+	t.Run("reuse after insufficient quorum", func(t *testing.T) {
+		testPackagedQuorumReusesProcessAfterInsufficientMembers(t, fixture)
+	})
 }
 
 // testPackagedQuorumRequiredInputCompletes proves that invoking the packaged
@@ -194,5 +197,29 @@ func testPackagedQuorumInsufficientSuccessfulMembersFails(
 	}
 	if got := runner.callCount(packagedQuorumMergeWorkstation); got != 0 {
 		t.Fatalf("%s provider call count = %d, want no merge dispatch before both branches succeed", packagedQuorumMergeWorkstation, got)
+	}
+}
+
+func testPackagedQuorumReusesProcessAfterInsufficientMembers(
+	t *testing.T,
+	fixture *packagedQuorumSharedFixture,
+) {
+	requestText := "reuse the quorum process after an insufficient-member failure"
+	runner := newPackagedQuorumCommandRunner()
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := runPackagedQuorumInvocation(t, scenario, map[string]any{"input": requestText})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed invocation after prior quorum failure", response)
+	}
+	assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+	for _, workstation := range []string{
+		packagedQuorumBranchAWorkstation,
+		packagedQuorumBranchBWorkstation,
+		packagedQuorumMergeWorkstation,
+	} {
+		if got := runner.callCount(workstation); got != 1 {
+			t.Fatalf("%s provider call count = %d, want one dispatch after reuse", workstation, got)
+		}
 	}
 }

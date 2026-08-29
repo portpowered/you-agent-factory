@@ -215,6 +215,12 @@ func (router *subagentProviderCommandRouter) unregister(paths []string) {
 	}
 }
 
+func (router *subagentProviderCommandRouter) routeCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.runners)
+}
+
 func (router *subagentProviderCommandRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -327,6 +333,9 @@ func newSubagentSharedFixture(t *testing.T) *subagentSharedFixture {
 func (fixture *subagentSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.lifecycle.assertClean(t)
+	if got := fixture.provider.routeCount(); got != 0 {
+		t.Errorf("SUBAGENT-CLEANUP-001 provider routes after cleanup = %d, want 0", got)
+	}
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.
