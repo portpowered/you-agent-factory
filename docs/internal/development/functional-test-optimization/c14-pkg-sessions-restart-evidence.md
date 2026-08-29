@@ -343,4 +343,3 @@ source. They are source evidence, not generated artifacts.
 | `board_persistence_process_windows_test.go` | `d7169e285158e5824190a14341b392f3f931d178d8234645f43c8ded4e54761d` |
 | `board_persistence_scenarios_test.go` | `c6229528fdb011010951cf3ca40103b3b89d466be4bc7de5c6f192786001fa7f` |
 | `logical_identity_test.go` | `7b6569b537f7c0fdc85c03911700de5d143f7ac113a14757f2669376cdeac65c` |
-
