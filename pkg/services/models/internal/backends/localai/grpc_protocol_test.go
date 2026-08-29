@@ -2,6 +2,7 @@ package localai
 
 import (
 	"context"
+	"encoding/base64"
 	"net"
 	"testing"
 
@@ -41,11 +42,40 @@ func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.
 		t.Fatalf("transport facts = method %q, closed %d, want Predict and one close", connection.method, connection.closed)
 	}
 	if connection.request.Prompt != request.Prompt ||
-		!equalStrings(connection.request.Images, []string{"image-a.png", "image-b.png"}) ||
+		!equalStrings(connection.request.Images, []string{
+			base64.StdEncoding.EncodeToString([]byte("image-a.png")),
+			base64.StdEncoding.EncodeToString([]byte("image-b.png")),
+		}) ||
 		!equalStrings(connection.request.Audios, []string{"audio-a.wav"}) ||
-		!equalStrings(connection.request.Videos, []string{"video-a.mp4"}) ||
+		!equalStrings(connection.request.Videos, []string{
+			base64.StdEncoding.EncodeToString([]byte("video-a.mp4")),
+		}) ||
 		connection.request.Metadata["temperature"] != "0.2" {
 		t.Fatal("pinned request fields do not preserve prompt/media order/metadata")
+	}
+}
+
+func TestPinnedGRPCProtocolClientPreservesBinaryMediaThroughBase64Fields(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	image := string([]byte{0x00, 0xff, 0x10, 0x80, 0x7f})
+	if _, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Inputs: []ProtocolInput{{Modality: models.ModalityImage, Content: image}}},
+	); err != nil {
+		t.Fatalf("Predict() error = %v", err)
+	}
+	if len(connection.request.Images) != 1 {
+		t.Fatalf("encoded images = %#v, want one image", connection.request.Images)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(connection.request.Images[0])
+	if err != nil {
+		t.Fatalf("DecodeString(image) error = %v", err)
+	}
+	if string(decoded) != image {
+		t.Fatalf("decoded image = %v, want original bytes %v", decoded, []byte(image))
 	}
 }
 
