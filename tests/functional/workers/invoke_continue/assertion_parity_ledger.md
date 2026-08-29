@@ -2,8 +2,8 @@
 
 This ledger records the 14 pre-migration functional rows in this package and
 the post-migration witness that owns each public assertion. It is an assertion
-map, not a source-scanning test. Rows 1–12 now execute beneath the one shared
-package process; the two manager rows remain independent until TASK-003.
+map, not a source-scanning test. All 14 rows now execute beneath the one shared
+package process; the two manager rows are owned by this delivered lane.
 
 | # | Pre-migration row | Post-migration witness | Assertions retained one-for-one |
 | ---: | --- | --- | --- |
@@ -18,12 +18,14 @@ package process; the two manager rows remain independent until TASK-003.
 | 9 | `TestDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback` (`foreign provider session`, `stale provider session`, `unsupported continuation`, `admission failure`) | `TestInvokeContinueSharedProcess/RemoteContinueProviderFailures/{foreign,stale,unsupported,admission}` | Each exact route/status/body maps to its expected typed error, and every remote failure leaves the local provider call count at zero. |
 | 10 | `TestDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess` | `TestInvokeContinueSharedProcess/RemoteInvokeStreamFailure` | Remote invoke is accepted by the exact server route, the emitted `SOURCE_FAILURE` is surfaced as `WORKER_SESSION_STREAM_SOURCE_FAILURE`, and no local fallback is used. |
 | 11 | `TestDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess` | `TestInvokeContinueSharedProcess/RemoteInvokeCancellation` | The request starts, caller cancellation returns `WORKER_SESSION_INVOKE_INTERRUPTED` within the bounded watchdog, and the blocked remote request is not converted into a local invocation. |
-| 12 | `TestDirectWorkerSessionContinueUnsupportedProviderDoesNotFreshStartThroughRootProcess` | `TestInvokeContinueSharedProcess/UnsupportedProviderContinuation` | The initial provider session is recorded; unsupported continuation returns the terminal typed failure; provider `Execute`/`Infer` remains at one initial call with no fresh-start fallback. |
-| 13 | `TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers` | `TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers` (retained for TASK-003) | Two explicit remote Worker Sessions overlap; active and completed list/show observations retain each worker/provider identity; live and retained streams contain only their own correlation, ordered positions, terminal delivery, and complete replay; provider requests preserve each repository marker and never cross routes. |
-| 14 | `TestDWROS8ManagerInterruptsOnlyOneRemoteWorker` | `TestDWROS8ManagerInterruptsOnlyOneRemoteWorker` (retained for TASK-003) | Interrupting A cancels only A, admits A's successor, resumes the exact provider session, and leaves B active; live and retained source/successor/B streams remain isolated and terminal/complete; cancellation counts and provider request order stay exact. |
+| 12 | `TestDirectWorkerSessionContinueUnsupportedProviderDoesNotFreshStartThroughRootProcess` | `TestInvokeContinueSharedProcess/UnsupportedProviderContinuation` | The initial provider session is recorded through the Codex command-runner edge; the real Providers root is configured without `session_resume`, unsupported continuation returns the terminal typed failure, and the runner remains at one non-resume initial call with no fresh-start fallback. |
+| 13 | `TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers` | `TestDWROS8ManagerInspectsTwoIsolatedRemoteWorkers` | Two explicit remote Worker Sessions overlap; active and completed list/show observations retain each worker/provider identity; live and retained streams contain only their own correlation, ordered positions, terminal delivery, and complete replay; provider requests preserve each repository marker and never cross routes. |
+| 14 | `TestDWROS8ManagerInterruptsOnlyOneRemoteWorker` | `TestDWROS8ManagerInterruptsOnlyOneRemoteWorker` | Interrupting A cancels only A, admits A's successor, resumes the exact provider session, and leaves B active; live and retained source/successor/B streams remain isolated and terminal/complete; cancellation counts and provider request order stay exact. |
 
 The source has one shared invoke/continue top-level test plus the two manager
 top-level tests; row 5 and the shared fixture's new boundary cases contain
 nested control cases. CASE-08, CASE-16, and CASE-22 are post-migration
 characterization additions owned by TASK-002, not pre-migration assertions
-silently claimed by this ledger.
+silently claimed by this ledger. The unsupported-provider witness uses the
+production Providers wire with a route-specific capability override and the
+existing command-runner edge; it does not use an in-process provider fake.

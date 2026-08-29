@@ -14,7 +14,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -360,7 +359,6 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	scenario := fixture.scenario(t, "unsupported-provider")
-	provider := scenario.unsupportedProvider
 	executionPath := filepath.Join(fixture.rootDir, "unsupported-execution.json")
 	document := invokeContinueExecutionDocument(invokeContinueExecutionSpec{
 		requestID: "unsupported-invoke-request", workerSessionID: "unsupported-source", dispatchID: "unsupported-dispatch",
@@ -384,19 +382,12 @@ func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *in
 		t.Fatal("unsupported provider continuation succeeded, want one terminal failure")
 	}
 	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_FAILED")
-	if got := provider.CallCount(); got != 1 {
-		t.Fatalf("provider Execute/Infer calls after unsupported continuation = %d, want initial call only", got)
+	if got := scenario.providerRunner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls after unsupported continuation = %d, want initial call only", got)
 	}
-	if got := provider.continuationCalls.Load(); got != 1 {
-		t.Fatalf("provider ContinueReference calls = %d, want one opaque continuation attempt", got)
-	}
-	gotReference, ok := provider.continuationReference.Load().(providers.ContinuationRef)
-	if !ok {
-		t.Fatal("provider ContinueReference did not receive a detached continuation reference")
-	}
-	wantReference := providers.ContinuationRef{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ProviderSessionID: "unsupported-source-thread", ExternalRef: "unsupported-source-thread"}
-	if gotReference != wantReference {
-		t.Fatalf("provider continuation reference = %#v, want exact opaque identity %#v", gotReference, wantReference)
+	requests := scenario.providerRunner.Requests()
+	if len(requests) != 1 || strings.Contains(strings.Join(requests[0].Args, " "), "resume") {
+		t.Fatalf("unsupported continuation provider requests = %#v, want one non-resume initial command", requests)
 	}
 	scenario.close(t)
 }

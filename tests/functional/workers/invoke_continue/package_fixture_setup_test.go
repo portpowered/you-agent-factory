@@ -16,14 +16,12 @@ import (
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type invokeContinueScenarioSetup struct {
 	scenarios            []invokeContinueScenario
 	routes               []invokeContinueStaticCommandRouteEntry
-	unsupportedProvider  *unsupportedContinuationProvider
 	managerRunner        *s8RemoteProviderRunner
 	managerRepositoryA   s8Repository
 	managerRepositoryB   s8Repository
@@ -69,7 +67,7 @@ func appendInvokeContinueScenario(
 	providerRunner invokeContinueProviderCommandRunner,
 	streamingRunner *wsrFT015StreamingProviderRunner,
 	blockingRunner *invokeContinueBlockingProviderRunner,
-	unsupportedProvider *unsupportedContinuationProvider,
+	unsupportedProvider providers.Service,
 	reset func(),
 ) error {
 	workingDirectory := filepath.Join(rootDir, "routes", name)
@@ -109,7 +107,6 @@ func newInvokeContinueScenarioSetup(t *testing.T, rootDir, homeDir string) (invo
 	return invokeContinueScenarioSetup{
 		scenarios:            append(direct.scenarios, manager.scenarios...),
 		routes:               append(direct.routes, manager.routes...),
-		unsupportedProvider:  direct.unsupportedProvider,
 		managerRunner:        manager.managerRunner,
 		managerRepositoryA:   manager.managerRepositoryA,
 		managerRepositoryB:   manager.managerRepositoryB,
@@ -172,16 +169,10 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "cancellation-recovery", recoveryRunner, recoveryRunner, nil, nil, nil, recoveryRunner.Reset); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	setup.unsupportedProvider = &unsupportedContinuationProvider{
-		MockProvider: testutil.NewMockProvider(workerexecution.InferenceResponse{
-			Content: "initial provider output",
-			ProviderSession: &providers.SessionMetadata{
-				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "unsupported-source-thread",
-			},
-		}),
-	}
-	unsupportedRunner := testutil.NewProviderCommandRunner()
-	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, setup.unsupportedProvider, nil); err != nil {
+	unsupportedRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("unsupported-source-thread", "initial provider output"),
+	})
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
 	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation"} {
@@ -253,7 +244,7 @@ func startInvokeContinuePackageProcess(
 	t *testing.T,
 	rootDir, hostDir, homeDir string,
 	route *invokeContinueStaticCommandRoute,
-	unsupportedProvider *unsupportedContinuationProvider,
+	unsupportedProvider providers.Service,
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
 	fallbackProvider, err := providerswire.NewService(providerswire.WithCommandRunner(route))

@@ -19,6 +19,8 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -70,7 +72,7 @@ type invokeContinueScenario struct {
 	providerRunner      invokeContinueProviderCommandRunner
 	streamingRunner     *wsrFT015StreamingProviderRunner
 	blockingRunner      *invokeContinueBlockingProviderRunner
-	unsupportedProvider *unsupportedContinuationProvider
+	unsupportedProvider providers.Service
 	reset               func()
 	session             *invokeContinueFactorySession
 }
@@ -161,7 +163,22 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		return nil, err
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
-	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route, setup.unsupportedProvider)
+	unsupportedProvider, err := providerswire.NewService(
+		providerswire.WithCommandRunner(route),
+		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
+			Provider:     providers.IDCodex,
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build unsupported continuation provider: %w", err)
+	}
+	for index := range setup.scenarios {
+		if setup.scenarios[index].name == "unsupported-provider" {
+			setup.scenarios[index].unsupportedProvider = unsupportedProvider
+		}
+	}
+	started, err := startInvokeContinuePackageProcess(t, rootDir, hostDir, homeDir, route, unsupportedProvider)
 	if err != nil {
 		return nil, err
 	}
