@@ -161,21 +161,23 @@ func assertRecordedSecretArtifact(t *testing.T, artifactPath, control string) {
 	}
 }
 
-func TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle(t *testing.T) {
+func TestRecordedFactoryRedactsSecretStepsAcrossLifecycle(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
-	runRecordedTwoWorkstationLifecycle(t, false)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("story003-two-step-output"),
+	})
+	support.CleanupProcess(t, process)
+	t.Run("secret step", func(t *testing.T) {
+		runRecordedTwoWorkstationLifecycle(t, process, false)
+	})
+	t.Run("inline secret step", func(t *testing.T) {
+		runRecordedTwoWorkstationLifecycle(t, process, true)
+	})
 }
 
-func TestRecordedFactoryRedactsInlineSecretStepAndPreservesPlainStepAcrossLifecycle(t *testing.T) {
-	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
-
-	runRecordedTwoWorkstationLifecycle(t, true)
-}
-
-func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
+func runRecordedTwoWorkstationLifecycle(t *testing.T, process support.Process, inline bool) {
 	secret := "sk-fake-story003-lifecycle-secret-4c9e2a7f"
 	secretControl := "secret-step-visible-control"
 	plainControl := "plain-step-visible-control"
@@ -197,10 +199,6 @@ func runRecordedTwoWorkstationLifecycle(t *testing.T, inline bool) {
 	})
 	inputs.Input.WorkingDirectory = dir
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner(output),
-	})
-	support.CleanupProcess(t, process)
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("recording two-workstation Factory run: %v\nstderr=%s", err, inputs.Stderr())
 	}

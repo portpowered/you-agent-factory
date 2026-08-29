@@ -2,6 +2,7 @@ package root_composition_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,24 +16,62 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestProcessExecuteOpensRequestedFactorySessionThroughRoot proves that an
-// ordinary customer process invocation opens the selected Factory source and
-// publishes one canonical Factory Session with observable lifecycle controls.
-// The API reads and controls below are API-owned session observations; the
-// opening itself is performed by Process.Execute on the root-built process.
-func TestProcessExecuteOpensRequestedFactorySessionThroughRoot(t *testing.T) {
+// TestProcessExecuteRuntimeOpeningThroughReusableRootProcess preserves the
+// success and failure opening witnesses through one immutable root process.
+// Each subtest retains its own Factory, home, and public observation boundary;
+// only compatible process wiring is reused.
+func TestProcessExecuteRuntimeOpeningThroughReusableRootProcess(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
 
-	factoryDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
-	api := support.NewProcessAPIServer()
+	router := &reusableRootAPIServerStarter{}
+	identities := &processExecuteOpeningIdentities{}
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		APIServerStarter: api.Start,
+		APIServerStarter: router.start,
+		FactorySessionIDGenerator: func() string {
+			return fmt.Sprintf("process-execute-session-%d", identities.session.Add(1))
+		},
+		FactorySessionRuntimeInstanceIDGenerator: func() string {
+			return fmt.Sprintf("process-execute-runtime-%d", identities.runtime.Add(1))
+		},
+		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
+			identities.replayPath.Store(path)
+			return nil, errors.New("replay fixture unavailable")
+		},
 	})
 	if err != nil {
 		t.Fatalf("root.BuildProcess() error = %v", err)
 	}
 	support.CleanupProcess(t, process)
+
+	t.Run("opens requested Factory Session", func(t *testing.T) {
+		testProcessExecuteOpensRequestedFactorySessionThroughRoot(t, process, router)
+	})
+	t.Run("corrupt current-board recording stops opening", func(t *testing.T) {
+		testProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t, process)
+	})
+	t.Run("unavailable Factory does not register session", func(t *testing.T) {
+		testProcessExecuteUnavailableFactoryDoesNotRegisterSession(t, process, identities)
+	})
+	t.Run("replay loader failure stops before live activation", func(t *testing.T) {
+		testProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(t, process, identities)
+	})
+}
+
+// testProcessExecuteOpensRequestedFactorySessionThroughRoot proves that an
+// ordinary customer process invocation opens the selected Factory source and
+// publishes one canonical Factory Session with observable lifecycle controls.
+// The API reads and controls below are API-owned session observations; the
+// opening itself is performed by Process.Execute on the root-built process.
+func testProcessExecuteOpensRequestedFactorySessionThroughRoot(
+	t *testing.T,
+	process support.Process,
+	router *reusableRootAPIServerStarter,
+) {
+	t.Helper()
+	factoryDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
+	api := support.NewProcessAPIServer()
+	router.setCurrent(api)
 
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
@@ -114,14 +153,14 @@ func TestProcessExecuteOpensRequestedFactorySessionThroughRoot(t *testing.T) {
 	if command.Err() != nil {
 		t.Fatalf("Process.Execute() returned before lifecycle observations: %v", command.Err())
 	}
+	command.Stop(t)
 }
 
 // TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening proves that a
 // corrupt current-board artifact is rejected at the Process.Execute opening
 // boundary and remains available for investigation.
-func TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T) {
-	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
+func testProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T, process support.Process) {
+	t.Helper()
 
 	factoryDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
 	recordPath := filepath.Join(factoryDir, "current-board.json")
@@ -130,19 +169,13 @@ func TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T) {
 		t.Fatalf("write corrupt current-board recording: %v", err)
 	}
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
-
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", factoryDir, "--record", recordPath, "--quiet",
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
 	inputs.Input.WorkingDirectory = factoryDir
 
-	err = process.Execute(inputs.Input)
+	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "CORRUPT_HISTORY") ||
 		!strings.Contains(err.Error(), filepath.Base(recordPath)) {
 		t.Fatalf("Process.Execute() error = %v, want corrupt current-board diagnostic", err)
@@ -159,27 +192,16 @@ func TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T) {
 // TestProcessExecuteUnavailableFactoryDoesNotRegisterSession proves that an
 // unavailable Factory definition fails at the customer process boundary before
 // Factory Session or runtime identity allocation can publish partial state.
-func TestProcessExecuteUnavailableFactoryDoesNotRegisterSession(t *testing.T) {
-	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
+func testProcessExecuteUnavailableFactoryDoesNotRegisterSession(
+	t *testing.T,
+	process support.Process,
+	identities *processExecuteOpeningIdentities,
+) {
+	t.Helper()
 
 	missingFactory := filepath.Join(t.TempDir(), "missing", "factory.json")
-	var sessionIDs atomic.Int32
-	var runtimeIDs atomic.Int32
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		FactorySessionIDGenerator: func() string {
-			sessionIDs.Add(1)
-			return "unexpected-session"
-		},
-		FactorySessionRuntimeInstanceIDGenerator: func() string {
-			runtimeIDs.Add(1)
-			return "unexpected-runtime"
-		},
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
+	sessionBefore := identities.session.Load()
+	runtimeBefore := identities.runtime.Load()
 
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--factory", missingFactory, "--quiet", "--no-record",
@@ -188,14 +210,14 @@ func TestProcessExecuteUnavailableFactoryDoesNotRegisterSession(t *testing.T) {
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	inputs.Input.WorkingDirectory = filepath.Dir(missingFactory)
 
-	err = process.Execute(inputs.Input)
+	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
 		t.Fatalf("Process.Execute() error = %v, want unavailable Factory diagnostic", err)
 	}
-	if got := sessionIDs.Load(); got != 0 {
+	if got := identities.session.Load() - sessionBefore; got != 0 {
 		t.Fatalf("Factory Session identity allocations after unavailable definition = %d, want 0", got)
 	}
-	if got := runtimeIDs.Load(); got != 0 {
+	if got := identities.runtime.Load() - runtimeBefore; got != 0 {
 		t.Fatalf("runtime identity allocations after unavailable definition = %d, want 0", got)
 	}
 }
@@ -203,22 +225,12 @@ func TestProcessExecuteUnavailableFactoryDoesNotRegisterSession(t *testing.T) {
 // TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation proves that
 // a replay-source failure is returned from the canonical runtime-opening
 // boundary without attempting to assemble a live Factory Session.
-func TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(t *testing.T) {
-	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
-
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
-		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
-			if path != "recording.json" {
-				t.Fatalf("replay input path = %q, want recording.json", path)
-			}
-			return nil, errors.New("replay fixture unavailable")
-		},
-	})
-	if err != nil {
-		t.Fatalf("root.BuildProcess() error = %v", err)
-	}
-	support.CleanupProcess(t, process)
+func testProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(
+	t *testing.T,
+	process support.Process,
+	identities *processExecuteOpeningIdentities,
+) {
+	t.Helper()
 
 	workingDirectory := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -228,10 +240,19 @@ func TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(t *testing.T
 	inputs.Input.Env = append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
 	inputs.Input.WorkingDirectory = workingDirectory
 
-	err = process.Execute(inputs.Input)
+	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "failed to load --replay input") {
 		t.Fatalf("Process.Execute() error = %v, want replay loader failure", err)
 	}
+	if got, _ := identities.replayPath.Load().(string); got != "recording.json" {
+		t.Fatalf("replay input path = %q, want recording.json", got)
+	}
+}
+
+type processExecuteOpeningIdentities struct {
+	session    atomic.Int32
+	runtime    atomic.Int32
+	replayPath atomic.Value
 }
 
 func processExecuteRuntimeOpeningFactoryConfig() map[string]any {

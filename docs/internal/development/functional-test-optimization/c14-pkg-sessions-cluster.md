@@ -208,8 +208,8 @@ old-to-new mapping with equal or stronger assertions.
 | ROOT-001 | `TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction` | Build has no lifecycle, opening, admission, response-stream, or API-start effect. |
 | ROOT-002 | `TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection` | Replayed automation Work restores occupancy and lineage once. |
 | ROOT-003 | `TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix` | UTC date and collision suffix produce distinct safe paths. |
-| ROOT-004 | `TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess` | Two default recordings are distinct dated UUID artifacts and replay to equivalent facts. |
-| ROOT-005 | `TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess` | Explicit JSONL recording appends valid records and preserves the trailing newline. |
+| ROOT-004 | `TestRecordingFormatsRemainObservableThroughReusableRootProcess` / `default recording reserves distinct dated UUID artifacts and replays` | Two default recordings are distinct dated UUID artifacts and replay to equivalent facts. |
+| ROOT-005 | `TestRecordingFormatsRemainObservableThroughReusableRootProcess` / `explicit JSONL recording appends through root process` | Explicit JSONL recording appends valid records and preserves the trailing newline. |
 | ROOT-006 | `TestDetachedOperationsFunctionalContract` / `live_*`, `durable_*` subcases | Live, durable async, and durable sync starts, invocation, and activation normalize and return expected results. |
 | ROOT-007 | `TestDetachedOperationsFunctionalContract` / `live_*`, `durable_*` subcases | Get, list, controls, result, subscription, and preparation preserve mode and correlation facts. |
 | ROOT-008 | `TestDetachedOperationsFunctionalValidation` | Nil services, invalid modes/IDs, empty activation, negative values, and invalid controls retain typed validation errors without mutation. |
@@ -218,14 +218,14 @@ old-to-new mapping with equal or stronger assertions.
 | ROOT-011 | `TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` / `isolated_sessions_reach_one_terminal_outcome_and_replay_equivalent_facts` | Two canonical sessions remain isolated and replay-equivalent. |
 | ROOT-012 | `TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation` / `provider_failure...`; `cancellation...` | Provider failure stays failed and held-dispatch cancellation releases the process. |
 | ROOT-013 | `TestSessionsPackagedRootShapeMatchesCanonicalServiceLayout` | Shipped Sessions root package layout remains canonical. |
-| ROOT-014 | `TestProcessExecuteOpensRequestedFactorySessionThroughRoot` | `Process.Execute` opens the requested Factory Session before command completion. |
-| ROOT-015 | `TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening` | Corrupt current-board recording stops opening with the expected diagnostic. |
-| ROOT-016 | `TestProcessExecuteUnavailableFactoryDoesNotRegisterSession`; `TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation` | Unavailable Factory and replay-loader failures do not register or activate a live session. |
+| ROOT-014 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess` / `opens requested Factory Session` | `Process.Execute` opens the requested Factory Session before command completion. |
+| ROOT-015 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess` / `corrupt current-board recording stops opening` | Corrupt current-board recording stops opening with the expected diagnostic. |
+| ROOT-016 | `TestProcessExecuteRuntimeOpeningThroughReusableRootProcess` / `unavailable Factory does not register session`; `/replay loader failure stops before live activation` | Unavailable Factory and replay-loader failures do not register or activate a live session. |
 | ROOT-017 | `TestRootProcessCloseAfterFailedCommandPreservesTheCommandFailure` | Command failure remains primary while close completes. |
 | ROOT-018 | `TestRootProcessCloseAfterSuccessfulCommandReportsNoFailure` | Successful command close reports no failure. |
 | ROOT-019 | `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` | One inert process serves two sessions with distinct session/stream identities. |
-| ROOT-020 | `TestRootProcessReportsDirectJavaScriptTransportStartFailure` | Injected JavaScript transport-start failure returns directly without fallback. |
-| ROOT-021 | `TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary`; `TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle`; `TestRecordedFactoryRedactsInlineSecretStepAndPreservesPlainStepAcrossLifecycle` | Declared, step, and inline secrets stay redacted while plain values survive recording/replay. |
+| ROOT-020 | `TestRootBuildProcessIsInertAndReusableAcrossFactorySessions` / `direct JavaScript transport start failure` | Injected JavaScript transport-start failure returns directly without fallback. |
+| ROOT-021 | `TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary`; `TestRecordedFactoryRedactsSecretStepsAcrossLifecycle` / `secret step`, `inline secret step` | Declared, step, and inline secrets stay redacted while plain values survive recording/replay. |
 | ROOT-022 | `TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession` / `in-flight_tail` | In-flight seeded replay materializes Work once and completes through the assembled session. |
 | ROOT-023 | `TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession` / `finished_recording` | Finished seeded replay remains terminal and does not redispatch. |
 | ROOT-024 | `TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle` | Work admission and response events appear through public Sessions reads. |
@@ -284,6 +284,74 @@ old-to-new mapping with equal or stronger assertions.
 | EXEC-013 | `TestAPIPartialResultIsAvailableBeforeTerminalCompletion` | Partial result is visible while running, then terminal completion remains correct. |
 | EXEC-014 | `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads` | In-flight and terminal CLI invocation facts become visible through public session/Work reads. |
 | EXEC-015 | `TestAPIInvocationResultMatchesCLICompatibleFacts` | Equivalent API and CLI invocation status, Work, result, and correlation facts agree. |
+
+## Story 002 ROOT optimization result
+
+Story: `fto-c14-pkg-sessions-cluster-002`
+Status: **PASS — ROOT-only optimization complete; CHAT and EXEC remain owned by
+stories 003 and 004.**
+
+The optimized subtree removes eight compatible root-fixture constructions:
+
+- default and explicit recording cases now share one immutable process;
+- the four `Process.Execute` opening cases share one process and fresh scenario
+  inputs;
+- the direct JavaScript startup-failure witness is a subtest of the existing
+  reusable-process fixture;
+- secret-step, automation replay/resume, and seeded replay subcases each reuse
+  one process while retaining per-case homes, Factory directories, recording
+  payloads, and API listeners.
+
+Independent lifecycle, failure, cancellation, replay-isolation, and cleanup
+boundaries remain separate where their assertions require them. Independent
+top-level ROOT fixtures run in parallel behind a package-local eight-slot
+semaphore; the bound prevents Windows packaged-installation/listener startup
+contention from becoming a false readiness failure. No new sleep or timeout
+padding was added.
+
+### Final ROOT package evidence
+
+The exact command was run sequentially three times with a PowerShell
+`Diagnostics.Stopwatch`; every sample exited `0`:
+
+```text
+go test ./tests/functional/sessions/root_composition/... -count=1
+```
+
+| Sample 1 | Sample 2 | Sample 3 | Median | Baseline median | Improvement |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 17.797s | 21.319s | 20.566s | **20.566s** | 39.288s | **47.6%** |
+
+All three broad final gates passed; their package results were
+`root_composition=14.620s`, `17.794s`, and `17.312s`, with nested
+`runtime_api_fixture=0.073s`, `0.062s`, and `0.057s`. Earlier
+uncapped/high-contention scheduling produced readiness failures; those attempts
+were not converted into passes. The final bounded schedule passed, while an
+unrelated long-running local `you` process remained on the shared host, so the
+numbers are directional same-host evidence rather than an absolute latency
+claim.
+
+Changed-witness repeatability passed with exit `0`:
+
+```text
+go test ./tests/functional/sessions/root_composition -run '^(TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection|TestRecordingFormatsRemainObservableThroughReusableRootProcess|TestProcessExecuteRuntimeOpeningThroughReusableRootProcess|TestRootBuildProcessIsInertAndReusableAcrossFactorySessions|TestRecordedFactoryRedactsSecretStepsAcrossLifecycle|TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession)$' -count=10
+```
+
+The repeat command passed with package elapsed `146.066s`.
+
+The same selector set passed supported race execution with exit `0`:
+
+```text
+go test -race ./tests/functional/sessions/root_composition -run '^(TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection|TestRecordingFormatsRemainObservableThroughReusableRootProcess|TestProcessExecuteRuntimeOpeningThroughReusableRootProcess|TestRootBuildProcessIsInertAndReusableAcrossFactorySessions|TestRecordedFactoryRedactsSecretStepsAcrossLifecycle|TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession)$' -count=1
+```
+
+The supported race command passed with package elapsed `20.119s`.
+
+The assertion-parity table above records the direct old-to-new selector mapping
+for ROOT-001 through ROOT-029. The final full gate and changed-witness checks
+observed the original success, bad-input, provider-failure, cancellation,
+replay, redaction, cleanup, and runner-routing outcomes; no assertion was
+deleted or weakened.
 
 ## Failure, privacy, and evidence boundaries
 

@@ -53,20 +53,29 @@ func TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix(t *testing.T)
 	}
 }
 
-// TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess
-// proves two completed default-session runs reserve separate canonical files in
-// one UTC date directory. It also keeps the customer-visible whole-file JSON
-// contract and the public replay path observable through root.BuildProcess.
-func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess(t *testing.T) {
+// TestRecordingFormatsRemainObservableThroughReusableRootProcess proves the
+// default whole-file and explicit JSONL recording contracts through one
+// reusable root process. The subtests retain separate homes, factories, and
+// artifacts, while the immutable process wiring is constructed once.
+func TestRecordingFormatsRemainObservableThroughReusableRootProcess(t *testing.T) {
 	t.Parallel()
 	acquireRootCompositionFixtureSlot(t)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	t.Run("default recording reserves distinct dated UUID artifacts and replays", func(t *testing.T) {
+		testDefaultRecordingContract(t, process)
+	})
+	t.Run("explicit JSONL recording appends through root process", func(t *testing.T) {
+		testExplicitJSONLRecordingContract(t, process)
+	})
+}
 
+func testDefaultRecordingContract(t *testing.T, process support.Process) {
+	t.Helper()
 	homeDir := t.TempDir()
 	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	wantDate := time.Now().UTC().Format("2006/01/02")
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 
 	firstReportedPath := executeDefaultRecordingRun(t, process, factoryDir, env)
 	secondReportedPath := executeDefaultRecordingRun(t, process, factoryDir, env)
@@ -112,18 +121,11 @@ func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProc
 	}
 }
 
-// TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess preserves the
-// current explicit-path append format while automatic recordings continue to
-// use whole-file .json snapshots.
-func TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess(t *testing.T) {
-	t.Parallel()
-	acquireRootCompositionFixtureSlot(t)
-
+func testExplicitJSONLRecordingContract(t *testing.T, process support.Process) {
+	t.Helper()
 	homeDir := t.TempDir()
 	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-explicit-jsonl-recording")
 	recordingPath := filepath.Join(t.TempDir(), "explicit.replay.jsonl")
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", factoryDir, "--record", recordingPath})
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = factoryDir
