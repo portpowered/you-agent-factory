@@ -210,18 +210,25 @@ the later gates `CI-CONTENTION-01`, `PACKAGE-FINAL-C09-01`, `DIFF-C09-01`, and
 ## Story 002 correction and evidence
 
 The package-owned correction keeps the production-composed executable spine
-unchanged and replaces readiness guesses with phase observation. One
-`loopPhaseObserver` owns a 15 s context for the valid scenario. Its waits
-record the phase and last observation, then fail with the
-`LOOP-CONTENTION-01` phase/observation diagnostic when the context expires.
+unchanged and replaces readiness guesses with phase observation. Each
+`loopPhaseObserver` wait creates a named, phase-local context and records the
+phase and last observation before failing with the `LOOP-CONTENTION-01`
+diagnostic. The 15 s ceiling remains only for production process startup and
+loopback binding; it is not reused for scenario phases or cleanup. The
+provider and scheduler readiness phases use 3 s budgets, public Work and
+dispatch observations use 2 s budgets, and the invocation client has a 2 s
+transport ceiling around the product's 20 ms response deadline. These bounds
+are based on the former 1 s readiness opportunities and 2 s public projection
+observation window, with margin for the production-composed Windows process;
+they are diagnostic ceilings rather than synchronization.
 
 | Former wait | Corrected observation |
 | --- | --- |
-| Provider start with `time.After(1s)` | Controlled runner `started` signal under the observer context; the last observation includes provider call count. |
-| Scheduler timer channel with `time.After(1s)` | Monotonic scheduler-specific registration count plus a non-blocking notification channel; each advance waits for a registration strictly newer than its captured cursor. |
-| Work submission with `time.After(2s)` | Submission channel under the observer context; every discarded record updates the last public Work observation. |
-| Dispatch wall deadline plus `runtime.Gosched` | Public retained Factory Event/dispatch projection through the existing bounded `support.WaitForObservation`, using the observer's remaining deadline and recording event/dispatch/completion counts. |
-| Invocation request without a client bound | Request context derived from the test context and the package's single diagnostic ceiling. |
+| Provider start with `time.After(1s)` | Controlled runner `started` signal under `loopProviderPhaseBudget=3s`; the last observation includes provider call count. |
+| Scheduler timer channel with `time.After(1s)` | Monotonic scheduler-specific registration count plus a non-blocking notification channel under `loopSchedulerPhaseBudget=3s`; each advance waits for a registration strictly newer than its captured cursor. |
+| Work submission with `time.After(2s)` | Submission channel under `loopWorkPhaseBudget=2s`; every discarded record updates the last public Work observation. |
+| Dispatch wall deadline plus `runtime.Gosched` | Public retained Factory Event/dispatch projection through the existing bounded `support.WaitForObservation` under `loopDispatchPhaseBudget=2s`, recording event/dispatch/completion counts. |
+| Invocation request without a client bound | Request context derived from the test context and the scoped `loopInvocationRequestBudget=2s` transport ceiling. |
 
 The public projection poll remains intentional: the dispatch completion
 observation is asynchronously committed and has no package-visible signal that
@@ -232,12 +239,26 @@ runtime edge or turn a missing dispatch into success.
 Cleanup now uses a package-local LIFO stack. The controlled runner's release
 is guarded by `sync.Once`; session termination, stopped-status observation,
 deletion, and the final public 404 check each run under their own bounded
-context and continue to the next cleanup step after an error. Route
-unregistration and scenario-root removal still run after session cleanup.
-The scenario cleanup stack executes every registered action once, joins all
-errors, and returns the same joined error on repeated calls. Fixture cleanup
-also asserts that the provider router has no remaining registrations after
-all child scenarios have closed.
+context beneath one `loopSessionCleanupBudget=5s` total. Cleanup continues to
+the next step after an error. Route unregistration and scenario-root removal
+still run after session cleanup. The scenario cleanup stack executes every
+registered action once, joins all errors, and returns the same joined error on
+repeated calls. Fixture cleanup also asserts one process/listener close, no
+remaining provider registrations, a completed `Process.Execute` command, and
+the rejected post-close `/status` probe.
+
+`TestLoopCleanupResourceMatrix` now exercises the real package composition in
+four sequential subtests: invalid-duration validation after session
+acquisition, a timed-out invocation with a blocked provider and scheduler
+timer, an injected early assertion with live Factory Event and Response Event
+streams, and partial acquisition before session opening. The matrix counts
+each cleanup action, observes provider-route unregister calls, asserts public
+Factory Session absence, checks scheduler timer stop counts against
+registrations, retains both injected cleanup errors, waits for the blocked
+runner and stream readers to finish, and leaves fixture listener/process/root
+checks to the shared fixture cleanup. The runner-release unit test registers
+release and cancellation before launching `Run`, then asserts the goroutine
+exits on both its normal and cleanup paths.
 
 ### Story-owned corrected-run evidence
 
@@ -247,6 +268,11 @@ all child scenarios have closed.
 | `GOMAXPROCS=2 go test -count=1 -run '^TestPackagedLoop/(TestPackagedLoopRejectsInvalidDurationBeforeWorkAdmission|TestPackagedLoopDurationBoundaries/minimum_1s)$' -timeout=10m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 1.335s`; no failure output. | Invalid duration remains HTTP 400 with no Work, and the minimum accepted duration remains public `init`/`SCHEDULED` Work with exact start tags. | The remaining boundary cases are covered by the complete package run. |
 | `go test -count=1 -run '^Test(LoopCleanupStackRunsAllActionsOnceAndRetainsFailures|BlockingLoopRunnerReleaseIsIdempotent)$' ./tests/functional/factory/packaged/loop` | Focused cleanup tests emitted `ok …/packaged/loop` in approximately 0.06 s. | Partial cleanup failure does not suppress later LIFO actions, both injected errors remain discoverable, repeated cleanup does not rerun actions, and repeated runner release unblocks the blocked runner without a close panic. | OS-wide resources outside this package's ownership. |
 | `GOMAXPROCS=2 go test -count=1 -run '^TestPackagedLoop$' -timeout=10m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 2.671s`. The complete run's fixture assertions require one process/API host, eight selected scenario sessions, public session absence, removed roots, and zero provider-route registrations; no failure output was present. | Complete current package behavior and lifecycle accounting after the correction, directionally below the characterized 2.988 s package result. | Final-head promotion, PR CI, and clean-room validation remain story `...-003`. |
+| `go test -count=1 -run '^(TestLoopCleanupResourceMatrix|TestBlockingLoopRunnerReleaseIsIdempotent|TestLoopCleanupStackRunsAllActionsOnceAndRetainsFailures)$' -timeout=10m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 1.914s` with all four resource-matrix subtests and cleanup-core tests passing. | Production-composed validation, blocked/canceled execution, early assertion with live streams, partial acquisition, idempotent release, public session absence, exact route/timer cleanup counts, and joined cleanup failures are observed without resource remainder. | This local evidence does not prove GitHub-hosted suite contention. |
+| `go test -race -count=1 -run '^TestLoopCleanupResourceMatrix$' -timeout=15m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 7.709s`; no race diagnostic or failure output was present. | The new stream, blocked-runner, timer-counter, route-counter, and fixture cleanup synchronization is race-clean in the package-owned matrix. | Other package tests and hosted contention remain outside this focused race run. |
+| `GOMAXPROCS=2 go test -count=3 -run '^TestPackagedLoop/TestPackagedLoopUsesInvocationDurationAndSkipsOverlap$' -timeout=15m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 5.250s` for all three repetitions with no failure output. | The corrected phase budgets preserve valid-loop invocation, Work, overlap, dispatch, re-arm, timing, and terminal witnesses under representative local contention. | GitHub-hosted suite contention and portable latency thresholds. |
+| `go test -count=1 -timeout=15m ./tests/functional/factory/packaged/loop` | Go test emitted `ok …/packaged/loop 5.518s` with no failure output. | The complete current package, including the resource cleanup matrix, passed once through the production-composed path. | Final pushed-head CI and clean-room validation remain story `...-003`. |
+| `go test -count=1 -timeout=10m ./tests/functional/factory/packaged/loop` after the required `origin/main` rebase | Go test emitted `ok …/packaged/loop 103.738s` with no failure output. The host was visibly contended during this run; the wall time is recorded as contaminated local timing, not a threshold. | The final rebased code head passed the complete production-composed package, including the resource cleanup matrix. | Hosted contention and portable latency thresholds remain review-owned. |
 | `git diff --check` | Exit 0 after formatting and correction. | No whitespace errors in the implementation diff. | Final three-dot ownership audit remains story `...-003`. |
 
 The package-level timing is directional evidence only. The host was running
@@ -279,6 +305,7 @@ files:
 - `docs/internal/development/functional-test-optimization/c09-packaged-loop-contention.md`
 - `tests/functional/factory/packaged/loop/cleanup_test.go`
 - `tests/functional/factory/packaged/loop/invocation_test.go`
+- `tests/functional/factory/packaged/loop/resource_cleanup_test.go`
 - `tests/functional/factory/packaged/loop/shared_fixture_test.go`
 
 `git diff --check origin/main...HEAD` emitted no diagnostics. The final audit

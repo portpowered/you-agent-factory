@@ -49,7 +49,6 @@ func TestPackagedLoop(t *testing.T) {
 
 func testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T, fixture *loopSharedFixture) {
 	observer := newLoopPhaseObserver(t)
-	defer observer.close()
 	start := fixture.clock.Now()
 	schedulerBeforeInvocation := fixture.clock.schedulerTimerRegistrations()
 	runner := newBlockingLoopRunner()
@@ -146,7 +145,6 @@ func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture
 				t.Fatalf("duration %q status = %d, want 200", testCase.every, status)
 			}
 			observer := newLoopPhaseObserver(t)
-			defer observer.close()
 			submission := waitForLoopSubmission(observer, fixture.submissions, "scheduled-execution")
 			assertLoopSubmission(t, submission, "init", "SCHEDULED", "1", start, start)
 		})
@@ -164,12 +162,15 @@ func assertNoLoopSubmission(t *testing.T, submissions <-chan work.FactorySubmiss
 }
 
 type blockingLoopRunner struct {
-	started     chan struct{}
-	release     chan struct{}
-	startOnce   sync.Once
-	releaseOnce sync.Once
-	mu          sync.Mutex
-	count       int
+	started      chan struct{}
+	release      chan struct{}
+	done         chan struct{}
+	startOnce    sync.Once
+	releaseOnce  sync.Once
+	doneOnce     sync.Once
+	mu           sync.Mutex
+	count        int
+	releaseCalls atomic.Uint32
 }
 
 // loopSchedulerClock keeps the fake clock's scheduler-specific timer
@@ -180,6 +181,22 @@ type loopSchedulerClock struct {
 	*clockwork.FakeClock
 	schedulerTimers     chan struct{}
 	schedulerTimerCount atomic.Uint64
+	schedulerTimerStops atomic.Uint64
+}
+
+type loopSchedulerTimer struct {
+	clockwork.Timer
+	stopCount *atomic.Uint64
+}
+
+func (timer *loopSchedulerTimer) Stop() bool {
+	if timer == nil {
+		return false
+	}
+	if timer.stopCount != nil {
+		timer.stopCount.Add(1)
+	}
+	return timer.Timer.Stop()
 }
 
 var _ clockwork.Clock = (*loopSchedulerClock)(nil)
@@ -199,6 +216,7 @@ func (clock *loopSchedulerClock) AfterFunc(duration time.Duration, callback func
 		case clock.schedulerTimers <- struct{}{}:
 		default:
 		}
+		return &loopSchedulerTimer{Timer: timer, stopCount: &clock.schedulerTimerStops}
 	}
 	return timer
 }
@@ -224,17 +242,23 @@ func loopSchedulerTimerCaller() bool {
 }
 
 func newBlockingLoopRunner() *blockingLoopRunner {
-	return &blockingLoopRunner{started: make(chan struct{}), release: make(chan struct{})}
+	return &blockingLoopRunner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
 }
 
 func (runner *blockingLoopRunner) Release() {
 	if runner == nil {
 		return
 	}
+	runner.releaseCalls.Add(1)
 	runner.releaseOnce.Do(func() { close(runner.release) })
 }
 
 func (runner *blockingLoopRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	defer runner.doneOnce.Do(func() { close(runner.done) })
 	runner.mu.Lock()
 	runner.count++
 	runner.mu.Unlock()
@@ -251,6 +275,13 @@ func (runner *blockingLoopRunner) calls() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.count
+}
+
+func (runner *blockingLoopRunner) releaseCount() uint32 {
+	if runner == nil {
+		return 0
+	}
+	return runner.releaseCalls.Load()
 }
 
 func invokeLoop(t *testing.T, scenario *loopScenario, args map[string]any) factoryapi.InvocationResponse {
@@ -282,7 +313,7 @@ func postLoopInvocation(
 		t.Fatalf("marshal loop invocation: %v", err)
 	}
 	endpoint := scenario.fixture.baseURL + "/factory-sessions/" + scenario.sessionID + "/invocations"
-	ctx, cancel := context.WithTimeout(t.Context(), loopSharedFixtureTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), loopInvocationRequestBudget)
 	defer cancel()
 	requestWithContext, err := http.NewRequestWithContext(
 		ctx,
@@ -330,24 +361,14 @@ func assertLoopSubmission(
 }
 
 type loopPhaseObserver struct {
-	t      testing.TB
-	ctx    context.Context
-	cancel context.CancelFunc
-	limit  time.Duration
-	phase  string
-	last   string
+	t     testing.TB
+	phase string
+	last  string
 }
 
 func newLoopPhaseObserver(t testing.TB) *loopPhaseObserver {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), loopSharedFixtureTimeout)
-	return &loopPhaseObserver{t: t, ctx: ctx, cancel: cancel, limit: loopSharedFixtureTimeout}
-}
-
-func (observer *loopPhaseObserver) close() {
-	if observer != nil && observer.cancel != nil {
-		observer.cancel()
-	}
+	return &loopPhaseObserver{t: t}
 }
 
 func (observer *loopPhaseObserver) begin(phase, last string) {
@@ -355,14 +376,21 @@ func (observer *loopPhaseObserver) begin(phase, last string) {
 	observer.last = last
 }
 
-func (observer *loopPhaseObserver) fail(err error) {
+func (observer *loopPhaseObserver) fail(budget time.Duration, err error) {
 	observer.t.Fatalf(
 		"LOOP-CONTENTION-01 phase %q timed out after %s; last observation=%s; cause=%v",
 		observer.phase,
-		observer.limit,
+		budget,
 		observer.last,
 		err,
 	)
+}
+
+func (observer *loopPhaseObserver) phaseContext(
+	phase, last string, budget time.Duration,
+) (context.Context, context.CancelFunc) {
+	observer.begin(phase, last)
+	return context.WithTimeout(observer.t.Context(), budget)
 }
 
 func (observer *loopPhaseObserver) waitForSignal(
@@ -371,12 +399,13 @@ func (observer *loopPhaseObserver) waitForSignal(
 	last func() string,
 ) {
 	observer.t.Helper()
-	observer.begin(phase, last())
+	ctx, cancel := observer.phaseContext(phase, last(), loopProviderPhaseBudget)
+	defer cancel()
 	select {
 	case <-signal:
 		observer.last = "signal received"
-	case <-observer.ctx.Done():
-		observer.fail(observer.ctx.Err())
+	case <-ctx.Done():
+		observer.fail(loopProviderPhaseBudget, ctx.Err())
 	}
 }
 
@@ -386,7 +415,12 @@ func (observer *loopPhaseObserver) waitForSchedulerTimer(
 	after uint64,
 ) {
 	observer.t.Helper()
-	observer.begin(phase, fmt.Sprintf("scheduler_timer_registrations=%d want>%d", clock.schedulerTimerRegistrations(), after))
+	ctx, cancel := observer.phaseContext(
+		phase,
+		fmt.Sprintf("scheduler_timer_registrations=%d want>%d", clock.schedulerTimerRegistrations(), after),
+		loopSchedulerPhaseBudget,
+	)
+	defer cancel()
 	for {
 		registrations := clock.schedulerTimerRegistrations()
 		observer.last = fmt.Sprintf("scheduler_timer_registrations=%d want>%d", registrations, after)
@@ -395,8 +429,8 @@ func (observer *loopPhaseObserver) waitForSchedulerTimer(
 		}
 		select {
 		case <-clock.schedulerTimers:
-		case <-observer.ctx.Done():
-			observer.fail(observer.ctx.Err())
+		case <-ctx.Done():
+			observer.fail(loopSchedulerPhaseBudget, ctx.Err())
 		}
 	}
 }
@@ -407,7 +441,12 @@ func waitForLoopSubmission(
 	workType string,
 ) work.FactorySubmissionRecord {
 	observer.t.Helper()
-	observer.begin("public Work submission "+workType, "no matching Work submission")
+	ctx, cancel := observer.phaseContext(
+		"public Work submission "+workType,
+		"no matching Work submission",
+		loopWorkPhaseBudget,
+	)
+	defer cancel()
 	for {
 		select {
 		case record := <-submissions:
@@ -415,8 +454,8 @@ func waitForLoopSubmission(
 			if record.Request.WorkTypeID == workType {
 				return record
 			}
-		case <-observer.ctx.Done():
-			observer.fail(observer.ctx.Err())
+		case <-ctx.Done():
+			observer.fail(loopWorkPhaseBudget, ctx.Err())
 		}
 	}
 }
@@ -435,7 +474,7 @@ func waitForLoopDispatchCompletion(observer *loopPhaseObserver, scenario *loopSc
 	observer.t.Helper()
 	observer.begin("public dispatch completion", "factory_events=0 dispatches=0 completed=false")
 	_, err := support.WaitForObservation(
-		observer.remaining(),
+		loopDispatchPhaseBudget,
 		func() ([]factoryapi.FactoryEvent, error) {
 			events := support.GetFactoryEventsForSessionAt(observer.t, scenario.fixture.baseURL, scenario.sessionID)
 			dispatches := support.ObserveDispatchEvents(observer.t, events)
@@ -452,18 +491,6 @@ func waitForLoopDispatchCompletion(observer *loopPhaseObserver, scenario *loopSc
 		},
 	)
 	if err != nil {
-		observer.fail(fmt.Errorf("public dispatch observation: %w", err))
+		observer.fail(loopDispatchPhaseBudget, fmt.Errorf("public dispatch observation: %w", err))
 	}
-}
-
-func (observer *loopPhaseObserver) remaining() time.Duration {
-	deadline, ok := observer.ctx.Deadline()
-	if !ok {
-		return observer.limit
-	}
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return time.Nanosecond
-	}
-	return remaining
 }

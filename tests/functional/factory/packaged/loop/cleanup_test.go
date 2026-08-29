@@ -26,14 +26,16 @@ type loopCleanupAction struct {
 }
 
 type loopCleanupStack struct {
-	mu      sync.Mutex
-	actions []loopCleanupAction
-	once    sync.Once
-	err     error
+	mu       sync.Mutex
+	actions  []loopCleanupAction
+	attempts map[string]int
+	once     sync.Once
+	ran      bool
+	err      error
 }
 
 func newLoopCleanupStack() *loopCleanupStack {
-	return &loopCleanupStack{}
+	return &loopCleanupStack{attempts: make(map[string]int)}
 }
 
 func (stack *loopCleanupStack) add(name string, fn func() error) {
@@ -57,17 +59,39 @@ func (stack *loopCleanupStack) run() error {
 		var errs []error
 		for index := len(actions) - 1; index >= 0; index-- {
 			action := actions[index]
+			stack.mu.Lock()
+			stack.attempts[action.name]++
+			stack.mu.Unlock()
 			if err := action.fn(); err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", action.name, err))
 			}
 		}
 		stack.mu.Lock()
 		stack.err = errors.Join(errs...)
+		stack.ran = true
 		stack.mu.Unlock()
 	})
 	stack.mu.Lock()
 	defer stack.mu.Unlock()
 	return stack.err
+}
+
+func (stack *loopCleanupStack) actionCalls(name string) int {
+	if stack == nil {
+		return 0
+	}
+	stack.mu.Lock()
+	defer stack.mu.Unlock()
+	return stack.attempts[name]
+}
+
+func (stack *loopCleanupStack) hasRun() bool {
+	if stack == nil {
+		return false
+	}
+	stack.mu.Lock()
+	defer stack.mu.Unlock()
+	return stack.ran
 }
 
 type loopRunnerReleaser interface {
@@ -115,24 +139,26 @@ func (scenario *loopScenario) removeRoot() error {
 }
 
 func closeLoopSession(baseURL, sessionID string) (bool, error) {
+	cleanupContext, cancel := context.WithTimeout(context.Background(), loopSessionCleanupBudget)
+	defer cancel()
 	var errs []error
-	if err := runLoopCleanupStep(func(ctx context.Context) error {
+	if err := runLoopCleanupStep(cleanupContext, loopSessionTerminateBudget, func(ctx context.Context) error {
 		return terminateLoopSession(ctx, baseURL, sessionID)
 	}); err != nil {
 		errs = append(errs, err)
 	}
-	if err := runLoopCleanupStep(func(ctx context.Context) error {
+	if err := runLoopCleanupStep(cleanupContext, loopSessionStoppedBudget, func(ctx context.Context) error {
 		return waitForLoopSessionStopped(ctx, baseURL, sessionID)
 	}); err != nil {
 		errs = append(errs, err)
 	}
-	if err := runLoopCleanupStep(func(ctx context.Context) error {
+	if err := runLoopCleanupStep(cleanupContext, loopSessionDeleteBudget, func(ctx context.Context) error {
 		return deleteLoopSession(ctx, baseURL, sessionID)
 	}); err != nil {
 		errs = append(errs, err)
 	}
 	absent := false
-	if err := runLoopCleanupStep(func(ctx context.Context) error {
+	if err := runLoopCleanupStep(cleanupContext, loopSessionAbsentBudget, func(ctx context.Context) error {
 		var err error
 		absent, err = observeLoopSessionAbsent(ctx, baseURL, sessionID)
 		return err
@@ -142,8 +168,15 @@ func closeLoopSession(baseURL, sessionID string) (bool, error) {
 	return absent, errors.Join(errs...)
 }
 
-func runLoopCleanupStep(fn func(context.Context) error) error {
-	ctx, cancel := context.WithTimeout(context.Background(), loopSharedFixtureTimeout)
+func runLoopCleanupStep(
+	parent context.Context,
+	budget time.Duration,
+	fn func(context.Context) error,
+) error {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 	return fn(ctx)
 }
@@ -180,7 +213,9 @@ func terminateLoopSession(ctx context.Context, baseURL, sessionID string) error 
 
 func waitForLoopSessionStopped(ctx context.Context, baseURL, sessionID string) error {
 	// The public status projection is the only package-visible stop observation;
-	// the ticker is a bounded observation interval, not a readiness delay.
+	// the ticker is a bounded observation interval, not a readiness delay. The
+	// caller supplies a dedicated stop-phase budget and a shorter total cleanup
+	// budget prevents this poll from multiplying across cleanup steps.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	var (
@@ -337,16 +372,31 @@ func TestLoopCleanupStackRunsAllActionsOnceAndRetainsFailures(t *testing.T) {
 func TestBlockingLoopRunnerReleaseIsIdempotent(t *testing.T) {
 	runner := newBlockingLoopRunner()
 	result := make(chan error, 1)
-	ctx, cancel := context.WithTimeout(t.Context(), loopSharedFixtureTimeout)
+	done := make(chan struct{})
+	runContext, cancel := context.WithCancel(t.Context())
 	defer cancel()
+	// Register cancellation and release before starting the goroutine. A failed
+	// start observation must clean up the same blocked runner it is checking.
+	t.Cleanup(func() {
+		runner.Release()
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(loopProviderPhaseBudget):
+			t.Errorf("blocking runner goroutine remained after test cleanup")
+		}
+	})
 	go func() {
-		_, err := runner.Run(context.Background(), platformprocess.CommandRequest{})
+		_, err := runner.Run(runContext, platformprocess.CommandRequest{})
 		result <- err
+		close(done)
 	}()
+	startContext, startCancel := context.WithTimeout(t.Context(), loopProviderPhaseBudget)
+	defer startCancel()
 	select {
 	case <-runner.started:
-	case <-ctx.Done():
-		t.Fatalf("blocking runner did not start: %v", ctx.Err())
+	case <-startContext.Done():
+		t.Fatalf("blocking runner did not start: %v", startContext.Err())
 	}
 
 	runner.Release()
@@ -356,7 +406,7 @@ func TestBlockingLoopRunnerReleaseIsIdempotent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("released runner error = %v, want nil", err)
 		}
-	case <-ctx.Done():
-		t.Fatalf("idempotent runner release did not unblock Run: %v", ctx.Err())
+	case <-startContext.Done():
+		t.Fatalf("idempotent runner release did not unblock Run: %v", startContext.Err())
 	}
 }
