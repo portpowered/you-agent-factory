@@ -411,10 +411,16 @@ the explicit successor to closed, unmerged [PR #2331](https://github.com/portpow
 the linkage was recorded in both PR conversations. The old PR's protected
 dead-code-baseline closure remains historical context only.
 
-The final branch head is the commit containing this handoff section. Its exact
-identifier is captured with `git rev-parse HEAD` immediately before the final
-push and in the successor PR handoff comment. No code or protected fixture is
-changed after the story-002 implementation head `b8ea73092e`.
+The provisional handoff head `ea63a4da83` was superseded before final push when
+the required current-main sync observed `origin/main` advancing to
+`676e29c776746c9e74b97b91ddfe59003989559b`. The six upstream paths were
+outside this lane's owned surface, and the c10 series rebased cleanly. The
+rebased equivalents of the five recovered commits are `52b53190b7`,
+`399bc740dd`, `4e18da1f84`, `7f7699d01e`, and `4da3be7202`, in that order;
+the story-002 strengthening commit is `4f2c228940`. The final pushed head is
+captured with `git rev-parse HEAD` in the successor PR handoff comment. No
+code or protected fixture is changed by the rebase or this documentation
+refresh.
 
 ### Final topology and performance direction
 
@@ -435,15 +441,17 @@ Functional Coverage package result and timing are the authoritative
 
 ### Final verification and loopback ownership
 
-The implementation-stage final proof procedure is exactly:
+The provisional proof at `ea63a4da83` passed before the current-main sync, but
+it is not claimed as final-head evidence. The implementation-stage final proof
+procedure is exactly:
 
 ```text
 go test -count=1 -timeout=10m ./tests/functional/workers/inference/claude
 ```
 
-It runs once after this handoff section is committed at the final local head.
-The exit status, package timing, public witnesses, cleanup census, final head,
-and remaining unproven edges are recorded in the successor PR conversation;
+It runs once after this current-main refresh at the final local head. The exit
+status, package timing, public witnesses, cleanup census, final head, and
+remaining unproven edges are recorded in the successor PR conversation;
 CI-run results are not committed to this branch. The unchanged tagged
 full-stream and tool goldens remain isolated under `functionallong`, so no
 risk-triggered tagged rerun is required. `LOOPBACK-C10-01` is read-only and
