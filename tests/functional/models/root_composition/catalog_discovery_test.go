@@ -402,15 +402,9 @@ func runModelsCatalogDiscoveryMapsUnknownDetailThroughHTTPWithBarrier(
 // the effective built-in catalog rejects an operation outside the selected
 // model definition before any model host or provider effect is attempted.
 func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T) {
-	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	fixture := ensureSharedModelsBuiltinFixture(t)
 
-	endpoint := server.URL() + "/models/tts/invocations"
+	endpoint := fixture.baseURL + "/models/tts/invocations"
 	response, err := http.Post(endpoint, "application/json", strings.NewReader(`{"operation":"ASR"}`))
 	if err != nil {
 		t.Fatalf("POST %s: %v", endpoint, err)
@@ -427,12 +421,12 @@ func TestModelsCatalogDiscoveryMapsUnsupportedOperationThroughHTTP(t *testing.T)
 		t.Fatalf("POST %s = status %d, failure %#v; want typed bad-request 400", endpoint, response.StatusCode, failure)
 	}
 
-	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "invoke", "tts",
 		"--operation", "ASR", "--text", "unsupported catalog operation",
 	})
-	inputs.Input.WorkingDirectory = dir
+	inputs.Input.WorkingDirectory = fixture.rootDir
+	process := characterizationBuildProcess(t, serviceedges.Edges{})
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(models invoke) error = nil, want unsupported catalog operation")
 	}
@@ -839,15 +833,9 @@ func TestModelsCatalogReadinessFailureStaysUnavailableThroughHTTP(t *testing.T) 
 func TestModelsCatalogProjectsCustomModelThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	dir := characterizationScaffoldFactory(t, catalogCustomModelFactoryConfig())
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	fixture := ensureSharedModelsCatalogFixture(t)
 
-	list := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	list := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.baseURL+"/models")
 	custom, ok := findModelSummary(list.Results, "custom-embed")
 	if !ok || len(custom.Operations) != 1 || custom.Operations[0].Name != "EMBED" {
 		t.Fatalf("effective custom catalog entry = %#v, want one EMBED operation", custom)
@@ -856,7 +844,7 @@ func TestModelsCatalogProjectsCustomModelThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("custom runtime identity = %q, want custom-embed", custom.ManagedRuntime.Identity)
 	}
 
-	detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/CUSTOM-EMBED")
+	detail := support.GetJSON[factoryapi.ModelDetail](t, fixture.baseURL+"/models/CUSTOM-EMBED")
 	if detail.Name != "custom-embed" || len(detail.Operations) != 1 || detail.Operations[0].Name != "EMBED" {
 		t.Fatalf("custom detail = %#v, want one EMBED operation", detail)
 	}

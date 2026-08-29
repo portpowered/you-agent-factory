@@ -49,10 +49,11 @@ type sharedModelsFixture struct {
 	baseURL  string
 	env      []string
 
-	process    support.ApplicationProcess
-	command    *sharedModelsProcessCommand
-	apiStarted atomic.Bool
-	apiStopped chan struct{}
+	process        support.ApplicationProcess
+	command        *sharedModelsProcessCommand
+	providerRunner *support.RecordingCommandRunner
+	apiStarted     atomic.Bool
+	apiStopped     chan struct{}
 
 	scenarioMu    sync.Mutex
 	sessionIDs    map[string]string
@@ -141,6 +142,12 @@ var sharedModelsCatalogFixtureState struct {
 	err     error
 }
 
+var sharedModelsBuiltinFixtureState struct {
+	sync.Once
+	fixture *sharedModelsFixture
+	err     error
+}
+
 // TestModelsSharedProcessEligibleScenarios is the explicit race-test target
 // for the shared mutable session ledger. The two subtests use the same rich
 // catalog definition and process while retaining their original HTTP and CLI
@@ -213,16 +220,16 @@ func ensureSharedModelsFixture(t *testing.T) *sharedModelsFixture {
 }
 
 func newSharedModelsFixture(t *testing.T) (_ *sharedModelsFixture, err error) {
-	return newSharedModelsFixtureWithConfig(t, richCatalogFactoryConfig(), true, nil)
+	return newSharedModelsFixtureWithConfig(t, richCatalogFactoryConfig(), true, nil, serviceedges.Edges{})
 }
 
 func ensureSharedModelsCatalogFixture(t *testing.T) *sharedModelsFixture {
 	t.Helper()
 	sharedModelsCatalogFixtureState.Do(func() {
 		sharedModelsCatalogFixtureState.fixture, sharedModelsCatalogFixtureState.err =
-			newSharedModelsFixtureWithConfig(t, catalogDiscoveryFactoryConfig(), false, func(rootDir string) {
+			newSharedModelsFixtureWithConfig(t, catalogCustomModelFactoryConfig(), false, func(rootDir string) {
 				support.WriteAgentConfig(t, rootDir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
-			})
+			}, serviceedges.Edges{})
 	})
 	if sharedModelsCatalogFixtureState.err != nil {
 		t.Fatalf("initialize shared Models catalog fixture: %v", sharedModelsCatalogFixtureState.err)
@@ -230,11 +237,30 @@ func ensureSharedModelsCatalogFixture(t *testing.T) *sharedModelsFixture {
 	return sharedModelsCatalogFixtureState.fixture
 }
 
+func ensureSharedModelsBuiltinFixture(t *testing.T) *sharedModelsFixture {
+	t.Helper()
+	sharedModelsBuiltinFixtureState.Do(func() {
+		runner := support.NewRecordingCommandRunner("provider should not run before managed readiness")
+		sharedModelsBuiltinFixtureState.fixture, sharedModelsBuiltinFixtureState.err =
+			newSharedModelsFixtureWithConfig(t, builtInOnlyModelFactoryConfig(), false, nil, serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			})
+		if sharedModelsBuiltinFixtureState.fixture != nil {
+			sharedModelsBuiltinFixtureState.fixture.providerRunner = runner
+		}
+	})
+	if sharedModelsBuiltinFixtureState.err != nil {
+		t.Fatalf("initialize shared Models built-in fixture: %v", sharedModelsBuiltinFixtureState.err)
+	}
+	return sharedModelsBuiltinFixtureState.fixture
+}
+
 func newSharedModelsFixtureWithConfig(
 	t *testing.T,
 	config map[string]any,
 	seedOmniVoiceCache bool,
 	prepare func(string),
+	edges serviceedges.Edges,
 ) (_ *sharedModelsFixture, err error) {
 	t.Helper()
 	rootDir, err := os.MkdirTemp("", "c06-models-shared-")
@@ -278,16 +304,15 @@ func newSharedModelsFixtureWithConfig(
 
 	api := support.NewProcessAPIServer()
 	var apiStopOnce sync.Once
-	process, buildErr := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			fixture.apiStarted.Store(true)
-			fixture.apiStarts.Add(1)
-			c06Ledger.apiServers.Add(1)
-			err := api.Start(ctx, request)
-			apiStopOnce.Do(func() { close(fixture.apiStopped) })
-			return err
-		},
-	})
+	edges.APIServerStarter = func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		fixture.apiStarted.Store(true)
+		fixture.apiStarts.Add(1)
+		c06Ledger.apiServers.Add(1)
+		err := api.Start(ctx, request)
+		apiStopOnce.Do(func() { close(fixture.apiStopped) })
+		return err
+	}
+	process, buildErr := support.BuildProcessWithContext(context.Background(), edges)
 	if buildErr != nil {
 		return nil, fmt.Errorf("BuildProcess: %w", buildErr)
 	}
@@ -607,6 +632,14 @@ func closeSharedModelsCatalogFixture() error {
 	return fixture.close()
 }
 
+func closeSharedModelsBuiltinFixture() error {
+	fixture := sharedModelsBuiltinFixtureState.fixture
+	if fixture == nil {
+		return nil
+	}
+	return fixture.close()
+}
+
 func sharedModelsFixtureCounters() (rootBuilds, apiStarts, opens, closes int64) {
 	fixture := sharedModelsFixtureState.fixture
 	if fixture == nil {
@@ -617,6 +650,14 @@ func sharedModelsFixtureCounters() (rootBuilds, apiStarts, opens, closes int64) 
 
 func sharedModelsCatalogFixtureCounters() (rootBuilds, apiStarts int64) {
 	fixture := sharedModelsCatalogFixtureState.fixture
+	if fixture == nil {
+		return 0, 0
+	}
+	return fixture.rootBuilds.Load(), fixture.apiStarts.Load()
+}
+
+func sharedModelsBuiltinFixtureCounters() (rootBuilds, apiStarts int64) {
+	fixture := sharedModelsBuiltinFixtureState.fixture
 	if fixture == nil {
 		return 0, 0
 	}

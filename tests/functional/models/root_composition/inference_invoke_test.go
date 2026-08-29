@@ -425,19 +425,13 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 func TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.T) {
 	t.Parallel()
 
-	dir := characterizationScaffoldFactory(t, builtInOnlyModelFactoryConfig())
-	runner := support.NewRecordingCommandRunner("provider should not run before managed readiness")
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
+	fixture := ensureSharedModelsBuiltinFixture(t)
 
-	assertEffectiveBuiltinDiscovery(t, server.URL())
-	assertEffectiveBuiltinReadinessFailures(t, server.URL())
-	assertUnknownBuiltinFailure(t, server.URL())
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", runner.CallCount())
+	assertEffectiveBuiltinDiscovery(t, fixture.baseURL)
+	assertEffectiveBuiltinReadinessFailures(t, fixture.baseURL)
+	assertUnknownBuiltinFailure(t, fixture.baseURL)
+	if fixture.providerRunner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", fixture.providerRunner.CallCount())
 	}
 }
 
