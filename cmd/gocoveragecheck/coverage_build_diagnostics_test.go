@@ -90,6 +90,47 @@ func TestBuildCoverageCompileProbeInvocationPreservesCoverageShape(t *testing.T)
 	}
 }
 
+func TestBuildCoverageCompileProbeInvocationsSplitDuplicatePackageNames(t *testing.T) {
+	t.Parallel()
+
+	probes, err := buildCoverageCompileProbeInvocations(commandInvocation{
+		name: "go",
+		args: []string{
+			"test",
+			"-run=TestSubmit",
+			"-coverprofile=coverage.out",
+			"-json",
+			"github.com/example/recordings/process",
+			"github.com/example/transport/process",
+			"github.com/example/transport/stdio",
+		},
+	}, filepath.Join(t.TempDir(), "compile-probe-bin"))
+	if err != nil {
+		t.Fatalf("buildCoverageCompileProbeInvocations() error = %v", err)
+	}
+	if len(probes) != 2 {
+		t.Fatalf("probe count = %d, want two unique-basename groups", len(probes))
+	}
+
+	for _, probe := range probes {
+		processCount := 0
+		for _, packagePath := range []string{
+			"github.com/example/recordings/process",
+			"github.com/example/transport/process",
+		} {
+			if slicesContains(probe.args, packagePath) {
+				processCount++
+			}
+		}
+		if processCount > 1 {
+			t.Fatalf("probe args = %v, duplicate process basenames remain in one command", probe.args)
+		}
+	}
+	if !slicesContains(probes[0].args, "github.com/example/transport/stdio") {
+		t.Fatalf("first probe args = %v, distinct basename was not packed with the first group", probes[0].args)
+	}
+}
+
 func TestCoverageBuildDiagnosticRunWritesCompleteSummaryAndCleansBinaries(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter

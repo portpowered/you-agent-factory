@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -93,16 +94,20 @@ func runCoverageBuildProbe(cfg config, plan coverageInvocationPlan, testPackages
 	defer func() { _ = os.RemoveAll(probeDir) }()
 
 	var trace strings.Builder
-	for index, invocation := range plan.invocations {
-		probe, buildErr := buildCoverageCompileProbeInvocation(invocation, probeDir)
+	probeIndex := 0
+	for _, invocation := range plan.invocations {
+		probes, buildErr := buildCoverageCompileProbeInvocations(invocation, probeDir)
 		if buildErr != nil {
 			return nil, runFailedCoverageBuildDiagnostic(outputPath, run, started, trace.String(), buildErr)
 		}
-		stdout, stderr, commandErr := runCommand(probe)
-		appendCoverageBuildTrace(&trace, stdout, stderr)
-		if commandErr != nil {
-			failure := coverageBuildProbeFailure(index, len(plan.invocations), commandErr, stdout, stderr)
-			return nil, runFailedCoverageBuildDiagnostic(outputPath, run, started, trace.String(), failure)
+		for _, probe := range probes {
+			stdout, stderr, commandErr := runCommand(probe)
+			appendCoverageBuildTrace(&trace, stdout, stderr)
+			if commandErr != nil {
+				failure := coverageBuildProbeFailure(probeIndex, len(probes), commandErr, stdout, stderr)
+				return nil, runFailedCoverageBuildDiagnostic(outputPath, run, started, trace.String(), failure)
+			}
+			probeIndex++
 		}
 	}
 
@@ -142,17 +147,70 @@ func expectedCoveragePackageCount(packages []string) int {
 }
 
 func buildCoverageCompileProbeInvocation(invocation commandInvocation, outputDir string) (commandInvocation, error) {
+	return buildCoverageCompileProbeInvocationForPackages(invocation, outputDir, nil)
+}
+
+func buildCoverageCompileProbeInvocations(invocation commandInvocation, outputDir string) ([]commandInvocation, error) {
+	packages, err := coverageInvocationPackageArgs(invocation.args)
+	if err != nil {
+		return nil, err
+	}
+
+	type probePackageGroup struct {
+		names    map[string]struct{}
+		packages []string
+	}
+	groups := make([]probePackageGroup, 0, len(packages))
+	for _, packageArg := range packages {
+		packageName := path.Base(strings.TrimSuffix(strings.TrimSpace(packageArg), "/"))
+		if packageName == "." || packageName == "..." || packageName == "" {
+			packageName = packageArg
+		}
+		groupIndex := -1
+		for index := range groups {
+			if _, exists := groups[index].names[packageName]; !exists {
+				groupIndex = index
+				break
+			}
+		}
+		if groupIndex == -1 {
+			groupIndex = len(groups)
+			groups = append(groups, probePackageGroup{names: make(map[string]struct{})})
+		}
+		groups[groupIndex].names[packageName] = struct{}{}
+		groups[groupIndex].packages = append(groups[groupIndex].packages, packageArg)
+	}
+
+	probes := make([]commandInvocation, 0, len(groups))
+	for _, group := range groups {
+		probe, err := buildCoverageCompileProbeInvocationForPackages(invocation, outputDir, group.packages)
+		if err != nil {
+			return nil, err
+		}
+		probes = append(probes, probe)
+	}
+	return probes, nil
+}
+
+func buildCoverageCompileProbeInvocationForPackages(invocation commandInvocation, outputDir string, selectedPackages []string) (commandInvocation, error) {
 	if len(invocation.args) == 0 || invocation.args[0] != "test" {
 		return commandInvocation{}, errors.New("prepare coverage compile probe: expected a go test invocation")
 	}
+	packageStart, packages, err := coverageInvocationPackageArgsWithStart(invocation.args)
+	if err != nil {
+		return commandInvocation{}, err
+	}
+	if len(selectedPackages) == 0 {
+		selectedPackages = packages
+	}
 	args := []string{"test", "-c", "-o", outputDir, "-x"}
-	for index := 1; index < len(invocation.args); index++ {
+	for index := 1; index < packageStart; index++ {
 		arg := invocation.args[index]
 		switch {
 		case arg == "-json":
 			continue
 		case arg == "-coverprofile":
-			if index+1 >= len(invocation.args) {
+			if index+1 >= packageStart {
 				return commandInvocation{}, errors.New("prepare coverage compile probe: -coverprofile has no value")
 			}
 			index++
@@ -163,12 +221,53 @@ func buildCoverageCompileProbeInvocation(invocation commandInvocation, outputDir
 			args = append(args, arg)
 		}
 	}
+	args = append(args, selectedPackages...)
 	return commandInvocation{
 		name: invocation.name,
 		args: args,
 		env:  invocation.env,
 		dir:  invocation.dir,
 	}, nil
+}
+
+func coverageInvocationPackageArgs(args []string) ([]string, error) {
+	_, packages, err := coverageInvocationPackageArgsWithStart(args)
+	return packages, err
+}
+
+func coverageInvocationPackageArgsWithStart(args []string) (int, []string, error) {
+	if len(args) == 0 || args[0] != "test" {
+		return 0, nil, errors.New("prepare coverage compile probe: expected a go test invocation")
+	}
+	for index := 1; index < len(args); index++ {
+		arg := args[index]
+		switch {
+		case arg == "-coverprofile":
+			if index+2 > len(args) {
+				return 0, nil, errors.New("prepare coverage compile probe: -coverprofile has no value")
+			}
+			packageStart := index + 2
+			if packageStart < len(args) && args[packageStart] == "-json" {
+				packageStart++
+			}
+			return coverageInvocationPackageArgsFromStart(args, packageStart)
+		case strings.HasPrefix(arg, "-coverprofile="):
+			packageStart := index + 1
+			if packageStart < len(args) && args[packageStart] == "-json" {
+				packageStart++
+			}
+			return coverageInvocationPackageArgsFromStart(args, packageStart)
+		}
+	}
+	return 0, nil, errors.New("prepare coverage compile probe: coverage invocation has no -coverprofile argument")
+}
+
+func coverageInvocationPackageArgsFromStart(args []string, packageStart int) (int, []string, error) {
+	if packageStart >= len(args) {
+		return 0, nil, errors.New("prepare coverage compile probe: coverage invocation has no test packages")
+	}
+	packages := append([]string(nil), args[packageStart:]...)
+	return packageStart, packages, nil
 }
 
 func appendCoverageBuildTrace(trace *strings.Builder, stdout, stderr string) {
