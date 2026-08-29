@@ -44,6 +44,42 @@ func TestSelectCompletionSessionIdentityUsesRetainedMetricIdentity(t *testing.T)
 	}
 }
 
+func TestCompletionEventScopeIDUsesResumeSourceIdentity(t *testing.T) {
+	t.Parallel()
+
+	const (
+		successorID = "successor-runtime-id"
+		sourceID    = "source-runtime-id"
+	)
+	identity := selectCompletionSessionIdentity(
+		factorysessions.DefaultSessionID,
+		factory.SessionBuildSpec{
+			SessionID:                      factorysessions.DefaultSessionID,
+			MetricsSessionID:               successorID,
+			ResumeSourceCanonicalSessionID: sourceID,
+		},
+	)
+	if identity.runtimeID != successorID {
+		t.Fatalf("completion metrics identity = %q, want %q", identity.runtimeID, successorID)
+	}
+	if got := completionEventScopeID(identity.id, factory.SessionBuildSpec{
+		ResumeSourceCanonicalSessionID: sourceID,
+	}); got != sourceID {
+		t.Fatalf("completion event scope = %q, want %q", got, sourceID)
+	}
+}
+
+func TestCompletionEventScopeIDFallsBackToPublicSelector(t *testing.T) {
+	t.Parallel()
+
+	if got := completionEventScopeID(
+		factorysessions.DefaultSessionID,
+		factory.SessionBuildSpec{MetricsSessionID: "current-runtime-id"},
+	); got != factorysessions.DefaultSessionID {
+		t.Fatalf("completion event scope = %q, want public selector %q", got, factorysessions.DefaultSessionID)
+	}
+}
+
 func TestRetainedRuntimeMetricsSessionIDsDeduplicatesSuccessorAndSource(t *testing.T) {
 	const canonicalID = "canonical-runtime-id"
 

@@ -398,6 +398,7 @@ func (a *Assembly) Complete(
 	if session == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
+	session.RuntimeEventSessionID = completionEventScopeID(identity.id, startupSpec)
 	session.RetainedRuntimeMetricsSessionIDs = retainedRuntimeMetricsSessionIDs(
 		livesession.CanonicalID(session),
 		startupSpec.ResumeSourceCanonicalSessionID,
@@ -517,6 +518,13 @@ func selectCompletionSessionIdentity(factorySessionID string, startupSpec factor
 		}
 	}
 	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
+}
+
+func completionEventScopeID(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) string {
+	if sourceID := strings.TrimSpace(startupSpec.ResumeSourceCanonicalSessionID); sourceID != "" {
+		return sourceID
+	}
+	return strings.TrimSpace(factorySessionID)
 }
 
 type definitionHost struct {

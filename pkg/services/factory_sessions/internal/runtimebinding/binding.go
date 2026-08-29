@@ -225,6 +225,7 @@ func registerReplacementSession(
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
 		RuntimeFactorySessionID: session.RuntimeFactorySessionID,
+		RuntimeEventSessionID:   session.RuntimeEventSessionID,
 		Target:                  session.Target,
 		Handle: &SessionState{
 			Handle: replacementHandle, Instance: replacement,

@@ -79,6 +79,10 @@ func (s *Service) SubscribeFactoryEventsForSession(
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("Factory Sessions gateway is required")
 	}
+	scopeSessionID := strings.TrimSpace(sessionID)
+	if session, resolveErr := s.host.RequireSession(sessionID); resolveErr == nil && session != nil {
+		scopeSessionID = livesession.EventScopeID(session)
+	}
 	runtime, err := s.host.SessionFactory(sessionID)
 	if err != nil {
 		return nil, err
@@ -88,7 +92,7 @@ func (s *Service) SubscribeFactoryEventsForSession(
 		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
 	stream, err := legacyRuntime.SubscribeFactoryEvents(
-		ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID},
+		ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: scopeSessionID},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe factory events: %w", err)

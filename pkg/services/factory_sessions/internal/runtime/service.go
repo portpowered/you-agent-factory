@@ -25,6 +25,7 @@ import (
 type Registration struct {
 	SessionID               string
 	RuntimeFactorySessionID string
+	RuntimeEventSessionID   string
 	FactoryDir              string
 	FolderPath              string
 	ExecutionBaseDir        string
@@ -310,6 +311,9 @@ func (s *Service) Register(registration Registration) string {
 			if strings.TrimSpace(registration.RuntimeFactorySessionID) == "" {
 				registration.RuntimeFactorySessionID = strings.TrimSpace(existing.RuntimeFactorySessionID)
 			}
+			if strings.TrimSpace(registration.RuntimeEventSessionID) == "" {
+				registration.RuntimeEventSessionID = strings.TrimSpace(existing.RuntimeEventSessionID)
+			}
 		} else {
 			sessionID = strings.TrimSpace(s.sessionIDs())
 			if sessionID == "" {
@@ -345,6 +349,7 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 	if session == nil {
 		return nil
 	}
+	session.RuntimeEventSessionID = strings.TrimSpace(registration.RuntimeEventSessionID)
 	if runtimeSessionID := strings.TrimSpace(registration.RuntimeFactorySessionID); runtimeSessionID != "" {
 		session.RuntimeFactorySessionID = runtimeSessionID
 		if s.responseEvents == nil {
