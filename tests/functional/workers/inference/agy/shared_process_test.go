@@ -487,55 +487,6 @@ func (fixture *agyProcessFixture) runScenario(
 	}
 }
 
-type agySharedFactoryEventObservationResult struct {
-	events []factoryapi.FactoryEvent
-	err    error
-}
-
-type agySharedFactoryEventObservation struct {
-	cancel context.CancelFunc
-	done   chan agySharedFactoryEventObservationResult
-
-	once   sync.Once
-	result agySharedFactoryEventObservationResult
-}
-
-func newAgySharedFactoryEventObservation(
-	baseURL string,
-	sessionID string,
-	want int,
-	timeout time.Duration,
-) *agySharedFactoryEventObservation {
-	observeContext, cancel := context.WithCancel(context.Background())
-	done := make(chan agySharedFactoryEventObservationResult, 1)
-	go func() {
-		events, err := waitForAgySessionFactoryEvents(observeContext, baseURL, sessionID, want, timeout)
-		done <- agySharedFactoryEventObservationResult{events: events, err: err}
-	}()
-	return &agySharedFactoryEventObservation{cancel: cancel, done: done}
-}
-
-func (observation *agySharedFactoryEventObservation) finish() agySharedFactoryEventObservationResult {
-	if observation == nil {
-		return agySharedFactoryEventObservationResult{}
-	}
-	observation.once.Do(func() {
-		observation.result = <-observation.done
-	})
-	return observation.result
-}
-
-func (observation *agySharedFactoryEventObservation) stop() agySharedFactoryEventObservationResult {
-	if observation == nil {
-		return agySharedFactoryEventObservationResult{}
-	}
-	observation.once.Do(func() {
-		observation.cancel()
-		observation.result = <-observation.done
-	})
-	return observation.result
-}
-
 type agySharedScenarioRun struct {
 	fixture   *agyProcessFixture
 	sessionID string
