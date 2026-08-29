@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -27,7 +28,7 @@ func newScriptSharedExecutionScenarios(t *testing.T) []scriptSharedScenario {
 
 	cancellationDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	workstationAgentsPath := filepath.Join(cancellationDir, "workstations", "run-script", "AGENTS.md")
-	agentsMD := "---\ntype: MODEL_WORKSTATION\nlimits:\n  maxExecutionTime: 10ms\n---\nExecute the script.\n"
+	agentsMD := "---\ntype: MODEL_WORKSTATION\n---\nExecute the script.\n"
 	if err := os.WriteFile(workstationAgentsPath, []byte(agentsMD), 0o644); err != nil {
 		t.Fatalf("write workstation AGENTS.md: %v", err)
 	}
@@ -88,13 +89,54 @@ func newScriptSharedExecutionScenarios(t *testing.T) []scriptSharedScenario {
 			traceID:                 "shared-script-cancellation-trace",
 			workTypeName:            "task",
 			terminalState:           "failed",
-			expectedOutcome:         factoryapi.WorkOutcomeFailed,
+			expectedOutcome:         factoryapi.WorkOutcomeCanceled,
 			expectedCommand:         "echo",
 			expectedArgs:            []string{"default-output"},
-			allowMultipleDispatches: true,
-			runner:                  newScriptSharedCommandRunner(&blockingCancellationCommandRunner{}),
+			cancelAfterCommandStart: true,
+			runner:                  newScriptSharedCommandRunner(newBlockingCancellationCommandRunner()),
 			assertResult:            assertScriptSharedCancellation,
 		},
+	}
+}
+
+func cancelScriptSharedSessionAfterCommandStart(
+	t *testing.T,
+	fixture *scriptSharedSpineFixture,
+	scenario scriptSharedScenario,
+	sessionID string,
+) {
+	t.Helper()
+	runner, ok := scenario.runner.Delegate().(*blockingCancellationCommandRunner)
+	if !ok {
+		t.Fatalf("%s command delegate = %T, want blocking cancellation runner", scenario.name, scenario.runner.Delegate())
+	}
+	waitForScriptSharedSignal(t, runner.StartedSignal(), "script command admission")
+	control := cancelScriptSharedSessionAt(t, fixture.baseURL, sessionID)
+	if control.Operation != factoryapi.FactorySessionLifecycleControlKindCancel {
+		t.Fatalf("%s cancellation operation = %q, want CANCEL", scenario.name, control.Operation)
+	}
+	if control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("%s cancellation outcome = %q, want ACCEPTED", scenario.name, control.Outcome)
+	}
+	if control.SessionId != sessionID {
+		t.Fatalf("%s cancellation session id = %q, want %q", scenario.name, control.SessionId, sessionID)
+	}
+	waitForScriptSharedSignal(t, runner.TerminatedSignal(), "script command cancellation and termination")
+}
+
+func waitForScriptSharedSignal(t *testing.T, signal <-chan struct{}, label string) {
+	t.Helper()
+	// The signal is emitted by the controlled external-effect edge. The timer
+	// only bounds a missing edge or test cancellation; it does not synchronize
+	// the Factory workflow with a guessed duration.
+	timer := time.NewTimer(scriptSharedSpineTimeout)
+	defer timer.Stop()
+	select {
+	case <-signal:
+	case <-t.Context().Done():
+		t.Fatalf("waiting for %s ended with test context: %v", label, t.Context().Err())
+	case <-timer.C:
+		t.Fatalf("timed out waiting for %s", label)
 	}
 }
 
@@ -198,15 +240,25 @@ func assertScriptSharedCancellation(
 			scenario.name, runner.CallCount(), runner.Started(), runner.ContextCanceled(), runner.Terminated(),
 		)
 	}
-	assertScriptCancellationDispatchFailure(t, events)
 }
 
 type blockingCancellationCommandRunner struct {
-	mu              sync.Mutex
-	calls           int
-	started         bool
-	contextCanceled bool
-	terminated      bool
+	mu               sync.Mutex
+	calls            int
+	started          bool
+	contextCanceled  bool
+	terminated       bool
+	startedSignal    chan struct{}
+	terminatedSignal chan struct{}
+	startOnce        sync.Once
+	terminationOnce  sync.Once
+}
+
+func newBlockingCancellationCommandRunner() *blockingCancellationCommandRunner {
+	return &blockingCancellationCommandRunner{
+		startedSignal:    make(chan struct{}),
+		terminatedSignal: make(chan struct{}),
+	}
 }
 
 func (r *blockingCancellationCommandRunner) Run(
@@ -216,6 +268,7 @@ func (r *blockingCancellationCommandRunner) Run(
 	r.mu.Lock()
 	r.calls++
 	r.started = true
+	r.startOnce.Do(func() { close(r.startedSignal) })
 	r.mu.Unlock()
 
 	<-ctx.Done()
@@ -223,9 +276,18 @@ func (r *blockingCancellationCommandRunner) Run(
 	r.mu.Lock()
 	r.contextCanceled = true
 	r.terminated = true
+	r.terminationOnce.Do(func() { close(r.terminatedSignal) })
 	r.mu.Unlock()
 
 	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func (r *blockingCancellationCommandRunner) StartedSignal() <-chan struct{} {
+	return r.startedSignal
+}
+
+func (r *blockingCancellationCommandRunner) TerminatedSignal() <-chan struct{} {
+	return r.terminatedSignal
 }
 
 func (r *blockingCancellationCommandRunner) CallCount() int {
@@ -250,38 +312,6 @@ func (r *blockingCancellationCommandRunner) Terminated() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.terminated
-}
-
-func assertScriptCancellationDispatchFailure(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-
-	dispatches := support.ObserveDispatchEvents(t, events)
-	if len(dispatches) == 0 {
-		t.Fatal("factory events missing dispatch observations")
-	}
-
-	for _, want := range []string{
-		"execution cancelled: context canceled",
-		"execution timeout",
-	} {
-		for _, dispatch := range dispatches {
-			response := dispatch.Response
-			if response == nil || response.Outcome != factoryapi.WorkOutcomeFailed {
-				continue
-			}
-			if response.Output != nil {
-				continue
-			}
-			if response.Error != nil && strings.Contains(*response.Error, want) {
-				return
-			}
-		}
-	}
-
-	t.Fatalf(
-		"factory events missing failed cancellation dispatch: %#v",
-		dispatches,
-	)
 }
 
 type nonZeroExitCommandRunner struct {

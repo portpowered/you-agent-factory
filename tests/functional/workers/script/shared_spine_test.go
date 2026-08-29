@@ -1,6 +1,7 @@
 package script_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -152,6 +151,7 @@ type scriptSharedScenario struct {
 	environmentPrivacy      bool
 	noInference             bool
 	allowMultipleDispatches bool
+	cancelAfterCommandStart bool
 	runner                  *scriptSharedCommandRunner
 	assertResult            scriptSharedResultAssertion
 }
@@ -295,13 +295,23 @@ func (fixture *scriptSharedSpineFixture) runScenario(
 	if workID == "" || strings.TrimSpace(submitted.RequestId) == "" {
 		t.Fatalf("submitted Work identity = work:%q request:%q, want both identities", workID, submitted.RequestId)
 	}
+	if scenario.cancelAfterCommandStart {
+		cancelScriptSharedSessionAfterCommandStart(t, fixture, scenario, sessionID)
+	}
 
 	// Work dispatch and Factory Session lifecycle updates are asynchronous.
 	// Observe the public terminal status rather than sleeping or handing off at
 	// the command edge: only the status contract proves that all Work state has
-	// become customer-visible and terminal. The package deadline above is a
-	// stuck-runtime safety bound, not timeout padding.
-	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, scriptSharedSpineTimeout)
+	// become customer-visible and terminal. A public session cancellation
+	// terminalizes the live runtime before its Work categories are projected, so
+	// that scenario observes the stopped-runtime contract instead. The package
+	// deadline above is a stuck-runtime safety bound, not timeout padding.
+	if scenario.cancelAfterCommandStart {
+		support.WaitForSessionStopped(t, fixture.baseURL, sessionID, scriptSharedSpineTimeout)
+		assertScriptSharedCancellationStatus(t, fixture.baseURL, sessionID)
+	} else {
+		support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, scriptSharedSpineTimeout)
+	}
 	listed := listScriptSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
 	assertScriptSharedWork(t, scenario, submitted, listed)
@@ -320,6 +330,48 @@ func (fixture *scriptSharedSpineFixture) runScenario(
 	})
 	fixture.closeSession(t, sessionID)
 	assertScriptSessionDeleted(t, fixture.baseURL, sessionID)
+}
+
+func cancelScriptSharedSessionAt(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+
+	requestID := "shared-script-cancel-" + sessionID
+	payload, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{RequestId: &requestID})
+	if err != nil {
+		t.Fatalf("marshal shared script cancellation control: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/cancel"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build shared script cancellation control: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("cancel shared Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read shared script cancellation response: %v", err)
+	}
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted {
+		t.Fatalf(
+			"cancel shared Factory Session %q status = %d, want 200 or 202: %s",
+			sessionID,
+			response.StatusCode,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	var control factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(body, &control); err != nil {
+		t.Fatalf("decode shared script cancellation response: %v", err)
+	}
+	return control
 }
 
 func (fixture *scriptSharedSpineFixture) openSession(t *testing.T, factoryDir string) string {
@@ -489,7 +541,9 @@ func assertScriptSharedWork(
 		scenario.workTypeName + ":init":   0,
 		scenario.workTypeName + ":failed": 0,
 	}
-	if scenario.expectedOutcome == factoryapi.WorkOutcomeFailed {
+	if scenario.cancelAfterCommandStart {
+		wants[scenario.workTypeName+":init"] = 1
+	} else if scenario.expectedOutcome == factoryapi.WorkOutcomeFailed {
 		wants[scenario.workTypeName+":"+scenario.terminalState] = 0
 		wants[scenario.workTypeName+":failed"] = 1
 	} else {
@@ -512,6 +566,18 @@ func assertScriptSharedWork(
 	}
 	if found != 1 {
 		t.Fatalf("%s Work identity count = %d, want exactly one %q", scenario.name, found, workID)
+	}
+	if scenario.cancelAfterCommandStart {
+		work := workByID(t, listed, workID)
+		if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypePROCESSING {
+			t.Fatalf("%s canceled Work state = %#v, want init/PROCESSING without a routed result", scenario.name, work.State)
+		}
+		if work.FailureDetail != nil {
+			t.Fatalf("%s canceled Work failure detail = %#v, want no business failure", scenario.name, work.FailureDetail)
+		}
+		if work.StructuredResult != nil {
+			t.Fatalf("%s canceled Work structured result = %#v, want no primary success result", scenario.name, work.StructuredResult)
+		}
 	}
 }
 
@@ -541,6 +607,10 @@ func assertScriptSharedEvents(
 			}
 		}
 	}
+	if scenario.cancelAfterCommandStart {
+		assertScriptSharedCancellationEvents(t, scenario, submitted, events)
+		return
+	}
 	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) == 0 || (!scenario.allowMultipleDispatches && len(dispatches) != 1) || dispatches[0].Response == nil {
 		want := "one completed dispatch"
@@ -562,6 +632,94 @@ func assertScriptSharedEvents(
 	}
 	if scenario.noInference && (hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceRequest) || hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceResponse)) {
 		t.Fatalf("%s emitted inference events: %v", scenario.name, factoryEventTypes(events))
+	}
+}
+
+func assertScriptSharedCancellationEvents(
+	t *testing.T,
+	scenario scriptSharedScenario,
+	submitted factoryapi.SubmitWorkResponse,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 {
+		t.Fatalf("%s dispatch observations = %#v, want exactly one admitted dispatch", scenario.name, dispatches)
+	}
+	dispatch := dispatches[0]
+	if dispatch.Response != nil {
+		t.Fatalf("%s canceled dispatch response = %#v, want no primary dispatch result", scenario.name, dispatch.Response)
+	}
+	if !support.DispatchObservationIncludesWork(dispatch, support.StringPointerValue(submitted.WorkId)) {
+		t.Fatalf("%s canceled dispatch omitted Work %q", scenario.name, support.StringPointerValue(submitted.WorkId))
+	}
+
+	var scriptRequests, scriptResponses, agentResponses int
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeScriptRequest:
+			payload, err := event.Payload.AsScriptRequestEventPayload()
+			if err != nil {
+				t.Fatalf("%s decode script request: %v", scenario.name, err)
+			}
+			scriptRequests++
+			if payload.DispatchId != dispatch.DispatchID {
+				t.Fatalf("%s script request dispatch id = %q, want %q", scenario.name, payload.DispatchId, dispatch.DispatchID)
+			}
+		case factoryapi.FactoryEventTypeScriptResponse:
+			payload, err := event.Payload.AsScriptResponseEventPayload()
+			if err != nil {
+				t.Fatalf("%s decode script response: %v", scenario.name, err)
+			}
+			scriptResponses++
+			if payload.DispatchId != dispatch.DispatchID {
+				t.Fatalf("%s script response dispatch id = %q, want %q", scenario.name, payload.DispatchId, dispatch.DispatchID)
+			}
+			if payload.Outcome != factoryapi.ScriptExecutionOutcome("CANCELED") {
+				t.Fatalf("%s script response outcome = %q, want CANCELED", scenario.name, payload.Outcome)
+			}
+			if payload.FailureType == nil || *payload.FailureType != factoryapi.ScriptFailureType("CANCELED") {
+				t.Fatalf("%s script response failure type = %#v, want CANCELED", scenario.name, payload.FailureType)
+			}
+			if payload.ExitCode != nil || payload.Stdout != "" {
+				t.Fatalf("%s script cancellation result = %#v, want no exit code or stdout", scenario.name, payload)
+			}
+		case factoryapi.FactoryEventTypeAgentRunResponse:
+			payload, err := event.Payload.AsAgentRunResponseEventPayload()
+			if err != nil {
+				t.Fatalf("%s decode agent response: %v", scenario.name, err)
+			}
+			agentResponses++
+			if payload.Outcome != scenario.expectedOutcome {
+				t.Fatalf("%s agent response outcome = %q, want %q", scenario.name, payload.Outcome, scenario.expectedOutcome)
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			t.Fatalf("%s emitted a dispatch response after cancellation", scenario.name)
+		}
+	}
+	if scriptRequests != 1 || scriptResponses != 1 || agentResponses != 1 {
+		t.Fatalf(
+			"%s cancellation event counts = script requests:%d responses:%d agent responses:%d, want 1/1/1",
+			scenario.name,
+			scriptRequests,
+			scriptResponses,
+			agentResponses,
+		)
+	}
+	if scenario.noInference && (hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceRequest) || hasFactoryEventType(events, factoryapi.FactoryEventTypeInferenceResponse)) {
+		t.Fatalf("%s emitted inference events: %v", scenario.name, factoryEventTypes(events))
+	}
+}
+
+func assertScriptSharedCancellationStatus(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+	status := support.GetJSON[factoryapi.StatusResponse](t, endpoint)
+	// Live cancellation is represented by canceled Worker-owned event facts;
+	// the live runtime itself reports its stopped state as COMPLETED/FINISHED.
+	if status.FactoryState != "COMPLETED" || status.RuntimeStatus != "FINISHED" {
+		t.Fatalf("canceled Factory Session status = %#v, want COMPLETED/FINISHED stopped state", status)
 	}
 }
 
@@ -782,179 +940,3 @@ func replaceScriptEnvironment(environment []string, name, value string) []string
 	}
 	return append(result, name+"="+value)
 }
-
-type scriptCommandRoute struct {
-	selector string
-	runner   platformprocess.CommandRunner
-}
-
-type scriptCommandRouter struct {
-	routes map[string]scriptCommandRoute
-
-	mu    sync.Mutex
-	calls []scriptRoutedCommand
-}
-
-type scriptRoutedCommand struct {
-	selector string
-	request  platformprocess.CommandRequest
-}
-
-// newScriptCommandRouter freezes every route before the root process is built.
-// The map is read-only during execution; only the diagnostic call ledger is
-// synchronized for concurrent scenario observations.
-func newScriptCommandRouter(routes []scriptCommandRoute) (*scriptCommandRouter, error) {
-	indexed := make(map[string]scriptCommandRoute, len(routes))
-	for _, route := range routes {
-		selector, err := normalizeScriptRouteSelector(route.selector)
-		if err != nil {
-			return nil, err
-		}
-		if route.runner == nil {
-			return nil, fmt.Errorf("script route %q has no command runner", selector)
-		}
-		if _, exists := indexed[selector]; exists {
-			return nil, fmt.Errorf("duplicate script route selector %q", scriptSelectorContext(route.selector))
-		}
-		route.selector = selector
-		indexed[selector] = route
-	}
-	return &scriptCommandRouter{routes: indexed}, nil
-}
-
-func (router *scriptCommandRouter) Run(
-	ctx context.Context,
-	request platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	selector, err := normalizeScriptRouteSelector(request.WorkDir)
-	if err != nil {
-		return platformprocess.CommandResult{}, fmt.Errorf("script route selector %q is invalid", scriptSelectorContext(request.WorkDir))
-	}
-	route, ok := router.routes[selector]
-	if !ok {
-		return platformprocess.CommandResult{}, fmt.Errorf("unknown script route selector %q", scriptSelectorContext(request.WorkDir))
-	}
-	if err := ctx.Err(); err != nil {
-		return platformprocess.CommandResult{}, err
-	}
-	router.mu.Lock()
-	router.calls = append(router.calls, scriptRoutedCommand{
-		selector: selector,
-		request:  cloneScriptCommandRequest(request),
-	})
-	router.mu.Unlock()
-	return route.runner.Run(ctx, request)
-}
-
-func (router *scriptCommandRouter) callsFor(selector string) []scriptRoutedCommand {
-	cleaned, err := normalizeScriptRouteSelector(selector)
-	if err != nil {
-		return nil
-	}
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	calls := make([]scriptRoutedCommand, 0)
-	for _, call := range router.calls {
-		if call.selector != cleaned {
-			continue
-		}
-		call.request = cloneScriptCommandRequest(call.request)
-		calls = append(calls, call)
-	}
-	return calls
-}
-
-func (router *scriptCommandRouter) callCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.calls)
-}
-
-func (router *scriptCommandRouter) routeCount() int {
-	return len(router.routes)
-}
-
-func normalizeScriptRouteSelector(path string) (string, error) {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return "", fmt.Errorf("script route selector is required")
-	}
-	abs, err := filepath.Abs(trimmed)
-	if err != nil {
-		return "", fmt.Errorf("normalize script route selector: %w", err)
-	}
-	cleaned := filepath.Clean(abs)
-	if runtime.GOOS == "windows" {
-		cleaned = strings.ToLower(cleaned)
-	}
-	return cleaned, nil
-}
-
-func cleanScriptRouteSelector(path string) string {
-	cleaned, _ := normalizeScriptRouteSelector(path)
-	return cleaned
-}
-
-func scriptSelectorContext(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return "<empty>"
-	}
-	base := filepath.Base(filepath.Clean(trimmed))
-	if base == "." || base == string(filepath.Separator) || base == "\\" {
-		return "<root>"
-	}
-	return base
-}
-
-func cloneScriptCommandRequest(request platformprocess.CommandRequest) platformprocess.CommandRequest {
-	request.Args = append([]string(nil), request.Args...)
-	request.Stdin = append([]byte(nil), request.Stdin...)
-	request.Env = append([]string(nil), request.Env...)
-	return request
-}
-
-func TestScriptCommandRouterRejectsUnknownAndDuplicateSelectors(t *testing.T) {
-	firstSelector := t.TempDir()
-	runner := support.NewRecordingCommandRunner("must-not-run")
-	router, err := newScriptCommandRouter([]scriptCommandRoute{{
-		selector: firstSelector,
-		runner:   runner,
-	}})
-	if err != nil {
-		t.Fatalf("newScriptCommandRouter: %v", err)
-	}
-
-	if _, err := newScriptCommandRouter([]scriptCommandRoute{
-		{selector: firstSelector, runner: runner},
-		{selector: firstSelector, runner: runner},
-	}); err == nil {
-		t.Fatal("duplicate script selector was accepted")
-	}
-
-	secret := "script-router-secret"
-	unknown := filepath.Join(t.TempDir(), "unknown-selector")
-	_, err = router.Run(context.Background(), platformprocess.CommandRequest{
-		Command: "echo",
-		Args:    []string{secret},
-		Env:     []string{"ROUTER_SECRET=" + secret},
-		WorkDir: unknown,
-	})
-	if err == nil {
-		t.Fatal("unknown script selector was accepted")
-	}
-	if !strings.Contains(err.Error(), "unknown-selector") {
-		t.Fatalf("unknown selector error = %v, want sanitized selector context", err)
-	}
-	if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), filepath.Dir(unknown)) {
-		t.Fatalf("unknown selector error leaked request or path context: %v", err)
-	}
-	if got := runner.CallCount(); got != 0 {
-		t.Fatalf("runner calls after unknown selector = %d, want zero", got)
-	}
-	if got := router.callCount(); got != 0 {
-		t.Fatalf("router calls after unknown selector = %d, want zero", got)
-	}
-}
-
-var _ platformprocess.CommandRunner = (*scriptCommandRouter)(nil)
