@@ -113,8 +113,14 @@ func replayHaikuGoldenCase(
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "claude Haiku golden replay"},
 	})
+	// The command edge can return before the asynchronous Factory Session
+	// projection has classified Work. Only the session-scoped public status
+	// contract observes that customer-visible boundary; a runner-local signal
+	// would bypass the behavior this functional test is proving.
 	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 20*time.Second)
-	assertSuccessfulHaikuGoldenWork(t, server, router, replayCase, sessionID)
+	if err := assertSuccessfulHaikuGoldenWork(t, server, router, replayCase, sessionID); err != nil {
+		t.Fatal(err)
+	}
 	support.CloseFactorySessionAt(t, server.URL(), sessionID)
 	closed = true
 }
@@ -125,30 +131,53 @@ func assertSuccessfulHaikuGoldenWork(
 	router *haikuGoldenCommandRouter,
 	replayCase haikuGoldenReplayCase,
 	sessionID string,
-) {
+) error {
 	t.Helper()
+	// Return the first witness failure so the adverse path can exercise this
+	// exact assertion sequence as a contained expected failure.
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(server.URL(), sessionID))
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
+		return fmt.Errorf("completed work = %d, want 1", got)
 	}
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0", got)
+		return fmt.Errorf("failed work = %d, want 0", got)
 	}
 	request, ok := router.RequestFor(replayCase.factoryDir)
 	if !ok {
-		t.Fatalf("no Claude command request recorded for golden %q", replayCase.golden.Name)
+		return fmt.Errorf("no Claude command request recorded for golden %q", replayCase.golden.Name)
 	}
-	support.AssertArgsContainSequence(t, request.Args, []string{
+	wantArgs := []string{
 		"--model", replayCase.golden.Selector,
 		"--verbose",
 		"--output-format", "stream-json",
 		"--include-partial-messages",
-	})
-	assertHaikuGoldenInferenceResult(
-		t,
+	}
+	if !haikuGoldenArgsContainSequence(request.Args, wantArgs) {
+		return fmt.Errorf("expected args %v to contain sequence %v", request.Args, wantArgs)
+	}
+	if err := findHaikuGoldenInferenceResult(
 		support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID),
 		replayCase.golden.SessionID,
-	)
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func haikuGoldenArgsContainSequence(args, want []string) bool {
+	for i := 0; i <= len(args)-len(want); i++ {
+		match := true
+		for j := range want {
+			if args[i+j] != want[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
 }
 
 func assertHaikuGoldenTopology(
@@ -270,13 +299,6 @@ func validateHaikuGoldenNativeShape(stdout []byte, golden haikuGoldenCase) error
 		return fmt.Errorf("Haiku golden %q shape model=%t delta=%t result=%t", golden.Name, sawModel, sawDelta, sawResult)
 	}
 	return nil
-}
-
-func assertHaikuGoldenInferenceResult(t *testing.T, events []factoryapi.FactoryEvent, wantSessionID string) {
-	t.Helper()
-	if err := findHaikuGoldenInferenceResult(events, wantSessionID); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func findHaikuGoldenInferenceResult(events []factoryapi.FactoryEvent, wantSessionID string) error {

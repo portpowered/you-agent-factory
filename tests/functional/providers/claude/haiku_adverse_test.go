@@ -128,12 +128,16 @@ func assertHaikuRouteRejected(
 	want string,
 ) {
 	t.Helper()
+	requestCount := len(router.Requests())
 	_, err := router.Run(context.Background(), request)
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("route error = %v, want %q", err, want)
 	}
 	if strings.Contains(err.Error(), haikuAdverseSecret) {
 		t.Fatalf("route error leaked request or environment data: %q", err)
+	}
+	if got := len(router.Requests()); got != requestCount {
+		t.Fatalf("route calls after rejected request = %d, want unchanged at %d", got, requestCount)
 	}
 }
 
@@ -150,6 +154,9 @@ func TestClaudeHaikuGoldenAdverseProcessPathsReclaimResources(t *testing.T) {
 		}()
 
 		submitHaikuAdverseWork(t, server, sessionID, "partial-result")
+		// Partial completion is reported asynchronously by the public Factory
+		// Session projection. The injected runner has no equivalent signal for
+		// Work classification, so this bounded public observation is necessary.
 		support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 20*time.Second)
 		listed := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(server.URL(), sessionID))
 		if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
@@ -158,11 +165,8 @@ func TestClaudeHaikuGoldenAdverseProcessPathsReclaimResources(t *testing.T) {
 		if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 			t.Fatalf("partial result failed work = %d, want 1", got)
 		}
-		if err := findHaikuGoldenInferenceResult(
-			support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID),
-			replayCase.golden.SessionID,
-		); err == nil {
-			t.Fatal("partial result unexpectedly satisfied the successful inference assertion")
+		if err := assertSuccessfulHaikuGoldenWork(t, server, router, replayCase, sessionID); err == nil {
+			t.Fatal("partial result unexpectedly satisfied the successful work assertion")
 		}
 		if got := router.CallsFor(replayCase.factoryDir); got == 0 {
 			t.Fatal("partial result did not reach the controlled Claude route")
@@ -184,12 +188,19 @@ func TestClaudeHaikuGoldenAdverseProcessPathsReclaimResources(t *testing.T) {
 		}()
 
 		submitHaikuAdverseWork(t, server, sessionID, "cancellation")
+		// The runner's started channel is the deterministic signal that
+		// Process.Execute reached the controlled dependency edge. Retain only a
+		// bounded timeout so a dispatch regression fails instead of hanging; no
+		// public endpoint can establish that this exact command was reached.
 		select {
 		case <-replayCase.started:
 		case <-time.After(10 * time.Second):
 			t.Fatal("cancellation route did not start")
 		}
 		support.TerminateFactorySessionAt(t, server.URL(), sessionID)
+		// Termination is asynchronous at the public Factory Session boundary.
+		// The route-start signal cannot prove that the session projection has
+		// stopped, so observe the public status before deleting the session.
 		support.WaitForSessionStopped(t, server.URL(), sessionID, 20*time.Second)
 		if got := router.CallsFor(replayCase.factoryDir); got != 1 {
 			t.Fatalf("canceled route calls = %d, want 1", got)
@@ -236,14 +247,14 @@ func finishHaikuAdverseSession(
 	sessionID string,
 ) {
 	t.Helper()
+	// CloseFactorySessionAt observes the public stopped state before deletion;
+	// that lifecycle transition is asynchronous and cannot be replaced by the
+	// runner's command signal without bypassing the Factory Session boundary.
 	support.CloseFactorySessionAt(t, server.URL(), sessionID)
 	assertHaikuSessionDeleted(t, server.URL(), sessionID)
+	// ProcessCommand.Stop cancels and joins Process.Execute. Waiting on Done
+	// again would duplicate that deterministic shutdown observation.
 	server.Stop(t)
-	select {
-	case <-server.Done():
-	case <-time.After(10 * time.Second):
-		t.Error("Claude adverse server did not stop")
-	}
 	server.Close(t)
 	router.Close()
 	if got := router.RouteCount(); got != 0 {
