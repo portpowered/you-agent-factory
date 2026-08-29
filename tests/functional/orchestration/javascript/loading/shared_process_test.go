@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,9 +16,8 @@ import (
 	"testing"
 	"time"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	"github.com/portpowered/infinite-you/pkg/root"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -31,195 +31,188 @@ const (
 	loadingRecoveryResult = "<LOADING_RECOVERY>"
 )
 
-type loadingResourceKind string
-
-const (
-	loadingResourceProcess  loadingResourceKind = "process"
-	loadingResourcePort     loadingResourceKind = "port"
-	loadingResourceListener loadingResourceKind = "listener"
-	loadingResourceSession  loadingResourceKind = "session"
-	loadingResourceStream   loadingResourceKind = "stream"
-	loadingResourceRoute    loadingResourceKind = "route"
-	loadingResourceRoot     loadingResourceKind = "root"
-	loadingResourceWorktree loadingResourceKind = "worktree"
-	loadingResourceMutable  loadingResourceKind = "mutable-state"
+var (
+	loadingFixtureMu     sync.Mutex
+	sharedLoadingFixture *loadingFixture
 )
 
-var loadingResourceKinds = []loadingResourceKind{
-	loadingResourceProcess,
-	loadingResourcePort,
-	loadingResourceListener,
-	loadingResourceSession,
-	loadingResourceStream,
-	loadingResourceRoute,
-	loadingResourceRoot,
-	loadingResourceWorktree,
-	loadingResourceMutable,
-}
+// TestMain owns the one reusable process for this package. Individual tests
+// retain their original top-level selectors, while the shared fixture keeps
+// process construction and hosted-server startup out of every scenario.
+func TestMain(m *testing.M) {
+	code := m.Run()
 
-type loadingResourceLedger struct {
-	process  atomic.Int32
-	port     atomic.Int32
-	listener atomic.Int32
-	session  atomic.Int32
-	stream   atomic.Int32
-	route    atomic.Int32
-	root     atomic.Int32
-	worktree atomic.Int32
-	mutable  atomic.Int32
-}
-
-type loadingResourceCounts struct {
-	process  int32
-	port     int32
-	listener int32
-	session  int32
-	stream   int32
-	route    int32
-	root     int32
-	worktree int32
-	mutable  int32
-}
-
-func (ledger *loadingResourceLedger) counter(kind loadingResourceKind) *atomic.Int32 {
-	switch kind {
-	case loadingResourceProcess:
-		return &ledger.process
-	case loadingResourcePort:
-		return &ledger.port
-	case loadingResourceListener:
-		return &ledger.listener
-	case loadingResourceSession:
-		return &ledger.session
-	case loadingResourceStream:
-		return &ledger.stream
-	case loadingResourceRoute:
-		return &ledger.route
-	case loadingResourceRoot:
-		return &ledger.root
-	case loadingResourceWorktree:
-		return &ledger.worktree
-	case loadingResourceMutable:
-		return &ledger.mutable
-	default:
-		panic("unknown loading resource kind: " + string(kind))
-	}
-}
-
-func (ledger *loadingResourceLedger) acquire(kind loadingResourceKind) {
-	ledger.counter(kind).Add(1)
-}
-
-func (ledger *loadingResourceLedger) release(kind loadingResourceKind) {
-	counter := ledger.counter(kind)
-	for {
-		current := counter.Load()
-		if current == 0 {
-			return
-		}
-		if counter.CompareAndSwap(current, current-1) {
-			return
+	loadingFixtureMu.Lock()
+	fixture := sharedLoadingFixture
+	loadingFixtureMu.Unlock()
+	if fixture != nil {
+		if err := fixture.shutdown(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			code = 1
 		}
 	}
+	os.Exit(code)
 }
 
-func (ledger *loadingResourceLedger) snapshot() loadingResourceCounts {
-	return loadingResourceCounts{
-		process:  ledger.process.Load(),
-		port:     ledger.port.Load(),
-		listener: ledger.listener.Load(),
-		session:  ledger.session.Load(),
-		stream:   ledger.stream.Load(),
-		route:    ledger.route.Load(),
-		root:     ledger.root.Load(),
-		worktree: ledger.worktree.Load(),
-		mutable:  ledger.mutable.Load(),
-	}
-}
-
-// unwindLoadingFixtureStart returns the injected cause unchanged after
-// draining every resource cell acquired before a fixture start failure.
-func unwindLoadingFixtureStart(ledger *loadingResourceLedger, cause error) error {
-	for _, kind := range loadingResourceKinds {
-		for ledger.counter(kind).Load() > 0 {
-			ledger.release(kind)
-		}
-	}
-	return cause
-}
-
-// TestJavaScriptLoadingFixturePartialStartUnwinds proves a partial package
-// fixture start cannot strand process, listener, session, stream, routing,
-// root, worktree, or mutable runner resources and preserves the original
-// startup error.
+// TestJavaScriptLoadingFixturePartialStartUnwinds proves a real process
+// startup failure preserves the original error and closes the listener that
+// was acquired by the injected HTTP transport edge.
 func TestJavaScriptLoadingFixturePartialStartUnwinds(t *testing.T) {
-	ledger := &loadingResourceLedger{}
-	for _, kind := range loadingResourceKinds {
-		ledger.acquire(kind)
-	}
-	original := errors.New("injected loading fixture start failure")
+	hostDir := scaffoldLoadingHostFactory(t)
+	homeDir := t.TempDir()
+	writeLoadingGlobalConfig(t, homeDir)
 
-	if got := unwindLoadingFixtureStart(ledger, original); got != original {
+	original := errors.New("injected loading fixture start failure")
+	var listenerURL atomic.Value
+	var listenerOpen atomic.Int32
+	var starterCalls atomic.Int32
+	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		server := httptest.NewServer(request.Handler)
+		listenerURL.Store(server.URL)
+		listenerOpen.Store(1)
+		server.CloseClientConnections()
+		server.Close()
+		listenerOpen.Store(0)
+		return original
+	}
+
+	runner := newLoadingCommandRunner()
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		APIServerStarter:      failingStarter,
+		ProviderCommandRunner: runner,
+		FactoryRuntimeWorkflowHome: func() (string, error) {
+			return homeDir, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(loading partial start): %v", err)
+	}
+
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
+	})
+	inputs.Input.Env = loadingCustomerEnvironment(homeDir)
+	inputs.Input.WorkingDirectory = hostDir
+	got := process.Execute(inputs.Input)
+	closeContext, cancel := context.WithTimeout(context.Background(), loadingFixtureTimeout)
+	closeErr := process.Close(closeContext)
+	cancel()
+	if closeErr != nil {
+		t.Fatalf("close partial-start process: %v", closeErr)
+	}
+	if !errors.Is(got, original) && !strings.Contains(gotErrorText(got), original.Error()) {
 		t.Fatalf("partial-start error = %v, want original error %v", got, original)
 	}
-	counts := ledger.snapshot()
-	if counts != (loadingResourceCounts{}) {
-		t.Fatalf("partial-start resource counts = %#v, want all zero", counts)
+	if got := starterCalls.Load(); got != 1 {
+		t.Fatalf("partial-start API starter calls = %d, want one", got)
 	}
-	t.Logf("loading partial-start lifecycle report: process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d original_error=%q", counts.process, counts.port, counts.listener, counts.session, counts.stream, counts.route, counts.root, counts.worktree, counts.mutable, original)
+	if got := listenerOpen.Load(); got != 0 {
+		t.Fatalf("partial-start listener state = %d, want closed", got)
+	}
+	if got := runner.CallCount(); got != 0 {
+		t.Fatalf("partial-start provider calls = %d, want zero", got)
+	}
+	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
+		client := http.Client{Timeout: time.Second}
+		response, probeErr := client.Get(rawURL + "/status")
+		if probeErr == nil {
+			body, _ := io.ReadAll(response.Body)
+			response.Body.Close()
+			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
+		}
+	}
+	t.Logf("loading partial-start lifecycle report: process_closed=true api_starter_calls=%d listener_open=%d provider_calls=%d original_error=%q", starterCalls.Load(), listenerOpen.Load(), runner.CallCount(), original)
 }
 
-// TestJavaScriptLoadingBehavior runs the 11 loading rows sequentially through
-// one process-owned host. Each row still receives an explicit, unique durable
-// Factory Session and authored root; failure-before-session rows receive a
-// fresh recovery invocation to prove the next source can load cleanly.
-func TestJavaScriptLoadingBehavior(t *testing.T) {
-	fixture := newLoadingFixture(t)
+func gotErrorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
 
-	cases := []struct {
-		name string
-		run  func(*testing.T, *loadingFixture)
-	}{
-		{"inline/success", runInlineJavaScriptFactoryRunsFromCLI},
-		{"inline/ordered-pipeline", runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline},
-		{"inline/syntax-error", runInlineJavaScriptSyntaxErrorReturnsSourceLocation},
-		{"file/relative-import", runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot},
-		{"file/missing-import", runJavaScriptFactoryMissingImportFailsActionably},
-		{"typescript/success", runTypeScriptFactoryTranspilesAndRuns},
-		{"typescript/syntax-error", runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic},
-		{"typescript/source-map", runTypeScriptSourceMapReportsAuthoredLocation},
-		{"named/standard-cli", runNamedJavaScriptFactoryRunsThroughStandardCLI},
-		{"named/api", runNamedJavaScriptFactoryRunsThroughAPIInvocation},
-		{"named/session-controls", runNamedJavaScriptFactoryUsesSameFactorySessionControls},
+// Keep the original top-level test identities so focused -run selectors and
+// review tooling continue to address the same behavior rows as the baseline.
+func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
+	runInlineJavaScriptFactoryRunsFromCLI(t, loadingFixtureForTest(t))
+}
+
+func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
+	runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t, loadingFixtureForTest(t))
+}
+
+func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
+	runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t, loadingFixtureForTest(t))
+}
+
+func TestJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T) {
+	runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t, loadingFixtureForTest(t))
+}
+
+func TestJavaScriptFactoryMissingImportFailsActionably(t *testing.T) {
+	runJavaScriptFactoryMissingImportFailsActionably(t, loadingFixtureForTest(t))
+}
+
+func TestTypeScriptFactoryTranspilesAndRuns(t *testing.T) {
+	runTypeScriptFactoryTranspilesAndRuns(t, loadingFixtureForTest(t))
+}
+
+func TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T) {
+	runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t, loadingFixtureForTest(t))
+}
+
+func TestTypeScriptSourceMapReportsAuthoredLocation(t *testing.T) {
+	runTypeScriptSourceMapReportsAuthoredLocation(t, loadingFixtureForTest(t))
+}
+
+func TestNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
+	runNamedJavaScriptFactoryRunsThroughStandardCLI(t, loadingFixtureForTest(t))
+}
+
+func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
+	runNamedJavaScriptFactoryRunsThroughAPIInvocation(t, loadingFixtureForTest(t))
+}
+
+func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
+	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, loadingFixtureForTest(t))
+}
+
+func loadingFixtureForTest(t *testing.T) *loadingFixture {
+	t.Helper()
+
+	loadingFixtureMu.Lock()
+	defer loadingFixtureMu.Unlock()
+	if sharedLoadingFixture == nil {
+		sharedLoadingFixture = newLoadingFixture(t)
 	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			tc.run(t, fixture)
-		})
-	}
+	return sharedLoadingFixture
 }
 
 type loadingFixture struct {
-	owner         testing.TB
-	process       *initializerapplication.Process
-	api           *support.ProcessAPIServer
-	apiStarter    *loadingAPIServerStarter
-	resources     *loadingResourceLedger
-	provider      *support.RecordingCommandRunner
-	baseURL       string
-	hostDir       string
-	homeDir       string
-	namedCLI      loadingNamedFactory
-	namedAPI      loadingNamedFactory
-	namedControl  loadingNamedFactory
-	serverStarted atomic.Bool
-	command       *support.ProcessCommand
+	process      support.ApplicationProcess
+	api          *support.ProcessAPIServer
+	provider     *loadingCommandRunner
+	baseURL      string
+	hostDir      string
+	homeDir      string
+	namedCLI     loadingNamedFactory
+	namedAPI     loadingNamedFactory
+	namedControl loadingNamedFactory
 
+	serverStarted atomic.Bool
 	rootBuilds    atomic.Int32
 	processStarts atomic.Int32
 	processStops  atomic.Int32
+	apiStarts     atomic.Int32
 	requestNumber atomic.Uint64
+
+	processCancel context.CancelFunc
+	processDone   chan struct{}
+	processMu     sync.Mutex
+	processErr    error
+	apiStopped    chan struct{}
+	apiStopOnce   sync.Once
 
 	sessionMu sync.Mutex
 	sessions  map[string]loadingSession
@@ -228,7 +221,6 @@ type loadingFixture struct {
 
 type loadingNamedFactory struct {
 	name       string
-	sourceDir  string
 	factoryDir string
 }
 
@@ -239,79 +231,98 @@ type loadingSession struct {
 	homeDir   string
 }
 
-type loadingAPIServerStarter struct {
-	api       *support.ProcessAPIServer
-	resources *loadingResourceLedger
-	starts    atomic.Int32
-	stopped   chan struct{}
-	stopOnce  sync.Once
+// loadingCommandRunner is the provider boundary used by the real process.
+// The ordered workflow gets deterministic provider-native output while all
+// other rows can assert that no child dispatch was added to the call count.
+type loadingCommandRunner struct {
+	mu       sync.Mutex
+	requests []platformprocess.CommandRequest
 }
 
-func (starter *loadingAPIServerStarter) Start(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	starter.starts.Add(1)
-	starter.resources.acquire(loadingResourcePort)
-	starter.resources.acquire(loadingResourceListener)
-	defer starter.resources.release(loadingResourcePort)
-	defer starter.resources.release(loadingResourceListener)
-	err := starter.api.Start(ctx, request)
-	starter.stopOnce.Do(func() { close(starter.stopped) })
-	return err
+func newLoadingCommandRunner() *loadingCommandRunner {
+	return &loadingCommandRunner{}
 }
+
+func (runner *loadingCommandRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	runner.mu.Lock()
+	request.Args = append([]string(nil), request.Args...)
+	request.Stdin = append([]byte(nil), request.Stdin...)
+	request.Env = append([]string(nil), request.Env...)
+	runner.requests = append(runner.requests, request)
+	runner.mu.Unlock()
+
+	prompt := strings.TrimSpace(string(request.Stdin))
+	label := "child"
+	if strings.Contains(prompt, "stage-two-after") {
+		label = "stage-two"
+	} else if strings.Contains(prompt, "stage-one-input") {
+		label = "stage-one"
+	}
+	return platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("provider:" + label + ":" + prompt),
+	}, nil
+}
+
+func (runner *loadingCommandRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return len(runner.requests)
+}
+
+var _ platformprocess.CommandRunner = (*loadingCommandRunner)(nil)
 
 func newLoadingFixture(t *testing.T) *loadingFixture {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	hostDir := scaffoldLoadingHostFactory(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	resources := &loadingResourceLedger{}
-	api := support.NewProcessAPIServer()
-	apiStarter := &loadingAPIServerStarter{
-		api:       api,
-		resources: resources,
-		stopped:   make(chan struct{}),
+	homeDir, err := os.MkdirTemp("", "you-functional-loading-home-")
+	if err != nil {
+		t.Fatalf("create loading home: %v", err)
 	}
+	hostDir, err := os.MkdirTemp("", "you-functional-loading-factory-")
+	if err != nil {
+		_ = os.RemoveAll(homeDir)
+		t.Fatalf("create loading factory: %v", err)
+	}
+	if err := writeLoadingHostFactory(hostDir); err != nil {
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
+		t.Fatalf("write loading host factory: %v", err)
+	}
+	writeLoadingGlobalConfig(t, homeDir)
+
+	api := support.NewProcessAPIServer()
+	runner := newLoadingCommandRunner()
 	fixture := &loadingFixture{
-		api:        api,
-		owner:      t,
-		apiStarter: apiStarter,
-		resources:  resources,
-		provider:   runner,
-		hostDir:    hostDir,
-		homeDir:    homeDir,
-		sessions:   make(map[string]loadingSession),
-		closed:     make(map[string]struct{}),
+		api:         api,
+		provider:    runner,
+		hostDir:     hostDir,
+		homeDir:     homeDir,
+		processDone: make(chan struct{}),
+		apiStopped:  make(chan struct{}),
+		sessions:    make(map[string]loadingSession, loadingBehaviorCount),
+		closed:      make(map[string]struct{}, loadingBehaviorCount),
 	}
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
-		APIServerStarter:      fixture.apiStarter.Start,
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		APIServerStarter:      fixture.serveAPIServer,
 		ProviderCommandRunner: runner,
 		FactoryRuntimeWorkflowHome: func() (string, error) {
 			return homeDir, nil
 		},
 	})
 	if err != nil {
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
 		t.Fatalf("BuildProcess(loading): %v", err)
 	}
 	fixture.process = process
 	fixture.rootBuilds.Add(1)
-	fixture.resources.acquire(loadingResourceRoot)
-	fixture.resources.acquire(loadingResourceProcess)
-	fixture.resources.acquire(loadingResourceRoute)
-
-	// Register the lifecycle census before process cleanup so the final report
-	// runs after the command, root, route, listener, and session cleanups.
-	t.Cleanup(func() { fixture.assertCleanup(t) })
-	t.Cleanup(func() { fixture.processStops.Add(1) })
-	t.Cleanup(func() {
-		fixture.resources.release(loadingResourceRoute)
-		fixture.resources.release(loadingResourceProcess)
-		fixture.resources.release(loadingResourceRoot)
-	})
-	support.CleanupProcess(t, process)
 
 	fixture.namedCLI = fixture.prepareNamedFactory(t, "cli", false)
 	fixture.namedAPI = fixture.prepareNamedFactory(t, "api", false)
@@ -334,7 +345,17 @@ func (fixture *loadingFixture) prepareNamedFactory(t *testing.T, label string, b
 		name,
 		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
 	)
-	return loadingNamedFactory{name: name, sourceDir: sourceDir, factoryDir: factoryDir}
+	return loadingNamedFactory{name: name, factoryDir: factoryDir}
+}
+
+func (fixture *loadingFixture) serveAPIServer(
+	ctx context.Context,
+	request platformhttpserver.StartRequest,
+) error {
+	fixture.apiStarts.Add(1)
+	err := fixture.api.Start(ctx, request)
+	fixture.apiStopOnce.Do(func() { close(fixture.apiStopped) })
+	return err
 }
 
 func (fixture *loadingFixture) startAPIServer(t *testing.T) {
@@ -342,31 +363,61 @@ func (fixture *loadingFixture) startAPIServer(t *testing.T) {
 	if fixture.serverStarted.Load() {
 		return
 	}
-	inputs := support.FakeInputs(context.Background(), []string{
+	processContext, cancel := context.WithCancel(context.Background())
+	fixture.processCancel = cancel
+	inputs := support.FakeInputs(processContext, []string{
 		"you", "run", "--dir", fixture.hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = loadingCustomerEnvironment(fixture.homeDir)
 	inputs.Input.WorkingDirectory = fixture.hostDir
 	fixture.processStarts.Add(1)
-	fixture.command = support.StartProcessCommand(fixture.owner, fixture.process, inputs.Input)
+	go func() {
+		err := fixture.process.Execute(inputs.Input)
+		fixture.processMu.Lock()
+		fixture.processErr = err
+		fixture.processMu.Unlock()
+		fixture.processStops.Add(1)
+		close(fixture.processDone)
+	}()
 
 	baseURL, err := fixture.api.WaitForBaseURL(loadingFixtureTimeout)
 	if err != nil {
+		cancel()
+		<-fixture.processDone
 		t.Fatalf("wait for loading API: %v", err)
 	}
 	fixture.baseURL = baseURL
 	support.WaitForStatus(t, baseURL, loadingFixtureTimeout, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
-	if got := fixture.apiStarter.starts.Load(); got != 1 {
+	if got := fixture.apiStarts.Load(); got != 1 {
 		t.Fatalf("loading API server starts = %d, want one", got)
 	}
 	fixture.serverStarted.Store(true)
 }
 
+func writeLoadingHostFactory(dir string) error {
+	cfg := map[string]any{
+		"name": "javascript-loading-host",
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "loading-host.workflow.js",
+			},
+		},
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), raw, 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "loading-host.workflow.js"), []byte(loadingHostWorkflow), 0o600)
+}
+
 func scaffoldLoadingHostFactory(t *testing.T) string {
 	t.Helper()
-
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "javascript-loading-host",
 		"orchestrator": map[string]any{
@@ -376,10 +427,31 @@ func scaffoldLoadingHostFactory(t *testing.T) string {
 			},
 		},
 	})
-	if err := os.WriteFile(filepath.Join(dir, "loading-host.workflow.js"), []byte(loadingHostWorkflow), 0o600); err != nil {
+	if err := writeLoadingHostFactory(dir); err != nil {
 		t.Fatalf("write loading host workflow: %v", err)
 	}
 	return dir
+}
+
+func writeLoadingGlobalConfig(t *testing.T, homeDir string) {
+	t.Helper()
+	dir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("create loading global config directory: %v", err)
+	}
+	config := map[string]any{
+		"defaults": map[string]any{
+			"workerModelProvider": "openai",
+			"workerModel":         "default-model",
+		},
+	}
+	raw, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal loading global config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), raw, 0o600); err != nil {
+		t.Fatalf("write loading global config: %v", err)
+	}
 }
 
 func loadingCustomerEnvironment(homeDir string) []string {
@@ -502,9 +574,6 @@ func (fixture *loadingFixture) trackSession(
 		rootDir:   rootDir,
 		homeDir:   homeDir,
 	}
-	fixture.resources.acquire(loadingResourceSession)
-	fixture.resources.acquire(loadingResourceWorktree)
-	fixture.resources.acquire(loadingResourceMutable)
 	fixture.sessionMu.Unlock()
 
 	t.Cleanup(func() {
@@ -529,8 +598,7 @@ func (fixture *loadingFixture) closeSession(t testing.TB, sessionID string) {
 	}
 
 	// A completed local one-shot invocation releases its invocation-local
-	// session service when Process.Execute returns. The local control probe
-	// therefore reports not-found after the invocation, which is the expected
+	// session service when Process.Execute returns. Not-found is the expected
 	// terminal observation; any other cleanup error remains actionable.
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "session", "terminate", sessionID,
@@ -567,20 +635,17 @@ func (fixture *loadingFixture) markSessionClosed(sessionID string) {
 	}
 	fixture.closed[sessionID] = struct{}{}
 	fixture.sessionMu.Unlock()
-	fixture.resources.release(loadingResourceMutable)
-	fixture.resources.release(loadingResourceWorktree)
-	fixture.resources.release(loadingResourceSession)
 }
 
 func (fixture *loadingFixture) recoverAfterLoadFailure(t *testing.T, label string) {
 	t.Helper()
 	dir := scaffoldLoadingRecoveryFactory(t, label)
+	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(
 		t,
 		[]string{
 			"you", "--json", "run",
 			"--factory", filepath.Join(dir, "factory.json"),
-			"--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
 			"--output", "primary",
 			"--no-record",
 			"recovery",
@@ -588,8 +653,8 @@ func (fixture *loadingFixture) recoverAfterLoadFailure(t *testing.T, label strin
 		dir,
 		t.TempDir(),
 	)
-	if fixture.provider.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 after %s recovery", fixture.provider.CallCount(), label)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d after %s recovery", got, providerCalls, label)
 	}
 	assertLoadingRecoveryOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
@@ -620,9 +685,6 @@ func scaffoldLoadingRecoveryFactory(t *testing.T, label string) string {
 	if err := os.WriteFile(filepath.Join(dir, "recovery.workflow.js"), []byte(`workflow.final("`+loadingRecoveryResult+`");`), 0o600); err != nil {
 		t.Fatalf("write loading recovery workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "mock-workers.json"), []byte(`{"mockWorkers":[]}`), 0o600); err != nil {
-		t.Fatalf("write loading recovery mock-workers config: %v", err)
-	}
 	return dir
 }
 
@@ -643,52 +705,70 @@ func assertLoadingRecoveryOutcome(t *testing.T, result factoryapi.InvocationResp
 	}
 }
 
-func (fixture *loadingFixture) assertCleanup(t testing.TB) {
-	t.Helper()
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		t.Errorf("loading root builds = %d, want one", got)
-	}
-	if got := fixture.processStarts.Load(); got != 1 {
-		t.Errorf("loading process starts = %d, want one", got)
-	}
-	if got := fixture.processStops.Load(); got != 1 {
-		t.Errorf("loading process stops = %d, want one", got)
-	}
-	if got := fixture.apiStarter.starts.Load(); got != 1 {
-		t.Errorf("loading API starts = %d, want one", got)
-	}
-	select {
-	case <-fixture.apiStarter.stopped:
-	case <-time.After(loadingFixtureTimeout):
-		t.Errorf("loading API listener did not stop")
+func (fixture *loadingFixture) shutdown() error {
+	if fixture.processCancel != nil {
+		fixture.processCancel()
+		<-fixture.processDone
 	}
 
-	counts := fixture.resources.snapshot()
-	if counts != (loadingResourceCounts{}) {
-		t.Errorf("loading active resource counts = %#v, want all zero", counts)
+	closeContext, cancel := context.WithTimeout(context.Background(), loadingFixtureTimeout)
+	defer cancel()
+	closeErr := fixture.process.Close(closeContext)
+
+	fixture.processMu.Lock()
+	processErr := fixture.processErr
+	fixture.processMu.Unlock()
+	var shutdownErr error
+	if processErr != nil && !errors.Is(processErr, context.Canceled) {
+		shutdownErr = fmt.Errorf("loading Process.Execute shutdown: %w", processErr)
 	}
+	if closeErr != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("close loading process: %w", closeErr))
+	}
+	if got := fixture.rootBuilds.Load(); got != 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading root builds = %d, want one", got))
+	}
+	if got := fixture.processStarts.Load(); got > 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading process starts = %d, want at most one", got))
+	}
+	if got := fixture.processStops.Load(); got != fixture.processStarts.Load() {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading process stops = %d, starts = %d", got, fixture.processStarts.Load()))
+	}
+	if got := fixture.apiStarts.Load(); got > 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading API server starts = %d, want at most one", got))
+	}
+
 	fixture.sessionMu.Lock()
 	tracked := len(fixture.sessions)
 	closed := len(fixture.closed)
 	fixture.sessionMu.Unlock()
-	if tracked != loadingBehaviorCount {
-		t.Errorf("loading tracked top-level sessions = %d, want %d", tracked, loadingBehaviorCount)
-	}
 	if tracked != closed {
-		t.Errorf("loading sessions closed = %d/%d, want all tracked sessions closed", closed, tracked)
-	}
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Errorf("loading provider calls = %d, want zero because every row uses mock workers or no child dispatch", got)
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading sessions closed = %d/%d", closed, tracked))
 	}
 
+	listenerClosed := fixture.apiStarts.Load() == 0
+	if fixture.apiStarts.Load() > 0 {
+		// Process.Execute has returned before shutdown reaches this point, so
+		// the API edge's terminal callback is the deterministic close signal.
+		<-fixture.apiStopped
+		listenerClosed = true
+	}
 	if strings.TrimSpace(fixture.baseURL) != "" {
 		client := http.Client{Timeout: time.Second}
 		response, err := client.Get(strings.TrimSuffix(fixture.baseURL, "/") + "/status")
 		if err == nil {
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
-			t.Errorf("loading API listener remained available after cleanup: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
+			listenerClosed = false
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
 		}
 	}
-	t.Logf("loading lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarter.starts.Load(), tracked, closed, fixture.provider.CallCount(), counts.process, counts.port, counts.listener, counts.session, counts.stream, counts.route, counts.root, counts.worktree, counts.mutable)
+	if err := os.RemoveAll(fixture.hostDir); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove loading factory: %w", err))
+	}
+	if err := os.RemoveAll(fixture.homeDir); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove loading home: %w", err))
+	}
+	fmt.Fprintf(os.Stderr, "loading lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d listener_closed=%t\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.provider.CallCount(), listenerClosed)
+	return shutdownErr
 }

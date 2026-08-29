@@ -25,17 +25,16 @@ const (
 // primary outcome that reflects the imported module contribution.
 func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedJavaScriptFactoryWithRelativeImport(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
 	}, dir, t.TempDir())
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for file-backed factory without child dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed factory without child dispatch", got, providerCalls)
 	}
 	assertFileJavaScriptImportedSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
@@ -48,11 +47,10 @@ func runJavaScriptFactoryFileRunsRelativeImportsFromFactoryRoot(t *testing.T, fi
 // worker dispatch.
 func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedJavaScriptFactoryWithMissingImport(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
@@ -64,8 +62,8 @@ func runJavaScriptFactoryMissingImportFailsActionably(t *testing.T, fixture *loa
 		inputs.Stderr(),
 		fileJavaScriptMissingImportPath,
 	)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for missing import before dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for missing import before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 	fixture.recoverAfterLoadFailure(t, "missing-import")

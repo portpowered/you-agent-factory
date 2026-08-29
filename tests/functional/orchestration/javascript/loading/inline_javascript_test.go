@@ -74,7 +74,7 @@ var privateJavaScriptVMDiagnosticMarkers = []string{
 
 // TestInlineJavaScriptFactoryRunsFromCLI proves an inline JavaScript Factory
 // definition completes through the public you run customer process boundary
-// with mock workers, a terminal COMPLETED primary outcome that returns the
+// with the injected provider command edge, a terminal COMPLETED primary outcome that returns the
 // authored primary result, and without private VM internals in success
 // diagnostics.
 func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture) {
@@ -101,17 +101,16 @@ func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture
 			},
 		},
 	})
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
 	}, dir, t.TempDir())
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for inline factory without child dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for inline factory without child dispatch", got, providerCalls)
 	}
 	assertInlineJavaScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
@@ -121,20 +120,19 @@ func runInlineJavaScriptFactoryRunsFromCLI(t *testing.T, fixture *loadingFixture
 // JavaScript Factory with sequential agent.run child dispatches completes
 // through the public you run customer process boundary with ordered stage
 // evidence, stage-two dependency on stage-one output, and a terminal COMPLETED
-// primary outcome without live provider execution.
+// primary outcome with deterministic provider-command edge responses.
 func runInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldOrderedInlineJavaScriptPipelineFactory(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
 	}, dir, t.TempDir())
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for mock-worker child execution", got)
+	if got := fixture.provider.CallCount(); got != providerCalls+2 {
+		t.Fatalf("provider command runner call count = %d, want %d for two ordered child dispatches", got, providerCalls+2)
 	}
 	assertOrderedInlineJavaScriptPipelineOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
@@ -169,11 +167,10 @@ func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *
 			},
 		},
 	})
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
@@ -185,8 +182,8 @@ func runInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T, fixture *
 		inputs.Stderr(),
 		inlineJavaScriptSyntaxErrorLine,
 	)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for syntax error before dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for syntax error before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 	fixture.recoverAfterLoadFailure(t, "inline-syntax")
@@ -219,16 +216,6 @@ func scaffoldOrderedInlineJavaScriptPipelineFactory(t *testing.T) string {
 		t.Fatalf("write ordered pipeline workflow: %v", err)
 	}
 	return dir
-}
-
-func writeEmptyMockWorkersConfig(t *testing.T, dir string) string {
-	t.Helper()
-
-	path := filepath.Join(dir, "mock-workers.json")
-	if err := os.WriteFile(path, []byte(`{"mockWorkers":[]}`), 0o600); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
-	return path
 }
 
 func decodeSingleInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {

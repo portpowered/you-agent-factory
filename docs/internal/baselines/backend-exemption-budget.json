@@ -651,12 +651,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/orchestration/javascript/loading/named_factory_test.go#TestNamedJavaScriptFactoryUsesSameFactorySessionControls",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/provider_sessions/details/codex_details_test.go#observeCodexProviderSessionDetailGolden",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."

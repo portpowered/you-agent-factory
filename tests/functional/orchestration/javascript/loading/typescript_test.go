@@ -29,17 +29,16 @@ const (
 // in success diagnostics.
 func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactory(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocation(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
 	}, dir, t.TempDir())
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for file-backed TypeScript factory without child dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for file-backed TypeScript factory without child dispatch", got, providerCalls)
 	}
 	assertTypeScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
@@ -52,11 +51,10 @@ func runTypeScriptFactoryTranspilesAndRuns(t *testing.T, fixture *loadingFixture
 // external worker dispatch.
 func runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactoryWithSyntaxError(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
@@ -68,8 +66,8 @@ func runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T, fix
 		inputs.Stderr(),
 		typeScriptSyntaxErrorLine,
 	)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for TypeScript syntax failure before dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript syntax failure before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 	fixture.recoverAfterLoadFailure(t, "typescript-syntax")
@@ -81,11 +79,10 @@ func runTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic(t *testing.T, fix
 // line after TypeScript stripping.
 func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadingFixture) {
 	dir := scaffoldFileBackedTypeScriptFactoryWithSourceMapSyntaxError(t)
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+	providerCalls := fixture.provider.CallCount()
 	inputs, err := fixture.executeCLI(t, []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
@@ -98,8 +95,8 @@ func runTypeScriptSourceMapReportsAuthoredLocation(t *testing.T, fixture *loadin
 		typeScriptSourceMapAuthoredLine,
 		typeScriptSourceMapEmittedLine,
 	)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for TypeScript source-map failure before dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for TypeScript source-map failure before dispatch", got, providerCalls)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 	fixture.recoverAfterLoadFailure(t, "typescript-source-map")

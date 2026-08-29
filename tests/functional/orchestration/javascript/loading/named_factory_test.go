@@ -4,6 +4,7 @@ package loading_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,17 +30,16 @@ const (
 func runNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T, fixture *loadingFixture) {
 	factoryName := fixture.namedCLI.name
 	namedFactoryDir := fixture.namedCLI.factoryDir
-	mockWorkersPath := writeEmptyMockWorkersConfig(t, fixture.namedCLI.sourceDir)
+	providerCalls := fixture.provider.CallCount()
 	result, inputs := fixture.runCLIInvocationAtRoot(t, []string{
 		"you", "--json", "run",
 		"--named", factoryName,
-		"--with-mock-workers", mockWorkersPath,
 		"--output", "primary",
 		"--no-record",
 		"hello",
 	}, t.TempDir(), fixture.homeDir, namedFactoryDir)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for named inline factory without child dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named inline factory without child dispatch", got, providerCalls)
 	}
 	assertNamedJavaScriptSuccessOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
@@ -54,11 +54,12 @@ func runNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *lo
 	factoryName := fixture.namedAPI.name
 	namedFactoryDir := fixture.namedAPI.factoryDir
 	requestID := fixture.nextRequestID("named-api")
+	providerCalls := fixture.provider.CallCount()
 	result := invokeNamedJavaScriptFactoryOverHTTP(t, fixture.baseURL, factoryName, "hello", requestID)
 	fixture.trackSession(t, result.SessionId, requestID, namedFactoryDir, fixture.homeDir, "api")
 	assertNamedJavaScriptSessionSuccessOutcome(t, result, factoryName)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for named inline factory without child dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named inline factory without child dispatch", got, providerCalls)
 	}
 
 	responseJSON, err := json.Marshal(result)
@@ -72,21 +73,15 @@ func runNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T, fixture *lo
 // Factory Session lifecycle controls apply to a named JavaScript Factory session
 // started through the public HTTP customer boundary and remain observable on the
 // public session surface for that named Factory identity through HTTP and CLI.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func runNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T, fixture *loadingFixture) {
 	fixture.startAPIServer(t)
+	providerCalls := fixture.provider.CallCount()
 	factoryName := fixture.namedControl.name
 	namedFactoryDir := fixture.namedControl.factoryDir
 	requestID := fixture.nextRequestID("named-controls")
 	sessionID := startNamedJavaScriptFactoryAsyncSession(t, fixture.baseURL, factoryName, requestID)
 	fixture.trackSession(t, sessionID, requestID, namedFactoryDir, fixture.homeDir, "api")
-	waitForNamedJavaScriptDurableSessionStatus(
-		t,
-		fixture.baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		namedJavaScriptSessionControlWait,
-	)
+	waitForNamedJavaScriptSessionStarted(t, fixture.baseURL, sessionID)
 
 	pause := applyNamedJavaScriptSessionLifecycleControl(
 		t,
@@ -115,12 +110,11 @@ func runNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T, fixtu
 		resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("HTTP resume response = %#v, want accepted resume", resume)
 	}
-	waitForNamedJavaScriptDurableSessionStatus(
+	assertNamedJavaScriptDurableSessionStatus(
 		t,
-		fixture.baseURL,
-		sessionID,
+		readNamedJavaScriptDurableSession(t, fixture.baseURL, sessionID),
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		namedJavaScriptSessionControlWait,
+		factoryName,
 	)
 
 	cliPause := runNamedJavaScriptSessionLifecycleCLIJSON(t, fixture, t.TempDir(), "pause", sessionID)
@@ -140,15 +134,14 @@ func runNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T, fixtu
 		cliResume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("CLI resume response = %#v, want accepted resume", cliResume)
 	}
-	waitForNamedJavaScriptDurableSessionStatus(
+	assertNamedJavaScriptDurableSessionStatus(
 		t,
-		fixture.baseURL,
-		sessionID,
+		readNamedJavaScriptDurableSession(t, fixture.baseURL, sessionID),
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		namedJavaScriptSessionControlWait,
+		factoryName,
 	)
-	if got := fixture.provider.CallCount(); got != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for named inline factory without child dispatch", got)
+	if got := fixture.provider.CallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for named busy-loop factory without child dispatch", got, providerCalls)
 	}
 }
 
@@ -388,31 +381,17 @@ func readNamedJavaScriptDurableSession(
 	return session
 }
 
-func waitForNamedJavaScriptDurableSessionStatus(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-	timeout time.Duration,
-) {
+func waitForNamedJavaScriptSessionStarted(t *testing.T, baseURL string, sessionID string) {
 	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readNamedJavaScriptDurableSession(t, baseURL, sessionID)
-		if session.Status == want {
+	ctx, cancel := context.WithTimeout(t.Context(), namedJavaScriptSessionControlWait)
+	defer cancel()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
+	for {
+		event := stream.NextEventContext(ctx)
+		if event.Type == factoryapi.FactoryEventTypeSessionStarted {
 			return
 		}
-		time.Sleep(15 * time.Millisecond)
 	}
-	session := readNamedJavaScriptDurableSession(t, baseURL, sessionID)
-	t.Fatalf(
-		"named JavaScript durable session %s status = %q, want %q within %s",
-		sessionID,
-		session.Status,
-		want,
-		timeout,
-	)
 }
 
 func assertNamedJavaScriptDurableSessionStatus(
