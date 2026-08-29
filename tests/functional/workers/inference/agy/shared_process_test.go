@@ -29,6 +29,7 @@ const (
 	agySharedSuccessSelector = "agy-final-only-success"
 	agySharedTimeoutSelector = "agy-timeout"
 	agySharedCommand         = "agy"
+	agySharedIdleHostFactory = `{"name":"agy-shared-host","workTypes":[],"workers":[],"workstations":[]}`
 )
 
 var agySharedProcess = &agyProcessFixture{}
@@ -260,14 +261,18 @@ func (fixture *agyProcessFixture) setup(t *testing.T) (setupErr error) {
 
 func (fixture *agyProcessFixture) createDirectories(rootDir string) error {
 	fixture.homeDir = filepath.Join(rootDir, "home")
+	fixture.hostDir = filepath.Join(rootDir, "host")
 	fixture.successDir = filepath.Join(rootDir, "success")
-	// The package host has no Work of its own; reuse the success Factory root.
-	fixture.hostDir = fixture.successDir
 	fixture.timeoutDir = filepath.Join(rootDir, "timeout")
-	for _, path := range []string{fixture.homeDir, fixture.successDir, fixture.timeoutDir} {
+	for _, path := range []string{fixture.homeDir, fixture.hostDir, fixture.successDir, fixture.timeoutDir} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return fmt.Errorf("create package fixture path %q: %w", path, err)
 		}
+	}
+	// Keep the long-lived API host's default session idle; scenario behavior
+	// runs through the two immutable explicit-session Factory roots below.
+	if err := os.WriteFile(filepath.Join(fixture.hostDir, "factory.json"), []byte(agySharedIdleHostFactory), 0o644); err != nil {
+		return fmt.Errorf("write idle AGY host factory: %w", err)
 	}
 	return nil
 }
