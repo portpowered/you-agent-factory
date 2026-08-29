@@ -1,12 +1,16 @@
 # C14 — transport/acp/realclient characterization ledger
 
-Status: CHARACTERIZED. Three supported enabled/required local baseline runs
-passed after using an isolated official Node.js `v22.13.0` runtime. No test
-topology or test assertion was edited while recording this ledger.
+Status: OPTIMIZED. Three supported enabled/required local baseline runs and
+three final runs passed after using an isolated official Node.js `v22.13.0`
+runtime. Story 002 consolidates the pinned package setup while preserving the
+real ACPX process phases and assertion inventory; repeat, race, clean-room,
+and PR handoff evidence remain for story 003.
 
 This is the task-owned ledger for
-`fto-c14-pkg-transport-acp-realclient-001`. It records the pre-edit
-denominator and the supported discovery/profile observations.
+`fto-c14-pkg-transport-acp-realclient-001` and
+`fto-c14-pkg-transport-acp-realclient-002`. It records the pre-edit
+denominator, supported discovery/profile observations, and the final
+optimization evidence.
 
 ## Authority and scope
 
@@ -165,11 +169,10 @@ The happy-path assertions that remain active in the source are:
   classifications, provider name/count, cleanup, and outcome are emitted.
 
 The source direct-start comment was corrected after the profile to describe the
-seven happy-path starts. One evidence discrepancy remains for the optimization
-story to resolve without weakening the runtime assertion: `emitEvidence`
-currently serializes/logs `providerInvocations=1` even though the executable
-assertion requires exactly two. The baseline's sanitized evidence preserves
-that mismatch as an observed pre-change finding.
+seven happy-path starts. Before story 002, `emitEvidence` serialized/logged
+`providerInvocations=1` even though the executable assertion required exactly
+two; the optimization now passes the observed exact count through to the
+sanitized evidence without weakening that assertion.
 
 ## Process, phase, wait, and cleanup profile
 
@@ -264,28 +267,148 @@ binary and process-tree failure semantics.
 | RC-CLIENT-001 | Exercised in the supported profile and all three baseline runs through pinned ACPX, the current built binary, real stdio, and the deterministic provider; sanitized evidence was emitted. |
 | RC-CLIENT-002 and RC-CLIENT-003 | Retained by bounded runner/parser/assertion and registered cleanup ownership; direct malformed/output/recovery injection remains with the unchanged lower ACP gates and later real-client run. |
 | RC-CLIENT-004 and RC-CLIENT-005 | Later repeat/race gates; not claimed here. |
-| RC-BOUNDARY-001 | Supported happy path observed one 16-character ephemeral prompt, one prompt result, and exactly two provider markers; the sanitized evidence field still reports one and is a story-002 correction target. |
+| RC-BOUNDARY-001 | Supported happy path observed one 16-character ephemeral prompt, one prompt result, and exactly two provider markers; final sanitized evidence reports the observed exact count of two. |
 | RC-AUTH-001 | Not applicable by contract; no credential-bearing edge was added. |
 | RC-CAPACITY-001 | Not applicable by contract; no load claim is made. |
 
-The smallest safe optimization candidate is deferred until the valid profile:
-measure whether the four separate ACPX phase invocations are the dominant
-intrinsic cost, then consider only a test-local consolidation that preserves
-the pinned package, fresh session state, current binary, real stdio/process
-edges, each phase assertion, and cleanup. The helper process cases are not a
-candidate for consolidation because their independent timeout and non-zero
-process-tree witnesses are the behavior under test. The evidence-count
-discrepancy must be corrected in the preservation story, not used as a reason
-to weaken the exact two-call assertion.
+The smallest safe optimization candidate identified by story 001 was the four
+separate ACPX phase invocations. Story 002 now acquires the pinned package once
+through `npx --yes --package acpx@0.13.0 acpx --version`, validates the retained
+package in the scenario-local `_npx` cache, and invokes that exact `dist/cli.js`
+directly with Node for session creation, prompt, and close. This preserves the
+pinned package, fresh session state, current binary, real stdio/process edges,
+each phase assertion, and cleanup while removing three repeated npm/npx
+launchers. The helper process cases were not consolidated because their
+independent timeout and non-zero process-tree witnesses are the behavior under
+test.
+
+## Story 002 optimization and final local evidence
+
+### Topology and assertion parity
+
+The final normal-path accounting remains seven test-owned direct starts:
+
+1. `node --version` prerequisite probe;
+2. `git rev-parse HEAD` revision witness;
+3. `go build -o <temporary binary> ./cmd/factory` current-binary witness;
+4. one `npx --yes --package acpx@0.13.0 acpx --version` package acquisition and
+   exact-version witness;
+5. direct Node invocation of the retained pinned ACPX CLI for `sessions new`;
+6. direct Node invocation of the same CLI for one `prompt`; and
+7. direct Node invocation of the same CLI for `sessions close`.
+
+The pre-change topology also had seven test-owned normal-path starts, but each
+of the four ACPX phases launched through a fresh `npx` wrapper. The final path
+retains one public npm acquisition/version command and reuses its immutable
+scenario-local package for the remaining three real ACPX process boundaries.
+No session is shared across test cases or runs, and the two helper cases still
+own their independent real descendant timeout/non-zero cleanup witnesses.
+
+The final runtime assertion inventory is the same or stronger than the
+pre-change inventory: exact `acpx@0.13.0`/`--version`, current revision and
+fresh production binary, structured `[binary, server, acp]` argv, created client
+and ACP session identities, negotiated protocol and
+`factory:@you/factory-builder`, one ephemeral 16-character prompt, non-empty
+assistant content, Worker `tool_call` and `tool_call_update`, exactly one
+`end_turn`, exactly two deterministic `codex` provider invocations, close
+identity, zero queue owners, and sanitized evidence. `emitEvidence` now writes
+the count returned by the exact provider-marker assertion (`2`) rather than a
+conflicting literal (`1`).
+
+Prerequisite and failure semantics remain owned by the unchanged admission,
+bounded-runner, parser, and cleanup paths: optional `-short`, missing enable,
+and unsupported Node continue to skip; required variants fail closed before
+build or ACPX startup; timeout and non-zero helper cases retain their safe
+classifications and complete process-tree cleanup; malformed/error output and
+partial-session recovery still fail closed through the existing parser and
+registered cleanup. Story 002 changed only how the already-admitted pinned
+client executable is launched after package acquisition, so no failure row was
+skipped or replaced with a mock.
+
+### Final functional and process evidence
+
+Environment and cache policy matched the baseline: Windows `windows/amd64`,
+Go `go1.25.0`, isolated official Node `v22.13.0`, npm `10.9.2`, required and
+enabled gates set to `1`, no `-short`, and a fresh scenario-local npm cache and
+temporary home for each happy-path case. The final package procedure was run
+as three separate processes:
+
+```text
+go test ./tests/functional/transport/acp/realclient/... -count=1 -timeout=10m
+```
+
+| Run | Outer wall | Go package wall | Result |
+| --- | ---: | ---: | --- |
+| 1 | `42.013s` | `41.107s` | exit `0`, all three tests passed |
+| 2 | `35.142s` | `34.118s` | exit `0`, all three tests passed |
+| 3 | `26.883s` | `25.884s` | exit `0`, all three tests passed |
+
+Final outer median is `35.142s`; final package median is `34.118s`. The
+baseline medians were `44.615s` outer and `43.551s` package, so the observed
+reductions are `21.23%` and `21.66%` respectively. The samples are retained
+as observed; no host-contended run was discarded.
+
+The focused real-client witness also passed independently with the exact
+selector and gates:
+
+```text
+go test ./tests/functional/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout=10m -v
+```
+
+It passed with a `23.27s` test wall and emitted sanitized evidence with
+`acpx=0.13.0`, `initialization=negotiated`, `session=created`, the default
+target, non-empty assistant result, `terminal=end_turn`, `provider=codex`,
+`provider_invocations=2`, `cleanup=complete`, and `outcome=passed`. The
+provider marker file contained exactly two `codex` lines. The focused process
+helpers also passed at `-count=1`, including safe `timeout` and `non-zero exit`
+classifications plus recorded descendant-PID inactivity.
+
+### Post-change phase profile and floor disposition
+
+A temporary gated phase trace was used for one diagnostic happy-path run and
+removed after observation. It recorded phase names, command family, and wall
+only; it retained no arguments, prompt, response, provider payload, path, or
+environment value.
+
+| Final phase | Bound | Observed wall | Required property retained |
+| --- | ---: | ---: | --- |
+| `read-revision` / Git | `60s` | `58ms` | full current revision witness |
+| `build-current-you` / Go | `60s` | `5.367s` | freshly built production executable |
+| `verify-acpx-version` / npx | `60s` | `7.489s` | public package acquisition and exact pinned version |
+| `create-session` / direct Node + ACPX | `60s` | `1.175s` | real stdio initialize/session, identities, protocol, and target |
+| `complete-prompt` / direct Node + ACPX | `60s` plus ACPX `45s` | `3.390s` | real routing, Worker updates, two provider process calls, and `end_turn` |
+| `close-session` / direct Node + ACPX | `60s` | `2.794s` | real close identity and queue-owner teardown |
+
+The independent helper witnesses retain their one-second timeout bound and
+recorded-PID inactivity observation; their process-tree ownership was not a
+performance candidate. The measured retained happy-path phases total
+`20.273s` before test/build overhead, and the final package median includes the
+required helper cases plus ordinary host contention. The target's numeric
+40-percent reduction was not reached by the three valid final samples. The
+profile-backed floor disposition is therefore accepted for story 002: every
+remaining material phase is tied above to a required real edge or assertion,
+the one fresh-cache public package acquisition cannot be globally prewarmed
+under the baseline policy, and no further package-only consolidation can
+remove the current binary, independent ACPX session/prompt/close boundaries,
+provider subprocesses, or process-tree failure witnesses without weakening
+the executable spine. No new sleep, wider timeout, skipped witness, mock
+client, dependency change, or shared/production edit was introduced.
+
+`GATE-PERF-LOCAL` is therefore recorded as the measured floor alternative,
+with the remaining PR package-direction verdict and terminal CI owned by
+review. The final direct-client run proved the behavioral property; repeat,
+race, clean-room, and exact-head handoff remain for story 003.
 
 ## Characterization result
 
 `GATE-BASELINE`, `GATE-PROFILE`, `GATE-DISCOVERY`, and `GATE-PREREQ` are
-satisfied for story 001. The initial host-installed Node `v22.12.0` result was
-a real, safe prerequisite diagnostic but did not satisfy the denominator. The
+satisfied for story 001. Story 002 satisfies the real-client parity,
+provider-count, process-cleanup, and `GATE-PERF-LOCAL` measured-floor
+disposition above. The initial host-installed Node `v22.12.0` result was a
+real, safe prerequisite diagnostic but did not satisfy the denominator. The
 narrow environmental remedy was an official, isolated Node `v22.13.0`
 runtime; the three required runs then passed without client substitution,
 skipping, or topology restructuring.
 
-Remaining gates are optimization parity/performance, repeat/race, clean-room
-validation, and current-head PR evidence owned by stories 002 and 003.
+Remaining gates are repeat/race, clean-room validation, PR package direction,
+and current-head PR evidence owned by story 003 and review.
