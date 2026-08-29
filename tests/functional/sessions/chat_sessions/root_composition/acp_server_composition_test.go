@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 
@@ -56,6 +57,107 @@ var packagedFactoryCatalogState struct {
 	catalog factorydefinitions.PackagedFactoryCatalogOperations
 	names   []string
 	err     error
+}
+
+// sharedACPActivationHome is immutable fixture input for activation-owning
+// tests. The roots themselves remain per-test because the on-demand Factory
+// target retains a terminal runtime under the process-scoped default session;
+// the home/catalog/profile do not need to be rebuilt for every process.
+var sharedACPActivationHomeState struct {
+	sync.Mutex
+	home string
+	err  error
+
+	originalHomeSet            bool
+	originalHome               string
+	originalUserProfileSet     bool
+	originalUserProfile        string
+	originalDefaultProviderSet bool
+	originalDefaultProvider    string
+	originalDefaultModelSet    bool
+	originalDefaultModel       string
+}
+
+// A few independent ACP roots may run at once, but their real local runtime
+// startup still touches the filesystem-backed packaged catalog. This bound
+// keeps startup below the host's contention cliff while preserving parallel
+// execution of independent process/home lifetimes.
+var chatActivationSlots = make(chan struct{}, 4)
+
+func acquireChatActivationSlot(t testing.TB) {
+	t.Helper()
+	chatActivationSlots <- struct{}{}
+	t.Cleanup(func() { <-chatActivationSlots })
+}
+
+var sharedACPActivationTargets = []string{
+	"factory:@you/goal",
+	"factory:@you/classify",
+	"factory:@you/loop",
+	"factory:@you/plan-parallel",
+	"factory:@you/factory-builder",
+	"factory:@you/spawn",
+	"factory:@you/deep-research",
+	"factory:@acp-child-test/one-worker",
+	"factory:@acp-child-test/two-workers",
+	"factory:@acp-child-test/replay",
+}
+
+// sharedACPActivationHomeForTest returns one immutable home/catalog/profile
+// cohort while every caller still gets a fresh root process. It uses the
+// package process environment, rather than testing.T.Setenv, because callers
+// may enter the shared-root setup after t.Parallel; all activation witnesses
+// use this same value and no activation witness mutates it during execution.
+func sharedACPActivationHomeForTest(t testing.TB) string {
+	t.Helper()
+
+	sharedACPActivationHomeState.Lock()
+	defer sharedACPActivationHomeState.Unlock()
+	if sharedACPActivationHomeState.home == "" && sharedACPActivationHomeState.err == nil {
+		home, err := chatPersistentMkdirTemp("shared ACP activation home", "you-chat-activation-cohort-")
+		if err != nil {
+			sharedACPActivationHomeState.err = fmt.Errorf("create shared ACP activation home: %w", err)
+		} else {
+			// Runtime opening performs packaged-install reconciliation. Materialize
+			// the complete published catalog once so concurrent private roots only
+			// read this home and never contend on a staging-owner path.
+			seedEveryInstalledPackagedFactory(t, home)
+			seedSharedACPWorkerChildFactories(t, home)
+			support.SeedACPAgentProfile(
+				t,
+				home,
+				"factory:@you/goal",
+				sharedACPActivationTargets,
+			)
+			if err := os.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex"); err != nil {
+				sharedACPActivationHomeState.err = fmt.Errorf("set shared ACP default worker provider: %w", err)
+			} else if err := os.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5"); err != nil {
+				sharedACPActivationHomeState.err = fmt.Errorf("set shared ACP default worker model: %w", err)
+			}
+			sharedACPActivationHomeState.home = home
+		}
+	}
+	if sharedACPActivationHomeState.err != nil {
+		t.Fatalf("shared ACP activation home: %v", sharedACPActivationHomeState.err)
+	}
+	home := sharedACPActivationHomeState.home
+	if err := os.Setenv("HOME", home); err != nil {
+		t.Fatalf("set shared ACP HOME: %v", err)
+	}
+	if err := os.Setenv("USERPROFILE", home); err != nil {
+		t.Fatalf("set shared ACP USERPROFILE: %v", err)
+	}
+	return home
+}
+
+func closeSharedACPActivationHome() error {
+	sharedACPActivationHomeState.Lock()
+	home := sharedACPActivationHomeState.home
+	sharedACPActivationHomeState.Unlock()
+	if home == "" {
+		return nil
+	}
+	return chatRemoveRoot(home)
 }
 
 func catalogCohortForTest(t *testing.T) *catalogCohort {
@@ -172,7 +274,7 @@ func TestACPServerReachesCanonicalChatSessionsAuthorityThroughRootBuildProcess(t
 // derived from home, at <globalRoot>/<scope>/<name>/factory.json -- the exact
 // layout the production named-Factory catalog and effective-catalog
 // discovery both read.
-func seedInstalledPackagedFactory(t *testing.T, home, name string) {
+func seedInstalledPackagedFactory(t testing.TB, home, name string) {
 	t.Helper()
 
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
@@ -184,7 +286,7 @@ func seedInstalledPackagedFactory(t *testing.T, home, name string) {
 	seedInstalledPackagedFactoryFromCatalog(t, globalRoot, catalog, name)
 }
 
-func seedInstalledPackagedFactories(t *testing.T, home string, names []string) {
+func seedInstalledPackagedFactories(t testing.TB, home string, names []string) {
 	t.Helper()
 
 	globalRoot, err := factorydefinitions.NamedFactoriesRootForHome(home)
@@ -198,7 +300,7 @@ func seedInstalledPackagedFactories(t *testing.T, home string, names []string) {
 }
 
 func seedInstalledPackagedFactoryFromCatalog(
-	t *testing.T,
+	t testing.TB,
 	globalRoot string,
 	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	name string,
@@ -227,7 +329,7 @@ func seedInstalledPackagedFactoryFromCatalog(
 }
 
 func packagedFactoryCatalogForTest(
-	t *testing.T,
+	t testing.TB,
 ) (factorydefinitions.PackagedFactoryCatalogOperations, []string) {
 	t.Helper()
 
@@ -344,7 +446,7 @@ func decodeRPCMessage(t *testing.T, out *bytes.Buffer) rpcMessage {
 // packaged Factory under home's global named-Factory root, reproducing the
 // state a real `you server acp` process reaches after system initialization
 // runs. It returns the installed names.
-func seedEveryInstalledPackagedFactory(t *testing.T, home string) []string {
+func seedEveryInstalledPackagedFactory(t testing.TB, home string) []string {
 	t.Helper()
 
 	_, names := packagedFactoryCatalogForTest(t)
@@ -608,6 +710,10 @@ var controlledCohortState struct {
 // contexts, while this final close releases runtimes retained by the shared
 // process before its fixed home is removed.
 func TestMain(m *testing.M) {
+	sharedACPActivationHomeState.originalHome, sharedACPActivationHomeState.originalHomeSet = os.LookupEnv("HOME")
+	sharedACPActivationHomeState.originalUserProfile, sharedACPActivationHomeState.originalUserProfileSet = os.LookupEnv("USERPROFILE")
+	sharedACPActivationHomeState.originalDefaultProvider, sharedACPActivationHomeState.originalDefaultProviderSet = os.LookupEnv("YOU_DEFAULT_WORKER_MODEL_PROVIDER")
+	sharedACPActivationHomeState.originalDefaultModel, sharedACPActivationHomeState.originalDefaultModelSet = os.LookupEnv("YOU_DEFAULT_WORKER_MODEL")
 	code := m.Run()
 
 	if err := closeCatalogCohort(); err != nil {
@@ -627,6 +733,30 @@ func TestMain(m *testing.M) {
 			_, _ = fmt.Fprintf(os.Stderr, "controlled ACP cohort home cleanup: %v\n", err)
 			code = 1
 		}
+	}
+	if err := closeSharedACPActivationHome(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "shared ACP activation home cleanup: %v\n", err)
+		code = 1
+	}
+	if sharedACPActivationHomeState.originalHomeSet {
+		_ = os.Setenv("HOME", sharedACPActivationHomeState.originalHome)
+	} else {
+		_ = os.Unsetenv("HOME")
+	}
+	if sharedACPActivationHomeState.originalUserProfileSet {
+		_ = os.Setenv("USERPROFILE", sharedACPActivationHomeState.originalUserProfile)
+	} else {
+		_ = os.Unsetenv("USERPROFILE")
+	}
+	if sharedACPActivationHomeState.originalDefaultProviderSet {
+		_ = os.Setenv("YOU_DEFAULT_WORKER_MODEL_PROVIDER", sharedACPActivationHomeState.originalDefaultProvider)
+	} else {
+		_ = os.Unsetenv("YOU_DEFAULT_WORKER_MODEL_PROVIDER")
+	}
+	if sharedACPActivationHomeState.originalDefaultModelSet {
+		_ = os.Setenv("YOU_DEFAULT_WORKER_MODEL", sharedACPActivationHomeState.originalDefaultModel)
+	} else {
+		_ = os.Unsetenv("YOU_DEFAULT_WORKER_MODEL")
 	}
 	if err := chatCensus.assertClean(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "chat root-composition cleanup census: %v\n", err)
@@ -690,28 +820,27 @@ func controlledACPCohortForTest(t *testing.T) *controlledACPCohort {
 	return cohort
 }
 
-// newControlledACPCohort builds one fixed-profile root for a scenario whose
-// real Factory activation remains retained by the on-demand ACP target. The
-// production runtime currently binds Factory Definitions under the fixed
-// ~default session scope and the public ACP close path cannot close a
-// terminalized session, so sharing that retained activation across scenarios
-// would make later tests fail with dependency_unavailable. This isolated
-// process is the smallest faithful boundary until the production activation
-// owner gains a supported release/reopen capability.
+// newControlledACPCohort builds one root process for a scenario whose real
+// Factory activation remains retained by the on-demand ACP target. The
+// immutable profile/catalog home is shared, but the process and working root
+// stay scenario-local: the production runtime currently binds Factory
+// Definitions under the fixed ~default session scope and the public ACP close
+// path cannot close a terminalized session, so sharing that retained
+// activation would make later tests fail with dependency_unavailable.
 func newControlledACPCohort(t *testing.T, name string) *controlledACPCohort {
 	t.Helper()
-	home := chatMkdirTemp(t, "controlled ACP "+name, "", "you-chat-sessions-"+name+"-")
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	workingDirectoryRoot := filepath.Join(home, "workdirs")
+	home := sharedACPActivationHomeForTest(t)
+	workingDirectoryRoot := chatMkdirTemp(
+		t,
+		"controlled ACP "+name+" working roots",
+		"",
+		"you-chat-sessions-"+name+"-",
+	)
 	if err := os.MkdirAll(workingDirectoryRoot, 0o755); err != nil {
-		_ = os.RemoveAll(home)
-		t.Fatalf("create controlled ACP %s workdirs: %v", name, err)
+		t.Fatalf("create controlled ACP %s working roots: %v", name, err)
 	}
 
 	runner := &controlledACPCommandRunner{}
-	seedInstalledPackagedFactory(t, home, controlledACPFactory)
-	support.SeedACPAgentProfile(t, home, "factory:"+controlledACPFactory, []string{"factory:" + controlledACPFactory})
 
 	cohort := &controlledACPCohort{
 		home:                 home,

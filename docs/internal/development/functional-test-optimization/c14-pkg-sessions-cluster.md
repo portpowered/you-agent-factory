@@ -353,6 +353,80 @@ observed the original success, bad-input, provider-failure, cancellation,
 replay, redaction, cleanup, and runner-routing outcomes; no assertion was
 deleted or weakened.
 
+## Story 003 Chat Sessions root-composition optimization result
+
+Story: `fto-c14-pkg-sessions-cluster-003`
+Status: **PASS — Chat root-composition optimization complete; EXEC and final
+cluster reconciliation remain owned by stories 004 and 005.**
+
+The optimized Chat fixtures keep one immutable published-catalog/profile input
+cohort and one fresh root process, working directory, ACP connection, and
+session lifetime per activation-owning scenario. The shared profile offers all
+published packaged Factories and the three custom child-event Factories once;
+each scenario selects its target with the real
+`session/set_config_option` request before its first prompt. Independent ACP
+activations run in parallel behind a four-slot package-local semaphore because
+the production packaged-installation reconciler still touches the
+filesystem-backed catalog during runtime opening. The semaphore kept that
+host contention bounded without changing production code or adding waits. The
+re-exec'd child peer uses a command-scoped test flag, so parallel fixtures do
+not mutate process-wide peer environment state.
+
+The retained-runtime boundary remains explicit: sharing a Chat process across
+completed on-demand activations was characterized and failed with
+`dependency_unavailable`, so process ownership was not weakened. The shared
+home contains only fixture catalog/profile inputs and runtime-managed
+installation evidence; scenario working roots, runner state, process state,
+ACP streams, and sessions remain private. The existing CHAT-001 through
+CHAT-025 mapping above is unchanged, with no assertion deleted, skipped, or
+weakened and no new sleep or timeout padding.
+
+### Final Chat package evidence
+
+The exact PRD command was run sequentially three times; every sample exited
+`0`:
+
+```text
+go test ./tests/functional/sessions/chat_sessions/root_composition/... -count=1
+```
+
+| Sample 1 | Sample 2 | Sample 3 | Median | Baseline median | Improvement |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 17.137s | 16.850s | 19.060s | **17.137s** | 55.551s | **69.2%** |
+
+The spread is retained as same-host variance; the median remains more than
+40% below the unchanged baseline. The package result for the broad pre-measure
+was 55.551s. These samples were collected after the final setup refinement,
+which moves the identical operator-default environment initialization into the
+one-time shared fixture cohort.
+
+The exact package gate passed with exit `0` on all three samples. The
+bounded changed-witness repeat command passed with exit `0` in `96.085s`:
+
+```text
+go test ./tests/functional/sessions/chat_sessions/root_composition -run '^(TestPackagedFactoriesCompleteOneACPPromptTurn|TestPackagedPlanParallelCompletesOneACPPromptTurn|TestFactoryBuilderGreetsOnAVagueFirstACPTurn|TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn|TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult|TestOneACPWorkerDeliversEveryUpdateAsChildContent|TestTwoACPWorkersKeepChildStreamsAttributed|TestACPWorkerChildStreamSurvivesRetainedReplay|TestJavaScriptFactoryChildrenAreVisibleAsWorkers|TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns|TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError|TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch|TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch)$' -count=10
+```
+
+The same changed-witness selector set passed supported race execution with
+exit `0` in `35.943s`:
+
+```text
+go test -race ./tests/functional/sessions/chat_sessions/root_composition -run '^(TestPackagedFactoriesCompleteOneACPPromptTurn|TestPackagedPlanParallelCompletesOneACPPromptTurn|TestFactoryBuilderGreetsOnAVagueFirstACPTurn|TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn|TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult|TestOneACPWorkerDeliversEveryUpdateAsChildContent|TestTwoACPWorkersKeepChildStreamsAttributed|TestACPWorkerChildStreamSurvivesRetainedReplay|TestJavaScriptFactoryChildrenAreVisibleAsWorkers|TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns|TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError|TestACPPromptDelegationRedeliveredRequestMakesNoSecondFactoryDispatch|TestACPPromptDelegationConcurrentPromptRejectsAsBusyWithNoFactoryDispatch)$' -count=1
+```
+
+The final broad gate's cleanup census balanced `24/24` processes, `58/58`
+connections, `58/58` response streams, `56/56` pipes, `29/29` sessions,
+`30/30` turns, `34/34` calls, `4/4` peers, and `91/91` paths, with zero
+listeners and zero violations. The repeated and race runs also completed
+without a census violation. Runtime logs included bounded
+`packaged_installation` active-contention observations from the shared
+filesystem catalog; all retries completed successfully and no test outcome or
+cleanup count was lost.
+
+No production, public contract, generated, UI, shared-support, restart, or
+other Sessions package files changed. Remote ACP/provider behavior, hosted CI,
+and merge remain unproven and are owned by the final handoff.
+
 ## Failure, privacy, and evidence boundaries
 
 - All baseline and profile commands exited `0`; the planned environmentally

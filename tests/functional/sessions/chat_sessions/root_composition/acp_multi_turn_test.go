@@ -48,6 +48,7 @@ func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 	}
 
 	cohort := newControlledACPCohort(t, "multi-turn")
+	t.Parallel()
 	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "multi-turn")
 	stdin, stdout := startControlledServeACPHarness(t, cohort, cwd)
 	sessionID := driveServeACPSessionNew(t, stdin, stdout, cwd)
