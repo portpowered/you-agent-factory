@@ -233,7 +233,7 @@ evidence instead of replacing it with a timing target.
 
 ## Story 002 correction and local evidence
 
-- Correction commit: `e3df25fec7265cfd2cff63314de42bdba11e2e71` (`test(restart): bound each CLI operation independently`), the rebased implementation commit on the current PR branch.
+- Correction commit: `db9e327e5ec8ec92be47e93065293372835705fe` (`test(restart): bound each CLI operation independently`), the rebased implementation commit on the current PR branch.
 - The owned scenario no longer stores or receives a cumulative `cliContext`.
   Scenario setup, including the one fresh `go build`, runs under the test
   context; each owned CLI submit, `work list`, `work show`, and Worker Session
@@ -259,7 +259,7 @@ second attempt: exit non-zero, 1200.133s
 After those environmental attempts, the same declared command completed on
 the rebased implementation correction. The historical pre-rebase run is not
 used as current-head evidence. The current implementation head used for the
-final local proof was `b815b1acc9b40c0cbc2c1d8ab18304c98183ebc7`, a descendant
+final local proof was `c809290475fdb0a35939162ca24d5debb1f4754d`, a descendant
 of the correction commit and the parent of this documentation-only review fix:
 
 ```text
@@ -267,7 +267,7 @@ go test -count=3 -cpu=2 -timeout=20m -run '^TestBoardPersistenceCLIRestartRoundT
 ```
 
 The current-head command exited `0` and reported `ok` for all three requested
-repetitions in `54.185s`. It exercised the local-real built CLI, three real
+repetitions in `70.411s`. It exercised the local-real built CLI, three real
 daemon generations per repetition, loopback HTTP, recordings, durable
 snapshots, signals, and public assertions. No daemon, CLI, restart, or cleanup
 failure was emitted. Source inspection confirms the unchanged topology of one
