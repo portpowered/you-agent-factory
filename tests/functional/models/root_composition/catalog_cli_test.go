@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -18,18 +17,14 @@ import (
 func TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	factoryDir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	fixture := ensureSharedModelsCatalogFixture(t)
 
 	listInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "--server", server.URL(), "models", "list",
+		"you", "--json", "--server", fixture.baseURL, "models", "list",
 	})
-	if err := server.Execute(t, listInputs.Input); err != nil {
+	listInputs.Input.Env = append([]string(nil), fixture.env...)
+	listInputs.Input.WorkingDirectory = fixture.rootDir
+	if err := fixture.process.Execute(listInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(remote models list) error = %v\nstderr=%s", err, listInputs.Stderr())
 	}
 	var listed factoryapi.ListModelsResponse
@@ -49,9 +44,11 @@ func TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess(t *test
 	}
 
 	inspectInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "--server", server.URL(), "models", "inspect", "OMNIVOICE_Q4_K_M",
+		"you", "--json", "--server", fixture.baseURL, "models", "inspect", "OMNIVOICE_Q4_K_M",
 	})
-	if err := server.Execute(t, inspectInputs.Input); err != nil {
+	inspectInputs.Input.Env = append([]string(nil), fixture.env...)
+	inspectInputs.Input.WorkingDirectory = fixture.rootDir
+	if err := fixture.process.Execute(inspectInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(remote models inspect) error = %v\nstderr=%s", err, inspectInputs.Stderr())
 	}
 	var detail factoryapi.ModelDetail
@@ -80,9 +77,11 @@ func TestModelsCatalogCLIProjectsFactoryDiscoveryThroughRootBuildProcess(t *test
 	}
 
 	builtInInspectInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "--server", server.URL(), "models", "inspect", models.BuiltInModelNameLLM,
+		"you", "--json", "--server", fixture.baseURL, "models", "inspect", models.BuiltInModelNameLLM,
 	})
-	if err := server.Execute(t, builtInInspectInputs.Input); err != nil {
+	builtInInspectInputs.Input.Env = append([]string(nil), fixture.env...)
+	builtInInspectInputs.Input.WorkingDirectory = fixture.rootDir
+	if err := fixture.process.Execute(builtInInspectInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(remote models inspect built-in) error = %v\nstderr=%s", err, builtInInspectInputs.Stderr())
 	}
 	var builtInDetail factoryapi.ModelDetail

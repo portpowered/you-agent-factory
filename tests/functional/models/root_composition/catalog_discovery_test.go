@@ -170,22 +170,14 @@ func assertGenericRuntimeFailures(t *testing.T) {
 func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 
-	dir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	support.WriteAgentConfig(t, dir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
+	fixture := ensureSharedModelsCatalogFixture(t)
 
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := support.GetJSON[factoryapi.StatusResponse](t, fixture.baseURL+"/status")
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("GET /status factory_state = %q, want RUNNING", status.FactoryState)
 	}
 
-	models := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	models := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.baseURL+"/models")
 	var observed *factoryapi.ModelSummary
 	for index := range models.Results {
 		if models.Results[index].Name == "OMNIVOICE_Q4_K_M" {
@@ -759,15 +751,9 @@ func findCatalogModel(
 func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
-	dir := characterizationScaffoldFactory(t, catalogDiscoveryFactoryConfig())
-	server := characterizationStartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	fixture := ensureSharedModelsCatalogFixture(t)
 
-	list := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	list := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.baseURL+"/models")
 	if len(list.Results) < 5 {
 		t.Fatalf("GET /models returned %d models, want factory plus built-ins: %#v", len(list.Results), list.Results)
 	}
@@ -778,13 +764,13 @@ func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
 		modelprovider.BuiltInModelNameTTS,
 		"OMNIVOICE_Q4_K_M",
 	} {
-		detail := support.GetJSON[factoryapi.ModelDetail](t, server.URL()+"/models/"+name)
+		detail := support.GetJSON[factoryapi.ModelDetail](t, fixture.baseURL+"/models/"+name)
 		if detail.Name != name {
 			t.Fatalf("GET /models/%s name = %q, want %q", name, detail.Name, name)
 		}
 	}
 
-	response, err := http.Get(server.URL() + "/models/catalog-missing")
+	response, err := http.Get(fixture.baseURL + "/models/catalog-missing")
 	if err != nil {
 		t.Fatalf("GET unknown model: %v", err)
 	}
@@ -793,7 +779,7 @@ func TestModelsCatalogProjectsBuiltInsThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("GET unknown model status = %d, want %d", response.StatusCode, http.StatusNotFound)
 	}
 	unsupported, err := http.Post(
-		server.URL()+"/models/llm/invocations",
+		fixture.baseURL+"/models/llm/invocations",
 		"application/json",
 		strings.NewReader(`{"operation":"EMBED","content":[{"type":"TEXT","text":"unsupported"}]}`),
 	)

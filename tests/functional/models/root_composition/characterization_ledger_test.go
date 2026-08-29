@@ -42,6 +42,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "C06-002 shared Models fixture cleanup failed: %v\n", err)
 		exitCode = 1
 	}
+	if err := closeSharedModelsCatalogFixture(); err != nil {
+		fmt.Fprintf(os.Stderr, "C14-002 shared Models catalog fixture cleanup failed: %v\n", err)
+		exitCode = 1
+	}
 	if err := writeForcedModelsCleanupReport(); err != nil {
 		fmt.Fprintf(os.Stderr, "write forced Models cleanup report: %v\n", err)
 		exitCode = 1
@@ -69,6 +73,13 @@ func TestMain(m *testing.M) {
 		sharedAPIStarts,
 		sharedSessionOpens,
 		sharedSessionCloses,
+	)
+	catalogRootBuilds, catalogAPIStarts := sharedModelsCatalogFixtureCounters()
+	fmt.Fprintf(
+		os.Stderr,
+		"C14-002 shared_models_catalog_root_builds=%d shared_models_catalog_api_starts=%d\n",
+		catalogRootBuilds,
+		catalogAPIStarts,
 	)
 	os.Exit(exitCode)
 }

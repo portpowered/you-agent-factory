@@ -20,6 +20,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,14 +34,15 @@ const (
 	sharedModelsUnknownSessionFactoryName = "models-shared-unknown-session"
 )
 
-// sharedModelsFixture owns the one root-built process and API transport for
-// the identical rich-catalog scenarios. Each scenario still opens and closes
-// its own explicit Factory Session in a distinct test-owned Factory directory;
-// the session-scoped current-Factory route proves those two routed inputs stay
-// distinct while the scenarios overlap. Only immutable process wiring and the
-// read-only catalog fixture are shared. The public Models routes are bound to
-// the process runtime and have no session selector, so they intentionally remain
-// the behavior witness for the original process-level model contract.
+// sharedModelsFixture owns one root-built process and API transport for a
+// candidate-controlled immutable catalog fixture. The rich-catalog scenario
+// pair still opens and closes its own explicit Factory Session in a distinct
+// test-owned Factory directory; the session-scoped current-Factory route proves
+// those two routed inputs stay distinct while the scenarios overlap. Only
+// immutable process wiring and read-only catalog state are shared. The public
+// Models routes are bound to the process runtime and have no session selector,
+// so they intentionally remain the behavior witness for the original
+// process-level model contract.
 type sharedModelsFixture struct {
 	rootDir  string
 	homeDir  string
@@ -134,6 +136,12 @@ var sharedModelsFixtureState struct {
 	err     error
 }
 
+var sharedModelsCatalogFixtureState struct {
+	sync.Once
+	fixture *sharedModelsFixture
+	err     error
+}
+
 // TestModelsSharedProcessEligibleScenarios is the explicit race-test target
 // for the shared mutable session ledger. The two subtests use the same rich
 // catalog definition and process while retaining their original HTTP and CLI
@@ -206,6 +214,29 @@ func ensureSharedModelsFixture(t *testing.T) *sharedModelsFixture {
 }
 
 func newSharedModelsFixture(t *testing.T) (_ *sharedModelsFixture, err error) {
+	return newSharedModelsFixtureWithConfig(t, richCatalogFactoryConfig(), true, nil)
+}
+
+func ensureSharedModelsCatalogFixture(t *testing.T) *sharedModelsFixture {
+	t.Helper()
+	sharedModelsCatalogFixtureState.Do(func() {
+		sharedModelsCatalogFixtureState.fixture, sharedModelsCatalogFixtureState.err =
+			newSharedModelsFixtureWithConfig(t, catalogDiscoveryFactoryConfig(), false, func(rootDir string) {
+				support.WriteAgentConfig(t, rootDir, "tts-worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "OMNIVOICE_Q4_K_M"))
+			})
+	})
+	if sharedModelsCatalogFixtureState.err != nil {
+		t.Fatalf("initialize shared Models catalog fixture: %v", sharedModelsCatalogFixtureState.err)
+	}
+	return sharedModelsCatalogFixtureState.fixture
+}
+
+func newSharedModelsFixtureWithConfig(
+	t *testing.T,
+	config map[string]any,
+	seedOmniVoiceCache bool,
+	prepare func(string),
+) (_ *sharedModelsFixture, err error) {
 	t.Helper()
 	rootDir, err := os.MkdirTemp("", "c06-models-shared-")
 	if err != nil {
@@ -227,8 +258,11 @@ func newSharedModelsFixture(t *testing.T) (_ *sharedModelsFixture, err error) {
 		}
 	}()
 
-	if err := writeSharedModelsFactory(rootDir, richCatalogFactoryConfig()); err != nil {
+	if err := writeSharedModelsFactory(rootDir, config); err != nil {
 		return nil, err
+	}
+	if prepare != nil {
+		prepare(rootDir)
 	}
 	c06Ledger.factoryRoots.Add(1)
 
@@ -238,7 +272,9 @@ func newSharedModelsFixture(t *testing.T) (_ *sharedModelsFixture, err error) {
 	}
 	fixture.homeDir = homeDir
 	cacheDir := filepath.Join(homeDir, ".agent-factory", "models")
-	writeCachedOmniVoiceAssets(t, cacheDir)
+	if seedOmniVoiceCache {
+		writeCachedOmniVoiceAssets(t, cacheDir)
+	}
 	fixture.cacheDir = cacheDir
 
 	api := support.NewProcessAPIServer()
@@ -564,6 +600,14 @@ func closeSharedModelsFixture() error {
 	return fixture.close()
 }
 
+func closeSharedModelsCatalogFixture() error {
+	fixture := sharedModelsCatalogFixtureState.fixture
+	if fixture == nil {
+		return nil
+	}
+	return fixture.close()
+}
+
 func sharedModelsFixtureCounters() (rootBuilds, apiStarts, opens, closes int64) {
 	fixture := sharedModelsFixtureState.fixture
 	if fixture == nil {
@@ -572,11 +616,25 @@ func sharedModelsFixtureCounters() (rootBuilds, apiStarts, opens, closes int64) 
 	return fixture.rootBuilds.Load(), fixture.apiStarts.Load(), fixture.opens.Load(), fixture.closes.Load()
 }
 
+func sharedModelsCatalogFixtureCounters() (rootBuilds, apiStarts int64) {
+	fixture := sharedModelsCatalogFixtureState.fixture
+	if fixture == nil {
+		return 0, 0
+	}
+	return fixture.rootBuilds.Load(), fixture.apiStarts.Load()
+}
+
 func (fixture *sharedModelsFixture) close() error {
 	if fixture == nil {
 		return nil
 	}
 	var errs []error
+	if got := fixture.rootBuilds.Load(); got != 1 {
+		errs = append(errs, fmt.Errorf("shared Models root builds = %d, want exactly one", got))
+	}
+	if got := fixture.apiStarts.Load(); got != 1 {
+		errs = append(errs, fmt.Errorf("shared Models API starts = %d, want exactly one", got))
+	}
 	// Process and API shutdown are asynchronous. These context deadlines are
 	// safety ceilings for their cancellation signals, not readiness polling.
 	stopCtx, cancelStop := context.WithTimeout(context.Background(), sharedModelsProcessTimeout)
