@@ -287,8 +287,11 @@ preserve:
   immutable configurations.
 
 The focused Claude run proves normal shared-process/session/route cleanup. The
-final loopback below adds the integrated package run, clean tracked checkout,
-host process-tree check, and exclusion/ancestry evidence.
+adverse Claude loopback also exercises malformed/partial inputs, rejected
+routes, assertion failure, cancellation, session deletion, listener shutdown,
+and route release. The final loopback below adds the integrated package run,
+clean tracked checkout, host process-tree check, and exclusion/ancestry
+evidence.
 
 ## Story 001 evidence boundary
 
@@ -314,7 +317,7 @@ note above.
 | Golden behavior parity | PASS | Each selector retains checksum and native stream-shape validation, exact Claude streaming flags, one successful `task:done`, zero `task:failed`, and a session-scoped successful Model Response Factory Event with the expected Provider Session ID. |
 | Route and session isolation | PASS | Routes reject duplicate directory/selector registration before start and unknown/closed/mismatched requests without including request payload or environment data in diagnostics; each case maps to its own Factory directory and explicit session. |
 | Normal cleanup | PASS | Each explicit session is terminated and deleted after its scoped assertions; the shared server is stopped, the root process is closed by the support owner, routes are closed/released, and copied fixtures/operator home remain `t.TempDir` owned. |
-| Adverse cleanup loopback | NOT CLAIMED | Full assertion-failure, cancellation, host-resource, and clean-room cleanup evidence remains story 004. The focused positive path and fail-closed construction are covered here. |
+| Adverse cleanup loopback | PASS (bounded) | `TestClaudeHaikuGoldenAdverseValidationFailsBeforeRouting` covers empty, malformed, partial, unsanitized, and checksum-invalid fixtures without route calls; `TestClaudeHaikuGoldenRouterRejectsInvalidRoutesWithoutLeaks` covers duplicate, unknown, mismatched, unexpected-provider, and closed routes with bounded diagnostics; `TestClaudeHaikuGoldenAdverseProcessPathsReclaimResources` covers a terminal partial-result/assertion failure and cancellation through real Factory Session HTTP boundaries. The process paths delete the session, stop the server/listener, and release all routes. | This story does not claim an OS-wide resource census or the cross-package clean-room loopback owned by story 004. |
 | `TestClaudeHaikuStreamJSONGoldens` repeatability | PASS | The exact touched selector was run once and with `-count=3`; local output and timing are recorded in progress, not committed as a CI artifact. |
 | Dependency fidelity | PASS for story 002 | Production root composition and public Factory Session/Work/Event HTTP boundaries were used with a controlled `ProviderCommandRunner` and sanitized embedded streams; no live Claude call was made. |
 | PR package timing | NOT CLAIMED | Package-level Backend Functional Coverage timing remains story 004/PR-CI evidence. |

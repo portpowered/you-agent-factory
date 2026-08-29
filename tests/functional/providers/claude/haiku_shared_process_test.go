@@ -18,31 +18,37 @@ import (
 )
 
 type haikuGoldenReplayCase struct {
-	golden     haikuGoldenCase
-	factoryDir string
-	stdout     []byte
+	golden                 haikuGoldenCase
+	factoryDir             string
+	stdout                 []byte
+	blockUntilCancellation bool
+	started                chan struct{}
 }
 
 func prepareHaikuGoldenReplayCases(t *testing.T, manifest haikuGoldenManifest) []haikuGoldenReplayCase {
 	t.Helper()
 	cases := make([]haikuGoldenReplayCase, 0, len(manifest.Cases))
 	for _, golden := range manifest.Cases {
-		stdout := loadHaikuGoldenStdout(t, golden)
-		assertHaikuGoldenNativeShape(t, stdout, golden)
-
-		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-		support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-			modelprovider.ProviderClaude,
-			golden.Selector,
-		))
-		support.WriteWorkstationConfig(t, dir, "process", haikuGoldenWorkstationConfig(dir))
-		cases = append(cases, haikuGoldenReplayCase{
-			golden:     golden,
-			factoryDir: normalizeHaikuGoldenRouteDirectory(dir),
-			stdout:     append([]byte(nil), stdout...),
-		})
+		cases = append(cases, prepareHaikuGoldenReplayCase(t, golden))
 	}
 	return cases
+}
+
+func prepareHaikuGoldenReplayCase(t *testing.T, golden haikuGoldenCase) haikuGoldenReplayCase {
+	t.Helper()
+	stdout := loadHaikuGoldenStdout(t, golden)
+	assertHaikuGoldenNativeShape(t, stdout, golden)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
+		modelprovider.ProviderClaude,
+		golden.Selector,
+	))
+	support.WriteWorkstationConfig(t, dir, "process", haikuGoldenWorkstationConfig(dir))
+	return haikuGoldenReplayCase{
+		golden:     golden,
+		factoryDir: normalizeHaikuGoldenRouteDirectory(dir),
+		stdout:     append([]byte(nil), stdout...),
+	}
 }
 
 func haikuGoldenWorkstationConfig(factoryDir string) string {
@@ -66,50 +72,89 @@ type haikuGoldenCommandRouter struct {
 }
 
 type haikuGoldenRoute struct {
-	selector string
-	result   platformprocess.CommandResult
+	selector               string
+	result                 platformprocess.CommandResult
+	blockUntilCancellation bool
+	started                chan struct{}
+	startedOnce            *sync.Once
 }
 
 func newHaikuGoldenCommandRouter(t *testing.T, cases []haikuGoldenReplayCase) *haikuGoldenCommandRouter {
 	t.Helper()
+	router, err := buildHaikuGoldenCommandRouter(cases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return router
+}
+
+func buildHaikuGoldenCommandRouter(cases []haikuGoldenReplayCase) (*haikuGoldenCommandRouter, error) {
 	routes := make(map[string]haikuGoldenRoute, len(cases))
 	selectors := make(map[string]struct{}, len(cases))
 	for _, replayCase := range cases {
 		if _, exists := routes[replayCase.factoryDir]; exists {
-			t.Fatalf("duplicate Claude golden Factory directory route")
+			return nil, errors.New("duplicate Claude golden Factory directory route")
 		}
 		if _, exists := selectors[replayCase.golden.Selector]; exists {
-			t.Fatalf("duplicate Claude golden selector route")
+			return nil, errors.New("duplicate Claude golden selector route")
+		}
+		var startedOnce *sync.Once
+		if replayCase.started != nil {
+			startedOnce = &sync.Once{}
 		}
 		routes[replayCase.factoryDir] = haikuGoldenRoute{
 			selector: replayCase.golden.Selector,
 			result: platformprocess.CommandResult{
 				Stdout: append([]byte(nil), replayCase.stdout...),
 			},
+			blockUntilCancellation: replayCase.blockUntilCancellation,
+			started:                replayCase.started,
+			startedOnce:            startedOnce,
 		}
 		selectors[replayCase.golden.Selector] = struct{}{}
 	}
-	return &haikuGoldenCommandRouter{routes: routes}
+	return &haikuGoldenCommandRouter{routes: routes}, nil
 }
 
-func (r *haikuGoldenCommandRouter) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (r *haikuGoldenCommandRouter) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.closed {
+		r.mu.Unlock()
 		return platformprocess.CommandResult{}, errors.New("Claude golden route is closed")
 	}
 	if request.Command != string(modelprovider.ProviderClaude) {
+		r.mu.Unlock()
 		return platformprocess.CommandResult{}, errors.New("Claude golden route rejected unexpected provider command")
 	}
 	route, ok := r.routes[normalizeHaikuGoldenRouteDirectory(request.WorkDir)]
 	if !ok {
+		r.mu.Unlock()
 		return platformprocess.CommandResult{}, errors.New("Claude golden route unavailable")
 	}
 	if !haikuGoldenRequestSelects(request.Args, route.selector) {
+		r.mu.Unlock()
 		return platformprocess.CommandResult{}, errors.New("Claude golden route rejected selector")
 	}
 	r.requests = append(r.requests, cloneHaikuCommandRequest(request))
-	return cloneHaikuCommandResult(route.result), nil
+	result := cloneHaikuCommandResult(route.result)
+	if route.started != nil {
+		if route.startedOnce != nil {
+			route.startedOnce.Do(func() { close(route.started) })
+		} else {
+			close(route.started)
+		}
+	}
+	if !route.blockUntilCancellation {
+		r.mu.Unlock()
+		return result, nil
+	}
+	r.mu.Unlock()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	<-ctx.Done()
+	result.Stdout = nil
+	return result, ctx.Err()
 }
 
 func haikuGoldenRequestSelects(args []string, selector string) bool {
