@@ -98,27 +98,14 @@ func TestAgyMultimodalGoldenThroughRootBuildProcess(t *testing.T) {
 func assertAgyMultimodalGoldenCase(t *testing.T, test agyGoldenCase) {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	copyAgyGoldenAsset(t, dir, test.asset)
-	support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfig())
-	support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(test.prompt, ""))
-	testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy multimodal golden\"}"))
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: readAgyGoldenAsset(t, test.trace),
-	})
-	_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		30*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, route, callStart := fixture.runGolden(t, "golden-"+test.name)
 
 	assertAgyGoldenWorkCompleted(t, listed)
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("provider command runner calls for %q = %d, want exactly one", test.name, got)
 	}
-	assertAgyGoldenCommand(t, runner.LastRequest(), dir, test.prompt, "")
+	assertAgyGoldenCommand(t, route.lastRequest(), route.workDir, test.prompt, "")
 
 	providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
 	if providerResponse.ProviderSession == nil ||
@@ -146,26 +133,14 @@ func assertAgyMultimodalGoldenCase(t *testing.T, test agyGoldenCase) {
 // TestAgyClipQAGoldenPassThroughRootBuildProcess proves the real clip-QA
 // review survives the Provider and Worker boundaries.
 func TestAgyClipQAGoldenPassThroughRootBuildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	copyAgyGoldenAsset(t, dir, "clip-fixture.mp4")
-	trace := readAgyGoldenAsset(t, "agy-trace-clipqa-schema.stream.jsonl")
-	support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfig())
-	support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(agyGoldenVideoPrompt, ""))
-	testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy clip QA golden\"}"))
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte(trace)})
-	_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		30*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, route, callStart := fixture.runGolden(t, "golden-clipqa")
 
 	assertAgyGoldenWorkCompleted(t, listed)
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("provider command runner calls for clip-QA = %d, want exactly one", got)
 	}
-	assertAgyGoldenCommand(t, runner.LastRequest(), dir, agyGoldenVideoPrompt, "")
+	assertAgyGoldenCommand(t, route.lastRequest(), route.workDir, agyGoldenVideoPrompt, "")
 
 	providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
 	if providerResponse.Response == nil {
@@ -189,29 +164,14 @@ func TestAgyClipQAGoldenPassThroughRootBuildProcess(t *testing.T) {
 // envelope satisfies an authored schema at the Worker boundary instead of
 // being accepted solely because the Provider returned exit-zero output.
 func TestAgyStructuredJSONGoldenThroughRootBuildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfig())
-	support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(
-		"Classify the statement as positive or negative and provide confidence.",
-		agyGoldenStructuredSchema,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy structured JSON golden\"}"))
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: readAgyGoldenAsset(t, "agy-trace-structured.json"),
-	})
-	_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		30*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, route, callStart := fixture.runGolden(t, "golden-structured")
 
 	assertAgyGoldenWorkCompleted(t, listed)
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("provider command runner calls for structured JSON = %d, want exactly one", got)
 	}
-	assertAgyGoldenCommand(t, runner.LastRequest(), dir,
+	assertAgyGoldenCommand(t, route.lastRequest(), route.workDir,
 		"Classify the statement as positive or negative and provide confidence.",
 		agyGoldenStructuredSchema,
 	)

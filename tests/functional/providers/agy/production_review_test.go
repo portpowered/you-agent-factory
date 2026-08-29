@@ -52,19 +52,13 @@ func TestAgyProductionReviewRolesThroughRootBuildProcess(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
 			test.run(t)
 		})
 	}
 }
 
 func testAgyColdWatchCompleteReportContract(t *testing.T) {
-	response, events, runner, assetPath := runAgyColdWatchInvocationWithStdout(
-		t,
-		agyColdWatchCompleteReportTrace(t),
-		"clip-fixture.mp4",
-		false,
-	)
+	response, events, route, assetPath, callStart := runAgySharedColdWatchComplete(t)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response=%#v", response.Status, response)
 	}
@@ -85,10 +79,10 @@ func testAgyColdWatchCompleteReportContract(t *testing.T) {
 			t.Fatalf("cold-watch primary result missing %q: %s", want, result)
 		}
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("AGY provider command calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("AGY provider command calls = %d, want exactly one", got)
 	}
-	assertAgyColdWatchCommand(t, runner.LastRequest(), assetPath)
+	assertAgyColdWatchCommand(t, route.lastRequest(), assetPath)
 	assertAgyColdWatchEvents(t, events, factoryapi.WorkOutcomeAccepted, result)
 }
 
@@ -186,14 +180,7 @@ func testAgyColdWatchMissingFile(t *testing.T) {
 }
 
 func testAgyClipQAStructuredPass(t *testing.T) {
-	response, events, runner, assetPath := runAgyClipQAInvocation(
-		t,
-		"agy-trace-clipqa-schema.stream.jsonl",
-		"clip-fixture.mp4",
-		agyClipQAShotSpec,
-		platformprocess.CommandResult{ExitCode: 0},
-		false,
-	)
+	response, events, route, assetPath, callStart := runAgySharedClipQAPass(t)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED; response=%#v", response.Status, response)
 	}
@@ -211,27 +198,15 @@ func testAgyClipQAStructuredPass(t *testing.T) {
 	if verdict.Confidence < 0 || verdict.Confidence > 1 {
 		t.Fatalf("clip-QA confidence = %v, want [0,1]", verdict.Confidence)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("AGY provider command calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("AGY provider command calls = %d, want exactly one", got)
 	}
-	assertAgyClipQACommand(t, runner.LastRequest(), assetPath, agyClipQAShotSpec)
+	assertAgyClipQACommand(t, route.lastRequest(), assetPath, agyClipQAShotSpec)
 	assertAgyClipQAEvents(t, events, result)
 }
 
 func testAgyClipQAStructuredReroll(t *testing.T) {
-	verdict := validAgyClipQAVerdictPayload()
-	verdict["action_completed"] = false
-	verdict["spec_deviations"] = []string{"the specified action did not finish"}
-	verdict["verdict"] = "reroll"
-	verdict["confidence"] = 0.82
-	response, events, runner, assetPath := runAgyClipQAInvocationWithStdout(
-		t,
-		agyClipQAVerdictTrace(t, verdict),
-		"clip-fixture.mp4",
-		agyClipQAShotSpec,
-		platformprocess.CommandResult{ExitCode: 0},
-		false,
-	)
+	response, events, route, assetPath, callStart := runAgySharedClipQAReroll(t)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED for inspected reroll; response=%#v", response.Status, response)
 	}
@@ -242,7 +217,10 @@ func testAgyClipQAStructuredReroll(t *testing.T) {
 	if result.Verdict != "reroll" || result.ActionCompleted || len(result.SpecDeviations) == 0 {
 		t.Fatalf("clip-QA reroll = %#v, want accepted inspected failure", result)
 	}
-	assertAgyClipQACommand(t, runner.LastRequest(), assetPath, agyClipQAShotSpec)
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("AGY provider command calls = %d, want exactly one", got)
+	}
+	assertAgyClipQACommand(t, route.lastRequest(), assetPath, agyClipQAShotSpec)
 	assertAgyClipQAEvents(t, events, invocationPrimaryText(t, *response.PrimaryResult))
 }
 
