@@ -438,9 +438,6 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 		ExitCode: deterministicProviderFailureExit,
 		Stderr:   []byte(deterministicProviderFailureStderr),
 	})
-	edges := serviceedges.Edges{}
-	support.ConfigureWorkerCommands(t, &edges, runner, nil)
-
 	args := []string{
 		"you", "run",
 		"--factory", factoryPath,
@@ -448,9 +445,8 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 		"--quiet",
 		"prove workers-owned clean invocation failure lifecycle",
 	}
-	process := buildLifecycleProcess(t, edges)
-	inputs := process.Inputs(args, factoryDir)
-	if err := process.Execute(inputs); err == nil {
+	inputs, executeErr := executeSharedLifecycleInvocation(t, args, runner)
+	if executeErr == nil {
 		t.Fatal("Process.Execute error = nil, want terminal clean invocation failure")
 	}
 

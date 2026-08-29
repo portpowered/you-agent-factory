@@ -356,3 +356,170 @@ Story 002 is complete at the semantic spine. Story 003 still owns repeated
 baseline/final measurement, race verification, clean-room reproduction, the
 performance decision, and PR/CI handoff; this evidence does not claim the
 parent's final performance floor or race result.
+
+## Story 003 — bounded optimization and final local evidence
+
+Story `fto-c14-pkg-workers-run-lifecycle-003` used one bounded second,
+profile-guided pass after the first optimized result missed the explicit 40%
+target. The pass kept the finite one-shot cohort on one package-local process,
+moved the sequential partial-output and hosted-provider-failure cases onto a
+second routed process, and retained dedicated ownership for the continuous
+host, detached-server isolation, cancellation/recovery, observation timeout,
+and forced-cleanup child. Every shared invocation has fresh HOME/USERPROFILE,
+working directory, streams, provider route, and (for the hosted cohort) an
+invocation-owned API server; a mutex keeps each cohort's `Process.Execute`
+non-overlapping.
+
+An exploratory attempt to reuse the cancellation/recovery process was rejected
+by its own public witness: recovery observed stale Factory Session/Work state
+and failed to reach readiness. That route was removed; cancellation and its
+recovery remain dedicated. This is the smallest safe disposition for the
+remaining stateful lifecycle edge and is part of the measured-floor rationale.
+
+The exact final implementation commit measured below is
+`4576ba78bc` (`test: reuse safe worker lifecycle cohorts`). The environment was
+Windows `windows/amd64`, Go `1.25.0`, PowerShell `7.6.5`, with local-real
+`root.BuildProcess`, filesystem, in-process application lifecycle, loopback
+HTTP, and controlled command-runner edges. No paid or remote calls were used.
+The required rebase onto `origin/main` preserved this patch at final head
+`beb18375f6`; the final-head clean-room result is recorded below.
+
+### Final comparable timing
+
+The three samples used the exact command `go test
+./tests/functional/workers/transports/cli/run/lifecycle/... -count=1` with an
+outer PowerShell stopwatch, sequentially on the same committed head:
+
+| Sample | Wall time | Exit |
+| --- | ---: | ---: |
+| 1 | 36.755s | 0 |
+| 2 | 32.397s | 0 |
+| 3 | 47.333s | 0 |
+| **Median** | **36.755s** | — |
+
+The untouched Story 001 samples were `54.261s`, `40.607s`, and `36.405s`,
+median `40.607s`. The committed final median is therefore `3.852s` / `9.5%`
+lower. It does not meet the 40% target; the accepted performance disposition
+is a profile-backed measured floor after the one bounded pass, not a claim of
+the target. The large spread is retained as expected Windows setup/scheduler
+contention rather than hidden by reruns.
+
+The committed-head JSON selector profile was run with:
+
+```text
+go test -json -v ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1
+```
+
+It exited `0`, with package event `38.534s`. The relevant selector/subtest
+events were: listener `2.00s`; clean `4.04s`; to-file `16.94s` (conflicts
+`1.73s` and `1.89s`); reasoning override `2.11s`; unsupported effort `8.54s`;
+hosted `8.93s`; clean failure plus adverse matrix `36.46s`; adverse matrix
+`30.59s` (partial `3.58s`, provider failure `2.32s`, cancellation/recovery
+`19.80s`, observation timeout `3.52s`, forced cleanup `1.37s`). The adverse
+matrix and cancellation/recovery remain the largest serialized bucket, while
+the final source-derived topology is 9 roots versus 18 untouched and 11 after
+Story 002:
+
+| Cohort | Root builds | `Process.Execute` calls | API listeners | Child binaries |
+| --- | ---: | ---: | ---: | ---: |
+| Finite shared cohort | 1 | 9 | 0 | 0 |
+| Hosted-adverse shared partial/failure cohort | 1 | 2 | 2 | 0 |
+| Dedicated hosted/cancellation/timeout/forced paths | 7 | 7 | 6 | 1 |
+| **Full package** | **9** | **18** | **8** | **1** |
+
+The direct package diagnostics were:
+
+```text
+C14 lifecycle finite one-shot shared topology: root_builds=1 process_executions=9 process_closes=1 active_invocations=0 provider_route_registers=9 provider_route_unbinds=9 provider_routes=0 provider_calls=4 api_starts=0
+C14 lifecycle hosted adverse shared topology: root_builds=1 process_executions=2 process_closes=1 active_invocations=0 provider_route_registers=2 provider_route_unbinds=2 provider_routes=0 provider_calls=2 api_starts=2
+```
+
+These counters, the profile, and the preserved semantic cases provide the
+measured-floor explanation: safe root-build removal is material, but the
+remaining cancellation/recovery projection waits, hosted listener lifecycle,
+forced child, and concurrent Windows startup contention are semantic or
+dependency-fidelity costs not safely removable by this package-local route.
+
+### Final quality gates
+
+| Gate | Exact procedure | Result and property proved |
+| --- | --- | --- |
+| GATE-SPINE-001 | `go test ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1 -v` on `4576ba78bc` | PASS, exit `0`; all seven selectors and FTM-01–FTM-17, output/error/state/identity/order/call-count/cancellation/recovery/timeout/cleanup witnesses pass. **assertion inventory same or stronger**. |
+| GATE-REPEAT-001 | `go test ./tests/functional/workers/transports/cli/run/lifecycle/... -count=3 -run '^(TestCLIRunCleanInvocationCompletesWithoutDashboardStartup\|TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch\|TestCLIRunCleanInvocationFailurePreservesPublicError)$` | PASS, exit `0`, `100.918s`; representative success, invalid input, failure, adverse matrix, route cleanup, and recovery assertions repeat three times. |
+| GATE-RACE-001 | `go test -race ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1` | PASS, exit `0`, `52.034s`; no race report in shared routing, command, gate, listener, or cleanup ownership. |
+| GATE-PERF-001 | Three stopwatch samples above plus committed JSON profile and one bounded second pass | PASS by the permitted measured-floor disposition; final median is recorded, target miss is explicit, and no assertion was removed or weakened. |
+| GATE-CLEANROOM-001 | Fresh detached worktree at final rebased head `beb18375f6`; `go test ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1`; worktree removed afterward | PASS, exit `0`, package `27.553s`; no hidden workspace state was needed. |
+
+### GATE-CLEANROOM-001 validation report
+
+## Environment and artifact
+
+- Commit/build identifier: detached final rebased head `beb18375f6`.
+- Environment and configuration: Windows `windows/amd64`, Go `1.25.0`,
+  clean detached Git worktree, no local PRD/progress state.
+- Customer entry point: public `you run` command through `root.BuildProcess` and
+  `Process.Execute`.
+- Real and substituted dependencies: production root/filesystem/process
+  lifecycle and loopback HTTP; only external provider/API effects controlled
+  through `edges.Edges`.
+- Cost/call budget used: one bounded clean-room package run; zero paid/remote
+  calls.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| FTM-01 through FTM-17 and seven selectors | PASS | Detached full package exit `0`; final package gate and direct topology counters above. | Terminal PR CI and merge. |
+| Repeated isolation and cleanup | PASS | Three-repeat representative gate exit `0`; shared routes registered/unregistered equally and ended at zero. | Other packages/platforms. |
+| Race safety | PASS | Final full-package `-race` exit `0`, no report. | Undetected defects outside this run/platform. |
+| Performance/floor evidence | PASS | Three final samples, selector profile, and bounded-pass topology/floor rationale above. | Portable absolute timing and target-level 40% reduction. |
+| Scoped implementation and assertion preservation | PASS | Final owned diff is lifecycle package plus this C14 ledger; explicit **assertion inventory same or stronger**. | Review-stage interpretation. |
+| No prohibited production/contract/config/CI/UI change | PASS | Detached commit contains only lifecycle functional tests and prior C14 ledger; no production or generated surface changed. | None identified. |
+| Reproducible clean-room behavior | PASS | Fresh detached checkout at `beb18375f6`, exact package command exit `0`, package `27.553s`, temporary worktree removed. | Terminal CI and merge. |
+
+## Customer journey
+
+1. A developer runs `go test
+   ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1`.
+   The detached clean checkout reports `ok` for the lifecycle package in
+   `27.553s`; the public CLI/process assertions and all adverse cleanup
+   witnesses remain active.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: this ledger is under the canonical functional
+  optimization evidence directory and records commands, topology, and gates.
+- Permission and error behavior: invalid input and provider failure continue to
+  assert stable errors, zero-dispatch validation, shaped failure, and no false
+  success.
+- Persistence/reload behavior: no persisted schema or public contract changed;
+  hosted Factory Session, Work, Worker Session, and Factory Event observations
+  remain asserted.
+- Accessibility/keyboard/responsive behavior: not applicable to this backend
+  functional package.
+- Operational signals: direct route/process counters, lifecycle phase
+  diagnostics, provider call counts, listener close signals, and forced-cleanup
+  report remain available.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| C14-FLOOR-001 | Informational | Compare the exact three-run medians above after the bounded pass. | Safe reuse should reduce intrinsic setup while preserving all witnesses. | Median improved `9.5%`; the 40% target was not reached, but profile-selected roots were removed and all behavior/race/repeat/clean-room gates passed. | Final profile, counters, and gate table. |
+| C14-ISOLATION-001 | Informational | Reuse cancellation/recovery and run its recovery invocation on the same process. | Recovery must observe a fresh session and distinct Work/Worker Session identities. | Stale lifecycle state was observed; the broader route was removed and recovery remains dedicated. | Exploratory failure recorded above; final full package and recovery witnesses pass. |
+
+## Verdict
+
+PASS
+
+The clean-room validator made no repairs. The final implementation preserves the
+executable spine, passes the complete semantic/repeat/race/clean-room gates,
+and is ready for the PR/CI handoff. The remaining unproven edges are terminal
+PR CI, review-owned package direction, conflict resolution, and merge.
+
+## Delivery handoff inputs
+
+The implementation-stage PR comment must contain the exact before median
+`40.607s`, after median `36.755s`, the three after samples, the measured-floor
+disposition, and the required PR CI run URL once CI starts. CI evidence belongs
+in that PR comment and not in a commit.

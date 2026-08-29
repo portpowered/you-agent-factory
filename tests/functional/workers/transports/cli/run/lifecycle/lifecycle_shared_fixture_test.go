@@ -10,18 +10,21 @@ import (
 	"sync/atomic"
 	"testing"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// lifecycleSharedProcessFixture owns only the compatible, finite one-shot
-// invocations. Its mutex makes the process reuse explicit: every invocation
-// still owns a fresh working directory, HOME, streams, route, and provider
-// runner, while the immutable root wiring is built once for the package.
+// lifecycleSharedProcessFixture owns a package-local sequential cohort. Its
+// mutex makes process reuse explicit: every invocation still owns a fresh
+// working directory, HOME, streams, route, provider runner, and (when used)
+// API server, while immutable root wiring is built once for the cohort.
 type lifecycleSharedProcessFixture struct {
 	process support.ApplicationProcess
 	router  *lifecycleCommandRouter
+	label   string
 
 	builds     atomic.Int32
 	executions atomic.Int32
@@ -32,20 +35,28 @@ type lifecycleSharedProcessFixture struct {
 	closeErr error
 }
 
-var lifecycleSharedFixtureState struct {
+type lifecycleSharedFixtureRegistry struct {
 	sync.Once
 	fixture *lifecycleSharedProcessFixture
 	err     error
 }
 
-// TestMain closes the package-owned process after all invocation cleanup has
-// completed. Hosted, cancellation, timeout, and forced-cleanup tests do not
-// use this fixture and retain their dedicated process ownership.
+var lifecycleSharedFixtureState lifecycleSharedFixtureRegistry
+var lifecycleAdverseFixtureState lifecycleSharedFixtureRegistry
+
+// TestMain closes package-owned processes after all invocation cleanup has
+// completed. Cancellation/recovery and forced-cleanup retain dedicated
+// process ownership because their lifecycle state cannot be reset safely.
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 
-	fixture := lifecycleSharedFixtureState.fixture
-	if fixture != nil {
+	for _, fixture := range []*lifecycleSharedProcessFixture{
+		lifecycleSharedFixtureState.fixture,
+		lifecycleAdverseFixtureState.fixture,
+	} {
+		if fixture == nil {
+			continue
+		}
 		closeContext, cancel := context.WithTimeout(context.Background(), lifecycleProcessCloseTimeout)
 		closeErr := fixture.close(closeContext)
 		cancel()
@@ -59,27 +70,44 @@ func TestMain(m *testing.M) {
 
 func sharedLifecycleProcess(t testing.TB) *lifecycleSharedProcessFixture {
 	t.Helper()
-	lifecycleSharedFixtureState.Do(func() {
+	return initializeSharedLifecycleProcess(t, &lifecycleSharedFixtureState, "finite one-shot")
+}
+
+func sharedAdverseLifecycleProcess(t testing.TB) *lifecycleSharedProcessFixture {
+	t.Helper()
+	return initializeSharedLifecycleProcess(t, &lifecycleAdverseFixtureState, "hosted adverse")
+}
+
+func initializeSharedLifecycleProcess(
+	t testing.TB,
+	state *lifecycleSharedFixtureRegistry,
+	label string,
+) *lifecycleSharedProcessFixture {
+	t.Helper()
+	state.Do(func() {
 		router := newLifecycleCommandRouter()
 		process, err := support.BuildProcessWithContext(
 			context.Background(),
-			serviceedges.Edges{ProviderCommandRunner: router},
+			serviceedges.Edges{
+				APIServerStarter:      router.Start,
+				ProviderCommandRunner: router,
+			},
 		)
 		if err != nil {
-			lifecycleSharedFixtureState.err = fmt.Errorf("build shared lifecycle process: %w", err)
+			state.err = fmt.Errorf("build %s shared lifecycle process: %w", label, err)
 			return
 		}
-		fixture := &lifecycleSharedProcessFixture{process: process, router: router}
+		fixture := &lifecycleSharedProcessFixture{process: process, router: router, label: label}
 		fixture.builds.Store(1)
-		lifecycleSharedFixtureState.fixture = fixture
+		state.fixture = fixture
 	})
-	if lifecycleSharedFixtureState.err != nil {
-		t.Fatalf("initialize shared lifecycle process: %v", lifecycleSharedFixtureState.err)
+	if state.err != nil {
+		t.Fatalf("initialize %s shared lifecycle process: %v", label, state.err)
 	}
-	if lifecycleSharedFixtureState.fixture == nil {
-		t.Fatal("shared lifecycle process was not initialized")
+	if state.fixture == nil {
+		t.Fatalf("%s shared lifecycle process was not initialized", label)
 	}
-	return lifecycleSharedFixtureState.fixture
+	return state.fixture
 }
 
 func executeSharedLifecycleInvocation(
@@ -110,35 +138,92 @@ func executeSharedLifecycleInputs(
 ) error {
 	t.Helper()
 	fixture := sharedLifecycleProcess(t)
-	return fixture.execute(t, inputs, runner)
+	return fixture.execute(t, inputs, runner, nil)
+}
+
+func sharedLifecycleInvocationProcess(
+	t testing.TB,
+	runner platformprocess.CommandRunner,
+	apiStarter platformhttpserver.Starter,
+) support.Process {
+	t.Helper()
+	return &lifecycleRoutedInvocationProcess{
+		fixture: sharedLifecycleProcess(t),
+		runner:  runner,
+		api:     apiStarter,
+	}
+}
+
+func sharedAdverseLifecycleInvocationProcess(
+	t testing.TB,
+	runner platformprocess.CommandRunner,
+	apiStarter platformhttpserver.Starter,
+) support.Process {
+	t.Helper()
+	return &lifecycleRoutedInvocationProcess{
+		fixture: sharedAdverseLifecycleProcess(t),
+		runner:  runner,
+		api:     apiStarter,
+	}
+}
+
+func buildSharedAdverseLifecycleProcess(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	apiStarter platformhttpserver.Starter,
+) *lifecycleCoordinator {
+	t.Helper()
+	return newLifecycleCoordinator(t, sharedAdverseLifecycleInvocationProcess(t, runner, apiStarter))
+}
+
+type lifecycleRoutedInvocationProcess struct {
+	fixture *lifecycleSharedProcessFixture
+	runner  platformprocess.CommandRunner
+	api     platformhttpserver.Starter
+}
+
+func (process *lifecycleRoutedInvocationProcess) Execute(input root.Input) error {
+	if process == nil || process.fixture == nil {
+		return errors.New("shared lifecycle invocation process is unavailable")
+	}
+	return process.fixture.executeInput(input, process.runner, process.api)
 }
 
 func (fixture *lifecycleSharedProcessFixture) execute(
 	t testing.TB,
 	inputs *support.CapturedInputs,
 	runner platformprocess.CommandRunner,
+	apiStarter platformhttpserver.Starter,
 ) error {
 	t.Helper()
-	if fixture == nil || fixture.process == nil || fixture.router == nil {
-		return errors.New("shared lifecycle process is unavailable")
-	}
 	if inputs == nil {
 		return errors.New("shared lifecycle invocation inputs are required")
+	}
+	return fixture.executeInput(inputs.Input, runner, apiStarter)
+}
+
+func (fixture *lifecycleSharedProcessFixture) executeInput(
+	input root.Input,
+	runner platformprocess.CommandRunner,
+	apiStarter platformhttpserver.Starter,
+) error {
+	if fixture == nil || fixture.process == nil || fixture.router == nil {
+		return errors.New("shared lifecycle process is unavailable")
 	}
 	if runner == nil {
 		return errors.New("shared lifecycle provider runner is required")
 	}
-	workingDirectory := filepath.Clean(inputs.Input.WorkingDirectory)
+	workingDirectory := filepath.Clean(input.WorkingDirectory)
 	if workingDirectory == "." || workingDirectory == "" {
-		return fmt.Errorf("shared lifecycle invocation working directory is invalid: %q", inputs.Input.WorkingDirectory)
+		return fmt.Errorf("shared lifecycle invocation working directory is invalid: %q", input.WorkingDirectory)
 	}
 
-	// Process.Execute is reusable, but the finite one-shot cohort is deliberately
+	// Process.Execute is reusable, but each package-local cohort is deliberately
 	// serialized so mutable invocation-owned runtime state never overlaps. The
-	// route and its runner remain installed only for this one Execute call.
+	// route and its effects remain installed only for this one Execute call.
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
-	if err := fixture.router.bind(workingDirectory, runner); err != nil {
+	if err := fixture.router.bind(workingDirectory, runner, apiStarter); err != nil {
 		return err
 	}
 	fixture.active.Add(1)
@@ -147,7 +232,7 @@ func (fixture *lifecycleSharedProcessFixture) execute(
 		fixture.active.Add(-1)
 		fixture.router.unbind(workingDirectory)
 	}()
-	return fixture.process.Execute(inputs.Input)
+	return fixture.process.Execute(input)
 }
 
 func (fixture *lifecycleSharedProcessFixture) close(ctx context.Context) error {
@@ -181,24 +266,27 @@ func (fixture *lifecycleSharedProcessFixture) close(ctx context.Context) error {
 	fixture.closeErr = errors.Join(closeErrors...)
 	fmt.Fprintf(
 		os.Stderr,
-		"C14 lifecycle shared topology: root_builds=%d process_executions=%d process_closes=%d active_invocations=%d provider_route_registers=%d provider_route_unbinds=%d provider_routes=%d provider_calls=%d\n",
+		"C14 lifecycle %s shared topology: root_builds=%d process_executions=%d process_closes=%d active_invocations=%d provider_route_registers=%d provider_route_unbinds=%d provider_routes=%d provider_calls=%d api_starts=%d\n",
+		fixture.label,
 		fixture.builds.Load(), fixture.executions.Load(), fixture.closes.Load(), fixture.active.Load(),
-		fixture.router.bindCount(), fixture.router.unbindCount(), fixture.router.routeCount(), fixture.router.callCount(),
+		fixture.router.bindCount(), fixture.router.unbindCount(), fixture.router.routeCount(), fixture.router.callCount(), fixture.router.apiStartCount(),
 	)
 	return fixture.closeErr
 }
 
 type lifecycleCommandRoute struct {
-	runner platformprocess.CommandRunner
+	runner     platformprocess.CommandRunner
+	apiStarter platformhttpserver.Starter
 }
 
 type lifecycleCommandRouter struct {
 	mu sync.Mutex
 
-	routes  map[string]lifecycleCommandRoute
-	binds   int
-	unbinds int
-	calls   int
+	routes    map[string]lifecycleCommandRoute
+	binds     int
+	unbinds   int
+	calls     int
+	apiStarts int
 }
 
 func newLifecycleCommandRouter() *lifecycleCommandRouter {
@@ -208,6 +296,7 @@ func newLifecycleCommandRouter() *lifecycleCommandRouter {
 func (router *lifecycleCommandRouter) bind(
 	workingDirectory string,
 	runner platformprocess.CommandRunner,
+	apiStarter platformhttpserver.Starter,
 ) error {
 	key := filepath.Clean(workingDirectory)
 	router.mu.Lock()
@@ -215,9 +304,30 @@ func (router *lifecycleCommandRouter) bind(
 	if _, exists := router.routes[key]; exists {
 		return fmt.Errorf("shared lifecycle provider route %q is already bound", key)
 	}
-	router.routes[key] = lifecycleCommandRoute{runner: runner}
+	router.routes[key] = lifecycleCommandRoute{runner: runner, apiStarter: apiStarter}
 	router.binds++
 	return nil
+}
+
+func (router *lifecycleCommandRouter) Start(
+	ctx context.Context,
+	request platformhttpserver.StartRequest,
+) error {
+	router.mu.Lock()
+	var route lifecycleCommandRoute
+	if len(router.routes) == 1 {
+		for _, candidate := range router.routes {
+			route = candidate
+		}
+	}
+	if route.apiStarter != nil {
+		router.apiStarts++
+	}
+	router.mu.Unlock()
+	if route.apiStarter == nil {
+		return errors.New("shared lifecycle API server route is not bound")
+	}
+	return route.apiStarter(ctx, request)
 }
 
 func (router *lifecycleCommandRouter) unbind(workingDirectory string) {
@@ -271,4 +381,16 @@ func (router *lifecycleCommandRouter) callCount() int {
 	return router.calls
 }
 
+func (router *lifecycleCommandRouter) apiStartCount() int {
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	return router.apiStarts
+}
+
 var _ platformprocess.CommandRunner = (*lifecycleCommandRouter)(nil)
+var _ platformhttpserver.Starter = func(
+	ctx context.Context,
+	request platformhttpserver.StartRequest,
+) error {
+	return (&lifecycleCommandRouter{}).Start(ctx, request)
+}
