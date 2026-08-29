@@ -48,6 +48,7 @@ type packagedACPInitializeFixture struct {
 // portion must launch the exact allowlisted executable boundary. The profile
 // fixture checks remain root-free shareable asset evidence.
 func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
+	t.Parallel()
 	var catalog packagedACPConformanceCatalog
 	if err := json.Unmarshal(modelproviders.RuntimeACPJSON(), &catalog); err != nil {
 		t.Fatalf("decode generated ACP runtime catalog: %v", err)
@@ -74,13 +75,13 @@ func TestPackagedACPProfilesUseSharedConformanceBehavior(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{Name: "packaged ACP conformance", WorkTypeID: "task"})
 	writeACPWorker(t, dir, entry.Name)
-	t.Setenv(acpHelperEnvironment, "package-conformance")
 	release := filepath.Join(t.TempDir(), "acp-peer-release")
-	t.Setenv(acpPackageConformanceReleaseEnvironment, release)
+	fixture := functionalACPFixture("package-conformance")
+	fixture.PackageConformanceReleasePath = release
 
 	var starts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: packagedACPCommandFactory(catalog.ACP, &starts),
+		PlatformProcessCommandFactory: packagedACPCommandFactory(catalog.ACP, &starts, fixture),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second, func() {
 		if err := os.WriteFile(release, []byte("completed Work observed"), 0o600); err != nil {
@@ -111,7 +112,11 @@ func readPackagedACPInitializeFixture(t *testing.T, providerID string) packagedA
 	return fixture
 }
 
-func packagedACPCommandFactory(entries []packagedACPConformanceEntry, starts *atomic.Int32) platformprocess.CommandFactory {
+func packagedACPCommandFactory(
+	entries []packagedACPConformanceEntry,
+	starts *atomic.Int32,
+	fixture acpFixtureConfig,
+) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		for _, entry := range entries {
 			parts := strings.Fields(entry.Command)
@@ -119,7 +124,7 @@ func packagedACPCommandFactory(entries []packagedACPConformanceEntry, starts *at
 				continue
 			}
 			starts.Add(1)
-			return exec.Command(os.Args[0], "-test.run=^TestACPAgentHelperProcess$")
+			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixture)...)
 		}
 		// The generated projection is the complete allowlist for this fixture.
 		// An unexpected command must fail inside the test binary rather than

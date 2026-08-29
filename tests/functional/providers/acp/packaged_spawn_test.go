@@ -21,7 +21,8 @@ import (
 // Isolation: isolated-with-reason - persistent connection count; the packaged
 // workflow must use one real ACP stdio peer across all four agent sessions.
 func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "spawn")
+	t.Parallel()
+	fixture := functionalACPFixture("spawn")
 	var starts atomic.Int32
 	homeDir := t.TempDir()
 	configDir := filepath.Join(homeDir, ".you-agent-factory")
@@ -38,7 +39,7 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 		WaitForServiceModeRuntime: true,
 		Env:                       packagedACPEnvironment(homeDir),
 		Edges: serviceedges.Edges{
-			PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+			PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 			ProvidersExecutableLocator:    availableExecutableLocator{},
 			ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{
 				Provider: "cursor-acp",

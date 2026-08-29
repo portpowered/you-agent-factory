@@ -68,7 +68,7 @@ func runACPSharedEligibleBehavior(t *testing.T, fixture *acpSharedProcessFixture
 
 func runACPSharedBaseline(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "shared-spine")
+	fixture.usePeerMode("shared-spine")
 	success := fixture.openSession(t)
 	failure := fixture.openSession(t)
 
@@ -85,7 +85,7 @@ func runACPSharedBaseline(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedExecutorProvider(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	legacyCalls := fixture.legacy.calls.Load()
 	session := fixture.openSession(t)
 	run := session.run(t, "acp-vertical-slice", "ACP vertical slice")
@@ -104,7 +104,7 @@ func runACPSharedExecutorProvider(t *testing.T, fixture *acpSharedProcessFixture
 
 func runACPSharedGenericFailure(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "fail")
+	fixture.usePeerMode("fail")
 	session := fixture.openSession(t)
 	run := session.run(t, "generic-protocol-failure", "generic protocol failure")
 	assertACPSharedFailure(t, run)
@@ -114,7 +114,7 @@ func runACPSharedGenericFailure(t *testing.T, fixture *acpSharedProcessFixture) 
 
 func runACPSharedLegacyExecutor(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	session := fixture.openSessionWith(t, func(t *testing.T, dir string) {
 		writeLegacyACPWorker(t, dir, "cursor-acp")
 	})
@@ -125,7 +125,7 @@ func runACPSharedLegacyExecutor(t *testing.T, fixture *acpSharedProcessFixture) 
 
 func runACPSharedConfiguredProvider(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	session := fixture.openSessionWith(t, func(t *testing.T, dir string) {
 		writeACPWorker(t, dir, "custom-acp")
 	})
@@ -139,7 +139,7 @@ func runACPSharedConfiguredProvider(t *testing.T, fixture *acpSharedProcessFixtu
 
 func runACPSharedCancellation(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "cancelled-response")
+	fixture.usePeerMode("cancelled-response")
 	session := fixture.openSession(t)
 	run := session.run(t, "self-cancel", "ACP self-reported cancellation")
 	if got := support.CountWorkAtCustomerState(run.listed, "task:failed"); got != 1 {
@@ -151,7 +151,7 @@ func runACPSharedCancellation(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedResponseEvents(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	session := fixture.openSession(t)
 	run := session.runRequest(t, sharedACPSubmitRequest("response-events", "ACP response events"), true)
 	if got := support.CountWorkAtCustomerState(run.listed, "task:done"); got != 1 {
@@ -166,7 +166,7 @@ func runACPSharedResponseEvents(t *testing.T, fixture *acpSharedProcessFixture) 
 
 func runACPSharedPartialFailure(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "fail")
+	fixture.usePeerMode("fail")
 	session := fixture.openSession(t)
 	run := session.run(t, "partial-failure", "ACP partial failure")
 	if got := support.CountWorkAtCustomerState(run.listed, "task:failed"); got != 1 {
@@ -178,7 +178,7 @@ func runACPSharedPartialFailure(t *testing.T, fixture *acpSharedProcessFixture) 
 
 func runACPSharedAuthentication(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "auth")
+	fixture.usePeerMode("auth")
 	session := fixture.openSession(t)
 	run := session.run(t, "authentication", "ACP auth")
 	if got := support.CountWorkAtCustomerState(run.listed, "task:failed"); got != 1 {
@@ -204,7 +204,7 @@ func runACPSharedAuthentication(t *testing.T, fixture *acpSharedProcessFixture) 
 
 func runACPSharedModel(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "model")
+	fixture.usePeerMode("model")
 	session := fixture.openSession(t)
 	run := session.run(t, "model-config", "ACP model config")
 	if got := support.CountWorkAtCustomerState(run.listed, "task:done"); got != 1 {
@@ -215,7 +215,7 @@ func runACPSharedModel(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedResource(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "resource")
+	fixture.usePeerMode("resource")
 	contentType := "image/png"
 	label := "fixture"
 	part := factoryapi.WorkContentPart{}
@@ -243,7 +243,7 @@ func runACPSharedResource(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedBTRCSuccess(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	session := fixture.openSession(t)
 	run := session.run(t, "btrc-success", "ACP target characterization")
 	workID, dispatchID := assertBTRCACPDispatch(t, run.events, factoryapi.WorkOutcomeAccepted, "done")
@@ -256,7 +256,7 @@ func runACPSharedBTRCSuccess(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedBTRCFailure(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "fail")
+	fixture.usePeerMode("fail")
 	session := fixture.openSession(t)
 	run := session.run(t, "btrc-failure", "ACP target characterization")
 	workID, dispatchID := assertBTRCACPDispatch(t, run.events, factoryapi.WorkOutcomeFailed, "failed")
@@ -271,8 +271,7 @@ func runACPSharedBTRCFailure(t *testing.T, fixture *acpSharedProcessFixture) {
 func runACPSharedInputContent(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
 	const sentinel = "ACP_INPUT_WORK_CONTENT_9f31"
-	t.Setenv(acpHelperEnvironment, "content")
-	t.Setenv("YOU_TEST_ACP_CONTENT_SENTINEL", sentinel)
+	fixture.usePeerContentMode(sentinel)
 	session := fixture.openSession(t)
 	run := session.run(t, "input-content", sentinel)
 	if got := support.CountWorkAtCustomerState(run.listed, "task:done"); got != 1 {
@@ -371,7 +370,7 @@ func runACPSharedCatalogInit(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedJavaScriptACP(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	dir := writeACPJavaScriptFactory(t)
 	inputs := sharedACPJavaScriptInputs(t, fixture, dir, "you", "--json", "run", "--factory", "./acp.js", "--no-record")
 	starts := fixture.peerStarts.Load()
@@ -394,7 +393,7 @@ func runACPSharedJavaScriptACP(t *testing.T, fixture *acpSharedProcessFixture) {
 
 func runACPSharedMixedRouting(t *testing.T, fixture *acpSharedProcessFixture) {
 	t.Helper()
-	t.Setenv(acpHelperEnvironment, "1")
+	fixture.usePeerMode("1")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	factory := `{
   "name":"mixed-acp-native",

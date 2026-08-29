@@ -25,6 +25,7 @@ import (
 // Isolation: isolated-with-reason - OS start failure; sharing would replace
 // the refused real command boundary with an already-started peer.
 func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -57,6 +58,7 @@ func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 // Isolation: isolated-with-reason - subprocess stderr; sharing would make the
 // configured secret and peer-owned diagnostic stream non-independent.
 func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP stderr redaction"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -64,11 +66,11 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "workstations", "process", "AGENTS.md"), workstation, 0o600); err != nil {
 		t.Fatalf("write ACP workstation environment: %v", err)
 	}
-	t.Setenv(acpHelperEnvironment, "stderr")
+	fixture := functionalACPFixture("stderr")
 
 	var starts atomic.Int32
 	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -104,14 +106,15 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 		{mode: "version", want: factoryapi.WorkFailureTypeMisconfigured},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
+			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP failure"}`))
 			writeACPWorker(t, dir, "cursor-acp")
-			t.Setenv(acpHelperEnvironment, test.mode)
+			fixture := functionalACPFixture(test.mode)
 
 			var starts atomic.Int32
 			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-				PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+				PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 				ProvidersExecutableLocator:    availableExecutableLocator{},
 			}, 20*time.Second)
 			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -128,13 +131,14 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 // Isolation: isolated-with-reason - executable lookup; sharing would remove
 // the zero-start proof that lookup fails before the ACP process boundary.
 func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *testing.T) {
+	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"missing ACP executable"}`))
 	writeACPWorker(t, dir, "cursor-acp")
 
 	var starts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
 		ProvidersExecutableLocator:    missingExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {

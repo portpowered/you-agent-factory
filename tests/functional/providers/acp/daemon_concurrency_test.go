@@ -14,15 +14,16 @@ import (
 // Isolation: isolated-with-reason - connection serialization; two concurrent
 // prompts must contend for one real ACP stdio connection and one peer.
 func TestProvidersACPSerializesConcurrentPromptsOnOneStdioConnection(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "serialize")
+	t.Parallel()
 	signals := t.TempDir()
 	promptHeld := filepath.Join(signals, "prompt-started")
 	release := filepath.Join(signals, "release")
-	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", promptHeld)
-	t.Setenv("YOU_TEST_ACP_RELEASE_SIGNAL", release)
+	fixture := functionalACPFixture("serialize")
+	fixture.PromptSignalPath = promptHeld
+	fixture.PromptReleasePath = release
 
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 	results := make(chan struct {
 		response factoryapi.FactorySessionSyncExecutionResponse

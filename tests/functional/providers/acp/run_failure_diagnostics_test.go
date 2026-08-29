@@ -26,12 +26,12 @@ func TestYouRunMapsGoldenSessionAndConfigRPCFailuresToTerminalWork(t *testing.T)
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP failure"}`))
 			writeACPWorker(t, dir, "cursor-acp")
-			t.Setenv(goldenACPModeEnvironment, test.mode)
+			fixture := goldenACPFixture(test.mode)
 			t.Setenv("YOU_ACP_GOLDEN_SENTINEL", "preserved")
 
 			var starts atomic.Int32
 			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-				PlatformProcessCommandFactory: goldenACPCommandFactory(&starts),
+				PlatformProcessCommandFactory: goldenACPCommandFactory(&starts, fixture),
 				ProvidersExecutableLocator:    availableExecutableLocator{},
 			}, 20*time.Second)
 			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {

@@ -20,19 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const (
-	acpHelperEnvironment                    = "YOU_TEST_ACP_AGENT_HELPER"
-	acpRetryAttemptDirectoryEnvironment     = "YOU_TEST_ACP_RETRY_ATTEMPT_DIR"
-	acpRetryHoldEnvironment                 = "YOU_TEST_ACP_RETRY_HOLD"
-	acpDisconnectMarkerEnvironment          = "YOU_TEST_ACP_DISCONNECT_MARKER"
-	acpDisconnectReadyEnvironment           = "YOU_TEST_ACP_DISCONNECT_READY"
-	acpDisconnectReleaseEnvironment         = "YOU_TEST_ACP_DISCONNECT_RELEASE"
-	acpPackageConformanceReleaseEnvironment = "YOU_TEST_ACP_PACKAGE_CONFORMANCE_RELEASE"
-	acpHelperStartMarkerEnvironment         = "YOU_TEST_ACP_HELPER_START_MARKER"
-	acpHelperExitMarkerEnvironment          = "YOU_TEST_ACP_HELPER_EXIT_MARKER"
-	acpHelperReadyMarkerEnvironment         = "YOU_TEST_ACP_HELPER_READY_MARKER"
-)
-
 // TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
 // Factory execution path through an ACP server error. The helper accepts a
 // fresh session only before it writes the failure marker, then accepts only
@@ -50,16 +37,16 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry ACP through its prior session"}`))
 	writeACPWorker(t, dir, providerID)
-	t.Setenv(acpHelperEnvironment, "retry-resume")
 	retryAttemptDir := t.TempDir()
 	retryHoldMarker := filepath.Join(retryAttemptDir, "first-prompt-held")
-	t.Setenv(acpRetryHoldEnvironment, retryHoldMarker)
-	t.Setenv(acpRetryAttemptDirectoryEnvironment, retryAttemptDir)
-	t.Setenv("YOU_TEST_ACP_SESSION_ID", sessionID)
+	retryFixture := functionalACPFixture("retry-resume")
+	retryFixture.SessionID = sessionID
+	retryFixture.RetryAttemptDirectory = retryAttemptDir
+	retryFixture.RetryHoldPath = retryHoldMarker
 
 	var processStarts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: retryACPCommandFactory(&processStarts, retryAttemptDir),
+		PlatformProcessCommandFactory: retryACPCommandFactory(&processStarts, retryFixture),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second, func(home string) {
 		configDir := filepath.Join(home, ".you-agent-factory")
@@ -122,7 +109,7 @@ func assertProviderSessionID(t *testing.T, events []factoryapi.FactoryEvent, pro
 func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 	var processStarts atomic.Int32
 	_ = support.BuildProcess(t, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts, functionalACPFixture("1")),
 	})
 	if got := processStarts.Load(); got != 0 {
 		t.Fatalf("ACP process starts during root construction = %d, want 0", got)
@@ -139,7 +126,7 @@ func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	var processStarts atomic.Int32
 	fallback := &legacyProvider{response: providers.ExecuteResult{Content: "legacy COMPLETE"}}
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts, functionalACPFixture("1")),
 		ProviderOverride:              fallback,
 	}, 20*time.Second)
 
@@ -183,17 +170,24 @@ func writeLegacyACPWorker(t *testing.T, factoryDir, providerID string) {
 	}
 }
 
-func acpHelperCommandFactory(starts *atomic.Int32) platformprocess.CommandFactory {
+func acpHelperCommandFactory(starts *atomic.Int32, fixture acpFixtureConfig) platformprocess.CommandFactory {
+	return acpHelperCommandFactoryWithProvider(starts, func() acpFixtureConfig { return fixture })
+}
+
+func acpHelperCommandFactoryWithProvider(
+	starts *atomic.Int32,
+	fixtureProvider func() acpFixtureConfig,
+) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if (name == "cursor-agent" || name == "custom-agent") && len(args) == 1 && args[0] == "acp" {
 			starts.Add(1)
-			return exec.Command(os.Args[0], "-test.run=^TestACPAgentHelperProcess$")
+			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixtureProvider())...)
 		}
 		return exec.Command(name, args...)
 	}
 }
 
-func retryACPCommandFactory(starts *atomic.Int32, attemptDir string) platformprocess.CommandFactory {
+func retryACPCommandFactory(starts *atomic.Int32, fixture acpFixtureConfig) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if name != "custom-agent" || !sameStringSlice(args, []string{"acp"}) {
 			return exec.Command(name, args...)
@@ -205,8 +199,8 @@ func retryACPCommandFactory(starts *atomic.Int32, attemptDir string) platformpro
 		// the highest phase file after the process has started; this makes the
 		// first failure and resumed second process deterministic without a prompt
 		// marker race.
-		_ = os.WriteFile(filepath.Join(attemptDir, strconv.Itoa(int(attempt))), []byte("started"), 0o600)
-		return exec.Command(os.Args[0], "-test.run=^TestACPAgentHelperProcess$")
+		_ = os.WriteFile(filepath.Join(fixture.RetryAttemptDirectory, strconv.Itoa(int(attempt))), []byte("started"), 0o600)
+		return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixture)...)
 	}
 }
 
@@ -292,25 +286,33 @@ func (p *legacyProvider) Continue(ctx context.Context, request providers.Continu
 // inert target unless a parent deliberately supplies a recognized mode, while
 // parent tests own all ACP protocol assertions.
 func TestACPAgentHelperProcess(t *testing.T) {
-	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "package-conformance" && mode != "resource" && mode != "content" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" && mode != "serialize" && mode != "crash-once" && mode != "spawn" && mode != "tournament" && mode != "cancelled-response" && mode != "resume" && mode != "resume-not-found" && mode != "retry-resume" && mode != "disconnect-once" && mode != "shared-spine" {
+	fixture, present, err := loadACPFixtureFromArgs()
+	if !present {
 		return
 	}
-	recordACPHelperPID(acpHelperStartMarkerEnvironment)
-	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {
+	if err != nil {
 		_, _ = os.Stderr.WriteString(err.Error() + "\n")
-		recordACPHelperPID(acpHelperExitMarkerEnvironment)
 		os.Exit(2)
 	}
-	recordACPHelperPID(acpHelperExitMarkerEnvironment)
+	if fixture.Kind != acpFixtureKindFunctional {
+		_, _ = fmt.Fprintf(os.Stderr, "acp fixture kind %q does not select the functional peer\n", fixture.Kind)
+		os.Exit(2)
+	}
+	recordACPHelperPID(fixture.HelperStartMarkerPath)
+	if err := runFunctionalRPCPeer(fixture, os.Stdin, os.Stdout, os.Stderr); err != nil {
+		_, _ = os.Stderr.WriteString(err.Error() + "\n")
+		recordACPHelperPID(fixture.HelperExitMarkerPath)
+		os.Exit(2)
+	}
+	recordACPHelperPID(fixture.HelperExitMarkerPath)
 	os.Exit(0)
 }
 
 // recordACPHelperPID is enabled only by the shared-process witness. Its
 // append-only marker gives the parent the child identity needed to observe the
 // actual OS process boundary before reusing the provider integration.
-func recordACPHelperPID(environment string) {
-	marker := strings.TrimSpace(os.Getenv(environment))
+func recordACPHelperPID(marker string) {
+	marker = strings.TrimSpace(marker)
 	if marker == "" {
 		return
 	}
@@ -329,9 +331,9 @@ func recordACPHelperPID(environment string) {
 // Without this checkpoint, the child can exit while the ACP SDK is still
 // draining the prompt's notifications and turn a valid response into a
 // transport failure.
-func holdACPHelperUntilReleased() error {
-	readyMarker := strings.TrimSpace(os.Getenv(acpHelperReadyMarkerEnvironment))
-	if strings.TrimSpace(os.Getenv(acpHelperExitMarkerEnvironment)) == "" || readyMarker == "" {
+func holdACPHelperUntilReleased(fixture acpFixtureConfig) error {
+	readyMarker := strings.TrimSpace(fixture.HelperReadyMarkerPath)
+	if strings.TrimSpace(fixture.HelperExitMarkerPath) == "" || readyMarker == "" {
 		return nil
 	}
 

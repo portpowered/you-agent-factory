@@ -13,12 +13,14 @@ import (
 
 // Isolation: isolated-with-reason - crash and replacement; the failed first
 // child and successful second child must remain distinct real ACP processes.
+// Keep this witness serial: its second invocation depends on the provider
+// daemon retiring the crashed connection before selecting the replacement.
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "crash-once")
 	marker := filepath.Join(t.TempDir(), "crashed")
-	t.Setenv("YOU_TEST_ACP_CRASH_MARKER", marker)
+	fixture := functionalACPFixture("crash-once")
+	fixture.CrashMarkerPath = marker
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 	first, err := invokeACPDaemonWorkflow(t, server, "crash", singleACPAgentWorkflow)
 	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
@@ -35,17 +37,19 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 
 // Isolation: isolated-with-reason - connection retirement; a live child closes
 // stdout and a replacement must be selected rather than reusing stale stdio.
+// This shares the crash witness's serial lifecycle boundary: the replacement
+// invocation must follow observed retirement of the first connection.
 func TestProvidersACPRetiresDisconnectedConnectionBeforeReuse(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "disconnect-once")
 	dir := t.TempDir()
 	disconnectMarker := filepath.Join(dir, "disconnected")
 	readyMarker := filepath.Join(dir, "response-ready")
 	releaseMarker := filepath.Join(dir, "release")
-	t.Setenv(acpDisconnectMarkerEnvironment, disconnectMarker)
-	t.Setenv(acpDisconnectReadyEnvironment, readyMarker)
-	t.Setenv(acpDisconnectReleaseEnvironment, releaseMarker)
+	fixture := functionalACPFixture("disconnect-once")
+	fixture.DisconnectMarkerPath = disconnectMarker
+	fixture.DisconnectReadyPath = readyMarker
+	fixture.DisconnectReleasePath = releaseMarker
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 
 	first, err := invokeACPDaemonWorkflow(t, server, "disconnect-first", singleACPAgentWorkflow)
