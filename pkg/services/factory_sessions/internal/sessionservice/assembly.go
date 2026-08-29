@@ -519,27 +519,6 @@ func selectCompletionSessionIdentity(factorySessionID string, startupSpec factor
 	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
 }
 
-func retainedRuntimeMetricsSessionIDs(currentID, sourceID string) []string {
-	ids := make([]string, 0, 2)
-	for _, candidate := range []string{currentID, sourceID} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" {
-			continue
-		}
-		alreadyRetained := false
-		for _, retained := range ids {
-			if retained == candidate {
-				alreadyRetained = true
-				break
-			}
-		}
-		if !alreadyRetained {
-			ids = append(ids, candidate)
-		}
-	}
-	return ids
-}
-
 type definitionHost struct {
 	runtime *SessionRuntime
 }

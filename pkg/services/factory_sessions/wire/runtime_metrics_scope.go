@@ -11,7 +11,9 @@ import (
 // NewRuntimeMetricsScopeResolver constructs the Factory Sessions-owned
 // retained-scope operation used by the base metrics and Costs adapters.
 func NewRuntimeMetricsScopeResolver(
-	reader factorysessions.RuntimeMetricsScopeSessionReader,
+	reader interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	},
 ) factorysessions.RuntimeMetricsScopeResolver {
 	if reader == nil {
 		return nil
@@ -20,7 +22,9 @@ func NewRuntimeMetricsScopeResolver(
 }
 
 type runtimeMetricsScopeResolver struct {
-	reader factorysessions.RuntimeMetricsScopeSessionReader
+	reader interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	}
 }
 
 func (resolver runtimeMetricsScopeResolver) ResolveRuntimeMetricsScope(

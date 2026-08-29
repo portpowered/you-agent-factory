@@ -28,6 +28,13 @@ type InvocationMetric = internalcontracts.InvocationMetric
 // sessions, and session-owned invocation requests.
 type SessionIDGenerator = internalcontracts.SessionIDGenerator
 
+// RuntimeMetricsScope and RuntimeMetricsScopeResolver are implementation
+// contracts published here as aliases so the Factory Sessions root retains its
+// singular service-interface inventory.
+type RuntimeMetricsScope = internalcontracts.RuntimeMetricsScope
+
+type RuntimeMetricsScopeResolver = internalcontracts.RuntimeMetricsScopeResolver
+
 // Effect-port contracts are published from the Sessions root as aliases so
 // peers and Wire bind through factorysessions names without adding service
 // authorities to the root.

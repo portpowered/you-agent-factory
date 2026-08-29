@@ -382,14 +382,7 @@ func buildBundle(
 		return nil, err
 	}
 	metricsSessionID := firstNonEmptySessionID(spec.MetricsSessionID, sessionID)
-	workerSessionsFactory, err = prepareBundleExecution(
-		workerSessionsFactory,
-		providerSessionProgress,
-	)
-	if err != nil {
-		return nil, err
-	}
-	workerServiceWithProgress := newRuntimeWorkersService(
+	workerServiceWithProgress, workerSessionsFactory, err := prepareRuntimeBundleWorkers(
 		workerExecution,
 		providerSessionProgress,
 		spec,
@@ -398,7 +391,11 @@ func buildBundle(
 		invocationSkipPermissionsOverride,
 		runtimeFactory,
 		mockWorkersConfig,
+		workerSessionsFactory,
 	)
+	if err != nil {
+		return nil, err
+	}
 	bundle, err := runtimeFactory.Build(
 		ctx,
 		spec.Dir,
@@ -445,6 +442,37 @@ func buildBundle(
 	setReplayEvents(bundle.Factory, spec.ReplayEvents)
 	setBundleProgressPublisher(bundle, providerSessionProgress.Publish)
 	return bundle, nil
+}
+
+func prepareRuntimeBundleWorkers(
+	workerExecution workers.Service,
+	providerSessionProgress *workersessions.ProviderSessionObservationPublisher,
+	spec runtimebuild.SessionBuildSpec,
+	sessionID string,
+	skipBuiltInPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	runtimeFactory *RuntimeFactory,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	workerSessionsFactory factory.WorkerSessionsFactory,
+) (workers.Service, factory.WorkerSessionsFactory, error) {
+	var err error
+	workerSessionsFactory, err = prepareBundleExecution(
+		workerSessionsFactory,
+		providerSessionProgress,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return newRuntimeWorkersService(
+		workerExecution,
+		providerSessionProgress,
+		spec,
+		sessionID,
+		skipBuiltInPrerequisiteValidation,
+		invocationSkipPermissionsOverride,
+		runtimeFactory,
+		mockWorkersConfig,
+	), workerSessionsFactory, nil
 }
 
 func newRuntimeWorkersService(

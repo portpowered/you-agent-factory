@@ -2,12 +2,35 @@
 package service
 
 import (
+	"strings"
+
 	factorymetrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
+
+func retainedRuntimeMetricsSessionIDs(currentID, sourceID string) []string {
+	ids := make([]string, 0, 2)
+	for _, candidate := range []string{currentID, sourceID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		alreadyRetained := false
+		for _, retained := range ids {
+			if retained == candidate {
+				alreadyRetained = true
+				break
+			}
+		}
+		if !alreadyRetained {
+			ids = append(ids, candidate)
+		}
+	}
+	return ids
+}
 
 // Runtime metric names emitted by the transport runtime host.
 const (

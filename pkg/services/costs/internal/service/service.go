@@ -93,26 +93,9 @@ func (service *Service) QueryCosts(
 		)
 		return costs.Report{}, err
 	}
-	metrics, err := service.metrics.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
-		MetricsRoot:       strings.TrimSpace(request.MetricsRoot),
-		SessionID:         sessionID,
-		SessionIDs:        normalizedRetainedFactorySessionIDs(request.RetainedFactorySessionIDs),
-		RuntimeInstanceID: runtimeID,
-	})
+	metrics, err := service.queryRuntimeMetrics(ctx, request, sessionID, runtimeID, scope)
 	if err != nil {
-		wrapped := &costs.QueryError{
-			Kind:    costs.QueryErrorMetricsFailed,
-			Message: "query runtime costs: query canonical runtime metrics",
-			Cause:   err,
-		}
-		service.logger.Error(
-			"runtime costs query failed",
-			"scope_kind", scope.Kind,
-			"factory_session_id", sessionID,
-			"status", "METRICS_ERROR",
-			"error_kind", queryErrorKind(wrapped),
-		)
-		return costs.Report{}, wrapped
+		return costs.Report{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return costs.Report{}, err
@@ -148,6 +131,37 @@ func (service *Service) QueryCosts(
 		"unpriced_provider_models", report.Coverage.UnpricedProviderModels,
 	)
 	return report, nil
+}
+
+func (service *Service) queryRuntimeMetrics(
+	ctx context.Context,
+	request costs.QueryRequest,
+	sessionID string,
+	runtimeID string,
+	scope costs.Scope,
+) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+	metrics, err := service.metrics.QueryRuntimeMetrics(ctx, factoryvisualization.RuntimeMetricsQueryRequest{
+		MetricsRoot:       strings.TrimSpace(request.MetricsRoot),
+		SessionID:         sessionID,
+		SessionIDs:        normalizedRetainedFactorySessionIDs(request.RetainedFactorySessionIDs),
+		RuntimeInstanceID: runtimeID,
+	})
+	if err == nil {
+		return metrics, nil
+	}
+	wrapped := &costs.QueryError{
+		Kind:    costs.QueryErrorMetricsFailed,
+		Message: "query runtime costs: query canonical runtime metrics",
+		Cause:   err,
+	}
+	service.logger.Error(
+		"runtime costs query failed",
+		"scope_kind", scope.Kind,
+		"factory_session_id", sessionID,
+		"status", "METRICS_ERROR",
+		"error_kind", queryErrorKind(wrapped),
+	)
+	return factoryvisualization.RuntimeMetricsQueryResult{}, wrapped
 }
 
 func (service *Service) readPriceTables(path string) (providers.PriceTable, operatorsettings.PriceTable, error) {

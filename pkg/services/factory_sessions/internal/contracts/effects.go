@@ -1,6 +1,7 @@
 package contracts
 
 import (
+	"context"
 	"io"
 	"io/fs"
 )
@@ -45,6 +46,23 @@ type RuntimePersistenceFileSystem interface {
 
 type InvocationMetricsRecorder interface {
 	RecordInvocationMetric(InvocationMetric)
+}
+
+// RuntimeMetricsScope is the Factory Sessions-owned identity set used to
+// select one live or resumed runtime metrics lineage. The requested ID is the
+// public selector; retained IDs are canonical persisted identities only.
+type RuntimeMetricsScope struct {
+	RequestedFactorySessionID string
+	RetainedFactorySessionIDs []string
+}
+
+// RuntimeMetricsScopeResolver resolves a public Factory Session selector to
+// the exact retained canonical identities that base metrics and Costs must
+// query. It is kept in the implementation-facing contracts package so the
+// public Sessions root can publish it as an alias without adding another
+// named service interface.
+type RuntimeMetricsScopeResolver interface {
+	ResolveRuntimeMetricsScope(context.Context, string) (RuntimeMetricsScope, error)
 }
 
 type ModelPullMetricsRecorder interface {
