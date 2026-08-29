@@ -188,3 +188,89 @@ absence, race safety, package timings, complete scope, or clean-room behavior;
 those edges remain assigned to `PARITY-RESEARCH`, `FAILURE-RESEARCH`,
 `RECOVERY-RESEARCH`, `PARITY-FLOW`, `REPLAY-FLOW`, `CLEAN-C11`, `RACE-C11`,
 `PERF-C11`, `SCOPE-C11`, and `VAL-C11` in the PRD.
+
+## Story 004 validation loopback
+
+This report follows `factory/docs/standards/validation-loopback-template.md`.
+It is read-only on package code: the Full Flow repair was already delivered by
+Story 003, and this story records the exact-head evidence without silently
+repairing a validation result.
+
+### Environment and artifact
+
+- Commit/build identifier: rebased candidate delivered code head
+  `fbe56dbff7748c83ddfd5b09ddc3b0f8ac873960`; the final ledger commit adds
+  documentation only and does not change the tested runtime tree.
+- Environment and configuration: Go 1.25.0, Windows/amd64, 24 CPUs; each
+  procedure ran from a fresh detached worktree at the candidate head. The
+  package command used the normal test configuration and `-count=1`.
+- Customer entry point: the four packaged functional test packages through
+  `root.BuildProcess`/`Process.Execute`, public Factory Session/API
+  boundaries, local filesystem/Git worktrees, and retained Factory Event
+  reads.
+- Real and substituted dependencies: local-real application composition,
+  Factory Sessions, event retention, filesystem, and Git/worktrees; controlled
+  `ProviderCommandRunner` edges and injected `httptest` API listeners; no
+  remote provider, Git, or paid service.
+- Cost/call budget used: remote calls 0, paid calls 0, cost $0; all provider
+  outputs were local synthetic controlled-command results.
+
+### Project criteria
+
+| Criterion | Result | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Combined four-package behavior | **PASS** | From the detached rebased candidate worktree, `go test ./tests/functional/factory/packaged/deep_research ./tests/functional/factory/packaged/full_flow ./tests/functional/factory/packaged/fusion ./tests/functional/factory/packaged/javascript_families -count=1 -v` exited 0. Package timings were Deep Research 3.935s, Full Flow 9.377s, Fusion 2.898s, and JavaScript Families 2.892s. | Remote provider/model availability and exhaustive schedules. |
+| `CLEAN-C11` lifecycle and teardown | **PASS** | The verbose exact-head run exited 0 and emitted Deep Research `process_starts=1 explicit_sessions_opened=5 explicit_sessions_closed=5 unique_session_ids=5 scenario_roots_removed=5 runtime_artifacts=0`, Full Flow `1/4/4/4`, Fusion `1/3/3/3`, and JavaScript Families `1/4/4/4`; each fixture also verified deleted-session 404s, listener rejection after process close, and test-owned root removal. Full Flow reported `isolated_rows=1` for its private Git/worktree scenario, not residue. | The harness has no independent OS-wide port enumeration; runtime artifacts and listener ownership are covered by the injected listener/process cleanup probes. |
+| `RACE-C11` and useful repeat | **PASS** | Final ledger-inclusive-head four-package `-count=2` repeat exited 0 (Deep Research 8.434s, Full Flow 19.172s, Fusion 5.622s, JavaScript Families 6.068s). Final-head `go test -race ./tests/functional/factory/packaged/full_flow -run '^TestPackagedFullFlow$' -count=1` exited 0 in 81.103s. | Exhaustive concurrent schedules and remote dependency races. |
+| `PERF-C11` topology and direction | **PASS** | The characterized five-host topology (four package hosts plus the former separate Full Flow worktree host) is now four package hosts: Deep Research, Full Flow, Fusion, and JavaScript Families. Full Flow is two hosts to one, and the cohort is five to four. The measured package timings above were lower than the recovered C03 medians (14.884s, 20.169s, 7.928s, 10.531s respectively) in this local run; this is directional evidence only, with no portable wall-clock, variance, or quiet-host threshold. | Production-scale latency and a clean-host benchmark. |
+| `SCOPE-C11` and recovered ancestry | **PASS** | Against the rebased integration base `9f68f37775801071a5b0880ddb46f452522fe547`, the three-dot diff listed only this C11 ledger plus `tests/functional/factory/packaged/full_flow/invocation_test.go` and `shared_fixture_test.go`; `git diff --check origin/main...HEAD` exited 0. `git merge-base --is-ancestor` exited 0 for recovered merges #2323 (`cca0cdc4ef14a054e41d1c0ffead82900d1e4b53`), #2333 (`84285f9a956b3f97d3e5cc64111a4635d21fc7aa`), and #2339 (`56eed9d6f23f2255bf5a021aa663b8b6387ea943`). | Review-stage conflict resolution, terminal CI, and merge. |
+| Security/privacy/cost and applicability | **PASS** | Manual scope review found synthetic data only, validated test-owned cleanup paths, no credentials in the changed files or test output recorded here, remote calls 0, paid calls 0, and cost $0. No UI changed, so accessibility, keyboard, browser, responsive, and localization checks are not applicable. | Remote/paid validation remains unauthorized and out of scope. |
+
+### Customer journey
+
+1. A clean detached worktree was created at the rebased candidate code head.
+   The
+   combined four-package command passed and exercised all 19 reconciled rows:
+   public results and failures, Work/dispatch/Factory Event assertions,
+   schema retry, provider/model selection, fanout/order, local Git commits and
+   worktree merges, replan, caller bounds, and retained cursor replay.
+2. The verbose run's lifecycle artifacts showed one application host per
+   package and balanced explicit non-default Factory Sessions: 5 + 4 + 3 + 4
+   opened and closed, with 16 unique session IDs and 16 removed scenario roots
+   overall. Each closed session returned 404 and each process listener rejected
+   `/status` after shutdown.
+3. The repeat and Full Flow race procedures passed. The temporary validation
+   worktrees were removed after each command; no validation artifact was
+   committed.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the canonical C11 ledger is under
+  `docs/internal/development/functional-test-optimization/` and links the
+  required validation template and recovered PR evidence.
+- Permission and error behavior: the existing story-owned assertions retained
+  public failed states, bounded failures, and deleted-session not-found
+  behavior; no authorization surface changed.
+- Persistence/reload behavior: local Factory persistence, retained event reads,
+  stale packaged-definition refresh, schema retry, and Full Flow Git state are
+  covered by the package matrix and prior story evidence.
+- Accessibility/keyboard/responsive behavior: not applicable; no visible UI
+  changed.
+- Operational signals: package lifecycle logs expose process starts, session
+  balance, unique IDs, removed roots, runtime artifacts, and isolated-row
+  status; package timings and race results are recorded above.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| `VAL-C11-NONROOT-DISCOVERY-DIAGNOSTICS` | Info / non-blocking | Run the combined package command with `-v`. | Discovery probes may inspect nested fixture directories and ignore directories without a Factory root. | Structured `logicaltarget` error-level probe diagnostics appear for nested `.git`, `inputs`, `workers`, and similar directories, while all package assertions pass and the command exits 0. | Exact-head verbose run; no test failure, no cleanup residue, and no code change made. |
+
+### Verdict
+
+**PASS**
+
+No failure or blocking uncertainty was found, so no delta-plan request is
+needed. The remaining unproven edges are the explicitly out-of-scope remote
+provider/model and exhaustive-schedule checks plus review-owned terminal CI,
+conflict resolution, and merge.
