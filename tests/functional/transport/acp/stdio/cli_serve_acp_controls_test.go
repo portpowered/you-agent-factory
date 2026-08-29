@@ -117,6 +117,11 @@ func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T)
 	assertPromptStopReason(t, responses["3"], acpsdk.StopReasonCancelled)
 	assertCloseResponse(t, responses["4"])
 	harness.runner.waitForCancellation(t, 1)
+	// session/close waits for the Factory Session control effect, while the
+	// canceled provider call can still be unwinding. Wait for the exact
+	// command-return edge before admitting a later request so no late worker
+	// event can contend with the post-close assertion.
+	harness.runner.waitForCompletion(t, 1)
 
 	callsBeforeRejectedPrompt := harness.runner.CallCount()
 	harness.sendPrompt(t, 5, sessionID, "this must not restart a closed session")
@@ -165,6 +170,10 @@ func TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities(t *
 	assertPromptStopReason(t, responses["4"], acpsdk.StopReasonCancelled)
 	assertCloseResponse(t, responses["5"])
 	harness.runner.waitForCancellation(t, 2)
+	// The close response and provider cancellation are separate observable
+	// edges. Join the controlled command before session/load opens the retained
+	// stream, otherwise a late canceled-dispatch record can race replay.
+	harness.runner.waitForCompletion(t, 2)
 
 	harness.sendLoad(t, 6, sessionID)
 	loadResponse, loadedUpdates := harness.responseWithUpdates(t, 6)
@@ -471,19 +480,21 @@ func newControlProviderFailureCommandRunner() *controlProviderCommandRunner {
 
 func (r *controlProviderCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	call := int(r.calls.Add(1))
+	// Signal only from the return path. The cancellation observation below is
+	// intentionally earlier: callers use waitForCancellation to prove the
+	// control reached the provider, then waitForCompletion to join the command
+	// before issuing another protocol request that consumes the same session.
+	defer func() { r.completed <- call }()
 	if _, blocked := r.blocks[call]; blocked {
 		r.started <- call
 		<-ctx.Done()
 		r.cancelled <- call
-		r.completed <- call
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
 	if err, failed := r.failures[call]; failed {
-		r.completed <- call
 		return platformprocess.CommandResult{Stderr: []byte("controlled provider failure")}, err
 	}
 	result := platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(controlHarnessProviderResult)}
-	r.completed <- call
 	return result, nil
 }
 
@@ -519,14 +530,24 @@ func (r *controlProviderCommandRunner) waitForCompletion(t *testing.T, want int)
 	t.Helper()
 	// The channel is the synchronization mechanism. This bounded branch is
 	// only a diagnostic guard for a regression that drops the provider return;
-	// it does not pace or otherwise make the test pass.
-	select {
-	case got := <-r.completed:
-		if got != want {
-			t.Fatalf("provider command completion = %d, want %d", got, want)
+	// it does not pace or otherwise make the test pass. A previous successful
+	// call may have completed before its caller needed to wait, so match the
+	// call identity instead of treating the shared channel as a FIFO request
+	// barrier.
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case got := <-r.completed:
+			if got == want {
+				return
+			}
+			if got > want {
+				t.Fatalf("provider command completion = %d, want %d", got, want)
+			}
+		case <-timer.C:
+			t.Fatalf("provider command call %d did not return", want)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatalf("provider command call %d did not return", want)
 	}
 }
 

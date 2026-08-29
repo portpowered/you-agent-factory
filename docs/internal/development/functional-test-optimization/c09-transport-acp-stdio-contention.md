@@ -196,3 +196,54 @@ contention topology, and identify the actual assertion before applying any
 test-local correction. Stories 002 and 003 retain the repeat, race, clean
 package, and CI handoff gates after that diagnosis.
 
+## Story 002: bounded test-local correction
+
+The close/load control harness had a concrete synchronization gap at the
+test-owned provider-command edge. Its `completed` notification was sent before
+the controlled `Run` method returned, and the close/load journey waited only
+for cancellation before opening the retained stream. The first bounded
+correction run also exposed that an earlier successful prompt could leave its
+completion notification buffered: a wait for call 2 consumed call 1 instead.
+
+The final correction is limited to
+`tests/functional/transport/acp/stdio/cli_serve_acp_controls_test.go`:
+
+* the controlled runner emits its completion notification from the return
+  path;
+* the bounded completion wait matches the requested call identity while
+  discarding only earlier completed calls; and
+* the close and close/load journeys join the canceled command before issuing
+  the next post-close prompt or `session/load` request.
+
+The existing real `root.BuildProcess`, asynchronous `Process.Execute`, actual
+`os.Pipe` stdin/stdout, protocol frames, lifecycle assertions, and five-second
+hang guards are unchanged. No sleep, blanket deadline change, process sharing,
+production/shared-support change, or c01 inventory edit was made. The c01
+inventory hashes remain the values recorded above.
+
+### REPEAT-01
+
+On WSL Ubuntu (`go1.25.0 linux/amd64`, 24 logical CPUs), the exact required
+control-harness repeat passed:
+
+```text
+go test -count=3 -timeout=15m -run '^(TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt|TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt|TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession|TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities)$' ./tests/functional/transport/acp/stdio
+```
+
+Observed result: exit 0, package `ok`, `10.131s`. This proves the four
+affected control selectors repeat at the local-real root-built ACP stdio and
+actual-pipe boundary after the correction. It does not prove the whole eight-
+selector package or hosted raised-parallelism behavior.
+
+### RACE-01
+
+Because the correction changes test-owned channel/goroutine completion
+observation, the risk-triggered race run was executed once:
+
+```text
+go test -race -count=1 -timeout=15m -run '^(TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt|TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt|TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession|TestServeACP_RootBuildProcessCloseThenLoadReplaysRetainedItemIdentities)$' ./tests/functional/transport/acp/stdio
+```
+
+Observed result: exit 0, package `ok`, `13.311s`; no race was reported. The
+race run does not prove scheduler fairness, leak freedom outside these
+selectors, or the hosted runner edge.
