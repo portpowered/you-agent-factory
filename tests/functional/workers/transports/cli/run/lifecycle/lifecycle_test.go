@@ -15,6 +15,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -34,6 +35,14 @@ var cleanInvocationForbiddenOperatorChatter = []string{
 	"Opening dashboard",
 	"Recording saved to",
 	"Factory:",
+}
+
+type hostedServerAttachedObservation struct {
+	baseURL     string
+	session     factoryapi.FactorySession
+	workID      string
+	workVisible bool
+	err         error
 }
 
 // TestCLIRunCleanInvocationCompletesWithoutDashboardStartup proves a
@@ -389,15 +398,19 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	inputs.Input.WorkingDirectory = factoryDir
 	command := support.StartProcessCommand(t, hostedProcess, inputs.Input)
 
-	observationsReady := make(chan struct {
-		session     factoryapi.FactorySession
-		workVisible bool
-		err         error
-	}, 1)
+	var releaseWorkerOnce, releaseShutdownOnce, correlationDoneOnce sync.Once
+	releaseWorker := func() { releaseWorkerOnce.Do(func() { close(sessionObservedGate) }) }
+	releaseShutdown := func() { releaseShutdownOnce.Do(func() { close(workObservedGate) }) }
+	correlationDone := make(chan struct{})
+	closeCorrelation := func() { correlationDoneOnce.Do(func() { close(correlationDone) }) }
+	t.Cleanup(func() {
+		releaseWorker()
+		releaseShutdown()
+		closeCorrelation()
+	})
+
+	observationsReady := make(chan hostedServerAttachedObservation, 1)
 	go func() {
-		var releaseWorkerOnce, releaseShutdownOnce sync.Once
-		releaseWorker := func() { releaseWorkerOnce.Do(func() { close(sessionObservedGate) }) }
-		releaseShutdown := func() { releaseShutdownOnce.Do(func() { close(workObservedGate) }) }
 		// Always release both gates before this goroutine exits, even on a
 		// WaitForBaseURL timeout, so an unexpected failure here cannot hang
 		// Process.Execute (and this test's t.Cleanup teardown) forever.
@@ -406,28 +419,39 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 
 		baseURL, err := hostedAPI.WaitForBaseURL(5 * time.Second)
 		if err != nil {
-			observationsReady <- struct {
-				session     factoryapi.FactorySession
-				workVisible bool
-				err         error
-			}{err: err}
+			observationsReady <- hostedServerAttachedObservation{err: err}
+			<-correlationDone
 			return
 		}
-		session, workVisible, pollErr := pollHostedServerAttachedInvocationObservations(
+		session, workID, workVisible, pollErr := pollHostedServerAttachedInvocationObservations(
 			baseURL,
 			wantServerAttachedInvocationPrimaryResult,
 			releaseWorker,
-			releaseShutdown,
 			command.Done(),
 		)
-		observationsReady <- struct {
-			session     factoryapi.FactorySession
-			workVisible bool
-			err         error
-		}{session: session, workVisible: workVisible, err: pollErr}
+		observationsReady <- hostedServerAttachedObservation{
+			baseURL:     baseURL,
+			session:     session,
+			workID:      workID,
+			workVisible: workVisible,
+			err:         pollErr,
+		}
+		<-correlationDone
 	}()
 
 	observation := <-observationsReady
+	if observation.err != nil {
+		t.Logf("hosted server-attached session/work observations before host shutdown: %v", observation.err)
+		closeCorrelation()
+	} else {
+		assertHostedServerAttachedPublicCorrelation(
+			t,
+			observation.baseURL,
+			factorysessions.DefaultSessionID,
+			observation.workID,
+		)
+		closeCorrelation()
+	}
 	<-command.Done()
 	if err := command.Err(); err != nil {
 		t.Fatalf(
@@ -437,9 +461,6 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 			inputs.Stdout(),
 			inputs.Stderr(),
 		)
-	}
-	if observation.err != nil {
-		t.Logf("hosted server-attached session/work observations before host shutdown: %v", observation.err)
 	}
 
 	stdout := strings.TrimSuffix(inputs.Stdout(), "\n")
@@ -571,9 +592,9 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 
 func pollHostedServerAttachedInvocationObservations(
 	baseURL, wantWorkText string,
-	releaseWorker, releaseShutdown func(),
+	releaseWorker func(),
 	done <-chan struct{},
-) (factoryapi.FactorySession, bool, error) {
+) (factoryapi.FactorySession, string, bool, error) {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -581,6 +602,7 @@ func pollHostedServerAttachedInvocationObservations(
 		sessionRead    bool
 		workVisible    bool
 		sessionDuring  factoryapi.FactorySession
+		terminalWorkID string
 		lastSessionErr string
 	)
 
@@ -600,42 +622,38 @@ func pollHostedServerAttachedInvocationObservations(
 			}
 		}
 		if !workVisible {
-			if ok, _ := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
+			if workID, ok, _ := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
+				terminalWorkID = workID
 				workVisible = true
-				// The hosted API listener cannot close (and so the process
-				// cannot finish) until this deterministic release fires,
-				// which guarantees terminal Work was observable before host
-				// shutdown.
-				releaseShutdown()
 			}
 		}
 		if sessionRead && workVisible {
-			return sessionDuring, true, nil
+			return sessionDuring, terminalWorkID, true, nil
 		}
 
 		select {
 		case <-done:
 			if !sessionRead {
-				return factoryapi.FactorySession{}, workVisible, fmt.Errorf(
+				return factoryapi.FactorySession{}, terminalWorkID, workVisible, fmt.Errorf(
 					"hosted CLI run finished before session identity was readable at %s: %s",
 					baseURL,
 					lastSessionErr,
 				)
 			}
-			return sessionDuring, workVisible, nil
+			return sessionDuring, terminalWorkID, workVisible, nil
 		default:
 		}
 
 		select {
 		case <-done:
 			if !sessionRead {
-				return factoryapi.FactorySession{}, workVisible, fmt.Errorf(
+				return factoryapi.FactorySession{}, terminalWorkID, workVisible, fmt.Errorf(
 					"hosted CLI run finished before session identity was readable at %s: %s",
 					baseURL,
 					lastSessionErr,
 				)
 			}
-			return sessionDuring, workVisible, nil
+			return sessionDuring, terminalWorkID, workVisible, nil
 		case <-ticker.C:
 		}
 	}
@@ -674,16 +692,120 @@ func readDefaultFactorySession(baseURL string) (factoryapi.FactorySession, error
 	return session, nil
 }
 
-func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
+func assertHostedServerAttachedPublicCorrelation(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	workID string,
+) {
+	t.Helper()
+
+	workerSessions := support.ListDefaultSessionWorkerSessions(t, baseURL, workID)
+	if len(workerSessions.Sessions) != 1 {
+		t.Fatalf("public Worker Sessions for Work %q = %#v, want exactly one", workID, workerSessions.Sessions)
+	}
+	worker := workerSessions.Sessions[0]
+	if strings.TrimSpace(worker.WorkerSessionId) == "" {
+		t.Fatalf("public Worker Session for Work %q has empty identity: %#v", workID, worker)
+	}
+	if worker.State != factoryapi.WorkerSessionObservationStateCompleted {
+		t.Fatalf("public Worker Session %q state = %q, want COMPLETED", worker.WorkerSessionId, worker.State)
+	}
+	if worker.FactorySessionId == nil || *worker.FactorySessionId != sessionID {
+		t.Fatalf("public Worker Session %q Factory Session = %#v, want %q", worker.WorkerSessionId, worker.FactorySessionId, sessionID)
+	}
+	if worker.WorkId == nil || *worker.WorkId != workID || !containsString(worker.WorkIds, workID) {
+		t.Fatalf("public Worker Session %q Work correlation = workId:%#v workIds:%#v, want %q", worker.WorkerSessionId, worker.WorkId, worker.WorkIds, workID)
+	}
+
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	assertHostedServerAttachedFactoryEvents(t, events, dispatches, sessionID, workID, worker.WorkerSessionId)
+}
+
+func assertHostedServerAttachedFactoryEvents(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	dispatches []support.DispatchEventObservation,
+	sessionID, workID, workerSessionID string,
+) string {
+	t.Helper()
+
+	var matching *support.DispatchEventObservation
+	for index := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatches[index], workID) {
+			continue
+		}
+		if matching != nil {
+			t.Fatalf("public dispatch observations for Work %q contain more than one dispatch", workID)
+		}
+		matching = &dispatches[index]
+	}
+	if matching == nil || matching.Response == nil {
+		t.Fatalf("public Factory Events contain no completed dispatch for Work %q: %#v", workID, dispatches)
+	}
+	if matching.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("public dispatch %q outcome = %q, want ACCEPTED", matching.DispatchID, matching.Response.Outcome)
+	}
+	if matching.StartedAt.IsZero() || matching.CompletedAt.IsZero() || matching.StartedAt.After(matching.CompletedAt) {
+		t.Fatalf("public dispatch %q event times = %s -> %s, want ordered non-zero times", matching.DispatchID, matching.StartedAt, matching.CompletedAt)
+	}
+
+	requestIndex, responseIndex, associationIndex := -1, -1, -1
+	for index, event := range events {
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != matching.DispatchID {
+			continue
+		}
+		if event.Id == "" {
+			t.Fatalf("public Factory Event at index %d for dispatch %q has empty identity", index, matching.DispatchID)
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("public Factory Event %q session = %#v, want %q", event.Id, event.Context.SessionId, sessionID)
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			requestIndex = index
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			responseIndex = index
+		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
+			associationIndex = index
+			association, err := event.Payload.AsDispatchWorkerSessionAssociationEventPayload()
+			if err != nil {
+				t.Fatalf("decode public Worker Session association event %q: %v", event.Id, err)
+			}
+			if association.WorkerSessionId != workerSessionID {
+				t.Fatalf("public dispatch %q Worker Session association = %q, want %q", matching.DispatchID, association.WorkerSessionId, workerSessionID)
+			}
+		}
+	}
+	if requestIndex < 0 || responseIndex < 0 || associationIndex < 0 {
+		t.Fatalf("public Factory Events for dispatch %q missing request/association/response: request=%d association=%d response=%d", matching.DispatchID, requestIndex, associationIndex, responseIndex)
+	}
+	if requestIndex >= associationIndex || associationIndex >= responseIndex {
+		t.Fatalf("public Factory Event order for dispatch %q = request:%d association:%d response:%d, want request < association < response", matching.DispatchID, requestIndex, associationIndex, responseIndex)
+	}
+	return matching.DispatchID
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (string, bool, string) {
 	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
 	response, err := http.Get(endpoint)
 	if err != nil {
-		return false, fmt.Sprintf("GET %s: %v", endpoint, err)
+		return "", false, fmt.Sprintf("GET %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		payload, _ := io.ReadAll(response.Body)
-		return false, fmt.Sprintf(
+		return "", false, fmt.Sprintf(
 			"GET %s status = %d: %s",
 			endpoint,
 			response.StatusCode,
@@ -692,7 +814,7 @@ func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
 	}
 	var listed factoryapi.ListWorkResponse
 	if err := json.NewDecoder(response.Body).Decode(&listed); err != nil {
-		return false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
+		return "", false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
 	}
 	for _, item := range listed.Results {
 		if item.State == nil || item.State.Type != factoryapi.WorkStateTypeTERMINAL {
@@ -705,11 +827,11 @@ func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
 		if err != nil {
 			continue
 		}
-		if part.Text == wantText {
-			return true, ""
+		if part.Text == wantText && item.WorkId != nil && strings.TrimSpace(*item.WorkId) != "" {
+			return *item.WorkId, true, ""
 		}
 	}
-	return false, fmt.Sprintf("listed work missing terminal primary text %q: %#v", wantText, listed.Results)
+	return "", false, fmt.Sprintf("listed work missing terminal primary text %q: %#v", wantText, listed.Results)
 }
 
 func assertCleanInvocationStdoutFreeOfOperatorChatter(t *testing.T, stdout string) {
