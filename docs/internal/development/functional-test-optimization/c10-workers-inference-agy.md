@@ -429,6 +429,17 @@ passed / `1` skipped / `0` failed. The clean-room package timing remains
 diagnostic until the fresh hosted Backend Functional Coverage result is
 recorded on the pushed head.
 
+The latest bounded pass starts that retained-plus-live observer before opening
+the response stream, allowing the two independent public SSE handshakes to
+overlap while retaining the same event-count publication barrier. Work is
+still submitted only after the response stream is open; exact Factory Event
+order/count, Work, provider, response, EOF, route, and resource-census
+assertions are unchanged. The final local exact package run passed once
+(`1.828s` package time), the package three-repeat run passed (`4.733s`), the
+race run passed (`3.963s`), and `make test` passed with `160` passed / `1`
+skipped / `0` failed. The hosted package timing remains diagnostic until a
+fresh Backend Functional Coverage result is recorded on the pushed head.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:

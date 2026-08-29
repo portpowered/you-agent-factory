@@ -424,12 +424,6 @@ func (fixture *agyProcessFixture) runScenario(
 	fixture.recordRun(run)
 	t.Cleanup(func() { run.close(t) })
 
-	stream := support.OpenFactoryResponseEventStreamAt(
-		t,
-		support.SessionResponseEventsURL(fixture.baseURL, session.Id),
-	)
-	run.stream = stream
-	fixture.recordStreamOpened()
 	wantFactoryEvents := 11
 	if scenario.selector == agySharedTimeoutSelector {
 		wantFactoryEvents = 23
@@ -437,15 +431,23 @@ func (fixture *agyProcessFixture) runScenario(
 	factoryEventObservation := newAgySharedFactoryEventObservation(
 		fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
 	)
-	// The observer is registered after the scenario cleanup, so a failed
-	// assertion cancels the public Factory Event stream before the session and
-	// response stream are released by run.close.
+	// Start the retained-plus-live Factory Event observer before opening the
+	// response stream so the two independent public SSE handshakes overlap. Its
+	// retained history makes this safe if the observer connection finishes
+	// later; Work is submitted only after the response stream is open, and
+	// finish still waits for the exact Factory Event publication target.
 	t.Cleanup(func() {
 		result := factoryEventObservation.stop()
 		if result.err != nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
 			t.Errorf("AGY %q Factory Event observation cleanup: %v", scenario.selector, result.err)
 		}
 	})
+	stream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(fixture.baseURL, session.Id),
+	)
+	run.stream = stream
+	fixture.recordStreamOpened()
 
 	routeRequestStart := fixture.router.requestCount()
 	name := workTitle
