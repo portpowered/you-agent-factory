@@ -1,16 +1,17 @@
 # C09 Auxiliary Provider Characterization Ledger
 
-Status: story `functional-test-optimization-c09-providers-auxiliary-migration-001`
-complete. This is the pre-migration characterization record; it does not claim
-Claude migration, after-topology, integrated cleanup, or PR-CI evidence owned by
-later stories.
+Status: stories `functional-test-optimization-c09-providers-auxiliary-migration-001`
+and `-002` complete. The Claude golden migration and its focused functional
+evidence are recorded below; discovery/permission proof, integrated cleanup,
+and PR-CI evidence remain later stories.
 
 ## Authority and scope
 
 - Repository: `you-agent-factory`
 - Branch: `functional-test-optimization-c09-providers-auxiliary-migration`
 - Discovery head and `origin/main`: `254bb71db2`
-- PRD story: `functional-test-optimization-c09-providers-auxiliary-migration-001`
+- PRD stories: `functional-test-optimization-c09-providers-auxiliary-migration-001`,
+  `-002`
 - Parent behavior: `BEH-01` — preserve auxiliary provider behavior while
   removing eligible repeated Claude construction.
 - Owned surfaces inspected:
@@ -73,13 +74,13 @@ verdict.
 The five rows below are the complete default-tag denominator from the test-list
 command. Named subcases are included in the row that owns them.
 
-| Package | Top-level test and source | Current executable cases and public boundary | Current process starts | Disposition basis |
+| Package | Top-level test and source | Executable cases and public boundary | Before starts | After story 002 / disposition |
 | --- | --- | --- | ---: | --- |
-| `providers/claude` | `TestClaudeHaikuStreamJSONGoldens` — `haiku_golden_test.go:51` | Manifest order: `alias`, `family`, `pinned`; each subtest validates its embedded stream, copies a fixture, writes a Claude worker, submits Work through the command edge, and observes Work plus Factory Events. `replayHaikuGolden` calls `RunFactoryToCompletionWithEdgesAndObservations` once per case. | 3 | Migrate the repeated eligible golden construction into one test-local process with explicit sessions in story 002. |
-| `providers/claude` | `TestClaudeStreamJSONCommandThroughRootBuildProcess` — `process_harness_test.go:18` | One standalone Claude `claude-sonnet-5` command case; observes done/failed Work, one command call, command identity, and stream-json flags. | 1 | Retain as its independent command-boundary process in story 002. |
-| `providers/discovery` | `TestProvidersListThroughRootBuildProcess` — `discovery_test.go:23` | One `BuildProcess`; three sequential `Process.Execute` calls for human list, JSON list, and unsupported-flag failure. Observes catalog output, diagnostics, and zero provider command calls. | 1 | Retain one already-optimal process; no per-command rebuild exists. |
-| `providers/discovery` | `TestPackagedACPProjectionRejectsInvalidRuntimeBindings` — `discovery_test.go:63` | Four pure subcases: unknown profile, unsupported transport, argument drift, and canonical alias duplication. Calls catalog projection directly and creates no process/session. | 0 | Retain as pure/no-fixture; a process would be synthetic overhead. |
-| `providers/permission` | `TestProviderPermissionBypassFunctionalContract` — `permission_bypass_test.go:19` | `capable Codex route uses the command edge` and `registered incapable Codex route fails before the command edge`; each subtest copies a fixture and calls one completion helper. | 2 | Retain two isolated processes because capability wiring is immutable and differs before process construction. |
+| `providers/claude` | `TestClaudeHaikuStreamJSONGoldens` — `haiku_golden_test.go:51` | Manifest order: `alias`, `family`, `pinned`; each case validates its embedded stream and checksum before start, prepares a copied fixture with a Factory-directory working route, opens one unique explicit Factory Session, submits Work through the session API, and observes session-scoped Work plus Factory Events. | 3 | 1 shared golden process with 3 explicit sessions; immutable routes are prepared before start. |
+| `providers/claude` | `TestClaudeStreamJSONCommandThroughRootBuildProcess` — `process_harness_test.go:18` | One standalone Claude `claude-sonnet-5` command case; observes done/failed Work, one command call, command identity, and stream-json flags. | 1 | 1 retained independent command-boundary process. |
+| `providers/discovery` | `TestProvidersListThroughRootBuildProcess` — `discovery_test.go:23` | One `BuildProcess`; three sequential `Process.Execute` calls for human list, JSON list, and unsupported-flag failure. Observes catalog output, diagnostics, and zero provider command calls. | 1 | 1 retained process; no per-command rebuild exists. |
+| `providers/discovery` | `TestPackagedACPProjectionRejectsInvalidRuntimeBindings` — `discovery_test.go:63` | Four pure subcases: unknown profile, unsupported transport, argument drift, and canonical alias duplication. Calls catalog projection directly and creates no process/session. | 0 | Pure/no-fixture retained; a process would be synthetic overhead. |
+| `providers/permission` | `TestProviderPermissionBypassFunctionalContract` — `permission_bypass_test.go:19` | `capable Codex route uses the command edge` and `registered incapable Codex route fails before the command edge`; each subtest copies a fixture and calls one completion helper. | 2 | 2 isolated processes retained because capability wiring is immutable and differs before process construction. |
 
 ### Start-count derivation
 
@@ -90,22 +91,25 @@ the functional `BuildProcess` wrapper, starts one `Process.Execute`, stops the
 daemon, and closes the application process. Therefore the source-derived
 current total is:
 
-| Package | Current starts | Planned starts | Calculation |
+| Package | Before starts | After story 002 | Calculation |
 | --- | ---: | ---: | --- |
-| Claude | 4 | 2 | 3 golden helper calls + 1 standalone command; story 002 shares only the 3 golden calls. |
+| Claude | 4 | 2 | Before: 3 golden helper calls + 1 standalone command. After: one shared golden server/process + 1 standalone command. |
 | Discovery | 1 | 1 | One process serves three public invocations; the projection test is pure. |
 | Permission | 2 | 2 | One process per incompatible capability configuration. |
 
-The planned counts are the PRD target, not evidence established by this story.
-The current helper uses its default Factory Session per process; this story
-does not claim the later requirement for three unique non-default explicit
-Factory Sessions or immutable pre-start Factory-directory routing.
+The Claude after-count is established by the shared test structure: one
+`StartFunctionalAPIServer` call builds one root process for all three golden
+subtests, while the standalone test retains its one helper-owned process. The
+focused run also records three command calls, one per route, and three unique
+non-default explicit Factory Session IDs. Discovery and permission are not
+changed by story 002.
 
 ## Public witness ledger
 
 ### Claude
 
-Sources: `tests/functional/providers/claude/haiku_golden_test.go:51-181`,
+Sources: `tests/functional/providers/claude/haiku_golden_test.go:51-225`,
+`haiku_shared_process_test.go:1-205`,
 `process_harness_test.go:18-57`, and
 `testdata/haiku_stream_json/manifest.json:1-35`.
 
@@ -119,10 +123,20 @@ Sources: `tests/functional/providers/claude/haiku_golden_test.go:51-181`,
 - Native stream shape is checked line by line: every line is JSON, a line
   reports the expected model, a text delta contains `HAIKU GOLDEN COMPLETE`,
   and a terminal result has the same exact result.
-- Each replay copies the `executor_success` Factory fixture, writes the
-  provider/model worker and task seed, and injects a controlled
-  `ProviderCommandRunner`. The public result is exactly one `task:done`, zero
-  `task:failed`, and one Claude command call.
+- Before the process starts, each replay copies the `executor_success` Factory
+  fixture, writes the provider/model worker and a workstation working-directory
+  route, validates the stream, and installs one immutable directory/selector
+  route. No seed file or live provider is used.
+- One `StartFunctionalAPIServer` call owns the loopback server and root-built
+  process. Cases run in manifest order; each opens a unique non-default
+  explicit Factory Session, submits one Work through its session endpoint, and
+  reads only that session's Work and Factory Events. Each public result is
+  exactly one `task:done`, zero `task:failed`, and one Claude command call.
+- The route rejects an unknown directory, unexpected provider command, closed
+  fixture, or selector mismatch with bounded diagnostics. Duplicate directory
+  and selector registrations fail before process start. Request witnesses are
+  cloned and are never included in route error text, so provider input and
+  environment values are not emitted by routing failures.
 - The request retains the selector and the exact ordered flags
   `--verbose`, `--output-format stream-json`, and
   `--include-partial-messages`. The retained Factory Event history must contain
@@ -266,15 +280,15 @@ preserve:
   thinking text/signatures, usage/cost, timestamps, durations, and random
   identifiers were removed. No validation procedure invokes a remote or paid
   provider.
-- Current source has no package-global routing or mutable provider-capability
-  fixture state. The later Claude fixture must keep route selection immutable
-  before start and sessions explicitly unique; permission must retain separate
+- The migrated Claude fixture has no package-global mutable routing state. Its
+  route map is built before `StartFunctionalAPIServer`, explicit sessions are
+  checked for uniqueness and non-default identity, and route memory is released
+  by the fixture cleanup after all cases close. Permission retains separate
   immutable configurations.
 
-This ledger establishes the before-state and cleanup obligations. It does not
-yet prove cleanup after a shared process, route registration rejection,
-explicit-session deletion, host resource counts, or a clean-checkout
-loopback; those belong to stories 002 and 004.
+The focused Claude run proves normal shared-process/session/route cleanup. The
+full adverse cleanup loopback, host resource counts, and clean-checkout
+integration remain story 004 evidence.
 
 ## Story 001 evidence boundary
 
@@ -290,5 +304,20 @@ loopback; those belong to stories 002 and 004.
 
 No topology mismatch was found between the PRD and current source, so no plan
 delta is requested. The absent source-plan file remains an explicit authority
-note above. The next bounded step is story 002: migrate only the three Claude
-golden replays while retaining the standalone command test.
+note above.
+
+## Story 002 evidence boundary
+
+| Criterion / gate | Result in this story | Evidence and remaining edge |
+| --- | --- | --- |
+| `AUX-CLAUDE-002` | PASS | The migrated selector run uses one root-built server/process for three manifest-order golden cases, three unique non-default explicit sessions, pre-start directory/selector routes, and one command call per route. Discovery/permission counts remain unchanged. |
+| Golden behavior parity | PASS | Each selector retains checksum and native stream-shape validation, exact Claude streaming flags, one successful `task:done`, zero `task:failed`, and a session-scoped successful Model Response Factory Event with the expected Provider Session ID. |
+| Route and session isolation | PASS | Routes reject duplicate directory/selector registration before start and unknown/closed/mismatched requests without including request payload or environment data in diagnostics; each case maps to its own Factory directory and explicit session. |
+| Normal cleanup | PASS | Each explicit session is terminated and deleted after its scoped assertions; the shared server is stopped, the root process is closed by the support owner, routes are closed/released, and copied fixtures/operator home remain `t.TempDir` owned. |
+| Adverse cleanup loopback | NOT CLAIMED | Full assertion-failure, cancellation, host-resource, and clean-room cleanup evidence remains story 004. The focused positive path and fail-closed construction are covered here. |
+| `TestClaudeHaikuStreamJSONGoldens` repeatability | PASS | The exact touched selector was run once and with `-count=3`; local output and timing are recorded in progress, not committed as a CI artifact. |
+| Dependency fidelity | PASS for story 002 | Production root composition and public Factory Session/Work/Event HTTP boundaries were used with a controlled `ProviderCommandRunner` and sanitized embedded streams; no live Claude call was made. |
+| PR package timing | NOT CLAIMED | Package-level Backend Functional Coverage timing remains story 004/PR-CI evidence. |
+
+The next bounded step is story 003: re-prove discovery and permission while
+retaining their no-change and isolated-process dispositions.

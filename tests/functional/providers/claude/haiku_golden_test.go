@@ -9,10 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -50,12 +48,104 @@ type haikuGoldenCase struct {
 // three live Claude Haiku selectors through the customer process boundary.
 func TestClaudeHaikuStreamJSONGoldens(t *testing.T) {
 	manifest := loadHaikuGoldenManifest(t)
-	for _, golden := range manifest.Cases {
-		golden := golden
-		t.Run(golden.Name, func(t *testing.T) {
-			stdout := loadHaikuGoldenStdout(t, golden)
-			assertHaikuGoldenNativeShape(t, stdout, golden)
-			replayHaikuGolden(t, golden, stdout)
+	cases := prepareHaikuGoldenReplayCases(t, manifest)
+	router := newHaikuGoldenCommandRouter(t, cases)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                cases[0].factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: router,
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	seenSessions := make(map[string]struct{}, len(cases))
+	t.Cleanup(func() {
+		if len(seenSessions) != len(cases) {
+			t.Errorf("explicit Claude golden sessions = %d, want %d", len(seenSessions), len(cases))
+		}
+		requests := router.Requests()
+		if len(requests) != len(cases) {
+			t.Errorf("shared Claude golden command calls = %d, want %d", len(requests), len(cases))
+		}
+		for index, replayCase := range cases {
+			if index >= len(requests) {
+				break
+			}
+			if got := normalizeHaikuGoldenRouteDirectory(requests[index].WorkDir); got != replayCase.factoryDir {
+				t.Errorf("golden request %d work dir = %q, want pre-start route for case %q", index, got, replayCase.golden.Name)
+			}
+		}
+		for _, replayCase := range cases {
+			if got := router.CallsFor(replayCase.factoryDir); got != 1 {
+				t.Errorf("golden route %q calls = %d, want 1", replayCase.golden.Name, got)
+			}
+		}
+		router.Close()
+		if got := router.RouteCount(); got != 0 {
+			t.Errorf("closed golden route count = %d, want 0", got)
+		}
+	})
+
+	for _, replayCase := range cases {
+		replayCase := replayCase
+		t.Run(replayCase.golden.Name, func(t *testing.T) {
+			opened := support.OpenFactorySessionAt(t, server.URL(), replayCase.factoryDir)
+			if opened.Session == nil || opened.Session.Id == "" {
+				t.Fatal("explicit Claude golden session has no id")
+			}
+			sessionID := opened.Session.Id
+			if sessionID == factorysessions.DefaultSessionID {
+				t.Fatalf("golden session id = %q, want a non-default explicit session", sessionID)
+			}
+			if _, exists := seenSessions[sessionID]; exists {
+				t.Fatalf("duplicate explicit golden session id %q", sessionID)
+			}
+			seenSessions[sessionID] = struct{}{}
+			closed := false
+			t.Cleanup(func() {
+				if closed {
+					return
+				}
+				support.CloseFactorySessionAt(t, server.URL(), sessionID)
+			})
+
+			name := "claude-haiku-" + replayCase.golden.Name
+			support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+				Name:         &name,
+				WorkTypeName: "task",
+				Payload: map[string]string{
+					"title": "claude Haiku golden replay",
+				},
+			})
+			support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 20*time.Second)
+
+			listed := support.GetJSON[factoryapi.ListWorkResponse](
+				t,
+				sessionWorkURL(server.URL(), sessionID),
+			)
+			if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+				t.Fatalf("completed work = %d, want 1", got)
+			}
+			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+				t.Fatalf("failed work = %d, want 0", got)
+			}
+			request, ok := router.RequestFor(replayCase.factoryDir)
+			if !ok {
+				t.Fatalf("no Claude command request recorded for golden %q", replayCase.golden.Name)
+			}
+			support.AssertArgsContainSequence(t, request.Args, []string{
+				"--model", replayCase.golden.Selector,
+				"--verbose",
+				"--output-format", "stream-json",
+				"--include-partial-messages",
+			})
+			assertHaikuGoldenInferenceResult(
+				t,
+				support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID),
+				replayCase.golden.SessionID,
+			)
+			support.CloseFactorySessionAt(t, server.URL(), sessionID)
+			closed = true
 		})
 	}
 }
@@ -125,40 +215,6 @@ func assertHaikuGoldenNativeShape(t *testing.T, stdout []byte, golden haikuGolde
 	if !sawModel || !sawDelta || !sawResult {
 		t.Fatalf("Haiku golden %q shape model=%t delta=%t result=%t", golden.Name, sawModel, sawDelta, sawResult)
 	}
-}
-
-func replayHaikuGolden(t *testing.T, golden haikuGoldenCase, stdout []byte) {
-	t.Helper()
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderClaude,
-		golden.Selector,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"claude Haiku golden replay"}`))
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
-
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
-	)
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0", got)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("Claude command calls = %d, want 1", runner.CallCount())
-	}
-	support.AssertArgsContainSequence(t, runner.LastRequest().Args, []string{
-		"--model", golden.Selector,
-		"--verbose",
-		"--output-format", "stream-json",
-		"--include-partial-messages",
-	})
-	assertHaikuGoldenInferenceResult(t, events, golden.SessionID)
 }
 
 func assertHaikuGoldenInferenceResult(t *testing.T, events []factoryapi.FactoryEvent, wantSessionID string) {
