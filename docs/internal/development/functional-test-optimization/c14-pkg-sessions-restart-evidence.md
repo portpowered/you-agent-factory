@@ -343,3 +343,85 @@ source. They are source evidence, not generated artifacts.
 | `board_persistence_process_windows_test.go` | `d7169e285158e5824190a14341b392f3f931d178d8234645f43c8ded4e54761d` |
 | `board_persistence_scenarios_test.go` | `c6229528fdb011010951cf3ca40103b3b89d466be4bc7de5c6f192786001fa7f` |
 | `logical_identity_test.go` | `7b6569b537f7c0fdc85c03911700de5d143f7ac113a14757f2669376cdeac65c` |
+
+## GATE-SPINE
+
+- Story: `fto-c14-pkg-sessions-restart-002`
+- Parent behavior: `BEH-C14-RESTART` — every restart, replay, persistence,
+  failure, process, and cleanup witness remains while redundant intrinsic work
+  is removed.
+- Status: **PASS for the focused one-build restart spine**.
+- Tested head: `6de3ad5b3e8aa853807919471b23324dfbcb702c`.
+- Dependency fidelity: `local_real` built CLI, real Windows daemon processes,
+  loopback, filesystem, recording, and existing controlled provider edges.
+- Cost: zero paid or remote-provider calls.
+
+The focused procedure was:
+
+```text
+go test ./tests/functional/sessions/restart/... -count=1 -run '^TestBoardPersistenceCLIRestartRoundTrip$' -v
+```
+
+It exited `0`; `TestBoardPersistenceCLIRestartRoundTrip` passed in `15.58s`
+and the package reported `ok ... 15.655s`. The test log showed one immutable
+package path and `builds=1`, followed by three live daemon session IDs and the
+initial active dispatch witness. The round-trip therefore crossed the real
+submit, readiness, Worker Session, clean-stop, replay/re-arm, release-file,
+response, persistence, and second-restart boundaries with the shared binary.
+
+The complete post-guard package proof was also run:
+
+```text
+go test ./tests/functional/sessions/restart/... -count=1 -v
+```
+
+It exited `0` in `25.449s`; all seven existing selectors passed. Every board
+scenario log reused the same package binary path and reported `builds=1`. The
+helper selector's `SCRIPT_WORKER` branch asserted zero package builds, and the
+real helper children completed through their existing sentinel/release path.
+The three board scenarios retained one private Factory directory, HOME,
+recording, release path, port, daemon lifecycle, and expected-state map each;
+no mutable scenario state moved into the package fixture.
+
+The implementation is limited to
+`tests/functional/sessions/restart/board_persistence_process_test.go` and
+`tests/functional/sessions/restart/board_persistence_scenarios_test.go`:
+
+- `sync.Once` creates one package-scoped temporary build directory and one
+  `go build ./cmd/factory` artifact for the normal package process.
+- The existing `YOU_BOARD_PERSISTENCE_HELPER=1` role is rejected by the build
+  helper, and the helper selector asserts its own process-local build count is
+  zero.
+- `TestMain` removes the package build directory after all test scenarios and
+  child-process joins, including partial-build failure cleanup.
+- No waits, timeouts, CLI contexts, assertions, public contracts, production
+  code, shared support, or scenario-owned mutable resources changed.
+
+## GATE-REPEAT
+
+- Story: `fto-c14-pkg-sessions-restart-002`
+- Status: **PASS for repeated fixture use and cleanup**.
+- Tested head: `6de3ad5b3e8aa853807919471b23324dfbcb702c`.
+
+The declared repeat procedure was run once:
+
+```text
+go test ./tests/functional/sessions/restart/... -count=3 -v
+```
+
+It exited `0` with package elapsed `179.353s`. All seven selectors passed in
+each of the three repetitions. The board logs reused one path,
+`you-restart-package-build-2685465539\\you.exe`, and every build log reported
+`builds=1`; the helper-role zero-build assertion passed in each helper child.
+Each repetition retained six real daemon starts, thirteen built CLI
+subprocesses, and three helper children, for totals of eighteen daemon starts,
+thirty-nine built CLI subprocesses, and nine helper children across the run.
+Each scenario retained private Factory/home/recording/release/port state. The
+package `TestMain` cleanup ran only after the repeated daemon and helper
+processes had joined.
+
+This gate proves the structural one-build fixture, helper recursion guard,
+scenario isolation, and package teardown on the exact implementation head. It
+does not prove the final three-run performance median, supported race result,
+clean-room loopback, rebased-main ancestry, terminal PR CI, or merge; those
+remain owned by story `fto-c14-pkg-sessions-restart-003` and review.
