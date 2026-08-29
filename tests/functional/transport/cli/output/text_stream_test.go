@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,7 +20,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -35,7 +35,6 @@ const (
 // CLI run surfaces lifecycle progress on stdout while the invocation is still
 // in flight, before the terminal primary result is written.
 func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
-	t.Parallel()
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
 
@@ -84,7 +83,6 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 // InvocationResponse wrappers, retired automation record shapes, and operator
 // lifecycle chatter that clean invocation output must suppress.
 func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
-	t.Parallel()
 	t.Run("human response-stream lifecycle presentation", func(t *testing.T) {
 		stdout, stderr := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
 		assertStableWorkerProgress(t, stderr)
@@ -115,7 +113,6 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 // a non-quiet operator continuous CLI run with --with-server reports Factory
 // initiated and Dashboard URL startup output on stdout.
 func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *testing.T) {
-	t.Parallel()
 	if testing.Short() {
 		t.Skip("slow CLI operator continuous text-stream startup")
 	}
@@ -126,24 +123,28 @@ func TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet(t *t
 	wantDashboardURL := configuredURL + "/dashboard/ui"
 	wantInitiated := "Factory initiated: " + dir
 
-	mockWorkersPath := writeTextStreamDefaultMockWorkersConfig(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
 
 	stdout := newInterruptibleStdoutCapture()
 	homeDir := t.TempDir()
 	args := []string{
 		"you", "--server", configuredURL,
 		"run", "--factory", factoryPath,
-		"--with-mock-workers", "--no-record", "--with-server", "--continuously",
-		mockWorkersPath,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
+		"--no-record", "--with-server", "--continuously",
 	}
 	inputs := support.FakeInputs(ctx, args)
 	inputs.Input.WorkingDirectory = dir
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	// This case intentionally owns an independent root: its loopback listener
+	// and continuous cancellation/join lifecycle must not be shared.
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: textStreamAcceptedProviderRunner(),
+	})
+	support.CleanupProcess(t, process)
+	t.Cleanup(cancel)
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)
@@ -178,13 +179,15 @@ waitForShutdown:
 	case <-time.After(humanTextStreamScenarioTimeout):
 		t.Fatalf("timed out waiting for continuous run cancellation\nstdout:\n%s", stdout.String())
 	}
+	assertTextStreamListenerRebinds(t, configuredURL)
 }
 
 // TestCLITextStreamInterruptedRunDoesNotClaimCompletion proves interrupting a
 // human response-stream CLI run ends with the documented cancellation outcome
 // and does not print successful-completion or primary-result claims on stdout.
 func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
-	t.Parallel()
+	// This case intentionally owns an independent root: cancellation and the
+	// external-work join are the behavior under test.
 	externalWork := newCancellableExternalWorkRunner()
 	stdout := newInterruptibleStdoutCapture()
 	runArgs := runGoalHumanInterruptibleResponseStream(t, externalWork, stdout)
@@ -299,9 +302,6 @@ func assertHumanStdoutFreeOfStructuredEnvelopeNoise(t *testing.T, stdout string)
 func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	providerRunner := textStreamAcceptedProviderRunner()
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
 		"--executor-provider", "codex",
@@ -310,15 +310,17 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 	}
 	args = append(args, runArgs...)
 	args = append(args, "deterministic human text-stream envelope contract")
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-	}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	stdout, stderr, err := runMachineOutputInvocation(
+		t,
+		args,
+		goalFactoryName,
+		textStreamAcceptedProviderRunner(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
 	}
-	return inputs.Stdout(), inputs.Stderr()
+	return stdout, stderr
 }
 
 type firstChunkGatedStdoutWriter struct {
@@ -485,24 +487,26 @@ func runGoalHumanInterruptibleResponseStream(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, writerFailureGoalMockWorkers())
+	workingDirectory := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic human text-stream interrupt contract",
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	stdout.cancel = cancel
 	inputs := support.FakeInputs(ctx, args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = workingDirectory
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: externalWork,
 	})
+	support.CleanupProcess(t, process)
+	support.InstallPackagedFactoryWithProcess(t, process, env, workingDirectory, goalFactoryName)
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)
@@ -564,8 +568,6 @@ func waitForInterruptibleStdoutLifecycle(t *testing.T, capture *interruptibleStd
 func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedStdoutWriter) {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
 	providerRunner := textStreamAcceptedProviderRunner()
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
@@ -574,17 +576,12 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 		"--no-record", "--output", "response-stream",
 		"deterministic human text-stream incremental contract",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
+	fixture, inputs := newMachineOutputInputs(t, args, goalFactoryName)
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-	})
 
 	go func() {
-		stdout.err = process.Execute(inputs.Input)
+		stdout.err = fixture.execute(inputs, providerRunner, nil)
 		close(stdout.done)
 	}()
 
@@ -641,18 +638,20 @@ func reserveTextStreamLoopbackURL(t *testing.T) string {
 	return "http://127.0.0.1:" + strconv.Itoa(port)
 }
 
-func writeTextStreamDefaultMockWorkersConfig(t *testing.T) string {
+func assertTextStreamListenerRebinds(t *testing.T, baseURL string) {
 	t.Helper()
 
-	data, err := json.MarshalIndent(workers.NewEmptyMockWorkersConfig(), "", "  ")
+	parsed, err := url.Parse(baseURL)
 	if err != nil {
-		t.Fatalf("marshal default mock-workers config: %v", err)
+		t.Fatalf("parse text-stream loopback URL %q: %v", baseURL, err)
 	}
-	path := filepath.Join(t.TempDir(), "mock-workers.json")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
+	listener, err := net.Listen("tcp", parsed.Host)
+	if err != nil {
+		t.Fatalf("rebind text-stream listener at %q after cancellation: %v", parsed.Host, err)
 	}
-	return path
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close rebound text-stream listener at %q: %v", parsed.Host, err)
+	}
 }
 
 func waitForTextStreamServerReady(ctx context.Context, baseURL string) error {
