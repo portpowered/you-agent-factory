@@ -99,6 +99,34 @@ type agySharedDaemon struct {
 	err error
 }
 
+// agyStaticCommandRunner is repeatable across -count runs. A queued test
+// runner would fall back to its generic response after the first invocation,
+// which would make a package-scoped process observe a different provider
+// transcript on the second and later repetitions.
+type agyStaticCommandRunner struct {
+	result platformprocess.CommandResult
+}
+
+func newAgyStaticCommandRunner(result platformprocess.CommandResult) platformprocess.CommandRunner {
+	return &agyStaticCommandRunner{result: agyCloneCommandResult(result)}
+}
+
+func (runner *agyStaticCommandRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	if err := ctx.Err(); err != nil {
+		return platformprocess.CommandResult{}, err
+	}
+	return agyCloneCommandResult(runner.result), nil
+}
+
+func agyCloneCommandResult(result platformprocess.CommandResult) platformprocess.CommandResult {
+	result.Stdout = append([]byte(nil), result.Stdout...)
+	result.Stderr = append([]byte(nil), result.Stderr...)
+	return result
+}
+
 func startAgySharedDaemon(process support.ApplicationProcess, input root.Input) *agySharedDaemon {
 	parent := input.Context
 	if parent == nil {
@@ -149,6 +177,7 @@ type agySharedReplay struct {
 	Listed         factoryapi.ListWorkResponse
 	FactoryEvents  []factoryapi.FactoryEvent
 	ResponseEvents []factoryapi.FactoryResponseEvent
+	RouteCalls     int
 }
 
 type agyProcessFixture struct {
@@ -272,7 +301,7 @@ func (fixture *agyProcessFixture) setup(t *testing.T) error {
 	if successLoaded.Process.ExitCode != nil {
 		successExitCode = *successLoaded.Process.ExitCode
 	}
-	successRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+	successRunner := newAgyStaticCommandRunner(platformprocess.CommandResult{
 		Stdout:   append([]byte(nil), successLoaded.Stdout.Raw...),
 		Stderr:   []byte(successLoaded.Stderr),
 		ExitCode: successExitCode,
@@ -376,6 +405,7 @@ func (fixture *agyProcessFixture) runScenario(
 	run.stream = stream
 	fixture.recordStreamOpened()
 
+	routeRequestStart := fixture.router.requestCount()
 	name := workTitle
 	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, session.Id, factoryapi.SubmitWorkRequest{
 		Name:         &name,
@@ -394,7 +424,7 @@ func (fixture *agyProcessFixture) runScenario(
 	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.Id)
 	responseEvents := readAgyResponseEvents(t, stream, agySharedScenarioTimeout, scenario.selector)
 	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)
-	fixture.assertRouteRequests(t, scenario)
+	routeCalls := fixture.assertRouteRequests(t, scenario, routeRequestStart)
 
 	run.close(t)
 	return agySharedReplay{
@@ -403,6 +433,7 @@ func (fixture *agyProcessFixture) runScenario(
 		Listed:         listed,
 		FactoryEvents:  factoryEvents,
 		ResponseEvents: responseEvents,
+		RouteCalls:     routeCalls,
 	}
 }
 
@@ -512,13 +543,13 @@ func (fixture *agyProcessFixture) assertProcessTopology(t *testing.T) {
 	}
 }
 
-func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *agySharedScenario) {
+func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *agySharedScenario, start int) int {
 	t.Helper()
 	want := 1
 	if scenario.selector == agySharedTimeoutSelector {
 		want = 9
 	}
-	requests := fixture.router.requestsForSelector(scenario.selector)
+	requests := fixture.router.requestsSince(start)
 	if len(requests) != want {
 		t.Fatalf("AGY %q routed requests = %d, want %d", scenario.selector, len(requests), want)
 	}
@@ -527,6 +558,7 @@ func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *ag
 			t.Fatalf("AGY %q routed request[%d] = command:%q workdir:%q, want command:%q workdir:%q", scenario.selector, index, request.Command, request.WorkDir, agySharedCommand, scenario.factoryDir)
 		}
 	}
+	return len(requests)
 }
 
 func (fixture *agyProcessFixture) finalize() error {
@@ -988,40 +1020,26 @@ func (router *agySharedCommandRouter) activeCallCount() int {
 	return router.active
 }
 
-func (router *agySharedCommandRouter) routeCallCount(selector string) int {
+func (router *agySharedCommandRouter) requestCount() int {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	count := 0
-	for _, request := range router.requests {
-		if request.Command == agySharedCommand && request.WorkDir == router.workDirForSelectorLocked(selector) {
-			count++
-		}
-	}
-	return count
+	return len(router.requests)
 }
 
-func (router *agySharedCommandRouter) requestsForSelector(selector string) []platformprocess.CommandRequest {
+func (router *agySharedCommandRouter) requestsSince(start int) []platformprocess.CommandRequest {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	workDir := router.workDirForSelectorLocked(selector)
-	requests := make([]platformprocess.CommandRequest, 0)
-	for _, request := range router.requests {
-		if request.WorkDir == workDir {
-			requests = append(requests, cloneAgyCommandRequest(request))
-		}
+	if start < 0 {
+		start = 0
+	}
+	if start > len(router.requests) {
+		start = len(router.requests)
+	}
+	requests := make([]platformprocess.CommandRequest, len(router.requests)-start)
+	for index, request := range router.requests[start:] {
+		requests[index] = cloneAgyCommandRequest(request)
 	}
 	return requests
-}
-
-func (router *agySharedCommandRouter) workDirForSelectorLocked(selector string) string {
-	for workDir, route := range router.routes {
-		if route.selector == selector {
-			return workDir
-		}
-	}
-	// Released routes are not queried by tests; returning a sentinel keeps the
-	// method side-effect-free if a diagnostic is emitted during finalization.
-	return "\x00"
 }
 
 func (router *agySharedCommandRouter) Run(

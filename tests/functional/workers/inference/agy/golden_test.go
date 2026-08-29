@@ -40,7 +40,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
 	}
-	if got := fixture.router.routeCallCount(scenario.selector); got != 1 {
+	if got := replay.RouteCalls; got != 1 {
 		t.Fatalf("agy %q route calls = %d, want one invocation", scenario.selector, got)
 	}
 
@@ -98,7 +98,7 @@ func TestAgyGoldenTimeout(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if got := fixture.router.routeCallCount(scenario.selector); got != 9 {
+	if got := replay.RouteCalls; got != 9 {
 		t.Fatalf("agy %q route calls = %d, want nine retry invocations", scenario.selector, got)
 	}
 
