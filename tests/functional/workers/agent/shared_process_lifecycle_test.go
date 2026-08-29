@@ -300,7 +300,7 @@ func (fixture *agentSharedProcessFixture) runScenario(
 		t.Fatalf("%s has unsupported input mode %q", scenario.name, scenario.inputMode)
 	}
 	var responseStream *support.FactoryResponseEventStream
-	if scenario.behavior == agentSharedCancel || scenario.name == "RuntimeRoot" {
+	if scenario.behavior == agentSharedCancel {
 		responseStream = support.OpenFactoryResponseEventStreamAt(
 			t,
 			support.SessionResponseEventsURL(fixture.baseURL, sessionID),
@@ -335,9 +335,10 @@ func (fixture *agentSharedProcessFixture) runScenario(
 		support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, agentSharedProcessTimeout)
 	}
 	if scenario.name == "RuntimeRoot" {
-		responseEvents = readAgentResponseEventsUntilTerminal(t, responseStream, agentSharedProcessTimeout)
-		responseStream.Close()
-		responseStream.WaitClosed(agentSharedProcessTimeout)
+		// The seed is consumed while the explicit session opens, before a live
+		// SSE subscriber can be attached. Read the retained public stream after
+		// terminalization so a fast seed dispatch cannot race subscription setup.
+		responseEvents = support.GetFactoryResponseEventsAt(t, fixture.baseURL, sessionID)
 	}
 	listed := listAgentSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
