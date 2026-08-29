@@ -1,13 +1,11 @@
 package help_test
 
 import (
-	"path/filepath"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,38 +25,23 @@ const (
 func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	sourceDir := support.ScaffoldFactory(t, invocationHelpFactoryConfig())
-	support.CreateNamedFactory(
-		t,
-		homeDir,
-		workingDirectory,
-		invocationHelpNamedFactoryName,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
+	fixture := helpPackageFixtureForTest(t)
+	result := fixture.execute(t,
 		"you", "run",
 		"--named", invocationHelpNamedFactoryName,
 		"--help",
-	})
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = workingDirectory
-
-	if err := process.Execute(inputs.Input); err != nil {
+	)
+	if result.err != nil {
 		t.Fatalf(
 			"Process.Execute(run --named %s --help) error = %v\nstdout:\n%s\nstderr:\n%s",
 			invocationHelpNamedFactoryName,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
+			result.err,
+			result.inputs.Stdout(),
+			result.inputs.Stderr(),
 		)
 	}
 
-	got := inputs.Stdout()
+	got := result.inputs.Stdout()
 	for _, want := range []string{
 		"Factory invocation help",
 		"Selected factory: " + invocationHelpFactoryConfigName + " (named factory " + invocationHelpNamedFactoryName + ")",
@@ -76,6 +59,26 @@ func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 	if strings.Contains(got, "Load workflow and run the factory engine") {
 		t.Fatalf("expected signature-aware help instead of generic Cobra help:\n%s", got)
 	}
+
+	duplicateResult := fixture.execute(t,
+		"you", "run",
+		"--named", invocationHelpNamedFactoryName,
+		"--help", "--help",
+	)
+	if duplicateResult.err != nil {
+		t.Fatalf(
+			"Process.Execute(duplicate --help) error = %v\nstdout:\n%s\nstderr:\n%s",
+			duplicateResult.err,
+			duplicateResult.inputs.Stdout(),
+			duplicateResult.inputs.Stderr(),
+		)
+	}
+	if duplicateResult.inputs.Stdout() != got {
+		t.Fatalf("duplicate --help output = %q, want idempotent output %q", duplicateResult.inputs.Stdout(), got)
+	}
+	if duplicateResult.inputs.Stderr() != result.inputs.Stderr() {
+		t.Fatalf("duplicate --help stderr = %q, want %q", duplicateResult.inputs.Stderr(), result.inputs.Stderr())
+	}
 }
 
 // TestCLIRunHelpDistinguishesRequiredAndOptionalParameters proves you run --named
@@ -84,38 +87,23 @@ func TestCLIRunHelpShowsInvocationSignatureForNamedFactory(t *testing.T) {
 func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	sourceDir := support.ScaffoldFactory(t, invocationHelpFactoryConfig())
-	support.CreateNamedFactory(
-		t,
-		homeDir,
-		workingDirectory,
-		invocationHelpNamedFactoryName,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
+	fixture := helpPackageFixtureForTest(t)
+	result := fixture.execute(t,
 		"you", "run",
 		"--named", invocationHelpNamedFactoryName,
 		"--help",
-	})
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = workingDirectory
-
-	if err := process.Execute(inputs.Input); err != nil {
+	)
+	if result.err != nil {
 		t.Fatalf(
 			"Process.Execute(run --named %s --help) error = %v\nstdout:\n%s\nstderr:\n%s",
 			invocationHelpNamedFactoryName,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
+			result.err,
+			result.inputs.Stdout(),
+			result.inputs.Stderr(),
 		)
 	}
 
-	got := inputs.Stdout()
+	got := result.inputs.Stdout()
 	usageLine := invocationHelpUsageLine(t, got)
 	if !strings.Contains(usageLine, "<"+invocationHelpRequiredParameter+">") {
 		t.Fatalf("usage line missing required token %q:\n%s", invocationHelpRequiredParameter, usageLine)
@@ -143,52 +131,54 @@ func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
 func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	sourceDir := support.ScaffoldFactory(t, invocationHelpFactoryConfig())
-	support.CreateNamedFactory(
-		t,
-		homeDir,
-		workingDirectory,
-		invocationHelpNamedFactoryName,
-		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
-	)
-
-	runner := testutil.NewProviderCommandRunner()
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(t.Context(), []string{
+	fixture := helpPackageFixtureForTest(t)
+	result := fixture.execute(t,
 		"you", "run",
 		"--named", invocationHelpNamedFactoryName,
 		"--help",
-	})
-	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = workingDirectory
-
-	if err := process.Execute(inputs.Input); err != nil {
+	)
+	if result.err != nil {
 		t.Fatalf(
 			"Process.Execute(run --named %s --help) error = %v\nstdout:\n%s\nstderr:\n%s",
 			invocationHelpNamedFactoryName,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
+			result.err,
+			result.inputs.Stdout(),
+			result.inputs.Stderr(),
 		)
 	}
-	if runner.CallCount() != 0 {
+	if fixture.providerRunner.CallCount() != 0 {
 		t.Fatalf(
 			"provider command runner call count = %d, want 0 for read-only run help",
-			runner.CallCount(),
+			fixture.providerRunner.CallCount(),
 		)
 	}
 
-	got := inputs.Stdout()
+	got := result.inputs.Stdout()
 	if !strings.Contains(got, "Factory invocation help") {
 		t.Fatalf("run --named %s --help missing Factory invocation help:\n%s", invocationHelpNamedFactoryName, got)
 	}
 	if !strings.Contains(got, "Selected factory: "+invocationHelpFactoryConfigName+" (named factory "+invocationHelpNamedFactoryName+")") {
 		t.Fatalf("run --named %s --help missing selected factory line:\n%s", invocationHelpNamedFactoryName, got)
+	}
+
+	conflictResult := fixture.execute(t,
+		"you", "run",
+		"--named", invocationHelpNamedFactoryName,
+		"--factory", fixture.fullFactoryPath,
+		"--help",
+	)
+	conflictErr := conflictResult.err
+	if conflictErr == nil || !strings.Contains(conflictErr.Error(), "--named cannot be used with --factory") {
+		t.Fatalf("conflicting --named/--factory error = %v, want stable selection conflict", conflictErr)
+	}
+	if conflictResult.inputs.Stdout() != "" {
+		t.Fatalf("conflicting --named/--factory stdout = %q, want empty", conflictResult.inputs.Stdout())
+	}
+	if diagnostic := support.RequireSafeCLIDiagnostic(t, conflictResult.inputs.Stderr()); diagnostic.Code != "CLI_COMMAND_FAILED" {
+		t.Fatalf("conflicting --named/--factory diagnostic code = %q, want CLI_COMMAND_FAILED", diagnostic.Code)
+	}
+	if fixture.providerRunner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count after help conflict = %d, want 0", fixture.providerRunner.CallCount())
 	}
 }
 
@@ -199,18 +189,17 @@ func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
 func TestCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
 	t.Parallel()
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
+	fixture := helpPackageFixtureForTest(t)
 	for _, command := range [][]string{
 		{"you", "session", "--help"},
 		{"you", "session", "pause", "--help"},
 		{"you", "session", "resume", "--help"},
 	} {
-		inputs := support.FakeInputs(t.Context(), command)
-		if err := process.Execute(inputs.Input); err != nil {
-			t.Fatalf("Process.Execute(%q) error = %v\nstdout:\n%s\nstderr:\n%s", command, err, inputs.Stdout(), inputs.Stderr())
+		result := fixture.execute(t, command...)
+		if result.err != nil {
+			t.Fatalf("Process.Execute(%q) error = %v\nstdout:\n%s\nstderr:\n%s", command, result.err, result.inputs.Stdout(), result.inputs.Stderr())
 		}
-		got := inputs.Stdout()
+		got := result.inputs.Stdout()
 		if !strings.Contains(got, "--remote --server http://factory.example:7437") {
 			t.Fatalf("help %q missing explicit remote placement example:\n%s", command, got)
 		}
@@ -223,6 +212,129 @@ func TestCLISessionHelpPublishesRunnablePlacementExamples(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestCLIRunHelpCoversGenericAndExplicitFactorySelections proves the generic
+// run help remains byte-for-byte stable and an explicit Factory path exposes
+// the same authored invocation signature as the named selection.
+func TestCLIRunHelpCoversGenericAndExplicitFactorySelections(t *testing.T) {
+	t.Parallel()
+
+	fixture := helpPackageFixtureForTest(t)
+	generic := fixture.execute(t, "you", "run", "--help")
+	if generic.err != nil {
+		t.Fatalf("generic run help error = %v\nstdout:\n%s\nstderr:\n%s", generic.err, generic.inputs.Stdout(), generic.inputs.Stderr())
+	}
+	wantGeneric, err := os.ReadFile(testutil.MustRepoPath(t, "pkg/transports/cli/baseline/testdata/run_help.txt"))
+	if err != nil {
+		t.Fatalf("read canonical run help baseline: %v", err)
+	}
+	if generic.inputs.Stdout() != string(wantGeneric) {
+		t.Fatalf("generic run help drifted from the canonical public baseline")
+	}
+	genericRepeat := fixture.execute(t, "you", "run", "--help")
+	if genericRepeat.err != nil {
+		t.Fatalf("repeated generic run help error = %v", genericRepeat.err)
+	}
+	if genericRepeat.inputs.Stdout() != generic.inputs.Stdout() || genericRepeat.inputs.Stderr() != generic.inputs.Stderr() {
+		t.Fatalf("repeated generic run help changed output or diagnostics")
+	}
+
+	named := fixture.execute(t, "you", "run", "--named", invocationHelpNamedFactoryName, "--help")
+	explicit := fixture.execute(t, "you", "run", "--factory", fixture.fullFactoryPath, "--help")
+	for name, result := range map[string]helpInvocationResult{
+		"named":    named,
+		"explicit": explicit,
+	} {
+		if result.err != nil {
+			t.Fatalf("%s Factory help error = %v\nstdout:\n%s\nstderr:\n%s", name, result.err, result.inputs.Stdout(), result.inputs.Stderr())
+		}
+		assertFullInvocationHelp(t, result.inputs.Stdout())
+	}
+	if !strings.Contains(explicit.inputs.Stdout(), "Selected factory: "+invocationHelpFactoryConfigName+" (factory config "+fixture.fullFactoryPath+")") {
+		t.Fatalf("explicit Factory help missing selected path identity:\n%s", explicit.inputs.Stdout())
+	}
+	if !strings.Contains(named.inputs.Stdout(), "Usage:\n  you run --named "+invocationHelpNamedFactoryName) ||
+		!strings.Contains(explicit.inputs.Stdout(), "Usage:\n  you run --factory "+fixture.fullFactoryPath) {
+		t.Fatalf("named and explicit help did not preserve their selection grammar")
+	}
+}
+
+// TestCLIRunHelpResetsEmptyAndInvalidSelections proves an empty signature can
+// be followed by a full signature on the same process, while missing and
+// malformed selections fail before help text or external work are produced.
+func TestCLIRunHelpResetsEmptyAndInvalidSelections(t *testing.T) {
+	t.Parallel()
+
+	fixture := helpPackageFixtureForTest(t)
+	empty := fixture.execute(t, "you", "run", "--factory", fixture.emptyFactoryPath, "--help")
+	if empty.err != nil {
+		t.Fatalf("empty signature help error = %v\nstdout:\n%s\nstderr:\n%s", empty.err, empty.inputs.Stdout(), empty.inputs.Stderr())
+	}
+	emptyOutput := empty.inputs.Stdout()
+	if !strings.Contains(emptyOutput, "Factory invocation help") ||
+		strings.Contains(emptyOutput, invocationHelpRequiredParameter) ||
+		strings.Contains(emptyOutput, invocationHelpOptionalParameter) ||
+		strings.Contains(emptyOutput, invocationHelpOptionalPathParameter) ||
+		strings.Contains(emptyOutput, "Examples:") {
+		t.Fatalf("empty signature help retained stale full-signature text:\n%s", emptyOutput)
+	}
+
+	full := fixture.execute(t, "you", "run", "--factory", fixture.fullFactoryPath, "--help")
+	if full.err != nil {
+		t.Fatalf("full signature after empty help error = %v\nstdout:\n%s\nstderr:\n%s", full.err, full.inputs.Stdout(), full.inputs.Stderr())
+	}
+	assertFullInvocationHelp(t, full.inputs.Stdout())
+
+	missing := fixture.execute(t, "you", "run", "--named", "invocation-help-missing", "--help")
+	if missing.err == nil || !strings.Contains(missing.err.Error(), "invocation-help-missing") {
+		t.Fatalf("missing named help error = %v, want stable missing-name error", missing.err)
+	}
+	if missing.inputs.Stdout() != "" {
+		t.Fatalf("missing named help stdout = %q, want empty", missing.inputs.Stdout())
+	}
+	support.RequireSafeCLIDiagnostic(t, missing.inputs.Stderr())
+
+	malformed := fixture.execute(t, "you", "run", "--factory", fixture.malformedFactoryPath, "--help")
+	if malformed.err == nil {
+		t.Fatal("malformed explicit Factory help error = nil, want validation failure")
+	}
+	if malformed.inputs.Stdout() != "" || strings.Contains(malformed.inputs.Stdout(), "Factory invocation help") {
+		t.Fatalf("malformed explicit Factory help stdout = %q, want no fabricated help", malformed.inputs.Stdout())
+	}
+	support.RequireSafeCLIDiagnostic(t, malformed.inputs.Stderr())
+	if fixture.providerRunner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls after help matrix = %d, want 0", fixture.providerRunner.CallCount())
+	}
+}
+
+func assertFullInvocationHelp(t *testing.T, output string) {
+	t.Helper()
+	for _, want := range []string{
+		"Factory invocation help",
+		"Factory-defined arguments:",
+		invocationHelpRequiredParameter,
+		invocationHelpOptionalParameter,
+		invocationHelpOptionalPathParameter,
+		"Examples:",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("full invocation help missing %q:\n%s", want, output)
+		}
+	}
+	usage := invocationHelpUsageLine(t, output)
+	for _, want := range []string{
+		"<" + invocationHelpRequiredParameter + ">",
+		"[--" + invocationHelpOptionalPathParameter + " <file-path>]",
+		"[--" + invocationHelpOptionalParameter + " <value>]",
+	} {
+		if !strings.Contains(usage, want) {
+			t.Fatalf("full invocation help usage missing %q:\n%s", want, usage)
+		}
+	}
+	assertInvocationHelpParameterRequirement(t, output, invocationHelpRequiredParameter, true)
+	assertInvocationHelpParameterRequirement(t, output, invocationHelpOptionalParameter, false)
+	assertInvocationHelpParameterRequirement(t, output, invocationHelpOptionalPathParameter, false)
 }
 
 func invocationHelpUsageLine(t *testing.T, help string) string {
