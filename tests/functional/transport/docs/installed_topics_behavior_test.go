@@ -1,15 +1,15 @@
 package docs_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -20,30 +20,35 @@ import (
 // model or paid-provider effects while still crossing validation, runtime
 // loading, and provider-backed worker execution.
 func TestInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
-	providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte("documentation example completed. COMPLETE"),
-	}, platformprocess.CommandResult{
-		Stdout: []byte("documentation example completed. COMPLETE"),
+	t.Run("Factory examples validate and run", func(t *testing.T) {
+		testFactoryDocumentationExamples(t, documentationProcess(t).process, documentationProcess(t).providerRunner)
 	})
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: providerRunner,
-	})
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		if err := process.Close(ctx); err != nil {
-			t.Errorf("close documentation process: %v", err)
+	t.Run("Docs index is complete and singular", func(t *testing.T) {
+		index := executeDocumentationCommand(
+			t,
+			documentationProcess(t).process,
+			isolatedDocumentationEnvironment(t),
+			documentationProcess(t).tempDir(t),
+			"docs",
+		)
+		for _, marker := range []string{
+			"# Docs",
+			"Packaged reference topics:",
+			"Run `you docs <topic>` below",
+		} {
+			if count := strings.Count(index, marker); count != 1 {
+				t.Fatalf("docs index marker %q count = %d, want 1", marker, count)
+			}
+		}
+		if strings.TrimSpace(index) == "" {
+			t.Fatal("docs index is empty")
 		}
 	})
-
-	t.Run("Factory examples validate and run", func(t *testing.T) {
-		testFactoryDocumentationExamples(t, process, providerRunner)
-	})
 	t.Run("Models topic documents names costs and safety", func(t *testing.T) {
-		testModelsDocumentation(t, process)
+		testModelsDocumentation(t, documentationProcess(t).process)
 	})
 	t.Run("Models invoke help documents prerequisites and names", func(t *testing.T) {
-		testModelsInvokeHelp(t, process)
+		testModelsInvokeHelp(t, documentationProcess(t).process)
 	})
 }
 
@@ -98,8 +103,8 @@ func testFactoryDocumentationExample(
 ) {
 	t.Helper()
 	env := isolatedDocumentationEnvironment(t)
-	markdown := executeDocumentationCommand(t, process, env, t.TempDir(), "docs", topic)
-	factoryDir := t.TempDir()
+	markdown := executeDocumentationCommand(t, process, env, documentationProcess(t).tempDir(t), "docs", topic)
+	factoryDir := documentationProcess(t).tempDir(t)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	if err := os.WriteFile(factoryPath, extractJSONExample(t, markdown, heading), 0o600); err != nil {
 		t.Fatalf("write copied %s Factory example: %v", topic, err)
@@ -147,7 +152,7 @@ func testFactoryDocumentationExample(
 func testModelsDocumentation(t *testing.T, process support.Process) {
 	t.Helper()
 	env := isolatedDocumentationEnvironment(t)
-	markdown := executeDocumentationCommand(t, process, env, t.TempDir(), "docs", "models")
+	markdown := executeDocumentationCommand(t, process, env, documentationProcess(t).tempDir(t), "docs", "models")
 	for _, want := range []string{
 		"local Models composition",
 		"| `llm` | `OMNI` | 5.0 GB |",
@@ -194,7 +199,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 func testModelsInvokeHelp(t *testing.T, process support.Process) {
 	t.Helper()
 	env := isolatedDocumentationEnvironment(t)
-	help := executeDocumentationCommand(t, process, env, t.TempDir(), "models", "invoke", "--help")
+	help := executeDocumentationCommand(t, process, env, documentationProcess(t).tempDir(t), "models", "invoke", "--help")
 	for _, want := range []string{
 		"Invoke one local model",
 		"Current Factory at ./factory/factory.json",
@@ -234,22 +239,59 @@ func executeDocumentationCommand(t *testing.T, process support.Process, env []st
 
 func executeDocumentationCommandResult(t *testing.T, process support.Process, env []string, workingDirectory string, args ...string) documentationCommandResult {
 	t.Helper()
-	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
-	inputs.Input.Env = append([]string(nil), env...)
-	inputs.Input.WorkingDirectory = workingDirectory
-	err := process.Execute(inputs.Input)
-	return documentationCommandResult{stdout: inputs.Stdout(), stderr: inputs.Stderr(), err: err}
+	var stdout, stderr bytes.Buffer
+	err := executeDocumentationCommandInto(t, process, env, workingDirectory, &stdout, &stderr, args...)
+	return documentationCommandResult{stdout: stdout.String(), stderr: stderr.String(), err: err}
 }
 
 func isolatedDocumentationEnvironment(t *testing.T) []string {
 	t.Helper()
-	home := t.TempDir()
-	return append(os.Environ(),
-		"HOME="+home,
-		"USERPROFILE="+home,
-		"XDG_CACHE_HOME="+filepath.Join(home, "cache"),
-		"INFINITE_YOU_OMNIVOICE_CACHE_DIR="+filepath.Join(home, "omnivoice-cache"),
-	)
+	return append([]string(nil), os.Environ()...)
+}
+
+func executeDocumentationCommandInto(
+	t *testing.T,
+	process support.Process,
+	env []string,
+	workingDirectory string,
+	stdout, stderr io.Writer,
+	args ...string,
+) error {
+	t.Helper()
+	fixture := documentationProcess(t)
+	finishInvocation := fixture.ledger.beginInvocation()
+	defer finishInvocation()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	inputs := support.FakeInputs(ctx, append([]string{"you"}, args...))
+	inputs.Input.Env = fixture.freshEnvironment(t, env)
+	inputs.Input.WorkingDirectory = workingDirectory
+	inputs.Input.Stdout = stdout
+	inputs.Input.Stderr = stderr
+	return process.Execute(inputs.Input)
+}
+
+var errDocumentationOutput = errors.New("docs output writer failed")
+
+type boundedDocumentationWriter struct {
+	buffer bytes.Buffer
+	limit  int
+}
+
+func (writer *boundedDocumentationWriter) Write(p []byte) (int, error) {
+	remaining := writer.limit - writer.buffer.Len()
+	if remaining <= 0 {
+		return 0, errDocumentationOutput
+	}
+	if remaining < len(p) {
+		_, _ = writer.buffer.Write(p[:remaining])
+		return remaining, errDocumentationOutput
+	}
+	return writer.buffer.Write(p)
+}
+
+func (writer *boundedDocumentationWriter) String() string {
+	return writer.buffer.String()
 }
 
 func extractJSONExample(t *testing.T, markdown, heading string) []byte {

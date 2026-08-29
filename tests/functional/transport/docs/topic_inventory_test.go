@@ -5,9 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface proves packaged topic aliases remain public.
@@ -35,6 +33,10 @@ func TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface(t *test
 		if !slices.Equal(entry.Aliases, want) {
 			t.Fatalf("topic %q aliases = %#v, want %#v", entry.Name, entry.Aliases, want)
 		}
+		canonicalOutput := executeDocsCommand(t, "docs", entry.Name)
+		if !strings.Contains(canonicalOutput, "# ") {
+			t.Fatalf("you docs %s returned empty markdown:\n%s", entry.Name, canonicalOutput)
+		}
 		for _, alias := range want {
 			if !slices.Contains(commands, alias) {
 				t.Fatalf("SupportedTopicCommands() missing alias %q", alias)
@@ -43,6 +45,9 @@ func TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface(t *test
 			if !strings.Contains(output, "# ") {
 				t.Fatalf("you docs %s returned empty markdown:\n%s", alias, output)
 			}
+			if output != canonicalOutput {
+				t.Fatalf("alias %s output differs from canonical topic %s", alias, entry.Name)
+			}
 		}
 	}
 
@@ -50,16 +55,36 @@ func TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface(t *test
 		if !slices.Contains(commands, topic) {
 			t.Fatalf("SupportedTopicCommands() missing canonical topic %q", topic)
 		}
+		if !slices.ContainsFunc(entries, func(entry docscli.TopicIndexEntry) bool {
+			return entry.Name == topic
+		}) {
+			t.Fatalf("TopicIndexEntries() missing canonical topic %q", topic)
+		}
+		if !strings.Contains(executeDocsCommand(t, "docs", topic), "# ") {
+			t.Fatalf("you docs %s returned empty markdown", topic)
+		}
+	}
+
+	index := executeDocsCommand(t, "docs")
+	for _, topic := range topics {
+		if !strings.Contains(index, "`"+topic+"`") {
+			t.Fatalf("docs index is missing canonical topic %q", topic)
+		}
 	}
 }
 
 func executeDocsCommand(t *testing.T, args ...string) string {
 	t.Helper()
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	inputs := support.FakeInputs(t.Context(), append([]string{"you"}, args...))
-	inputs.WorkingDirectory = t.TempDir()
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("execute root command %v: %v", args, err)
+	process := documentationProcess(t)
+	result := executeDocumentationCommandResult(
+		t,
+		process.process,
+		isolatedDocumentationEnvironment(t),
+		process.tempDir(t),
+		args...,
+	)
+	if result.err != nil {
+		t.Fatalf("execute root command %v: %v\nstdout:\n%s\nstderr:\n%s", args, result.err, result.stdout, result.stderr)
 	}
-	return inputs.Stdout()
+	return result.stdout
 }

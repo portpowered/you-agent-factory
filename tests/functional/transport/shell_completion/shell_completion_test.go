@@ -1,16 +1,11 @@
 package shell_completion_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
-	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 const (
@@ -21,30 +16,19 @@ const (
 
 // TestGeneratedCompletionScriptsReachRootProcess proves generated completion
 // and dynamic candidates through the production root process. Shell syntax is
-// covered by transport-level unit tests; functional tests do not build a CLI.
+// covered by transport-level unit and integration tests; this functional test
+// does not build or invoke a CLI executable.
 func TestGeneratedCompletionScriptsReachRootProcess(t *testing.T) {
-	workingDirectory := t.TempDir()
-	homeDirectory := t.TempDir()
-	writeShellCompletionFactory(t, workingDirectory)
-	if err := os.WriteFile(filepath.Join(workingDirectory, shellFileName), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write shell completion file: %v", err)
-	}
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	environment := append(os.Environ(), "HOME="+homeDirectory, "USERPROFILE="+homeDirectory)
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-
 	for _, shell := range []string{"bash", "zsh", "powershell"} {
+		shell := shell
 		t.Run(shell, func(t *testing.T) {
-			command := harness.CommandContext(ctx, "completion", shell)
-			command.Dir = workingDirectory
-			command.Env = environment
-			output, err := command.CombinedOutput()
-			if err != nil {
-				t.Fatalf("generate %s completion: %v\n%s", shell, err, output)
-			}
-			if len(strings.TrimSpace(string(output))) < 100 {
+			result := executeCompletionCommand(
+				t,
+				completionProcess(t).invocation(t, false),
+				"completion", shell,
+			)
+			requireCompletionSuccess(t, result, "generate "+shell)
+			if len(strings.TrimSpace(result.stdout)) < 100 {
 				t.Fatalf("generated %s completion is unexpectedly empty", shell)
 			}
 		})
@@ -59,22 +43,46 @@ func TestGeneratedCompletionScriptsReachRootProcess(t *testing.T) {
 		{name: "mode", args: []string{"__complete", "run", "--named", shellFactoryName, "--mode", "j"}, want: shellModeValue},
 		{name: "file", args: []string{"__complete", "run", "--named", shellFactoryName, "--config", "shell-conf"}, want: "ShellCompDirectiveDefault"},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			command := harness.CommandContext(ctx, tc.args...)
-			command.Dir = workingDirectory
-			command.Env = environment
-			output, err := command.CombinedOutput()
-			if err != nil {
-				t.Fatalf("request %s completion: %v\n%s", tc.name, err, output)
-			}
-			if !strings.Contains(string(output), tc.want) {
-				t.Fatalf("%s completion lacks %q:\n%s", tc.name, tc.want, output)
+			result := executeCompletionCommand(
+				t,
+				completionProcess(t).invocation(t, true),
+				tc.args...,
+			)
+			requireCompletionSuccess(t, result, "request "+tc.name+" completion")
+			if !strings.Contains(result.stdout+result.stderr, tc.want) {
+				t.Fatalf("%s completion lacks %q:\nstdout:\n%s\nstderr:\n%s", tc.name, tc.want, result.stdout, result.stderr)
 			}
 		})
 	}
 }
 
-func writeShellCompletionFactory(t *testing.T, workingDirectory string) {
+func requireCompletionSuccess(t testing.TB, result completionCommandResult, operation string) {
+	t.Helper()
+	if result.err != nil {
+		t.Fatalf("%s: %v\nstdout:\n%s\nstderr:\n%s", operation, result.err, result.stdout, result.stderr)
+	}
+}
+
+func requireCompletionHelp(t testing.TB, result completionCommandResult, operation string) {
+	t.Helper()
+	// Process.Execute returns nil for the successful exit status observed at
+	// this in-process boundary.
+	requireCompletionSuccess(t, result, operation+" help fallback")
+	if !strings.Contains(result.stdout, "Usage:\n  you completion [command]") {
+		t.Fatalf("%s help output = %q, want completion usage", operation, result.stdout)
+	}
+	if !strings.Contains(result.stdout, "Available Commands:") ||
+		!strings.Contains(result.stdout, "Generate the autocompletion script") {
+		t.Fatalf("%s help output = %q, want completion command inventory", operation, result.stdout)
+	}
+	if result.stderr != "" {
+		t.Fatalf("%s help stderr = %q, want empty", operation, result.stderr)
+	}
+}
+
+func writeShellCompletionFactory(t testing.TB, workingDirectory string) {
 	t.Helper()
 	definition := map[string]any{
 		"id": shellFactoryName, "name": shellFactoryName,
