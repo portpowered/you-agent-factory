@@ -17,6 +17,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -102,6 +103,10 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	assetOpen := edges.ModelAssetOpenFile
 	if assetOpen == nil {
 		assetOpen = func(path string) (io.ReadCloser, error) { return os.Open(path) }
+	}
+	assetCoordination, coordinationErr := platformlocking.New(platformlocking.LocalFileSystem{})
+	if coordinationErr != nil {
+		return nil, fmt.Errorf("construct Models asset staging coordination: %w", coordinationErr)
 	}
 
 	launcher := edges.ModelHostProcessLauncher
@@ -203,6 +208,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		assetEnvironment,
 		protocolNegotiator,
 		compatibilityChecker,
+		assetCoordination,
 		backendArtifactResolver,
 		edges.ModelInvocationProtocolClient,
 		protocolDialer,

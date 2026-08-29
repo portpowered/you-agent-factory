@@ -23,7 +23,7 @@ func (s *service) publishGenericRuntimeCache(
 	modelName string,
 	source genericSource,
 	result genericCacheResult,
-) (assets.RuntimeCacheInspection, error) {
+) (inspection assets.RuntimeCacheInspection, err error) {
 	if strings.TrimSpace(modelName) == "" || result.snapshotPath == "" {
 		return assets.RuntimeCacheInspection{}, nil
 	}
@@ -40,9 +40,27 @@ func (s *service) publishGenericRuntimeCache(
 	if err := assetContextError(ctx); err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
+	lock, err := s.lockGenericRuntime(ctx, cacheDirectory, modelName)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	defer func() {
+		err = closeAssetStagingLock(lock, err)
+	}()
+
+	revision := genericRuntimeRevision(source, result.artifacts)
+	existing, _, inspectErr := s.inspectGenericRuntimeCache(
+		ctx, cacheDirectory, canonicalModelName(modelName), source,
+	)
+	if inspectErr != nil {
+		return assets.RuntimeCacheInspection{}, inspectErr
+	}
+	if genericRuntimeInspectionMatches(existing, revision, metadataFiles) {
+		return existing, nil
+	}
 
 	publication, err := s.newGenericRuntimePublication(
-		cacheDirectory, canonicalModelName(modelName), genericRuntimeRevision(source, result.artifacts),
+		cacheDirectory, canonicalModelName(modelName), revision,
 	)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
@@ -59,10 +77,33 @@ func (s *service) publishGenericRuntimeCache(
 	publication.committed = true
 	publication.removeBackups(s)
 
-	inspection := genericRuntimeInspectionFromArtifacts(
+	inspection = genericRuntimeInspectionFromArtifacts(
 		publication.finalPath, publication.revision, metadataFiles, result.artifacts,
 	)
 	return inspection, nil
+}
+
+func genericRuntimeInspectionMatches(
+	inspection assets.RuntimeCacheInspection,
+	revision string,
+	metadataFiles []metadataFile,
+) bool {
+	if !inspection.Installed || inspection.Revision != revision ||
+		len(inspection.ObservedArtifacts) != len(metadataFiles) {
+		return false
+	}
+	observed := make(map[string]models.AssetArtifact, len(inspection.ObservedArtifacts))
+	for _, artifact := range inspection.ObservedArtifacts {
+		observed[filepath.ToSlash(strings.TrimSpace(artifact.Name))] = artifact
+	}
+	for _, file := range metadataFiles {
+		artifact, ok := observed[file.Path]
+		if !ok || artifact.Bytes != file.Bytes ||
+			!strings.EqualFold(strings.TrimSpace(artifact.SHA256), strings.TrimSpace(file.SHA256)) {
+			return false
+		}
+	}
+	return true
 }
 
 type genericRuntimePublication struct {

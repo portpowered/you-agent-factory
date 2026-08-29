@@ -19,9 +19,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -672,7 +674,16 @@ func newPreparationTestService(
 			return os.Create(path)
 		},
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		assets.ConstructionOptions{Coordination: mustPreparationLockingService()},
 	).(*service)
+}
+
+func mustPreparationLockingService() platformlocking.Service {
+	service, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		panic(err)
+	}
+	return service
 }
 
 func writeVerifiedCacheFixture(t *testing.T, cacheDirectory string) {

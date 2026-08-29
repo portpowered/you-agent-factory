@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -690,6 +691,10 @@ func newGenericService(
 	environment modelseffects.AssetResolveEnvironment,
 ) *service {
 	t.Helper()
+	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		t.Fatalf("construct asset coordination: %v", err)
+	}
 	value := New(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
@@ -705,7 +710,10 @@ func newGenericService(
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		assets.ConstructionOptions{ResolveEnvironment: environment},
+		assets.ConstructionOptions{
+			ResolveEnvironment: environment,
+			Coordination:       coordination,
+		},
 	)
 	service, ok := value.(*service)
 	if !ok {

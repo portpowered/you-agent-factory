@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
@@ -728,7 +729,16 @@ func newTestService(scopes runtimescopes.Service, cacheReads *int) *service {
 		},
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		assets.ConstructionOptions{Coordination: mustServiceTestLockingService()},
 	).(*service)
+}
+
+func mustServiceTestLockingService() platformlocking.Service {
+	service, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		panic(err)
+	}
+	return service
 }
 
 func writeCacheFixture(t *testing.T, cacheDirectory string, includeMetadata bool) {

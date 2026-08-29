@@ -95,6 +95,8 @@ var platformAdapterSelectionSymbols = map[string]struct{}{
 	repositoryImportPrefix + "pkg/platform/directoryreplace.NewLocal": {},
 	repositoryImportPrefix + "pkg/platform/filesystem.Local":          {},
 	repositoryImportPrefix + "pkg/platform/inboxgitkeep.NewLocal":     {},
+	repositoryImportPrefix + "pkg/platform/locking.LocalFileSystem":   {},
+	repositoryImportPrefix + "pkg/platform/locking.New":               {},
 }
 
 type productionDefaultAllowance struct {
@@ -154,6 +156,9 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ReadFile", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
+	{filePath: "pkg/platform/locking/file.go", operation: "LocalFileSystem.MkdirAll", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/locking.New"},
+	{filePath: "pkg/platform/locking/file.go", operation: "LocalFileSystem.OpenFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/locking.New"},
+	{filePath: "pkg/platform/locking/file.go", operation: "LocalFileSystem", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/locking.New"},
 
 	// Runtime metrics coordination is a policy-free host adapter selected by
 	// Wire. Its stable OS-held locks are the external effect behind the public

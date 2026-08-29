@@ -14,6 +14,7 @@ import (
 type ConstructionOptions struct {
 	ResolveEnvironment modelseffects.AssetResolveEnvironment
 	ResolveRevision    func(context.Context, string) (string, error)
+	Coordination       modelseffects.AssetStagingCoordination
 }
 
 // Service resolves scoped asset sources, prepares verified revisions, and

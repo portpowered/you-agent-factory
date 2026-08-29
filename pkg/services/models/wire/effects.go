@@ -26,6 +26,7 @@ type AssetReadFile = effects.AssetReadFile
 type AssetReadDirectory = effects.AssetReadDirectory
 type AssetCreateFile = effects.AssetCreateFile
 type AssetOpenFile = effects.AssetOpenFile
+type AssetStagingCoordination = effects.AssetStagingCoordination
 type HostProtocolNegotiationRequest = effects.HostProtocolNegotiationRequest
 type HostProtocolNegotiationResult = effects.HostProtocolNegotiationResult
 type HostProtocolNegotiator = effects.HostProtocolNegotiator

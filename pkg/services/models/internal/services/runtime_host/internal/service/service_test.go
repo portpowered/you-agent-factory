@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -392,6 +393,10 @@ func mustLeasesService(t *testing.T, clock modelseffects.HostClock) hostleases.S
 
 func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.Service {
 	t.Helper()
+	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		t.Fatalf("construct asset coordination: %v", err)
+	}
 	assets, err := assetswire.NewService(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
@@ -409,6 +414,7 @@ func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		scopedassets.ConstructionOptions{Coordination: coordination},
 	)
 	if err != nil {
 		t.Fatalf("construct assets: %v", err)

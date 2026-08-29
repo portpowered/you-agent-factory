@@ -260,7 +260,7 @@ func waitForStory001ModelStarts(t testing.TB, origin *characterizationOrigin, co
 		select {
 		case <-origin.modelStarted:
 		case <-ctx.Done():
-			t.Fatalf("timed out waiting for %d model download starts; observed=%d total=%d", count, observed, origin.modelStartCount())
+			t.Fatalf("timed out waiting for %d model download starts; observed=%d total=%d exchanges=%s", count, observed, origin.modelStartCount(), compactJSON(origin.exchangesSnapshot()))
 		}
 	}
 }
