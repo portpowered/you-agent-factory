@@ -30,7 +30,7 @@ Available Commands:
   help            Help about any command
   init            Configure provider and model defaults
   metrics         Inspect recorded Factory Runtime metrics
-  models          Inspect discovered models from a running service
+  models          Run local inference for language, speech, voice, and embeddings
   providers       Discover provider capabilities
   run             Load workflow and run the factory engine
   server          Serve the Current Factory API and dashboard

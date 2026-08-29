@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -30,11 +31,12 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 	}()
 
 	var listed bool
-	var inspected, pulled string
+	var inspected []string
+	var pulled string
 	var invocations []modelscli.InvokeConfig
 	rootModelsCLI = modelsCLIServiceFunctions{
 		list:    func(modelscli.ListConfig) error { listed = true; return nil },
-		inspect: func(cfg modelscli.InspectConfig) error { inspected = cfg.ModelName; return nil },
+		inspect: func(cfg modelscli.InspectConfig) error { inspected = append(inspected, cfg.ModelName); return nil },
 		pull:    func(cfg modelscli.PullConfig) error { pulled = cfg.ModelName; return nil },
 		invoke: func(cfg modelscli.InvokeConfig) error {
 			invocations = append(invocations, cfg)
@@ -43,8 +45,13 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 	}
 
 	executeDocumentedModelExample(t, []string{"models", "list"})
-	executeDocumentedModelExample(t, []string{"models", "inspect", "OMNIVOICE_Q4_K_M"})
-	executeDocumentedModelExample(t, []string{"models", "pull", "OMNIVOICE_Q4_K_M"})
+	for _, name := range []string{"llm", "asr", "tts", "embed"} {
+		executeDocumentedModelExample(t, []string{"models", "inspect", name})
+	}
+	executeDocumentedModelExample(t, []string{"models", "pull", "llm"})
+	executeDocumentedModelExample(t, []string{"--json", "models", "pull", "embed"})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "embed", "--operation", "EMBED", "--input", "text=Find similar work"})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "llm", "--operation", "OMNI", "--input", "prompt=Write a haiku"})
 	executeDocumentedModelExample(t, []string{"models", "invoke", "tts", "--operation", "TTS", "--input", "text=Read the release summary."})
 	executeDocumentedModelExample(t, []string{"models", "invoke", "tts", "--operation", "TTS", "--text", "Read the release summary.", "--output", "speech.wav"})
 	executeDocumentedModelExample(t, []string{"--json", "models", "invoke", "tts", "--operation", "TTS", "--input", "text=Read the release summary."})
@@ -57,8 +64,14 @@ func requireDocumentedModelCommands(t *testing.T, doc string) {
 	t.Helper()
 	for _, command := range []string{
 		"you models list",
-		"you models inspect OMNIVOICE_Q4_K_M",
-		"you models pull OMNIVOICE_Q4_K_M",
+		"you models inspect llm",
+		"you models inspect asr",
+		"you models inspect tts",
+		"you models inspect embed",
+		"you models pull llm",
+		"you --json models pull embed",
+		`you models invoke embed --operation EMBED --input text="Find similar work"`,
+		`you models invoke llm --operation OMNI --input prompt="Write a haiku"`,
 		`you models invoke tts --operation TTS --input text="Read the release summary." > speech.wav`,
 		`you models invoke tts --operation TTS --text "Read the release summary." --output speech.wav`,
 		`you --json models invoke tts --operation TTS --input text="Read the release summary."`,
@@ -69,15 +82,17 @@ func requireDocumentedModelCommands(t *testing.T, doc string) {
 	}
 }
 
-func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected, pulled string, invocations []modelscli.InvokeConfig) {
+func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected []string, pulled string, invocations []modelscli.InvokeConfig) {
 	t.Helper()
-	if !listed || inspected != "OMNIVOICE_Q4_K_M" || pulled != "OMNIVOICE_Q4_K_M" {
-		t.Fatalf("documented model task boundary = listed %t, inspected %q, pulled %q", listed, inspected, pulled)
+	if !listed || !reflect.DeepEqual(inspected, []string{"llm", "asr", "tts", "embed"}) || pulled != "embed" {
+		t.Fatalf("documented model task boundary = listed %t, inspected %#v, pulled %q", listed, inspected, pulled)
 	}
-	if len(invocations) != 3 {
-		t.Fatalf("documented invocations reaching model boundary = %d, want 3", len(invocations))
+	if len(invocations) != 5 {
+		t.Fatalf("documented invocations reaching model boundary = %d, want 5", len(invocations))
 	}
 	wants := []documentedModelInvocationProjection{
+		{modelName: "embed", operation: "EMBED", inputMapping: "text=Find similar work"},
+		{modelName: "llm", operation: "OMNI", inputMapping: "prompt=Write a haiku"},
 		{modelName: "tts", operation: "TTS", inputMapping: "text=Read the release summary."},
 		{modelName: "tts", operation: "TTS", text: "Read the release summary.", outputPath: "speech.wav"},
 		{modelName: "tts", operation: "TTS", inputMapping: "text=Read the release summary.", json: true},

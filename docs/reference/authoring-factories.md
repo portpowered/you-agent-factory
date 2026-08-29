@@ -49,6 +49,7 @@ A minimal workflow needs one work type, one worker, and one workstation:
 
 ```json
 {
+  "name": "minimal-workflow",
   "workTypes": [
     {
       "name": "task",
@@ -68,7 +69,7 @@ A minimal workflow needs one work type, one worker, and one workstation:
       "worker": "processor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }
@@ -103,6 +104,7 @@ with `you factory config validate ./factory.json`:
 
 ```json
 {
+  "name": "expected-artifacts",
   "workTypes": [
     {
       "name": "task",
@@ -128,7 +130,7 @@ with `you factory config validate ./factory.json`:
       "worker": "processor",
       "inputs": [{ "workType": "task", "state": "init" }],
       "outputs": [{ "workType": "task", "state": "complete" }],
-      "onFailure": { "workType": "task", "state": "failed" },
+      "onFailure": [{ "workType": "task", "state": "failed" }],
       "expectedArtifacts": [
         {
           "name": "manifest",
@@ -175,6 +177,7 @@ camelCase config fields.
 
 ```json
 {
+  "name": "sample-service",
   "id": "sample-service",
   "resources": [
     { "name": "agent-slot", "capacity": 1 }
@@ -201,8 +204,8 @@ camelCase config fields.
       "worker": "executor",
       "inputs": [{ "workType": "story", "state": "init" }],
       "outputs": [{ "workType": "story", "state": "in-review" }],
-      "onContinue": { "workType": "story", "state": "init" },
-      "onFailure": { "workType": "story", "state": "failed" },
+      "onContinue": [{ "workType": "story", "state": "init" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }],
       "resources": [{ "name": "agent-slot", "capacity": 1 }]
     },
     {
@@ -210,8 +213,8 @@ camelCase config fields.
       "worker": "reviewer",
       "inputs": [{ "workType": "story", "state": "in-review" }],
       "outputs": [{ "workType": "story", "state": "complete" }],
-      "onRejection": { "workType": "story", "state": "init" },
-      "onFailure": { "workType": "story", "state": "failed" },
+      "onRejection": [{ "workType": "story", "state": "init" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }],
       "resources": [{ "name": "agent-slot", "capacity": 1 }]
     },
     {
@@ -434,7 +437,7 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-The seventeen first-party packaged Factories also use the named-factory path.
+The nineteen first-party packaged Factories also use the named-factory path.
 `you factory list` is the discovery source for their descriptions and runnable
 examples.
 
@@ -445,6 +448,7 @@ examples.
 | `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
 | `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
 | `@you/factory-builder` | Graph | Create and install one validated graph or JavaScript Factory from a request. |
+| `@you/fix` | Graph | Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure. |
 | `@you/full-flow` | Graph | Plan implementation waves, work in isolated worktrees, merge, and replan until complete. |
 | `@you/fusion` | Graph | Produce a draft with one worker and refine it with another. |
 | `@you/goal` | Graph | Repeat bounded work on a goal until the executor reports completion. |
@@ -452,6 +456,7 @@ examples.
 | `@you/plan-execute` | Graph | Write matching Markdown and JSON PRDs, then execute and verify their stories in the current workspace. |
 | `@you/plan-parallel` | Graph | Plan a Work dependency graph, execute ready tasks concurrently, and merge results. |
 | `@you/quorum` | Graph | Run independent assessments concurrently and merge them. |
+| `@you/ralph` | Graph | Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete. |
 | `@you/review` | Graph | Repeat writing and independent review until approval or exhaustion. |
 | `@you/spawn` | JavaScript | Plan an exact number of tasks, execute them concurrently, and merge ordered results. |
 | `@you/subagent` | Graph | Run one bounded read-only subagent and return its result. |
@@ -717,6 +722,7 @@ This workstation stays the same for both local and cloud TTS:
 
 ```json
 {
+  "name": "local-tts",
   "workTypes": [
     {
       "name": "speech",
@@ -940,7 +946,7 @@ Keep the exact contracts on the canonical owner pages:
       "behavior": "POLLER",
       "worker": "github-poller",
       "outputs": [{ "workType": "task", "state": "init" }],
-      "onFailure": { "workType": "task", "state": "failed" }
+      "onFailure": [{ "workType": "task", "state": "failed" }]
     }
   ]
 }
@@ -997,7 +1003,7 @@ Bound workstation:
   "behavior": "POLLER",
   "worker": "linear-poller",
   "outputs": [{ "workType": "task", "state": "init" }],
-  "onFailure": { "workType": "task", "state": "failed" }
+  "onFailure": [{ "workType": "task", "state": "failed" }]
 }
 ```
 

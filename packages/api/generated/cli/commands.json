@@ -11987,17 +11987,17 @@
         "documentation": {
           "title": {
             "id": "you.models.title",
-            "canonicalEnglish": "Inspect discovered models from a running service"
+            "canonicalEnglish": "Run local inference for language, speech, voice, and embeddings"
           },
           "description": {
             "id": "you.models.description",
-            "canonicalEnglish": "Inspect discovered models from a running infinite-you service.\n\nUse list to discover model identifiers, inspect to view one model's readiness and capabilities, invoke to call a discovered model directly through the shared in-process bootstrap, and pull to populate the managed local-model cache for supported local assets."
+            "canonicalEnglish": "Discover, inspect, pull, and invoke local models for language, speech, voice, and embeddings.\n\nUse list and inspect to review the shipped llm, asr, tts, and embed names. Commands use local Models composition unless you explicitly select a reachable service with --server. Direct invocation also requires a valid Current Factory at ./factory/factory.json."
           }
         },
         "examples": [
           "you models list",
-          "you models inspect OMNIVOICE_Q4_K_M",
-          "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"hello\" --output ./speech.wav"
+          "you models inspect llm",
+          "you models inspect tts"
         ],
         "visibility": "public",
         "sourceHash": "a8d7dfb6605cc71553c22a22f2d0dc6504c189e865ba9ecf031e25269bb8b5db"
@@ -12012,7 +12012,7 @@
       "runnable": false,
       "usage": {
         "line": "models",
-        "example": "  # List models exposed by the default local service.\n  you models list\n\n  # Inspect one model readiness surface.\n  you models inspect OMNIVOICE_Q4_K_M\n\n  # Pull managed local assets before invoking.\n  you models pull OMNIVOICE_Q4_K_M"
+        "example": "  # List models from the local Models composition.\n  you models list\n\n  # Inspect one shipped model.\n  you models inspect llm\n\n  # Review a model before invoking it.\n  you models inspect tts"
       },
       "flags": {
         "you.models.flag.debug": {
@@ -12152,7 +12152,7 @@
           },
           "description": {
             "id": "you.models.list.description",
-            "canonicalEnglish": "List discovered models from GET /models on the configured service. Human output summarizes provider locality, supported operations, managed-runtime readiness, and resource counts. Use global --json for API-shaped output and global --server to target a non-default factory API base URI."
+            "canonicalEnglish": "List discovered models from the local Models composition. Human output summarizes provider locality, supported operations, managed-runtime readiness, and resource counts. Use global --json for API-shaped output and explicit --server to target a reachable factory API service."
           }
         },
         "examples": [
@@ -12413,12 +12413,12 @@
           },
           "description": {
             "id": "you.models.inspect.description",
-            "canonicalEnglish": "Inspect one discovered model from GET /models/{model_name}. Human output prints readiness, lifecycle, capabilities, and diagnostics for the named model. Use global --json for API-shaped output and global --server to target a non-default factory API base URI."
+            "canonicalEnglish": "Inspect one discovered model from the local Models composition. Human output prints readiness, lifecycle, capabilities, and diagnostics for the named model. Use global --json for API-shaped output and explicit --server to target a reachable factory API service."
           }
         },
         "examples": [
-          "you models inspect OMNIVOICE_Q4_K_M",
-          "you --json models inspect OMNIVOICE_Q4_K_M"
+          "you models inspect llm",
+          "you --json models inspect llm"
         ],
         "visibility": "public",
         "sourceHash": "9ed4ddda429ca152156e73f13050e2cb9adef97e2ecd2253ddddd62470d14c60"
@@ -12434,7 +12434,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "inspect <model-name>",
-        "example": "  # Inspect one model on the default local service.\n  you models inspect OMNIVOICE_Q4_K_M\n\n  # Emit API-shaped JSON for automation.\n  you --json models inspect OMNIVOICE_Q4_K_M"
+        "example": "  # Inspect one model from the local Models composition.\n  you models inspect llm\n\n  # Emit API-shaped JSON for automation.\n  you --json models inspect llm"
       },
       "arguments": {
         "you.models.inspect.arg.0": {
@@ -12709,15 +12709,13 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable --input values (slot=value with @path file bytes, or named generic-input JSON), and either repeatable --output paths or named output mappings, or global --json for structured invocation metadata. Repeatable --parameter JSON values preserve operation parameter names and values for generic multimodal operations. Readiness-gated execution uses the current factory configuration without starting a full workflow."
+            "canonicalEnglish": "Invoke one local model through the Current Factory at ./factory/factory.json. Use a shipped model name: llm for OMNI, asr for speech recognition, tts for voice synthesis, or embed for embeddings. An explicit --server must identify a reachable service. Repeatable --input and --output values preserve the existing named-slot contract."
           }
         },
         "examples": [
-          "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav",
-          "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"",
-          "you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json",
-          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json",
-          "you models invoke omni --operation OMNI --input '{\"name\":\"prompt\",\"modality\":\"TEXT\",\"contentType\":\"TEXT\",\"mediaType\":\"text/plain\",\"content\":\"Summarize this.\"}' --parameter '{\"name\":\"temperature\",\"value\":0.2}' --output-map text=./answer.txt --output-map usage=./usage.json"
+          "you models invoke embed --operation EMBED --input text=\"Find similar work\"",
+          "you models invoke llm --operation OMNI --input prompt=\"Summarize this.\"",
+          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
         ],
         "visibility": "public",
         "sourceHash": "b469b217b664304f713e17511a3cb96c37ba5cc8cca78419a699575f309fcd54"
@@ -12733,7 +12731,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "invoke <model-name>",
-        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json\n\n  # Transcribe audio into canonical transcript and timestamped segments files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json\n\n  # Preserve named multimodal inputs and operation parameters.\n  you models invoke omni --operation OMNI --input '{\"name\":\"prompt\",\"modality\":\"TEXT\",\"contentType\":\"TEXT\",\"mediaType\":\"text/plain\",\"content\":\"Summarize this.\"}' --parameter '{\"name\":\"temperature\",\"value\":0.2}' --output-map text=./answer.txt --output-map usage=./usage.json"
+        "example": "  # Generate an embedding.\n  you models invoke embed --operation EMBED --input text=\"Find similar work\"\n\n  # Run the Omni operation.\n  you models invoke llm --operation OMNI --input prompt=\"Summarize this.\"\n\n  # Transcribe audio into named output files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
       },
       "arguments": {
         "you.models.invoke.arg.0": {
@@ -13251,12 +13249,12 @@
           },
           "description": {
             "id": "you.models.remove.description",
-            "canonicalEnglish": "Explicitly remove one installed managed model cache revision through DELETE /models/{model_name}. The operation reports the selected revision, validated cache path, outcome, and measured bytes removed; it refuses active model hosts or invocation leases and never follows links outside the managed cache root. Use global --json for API-shaped output and global --server to target a non-default factory API base URI."
+            "canonicalEnglish": "Remove one installed managed model cache revision from the local Models composition. The operation reports the selected revision, validated cache path, outcome, and measured bytes removed; it refuses active model hosts or invocation leases and never follows links outside the managed cache root. Use global --json for API-shaped output and explicit --server to target a reachable factory API service."
           }
         },
         "examples": [
-          "you models remove OMNIVOICE_Q4_K_M",
-          "you --json models remove OMNIVOICE_Q4_K_M"
+          "you models remove llm",
+          "you --json models remove embed"
         ],
         "visibility": "public",
         "sourceHash": "cb8ee2af65b102201dab00c728a3430b160a8b0daa1e96409aeba318c187dbc1"
@@ -13272,7 +13270,7 @@
       "placement": "dual",
       "usage": {
         "line": "remove <model-name>",
-        "example": "  # Remove one installed managed cache revision.\n  you models remove OMNIVOICE_Q4_K_M\n\n  # Emit deterministic JSON for automation.\n  you --json models remove OMNIVOICE_Q4_K_M"
+        "example": "  # Remove one installed managed cache revision.\n  you models remove llm\n\n  # Emit deterministic JSON for automation.\n  you --json models remove embed"
       },
       "arguments": {
         "you.models.remove.arg.0": {
@@ -13528,12 +13526,12 @@
           },
           "description": {
             "id": "you.models.pull.description",
-            "canonicalEnglish": "Pull one discovered local model into the managed cache through POST /models/{model_name}/pull. Human output reports pull outcome, readiness, cache path, revision, and downloaded files. Use global --json for API-shaped output and global --server to target a non-default factory API base URI."
+            "canonicalEnglish": "Pull one discovered local model into the managed cache through the local Models composition. Human output reports pull outcome, readiness, cache path, revision, and downloaded files. Use global --json for API-shaped output and explicit --server to target a reachable factory API service."
           }
         },
         "examples": [
-          "you models pull OMNIVOICE_Q4_K_M",
-          "you --json models pull OMNIVOICE_Q4_K_M"
+          "you models pull llm",
+          "you --json models pull embed"
         ],
         "visibility": "public",
         "sourceHash": "f2b04bd9459450df808ca86f1958acc18ceb722d4f3dafbcdc05ae7bbb4853d0"
@@ -13549,7 +13547,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "pull <model-name>",
-        "example": "  # Pull managed local assets for one model.\n  you models pull OMNIVOICE_Q4_K_M\n\n  # Emit API-shaped JSON for automation.\n  you --json models pull OMNIVOICE_Q4_K_M"
+        "example": "  # Pull managed local assets for one model.\n  you models pull llm\n\n  # Emit API-shaped JSON for automation.\n  you --json models pull embed"
       },
       "arguments": {
         "you.models.pull.arg.0": {

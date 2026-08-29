@@ -1,6 +1,6 @@
 # Packaged Factories
 
-YOU ships **seventeen** first-party Factories under the `@you/` namespace. This
+YOU ships **nineteen** first-party Factories under the `@you/` namespace. This
 page is the canonical operator guide for that catalog. The authored sources
 live in `packages/packaged-factories/factories/`; the published catalog is
 described by `packages/packaged-factories/generated/manifest.json`.
@@ -52,7 +52,7 @@ before replacing its help command with a work request.
 ### Verified discovery output
 
 These commands were run against the current `you` binary while maintaining
-this topic. The catalog output contained all seventeen `@you/*` names; the help
+this topic. The catalog output contained all nineteen `@you/*` names; the help
 output below is the live boundary for `@you/goal`:
 
 ```text
@@ -130,6 +130,7 @@ it is not a promise of deterministic content.
 | Family | Factory | Orchestrator | Description |
 |---------|---------|--------------|-------------|
 | Planning and implementation | `@you/factory-builder` | Graph | Creates and installs one validated graph or JavaScript Factory from a customer request. Answers with usage guidance when the request is a question rather than a build request. |
+| Bounded and iterative | `@you/fix` | Graph | Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure. |
 | Bounded and iterative | `@you/classify` | Graph | Classifies a request by complexity and routes it to the configured small, medium, or large model lane. |
 | Parallel investigation and selection | `@you/deep-research` | JavaScript | Breaks a research question into bounded specialist investigations and synthesizes their findings. |
 | Planning and implementation | `@you/full-flow` | Graph | Plans parallel implementation waves in isolated worktrees, merges completed tasks, and replans until the project is complete. |
@@ -139,6 +140,7 @@ it is not a promise of deterministic content.
 | Planning and implementation | `@you/plan-execute` | Graph | Writes a Markdown and JSON PRD for a project request, then executes that plan in the current workspace. |
 | Planning and implementation | `@you/plan-parallel` | Graph | Plans a dependency graph of Work, executes ready tasks concurrently, and merges the completed results. |
 | Parallel investigation and selection | `@you/quorum` | Graph | Runs independent assessments in parallel and merges them into one final answer. |
+| Planning and implementation | `@you/ralph` | Graph | Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete. |
 | Bounded and iterative | `@you/review` | Graph | Produces candidate work and repeats independent review until approval or a bounded failure. |
 | Parallel investigation and selection | `@you/spawn` | JavaScript | Plans an exact number of independent tasks, runs them concurrently, and merges their results into one answer. |
 | Single bounded call | `@you/subagent` | Graph | Runs one bounded read-only subagent and returns its result. |
@@ -1455,7 +1457,7 @@ you run --named @you/classify \
 
 ## Materialization and editing
 
-1. `you factory list` — see the seventeen catalog entries.
+1. `you factory list` — see the nineteen catalog entries.
 2. `you run --named @you/goal --help` — materializes `@you/goal` without running
    work when you only need the generated help / local copy.
 3. Edit the materialized Factory under

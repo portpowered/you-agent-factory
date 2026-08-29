@@ -19,13 +19,16 @@ direct inference operations.
 
 ## Discover And Inspect Models
 
-Start a Factory service before using discovery, inspection, or pull commands.
-They query its `/models` surface; use the global `--server` option when the
-service is not at the default address.
+Without an explicit `--server`, discovery, inspection, pull, and removal use
+the local Models composition. You do not need to start `you server` first.
+Set `--server` only to use a reachable running service at that address.
 
 ```bash
 you models list
-you models inspect OMNIVOICE_Q4_K_M
+you models inspect llm
+you models inspect asr
+you models inspect tts
+you models inspect embed
 ```
 
 `list` summarizes each model's provider locality, supported operations and
@@ -57,13 +60,32 @@ observed cache, active pull, and host facts:
 
 The service does not publish `READY` with `NOT_INSTALLED`.
 
+### Check Download Size Before Pulling
+
+The built-in names resolve to pinned model payloads. These approximate decimal
+sizes exclude the additional platform-specific backend and runtime files.
+
+| Name | Operation | Pinned model payload |
+| --- | --- | ---: |
+| `llm` | `OMNI` | 5.0 GB |
+| `asr` | `ASR` | 148 MB |
+| `tts` | `TTS` | 18.7 GB |
+| `embed` | `EMBED` | 1.21 GB |
+
+Run `you --json models inspect <name>` to confirm the pinned source before a
+pull. After installation, `cacheBytes` reports the exact managed cache size.
+
+Warning: Pulling `tts` downloads an approximately 18.7 GB pinned model
+payload. Backend and runtime files need additional disk space. Inspect `tts`
+before pulling or invoking it.
+
 ## Pull A Managed Local Model
 
 Pull supported local assets into the service's managed cache:
 
 ```bash
-you models pull OMNIVOICE_Q4_K_M
-you --json models pull OMNIVOICE_Q4_K_M
+you models pull llm
+you --json models pull embed
 ```
 
 The command is synchronous for managed local assets: it remains active until
@@ -100,9 +122,9 @@ Use discovery and inspection to account for installed files:
 
 ```bash
 you models list
-you models inspect OMNIVOICE_Q4_K_M
+you models inspect llm
 you --json models list
-you --json models inspect OMNIVOICE_Q4_K_M
+you --json models inspect llm
 ```
 
 `models list` reports the installed revision, exact `cacheBytes`, and a readable
@@ -116,8 +138,8 @@ does not follow symbolic links, and it does not count data outside that revision
 Remove one installed revision only when you no longer need its local files:
 
 ```bash
-you models remove OMNIVOICE_Q4_K_M
-you --json models remove OMNIVOICE_Q4_K_M
+you models remove llm
+you --json models remove embed
 ```
 
 Removal names the model, revision, and validated `cachePath`. It measures regular
@@ -129,26 +151,32 @@ Removal is always customer-initiated. The managed disk cache has no automatic
 eviction, time-to-live policy, or background cleanup. Runtime host unloading does
 not remove the managed files.
 
-### Managed Model Storage Finding
+### Managed Model Storage
 
 The managed model cache remains under `.agent-factory/models`. Operator Settings
 uses `~/.you-agent-factory/config.json`, Factory Definitions uses
 `~/.you-agent-factory/factories`, and Recordings uses
 `~/.you-agent-factory/recordings`.
 
-This separation matches the service ownership boundaries in the repository, but
-the repository does not explain the different directory names.
-
-The placement is therefore not proven intentional. This change keeps the existing
-cache root and does not move data. Track the storage decision in [issue #2201](https://github.com/portpowered/you-agent-factory/issues/2201).
+These directories keep model assets separate from settings, Factory Definitions,
+and Recordings.
 
 ## Invoke A Model Directly
 
-Direct invocation runs one named operation through the current `./factory`
-configuration without starting a full Factory workflow. Use an uppercase
-operation and bind inputs with repeatable `--input slot=value` flags. Legacy
-`--text` and unqualified `--output <path>` spellings remain supported for
-direct text and audio operations.
+Direct invocation requires a valid Current Factory at
+`./factory/factory.json`. The path is relative to the working directory.
+It does not start a full Factory workflow.
+
+Without an explicit `--server`, direct invocation uses the local Models
+composition. An explicit `--server` must identify a reachable service.
+
+Use an uppercase operation and bind inputs with repeatable
+`--input slot=value` flags. Legacy `--text` and unqualified `--output <path>`
+spellings remain supported for direct text and audio operations.
+
+If `./factory/factory.json` is missing, the command returns
+`CURRENT_FACTORY_NOT_FOUND` before it accesses model assets. Create a valid
+Current Factory, then retry.
 
 Built-in model names are `llm`, `asr`, `tts`, and `embed`. Use an uppercase
 operation and bind inputs with repeatable `--input slot=value` flags.
@@ -172,10 +200,10 @@ The built-in `embed` model converts one text input into one `embedding:JSON`
 output. Its only operation is `EMBED`, so Models infers the operation when you
 omit `--operation`.
 
-Run this zero-configuration command:
+Run this command from a directory containing a valid Current Factory:
 
 ```bash
-you models invoke embed --input text="Find similar work"
+you models invoke embed --operation EMBED --input text="Find similar work"
 ```
 
 The command resolves `embed` and acquires missing managed assets on first use.
@@ -203,7 +231,7 @@ you models invoke embed \
 Use the global `--json` flag when a script needs the output name and metadata:
 
 ```bash
-you --json models invoke embed --input text="Find similar work"
+you --json models invoke embed --operation EMBED --input text="Find similar work"
 ```
 
 The response contains one named `embedding` output. Its modality and media
@@ -224,11 +252,8 @@ array:
 }
 ```
 
-After the first successful invocation, verified cache entries are reused and
-the next invocation does not contact the network. Add `--offline` to require
-cache-only resolution. Offline invocation succeeds when all required assets
-are cached; otherwise it returns the typed
-`MODEL_OFFLINE_CACHE_UNAVAILABLE` failure.
+After a successful invocation, verified cache entries are reused. The command
+does not provide an `--offline` flag.
 
 Malformed input syntax, missing `text`, unknown slots, duplicate slots,
 malformed JSON, and unsupported parameters fail before download or backend
@@ -337,7 +362,7 @@ before it writes a partial file.
 
 Metadata mode returns request identity and explicit execution state when JSON is
 requested without an output path, input mapping, or explicit output mappings, for example
-`{"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS","mode":"VALIDATION_ONLY","validationOnly":true,"inferenceExecuted":false}`.
+`{"modelName":"tts","operation":"TTS","mode":"VALIDATION_ONLY","validationOnly":true,"inferenceExecuted":false}`.
 It validates the request but does not execute inference or return model output.
 An output path or explicit output mapping selects execution behavior.
 
@@ -364,11 +389,11 @@ The pinned-protocol conformance fixture records the `Audios` and `Videos`
 request fields as accepted at the pinned llama.cpp protocol revision. This
 slice therefore supports text, images, audio, and video. The output is text.
 
-Use a repeatable `--input` flag for each named binding. The built-in operation
-selects automatically when `--input` is present.
+Use a repeatable `--input` flag for each named binding. Set
+`--operation OMNI` to select the built-in operation.
 
 ```bash
-you models invoke llm --input prompt="Write a haiku"
+you models invoke llm --operation OMNI --input prompt="Write a haiku"
 ```
 
 The command writes the generated UTF-8 text to stdout. Diagnostics remain on

@@ -969,9 +969,14 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 		t.Fatalf("execute models --help: %v", err)
 	}
 	help := out.String()
-	for _, want := range []string{"Inspect discovered models", "list", "inspect", "invoke", "pull", "bootstrap"} {
+	for _, want := range []string{"Run local inference", "speech", "voice", "embeddings", "list", "inspect", "invoke", "pull", "Current Factory", "./factory/factory.json", "--server"} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("models help missing %q:\n%s", want, help)
+		}
+	}
+	for _, stale := range []string{"Inspect discovered models from a running service", "shared in-process bootstrap", "OMNIVOICE_Q4_K_M"} {
+		if bytes.Contains([]byte(help), []byte(stale)) {
+			t.Fatalf("models help contains stale wording %q:\n%s", stale, help)
 		}
 	}
 }
