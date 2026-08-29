@@ -1,16 +1,10 @@
 package agy
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -22,25 +16,8 @@ const agyFunctionalModel = agyGoldenModel
 // print-mode execution through the customer process boundary and
 // Providers-backed command adapter.
 func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, agyFunctionalModel),
-		"stopToken: COMPLETE",
-		"skipPermissions: true\nstopToken: COMPLETE",
-		1,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy conductor success"}`))
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte(`{"event":"result","result":{"conversation_id":"agy-conductor-success","status":"SUCCESS","response":"agy functional answer COMPLETE","duration_seconds":1.0,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n"),
-	})
-
-	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		agyFunctionalEdges(runner),
-		20*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, responseEvents, route, callStart := fixture.runDirect(t, "direct-conductor-success")
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
@@ -48,10 +25,10 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("agy command runner calls = %d, want 1 through Providers path", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("agy command runner calls = %d, want 1 through Providers path", got)
 	}
-	request := runner.LastRequest()
+	request := route.lastRequest()
 	if !containsArgPair(request.Args, "--model", agyFunctionalModel) {
 		t.Fatalf("argv = %#v, want --model %s", request.Args, agyFunctionalModel)
 	}
@@ -64,25 +41,9 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 // TestAgyNativeFailureThroughRootBuildProcessIsSafe proves native Agy failures
 // remain safe and observable through the customer process boundary.
 func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAntigravity,
-		agyFunctionalModel,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy native failure"}`))
-
+	fixture := agySharedProcess(t)
+	_, listed, events, _, route, callStart := fixture.runDirect(t, "direct-native-failure")
 	const leaked = "/tmp/secret-key"
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   []byte("authentication failed: token path " + leaked + " leaked"),
-		ExitCode: 1,
-	})
-
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		agyFunctionalEdges(runner),
-		20*time.Second,
-	)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
@@ -90,8 +51,8 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
 		t.Fatalf("completed work = %d, want 0 after native failure", got)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("agy command runner calls = %d, want 1", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("agy command runner calls = %d, want 1", got)
 	}
 	encoded, err := json.Marshal(events)
 	if err != nil {
@@ -107,27 +68,14 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 // TestAgyTimeoutFailureThroughRootBuildProcess proves timeout normalization
 // through the customer process boundary without leaking partial output.
 func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAntigravity,
-		agyFunctionalModel,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy timeout"}`))
-
-	runner := newErroringCommandRunner(context.DeadlineExceeded)
-
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		agyFunctionalEdges(runner),
-		20*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, _, route, callStart := fixture.runDirect(t, "direct-timeout")
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if runner.callCount() < 1 {
-		t.Fatalf("agy command runner calls = %d, want at least one retryable timeout attempt", runner.callCount())
+	if got := route.callCount() - callStart; got < 1 {
+		t.Fatalf("agy command runner calls = %d, want at least one retryable timeout attempt", got)
 	}
 	reason := terminalFailureReason(t, events)
 	if reason != factoryapi.WorkFailureTypeTimeout {
@@ -140,27 +88,14 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 // cancellation returns the canonical outcome through the Providers command
 // adapter.
 func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAntigravity,
-		agyFunctionalModel,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy command cancel"}`))
-
-	runner := newErroringCommandRunner(context.Canceled)
-
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		agyFunctionalEdges(runner),
-		20*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, _, route, callStart := fixture.runDirect(t, "direct-cancellation")
 
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if runner.callCount() != 1 {
-		t.Fatalf("agy command runner calls = %d, want 1", runner.callCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("agy command runner calls = %d, want 1", got)
 	}
 	encoded, err := json.Marshal(events)
 	if err != nil {
@@ -170,39 +105,6 @@ func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) 
 	if !strings.Contains(payload, "provider invocation was canceled") {
 		t.Fatalf("Factory events missing canonical cancellation outcome: %s", payload)
 	}
-}
-
-func agyFunctionalEdges(runner platformprocess.CommandRunner) serviceedges.Edges {
-	return serviceedges.Edges{ProviderCommandRunner: runner}
-}
-
-// erroringCommandRunner is a test double proving Providers command-runner
-// native errors, such as context deadline or cancellation, reach the same
-// canonical outcome as a real subprocess failure.
-type erroringCommandRunner struct {
-	mu       sync.Mutex
-	err      error
-	requests []platformprocess.CommandRequest
-}
-
-func newErroringCommandRunner(err error) *erroringCommandRunner {
-	return &erroringCommandRunner{err: err}
-}
-
-func (r *erroringCommandRunner) Run(
-	_ context.Context,
-	req platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.requests = append(r.requests, req)
-	return platformprocess.CommandResult{}, r.err
-}
-
-func (r *erroringCommandRunner) callCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.requests)
 }
 
 func assertAgyFinalOnlyCompletion(
