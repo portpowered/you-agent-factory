@@ -1,16 +1,18 @@
 # C14 — transport/acp/realclient characterization ledger
 
-Status: OPTIMIZED. Three supported enabled/required local baseline runs and
-three final runs passed after using an isolated official Node.js `v22.13.0`
-runtime. Story 002 consolidates the pinned package setup while preserving the
-real ACPX process phases and assertion inventory; repeat, race, clean-room,
-and PR handoff evidence remain for story 003.
+Status: VALIDATED FOR REVIEW. Three supported enabled/required local baseline
+runs and three final runs passed after using an isolated official Node.js
+`v22.13.0` runtime. Story 002 consolidates the pinned package setup while
+preserving the real ACPX process phases and assertion inventory. Story 003's
+repeat, race, and clean-room evidence is appended below; PR handoff remains
+review-owned after the final push.
 
 This is the task-owned ledger for
-`fto-c14-pkg-transport-acp-realclient-001` and
-`fto-c14-pkg-transport-acp-realclient-002`. It records the pre-edit
-denominator, supported discovery/profile observations, and the final
-optimization evidence.
+`fto-c14-pkg-transport-acp-realclient-001`,
+`fto-c14-pkg-transport-acp-realclient-002`, and
+`fto-c14-pkg-transport-acp-realclient-003`. It records the pre-edit
+denominator, supported discovery/profile observations, final optimization
+evidence, and clean-room validation.
 
 ## Authority and scope
 
@@ -396,8 +398,9 @@ client, dependency change, or shared/production edit was introduced.
 
 `GATE-PERF-LOCAL` is therefore recorded as the measured floor alternative,
 with the remaining PR package-direction verdict and terminal CI owned by
-review. The final direct-client run proved the behavioral property; repeat,
-race, clean-room, and exact-head handoff remain for story 003.
+review. The final direct-client run proved the behavioral property, and story
+003's repeat, race, and clean-room gates passed below; exact-head PR handoff
+remains review-owned.
 
 ## Characterization result
 
@@ -410,5 +413,93 @@ narrow environmental remedy was an official, isolated Node `v22.13.0`
 runtime; the three required runs then passed without client substitution,
 skipping, or topology restructuring.
 
-Remaining gates are repeat/race, clean-room validation, PR package direction,
-and current-head PR evidence owned by story 003 and review.
+## Validation report: BEH-C14-DELIVER — ACP real-client optimization
+
+## Environment and artifact
+
+- Commit/build identifier: `79b768008da5fb865d4c2e7e417456c8e3ad290f`, the
+  exact rebased implementation head used for clean-room validation. The
+  report-only ledger commit is the sole subsequent planned source change.
+- Environment and configuration: Windows `windows/amd64`, Go `go1.25.0`,
+  isolated official Node.js `v22.13.0`, npm/npx `10.9.2`,
+  `INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1`,
+  `INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT=1`, and no `-short`.
+- Customer entry point: `go test ./tests/functional/transport/acp/realclient/...`
+  with the real-client gates enabled.
+- Real and substituted dependencies: pinned public `acpx@0.13.0`, freshly
+  built `./cmd/factory` executable, real OS process/stdio boundaries, and the
+  deterministic local provider command. No client or production-process
+  substitute was used.
+- Cost/call budget used: zero paid or remote inference calls; public npm
+  acquisition only.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| `GATE-BASELINE` and `GATE-PROFILE` | PASS | The valid three-run denominator, phase/process profile, cache policy, and cleanup ownership are recorded above. | PR package-level performance direction and terminal CI remain review-owned. |
+| `GATE-ASSERTIONS` and `RC-CLIENT-001` | PASS | The clean-room run reported `acpx=0.13.0`, negotiated initialization, the default target, non-empty assistant result, `end_turn`, two provider invocations, and complete cleanup; the source inventory remains unchanged. | Opposite-OS process ownership is not proven by this Windows run. |
+| `GATE-PERF-LOCAL` | PASS | Final samples and the measured phase-backed floor disposition are recorded in the story 002 section; no 40% claim is made. | The PR runner owns the package-level throughput verdict. |
+| `GATE-PROCESS`, `GATE-CLEANUP`, and `GATE-REPEAT` | PASS | The six process-helper executions at `-count=3`, three happy-path executions at `-count=3`, and clean-room/full runs passed with timeout/non-zero classifications, descendant-PID inactivity, zero queue owners, and no residue. | Other operating-system process implementations remain unproven. |
+| `GATE-RACE` | PASS | `go test -race ./tests/functional/transport/acp/realclient/... -count=1 -timeout=20m -v` passed all three witnesses with exit `0`. | Other race platforms are not covered locally. |
+| `GATE-SCOPE` | PASS | The ancestry check passed after rebasing onto `origin/main`; `git diff --check` passed and the complete diff contains only the real-client test tree and this ledger. | None within the owned diff. |
+| Security, privacy, and cost | PASS | Child environments remain allowlisted; output is sanitized; prompts, responses, provider arguments, environment values, and host paths are not retained; paid/remote calls remained zero. | Remote provider behavior is outside this local claim. |
+| `VAL-001` clean-room loopback | PASS | This report records the exact artifact, environment, journey, observations, findings, and verdict without repairing implementation. | Terminal CI, conflicts, and merge remain review-owned. |
+
+## Customer journey
+
+1. A detached clean checkout of the exact implementation head
+   `79b768008da5fb865d4c2e7e417456c8e3ad290f` ran
+   `go test ./tests/functional/transport/acp/realclient/... -count=1
+   -timeout=20m -v`; the package exited `0` in `69.866s`, and all three
+   top-level witnesses passed.
+2. The happy-path repeat procedure
+   `go test ./tests/functional/transport/acp/realclient -run
+   '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=3
+   -timeout=30m -v` exited `0` in `175.300s`; each run reported the pinned
+   client, negotiated target, two provider invocations, and complete cleanup.
+3. The process-cleanup repeat procedure
+   `go test ./tests/functional/transport/acp/realclient -run
+   '^TestRunBoundedCommand' -count=3 -timeout=10m -v` exited `0` in `7.588s`;
+   all six helper executions proved safe timeout/non-zero classification and
+   recorded-descendant inactivity.
+4. The supported race procedure
+   `go test -race ./tests/functional/transport/acp/realclient/... -count=1
+   -timeout=20m -v` exited `0` in `45.178s` with no race report. The ordinary
+   rebased full run also exited `0` in `57.363s`.
+5. The emitted success witness retained only safe classifications: pinned
+   version, negotiated initialization, session/default-target facts,
+   assistant/tool/terminal facts, provider name/count, cleanup, and outcome.
+   No prompt or provider payload was retained.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the implementation ledger remains in the
+  canonical internal functional-test-optimization directory; no customer
+  documentation or unrelated shared surface changed.
+- Permission and error behavior: optional prerequisite absence still skips;
+  required absence, timeout, non-zero, malformed/error, and partial-session
+  paths remain fail-closed through the existing admission, parser, runner, and
+  cleanup owners.
+- Persistence/reload behavior: the real ACPX client observed a persisted
+  session record with negotiated protocol/default target and closed the same
+  ACP session identity; no broader persistence claim is made.
+- Accessibility/keyboard/responsive behavior: not applicable; this lane has no
+  UI surface.
+- Operational signals: sanitized test evidence and safe phase classifications
+  identify the terminal outcome without leaking sensitive values.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| None | — | — | No validation defect | No validation defect observed | All declared local-real procedures above exited `0`. |
+
+## Verdict
+
+PASS
+
+The clean-room validation passed for the exact implementation head and all
+declared local-real behavioral, repeat, race, cleanup, scope, security, and
+performance-disposition checks. Review still owns current-head PR CI direction,
+terminal CI, conflicts, and merge.
