@@ -9,7 +9,7 @@ recorded below. Terminal CI and merge remain review-owned.
 
 - Repository: `you-agent-factory`
 - Branch: `functional-test-optimization-c09-providers-auxiliary-migration`
-- Discovery head and `origin/main`: `254bb71db2`
+- Review base / pre-migration artifact: `177ebdd07a176863221f11410ab84fd075f1eb80`
 - PRD stories: `functional-test-optimization-c09-providers-auxiliary-migration-001`,
   `-002`, `-003`, and `-004`
 - Parent behavior: `BEH-01` — preserve auxiliary provider behavior while
@@ -23,9 +23,9 @@ recorded below. Terminal CI and merge remain review-owned.
   shared functional support, the C01 inventory, baselines, workflows, and the
   PR #2316 branch/history.
 - Source-plan reference: `docs/temp/functional-test-optimization.md` was not
-  present in this checkout. The PRD and repository standards are the authority
-  for this characterization; the missing source plan is recorded rather than
-  reconstructed.
+  present in this checkout, in `origin/main`, or in any local ref. This is an
+  unresolved source-plan authority conflict; it is recorded for Project Lead /
+  operator resolution and is not replaced by the PRD or reconstructed here.
 - Paid/remote validation: zero calls, `$0`, no credentials or customer data.
 
 The process counts below are source-derived application-process starts, not a
@@ -64,6 +64,32 @@ ok  github.com/portpowered/infinite-you/tests/functional/providers/claude     8.
 ok  github.com/portpowered/infinite-you/tests/functional/providers/discovery  0.411s
 ok  github.com/portpowered/infinite-you/tests/functional/providers/permission 3.722s
 ```
+
+To attach direct behavioral evidence to this characterization story rather
+than relying on the later migration runs, the same package command was then
+run from the review base commit `177ebdd07a176863221f11410ab84fd075f1eb80`
+in a clean detached worktree:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/providers/claude ./tests/functional/providers/discovery ./tests/functional/providers/permission
+```
+
+Exit status: `0`; the base artifact reported:
+
+```text
+ok  github.com/portpowered/infinite-you/tests/functional/providers/claude     6.630s
+ok  github.com/portpowered/infinite-you/tests/functional/providers/discovery  0.350s
+ok  github.com/portpowered/infinite-you/tests/functional/providers/permission 3.161s
+```
+
+This is direct functional characterization through the existing real
+`root.BuildProcess`/`Process.Execute` paths and controlled command or
+permission edges. The five top-level tests retain the public witnesses listed
+below: Claude stream/command, Work, and Factory Event assertions; discovery
+catalog, ordering, invalid-flag, and zero-provider-call assertions; and
+capable/incapable permission Work, dispatch, bypass-flag, bounded-diagnostic,
+and command-call assertions. It proves the pre-migration behavior baseline;
+it does not prove the migrated topology or parity after structural change.
 
 The command completed in 13.351 seconds on the shared Windows host. This is a
 contaminated local timing observation, not a threshold or a PR performance
@@ -298,6 +324,7 @@ evidence.
 | Criterion / gate | Result in this story | Evidence and remaining edge |
 | --- | --- | --- |
 | `AUX-CHAR-001` | PASS | Five top-level tests from the `-list` command, source-derived subcases, 47 one-row matrix entries, exact public witnesses, cleanup obligations, and package dispositions are recorded above. No migrated parity is claimed. |
+| Direct behavioral characterization | PASS | Clean review-base artifact `177ebdd07a176863221f11410ab84fd075f1eb80` passed the declared three-package command with exit status `0` (Claude `6.630s`, discovery `0.350s`, permission `3.161s`). The existing tests exercised real root/public boundaries and retained the Claude stream/command/Work/Event, discovery catalog/diagnostic/zero-call, and permission success/failure/dispatch/bypass/zero-call witnesses listed above. | This is the pre-migration baseline; migrated parity remains owned by stories 002 and 003. |
 | Current topology basis | PASS | Source inspection derives Claude `4`, discovery `1`, and permission `2` application-process starts; the planned `2/1/2` target is explicitly marked unproven. |
 | Dependency fidelity | PASS for characterization | Real root composition and current controlled command/permission edges were inspected and the declared package suite passed. No remote provider call was made. |
 | Behavior preservation | NOT CLAIMED | Current pre-change behavior passed; parity after structural migration is story 002/003 evidence. |
@@ -305,9 +332,11 @@ evidence.
 | PR package timing | NOT CLAIMED | The local 13.351-second observation is contaminated and is not PR Backend Functional Coverage. |
 | Exclusions and ancestry | NOT CLAIMED | Final `origin/main...HEAD` and PR #2316 checks belong to story 004. |
 
-No topology mismatch was found between the PRD and current source, so no plan
-delta is requested. The absent source-plan file remains an explicit authority
-note above.
+No topology mismatch was found between the PRD and current source. The
+source-plan file is absent from the review base and all inspected refs, so
+source-plan alignment remains an explicit unresolved conflict requiring
+Project Lead / operator resolution; this ledger does not reinterpret the PRD
+as a substitute source plan.
 
 ## Story 002 evidence boundary
 
