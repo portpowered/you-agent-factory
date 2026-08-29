@@ -265,19 +265,6 @@ func (s *service) acquireGenericBackend(
 	)
 }
 
-func genericPreparationError(modelErr, backendErr error) error {
-	if modelErr == nil && backendErr == nil {
-		return nil
-	}
-	if offlineErr := combinedOfflineError(modelErr, backendErr); offlineErr != nil {
-		return offlineErr
-	}
-	if modelErr != nil {
-		return modelErr
-	}
-	return backendErr
-}
-
 func genericAssetResult(
 	source genericSource,
 	modelResult genericCacheResult,

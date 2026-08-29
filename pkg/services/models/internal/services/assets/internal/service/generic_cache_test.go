@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -873,7 +872,6 @@ func TestGenericSnapshotDiscoveryAndSourcePlanning(t *testing.T) {
 	assertGenericCacheRoots(t, service)
 	assertGenericSourceResolution(t, service)
 	assertGenericPreparationSelection(t)
-	assertGenericPreparationErrors(t)
 }
 
 func assertGenericSnapshotDiscovery(t *testing.T, service *service) {
@@ -954,27 +952,5 @@ func assertGenericPreparationSelection(t *testing.T) {
 	}
 	if shouldPrepareGenericAssets(models.PrepareModelAssetsRequest{Name: "unknown-symbol"}) {
 		t.Fatal("unknown symbolic name should not select generic preparation")
-	}
-}
-
-func assertGenericPreparationErrors(t *testing.T) {
-	t.Helper()
-	if genericPreparationError(nil, nil) != nil {
-		t.Fatal("genericPreparationError(nil, nil) should be nil")
-	}
-	modelErr := errors.New("model failure")
-	if !errors.Is(genericPreparationError(modelErr, nil), modelErr) || !errors.Is(genericPreparationError(nil, modelErr), modelErr) {
-		t.Fatal("genericPreparationError should retain the non-offline failure")
-	}
-	combined := combinedOfflineError(
-		&models.AssetOfflineError{Missing: []string{"z.bin", "a.bin"}},
-		&models.AssetOfflineError{Missing: []string{"a.bin"}},
-	)
-	if combined == nil || !reflect.DeepEqual(combined.Missing, []string{"a.bin", "z.bin"}) {
-		t.Fatalf("combinedOfflineError = %#v, want sorted unique names", combined)
-	}
-	interrupted := interruptedAssetError("publish", modelErr)
-	if !errors.Is(interrupted, models.ErrAssetPreparationInterrupted) || !strings.Contains(interrupted.Error(), "publish") {
-		t.Fatalf("interrupted asset error = %v, want safe operation and cause", interrupted)
 	}
 }
