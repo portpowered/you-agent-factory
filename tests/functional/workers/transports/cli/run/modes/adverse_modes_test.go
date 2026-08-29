@@ -292,8 +292,51 @@ func TestCLIRunCancellationRecoversOnSameProcess(t *testing.T) {
 	assertFreshInvocation(t, canceled, recovery)
 }
 
-func TestCLIRunConcurrentSessionsRequireDistinctFactorySessionAuthority(t *testing.T) {
-	t.Skip("MODE-U10 blocker: local one-shot run has no Factory Session selector and concurrent invocations contend for the public ~default runtime; observed error: Factory Definitions runtime is already bound: ~default")
+// This witness records the current public-surface blocker; it is not the MODE-U10 acceptance witness.
+func TestCLIRunConcurrentSessionsExposeMissingFactorySessionAuthority(t *testing.T) {
+	fixture := modesFixture(t)
+	first := fixture.start(t, modesInvocationSpec{
+		globalArgs:    []string{"--json"},
+		runArgs:       []string{"--output", "response-stream"},
+		prompt:        "first keyed session holds the provider route",
+		includePrompt: true,
+		behavior:      modesRouteBlock,
+		result:        "first keyed session COMPLETE",
+	})
+	first.route.WaitStarted(t)
+
+	second := fixture.start(t, modesInvocationSpec{
+		globalArgs:    []string{"--json"},
+		runArgs:       []string{"--output", "response-stream"},
+		prompt:        "second keyed session must not share the default runtime",
+		includePrompt: true,
+		behavior:      modesRouteBlock,
+		result:        "second keyed session COMPLETE",
+	})
+	secondResult := second.wait(t)
+	if secondResult.err == nil ||
+		!strings.Contains(secondResult.err.Error(), "Factory Definitions runtime is already bound: ~default") {
+		t.Fatalf("second concurrent invocation error = %v, want the stable default-runtime binding blocker", secondResult.err)
+	}
+	if secondResult.providerCalls != 0 || strings.TrimSpace(secondResult.stdout) != "" {
+		t.Fatalf("second concurrent invocation calls=%d stdout=%q, want no provider dispatch or success output", secondResult.providerCalls, secondResult.stdout)
+	}
+
+	first.cancel()
+	firstResult := first.wait(t)
+	if firstResult.err == nil || !strings.Contains(firstResult.err.Error(), "INVOCATION_CANCELED") {
+		t.Fatalf("first concurrent invocation error = %v, want cancellation while the second invocation is rejected", firstResult.err)
+	}
+	firstTerminal := decodeTerminalNDJSONInvocationResult(t, firstResult.stdout).Response
+	assertInvocationOutcome(t, firstTerminal, "CANCELED", "INVOCATION_CANCELED")
+	if firstResult.resources.id == secondResult.resources.id ||
+		firstResult.resources.sessionID == secondResult.resources.sessionID ||
+		firstResult.resources.workingRoot == secondResult.resources.workingRoot {
+		t.Fatalf("concurrent invocation resources were not distinct: first=%#v second=%#v", firstResult.resources, secondResult.resources)
+	}
+	if pathExists(firstResult.resources.workingRoot) || pathExists(secondResult.resources.workingRoot) {
+		t.Fatalf("concurrent invocation roots remain: first=%q second=%q", firstResult.resources.workingRoot, secondResult.resources.workingRoot)
+	}
 }
 
 func TestCLIRunEmptyPrimaryAndSelectorRecovery(t *testing.T) {
