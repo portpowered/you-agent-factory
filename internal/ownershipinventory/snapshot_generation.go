@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -372,12 +370,5 @@ func marshalSnapshot(label string, value any, validate func() error) ([]byte, er
 }
 
 func writeSnapshot(root, relativePath string, payload []byte) error {
-	path := filepath.Join(root, filepath.FromSlash(relativePath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir snapshot directory: %w", err)
-	}
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
-		return fmt.Errorf("write snapshot: %w", err)
-	}
-	return nil
+	return writeWithFileSystem(osFileSystem{}, root, relativePath, payload, 0o644, "mkdir snapshot directory", "write snapshot")
 }

@@ -43,10 +43,6 @@ func Load(root string) (Inventory, error) {
 
 // WriteInventory writes the ownership-inventory freeze artifact.
 func WriteInventory(root string, inventory Inventory) error {
-	path := filepath.Join(root, filepath.FromSlash(InventoryRelativePath))
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir ownership inventory: %w", err)
-	}
 	var payload bytes.Buffer
 	encoder := json.NewEncoder(&payload)
 	encoder.SetEscapeHTML(false)
@@ -54,8 +50,5 @@ func WriteInventory(root string, inventory Inventory) error {
 	if err := encoder.Encode(inventory); err != nil {
 		return fmt.Errorf("marshal ownership inventory: %w", err)
 	}
-	if err := os.WriteFile(path, payload.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("write ownership inventory: %w", err)
-	}
-	return nil
+	return writeWithFileSystem(osFileSystem{}, root, InventoryRelativePath, payload.Bytes(), 0o644, "mkdir ownership inventory", "write ownership inventory")
 }
