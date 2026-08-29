@@ -3,7 +3,7 @@
   "owner": "backend-unit-lane",
   "entrypoint": "make test-unit-fresh",
   "reference": {
-    "baseCommit": "022888528c6b3ae6192a9936db235bd4102fe597",
+    "baseCommit": "06763a831c13053cbfd31718d009f0e7e9bf0786",
     "runnerImage": "ubuntu-24.04",
     "goVersion": "go1.25.0",
     "unitDefaultJobs": 2,
