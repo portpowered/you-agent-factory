@@ -16,7 +16,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -25,8 +24,6 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-const submitFixtureTimeout = 15 * time.Second
 
 var packageSubmitFixture *submitFixture
 
@@ -51,9 +48,7 @@ func TestMain(m *testing.M) {
 	ledger.processStarted()
 
 	code := m.Run()
-	closeContext, cancel := context.WithTimeout(context.Background(), submitFixtureTimeout)
-	closeErr := process.Close(closeContext)
-	cancel()
+	closeErr := process.Close(context.Background())
 	ledger.processClosed()
 	if closeErr != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "close submit functional process: %v\n", closeErr)
@@ -338,22 +333,14 @@ func (f *submitFixture) startInvocation(t testing.TB, invocation *submitInvocati
 	}()
 	t.Cleanup(func() {
 		command.cancel()
-		select {
-		case <-command.done:
-		case <-time.After(submitFixtureTimeout):
-			t.Errorf("submit invocation did not stop")
-		}
+		<-command.done
 	})
 	return command
 }
 
 func (command *submitAsyncCommand) result(t testing.TB) submitCommandResult {
 	t.Helper()
-	select {
-	case <-command.done:
-	case <-time.After(submitFixtureTimeout):
-		t.Fatalf("submit invocation did not finish")
-	}
+	<-command.done
 	return submitCommandResult{
 		stdout: command.invocation.stdoutString(),
 		stderr: command.invocation.stderr.String(),
@@ -401,8 +388,20 @@ func submitEnvironmentNameBlocked(name string, blocked map[string]struct{}) bool
 type submitProviderCommandRunner struct {
 	active atomic.Int32
 
-	mu    sync.Mutex
-	calls int
+	mu           sync.Mutex
+	calls        int
+	nextCallDone chan struct{}
+}
+
+func (runner *submitProviderCommandRunner) expectNextCall(t testing.TB) <-chan struct{} {
+	t.Helper()
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	if runner.nextCallDone != nil {
+		t.Fatal("controlled provider call completion is already being observed")
+	}
+	runner.nextCallDone = make(chan struct{})
+	return runner.nextCallDone
 }
 
 func (runner *submitProviderCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -410,7 +409,12 @@ func (runner *submitProviderCommandRunner) Run(ctx context.Context, _ platformpr
 	defer runner.active.Add(-1)
 	runner.mu.Lock()
 	runner.calls++
+	callDone := runner.nextCallDone
+	runner.nextCallDone = nil
 	runner.mu.Unlock()
+	if callDone != nil {
+		defer close(callDone)
+	}
 	select {
 	case <-ctx.Done():
 		return platformprocess.CommandResult{}, ctx.Err()
@@ -453,13 +457,7 @@ func (starter *submitAPIServerStarter) Start(ctx context.Context, request platfo
 
 func (starter *submitAPIServerStarter) next(t testing.TB) *support.ProcessAPIServer {
 	t.Helper()
-	select {
-	case api := <-starter.ready:
-		return api
-	case <-time.After(submitFixtureTimeout):
-		t.Fatalf("timed out waiting for root-built API server")
-		return nil
-	}
+	return <-starter.ready
 }
 
 type submitHTTPServer struct {

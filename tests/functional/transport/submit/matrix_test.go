@@ -21,6 +21,18 @@ const submitBatchStdinLimit = 16 << 20
 // TestSubmitInputDependencyAndCleanupMatrix characterizes the public submit
 // input, HTTP, output, cancellation, ordering, and same-process cleanup edges.
 func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
+	testSubmitFileAndStdinDryRuns(t)
+	testSubmitMalformedAndInvalidInput(t)
+	testSubmitRequiredAndEmptyInputs(t)
+	testSubmitMinimumAndDuplicateBoundaries(t)
+	testSubmitAuthAndDependency(t)
+	testSubmitCancellation(t)
+	testSubmitOrderingAndIdempotency(t)
+	testSubmitRecoveryAndOutput(t)
+	testSubmitConcurrentSessions(t)
+}
+
+func testSubmitFileAndStdinDryRuns(t *testing.T) {
 	fixture := packageSubmitFixture
 
 	t.Run("SUB-005 batch file dry-run", func(t *testing.T) {
@@ -51,6 +63,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 			}
 		}
 	})
+
+}
+
+func testSubmitMalformedAndInvalidInput(t *testing.T) {
+	fixture := packageSubmitFixture
 
 	t.Run("SUB-007 malformed and invalid Work input precede HTTP", func(t *testing.T) {
 		cases := []struct {
@@ -86,6 +103,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 			}
 		})
 	})
+
+}
+
+func testSubmitRequiredAndEmptyInputs(t *testing.T) {
+	fixture := packageSubmitFixture
 
 	t.Run("SUB-008 unary required inputs avoid payload and HTTP", func(t *testing.T) {
 		missingPayload := filepath.Join(fixture.tempDir(t), "must-not-be-read.txt")
@@ -133,6 +155,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 			})
 		}
 	})
+
+}
+
+func testSubmitMinimumAndDuplicateBoundaries(t *testing.T) {
+	fixture := packageSubmitFixture
 
 	t.Run("SUB-010 smallest valid batch dry-run and live admission", func(t *testing.T) {
 		batch := oneWorkBatch("smallest-request", "smallest", "{}")
@@ -200,6 +227,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		}
 	})
 
+}
+
+func testSubmitAuthAndDependency(t *testing.T) {
+	fixture := packageSubmitFixture
+
 	t.Run("SUB-013 auth failures are surfaced once", func(t *testing.T) {
 		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 			t.Run(fmt.Sprintf("status-%d", status), func(t *testing.T) {
@@ -231,6 +263,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		}
 	})
 
+}
+
+func testSubmitCancellation(t *testing.T) {
+	fixture := packageSubmitFixture
+
 	t.Run("SUB-015 deadline reaches handler and joins", func(t *testing.T) {
 		observed := make(chan struct{})
 		handlerDone := make(chan struct{})
@@ -240,15 +277,17 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 			<-r.Context().Done()
 			close(handlerDone)
 		})
+		// This deadline is the cancellation contract under test; the handler
+		// observes ctx.Done and the test joins it through handlerDone.
 		ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 		defer cancel()
 		command := fixture.startInvocation(t, fixture.newInvocation(t, unaryCommand(server.URL(), "deadline-work", "task", writeUnaryPayload(t, fixture, "deadline"), "deadline-session"), ctx, "", true, "", nil))
-		waitForSignal(t, observed, "deadline handler observation")
+		waitForSignal(t, observed)
 		result := command.result(t)
 		if !errors.Is(result.err, context.DeadlineExceeded) {
 			t.Fatalf("deadline error = %v, want context deadline exceeded", result.err)
 		}
-		waitForSignal(t, handlerDone, "deadline handler shutdown")
+		waitForSignal(t, handlerDone)
 		if server.active.Load() != 0 {
 			t.Fatalf("deadline active handlers = %d, want 0", server.active.Load())
 		}
@@ -265,13 +304,13 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		})
 		ctx, cancel := context.WithCancel(context.Background())
 		command := fixture.startInvocation(t, fixture.newInvocation(t, unaryCommand(server.URL(), "cancel-work", "task", writeUnaryPayload(t, fixture, "cancel"), "cancel-session"), ctx, "", true, "", nil))
-		waitForSignal(t, observed, "cancel handler observation")
+		waitForSignal(t, observed)
 		cancel()
 		result := command.result(t)
 		if !errors.Is(result.err, context.Canceled) {
 			t.Fatalf("cancel error = %v, want context canceled", result.err)
 		}
-		waitForSignal(t, handlerDone, "cancel handler shutdown")
+		waitForSignal(t, handlerDone)
 		if server.active.Load() != 0 {
 			t.Fatalf("cancel active handlers = %d, want 0", server.active.Load())
 		}
@@ -284,6 +323,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 			t.Fatalf("survivor result = %#v", survivor)
 		}
 	})
+
+}
+
+func testSubmitOrderingAndIdempotency(t *testing.T) {
+	fixture := packageSubmitFixture
 
 	t.Run("SUB-017 batch request and rendered identities preserve order", func(t *testing.T) {
 		server := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, r *http.Request) {
@@ -350,6 +394,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		}
 	})
 
+}
+
+func testSubmitRecoveryAndOutput(t *testing.T) {
+	fixture := packageSubmitFixture
+
 	t.Run("SUB-019 failures recover with fresh state in one process", func(t *testing.T) {
 		invalid := fixture.execute(t, batchCommand("http://127.0.0.1:1", "{", true, false), context.Background(), "", true)
 		if invalid.err == nil {
@@ -379,15 +428,17 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 				<-r.Context().Done()
 				close(handlerDone)
 			})
+			// This deadline is the recovery contract under test; handlerDone
+			// remains the synchronization edge for the request cleanup.
 			ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 			command := fixture.startInvocation(t, fixture.newInvocation(t, batchCommand(timeoutServer.URL(), oneWorkBatch("timeout-request", "timeout", "{}"), false, false), ctx, "", true, "", nil))
-			waitForSignal(t, observed, "recovery timeout handler observation")
+			waitForSignal(t, observed)
 			timeoutResult := command.result(t)
 			cancel()
 			if timeoutResult.err == nil || !strings.Contains(timeoutResult.err.Error(), "context deadline exceeded") {
 				t.Fatalf("recovery timeout result = %#v", timeoutResult)
 			}
-			waitForSignal(t, handlerDone, "recovery timeout handler shutdown")
+			waitForSignal(t, handlerDone)
 			recoveryServer := newSubmitHTTPServer(t, fixture.ledger, func(w http.ResponseWriter, _ *http.Request) {
 				submitJSONResponse(w, http.StatusCreated, submitBatchAcceptedResponse("timeout-recovery", "timeout-recovery-trace", "timeout-recovery"))
 			})
@@ -419,6 +470,11 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		}
 	})
 
+}
+
+func testSubmitConcurrentSessions(t *testing.T) {
+	fixture := packageSubmitFixture
+
 	// SUB-021: concurrent explicit sessions isolate cancellation.
 	t.Run("concurrent_server_and_clients", func(t *testing.T) {
 		observed := make(chan string, 2)
@@ -447,12 +503,7 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		survivorCommand := fixture.startInvocation(t, survivorInvocation)
 		seen := map[string]bool{}
 		for len(seen) < 2 {
-			select {
-			case sessionID := <-observed:
-				seen[sessionID] = true
-			case <-time.After(submitFixtureTimeout):
-				t.Fatal("timed out waiting for both session requests")
-			}
+			seen[<-observed] = true
 		}
 		cancel()
 		cancelResult := cancelCommand.result(t)
@@ -466,12 +517,7 @@ func TestSubmitInputDependencyAndCleanupMatrix(t *testing.T) {
 		}
 		joined := map[string]bool{}
 		for len(joined) < 2 {
-			select {
-			case sessionID := <-handlerDone:
-				joined[sessionID] = true
-			case <-time.After(submitFixtureTimeout):
-				t.Fatal("timed out waiting for both session handlers")
-			}
+			joined[<-handlerDone] = true
 		}
 		requests := server.requestsSnapshot()
 		if len(requests) != 2 {
@@ -541,13 +587,9 @@ func writeUnaryPayload(t testing.TB, fixture *submitFixture, content string) str
 	return path
 }
 
-func waitForSignal(t testing.TB, signal <-chan struct{}, label string) {
+func waitForSignal(t testing.TB, signal <-chan struct{}) {
 	t.Helper()
-	select {
-	case <-signal:
-	case <-time.After(submitFixtureTimeout):
-		t.Fatalf("timed out waiting for %s", label)
-	}
+	<-signal
 }
 
 type boundedSubmitWriter struct {

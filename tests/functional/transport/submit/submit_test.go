@@ -1,9 +1,9 @@
 package submit_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -154,6 +153,7 @@ func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *test
 		t.Fatalf("write live payload: %v", err)
 	}
 	beforeCalls := fixture.runner.callCount()
+	providerCallDone := fixture.runner.expectNextCall(t)
 	result := fixture.execute(t, []string{
 		"you", "--server", baseURL,
 		"submit", "--name", "live-submit", "--work-type-name", "task",
@@ -166,10 +166,17 @@ func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *test
 		t.Fatalf("live unary output = %q", result.stdout)
 	}
 
-	status := waitForSubmitSessionFailure(t, baseURL, sessionID)
-	if status.Categories.Failed != 1 || status.Categories.Terminal != 0 {
-		t.Fatalf("explicit session status = %#v, want one failed Work and no completed Work", status)
+	waitForSubmitProviderCall(t, providerCallDone)
+	admitted := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(baseURL, sessionID))
+	workID := admitted.Results[0].WorkId
+	if workID == nil || *workID == "" {
+		t.Fatalf("admitted Work response omitted work id: %#v", admitted.Results)
 	}
+	workers := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, sessionWorkerURL(baseURL, sessionID, *workID))
+	if len(workers.Sessions) != 1 || workers.Sessions[0].WorkerSessionId == "" {
+		t.Fatalf("Worker Session observations = %#v, want one identified attempt", workers.Sessions)
+	}
+	readSubmitWorkerSessionTerminal(t, baseURL, sessionID, workers.Sessions[0].WorkerSessionId)
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(baseURL, sessionID))
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed CLI-submitted work = %d, want 1: %#v", got, listed)
@@ -196,43 +203,52 @@ func sessionWorkURL(baseURL, sessionID string) string {
 	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
 }
 
-func waitForSubmitSessionFailure(t testing.TB, baseURL, sessionID string) factoryapi.StatusResponse {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
-	deadline := time.NewTimer(submitFixtureTimeout)
-	defer deadline.Stop()
-	poll := time.NewTicker(10 * time.Millisecond)
-	defer poll.Stop()
-	var lastErr error
-	for {
-		request, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			t.Fatalf("build session status request: %v", err)
-		}
-		response, err := http.DefaultClient.Do(request)
-		if err == nil {
-			var status factoryapi.StatusResponse
-			decodeErr := json.NewDecoder(response.Body).Decode(&status)
-			_ = response.Body.Close()
-			if response.StatusCode == http.StatusOK && decodeErr == nil {
-				completed := status.Categories.Terminal + status.Categories.Failed
-				if completed > 0 && status.Categories.Initial == 0 && status.Categories.Processing == 0 {
-					return status
-				}
-				lastErr = fmt.Errorf("session status is not terminal: %#v", status)
-			} else if decodeErr != nil {
-				lastErr = decodeErr
-			} else {
-				lastErr = fmt.Errorf("status code %d", response.StatusCode)
-			}
-		} else {
-			lastErr = err
-		}
+func sessionWorkerURL(baseURL, sessionID, workID string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(workID)
+}
 
-		select {
-		case <-poll.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for failed submit session: %v", lastErr)
+func waitForSubmitProviderCall(t testing.TB, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-t.Context().Done():
+		t.Fatalf("waiting for the controlled provider call: %v", t.Context().Err())
+	}
+}
+
+func readSubmitWorkerSessionTerminal(t testing.TB, baseURL, sessionID, workerSessionID string) {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions/" + url.PathEscape(workerSessionID) + "/events"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build Worker Session event stream request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET Worker Session event stream: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET Worker Session event stream status = %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			t.Fatalf("decode Worker Session event stream: %v", err)
+		}
+		if event.Delivery == factoryapi.WorkerSessionEventDeliveryTerminal ||
+			event.Delivery == factoryapi.WorkerSessionEventDeliveryTerminalReplay {
+			return
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read Worker Session event stream: %v", err)
+	}
+	t.Fatal("Worker Session event stream ended without a terminal delivery")
 }
