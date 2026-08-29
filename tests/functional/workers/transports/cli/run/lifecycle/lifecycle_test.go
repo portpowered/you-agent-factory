@@ -8,13 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -34,6 +33,14 @@ var cleanInvocationForbiddenOperatorChatter = []string{
 	"Opening dashboard",
 	"Recording saved to",
 	"Factory:",
+}
+
+type hostedServerAttachedObservation struct {
+	baseURL     string
+	session     factoryapi.FactorySession
+	workID      string
+	workVisible bool
+	err         error
 }
 
 // TestCLIRunCleanInvocationCompletesWithoutDashboardStartup proves a
@@ -61,11 +68,9 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 		"--quiet",
 		"prove workers-owned clean invocation lifecycle",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err != nil {
+	process := buildLifecycleProcess(t, edges)
+	inputs := process.Inputs(args, factoryDir)
+	if err := process.Execute(inputs); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,
@@ -124,11 +129,9 @@ func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *tes
 		"--provider", "codex", "--worker-reasoning-effort", "xhigh",
 		"--to-file", promptPath, "--no-record", "--quiet",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err != nil {
+	process := buildLifecycleProcess(t, edges)
+	inputs := process.Inputs(args, factoryDir)
+	if err := process.Execute(inputs); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	if runner.CallCount() != 1 {
@@ -174,17 +177,15 @@ func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			runner := support.NewShapedProviderCommandRunner()
-			inputs := support.FakeInputs(t.Context(), test.args)
-			inputs.Input.WorkingDirectory = factoryDir
-			inputs.Input.Stdin = strings.NewReader(test.stdin)
-			inputs.Input.StdinIsTTY = &test.stdinIsTTY
-			process := support.BuildProcess(t, serviceedges.Edges{
+			process := buildLifecycleProcess(t, serviceedges.Edges{
 				ProviderCommandRunner:          runner,
 				WorkSubmittedFileReader:        os.ReadFile,
 				WorkSubmittedFilePathInspector: os.Stat,
 			})
-			support.CleanupProcess(t, process)
-			err := process.Execute(inputs.Input)
+			inputs := process.Inputs(test.args, factoryDir)
+			inputs.Input.Stdin = strings.NewReader(test.stdin)
+			inputs.Input.StdinIsTTY = &test.stdinIsTTY
+			err := process.Execute(inputs)
 			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
 			}
@@ -208,15 +209,13 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 		"you", "run", "--factory", factoryPath,
 		"--to-file", missingPath, "--no-record", "--quiet",
 	}
-	inputs := support.FakeInputs(t.Context(), missingArgs)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, serviceedges.Edges{
+	process := buildLifecycleProcess(t, serviceedges.Edges{
 		ProviderCommandRunner:          runner,
 		WorkSubmittedFileReader:        os.ReadFile,
 		WorkSubmittedFilePathInspector: os.Stat,
 	})
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
+	inputs := process.Inputs(missingArgs, factoryDir)
+	err := process.Execute(inputs)
 	if err == nil || !strings.Contains(err.Error(), missingPath) {
 		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
 	}
@@ -228,15 +227,13 @@ func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir
 		"you", "run", "--factory", factoryPath,
 		"--to-file", promptDir, "--no-record", "--quiet",
 	}
-	directoryInputs := support.FakeInputs(t.Context(), directoryArgs)
-	directoryInputs.Input.WorkingDirectory = factoryDir
-	directoryProcess := support.BuildProcess(t, serviceedges.Edges{
+	directoryProcess := buildLifecycleProcess(t, serviceedges.Edges{
 		ProviderCommandRunner:          runner,
 		WorkSubmittedFileReader:        os.ReadFile,
 		WorkSubmittedFilePathInspector: os.Stat,
 	})
-	support.CleanupProcess(t, directoryProcess)
-	err = directoryProcess.Execute(directoryInputs.Input)
+	directoryInputs := directoryProcess.Inputs(directoryArgs, factoryDir)
+	err = directoryProcess.Execute(directoryInputs)
 	if err == nil || !strings.Contains(err.Error(), "regular file") {
 		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
 	}
@@ -268,11 +265,9 @@ func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
 		"--quiet",
 		"prove the explicit reasoning effort path",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err != nil {
+	process := buildLifecycleProcess(t, edges)
+	inputs := process.Inputs(args, factoryDir)
+	if err := process.Execute(inputs); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 
@@ -311,11 +306,9 @@ func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *
 		"--quiet",
 		"reject the unsupported reasoning effort",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	err := process.Execute(inputs.Input)
+	process := buildLifecycleProcess(t, edges)
+	inputs := process.Inputs(args, factoryDir)
+	err := process.Execute(inputs)
 	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
 		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
 	}
@@ -335,18 +328,18 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
-	// The worker dispatch is held open until the polling goroutine below has
+	// The worker dispatch is held open until the lifecycle coordinator has
 	// deterministically observed the hosted Factory Session at least once.
 	// Without this gate, a mocked worker that returns instantly races the
 	// invocation's own completion (which cancels and tears down the hosted
 	// API listener) against the polling goroutine's first real HTTP round
 	// trip, and the listener side of that race wins essentially every time.
-	sessionObservedGate := make(chan struct{})
+	sessionObservedGate := newLifecycleGate("provider release")
 	hostedServerEdges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(
 		t,
 		&hostedServerEdges,
-		support.NewGatedSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult, sessionObservedGate),
+		support.NewGatedSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult, sessionObservedGate.channel()),
 		nil,
 	)
 	continuousHost := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -370,12 +363,15 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	// completing (which cancels and tears down the listener) structurally
 	// outraces the polling goroutine's next HTTP round trip, making terminal
 	// Work observability a best-effort race rather than a guarantee.
-	workObservedGate := make(chan struct{})
+	workObservedGate := newLifecycleGate("listener release")
+	correlationDone := newLifecycleGate("public correlation")
 	hostedAPI := support.NewProcessAPIServer()
-	hostedAPI.HoldShutdownUntilSignaled(workObservedGate)
+	hostedAPI.HoldShutdownUntilSignaled(workObservedGate.channel())
 	hostedServerEdges.APIServerStarter = hostedAPI.Start
-	hostedProcess := support.BuildProcess(t, hostedServerEdges)
-	support.CleanupProcess(t, hostedProcess)
+	hostedProcess := buildLifecycleProcess(t, hostedServerEdges)
+	hostedProcess.TrackGate(sessionObservedGate)
+	hostedProcess.TrackGate(workObservedGate)
+	hostedProcess.TrackGate(correlationDone)
 
 	args := []string{
 		"you", "run",
@@ -385,51 +381,57 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		"--quiet",
 		"prove workers-owned server-attached lifecycle",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	command := support.StartProcessCommand(t, hostedProcess, inputs.Input)
+	inputs := hostedProcess.Inputs(args, factoryDir)
+	command := hostedProcess.StartCommand(inputs)
+	releaseWorker := func() {
+		hostedProcess.ReleaseGate(sessionObservedGate, lifecyclePhaseProviderRelease, "Factory Session observation")
+	}
+	releaseShutdown := func() {
+		hostedProcess.ReleaseGate(workObservedGate, lifecyclePhaseTerminal, "public lifecycle correlation")
+	}
 
-	observationsReady := make(chan struct {
-		session     factoryapi.FactorySession
-		workVisible bool
-		err         error
-	}, 1)
+	observationsReady := make(chan hostedServerAttachedObservation, 1)
 	go func() {
-		var releaseWorkerOnce, releaseShutdownOnce sync.Once
-		releaseWorker := func() { releaseWorkerOnce.Do(func() { close(sessionObservedGate) }) }
-		releaseShutdown := func() { releaseShutdownOnce.Do(func() { close(workObservedGate) }) }
-		// Always release both gates before this goroutine exits, even on a
-		// WaitForBaseURL timeout, so an unexpected failure here cannot hang
-		// Process.Execute (and this test's t.Cleanup teardown) forever.
+		// Always release both lifecycle gates before this goroutine exits, even
+		// on a phase failure, so Process.Execute and cleanup cannot be stranded.
 		defer releaseWorker()
 		defer releaseShutdown()
 
-		baseURL, err := hostedAPI.WaitForBaseURL(5 * time.Second)
+		baseURL, err := hostedProcess.WaitForReadiness(hostedAPI)
 		if err != nil {
-			observationsReady <- struct {
-				session     factoryapi.FactorySession
-				workVisible bool
-				err         error
-			}{err: err}
+			observationsReady <- hostedServerAttachedObservation{err: err}
 			return
 		}
-		session, workVisible, pollErr := pollHostedServerAttachedInvocationObservations(
+		session, workID, workVisible, pollErr := hostedProcess.ObserveHostedServerAttached(
 			baseURL,
 			wantServerAttachedInvocationPrimaryResult,
 			releaseWorker,
-			releaseShutdown,
 			command.Done(),
 		)
-		observationsReady <- struct {
-			session     factoryapi.FactorySession
-			workVisible bool
-			err         error
-		}{session: session, workVisible: workVisible, err: pollErr}
+		observationsReady <- hostedServerAttachedObservation{
+			baseURL:     baseURL,
+			session:     session,
+			workID:      workID,
+			workVisible: workVisible,
+			err:         pollErr,
+		}
+		if pollErr == nil {
+			<-correlationDone.channel()
+		}
 	}()
 
 	observation := <-observationsReady
-	<-command.Done()
-	if err := command.Err(); err != nil {
+	if observation.err != nil {
+		t.Fatal(observation.err)
+	}
+	assertHostedServerAttachedPublicCorrelation(
+		t,
+		observation.baseURL,
+		factorysessions.DefaultSessionID,
+		observation.workID,
+	)
+	hostedProcess.ReleaseGate(correlationDone, lifecyclePhaseTerminal, "public Factory Session, Worker Session, Work, and Event correlation")
+	if err := hostedProcess.WaitCommand(command); err != nil {
 		t.Fatalf(
 			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
 			args,
@@ -437,9 +439,6 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 			inputs.Stdout(),
 			inputs.Stderr(),
 		)
-	}
-	if observation.err != nil {
-		t.Logf("hosted server-attached session/work observations before host shutdown: %v", observation.err)
 	}
 
 	stdout := strings.TrimSuffix(inputs.Stdout(), "\n")
@@ -464,6 +463,10 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 // primary result on stdout.
 func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 	t.Parallel()
+	if os.Getenv(lifecycleForcedCleanupChildEnv) == "1" {
+		runForcedLifecycleCleanupChild(t)
+		return
+	}
 
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
@@ -482,11 +485,9 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 		"--quiet",
 		"prove workers-owned clean invocation failure lifecycle",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, edges)
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err == nil {
+	process := buildLifecycleProcess(t, edges)
+	inputs := process.Inputs(args, factoryDir)
+	if err := process.Execute(inputs); err == nil {
 		t.Fatal("Process.Execute error = nil, want terminal clean invocation failure")
 	}
 
@@ -505,6 +506,8 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 	if errorResponse.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("ErrorResponse family = %q, want %q", errorResponse.Family, factoryapi.ErrorFamilyInternalServerError)
 	}
+
+	t.Run("adverse lifecycle matrix", runLifecycleAdverseMatrix)
 }
 
 func scaffoldProviderBackedFactory(t *testing.T) string {
@@ -550,94 +553,20 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 		}),
 		nil,
 	)
-	inputs := support.FakeInputs(t.Context(), []string{
+	process := buildLifecycleProcess(t, clientEdges)
+	inputs := process.Inputs([]string{
 		"you", "--server", continuousBaseURL,
 		"run",
 		"--factory", factoryPath,
 		"--no-record",
 		"prove detached server preference cannot attach",
-	})
-	inputs.Input.WorkingDirectory = factoryDir
-	process := support.BuildProcess(t, clientEdges)
-	support.CleanupProcess(t, process)
-	if err := process.Execute(inputs.Input); err == nil {
+	}, factoryDir)
+	if err := process.Execute(inputs); err == nil {
 		t.Fatalf(
 			"Process.Execute(detached --server run) unexpectedly succeeded; want failure when client provider edges are isolated from the continuous host\nstdout:\n%s\nstderr:\n%s",
 			inputs.Stdout(),
 			inputs.Stderr(),
 		)
-	}
-}
-
-func pollHostedServerAttachedInvocationObservations(
-	baseURL, wantWorkText string,
-	releaseWorker, releaseShutdown func(),
-	done <-chan struct{},
-) (factoryapi.FactorySession, bool, error) {
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	var (
-		sessionRead    bool
-		workVisible    bool
-		sessionDuring  factoryapi.FactorySession
-		lastSessionErr string
-	)
-
-	for {
-		if !sessionRead {
-			if session, ok, diagnostic := tryReadDefaultFactorySession(baseURL); ok {
-				sessionDuring = session
-				sessionRead = true
-				// The gated worker dispatch cannot return (and so the
-				// invocation cannot complete and tear down the hosted API
-				// listener) until this deterministic release fires, which
-				// guarantees the session identity was observable while the
-				// invocation was still active.
-				releaseWorker()
-			} else if diagnostic != "" {
-				lastSessionErr = diagnostic
-			}
-		}
-		if !workVisible {
-			if ok, _ := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
-				workVisible = true
-				// The hosted API listener cannot close (and so the process
-				// cannot finish) until this deterministic release fires,
-				// which guarantees terminal Work was observable before host
-				// shutdown.
-				releaseShutdown()
-			}
-		}
-		if sessionRead && workVisible {
-			return sessionDuring, true, nil
-		}
-
-		select {
-		case <-done:
-			if !sessionRead {
-				return factoryapi.FactorySession{}, workVisible, fmt.Errorf(
-					"hosted CLI run finished before session identity was readable at %s: %s",
-					baseURL,
-					lastSessionErr,
-				)
-			}
-			return sessionDuring, workVisible, nil
-		default:
-		}
-
-		select {
-		case <-done:
-			if !sessionRead {
-				return factoryapi.FactorySession{}, workVisible, fmt.Errorf(
-					"hosted CLI run finished before session identity was readable at %s: %s",
-					baseURL,
-					lastSessionErr,
-				)
-			}
-			return sessionDuring, workVisible, nil
-		case <-ticker.C:
-		}
 	}
 }
 
@@ -651,7 +580,7 @@ func tryReadDefaultFactorySession(baseURL string) (factoryapi.FactorySession, bo
 
 func readDefaultFactorySession(baseURL string) (factoryapi.FactorySession, error) {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/~default"
-	response, err := http.Get(endpoint)
+	response, err := lifecycleHTTPClient.Get(endpoint)
 	if err != nil {
 		return factoryapi.FactorySession{}, err
 	}
@@ -674,16 +603,120 @@ func readDefaultFactorySession(baseURL string) (factoryapi.FactorySession, error
 	return session, nil
 }
 
-func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
+func assertHostedServerAttachedPublicCorrelation(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	workID string,
+) {
+	t.Helper()
+
+	workerSessions := support.ListDefaultSessionWorkerSessions(t, baseURL, workID)
+	if len(workerSessions.Sessions) != 1 {
+		t.Fatalf("public Worker Sessions for Work %q = %#v, want exactly one", workID, workerSessions.Sessions)
+	}
+	worker := workerSessions.Sessions[0]
+	if strings.TrimSpace(worker.WorkerSessionId) == "" {
+		t.Fatalf("public Worker Session for Work %q has empty identity: %#v", workID, worker)
+	}
+	if worker.State != factoryapi.WorkerSessionObservationStateCompleted {
+		t.Fatalf("public Worker Session %q state = %q, want COMPLETED", worker.WorkerSessionId, worker.State)
+	}
+	if worker.FactorySessionId == nil || *worker.FactorySessionId != sessionID {
+		t.Fatalf("public Worker Session %q Factory Session = %#v, want %q", worker.WorkerSessionId, worker.FactorySessionId, sessionID)
+	}
+	if worker.WorkId == nil || *worker.WorkId != workID || !containsString(worker.WorkIds, workID) {
+		t.Fatalf("public Worker Session %q Work correlation = workId:%#v workIds:%#v, want %q", worker.WorkerSessionId, worker.WorkId, worker.WorkIds, workID)
+	}
+
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	assertHostedServerAttachedFactoryEvents(t, events, dispatches, sessionID, workID, worker.WorkerSessionId)
+}
+
+func assertHostedServerAttachedFactoryEvents(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	dispatches []support.DispatchEventObservation,
+	sessionID, workID, workerSessionID string,
+) string {
+	t.Helper()
+
+	var matching *support.DispatchEventObservation
+	for index := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatches[index], workID) {
+			continue
+		}
+		if matching != nil {
+			t.Fatalf("public dispatch observations for Work %q contain more than one dispatch", workID)
+		}
+		matching = &dispatches[index]
+	}
+	if matching == nil || matching.Response == nil {
+		t.Fatalf("public Factory Events contain no completed dispatch for Work %q: %#v", workID, dispatches)
+	}
+	if matching.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("public dispatch %q outcome = %q, want ACCEPTED", matching.DispatchID, matching.Response.Outcome)
+	}
+	if matching.StartedAt.IsZero() || matching.CompletedAt.IsZero() || matching.StartedAt.After(matching.CompletedAt) {
+		t.Fatalf("public dispatch %q event times = %s -> %s, want ordered non-zero times", matching.DispatchID, matching.StartedAt, matching.CompletedAt)
+	}
+
+	requestIndex, responseIndex, associationIndex := -1, -1, -1
+	for index, event := range events {
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != matching.DispatchID {
+			continue
+		}
+		if event.Id == "" {
+			t.Fatalf("public Factory Event at index %d for dispatch %q has empty identity", index, matching.DispatchID)
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("public Factory Event %q session = %#v, want %q", event.Id, event.Context.SessionId, sessionID)
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			requestIndex = index
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			responseIndex = index
+		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
+			associationIndex = index
+			association, err := event.Payload.AsDispatchWorkerSessionAssociationEventPayload()
+			if err != nil {
+				t.Fatalf("decode public Worker Session association event %q: %v", event.Id, err)
+			}
+			if association.WorkerSessionId != workerSessionID {
+				t.Fatalf("public dispatch %q Worker Session association = %q, want %q", matching.DispatchID, association.WorkerSessionId, workerSessionID)
+			}
+		}
+	}
+	if requestIndex < 0 || responseIndex < 0 || associationIndex < 0 {
+		t.Fatalf("public Factory Events for dispatch %q missing request/association/response: request=%d association=%d response=%d", matching.DispatchID, requestIndex, associationIndex, responseIndex)
+	}
+	if requestIndex >= associationIndex || associationIndex >= responseIndex {
+		t.Fatalf("public Factory Event order for dispatch %q = request:%d association:%d response:%d, want request < association < response", matching.DispatchID, requestIndex, associationIndex, responseIndex)
+	}
+	return matching.DispatchID
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (string, bool, string) {
 	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
-	response, err := http.Get(endpoint)
+	response, err := lifecycleHTTPClient.Get(endpoint)
 	if err != nil {
-		return false, fmt.Sprintf("GET %s: %v", endpoint, err)
+		return "", false, fmt.Sprintf("GET %s: %v", endpoint, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		payload, _ := io.ReadAll(response.Body)
-		return false, fmt.Sprintf(
+		return "", false, fmt.Sprintf(
 			"GET %s status = %d: %s",
 			endpoint,
 			response.StatusCode,
@@ -692,7 +725,7 @@ func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
 	}
 	var listed factoryapi.ListWorkResponse
 	if err := json.NewDecoder(response.Body).Decode(&listed); err != nil {
-		return false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
+		return "", false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
 	}
 	for _, item := range listed.Results {
 		if item.State == nil || item.State.Type != factoryapi.WorkStateTypeTERMINAL {
@@ -705,11 +738,11 @@ func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
 		if err != nil {
 			continue
 		}
-		if part.Text == wantText {
-			return true, ""
+		if part.Text == wantText && item.WorkId != nil && strings.TrimSpace(*item.WorkId) != "" {
+			return *item.WorkId, true, ""
 		}
 	}
-	return false, fmt.Sprintf("listed work missing terminal primary text %q: %#v", wantText, listed.Results)
+	return "", false, fmt.Sprintf("listed work missing terminal primary text %q: %#v", wantText, listed.Results)
 }
 
 func assertCleanInvocationStdoutFreeOfOperatorChatter(t *testing.T, stdout string) {
