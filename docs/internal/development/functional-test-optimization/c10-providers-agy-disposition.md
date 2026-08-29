@@ -367,3 +367,99 @@ provider output from entering the public event stream. No generated, product,
 UI, or API contract files changed. The remaining edges are Story 004's
 clean-room loopback, final package/PR timing evidence, current-head CI handoff,
 and review-owned terminal CI/merge; real AGY remains externally owned.
+
+## Story 004 clean-room validation and handoff
+
+- Story: `functional-test-optimization-c10-providers-agy-disposition-004`
+- Gates: `GATE-PKG-001`, `GATE-SCOPE-001`, `VAL-001`, and
+  `GATE-PR-FUNCTIONAL`
+- Status: **PASS** for the implementation-stage handoff.
+- Final local source head validated before this report-only update:
+  `a840c082a494bada3710dc612f374fcaa9ae49bc`.
+- The report update changes documentation only; it does not change the
+  executable or test source that produced the package result.
+- Dependency fidelity: clean local source checkout, production
+  `root.BuildProcess`/service composition, controlled
+  `ProviderCommandRunner`, real local MP4 fixtures and pinned AGY traces; no
+  AGY executable, credentials, remote call, or paid dependency.
+
+### VAL-001 validation loopback report
+
+This report follows `factory/docs/standards/validation-loopback-template.md`.
+
+#### Environment and artifact
+
+- Commit/build identifier: `a840c082a494bada3710dc612f374fcaa9ae49bc` package
+  source; final report-only documentation update follows it.
+- Environment and configuration: Windows PowerShell, `YOU_AGY_LIVE_SMOKE`
+  explicitly removed for the final package command, `-count=1`, timeout `15m`.
+- Customer entry point: `go test` through the functional package's
+  `root.BuildProcess` and `Process.Execute` boundary.
+- Real and substituted dependencies: production-owned services and local
+  fixtures/traces; only the external AGY command effect is substituted through
+  `edges.Edges.ProviderCommandRunner`.
+- Cost/call budget used: `$0`; zero remote or paid AGY calls.
+
+#### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| `GATE-PKG-001` | PASS | Discovery listed 13 top-level identities. The single final package command `go test -count=1 -timeout=15m ./tests/functional/providers/agy` passed with Go-reported `68.974s` and measured wall time `71.823s`; the 25 offline leaves and three lifecycle witnesses passed, `TestAgyLiveSmoke` skipped, and `TestMain` reported one process build/close, 29 routes cleared, zero active calls, no recording residue, and no fixture-root residue. | PR-host timing, real AGY, terminal CI, and project-wide suite. |
+| `GATE-SCOPE-001` | PASS | `git diff --name-status origin/main...HEAD` contains only the c10 report and five files under `tests/functional/providers/agy`; `git diff --check` passed; the current-main merge-tree exits 0 without conflict; no API, generated, product, UI, or sibling-provider surface changed. | Review-time conflict resolution if GitHub reports a new conflict. |
+| `GATE-FAIL-001` / `GATE-ISO-001` / `GATE-CLEAN-001` | PASS | Story 003's focused adverse, lifecycle, race, recovery, early-stop, concurrency, route, event-order, and zero-residue evidence remains in this artifact; the final package reran the integrated package once successfully. | Long soak and OS-global resources outside test ownership. |
+| `GATE-LIVE-001` | PASS | The final package ran with `YOU_AGY_LIVE_SMOKE` absent; the live cell explicitly skipped and the controlled runner ledger remained at zero remote calls. | Explicit operator-owned `YOU_AGY_LIVE_SMOKE=1` release gate (`CASE-AGY-27`). |
+| `GATE-SECURITY-001` | PASS | The native-failure test rejects the synthetic `/tmp/secret-key` sentinel and raw detail from serialized Factory Events; the source/evidence scan found no credentials or ambient-environment payload. | Unrelated production security controls. |
+| `GATE-PR-FUNCTIONAL` | PENDING REVIEW | Local package direction is 41 estimated pre-change root builds to one final offline package process; the final clean-room package measured `71.823s` wall time versus the Story 003 directional `84.836s` run. This is directional only; the current-head Backend Functional Coverage result belongs in the review PR comment. | PR-host package timing and terminal CI. |
+
+#### Customer journey
+
+1. A clean source checkout ran `go test ./tests/functional/providers/agy -list
+   '^Test'` and returned the 13 top-level identities: nine original offline
+   tests, three lifecycle witnesses, and the gated live smoke.
+2. With `YOU_AGY_LIVE_SMOKE` removed, the one final package command exercised
+   the production process boundary, controlled AGY command edge, real local
+   media/pinned traces, public Work/Factory Event/Provider Session assertions,
+   and package cleanup. It exited `0`; all package tests passed and the live
+   test skipped.
+3. The final lifecycle census observed one shared offline process construction,
+   one close, 29 frozen routes before clear and zero afterward, zero active
+   calls, removed recordings, and a removed fixture root.
+
+#### Cross-task integration and usability
+
+- Documentation discoverability: the canonical c10 report is under
+  `docs/internal/development/functional-test-optimization/` and links the
+  task-defined gates and loopback template.
+- Permission and error behavior: the existing public Work, dispatch,
+  Provider Session, diagnostic, cancellation, timeout, malformed, missing,
+  and security witnesses remained green.
+- Persistence/reload behavior: invocation-owned recordings and Factory
+  Session/Work identities were covered by Story 003 recovery and lifecycle
+  evidence; no persistence contract changed.
+- Accessibility/keyboard/responsive behavior: not applicable; no UI changed.
+- Operational signals: process/route/call/recording/fixture cleanup is
+  asserted by the package lifecycle ledger; remote AGY remains explicitly
+  opt-in.
+
+#### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| `FINDING-001` | INFO | Compare `origin/main` with the branch refs. | A stale branch may be merged when it is conflict-free; unnecessary sync is deferred by lane policy. | `origin/main` is nine commits ahead of the characterization base, while `git merge-tree --write-tree origin/main HEAD` exits `0` with no conflict. | `GATE-SCOPE-001` ref audit. |
+| `FINDING-002` | INFO | Compare the final local package timing with prior local samples. | Timing is directional and may be contaminated; no fixed threshold is applied. | Final measured wall time is `71.823s` versus prior Story 003 `84.836s`; process topology independently falls from 41 to 1. | `GATE-PKG-001` and `GATE-PR-FUNCTIONAL`. |
+
+#### Verdict
+
+**PASS** for `VAL-001` and the implementation-stage handoff. Review owns the
+current-head CI terminal result, any GitHub-reported conflict, and merge. Real
+AGY remains the external `provider-release-gate`.
+
+## Handoff state
+
+- #2316 is closed as superseded with the disposition recorded above.
+- Final implementation head is the report-updated branch head after the
+  report-only commit; no CI result is committed.
+- The named PR must be opened from
+  `functional-test-optimization-c10-providers-agy-disposition` with the
+  `prd.json` body. CI start and the review-owned package timing comment are
+  required before implementation emits the completion marker.
