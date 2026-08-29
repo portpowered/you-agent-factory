@@ -140,7 +140,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 			markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots", InterfaceCLI)
 			break
 		}
-		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage", InterfaceCLI)
+		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess", InterfaceCLI)
 	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
 		markCovered(scenario, LaneShort, "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":

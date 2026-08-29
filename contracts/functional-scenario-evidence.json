@@ -143,13 +143,6 @@
       ]
     },
     {
-      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
-      "stableIds": [
-        "cli/you.worker-sessions.continue",
-        "cli/you.worker-sessions.invoke"
-      ]
-    },
-    {
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
       "stableIds": [
         "cli/you.worker-sessions.cancel",
@@ -162,6 +155,13 @@
       "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots",
       "stableIds": [
         "cli/you.worker-sessions.interrupt"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke"
       ]
     },
     {

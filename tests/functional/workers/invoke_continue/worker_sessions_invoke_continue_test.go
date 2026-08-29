@@ -49,31 +49,35 @@ type directWorkerSessionInterruptCLIResult struct {
 	} `json:"successor"`
 }
 
-func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *testing.T) {
+func TestInvokeContinueSharedProcess(t *testing.T) {
+	fixture := ensureInvokeContinuePackageFixture(t)
+	t.Run("InvokeContinueLocal", func(t *testing.T) {
+		runDirectWorkerSessionInvokeContinueLocal(t, fixture)
+	})
+	fixture.assertSpine(t)
+	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
+}
+
+func runDirectWorkerSessionInvokeContinueLocal(
+	t *testing.T,
+	fixture *invokeContinuePackageFixture,
+) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: directCodexSessionOutput("local-source-thread", "initial direct output COMPLETE")},
-		platformprocess.CommandResult{Stdout: directCodexSessionOutput("local-source-thread", "continued direct output COMPLETE")},
-	)
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	runner := fixture.runner
+	process := fixture.process
+	workingDirectory := fixture.workingDirectory
+	env := invokeContinueEnvironment(fixture.homeDir)
+	if got := runner.CallCount(); got != 0 {
+		t.Fatalf("provider command runner calls before CASE-01 = %d, want zero", got)
+	}
+	session := fixture.openSession(t)
+	executionPath := filepath.Join(fixture.rootDir, "local-invoke-execution.json")
+	writeInvokeContinueExecution(t, executionPath, session.id, workingDirectory)
 
 	invoke := support.FakeInputs(ctx, []string{
 		"you", "--json", "worker-sessions", "invoke",
-		"--request-id", "local-invoke-request",
-		"--worker-session-id", "local-source-session",
-		"--dispatch-id", "local-source-dispatch",
-		"--workstation", "direct",
-		"--worker-type", "direct-worker",
-		"--runner", "codex",
-		"--provider", "codex",
-		"--model", "functional-model",
-		"--user-message", "initial direct prompt",
+		"--execution", executionPath,
 	})
 	invoke.Input.Env = env
 	invoke.Input.WorkingDirectory = workingDirectory
@@ -140,7 +144,8 @@ func TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage(t *tes
 	}
 
 	assertLocalTerminalWorkerSessionControls(t, ctx, process, env, workingDirectory)
-	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
+	session.close(t)
+	session.assertDeleted(t)
 }
 
 // TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields proves direct invocation tolerates future execution-file fields.
