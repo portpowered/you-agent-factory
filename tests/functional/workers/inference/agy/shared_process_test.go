@@ -445,18 +445,18 @@ func (fixture *agyProcessFixture) runScenario(
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	// The response stream is the hot production publication path. Wait for its
-	// exact characterized frame set before polling the separate public status
-	// endpoint so the observer cannot compete with runtime event publication.
-	// The status read remains a required session-boundary witness before the
-	// post-terminal Work and Factory Event snapshots.
-	if _, err := waitForAgySessionTerminalStatus(context.Background(), fixture.baseURL, session.Id, agySharedScenarioTimeout); err != nil {
-		t.Fatalf("AGY %q terminal session status: %v", scenario.selector, err)
+	wantFactoryEvents := 11
+	if scenario.selector == agySharedTimeoutSelector {
+		wantFactoryEvents = 23
+	}
+	factoryEvents, err := waitForAgySessionFactoryEvents(
+		context.Background(), fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
+	)
+	if err != nil {
+		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, err)
 	}
 	run.terminalObserved = true
-	listed, factoryEvents, err := readAgySessionProjections(
-		context.Background(), fixture.baseURL, session.Id, agySharedScenarioTimeout,
-	)
+	listed, err := readAgySessionWork(context.Background(), fixture.baseURL, session.Id)
 	if err != nil {
 		t.Fatalf("AGY %q session projections: %v", scenario.selector, err)
 	}

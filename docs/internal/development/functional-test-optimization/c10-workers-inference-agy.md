@@ -394,13 +394,16 @@ it does not claim an OS process-tree census after a forcibly killed child.
 | `VAL-005` | PASS | This report records the exact final package procedure, result, fidelity, cleanup census, scope, cost boundary, and proved/not-proved edges without mutating fixtures or runtime state. | Live AGY, malformed native output, non-timeout outage, canonical inventory, and merge remain outside this lane. |
 
 The hosted AGY package result remained above the comparison, so one bounded
-follow-up was applied: once the required terminal status witness exists, the
-cleanup path now treats the public session `DELETE` status (`204` or idempotent
-`404`) as the deletion witness and avoids a redundant serialized post-delete
-`GET`. Active-session conflicts retain the existing terminate/status/delete
-fallback. The exact response-stream EOF/no-extra-frame assertion, cleanup
-census, route ledger, and local functional behavior remained passing. A fresh
-hosted measurement for `41b2da8c5c` is handed to review after the final push.
+follow-up was applied: after the exact response frames arrive, the scenario
+waits for the expected retained Factory Event count as the public publication
+barrier before reading Work. This removes a redundant status-endpoint poll
+while retaining the exact public Factory Event and Work witnesses. The cleanup
+path treats the public session `DELETE` status (`204` or idempotent `404`) as
+the deletion witness and avoids a redundant serialized post-delete `GET`;
+active-session conflicts retain the existing terminate/status/delete fallback.
+The exact response-stream EOF/no-extra-frame assertion, cleanup census, route
+ledger, and local functional behavior remained passing. A fresh hosted
+measurement for the new head is handed to review after the final push.
 
 ### Scope and ancestry audit
 

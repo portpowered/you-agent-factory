@@ -55,36 +55,31 @@ func waitForAgyRuntimeReady(baseURL string, timeout time.Duration) error {
 	}
 }
 
-type agyTerminalStatusResult struct {
-	status factoryapi.StatusResponse
-	err    error
-}
-
-func waitForAgySessionTerminalStatus(
+func waitForAgySessionFactoryEvents(
 	ctx context.Context,
 	baseURL string,
 	sessionID string,
+	want int,
 	timeout time.Duration,
-) (factoryapi.StatusResponse, error) {
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
+) ([]factoryapi.FactoryEvent, error) {
+	if want <= 0 {
+		return nil, fmt.Errorf("AGY Factory Event target count = %d, want positive count", want)
+	}
 	observeContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	// Session terminality is published asynchronously after response frames;
-	// this bounded public poll remains the lifecycle witness while its wait is
-	// overlapped with response delivery by the scenario helper.
+	// The final Factory Event is published asynchronously after response frames;
+	// this retained public event read is the barrier before the Work snapshot.
 	poll := time.NewTicker(10 * time.Millisecond)
 	defer poll.Stop()
-	var last factoryapi.StatusResponse
+	var lastCount int
 	var lastErr error
 	for {
-		status, err := getAgySessionStatus(observeContext, endpoint)
+		events, err := readAgyFactoryEvents(observeContext, baseURL, sessionID)
 		if err == nil {
-			last = status
+			lastCount = len(events)
 			lastErr = nil
-			completed := status.Categories.Terminal + status.Categories.Failed
-			if completed != 0 && status.Categories.Initial == 0 && status.Categories.Processing == 0 &&
-				(status.RuntimeStatus == "IDLE" || status.RuntimeStatus == "FINISHED") {
-				return status, nil
+			if lastCount >= want {
+				return events, nil
 			}
 		} else {
 			lastErr = err
@@ -92,70 +87,9 @@ func waitForAgySessionTerminalStatus(
 		select {
 		case <-poll.C:
 		case <-observeContext.Done():
-			return last, fmt.Errorf("Factory Session %q at %s: last=%#v error=%v", sessionID, endpoint, last, lastErr)
+			return nil, fmt.Errorf("Factory Session %q Factory Events: got %d, want at least %d; error=%v", sessionID, lastCount, want, lastErr)
 		}
 	}
-}
-
-func getAgySessionStatus(ctx context.Context, endpoint string) (factoryapi.StatusResponse, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return factoryapi.StatusResponse{}, err
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return factoryapi.StatusResponse{}, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return factoryapi.StatusResponse{}, fmt.Errorf("status = %d", response.StatusCode)
-	}
-	var status factoryapi.StatusResponse
-	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
-		return factoryapi.StatusResponse{}, err
-	}
-	return status, nil
-}
-
-type agySessionProjectionResult struct {
-	work   factoryapi.ListWorkResponse
-	events []factoryapi.FactoryEvent
-	err    error
-	isWork bool
-}
-
-func readAgySessionProjections(
-	ctx context.Context,
-	baseURL string,
-	sessionID string,
-	timeout time.Duration,
-) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, error) {
-	projectionContext, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	results := make(chan agySessionProjectionResult, 2)
-	go func() {
-		work, err := readAgySessionWork(projectionContext, baseURL, sessionID)
-		results <- agySessionProjectionResult{work: work, err: err, isWork: true}
-	}()
-	go func() {
-		events, err := readAgyFactoryEvents(projectionContext, baseURL, sessionID)
-		results <- agySessionProjectionResult{events: events, err: err}
-	}()
-
-	var work factoryapi.ListWorkResponse
-	var events []factoryapi.FactoryEvent
-	for range 2 {
-		result := <-results
-		if result.err != nil {
-			return factoryapi.ListWorkResponse{}, nil, result.err
-		}
-		if result.isWork {
-			work = result.work
-		} else {
-			events = result.events
-		}
-	}
-	return work, events, nil
 }
 
 func readAgySessionWork(ctx context.Context, baseURL, sessionID string) (factoryapi.ListWorkResponse, error) {
@@ -230,9 +164,9 @@ func readAgyFactoryEvents(ctx context.Context, baseURL, sessionID string) (event
 	return events, nil
 }
 
-// closeAgyFactorySession first attempts the cheap common path for a terminal
-// session. An active session still follows the public terminate/status/delete
-// lifecycle, so cleanup remains valid after assertion or setup failures.
+// closeAgyFactorySession first attempts the cheap public DELETE path. An
+// active session still follows the public terminate/status/delete lifecycle,
+// so cleanup remains valid after assertion or setup failures.
 func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string, terminalObserved bool) error {
 	// http.Client{} uses http.DefaultTransport; keep its pool reusable across
 	// the scenario's lifecycle requests instead of evicting connections.
