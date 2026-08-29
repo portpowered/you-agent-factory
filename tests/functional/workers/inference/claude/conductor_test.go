@@ -1,112 +1,124 @@
-package claude_test
+package claude
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestClaudeConductorSuccessThroughRootBuildProcess proves successful Claude execution through the product graph.
-func TestClaudeConductorSuccessThroughRootBuildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderClaude,
-		"claude-sonnet-4-5-20250514",
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"claude conductor success"}`))
+const (
+	claudeConductorModel          = "claude-sonnet-4-5-20250514"
+	claudeConductorRunTimeout     = 20 * time.Second
+	claudeConductorProcessCommand = "claude"
+	claudeCancellationMessage     = "provider invocation was canceled"
+)
 
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: []byte(
-			`{"type":"result","subtype":"success","is_error":false,"result":"claude functional answer COMPLETE","session_id":"claude-session-1"}` + "\n",
-		),
+// TestClaudeDefaultLaneSharedProcess proves the ordinary Claude scenarios and
+// same-process recovery through one root-built process. Each subtest owns a
+// separate Factory directory and opens an explicit non-default Factory Session
+// so the process is shared while runtime state remains session-scoped.
+func TestClaudeDefaultLaneSharedProcess(t *testing.T) {
+	fixture := newClaudeDefaultLaneFixture(t)
+	t.Cleanup(func() {
+		fixture.assertSharedIdentityLedger(t)
 	})
 
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}, 20*time.Second)
+	t.Run("ConcurrentDefaultScenarios", func(t *testing.T) {
+		for _, scenario := range fixture.defaultScenarios {
+			scenario := scenario
+			t.Run(scenario.name, func(t *testing.T) {
+				t.Parallel()
+				fixture.runScenario(t, scenario)
+			})
+		}
+	})
+	t.Run("SameProcessRecoveryAfterAdverseSession", func(t *testing.T) {
+		runClaudeSameProcessRecoveryAfterAdverseSession(t, fixture)
+	})
+	t.Cleanup(func() {
+		fixture.assertSharedProcessCleanup(t)
+	})
+}
 
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("terminal place tokens = %d, want 1 completed work item; listed=%#v", got, listed)
+// runClaudeSameProcessRecoveryAfterAdverseSession proves that a canceled
+// explicit Factory Session can be deleted before a fresh explicit session
+// succeeds on the same root-built process. Its scenarios use distinct routes
+// so the concurrent default cases and this ordered probe remain independently
+// observable while sharing the production process.
+func runClaudeSameProcessRecoveryAfterAdverseSession(t *testing.T, fixture *claudeDefaultLaneFixture) {
+	t.Helper()
+	if len(fixture.recoveryScenarios) != 2 {
+		t.Fatalf("recovery scenarios = %d, want cancellation and fresh success", len(fixture.recoveryScenarios))
 	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed place tokens = %d, want 0", got)
+	if !t.Run("Cancellation", func(t *testing.T) {
+		fixture.runScenario(t, fixture.recoveryScenarios[0])
+	}) {
+		t.Fatal("cancellation recovery prerequisite failed")
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("claude command runner calls = %d, want 1 through conductor path", runner.CallCount())
+	if !t.Run("FreshSuccess", func(t *testing.T) {
+		fixture.runScenario(t, fixture.recoveryScenarios[1])
+	}) {
+		t.Fatal("fresh success recovery probe failed")
 	}
-	request := runner.LastRequest()
-	if request.Command != "claude" {
-		t.Fatalf("command = %q, want claude (conductor-selected built-in)", request.Command)
-	}
-	if !containsArgPair(request.Args, "--model", "claude-sonnet-4-5-20250514") {
-		t.Fatalf("args = %#v, want --model claude-sonnet-4-5-20250514", request.Args)
-	}
-	if !containsArgPair(request.Args, "--output-format", "stream-json") {
-		t.Fatalf("args = %#v, want claude stream-json invocation", request.Args)
+
+	if got := fixture.apiStarts.Load(); got != 1 {
+		t.Fatalf("recovery API server starts = %d, want exactly one shared process server", got)
 	}
 }
 
-func containsArgPair(args []string, flag, value string) bool {
-	for index := 0; index+1 < len(args); index++ {
-		if args[index] == flag && args[index+1] == value {
-			return true
+// TestClaudeCommandRouterFailsClosed proves that the package-local command
+// edge cannot silently fall back to another scenario when its immutable
+// selector is absent or duplicated.
+func TestClaudeCommandRouterFailsClosed(t *testing.T) {
+	first := &claudeScenarioCommandRunner{}
+	second := &claudeScenarioCommandRunner{}
+	duplicate, err := newClaudeCommandRouter([]claudeCommandRoute{
+		{selector: "duplicate-selector", runner: first},
+		{selector: "duplicate-selector", runner: second},
+	})
+	if err == nil || !strings.Contains(err.Error(), "duplicate Claude scenario selector") {
+		t.Fatalf("duplicate route construction error = %v, want fail-closed duplicate selector error", err)
+	}
+	if duplicate != nil {
+		t.Fatal("duplicate route construction returned a usable router")
+	}
+
+	router, err := newClaudeCommandRouter([]claudeCommandRoute{
+		{selector: "known-selector", runner: first},
+	})
+	if err != nil {
+		t.Fatalf("newClaudeCommandRouter: %v", err)
+	}
+	_, err = router.Run(context.Background(), platformprocess.CommandRequest{
+		Command: claudeConductorProcessCommand,
+		WorkDir: "unknown-selector",
+	})
+	if err == nil || !strings.Contains(err.Error(), "unknown Claude scenario selector") {
+		t.Fatalf("unknown route error = %v, want fail-closed selector error", err)
+	}
+	if got := first.CallCount(); got != 0 {
+		t.Fatalf("known route calls after unknown selector = %d, want 0", got)
+	}
+
+	for _, selector := range []string{"", " ", "."} {
+		if _, err := newClaudeCommandRouter([]claudeCommandRoute{
+			{selector: selector, runner: first},
+		}); err == nil || !strings.Contains(err.Error(), "Claude scenario selector is required") {
+			t.Fatalf("empty route selector %q error = %v, want required-selector error", selector, err)
 		}
 	}
-	return false
 }
 
-// TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical proves cancellation returns the canonical outcome.
-func TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderClaude,
-		"claude-sonnet-4-5-20250514",
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"claude command cancel"}`))
-
-	runner := &commandCancellationRunner{}
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}, 20*time.Second)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed place tokens = %d, want 1; listed=%#v", got, listed)
+func claudeScenarioNamed(t *testing.T, scenarios []claudeScenario, name string) claudeScenario {
+	t.Helper()
+	for _, scenario := range scenarios {
+		if scenario.name == name {
+			return scenario
+		}
 	}
-	if runner.calls != 1 {
-		t.Fatalf("claude command runner calls = %d, want 1", runner.calls)
-	}
-	request := runner.lastRequest
-	if request.Command != "claude" {
-		t.Fatalf("command = %q, want claude (conductor-selected built-in)", request.Command)
-	}
-	encoded, err := json.Marshal(events)
-	if err != nil {
-		t.Fatalf("marshal factory events: %v", err)
-	}
-	payload := string(encoded)
-	if !strings.Contains(payload, "provider invocation was canceled") {
-		t.Fatalf("factory events missing canonical cancellation outcome: %s", payload)
-	}
-	if strings.Contains(payload, "Claude command did not complete successfully") {
-		t.Fatalf("factory events used Claude-local cancellation fallback: %s", payload)
-	}
-}
-
-type commandCancellationRunner struct {
-	calls       int
-	lastRequest platformprocess.CommandRequest
-}
-
-func (r *commandCancellationRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	r.calls++
-	r.lastRequest = request
-	return platformprocess.CommandResult{}, context.Canceled
+	t.Fatalf("Claude scenario %q is not configured", name)
+	return claudeScenario{}
 }
