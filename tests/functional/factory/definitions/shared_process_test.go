@@ -41,21 +41,29 @@ var (
 func TestMain(m *testing.M) {
 	sharedDefinitionsProcess = sharedDefinitionsProcessForTest
 	code := m.Run()
-	if err := closeSharedDefinitionsServiceHosts(); err != nil {
-		fmt.Fprintf(os.Stderr, "close shared Factory Definitions service hosts: %v\n", err)
+	serviceHostsCloseErr := closeSharedDefinitionsServiceHosts()
+	if serviceHostsCloseErr != nil {
+		fmt.Fprintf(os.Stderr, "close shared Factory Definitions service hosts: %v\n", serviceHostsCloseErr)
 		if code == 0 {
 			code = 1
 		}
 	}
+	var processCloseErr error
 	if sharedDefinitionsFixture != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), sharedDefinitionsProcessShutdownTimeout)
-		err := sharedDefinitionsFixture.process.Close(ctx)
+		processCloseErr = sharedDefinitionsFixture.process.Close(ctx)
 		cancel()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "close shared Factory Definitions process: %v\n", err)
+		if processCloseErr != nil {
+			fmt.Fprintf(os.Stderr, "close shared Factory Definitions process: %v\n", processCloseErr)
 			if code == 0 {
 				code = 1
 			}
+		}
+	}
+	if err := writeDefinitionsForcedUnwindReport(serviceHostsCloseErr, processCloseErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write Factory Definitions forced-unwind report: %v\n", err)
+		if code == 0 {
+			code = 1
 		}
 	}
 	os.Exit(code)
@@ -161,6 +169,7 @@ func TestFactoryDefinitionsSharedProcessKeepsHomesAndCurrentFactoriesIsolated(t 
 	if got := sharedDefinitionsProviderCallCount(t); got != providerCallsBefore {
 		t.Fatalf("provider edge calls during static isolation canary = %d, want unchanged %d", got, providerCallsBefore)
 	}
+	failDefinitionsForcedUnwindAfterAssertion(t)
 }
 
 func sharedDefinitionsHome(t *testing.T) (string, string, []string) {

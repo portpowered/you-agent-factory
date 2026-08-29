@@ -49,6 +49,8 @@ import (
 // share one root-built process while retaining explicit unique Factory Sessions,
 // workspace selectors, and public Work/Event/replay evidence for each run.
 func TestPackagedReviewSharedProcess(t *testing.T) {
+	fixture := sharedPackagedReviewFixture(t)
+	fixture.census.resetForRun()
 	t.Run("ApprovalCompletes", testPackagedReviewApprovalCompletes)
 	t.Run("RejectionCarriesFeedback", testPackagedReviewRejectionCarriesFeedback)
 	t.Run("ThreeCleanRejectionsDoNotTripFailureBreaker", testPackagedReviewThreeCleanRejections)
@@ -58,8 +60,9 @@ func TestPackagedReviewSharedProcess(t *testing.T) {
 	t.Run("CLIResponseMatchesExplicitSession", testPackagedReviewCLIResponseParity)
 	t.Run("CleanupPathCensus", testPackagedReviewCleanupPathCensus)
 	t.Cleanup(func() {
-		assertPackagedReviewResourceCensus(t, sharedPackagedReviewFixture(t))
+		assertPackagedReviewResourceCensus(t, fixture)
 	})
+	failPackagedReviewForcedUnwindAfterAssertion(t)
 }
 
 func testPackagedReviewApprovalCompletes(t *testing.T) {

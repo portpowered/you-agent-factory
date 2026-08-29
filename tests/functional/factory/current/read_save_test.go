@@ -45,6 +45,8 @@ func TestSharedCurrentFactoryAPI(t *testing.T) {
 		t.Parallel()
 		testSharedTemplateValidationDoesNotMutate(t, fixture)
 	})
+
+	failCurrentFactoryForcedUnwindAfterAssertion(t, fixture)
 }
 
 // testSharedCurrentFactoryGetAndSave proves that one explicit Factory Session

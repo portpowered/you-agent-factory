@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -31,6 +32,7 @@ type classifySharedFixture struct {
 	baseURL        string
 	process        support.ApplicationProcess
 	providerRunner *classifySwitchingProviderRunner
+	listenerDone   <-chan struct{}
 	cancel         context.CancelFunc
 	done           chan error
 }
@@ -67,12 +69,20 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	var closeErr error
 	if classifyFixture != nil {
-		if err := classifyFixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared classify fixture: %v\n", err)
+		closeErr = classifyFixture.close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close shared classify fixture: %v\n", closeErr)
 			if code == 0 {
 				code = 1
 			}
+		}
+	}
+	if err := writeClassifyForcedUnwindReport(classifyFixture, closeErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write classify forced-unwind report: %v\n", err)
+		if code == 0 {
+			code = 1
 		}
 	}
 	os.Exit(code)
@@ -113,9 +123,16 @@ func startClassifyFixture() (*classifySharedFixture, error) {
 	}
 
 	api := support.NewProcessAPIServer()
+	listenerDone := make(chan struct{})
+	apiStarter := func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		// ProcessAPIServer.Start returns only after its httptest listener has
+		// been closed, so the completed starter is a deterministic observation.
+		defer close(listenerDone)
+		return api.Start(ctx, request)
+	}
 	providerRunner := &classifySwitchingProviderRunner{}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      api.Start,
+		APIServerStarter:      apiStarter,
 		ProviderCommandRunner: providerRunner,
 	})
 	if err != nil {
@@ -171,6 +188,7 @@ func startClassifyFixture() (*classifySharedFixture, error) {
 		baseURL:        baseURL,
 		process:        process,
 		providerRunner: providerRunner,
+		listenerDone:   listenerDone,
 		cancel:         cancel,
 		done:           done,
 	}, nil
@@ -238,8 +256,13 @@ func (fixture *classifySharedFixture) close() error {
 		errs = append(errs, fmt.Errorf("close root process: %w", err))
 	}
 	cancel()
+	if err := classifyListenerError(fixture.listenerDone); err != nil {
+		errs = append(errs, err)
+	}
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
 		errs = append(errs, fmt.Errorf("remove fixture root: %w", err))
+	} else if !classifyPathAbsent(fixture.rootDir) {
+		errs = append(errs, fmt.Errorf("fixture root %q remains after cleanup", fixture.rootDir))
 	}
 	return errors.Join(errs...)
 }
@@ -247,6 +270,7 @@ func (fixture *classifySharedFixture) close() error {
 type classifyScenario struct {
 	fixture   *classifySharedFixture
 	sessionID string
+	rootDir   string
 }
 
 func openClassifyScenario(
@@ -256,7 +280,11 @@ func openClassifyScenario(
 	t.Helper()
 	fixture := sharedClassifyFixture(t)
 	fixture.providerRunner.setDelegate(runner)
-	homeDir := t.TempDir()
+	rootDir := t.TempDir()
+	homeDir := filepath.Join(rootDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("create classify scenario home: %v", err)
+	}
 	factoryDir := support.CopyFactoryAsNamed(
 		t,
 		fixture.factoryDir,
@@ -269,7 +297,9 @@ func openClassifyScenario(
 		t.Fatal("opened classify session has no id")
 	}
 	t.Cleanup(func() {
+		defer cleanupClassifyScenarioRoot(t, rootDir)
 		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		assertClassifySessionAbsent(t, fixture.baseURL, sessionID)
 	})
-	return &classifyScenario{fixture: fixture, sessionID: sessionID}
+	return &classifyScenario{fixture: fixture, sessionID: sessionID, rootDir: rootDir}
 }

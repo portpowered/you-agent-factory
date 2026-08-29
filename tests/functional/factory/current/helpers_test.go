@@ -65,8 +65,9 @@ func startCurrentFactoryServerWithoutMockWorkersWithSetup(
 // then gets its own explicit Factory Session and uniquely named fixture so a
 // save cannot affect another witness's initial state.
 type sharedCurrentFactoryAPI struct {
-	rootDir string
-	server  *support.FunctionalAPIServer
+	rootDir       string
+	server        *support.FunctionalAPIServer
+	processClosed bool
 }
 
 func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
@@ -134,6 +135,14 @@ func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
 				"alpha-prompt-nonmutation",
 				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-nonmutation", "alpha-prompt-nonmutation-task"),
 			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"forced-unwind",
+				functionalNamedFactoryPayloadWithWorkType(t, "forced-unwind", "forced-unwind-task"),
+			)
 		}),
 	)
 	t.Cleanup(func() {
@@ -143,6 +152,8 @@ func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
 		default:
 			t.Error("shared Current Factory process is still running after Stop")
 		}
+		fixture.server.Close(t)
+		fixture.processClosed = true
 	})
 	return fixture
 }

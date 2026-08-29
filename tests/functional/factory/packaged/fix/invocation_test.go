@@ -148,6 +148,8 @@ func TestPackagedFixUsesNamedWorktreeAndIndependentReview(t *testing.T) {
 // share one root-built process while retaining explicit Factory Session and
 // selector isolation for each invocation.
 func TestPackagedFixSharedProcess(t *testing.T) {
+	fixture := sharedPackagedFixFixture(t)
+	fixture.census.resetForRun()
 	t.Run("UsesOperatorDefaultsWhenOptionalRoleParametersAreOmitted", testPackagedFixOperatorDefaults)
 
 	t.Run("CarriesIndependentRejectionFeedback", testPackagedFixRejectionFeedback)
@@ -159,8 +161,9 @@ func TestPackagedFixSharedProcess(t *testing.T) {
 	t.Run("CLIResponseMatchesExplicitSession", testPackagedFixCLIResponseParity)
 	t.Run("CleanupPathCensus", testPackagedFixCleanupPathCensus)
 	t.Cleanup(func() {
-		assertPackagedFixResourceCensus(t, sharedPackagedFixFixture(t))
+		assertPackagedFixResourceCensus(t, fixture)
 	})
+	failPackagedFixForcedUnwindAfterAssertion(t)
 }
 
 func testPackagedFixOperatorDefaults(t *testing.T) {

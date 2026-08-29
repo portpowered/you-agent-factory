@@ -47,6 +47,8 @@ func TestPackagedFactoryCatalogListsEveryEmbeddedFactory(t *testing.T) {
 			discoveredNames,
 		)
 	}
+
+	failCatalogForcedUnwindAfterAssertion(t)
 }
 
 // TestPackagedFactoryCatalogHasUniqueStableNames proves runtime packaged

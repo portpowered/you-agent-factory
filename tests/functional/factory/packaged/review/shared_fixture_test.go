@@ -106,12 +106,20 @@ var (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
+	var closeErr error
 	if packagedReviewFixture != nil {
-		if err := packagedReviewFixture.close(); err != nil {
-			fmt.Fprintf(os.Stderr, "close shared packaged Review fixture: %v\n", err)
+		closeErr = packagedReviewFixture.close()
+		if closeErr != nil {
+			fmt.Fprintf(os.Stderr, "close shared packaged Review fixture: %v\n", closeErr)
 			if code == 0 {
 				code = 1
 			}
+		}
+	}
+	if err := writePackagedReviewForcedUnwindReport(packagedReviewFixture, closeErr); err != nil {
+		fmt.Fprintf(os.Stderr, "write packaged Review forced-unwind report: %v\n", err)
+		if code == 0 {
+			code = 1
 		}
 	}
 	os.Exit(code)

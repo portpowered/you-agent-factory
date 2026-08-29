@@ -74,13 +74,33 @@ type packagedFixResourceCensus struct {
 	mu                   sync.Mutex
 	records              []packagedFixCensusRecord
 	cleanupPaths         map[packagedFixCleanupPath]int
+	closedSessionIDs     map[string]struct{}
 	cleanupPathCensusRun bool
 	processStarts        int
 }
 
 func newPackagedFixResourceCensus() *packagedFixResourceCensus {
 	return &packagedFixResourceCensus{
-		cleanupPaths: make(map[packagedFixCleanupPath]int),
+		cleanupPaths:     make(map[packagedFixCleanupPath]int),
+		closedSessionIDs: make(map[string]struct{}),
+	}
+}
+
+// resetForRun scopes scenario identities and cleanup-path counts to one
+// complete test repetition. The shared process intentionally survives
+// -count repetitions, while the census must not resolve deterministic request
+// names against an earlier repetition's record.
+func (census *packagedFixResourceCensus) resetForRun() {
+	if census == nil {
+		return
+	}
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	census.records = nil
+	census.cleanupPaths = make(map[packagedFixCleanupPath]int)
+	census.cleanupPathCensusRun = false
+	if census.closedSessionIDs == nil {
+		census.closedSessionIDs = make(map[string]struct{})
 	}
 }
 
@@ -163,6 +183,12 @@ func (census *packagedFixResourceCensus) recordCleanup(
 		census.records[index].rootAbsent = rootAbsent
 		census.records[index].sessionGone = sessionGone
 		census.records[index].selectorGone = selectorGone
+		if sessionGone {
+			if census.closedSessionIDs == nil {
+				census.closedSessionIDs = make(map[string]struct{})
+			}
+			census.closedSessionIDs[census.records[index].sessionID] = struct{}{}
+		}
 		census.records[index].resourceGone = map[string]bool{
 			"definition": pathAbsent(census.records[index].factoryDir),
 			"workspace":  pathAbsent(census.records[index].workspace),
@@ -178,6 +204,24 @@ func (census *packagedFixResourceCensus) recordCleanup(
 		}
 		return
 	}
+}
+
+func (census *packagedFixResourceCensus) knownClosedSessionIDs() map[string]struct{} {
+	if census == nil {
+		return nil
+	}
+	census.mu.Lock()
+	defer census.mu.Unlock()
+	closed := make(map[string]struct{}, len(census.closedSessionIDs))
+	for sessionID := range census.closedSessionIDs {
+		closed[sessionID] = struct{}{}
+	}
+	for _, record := range census.records {
+		if record.sessionGone {
+			closed[record.sessionID] = struct{}{}
+		}
+	}
+	return closed
 }
 
 func (census *packagedFixResourceCensus) snapshot() []packagedFixCensusRecord {
@@ -315,10 +359,7 @@ func assertPackagedFixLiveSessionCensus(
 	records []packagedFixCensusRecord,
 ) (defaultSessions, durableMirrors int) {
 	t.Helper()
-	closedSessions := make(map[string]struct{}, len(records))
-	for _, record := range records {
-		closedSessions[record.sessionID] = struct{}{}
-	}
+	closedSessions := fixture.census.knownClosedSessionIDs()
 	live := support.GetJSON[factoryapi.ListFactorySessionsResponse](
 		t,
 		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions?scope=live",
