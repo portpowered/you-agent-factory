@@ -13,6 +13,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -101,6 +102,7 @@ type concurrencySession struct {
 	marker    string
 	runner    *concurrencyScenarioRunner
 	id        string
+	stream    factoryapi.FactorySessionStreamIdentity
 	closeOnce sync.Once
 }
 
@@ -132,10 +134,9 @@ func newConcurrencySharedProcessFixture(t *testing.T) *concurrencySharedProcessF
 			fixture.apiClose.Do(func() { close(fixture.apiClosed) })
 			return err
 		},
-		ProviderCommandRunner:                    fixture.router,
-		FactorySessionIDGenerator:                fixture.identities.nextSessionID,
-		FactorySessionRuntimeInstanceIDGenerator: fixture.identities.nextRuntimeID,
-		FactorySessionResponseEventIDGenerator:   fixture.identities.nextResponseEventID,
+		ProviderCommandRunner:                  fixture.router,
+		FactorySessionIDGenerator:              fixture.identities.nextSessionID,
+		FactorySessionResponseEventIDGenerator: fixture.identities.nextResponseEventID,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -218,12 +219,30 @@ func (fixture *concurrencySharedProcessFixture) openCase(
 	if sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("opened Factory Session for %q = %q, want explicit session", dir, sessionID)
 	}
+	publicSession := getConcurrencyFactorySession(t, fixture.baseURL, sessionID)
+	if publicSession.Runtime.StreamIdentity == nil {
+		t.Fatalf("opened Factory Session for %q runtime stream identity = nil, want public identity", dir)
+	}
+	streamIdentity := *publicSession.Runtime.StreamIdentity
+	for label, value := range map[string]string{
+		"backend scope":     streamIdentity.BackendScopeID,
+		"logical session":   streamIdentity.LogicalSessionKeyID,
+		"factory session":   streamIdentity.FactorySessionID,
+		"stream generation": streamIdentity.StreamGenerationID,
+	} {
+		if strings.TrimSpace(value) == "" {
+			t.Fatalf("opened Factory Session %q %s stream identity = %#v, want non-empty public identity", dir, label, streamIdentity)
+		}
+	}
+	if streamIdentity.FactorySessionID != sessionID {
+		t.Fatalf("opened Factory Session %q stream identity session = %q, want %q", dir, streamIdentity.FactorySessionID, sessionID)
+	}
 	fixture.sessionsMu.Lock()
 	if _, exists := fixture.opened[sessionID]; exists {
 		fixture.sessionsMu.Unlock()
 		t.Fatalf("Factory Session id %q was reused", sessionID)
 	}
-	session := &concurrencySession{fixture: fixture, name: name, dir: dir, marker: marker, runner: runner, id: sessionID}
+	session := &concurrencySession{fixture: fixture, name: name, dir: dir, marker: marker, runner: runner, id: sessionID, stream: streamIdentity}
 	fixture.opened[sessionID] = dir
 	fixture.sessions[sessionID] = session
 	fixture.sessionsMu.Unlock()

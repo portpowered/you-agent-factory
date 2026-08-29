@@ -155,10 +155,9 @@ func newAgentSharedProcessFixture(t *testing.T) *agentSharedProcessFixture {
 			fixture.apiClose.Do(func() { close(apiClosed) })
 			return err
 		},
-		ProviderCommandRunner:                    router,
-		FactorySessionIDGenerator:                identities.nextSessionID,
-		FactorySessionRuntimeInstanceIDGenerator: identities.nextRuntimeID,
-		FactorySessionResponseEventIDGenerator:   identities.nextResponseEventID,
+		ProviderCommandRunner:                  router,
+		FactorySessionIDGenerator:              identities.nextSessionID,
+		FactorySessionResponseEventIDGenerator: identities.nextResponseEventID,
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)

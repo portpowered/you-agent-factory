@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -87,6 +88,41 @@ func assertConcurrencyInvocationPrimaryResult(t *testing.T, response factoryapi.
 	}
 	if !strings.Contains(part.Text, want) {
 		t.Fatalf("invocation primary result text = %q, want marker %q", part.Text, want)
+	}
+}
+
+func assertConcurrencyInvocationMarkerIsolation(
+	t *testing.T,
+	result concurrencyInvocationResult,
+	sessionID string,
+	wantMarker string,
+	foreignMarker string,
+) {
+	t.Helper()
+	if result.err != nil || result.response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("%s CC-03 invocation result = %#v, error=%v, want COMPLETED", sessionID, result.response, result.err)
+	}
+	if result.response.SessionId != nil && *result.response.SessionId != sessionID {
+		t.Fatalf("%s CC-03 invocation response session = %q, want %q", sessionID, *result.response.SessionId, sessionID)
+	}
+	assertConcurrencyInvocationPrimaryResult(t, result.response, wantMarker)
+	part, err := (*result.response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("%s CC-03 invocation result part = %#v: %v", sessionID, (*result.response.PrimaryResult)[0], err)
+	}
+	if strings.Contains(part.Text, foreignMarker) {
+		t.Fatalf("%s CC-03 invocation result text = %q, contains peer marker %q", sessionID, part.Text, foreignMarker)
+	}
+}
+
+func assertConcurrencyCanceledInvocationResult(t *testing.T, result concurrencyInvocationResult) {
+	t.Helper()
+	if result.err != nil && !errors.Is(result.err, context.Canceled) &&
+		!strings.Contains(result.err.Error(), "status = 404") {
+		t.Fatalf("CC-04 canceled invocation error = %v", result.err)
+	}
+	if result.err == nil && result.response.Status != factoryapi.InvocationTerminalStatusCanceled {
+		t.Fatalf("CC-04 canceled invocation response = %#v, want CANCELED", result.response)
 	}
 }
 
@@ -217,6 +253,17 @@ func listConcurrencyWork(t testing.TB, baseURL, sessionID string) factoryapi.Lis
 	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 }
 
+func getConcurrencyFactorySession(t testing.TB, baseURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode Factory Session %q: %v", sessionID, err)
+	}
+	return session
+}
+
 func listConcurrencyWorkerSessions(
 	t testing.TB,
 	baseURL, sessionID string,
@@ -229,6 +276,23 @@ func listConcurrencyWorkerSessions(
 	}
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(work)
 	return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
+}
+
+func concurrencyWorkerSessionForWork(
+	t testing.TB,
+	session *concurrencySession,
+	workID *string,
+) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	listed := listConcurrencyWorkerSessions(t, session.fixture.baseURL, session.id, workID)
+	if len(listed.Sessions) != 1 {
+		t.Fatalf("%s Worker Sessions for Work %q = %#v, want one public attempt", session.name, stringPointerValue(workID), listed.Sessions)
+	}
+	observation := listed.Sessions[0]
+	if strings.TrimSpace(observation.WorkerSessionId) == "" || strings.TrimSpace(observation.AttemptId) == "" || observation.WorkId == nil || *observation.WorkId != stringPointerValue(workID) {
+		t.Fatalf("%s Worker Session for Work %q = %#v, want Worker Session, attempt, and Work identities", session.name, stringPointerValue(workID), observation)
+	}
+	return observation
 }
 
 func cancelConcurrencyWorkerSession(
@@ -368,26 +432,30 @@ func assertConcurrencyCounts(t *testing.T, session *concurrencySession, workCoun
 	}
 }
 
-func assertDistinctConcurrencyDispatches(t *testing.T, first, second *concurrencySession) {
+func assertDistinctConcurrencyDispatches(
+	t *testing.T,
+	first *concurrencySession,
+	firstWork factoryapi.SubmitWorkResponse,
+	second *concurrencySession,
+	secondWork factoryapi.SubmitWorkResponse,
+) {
 	t.Helper()
-	firstDispatches := support.ObserveDispatchEvents(t, concurrencySessionEvents(t, first.fixture.baseURL, first.id))
-	secondDispatches := support.ObserveDispatchEvents(t, concurrencySessionEvents(t, second.fixture.baseURL, second.id))
+	firstEvents := concurrencySessionEvents(t, first.fixture.baseURL, first.id)
+	secondEvents := concurrencySessionEvents(t, second.fixture.baseURL, second.id)
+	firstDispatches := support.ObserveDispatchEvents(t, firstEvents)
+	secondDispatches := support.ObserveDispatchEvents(t, secondEvents)
 	if len(firstDispatches) != 1 || len(secondDispatches) != 1 || firstDispatches[0].DispatchID == secondDispatches[0].DispatchID {
 		t.Fatalf("CC-03 dispatch identities = %#v/%#v, want distinct one-per-session dispatches", firstDispatches, secondDispatches)
 	}
-	for _, event := range concurrencySessionEvents(t, first.fixture.baseURL, first.id) {
-		if event.Context.SessionId != nil && *event.Context.SessionId != first.id {
-			t.Fatalf("CC-03 first event escaped session: %#v", event.Context)
-		}
-	}
-	for _, event := range concurrencySessionEvents(t, second.fixture.baseURL, second.id) {
-		if event.Context.SessionId != nil && *event.Context.SessionId != second.id {
-			t.Fatalf("CC-03 second event escaped session: %#v", event.Context)
-		}
-	}
+	assertConcurrencySessionMarkerIsolation(t, first, firstEvents, firstWork, second.marker)
+	assertConcurrencySessionMarkerIsolation(t, second, secondEvents, secondWork, first.marker)
 }
 
-func assertConcurrencySessionOrdering(t *testing.T, session *concurrencySession) {
+func assertConcurrencySessionOrdering(
+	t *testing.T,
+	session *concurrencySession,
+	responses []factoryapi.SubmitWorkResponse,
+) {
 	t.Helper()
 	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
 	lastSessionSequence := 0
@@ -408,9 +476,206 @@ func assertConcurrencySessionOrdering(t *testing.T, session *concurrencySession)
 	if len(dispatches) != 2 {
 		t.Fatalf("%s ordering dispatches = %d, want two", session.name, len(dispatches))
 	}
-	if !dispatches[0].StartedAt.Before(dispatches[1].StartedAt) && dispatches[0].StartedAt.Equal(dispatches[1].StartedAt) {
-		t.Fatalf("%s dispatch start timestamps are not ordered: %#v", session.name, dispatches)
+	if err := concurrencyDispatchStartOrderError(dispatches); err != nil {
+		t.Fatalf("%s dispatch start timestamps are not ordered: %v; observations=%#v", session.name, err, dispatches)
 	}
+	if len(responses) != len(dispatches) {
+		t.Fatalf("%s ordering responses = %d, want one per dispatch", session.name, len(responses))
+	}
+	for _, response := range responses {
+		assertConcurrencyRequestDispatchTerminalCorrelation(t, session, events, response)
+	}
+}
+
+func assertConcurrencySessionMarkerIsolation(
+	t *testing.T,
+	session *concurrencySession,
+	events []factoryapi.FactoryEvent,
+	response factoryapi.SubmitWorkResponse,
+	foreignMarker string,
+) {
+	t.Helper()
+	workID := stringPointerValue(response.WorkId)
+	if workID == "" || strings.TrimSpace(response.RequestId) == "" {
+		t.Fatalf("%s CC-03 response = %#v, want Work and request identities", session.name, response)
+	}
+	work := concurrencyWorkByID(t, session, response.WorkId)
+	content := workContentText(t, work)
+	if !strings.Contains(content, session.marker) || strings.Contains(content, foreignMarker) {
+		t.Fatalf("%s CC-03 Work %q content = %q, want own marker %q and no peer marker %q", session.name, workID, content, session.marker, foreignMarker)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 || !support.DispatchObservationIncludesWork(dispatches[0], workID) || dispatches[0].Response == nil {
+		t.Fatalf("%s CC-03 dispatch = %#v, want one terminal dispatch for Work %q", session.name, dispatches, workID)
+	}
+	output := support.StringPointerValue(dispatches[0].Response.Output)
+	if !strings.Contains(output, session.marker) || strings.Contains(output, foreignMarker) {
+		t.Fatalf("%s CC-03 dispatch output = %q, want own marker %q and no peer marker %q", session.name, output, session.marker, foreignMarker)
+	}
+
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("marshal %s CC-03 Factory Events: %v", session.name, err)
+	}
+	if !strings.Contains(string(encoded), session.marker) || strings.Contains(string(encoded), foreignMarker) {
+		t.Fatalf("%s CC-03 Factory Events = %s, want own marker %q and no peer marker %q", session.name, encoded, session.marker, foreignMarker)
+	}
+	hasRequestWorkCorrelation := false
+	for _, event := range events {
+		if event.Context.SessionId != nil && *event.Context.SessionId != session.id {
+			t.Fatalf("%s CC-03 event escaped session: %#v", session.name, event.Context)
+		}
+		if event.Context.RequestId != nil && *event.Context.RequestId == response.RequestId && concurrencyEventHasWork(event, workID) {
+			hasRequestWorkCorrelation = true
+		}
+	}
+	if !hasRequestWorkCorrelation {
+		t.Fatalf("%s CC-03 Factory Events have no request %q to Work %q correlation", session.name, response.RequestId, workID)
+	}
+}
+
+func concurrencyEventHasWork(event factoryapi.FactoryEvent, workID string) bool {
+	if event.Context.WorkIds != nil {
+		for _, candidate := range *event.Context.WorkIds {
+			if candidate == workID {
+				return true
+			}
+		}
+	}
+	switch event.Type {
+	case factoryapi.FactoryEventTypeWorkRequest:
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err == nil && payload.Works != nil {
+			for _, work := range *payload.Works {
+				if stringPointerValue(work.WorkId) == workID {
+					return true
+				}
+			}
+		}
+	case factoryapi.FactoryEventTypeDispatchRequest:
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		if err == nil {
+			for _, input := range payload.Inputs {
+				if input.WorkId == workID {
+					return true
+				}
+			}
+		}
+	case factoryapi.FactoryEventTypeWorkStateChange:
+		payload, err := event.Payload.AsWorkStateChangeEventPayload()
+		return err == nil && payload.WorkId == workID
+	}
+	return false
+}
+
+func concurrencyEventSummary(events []factoryapi.FactoryEvent) string {
+	result := make([]string, 0, len(events))
+	for index, event := range events {
+		requestID := ""
+		if event.Context.RequestId != nil {
+			requestID = *event.Context.RequestId
+		}
+		dispatchID := ""
+		if event.Context.DispatchId != nil {
+			dispatchID = *event.Context.DispatchId
+		}
+		workIDs := []string{}
+		if event.Context.WorkIds != nil {
+			workIDs = append(workIDs, (*event.Context.WorkIds)...)
+		}
+		detail := ""
+		if event.Type == factoryapi.FactoryEventTypeWorkStateChange {
+			if payload, err := event.Payload.AsWorkStateChangeEventPayload(); err == nil {
+				detail = fmt.Sprintf("work=%q to=%q", payload.WorkId, payload.ToState)
+			}
+		}
+		result = append(result, fmt.Sprintf("#%d %s seq=%d sessionSeq=%v request=%q dispatch=%q contextWork=%v %s", index, event.Type, event.Context.Sequence, event.Context.SessionSequence, requestID, dispatchID, workIDs, detail))
+	}
+	return strings.Join(result, "; ")
+}
+
+func concurrencyDispatchStartOrderError(dispatches []support.DispatchEventObservation) error {
+	for index := 1; index < len(dispatches); index++ {
+		previous := dispatches[index-1]
+		current := dispatches[index]
+		if current.StartedAt.Before(previous.StartedAt) {
+			return fmt.Errorf("dispatch %q started at %s before prior dispatch %q at %s", current.DispatchID, current.StartedAt.Format(time.RFC3339Nano), previous.DispatchID, previous.StartedAt.Format(time.RFC3339Nano))
+		}
+		// Equal wall-clock timestamps are accepted by policy; canonical event
+		// order and per-session sequence remain authoritative at this precision.
+	}
+	return nil
+}
+
+func assertConcurrencyRequestDispatchTerminalCorrelation(
+	t *testing.T,
+	session *concurrencySession,
+	events []factoryapi.FactoryEvent,
+	response factoryapi.SubmitWorkResponse,
+) {
+	t.Helper()
+	workID := stringPointerValue(response.WorkId)
+	requestID := strings.TrimSpace(response.RequestId)
+	if workID == "" || requestID == "" {
+		t.Fatalf("%s ordering response = %#v, want Work/request identities", session.name, response)
+	}
+	type eventIndex struct {
+		request  int
+		dispatch int
+		terminal int
+	}
+	indices := eventIndex{request: -1, dispatch: -1, terminal: -1}
+	dispatchID := ""
+	for index, event := range events {
+		if event.Context.RequestId == nil || *event.Context.RequestId != requestID || !concurrencyEventHasWork(event, workID) {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest:
+			if indices.request != -1 {
+				t.Fatalf("%s Work %q request %q has duplicate WORK_REQUEST events", session.name, workID, requestID)
+			}
+			indices.request = index
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			if indices.dispatch != -1 {
+				t.Fatalf("%s Work %q request %q has duplicate DISPATCH_REQUEST events", session.name, workID, requestID)
+			}
+			indices.dispatch = index
+			if event.Context.DispatchId == nil || strings.TrimSpace(*event.Context.DispatchId) == "" {
+				t.Fatalf("%s Work %q dispatch request has no dispatch identity", session.name, workID)
+			}
+			dispatchID = *event.Context.DispatchId
+		}
+	}
+	for index, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatchID || !concurrencyEventHasWork(event, workID) || event.Context.SessionId == nil || *event.Context.SessionId != session.id {
+				continue
+			}
+			if indices.terminal != -1 {
+				t.Fatalf("%s Work %q request %q has duplicate terminal DISPATCH_RESPONSE events", session.name, workID, requestID)
+			}
+			indices.terminal = index
+		}
+	}
+	if indices.request == -1 || indices.dispatch == -1 || indices.terminal == -1 {
+		t.Fatalf("%s Work %q request %q timeline indexes = %#v, want WORK_REQUEST, DISPATCH_REQUEST, terminal DISPATCH_RESPONSE; events=%s", session.name, workID, requestID, indices, concurrencyEventSummary(events))
+	}
+	if !(indices.request < indices.dispatch && indices.dispatch < indices.terminal) {
+		t.Fatalf("%s Work %q request %q event order = %#v, want request < dispatch < terminal", session.name, workID, requestID, indices)
+	}
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if dispatch.DispatchID != dispatchID {
+			continue
+		}
+		if !support.DispatchObservationIncludesWork(dispatch, workID) || dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("%s Work %q dispatch = %#v, want accepted terminal response", session.name, workID, dispatch)
+		}
+		return
+	}
+	t.Fatalf("%s Work %q dispatch %q is absent from public dispatch observations", session.name, workID, dispatchID)
 }
 
 func assertConcurrencyEventIDsUnchanged(t *testing.T, want, got []factoryapi.FactoryEvent, operation string) {
@@ -478,6 +743,48 @@ func assertConcurrencyCancellationResponseEvents(t *testing.T, events []factorya
 	}
 }
 
+func assertConcurrencyResponseStreamIdentity(
+	t *testing.T,
+	events []factoryapi.FactoryResponseEvent,
+	sessionID string,
+	dispatchID string,
+) string {
+	t.Helper()
+	if len(events) == 0 {
+		t.Fatalf("%s response stream is empty, want public run identity", sessionID)
+	}
+	runID := ""
+	var previousSequence int64
+	for _, event := range events {
+		if event.FactorySessionId != sessionID || strings.TrimSpace(event.EventId) == "" || strings.TrimSpace(event.RunId) == "" {
+			t.Fatalf("%s response event = %#v, want session/event/run identity", sessionID, event)
+		}
+		if runID == "" {
+			runID = event.RunId
+		} else if event.RunId != runID {
+			t.Fatalf("%s response stream changed run identity from %q to %q", sessionID, runID, event.RunId)
+		}
+		if event.Sequence <= previousSequence {
+			t.Fatalf("%s response stream sequence regressed: previous=%d current=%d event=%#v", sessionID, previousSequence, event.Sequence, event)
+		}
+		previousSequence = event.Sequence
+		if event.DispatchId != nil && *event.DispatchId != dispatchID {
+			t.Fatalf("%s response stream dispatch = %q, want %q", sessionID, *event.DispatchId, dispatchID)
+		}
+	}
+	return runID
+}
+
+func concurrencyResponseEventIDs(events []factoryapi.FactoryResponseEvent) map[string]struct{} {
+	ids := make(map[string]struct{}, len(events))
+	for _, event := range events {
+		if event.EventId != "" {
+			ids[event.EventId] = struct{}{}
+		}
+	}
+	return ids
+}
+
 func assertConcurrencySessionDeleted(t testing.TB, baseURL, sessionID string) {
 	t.Helper()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
@@ -500,3 +807,15 @@ func stringPointerValue(value *string) string {
 }
 
 func stringPointer(value string) *string { return &value }
+
+func TestConcurrencyDispatchStartOrderRejectsDescendingTimestamps(t *testing.T) {
+	t.Parallel()
+	first := time.Date(2026, time.August, 29, 12, 0, 2, 0, time.UTC)
+	second := first.Add(-time.Nanosecond)
+	if err := concurrencyDispatchStartOrderError([]support.DispatchEventObservation{
+		{DispatchID: "dispatch-first", StartedAt: first},
+		{DispatchID: "dispatch-second", StartedAt: second},
+	}); err == nil {
+		t.Fatal("descending dispatch start timestamps returned nil error, want regression failure")
+	}
+}

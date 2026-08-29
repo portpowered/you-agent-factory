@@ -409,16 +409,11 @@ func cloneConcurrencyCommandRequest(request platformprocess.CommandRequest) plat
 
 type concurrencyIdentityGenerator struct {
 	sessions      atomic.Uint64
-	runtimes      atomic.Uint64
 	responseEvent atomic.Uint64
 }
 
 func (generator *concurrencyIdentityGenerator) nextSessionID() string {
 	return fmt.Sprintf("00000000-0000-4000-8000-%012x", generator.sessions.Add(1))
-}
-
-func (generator *concurrencyIdentityGenerator) nextRuntimeID() string {
-	return fmt.Sprintf("concurrency-shared-runtime-%d", generator.runtimes.Add(1))
 }
 
 func (generator *concurrencyIdentityGenerator) nextResponseEventID() string {

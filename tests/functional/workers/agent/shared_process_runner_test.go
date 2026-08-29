@@ -217,16 +217,11 @@ func cloneAgentCommandResult(result platformprocess.CommandResult) platformproce
 
 type agentSharedIdentityGenerator struct {
 	sessions      atomic.Uint64
-	runtimes      atomic.Uint64
 	responseEvent atomic.Uint64
 }
 
 func (generator *agentSharedIdentityGenerator) nextSessionID() string {
 	return fmt.Sprintf("00000000-0000-4000-8000-%012x", generator.sessions.Add(1))
-}
-
-func (generator *agentSharedIdentityGenerator) nextRuntimeID() string {
-	return fmt.Sprintf("agent-shared-runtime-%d", generator.runtimes.Add(1))
 }
 
 func (generator *agentSharedIdentityGenerator) nextResponseEventID() string {

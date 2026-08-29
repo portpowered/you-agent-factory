@@ -373,7 +373,7 @@ func assertAgentWorkerSession(
 			t.Fatalf("%s cancellation Worker Sessions = %#v, want one", scenario.name, listed.Sessions)
 		}
 		workerSession := listed.Sessions[0]
-		if strings.TrimSpace(workerSession.WorkerSessionId) == "" || workerSession.WorkId == nil || *workerSession.WorkId != workID {
+		if strings.TrimSpace(workerSession.WorkerSessionId) == "" || strings.TrimSpace(workerSession.AttemptId) == "" || workerSession.WorkId == nil || *workerSession.WorkId != workID {
 			t.Fatalf("%s cancellation Worker Session = %#v, want Work correlation %q", scenario.name, workerSession, workID)
 		}
 		return
@@ -386,13 +386,111 @@ func assertAgentWorkerSession(
 		wantState = factoryapi.WorkerSessionObservationStateFailed
 	}
 	for index, workerSession := range listed.Sessions {
-		if strings.TrimSpace(workerSession.WorkerSessionId) == "" || workerSession.WorkId == nil || *workerSession.WorkId != workID {
+		if strings.TrimSpace(workerSession.WorkerSessionId) == "" || strings.TrimSpace(workerSession.AttemptId) == "" || workerSession.WorkId == nil || *workerSession.WorkId != workID {
 			t.Fatalf("%s Worker Session[%d] = %#v, want Work correlation %q", scenario.name, index, workerSession, workID)
 		}
 		if workerSession.State != wantState {
 			t.Fatalf("%s Worker Session[%d] state = %q, want %q", scenario.name, index, workerSession.State, wantState)
 		}
 	}
+}
+
+func assertAgentRuntimeRootPublicIdentities(
+	t *testing.T,
+	baseURL string,
+	session factoryapi.FactorySession,
+	events []factoryapi.FactoryEvent,
+	responseEvents []factoryapi.FactoryResponseEvent,
+	sessionID string,
+	requestID string,
+	workID string,
+) {
+	t.Helper()
+	identity := session.Runtime.StreamIdentity
+	if identity == nil {
+		t.Fatal("RuntimeRoot Factory Session stream identity = nil, want public stream identity")
+	}
+	for label, value := range map[string]string{
+		"backend scope":     identity.BackendScopeID,
+		"logical session":   identity.LogicalSessionKeyID,
+		"factory session":   identity.FactorySessionID,
+		"stream generation": identity.StreamGenerationID,
+	} {
+		if strings.TrimSpace(value) == "" {
+			t.Fatalf("RuntimeRoot %s stream identity = %#v, want non-empty", label, identity)
+		}
+	}
+	if identity.FactorySessionID != sessionID {
+		t.Fatalf("RuntimeRoot stream identity session = %q, want %q", identity.FactorySessionID, sessionID)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 1 || dispatches[0].DispatchID == "" || !support.DispatchObservationIncludesWork(dispatches[0], workID) {
+		t.Fatalf("RuntimeRoot dispatch identities = %#v, want one dispatch correlated to Work %q", dispatches, workID)
+	}
+	dispatchID := dispatches[0].DispatchID
+	requestWorkCorrelated := false
+	for _, event := range events {
+		if event.Context.RequestId == nil || *event.Context.RequestId != requestID || event.Context.WorkIds == nil {
+			continue
+		}
+		for _, candidate := range *event.Context.WorkIds {
+			if candidate == workID {
+				requestWorkCorrelated = true
+				break
+			}
+		}
+	}
+	if !requestWorkCorrelated {
+		t.Fatalf("RuntimeRoot Factory Events contain no request %q to Work %q correlation", requestID, workID)
+	}
+	workerSessions := listAgentSessionWorkerSessions(t, baseURL, sessionID, workID)
+	if len(workerSessions.Sessions) != 1 {
+		t.Fatalf("RuntimeRoot Worker Sessions = %#v, want one attempt", workerSessions.Sessions)
+	}
+	workerSession := workerSessions.Sessions[0]
+	if strings.TrimSpace(workerSession.WorkerSessionId) == "" || strings.TrimSpace(workerSession.AttemptId) == "" || workerSession.WorkId == nil || *workerSession.WorkId != workID {
+		t.Fatalf("RuntimeRoot Worker Session = %#v, want public attempt/Work identity %q", workerSession, workID)
+	}
+
+	if len(responseEvents) == 0 {
+		t.Fatal("RuntimeRoot response events are empty, want public run identity")
+	}
+	runID := ""
+	for _, event := range responseEvents {
+		if event.FactorySessionId != sessionID || strings.TrimSpace(event.EventId) == "" || strings.TrimSpace(event.RunId) == "" {
+			t.Fatalf("RuntimeRoot response event = %#v, want session/event/run identity", event)
+		}
+		if runID == "" {
+			runID = event.RunId
+		} else if event.RunId != runID {
+			t.Fatalf("RuntimeRoot response run identity changed from %q to %q", runID, event.RunId)
+		}
+		if event.DispatchId != nil && *event.DispatchId != dispatchID {
+			t.Fatalf("RuntimeRoot response event dispatch = %q, want %q", *event.DispatchId, dispatchID)
+		}
+		payload, err := event.Payload.AsFactoryResponseEventSessionPayload()
+		if err != nil {
+			continue
+		}
+		if payload.FactorySessionId != nil && *payload.FactorySessionId != sessionID {
+			t.Fatalf("RuntimeRoot response session payload session = %q, want %q", *payload.FactorySessionId, sessionID)
+		}
+		if payload.DispatchId != nil && *payload.DispatchId != dispatchID {
+			t.Fatalf("RuntimeRoot response session payload dispatch = %q, want %q", *payload.DispatchId, dispatchID)
+		}
+		if payload.AttemptId != nil {
+			if *payload.AttemptId != workerSession.AttemptId {
+				t.Fatalf("RuntimeRoot response attempt = %q, want Worker Session attempt %q", *payload.AttemptId, workerSession.AttemptId)
+			}
+		}
+	}
+}
+
+func listAgentSessionWorkerSessions(t *testing.T, baseURL, sessionID, workID string) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(workID)
+	return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
 }
 
 func assertAgentSessionDeleted(t *testing.T, baseURL, sessionID string) {

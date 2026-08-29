@@ -102,7 +102,25 @@ func (fixture *concurrencySharedProcessFixture) runConcurrentSessionIsolation(t 
 	waitConcurrencyWorkSettled(t, fixture.baseURL, second.id, 1)
 	assertConcurrencyCompletedWorks(t, first, []factoryapi.SubmitWorkResponse{firstWork})
 	assertConcurrencyCompletedWorks(t, second, []factoryapi.SubmitWorkResponse{secondWork})
-	assertDistinctConcurrencyDispatches(t, first, second)
+	assertDistinctConcurrencyDispatches(t, first, firstWork, second, secondWork)
+	firstInvocationDone := make(chan concurrencyInvocationResult, 1)
+	go func() {
+		response, err := postConcurrencyInvocation(t.Context(), fixture.baseURL, first.id, first.marker)
+		firstInvocationDone <- concurrencyInvocationResult{response: response, err: err}
+	}()
+	first.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	first.runner.releaseCall(2)
+	firstInvocation := awaitConcurrencyInvocation(t, firstInvocationDone)
+	assertConcurrencyInvocationMarkerIsolation(t, firstInvocation, first.id, first.marker, second.marker)
+	secondInvocationDone := make(chan concurrencyInvocationResult, 1)
+	go func() {
+		response, err := postConcurrencyInvocation(t.Context(), fixture.baseURL, second.id, second.marker)
+		secondInvocationDone <- concurrencyInvocationResult{response: response, err: err}
+	}()
+	second.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	second.runner.releaseCall(2)
+	secondInvocation := awaitConcurrencyInvocation(t, secondInvocationDone)
+	assertConcurrencyInvocationMarkerIsolation(t, secondInvocation, second.id, second.marker, first.marker)
 	first.closeAndAssertGone(t)
 	second.closeAndAssertGone(t)
 }
@@ -133,6 +151,8 @@ func (fixture *concurrencySharedProcessFixture) runSessionCancellationIsolation(
 	}
 	support.WaitForSessionStopped(t, fixture.baseURL, canceled.id, concurrencySharedProcessTimeout)
 	canceled.closeAndAssertGone(t)
+	canceledResult := awaitConcurrencyInvocation(t, canceledDone)
+	assertConcurrencyCanceledInvocationResult(t, canceledResult)
 	canceledEvents := readConcurrencyResponseEventsUntilTerminal(t, canceledStream, concurrencySharedProcessTimeout)
 	assertConcurrencyCancellationResponseEvents(t, canceledEvents, canceled.id)
 	canceledStream.Close()
@@ -339,8 +359,8 @@ func (fixture *concurrencySharedProcessFixture) runSessionOrdering(t *testing.T)
 	waitConcurrencyWorkSettled(t, fixture.baseURL, second.id, 2)
 	assertConcurrencyCompletedWorks(t, first, firstWorks)
 	assertConcurrencyCompletedWorks(t, second, secondWorks)
-	assertConcurrencySessionOrdering(t, first)
-	assertConcurrencySessionOrdering(t, second)
+	assertConcurrencySessionOrdering(t, first, firstWorks)
+	assertConcurrencySessionOrdering(t, second, secondWorks)
 	if fixture.router.callsFor(first.dir) == nil || len(fixture.router.callsFor(first.dir)) != 2 || len(fixture.router.callsFor(second.dir)) != 2 {
 		t.Fatalf("CC-12 per-session route calls = %d/%d, want two/two", len(fixture.router.callsFor(first.dir)), len(fixture.router.callsFor(second.dir)))
 	}
@@ -370,6 +390,7 @@ func (fixture *concurrencySharedProcessFixture) runTimeoutRecovery(t *testing.T)
 func (fixture *concurrencySharedProcessFixture) runRecovery(t *testing.T) {
 	t.Helper()
 	old := fixture.openCase(t, "CC-13-old", 1, concurrencyRunnerHold, "cc13-old", "", 0)
+	oldStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(fixture.baseURL, old.id))
 	oldWork := submitConcurrencyWork(t, old, old.marker)
 	old.runner.waitStarted(t, concurrencySharedProcessTimeout)
 	oldEvents := concurrencySessionEvents(t, fixture.baseURL, old.id)
@@ -377,15 +398,21 @@ func (fixture *concurrencySharedProcessFixture) runRecovery(t *testing.T) {
 	if len(oldDispatches) != 1 {
 		t.Fatalf("CC-13 old dispatch observations = %#v, want one", oldDispatches)
 	}
+	oldWorkerSession := concurrencyWorkerSessionForWork(t, old, oldWork.WorkId)
 	if err := cancelConcurrencySession(fixture.baseURL, old.id); err != nil {
 		t.Fatalf("CC-13 cancel old session: %v", err)
 	}
 	old.runner.waitCanceled(t, concurrencySharedProcessTimeout)
 	support.WaitForSessionStopped(t, fixture.baseURL, old.id, concurrencySharedProcessTimeout)
+	oldResponseEvents := readConcurrencyResponseEventsUntilTerminal(t, oldStream, concurrencySharedProcessTimeout)
+	oldRunID := assertConcurrencyResponseStreamIdentity(t, oldResponseEvents, old.id, oldDispatches[0].DispatchID)
+	oldStream.Close()
+	oldStream.WaitClosed(concurrencySharedProcessTimeout)
 	old.closeAndAssertGone(t)
 	fixture.router.unregister(old.dir)
 
 	fresh := fixture.openCase(t, "CC-13-fresh", 1, concurrencyRunnerSuccess, "cc13-fresh", "", 0)
+	freshStream := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(fixture.baseURL, fresh.id))
 	freshWork := submitConcurrencyWork(t, fresh, fresh.marker)
 	waitConcurrencyWorkSettled(t, fixture.baseURL, fresh.id, 1)
 	assertConcurrencyWorkCompleted(t, fresh, freshWork.WorkId, fresh.marker)
@@ -397,8 +424,38 @@ func (fixture *concurrencySharedProcessFixture) runRecovery(t *testing.T) {
 	if len(freshDispatches) != 1 || freshDispatches[0].DispatchID == oldDispatches[0].DispatchID || !support.DispatchObservationIncludesWork(freshDispatches[0], stringPointerValue(freshWork.WorkId)) {
 		t.Fatalf("CC-13 fresh dispatch = %#v, want new identity for Work %q", freshDispatches, stringPointerValue(freshWork.WorkId))
 	}
+	freshWorkerSession := concurrencyWorkerSessionForWork(t, fresh, freshWork.WorkId)
+	freshResponseEvents := readConcurrencyResponseEventsUntilTerminal(t, freshStream, concurrencySharedProcessTimeout)
+	freshRunID := assertConcurrencyResponseStreamIdentity(t, freshResponseEvents, fresh.id, freshDispatches[0].DispatchID)
+	oldResponseEventIDs := concurrencyResponseEventIDs(oldResponseEvents)
+	for eventID := range concurrencyResponseEventIDs(freshResponseEvents) {
+		if _, reused := oldResponseEventIDs[eventID]; reused {
+			t.Fatalf("CC-13 fresh response stream reused old response event identity %q", eventID)
+		}
+	}
+	freshStream.Close()
+	freshStream.WaitClosed(concurrencySharedProcessTimeout)
 	if stringPointerValue(oldWork.WorkId) == stringPointerValue(freshWork.WorkId) {
 		t.Fatalf("CC-13 fresh Work ID %q reused canceled Work", stringPointerValue(freshWork.WorkId))
+	}
+	if old.stream.StreamGenerationID == fresh.stream.StreamGenerationID || old.stream.LogicalSessionKeyID == fresh.stream.LogicalSessionKeyID {
+		t.Fatalf("CC-13 fresh public stream identity reused old identity: old=%#v fresh=%#v", old.stream, fresh.stream)
+	}
+	if oldWorkerSession.AttemptId == freshWorkerSession.AttemptId || oldWorkerSession.WorkerSessionId == freshWorkerSession.WorkerSessionId {
+		t.Fatalf("CC-13 fresh Worker Session identity reused old attempt: old=%#v fresh=%#v", oldWorkerSession, freshWorkerSession)
+	}
+	if oldRunID == freshRunID {
+		t.Fatalf("CC-13 fresh response stream reused old run identity: old=%q fresh=%q", oldRunID, freshRunID)
+	}
+	for _, event := range freshResponseEvents {
+		if event.FactorySessionId == old.id || event.RunId == oldRunID || (event.DispatchId != nil && *event.DispatchId == oldDispatches[0].DispatchID) {
+			t.Fatalf("CC-13 fresh response stream retained stale old identity: %#v", event)
+		}
+	}
+	for _, event := range freshEvents {
+		if event.Context.SessionId != nil && *event.Context.SessionId != fresh.id {
+			t.Fatalf("CC-13 fresh Factory Event escaped fresh session: %#v", event.Context)
+		}
 	}
 	fresh.closeAndAssertGone(t)
 }

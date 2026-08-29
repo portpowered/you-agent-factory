@@ -279,7 +279,8 @@ func (fixture *agentSharedProcessFixture) runScenario(
 		return
 	}
 
-	sessionID := fixture.openSession(t, scenario.factoryDir)
+	opened := fixture.openSessionResponse(t, scenario.factoryDir)
+	sessionID := opened.Session.Id
 	name := "agent-" + strings.ToLower(scenario.name)
 	traceID := "trace-agent-" + strings.ToLower(scenario.name)
 	request := factoryapi.SubmitWorkRequest{
@@ -299,7 +300,7 @@ func (fixture *agentSharedProcessFixture) runScenario(
 		t.Fatalf("%s has unsupported input mode %q", scenario.name, scenario.inputMode)
 	}
 	var responseStream *support.FactoryResponseEventStream
-	if scenario.behavior == agentSharedCancel {
+	if scenario.behavior == agentSharedCancel || scenario.name == "RuntimeRoot" {
 		responseStream = support.OpenFactoryResponseEventStreamAt(
 			t,
 			support.SessionResponseEventsURL(fixture.baseURL, sessionID),
@@ -333,6 +334,11 @@ func (fixture *agentSharedProcessFixture) runScenario(
 	} else {
 		support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, agentSharedProcessTimeout)
 	}
+	if scenario.name == "RuntimeRoot" {
+		responseEvents = readAgentResponseEventsUntilTerminal(t, responseStream, agentSharedProcessTimeout)
+		responseStream.Close()
+		responseStream.WaitClosed(agentSharedProcessTimeout)
+	}
 	listed := listAgentSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
 	workID := support.StringPointerValue(submitted.WorkId)
@@ -345,6 +351,10 @@ func (fixture *agentSharedProcessFixture) runScenario(
 	assertAgentScenarioWork(t, listed, workID, scenario)
 	assertAgentScenarioDispatch(t, events, sessionID, requestID, workID, scenario)
 	assertAgentWorkerSession(t, fixture.baseURL, sessionID, workID, scenario)
+	if scenario.name == "RuntimeRoot" {
+		publicSession := getAgentFactorySession(t, fixture.baseURL, sessionID)
+		assertAgentRuntimeRootPublicIdentities(t, fixture.baseURL, publicSession, events, responseEvents, sessionID, requestID, workID)
+	}
 	fixture.assertRoute(t, scenario)
 
 	fixture.closeSession(t, sessionID)
@@ -443,6 +453,14 @@ func seededAgentIdentity(t *testing.T, events []factoryapi.FactoryEvent) (string
 
 func (fixture *agentSharedProcessFixture) openSession(t *testing.T, factoryDir string) string {
 	t.Helper()
+	return fixture.openSessionResponse(t, factoryDir).Session.Id
+}
+
+func (fixture *agentSharedProcessFixture) openSessionResponse(
+	t *testing.T,
+	factoryDir string,
+) factoryapi.OpenFactorySessionResponse {
+	t.Helper()
 	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
 	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
 		t.Fatalf("opened Factory Session for %q = %#v, want identity", factoryDir, opened)
@@ -458,7 +476,18 @@ func (fixture *agentSharedProcessFixture) openSession(t *testing.T, factoryDir s
 	}
 	fixture.opened[sessionID] = factoryDir
 	t.Cleanup(func() { fixture.closeSession(t, sessionID) })
-	return sessionID
+	return opened
+}
+
+func getAgentFactorySession(t *testing.T, baseURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, endpoint)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode Factory Session %q: %v", sessionID, err)
+	}
+	return session
 }
 
 func (fixture *agentSharedProcessFixture) closeSession(t testing.TB, sessionID string) {
