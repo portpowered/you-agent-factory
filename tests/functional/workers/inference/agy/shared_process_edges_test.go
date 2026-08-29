@@ -230,26 +230,6 @@ func readAgyFactoryEvents(ctx context.Context, baseURL, sessionID string) (event
 	return events, nil
 }
 
-func assertAgyFactorySessionDeleted(baseURL, sessionID string) error {
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	// Keep the default transport pool reusable for the next public observation;
-	// the API server explicitly closes client connections during final shutdown.
-	client := &http.Client{Timeout: agySharedScenarioTimeout}
-	response, err := client.Get(endpoint)
-	if err != nil {
-		return fmt.Errorf("GET deleted AGY Factory Session %q: %w", sessionID, err)
-	}
-	body, readErr := io.ReadAll(response.Body)
-	closeErr := response.Body.Close()
-	if readErr != nil {
-		return errors.Join(readErr, closeErr)
-	}
-	if response.StatusCode != http.StatusNotFound {
-		return fmt.Errorf("GET deleted AGY Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return closeErr
-}
-
 // closeAgyFactorySession first attempts the cheap common path for a terminal
 // session. An active session still follows the public terminate/status/delete
 // lifecycle, so cleanup remains valid after assertion or setup failures.

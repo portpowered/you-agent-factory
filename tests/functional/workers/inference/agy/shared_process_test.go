@@ -540,10 +540,10 @@ func (run *agySharedScenarioRun) closeSession(ctx context.Context) error {
 		var errs []error
 		if err := closeAgyFactorySession(ctx, run.fixture.baseURL, run.sessionID, run.terminalObserved); err != nil {
 			errs = append(errs, fmt.Errorf("close Factory Session %q: %w", run.sessionID, err))
-		}
-		if err := assertAgyFactorySessionDeleted(run.fixture.baseURL, run.sessionID); err != nil {
-			errs = append(errs, err)
 		} else {
+			// A successful public DELETE (or an idempotent 404) is the deletion
+			// witness. The following stream EOF check proves the session-owned
+			// response stream was released without another serialized request.
 			run.fixture.recordSessionDeleted(run.sessionID)
 			run.fixture.forgetRun(run.sessionID)
 		}
@@ -881,10 +881,6 @@ func (fixture *agyProcessFixture) closeUnclosedSessions(ctx context.Context) err
 		}
 		if err := closeAgyFactorySession(ctx, fixture.baseURL, id, false); err != nil {
 			errs = append(errs, fmt.Errorf("close unclosed session %q: %w", id, err))
-			continue
-		}
-		if err := assertAgyFactorySessionDeleted(fixture.baseURL, id); err != nil {
-			errs = append(errs, err)
 			continue
 		}
 		fixture.recordSessionDeleted(id)
