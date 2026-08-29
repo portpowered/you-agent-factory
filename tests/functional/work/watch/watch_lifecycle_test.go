@@ -27,6 +27,13 @@ const (
 )
 
 func TestWorkWatchControlledLifecycleCases(t *testing.T) {
+	t.Run("boundary cases", runControlledWatchBoundaryCases)
+	t.Run("cancellation cases", runControlledWatchCancellationCases)
+	t.Run("recovery and cleanup cases", runControlledWatchRecoveryAndCleanupCases)
+	t.Run("contention cases", runControlledWatchContentionCases)
+}
+
+func runControlledWatchBoundaryCases(t *testing.T) {
 	t.Run("CASE-WW-002 empty stream cancellation", func(t *testing.T) {
 		stream := newControlledWatchStream(t, nil, nil)
 		ctx, cancel := context.WithCancel(t.Context())
@@ -86,11 +93,9 @@ func TestWorkWatchControlledLifecycleCases(t *testing.T) {
 			{fixture.complete.Id, "processing", "complete", true},
 		})
 	})
+}
 
-	t.Run("CASE-WW-005 conflicting duplicate fails safely", func(t *testing.T) {
-		runControlledConflictFailure(t)
-	})
-
+func runControlledWatchCancellationCases(t *testing.T) {
 	t.Run("CASE-WW-006 follow cancellation detaches", func(t *testing.T) {
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{
@@ -144,6 +149,12 @@ func TestWorkWatchControlledLifecycleCases(t *testing.T) {
 		support.RequireSafeCLIDiagnostic(t, stderr.String())
 		waitForControlledSignal(t, connection.closed, "deadline watch stream close")
 	})
+}
+
+func runControlledWatchRecoveryAndCleanupCases(t *testing.T) {
+	t.Run("CASE-WW-005 conflicting duplicate fails safely", func(t *testing.T) {
+		runControlledConflictFailure(t)
+	})
 
 	t.Run("CASE-WW-009 disconnect preserves accepted transition", func(t *testing.T) {
 		runControlledReconnectCase(t)
@@ -171,7 +182,9 @@ func TestWorkWatchControlledLifecycleCases(t *testing.T) {
 	t.Run("CASE-WW-012 failure cleanup preserves primary error", func(t *testing.T) {
 		runControlledConflictFailure(t)
 	})
+}
 
+func runControlledWatchContentionCases(t *testing.T) {
 	t.Run("CASE-WW-016 delivery and cancellation use signals", func(t *testing.T) {
 		fixture := newControlledWatchFixture(t)
 		stream := newControlledWatchStream(t, [][]factoryapi.FactoryEvent{{

@@ -29,7 +29,6 @@ type workWatchStreamGate struct {
 	once     sync.Once
 
 	mu            sync.Mutex
-	lastProbe     string
 	lastStatus    int
 	lastMediaType string
 }
