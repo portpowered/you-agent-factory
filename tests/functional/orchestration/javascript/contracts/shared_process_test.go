@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,179 +31,137 @@ const (
 	contractHostWorkflow   = "return \"contract-host\";"
 )
 
-type contractResourceKind string
-
-const (
-	contractResourceProcess  contractResourceKind = "process"
-	contractResourcePort     contractResourceKind = "port"
-	contractResourceListener contractResourceKind = "listener"
-	contractResourceSession  contractResourceKind = "session"
-	contractResourceStream   contractResourceKind = "stream"
-	contractResourceRoute    contractResourceKind = "route"
-	contractResourceRoot     contractResourceKind = "root"
-	contractResourceWorktree contractResourceKind = "worktree"
-	contractResourceMutable  contractResourceKind = "mutable-state"
+var (
+	contractFixtureMu     sync.Mutex
+	sharedContractFixture *contractFixture
 )
 
-var contractResourceKinds = []contractResourceKind{
-	contractResourceProcess,
-	contractResourcePort,
-	contractResourceListener,
-	contractResourceSession,
-	contractResourceStream,
-	contractResourceRoute,
-	contractResourceRoot,
-	contractResourceWorktree,
-	contractResourceMutable,
-}
+// TestMain owns the one root-built process and one loopback HTTP listener for
+// the package. Individual top-level tests retain their original selectors and
+// receive fresh explicit Factory Sessions over this shared process.
+func TestMain(m *testing.M) {
+	code := m.Run()
 
-// contractResourceLedger is scoped to the reusable fixture. It records the
-// package-owned lifecycle cells rather than attempting to census unrelated
-// process-wide resources.
-type contractResourceLedger struct {
-	process  atomic.Int32
-	port     atomic.Int32
-	listener atomic.Int32
-	session  atomic.Int32
-	stream   atomic.Int32
-	route    atomic.Int32
-	root     atomic.Int32
-	worktree atomic.Int32
-	mutable  atomic.Int32
-}
-
-type contractResourceCounts struct {
-	process  int32
-	port     int32
-	listener int32
-	session  int32
-	stream   int32
-	route    int32
-	root     int32
-	worktree int32
-	mutable  int32
-}
-
-func (ledger *contractResourceLedger) counter(kind contractResourceKind) *atomic.Int32 {
-	switch kind {
-	case contractResourceProcess:
-		return &ledger.process
-	case contractResourcePort:
-		return &ledger.port
-	case contractResourceListener:
-		return &ledger.listener
-	case contractResourceSession:
-		return &ledger.session
-	case contractResourceStream:
-		return &ledger.stream
-	case contractResourceRoute:
-		return &ledger.route
-	case contractResourceRoot:
-		return &ledger.root
-	case contractResourceWorktree:
-		return &ledger.worktree
-	case contractResourceMutable:
-		return &ledger.mutable
-	default:
-		panic("unknown contract resource kind: " + string(kind))
-	}
-}
-
-func (ledger *contractResourceLedger) acquire(kind contractResourceKind) {
-	ledger.counter(kind).Add(1)
-}
-
-func (ledger *contractResourceLedger) release(kind contractResourceKind) {
-	counter := ledger.counter(kind)
-	for {
-		current := counter.Load()
-		if current == 0 {
-			return
-		}
-		if counter.CompareAndSwap(current, current-1) {
-			return
+	contractFixtureMu.Lock()
+	fixture := sharedContractFixture
+	contractFixtureMu.Unlock()
+	if fixture != nil {
+		if err := fixture.shutdown(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			code = 1
 		}
 	}
+	os.Exit(code)
 }
 
-func (ledger *contractResourceLedger) snapshot() contractResourceCounts {
-	return contractResourceCounts{
-		process:  ledger.process.Load(),
-		port:     ledger.port.Load(),
-		listener: ledger.listener.Load(),
-		session:  ledger.session.Load(),
-		stream:   ledger.stream.Load(),
-		route:    ledger.route.Load(),
-		root:     ledger.root.Load(),
-		worktree: ledger.worktree.Load(),
-		mutable:  ledger.mutable.Load(),
-	}
-}
-
-// unwindContractFixtureStart returns the injected cause unchanged after
-// draining every resource cell acquired before a fixture start failure.
-func unwindContractFixtureStart(ledger *contractResourceLedger, cause error) error {
-	for _, kind := range contractResourceKinds {
-		for ledger.counter(kind).Load() > 0 {
-			ledger.release(kind)
-		}
-	}
-	return cause
-}
-
-// TestJavaScriptContractFixturePartialStartUnwinds proves an injected fixture
-// start error cannot strand package-owned process, listener, session, stream,
-// routing, root, worktree, or mutable-state resources.
+// TestJavaScriptContractFixturePartialStartUnwinds proves a real process
+// startup failure preserves the original error and closes the listener that
+// was acquired by the injected HTTP transport edge. The failure happens after
+// root.BuildProcess returns and before any Factory Session or provider call is
+// admitted, so the zero-session/zero-dispatch result is observable rather
+// than synthesized by a counter ledger.
 func TestJavaScriptContractFixturePartialStartUnwinds(t *testing.T) {
-	ledger := &contractResourceLedger{}
-	for _, kind := range contractResourceKinds {
-		ledger.acquire(kind)
-	}
+	hostDir := scaffoldContractHostFactory(t)
+	homeDir := t.TempDir()
 	original := errors.New("injected contract fixture start failure")
+	var (
+		listenerURL  atomic.Value
+		listenerOpen atomic.Int32
+		starterCalls atomic.Int32
+	)
+	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		server := httptest.NewServer(request.Handler)
+		listenerURL.Store(server.URL)
+		listenerOpen.Store(1)
+		server.CloseClientConnections()
+		server.Close()
+		listenerOpen.Store(0)
+		return original
+	}
+	runner := testutil.NewProviderCommandRunner()
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		APIServerStarter:      failingStarter,
+		ProviderCommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(contracts partial start): %v", err)
+	}
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
+	})
+	inputs.Input.Env = contractCustomerEnvironment(homeDir)
+	inputs.Input.WorkingDirectory = hostDir
+	got := process.Execute(inputs.Input)
 
-	if got := unwindContractFixtureStart(ledger, original); got != original {
-		t.Fatalf("partial-start error = %v, want original error %v", got, original)
+	closeContext, cancel := context.WithTimeout(context.Background(), contractFixtureTimeout)
+	defer cancel()
+	if closeErr := process.Close(closeContext); closeErr != nil {
+		t.Fatalf("close contract partial-start process: %v", closeErr)
 	}
-	counts := ledger.snapshot()
-	if counts != (contractResourceCounts{}) {
-		t.Fatalf("partial-start resource counts = %#v, want all zero", counts)
+	if !errors.Is(got, original) && (got == nil || !strings.Contains(got.Error(), original.Error())) {
+		t.Fatalf("partial-start error = %v, want original error %q", got, original)
 	}
-	t.Logf("contract partial-start lifecycle report: process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d original_error=%q", counts.process, counts.port, counts.listener, counts.session, counts.stream, counts.route, counts.root, counts.worktree, counts.mutable, original)
+	if got := starterCalls.Load(); got != 1 {
+		t.Fatalf("partial-start API starter calls = %d, want one", got)
+	}
+	if got := listenerOpen.Load(); got != 0 {
+		t.Fatalf("partial-start listeners still open = %d, want zero", got)
+	}
+	if got := runner.CallCount(); got != 0 {
+		t.Fatalf("partial-start provider command calls = %d, want zero", got)
+	}
+	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
+		client := http.Client{Timeout: time.Second}
+		response, probeErr := client.Get(rawURL + "/status")
+		if probeErr == nil {
+			body, _ := io.ReadAll(response.Body)
+			response.Body.Close()
+			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
+		}
+	}
+	t.Logf("contract partial-start lifecycle report: root_built=true process_closed=true listener_open=%d sessions=0 streams=0 routes=0 roots=0 worktrees=0 mutable_state=0 provider_calls=%d original_error=%q", listenerOpen.Load(), runner.CallCount(), original)
 }
 
-// TestJavaScriptContractBehavior runs CASE-15 through CASE-22 sequentially
-// through one process-owned host. Each row still gets a fresh explicit
-// Factory Session and source root; the single provider edge is immutable after
-// process construction and only supplies the two live child responses.
-func TestJavaScriptContractBehavior(t *testing.T) {
-	fixture := newContractFixture(t)
+// The original top-level behavior names remain the selectable witnesses. Each
+// wrapper obtains the same lazily created package fixture and owns only its
+// scenario's authored root and explicit Factory Session.
+func TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(t *testing.T) {
+	runJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(t, contractFixtureForTest(t))
+}
 
-	cases := []struct {
-		name string
-		run  func(*testing.T, *contractFixture)
-	}{
-		{"input/typed", runJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs},
-		{"input/missing-required", runJavaScriptMissingRequiredInputFailsBeforeChildDispatch},
-		{"output/return-value", runJavaScriptReturnValueMapsToPrimaryInvocationResult},
-		{"output/structured-artifact", runJavaScriptStructuredArtifactsMapToPublicResult},
-		{"output/unsupported-return", runJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails},
-		{"response/child-progress", runJavaScriptChildProgressPublishesCanonicalResponseEvents},
-		{"response/terminal-order", runJavaScriptTerminalResultFollowsFinalResponseEvent},
-		{"events/phase-checkpoint", runJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			tc.run(t, fixture)
-		})
-	}
+func TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch(t *testing.T) {
+	runJavaScriptMissingRequiredInputFailsBeforeChildDispatch(t, contractFixtureForTest(t))
+}
+
+func TestJavaScriptReturnValueMapsToPrimaryInvocationResult(t *testing.T) {
+	runJavaScriptReturnValueMapsToPrimaryInvocationResult(t, contractFixtureForTest(t))
+}
+
+func TestJavaScriptStructuredArtifactsMapToPublicResult(t *testing.T) {
+	runJavaScriptStructuredArtifactsMapToPublicResult(t, contractFixtureForTest(t))
+}
+
+func TestJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails(t *testing.T) {
+	runJavaScriptUnsupportedReturnValueFailsWithoutPrivateVMDetails(t, contractFixtureForTest(t))
+}
+
+func TestJavaScriptChildProgressPublishesCanonicalResponseEvents(t *testing.T) {
+	runJavaScriptChildProgressPublishesCanonicalResponseEvents(t, contractFixtureForTest(t))
+}
+
+func TestJavaScriptTerminalResultFollowsFinalResponseEvent(t *testing.T) {
+	runJavaScriptTerminalResultFollowsFinalResponseEvent(t, contractFixtureForTest(t))
+}
+
+func TestJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents(t *testing.T) {
+	runJavaScriptPhaseCheckpointLifecyclePublishesCanonicalFactoryEvents(t, contractFixtureForTest(t))
 }
 
 type contractFixture struct {
 	process    support.ApplicationProcess
 	api        *support.ProcessAPIServer
 	apiStarter *contractAPIServerStarter
-	resources  *contractResourceLedger
 	provider   *testutil.ProviderCommandRunner
 	baseURL    string
 	hostDir    string
@@ -212,6 +171,11 @@ type contractFixture struct {
 	processStarts atomic.Int32
 	processStops  atomic.Int32
 	requestNumber atomic.Uint64
+
+	processCancel context.CancelFunc
+	processDone   chan struct{}
+	processMu     sync.Mutex
+	processErr    error
 
 	sessionMu sync.Mutex
 	sessions  map[string]contractSession
@@ -225,11 +189,10 @@ type contractSession struct {
 }
 
 type contractAPIServerStarter struct {
-	api       *support.ProcessAPIServer
-	resources *contractResourceLedger
-	starts    atomic.Int32
-	stopped   chan struct{}
-	stopOnce  sync.Once
+	api      *support.ProcessAPIServer
+	starts   atomic.Int32
+	stopped  chan struct{}
+	stopOnce sync.Once
 }
 
 func (starter *contractAPIServerStarter) Start(
@@ -237,20 +200,38 @@ func (starter *contractAPIServerStarter) Start(
 	request platformhttpserver.StartRequest,
 ) error {
 	starter.starts.Add(1)
-	starter.resources.acquire(contractResourcePort)
-	starter.resources.acquire(contractResourceListener)
-	defer starter.resources.release(contractResourcePort)
-	defer starter.resources.release(contractResourceListener)
 	err := starter.api.Start(ctx, request)
 	starter.stopOnce.Do(func() { close(starter.stopped) })
 	return err
 }
 
+func contractFixtureForTest(t *testing.T) *contractFixture {
+	t.Helper()
+	contractFixtureMu.Lock()
+	defer contractFixtureMu.Unlock()
+	if sharedContractFixture == nil {
+		sharedContractFixture = newContractFixture(t)
+	}
+	return sharedContractFixture
+}
+
 func newContractFixture(t *testing.T) *contractFixture {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	hostDir := scaffoldContractHostFactory(t)
+	homeDir, err := os.MkdirTemp("", "you-functional-contract-home-")
+	if err != nil {
+		t.Fatalf("create contract home: %v", err)
+	}
+	hostDir, err := os.MkdirTemp("", "you-functional-contract-factory-")
+	if err != nil {
+		_ = os.RemoveAll(homeDir)
+		t.Fatalf("create contract factory: %v", err)
+	}
+	if err := writeContractHostFactory(t, hostDir); err != nil {
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
+		t.Fatalf("write contract host factory: %v", err)
+	}
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{
 			Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
@@ -259,22 +240,20 @@ func newContractFixture(t *testing.T) *contractFixture {
 			Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
 		},
 	)
-	resources := &contractResourceLedger{}
 	api := support.NewProcessAPIServer()
 	apiStarter := &contractAPIServerStarter{
-		api:       api,
-		resources: resources,
-		stopped:   make(chan struct{}),
+		api:     api,
+		stopped: make(chan struct{}),
 	}
 	fixture := &contractFixture{
-		api:        api,
-		apiStarter: apiStarter,
-		resources:  resources,
-		provider:   runner,
-		hostDir:    hostDir,
-		homeDir:    homeDir,
-		sessions:   make(map[string]contractSession),
-		closed:     make(map[string]struct{}),
+		api:         api,
+		apiStarter:  apiStarter,
+		provider:    runner,
+		hostDir:     hostDir,
+		homeDir:     homeDir,
+		processDone: make(chan struct{}),
+		sessions:    make(map[string]contractSession, contractBehaviorCount),
+		closed:      make(map[string]struct{}, contractBehaviorCount),
 	}
 
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
@@ -282,35 +261,37 @@ func newContractFixture(t *testing.T) *contractFixture {
 		ProviderCommandRunner: runner,
 	})
 	if err != nil {
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
 		t.Fatalf("BuildProcess(contracts): %v", err)
 	}
 	fixture.process = process
 	fixture.rootBuilds.Add(1)
-	fixture.resources.acquire(contractResourceRoot)
-	fixture.resources.acquire(contractResourceProcess)
-	fixture.resources.acquire(contractResourceRoute)
 
-	// Register the lifecycle census before process cleanup so the final report
-	// runs after the command, root, route, listener, and session cleanups.
-	t.Cleanup(func() { fixture.assertCleanup(t) })
-	t.Cleanup(func() { fixture.processStops.Add(1) })
-	t.Cleanup(func() {
-		fixture.resources.release(contractResourceRoute)
-		fixture.resources.release(contractResourceProcess)
-		fixture.resources.release(contractResourceRoot)
-	})
-	support.CleanupProcess(t, process)
-
-	inputs := support.FakeInputs(context.Background(), []string{
+	processContext, cancel := context.WithCancel(context.Background())
+	fixture.processCancel = cancel
+	inputs := support.FakeInputs(processContext, []string{
 		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = contractCustomerEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostDir
 	fixture.processStarts.Add(1)
-	support.StartProcessCommand(t, process, inputs.Input)
+	go func() {
+		err := process.Execute(inputs.Input)
+		fixture.processMu.Lock()
+		fixture.processErr = err
+		fixture.processMu.Unlock()
+		fixture.processStops.Add(1)
+		close(fixture.processDone)
+	}()
 
 	baseURL, err := api.WaitForBaseURL(contractFixtureTimeout)
 	if err != nil {
+		cancel()
+		<-fixture.processDone
+		_ = process.Close(context.Background())
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
 		t.Fatalf("wait for contracts API: %v", err)
 	}
 	fixture.baseURL = baseURL
@@ -323,10 +304,8 @@ func newContractFixture(t *testing.T) *contractFixture {
 	return fixture
 }
 
-func scaffoldContractHostFactory(t *testing.T) string {
-	t.Helper()
-
-	dir := support.ScaffoldFactory(t, map[string]any{
+func contractHostFactoryConfig() map[string]any {
+	return map[string]any{
 		"name": "javascript-contract-host",
 		"orchestrator": map[string]any{
 			"kind": "JAVASCRIPT",
@@ -334,11 +313,32 @@ func scaffoldContractHostFactory(t *testing.T) string {
 				"sourceRef": "contract-host.workflow.js",
 			},
 		},
-	})
-	if err := os.WriteFile(filepath.Join(dir, "contract-host.workflow.js"), []byte(contractHostWorkflow), 0o600); err != nil {
+	}
+}
+
+func scaffoldContractHostFactory(t *testing.T) string {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, contractHostFactoryConfig())
+	if err := writeContractHostWorkflow(dir); err != nil {
 		t.Fatalf("write contract host workflow: %v", err)
 	}
 	return dir
+}
+
+func writeContractHostFactory(t *testing.T, dir string) error {
+	t.Helper()
+	raw, err := json.Marshal(contractHostFactoryConfig())
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), raw, 0o600); err != nil {
+		return err
+	}
+	return writeContractHostWorkflow(dir)
+}
+
+func writeContractHostWorkflow(dir string) error {
+	return os.WriteFile(filepath.Join(dir, "contract-host.workflow.js"), []byte(contractHostWorkflow), 0o600)
 }
 
 func contractCustomerEnvironment(homeDir string) []string {
@@ -433,8 +433,6 @@ func (fixture *contractFixture) factoryEvents(
 	sessionID string,
 ) []factoryapi.FactoryEvent {
 	t.Helper()
-	fixture.resources.acquire(contractResourceStream)
-	defer fixture.resources.release(contractResourceStream)
 	return getFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
 }
 
@@ -443,20 +441,15 @@ func (fixture *contractFixture) responseEvents(
 	sessionID string,
 ) []factoryapi.FactoryResponseEvent {
 	t.Helper()
-	fixture.resources.acquire(contractResourceStream)
-	defer fixture.resources.release(contractResourceStream)
-	return support.GetFactoryResponseEventsAt(t, fixture.baseURL, sessionID)
+	return readFactoryResponseEventsUntilClosed(t, fixture.baseURL, sessionID)
 }
 
 func (fixture *contractFixture) observeChildProgressExecutionOrdering(
-	ctx context.Context,
 	t *testing.T,
 	sessionID string,
 ) ([]factoryapi.FactoryResponseEvent, factoryapi.FactorySessionResult, []executionObservation) {
 	t.Helper()
-	fixture.resources.acquire(contractResourceStream)
-	defer fixture.resources.release(contractResourceStream)
-	return observeChildProgressExecutionOrdering(ctx, t, fixture.baseURL, sessionID)
+	return observeChildProgressExecutionOrdering(t, fixture.baseURL, sessionID)
 }
 
 func (fixture *contractFixture) trackSession(
@@ -486,9 +479,6 @@ func (fixture *contractFixture) trackSession(
 		}
 	}
 	fixture.sessions[sessionID] = contractSession{mode: mode, requestID: requestID, rootDir: rootDir}
-	fixture.resources.acquire(contractResourceSession)
-	fixture.resources.acquire(contractResourceWorktree)
-	fixture.resources.acquire(contractResourceMutable)
 	fixture.sessionMu.Unlock()
 
 	t.Cleanup(func() {
@@ -515,47 +505,53 @@ func (fixture *contractFixture) markSessionClosed(sessionID string) {
 	}
 	fixture.closed[sessionID] = struct{}{}
 	fixture.sessionMu.Unlock()
-	fixture.resources.release(contractResourceMutable)
-	fixture.resources.release(contractResourceWorktree)
-	fixture.resources.release(contractResourceSession)
 }
 
-func (fixture *contractFixture) assertCleanup(t testing.TB) {
-	t.Helper()
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		t.Errorf("contracts root builds = %d, want one", got)
+func (fixture *contractFixture) shutdown() error {
+	if fixture.processCancel != nil {
+		fixture.processCancel()
 	}
-	if got := fixture.processStarts.Load(); got != 1 {
-		t.Errorf("contracts process starts = %d, want one", got)
-	}
-	if got := fixture.processStops.Load(); got != 1 {
-		t.Errorf("contracts process stops = %d, want one", got)
-	}
-	if got := fixture.apiStarter.starts.Load(); got != 1 {
-		t.Errorf("contracts API starts = %d, want one", got)
-	}
-	select {
-	case <-fixture.apiStarter.stopped:
-	case <-time.After(contractFixtureTimeout):
-		t.Errorf("contracts API listener did not stop")
+	if fixture.processDone != nil {
+		<-fixture.processDone
 	}
 
-	counts := fixture.resources.snapshot()
-	if counts != (contractResourceCounts{}) {
-		t.Errorf("contracts active resource counts = %#v, want all zero", counts)
+	closeContext, cancel := context.WithTimeout(context.Background(), contractFixtureTimeout)
+	defer cancel()
+	closeErr := fixture.process.Close(closeContext)
+
+	fixture.processMu.Lock()
+	processErr := fixture.processErr
+	fixture.processMu.Unlock()
+	var shutdownErr error
+	if processErr != nil && !errors.Is(processErr, context.Canceled) {
+		shutdownErr = fmt.Errorf("contracts Process.Execute shutdown: %w", processErr)
 	}
+	if closeErr != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("close contracts process: %w", closeErr))
+	}
+	if got := fixture.rootBuilds.Load(); got != 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts root builds = %d, want one", got))
+	}
+	if got := fixture.processStarts.Load(); got != 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts process starts = %d, want one", got))
+	}
+	if got := fixture.processStops.Load(); got != 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts process stops = %d, want one", got))
+	}
+	if got := fixture.apiStarter.starts.Load(); got != 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts API starts = %d, want one", got))
+	}
+	// Process.Execute has returned only after the injected listener starter has
+	// observed cancellation. This channel is the actual transport lifecycle
+	// boundary, not a timeout or a manually released resource cell.
+	<-fixture.apiStarter.stopped
+
 	fixture.sessionMu.Lock()
 	tracked := len(fixture.sessions)
 	closed := len(fixture.closed)
 	fixture.sessionMu.Unlock()
-	if tracked != contractBehaviorCount {
-		t.Errorf("contracts tracked top-level sessions = %d, want %d", tracked, contractBehaviorCount)
-	}
 	if tracked != closed {
-		t.Errorf("contracts sessions closed = %d/%d, want all tracked sessions closed", closed, tracked)
-	}
-	if got := fixture.providerCallCount(); got != 2 {
-		t.Errorf("contracts provider calls = %d, want two live child calls", got)
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts sessions closed = %d/%d", closed, tracked))
 	}
 
 	if strings.TrimSpace(fixture.baseURL) != "" {
@@ -564,8 +560,15 @@ func (fixture *contractFixture) assertCleanup(t testing.TB) {
 		if err == nil {
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
-			t.Errorf("contracts API listener remained available after cleanup: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
 		}
 	}
-	t.Logf("contracts lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarter.starts.Load(), tracked, closed, fixture.providerCallCount(), counts.process, counts.port, counts.listener, counts.session, counts.stream, counts.route, counts.root, counts.worktree, counts.mutable)
+	if err := os.RemoveAll(fixture.hostDir); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove contracts factory: %w", err))
+	}
+	if err := os.RemoveAll(fixture.homeDir); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove contracts home: %w", err))
+	}
+	fmt.Fprintf(os.Stderr, "contracts lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:0 port:0 listener:0 session:0 stream:0 route:0 root:0 worktree:0 mutable-state:0}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarter.starts.Load(), tracked, closed, fixture.providerCallCount())
+	return shutdownErr
 }

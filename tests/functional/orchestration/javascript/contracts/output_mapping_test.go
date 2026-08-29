@@ -164,13 +164,6 @@ func scaffoldReturnValueMappingWorkflow(t *testing.T) string {
 	); err != nil {
 		t.Fatalf("write return value workflow: %v", err)
 	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
@@ -193,13 +186,6 @@ func scaffoldStructuredArtifactWorkflow(t *testing.T) string {
 	); err != nil {
 		t.Fatalf("write structured artifact workflow: %v", err)
 	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
@@ -221,13 +207,6 @@ func scaffoldUnsupportedReturnWorkflow(t *testing.T) string {
 		0o600,
 	); err != nil {
 		t.Fatalf("write unsupported return workflow: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
 	}
 	return dir
 }

@@ -165,13 +165,6 @@ func scaffoldMissingRequiredInputMappingFactory(t *testing.T) string {
 	); err != nil {
 		t.Fatalf("write missing required input workflow: %v", err)
 	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
@@ -186,7 +179,6 @@ func runMissingRequiredInputJavaScriptInvocation(
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
 		"--no-record",
-		"--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
 		"--output", "primary",
 	})
 	homeDir := t.TempDir()
@@ -306,13 +298,6 @@ func scaffoldTypedInputMappingWorkflow(t *testing.T) string {
 		0o600,
 	); err != nil {
 		t.Fatalf("write typed input workflow: %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(dir, "mock-workers.json"),
-		[]byte(`{"mockWorkers":[]}`),
-		0o600,
-	); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
 	}
 	return dir
 }
