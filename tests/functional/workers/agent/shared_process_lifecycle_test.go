@@ -119,23 +119,26 @@ func (fixture *agentSharedProcessFixture) runEmptyScenario(t *testing.T, scenari
 		TraceId:      &traceID,
 		WorkTypeName: "task",
 	}
-	beforeCalls := fixture.router.callCount()
 	status, body := postAgentWorkStatus(t, fixture.baseURL, sessionID, emptyRequest)
-	if status == http.StatusCreated {
-		fixture.closeSession(t, sessionID)
-		assertAgentSessionDeleted(t, fixture.baseURL, sessionID)
-		t.Skipf("contract blocker: empty Work request was accepted with status 201; body=%s", body)
+	if status != http.StatusCreated {
+		t.Fatalf("empty Work submission status = %d, want current characterized 201 acceptance; body=%s", status, body)
 	}
-	if status != http.StatusBadRequest {
-		t.Fatalf("empty Work submission status = %d, want 400; body=%s", status, body)
+	var emptyResponse factoryapi.SubmitWorkResponse
+	if err := json.Unmarshal([]byte(body), &emptyResponse); err != nil {
+		t.Fatalf("decode accepted empty Work response: %v; body=%s", err, body)
 	}
-	if strings.TrimSpace(body) == "" {
-		t.Fatal("empty Work submission returned an empty validation diagnostic")
+	if !emptyResponse.Accepted {
+		t.Fatalf("empty Work response accepted = false; body=%s", body)
 	}
-	if got := fixture.router.callCount(); got != beforeCalls {
-		t.Fatalf("provider calls after rejected empty Work = %d, want unchanged at %d", got, beforeCalls)
+	if emptyResponse.SessionId == nil || *emptyResponse.SessionId != sessionID {
+		t.Fatalf("accepted empty Work session id = %#v, want %q", emptyResponse.SessionId, sessionID)
 	}
-
+	if emptyResponse.Name == nil || *emptyResponse.Name != name || emptyResponse.TraceId != traceID {
+		t.Fatalf("accepted empty Work identity = %#v, want name=%q trace=%q", emptyResponse, name, traceID)
+	}
+	if strings.TrimSpace(emptyResponse.RequestId) == "" || strings.TrimSpace(support.StringPointerValue(emptyResponse.WorkId)) == "" {
+		t.Fatalf("accepted empty Work response = %#v, want request and Work identities", emptyResponse)
+	}
 	content := agentTextContent(t, scenario.inputMarker)
 	validRequest := factoryapi.SubmitWorkRequest{
 		Name:         &name,
@@ -144,15 +147,20 @@ func (fixture *agentSharedProcessFixture) runEmptyScenario(t *testing.T, scenari
 		Content:      &content,
 	}
 	submitted := support.SubmitSessionWorkAt(t, fixture.baseURL, sessionID, validRequest)
+	if !submitted.Accepted {
+		t.Fatalf("valid Work after accepted empty Work = %#v, want accepted response", submitted)
+	}
 	if submitted.SessionId == nil || *submitted.SessionId != sessionID || support.StringPointerValue(submitted.WorkId) == "" || strings.TrimSpace(submitted.RequestId) == "" {
-		t.Fatalf("valid Work after empty rejection = %#v, want session/work/request identity", submitted)
+		t.Fatalf("valid Work after accepted empty Work = %#v, want session/work/request identity", submitted)
 	}
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, sessionID, agentSharedProcessTimeout)
 	listed := listAgentSessionWork(t, fixture.baseURL, sessionID)
 	events := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, sessionID)
+	emptyWorkID := support.StringPointerValue(emptyResponse.WorkId)
 	workID := support.StringPointerValue(submitted.WorkId)
-	assertAgentScenarioWork(t, listed, workID, scenario)
-	assertAgentScenarioDispatch(t, events, sessionID, submitted.RequestId, workID, scenario)
+	assertAgentEmptyScenarioWork(t, fixture.baseURL, sessionID, listed, emptyWorkID, workID, scenario.output)
+	assertAgentEmptyScenarioDispatch(t, events, sessionID, emptyResponse.RequestId, emptyWorkID, submitted.RequestId, workID, scenario.output)
+	assertAgentWorkerSession(t, fixture.baseURL, sessionID, emptyWorkID, scenario)
 	assertAgentWorkerSession(t, fixture.baseURL, sessionID, workID, scenario)
 	fixture.assertRoute(t, scenario)
 	fixture.closeSession(t, sessionID)
@@ -473,9 +481,16 @@ func (fixture *agentSharedProcessFixture) assertRoute(
 ) {
 	t.Helper()
 	calls := fixture.router.callsFor(scenario.factoryDir)
-	if len(calls) != scenario.wantCalls {
-		t.Fatalf("%s immutable route calls = %d, want %d; calls=%#v", scenario.name, len(calls), scenario.wantCalls, calls)
+	wantCalls := scenario.wantCalls
+	if scenario.name == "Empty" {
+		// The operator-authorized AG-08 characterization accepts and dispatches
+		// the empty request, then dispatches the valid follow-up as well.
+		wantCalls++
 	}
+	if len(calls) != wantCalls {
+		t.Fatalf("%s immutable route calls = %d, want %d; calls=%#v", scenario.name, len(calls), wantCalls, calls)
+	}
+	markerCalls := 0
 	for index, call := range calls {
 		request := call.request
 		if request.Command != string(scenario.provider) {
@@ -488,7 +503,14 @@ func (fixture *agentSharedProcessFixture) assertRoute(
 			t.Fatalf("%s provider args[%d] = %#v, want --model %q", scenario.name, index, request.Args, scenario.model)
 		}
 		if !agentCommandRequestContains(request, scenario.inputMarker) {
+			if scenario.name == "Empty" {
+				continue
+			}
 			t.Fatalf("%s provider request[%d] omitted input marker %q: %#v", scenario.name, index, scenario.inputMarker, request)
 		}
+		markerCalls++
+	}
+	if scenario.name == "Empty" && markerCalls != scenario.wantCalls {
+		t.Fatalf("%s valid follow-up marker calls = %d, want %d; calls=%#v", scenario.name, markerCalls, scenario.wantCalls, calls)
 	}
 }

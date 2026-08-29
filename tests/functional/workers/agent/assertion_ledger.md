@@ -27,7 +27,7 @@ reclassifying the five retained executable rows above.
 | AG-05 | Claude selection reaches the controlled Claude route once and preserves accepted Work/output without a Codex route. | `TestAgentSharedProcess/Claude` | Story `...-002` |
 | AG-06 | Unknown provider fails before session/dispatch/provider effects with an actionable diagnostic. | `TestAgentSharedProcess/Invalid/UnknownProvider` | Story `...-002` |
 | AG-07 | Missing Worker reference fails isolated validation before session/dispatch/provider effects. | `TestAgentSharedProcess/Invalid/MalformedConfiguration` | Story `...-002` |
-| AG-08 | Empty Work is rejected before provider effects and a later valid request can use the explicit session. | `TestAgentSharedProcess/Empty` | Story `...-002` (blocked by current 201 acceptance) |
+| AG-08 | Characterize the current empty Work behavior: the no-content request returns HTTP 201 with `accepted=true` and request/Work identity, then a later valid request succeeds in the same explicit session. | `TestAgentSharedProcess/Empty` | Story `...-002` |
 | AG-09 | Minimum single-part Work produces one Work/dispatch/attempt with the exact input marker and no duplicate. | `TestAgentSharedProcess/Minimum` | Story `...-002` |
 | AG-10 | Typed provider failure produces the current failed Work/dispatch classification without fallback and leaves the session closable. | `TestAgentSharedProcess/Failure` | Story `...-002` |
 | AG-11 | Deterministic timeout produces terminal timeout observations with retries on the same immutable route, no fallback, and zero active calls. | `TestAgentSharedProcess/Timeout` | Story `...-002` |

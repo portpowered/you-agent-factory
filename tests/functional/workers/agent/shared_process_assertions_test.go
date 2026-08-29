@@ -116,6 +116,127 @@ func assertAgentScenarioWork(
 	}
 }
 
+func assertAgentEmptyScenarioWork(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	listed factoryapi.ListWorkResponse,
+	emptyWorkID string,
+	validWorkID string,
+	wantOutput string,
+) {
+	t.Helper()
+	if emptyWorkID == "" || validWorkID == "" || emptyWorkID == validWorkID {
+		t.Fatalf("empty/valid Work identities = %q/%q, want distinct non-empty identities", emptyWorkID, validWorkID)
+	}
+	if len(listed.Results) == 0 {
+		t.Fatalf("empty characterization Work list = %#v, want at least one visible result", listed)
+	}
+	emptyWork := getAgentSessionWorkByID(t, baseURL, sessionID, emptyWorkID)
+	validWork := getAgentSessionWorkByID(t, baseURL, sessionID, validWorkID)
+	assertAgentCompletedWork(t, emptyWork, emptyWorkID, "")
+	assertAgentCompletedWork(t, validWork, validWorkID, wantOutput)
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("empty characterization visible failed Work = %d, want zero; listed=%#v", got, listed)
+	}
+	if support.StringPointerValue(emptyWork.WorkId) == support.StringPointerValue(validWork.WorkId) {
+		t.Fatalf("empty and valid Work detail identities = %q, want distinct", support.StringPointerValue(emptyWork.WorkId))
+	}
+}
+
+func getAgentSessionWorkByID(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	workID string,
+) factoryapi.Work {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/work/" + url.PathEscape(workID)
+	return support.GetJSON[factoryapi.Work](t, endpoint)
+}
+
+func assertAgentCompletedWork(t testing.TB, item factoryapi.Work, workID, wantOutput string) {
+	t.Helper()
+	if support.StringPointerValue(item.WorkId) != workID || item.State == nil || item.State.Name != "done" {
+		t.Fatalf("Work detail = %#v, want Work %q in done state", item, workID)
+	}
+	if item.FailureDetail != nil {
+		t.Fatalf("Work %q failure detail = %#v, want none", workID, item.FailureDetail)
+	}
+	if wantOutput == "" {
+		return
+	}
+	if item.Content == nil || len(*item.Content) != 1 {
+		t.Fatalf("Work %q content = %#v, want one text part", workID, item.Content)
+	}
+	textPart, err := (*item.Content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode Work %q text content: %v", workID, err)
+	}
+	if !strings.Contains(textPart.Text, wantOutput) {
+		t.Fatalf("Work %q text = %q, want content %q", workID, textPart.Text, wantOutput)
+	}
+}
+
+func assertAgentEmptyScenarioDispatch(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	sessionID string,
+	emptyRequestID string,
+	emptyWorkID string,
+	validRequestID string,
+	validWorkID string,
+	wantOutput string,
+) {
+	t.Helper()
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 2 {
+		t.Fatalf("empty characterization dispatch observations = %#v, want one per accepted Work", dispatches)
+	}
+	for _, event := range events {
+		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
+			t.Fatalf("empty characterization Factory Event %q escaped Factory Session %q", event.Id, sessionID)
+		}
+	}
+	matched := map[string]bool{}
+	for _, dispatch := range dispatches {
+		if dispatch.Response == nil || dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("empty characterization dispatch = %#v, want accepted response", dispatch)
+		}
+		var workID, requestID string
+		switch {
+		case support.DispatchObservationIncludesWork(dispatch, emptyWorkID):
+			workID, requestID = emptyWorkID, emptyRequestID
+		case support.DispatchObservationIncludesWork(dispatch, validWorkID):
+			workID, requestID = validWorkID, validRequestID
+		default:
+			t.Fatalf("empty characterization dispatch = %#v, want Work %q or %q", dispatch, emptyWorkID, validWorkID)
+		}
+		if dispatch.DispatchID == "" || dispatch.Request.TransitionId != "process" {
+			t.Fatalf("empty characterization dispatch = %#v, want process identity for Work %q", dispatch, workID)
+		}
+		if matched[workID] {
+			t.Fatalf("empty characterization has duplicate dispatch for Work %q", workID)
+		}
+		matched[workID] = true
+		if workID == validWorkID && !strings.Contains(support.StringPointerValue(dispatch.Response.Output), wantOutput) {
+			t.Fatalf("valid follow-up dispatch output = %q, want content %q", support.StringPointerValue(dispatch.Response.Output), wantOutput)
+		}
+		correlated := false
+		for _, event := range events {
+			if event.Context.RequestId != nil && *event.Context.RequestId == requestID {
+				correlated = true
+			}
+		}
+		if !correlated {
+			t.Fatalf("empty characterization events contain no request correlation for %q", requestID)
+		}
+	}
+	if !matched[emptyWorkID] || !matched[validWorkID] {
+		t.Fatalf("empty characterization dispatch Work matches = %#v, want %q and %q", matched, emptyWorkID, validWorkID)
+	}
+}
+
 func assertAgentDispatch(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
