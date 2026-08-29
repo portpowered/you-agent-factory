@@ -16,3 +16,21 @@ the retained behavior; the concurrency row remains owned by story `...-003`.
 No row is deleted by the migration. New checks for explicit session identity,
 immutable route selection, text input lineage, and one shared process are
 additive witnesses around rows 1–4.
+
+## Additive agent matrix witnesses
+
+These checks expand the requested AG-05 through AG-14 behavior matrix without
+reclassifying the five retained executable rows above.
+
+| Matrix case | Observable assertion | Post-migration witness | Owner/status |
+| --- | --- | --- | --- |
+| AG-05 | Claude selection reaches the controlled Claude route once and preserves accepted Work/output without a Codex route. | `TestAgentSharedProcess/Claude` | Story `...-002` |
+| AG-06 | Unknown provider fails before session/dispatch/provider effects with an actionable diagnostic. | `TestAgentSharedProcess/Invalid/UnknownProvider` | Story `...-002` |
+| AG-07 | Missing Worker reference fails isolated validation before session/dispatch/provider effects. | `TestAgentSharedProcess/Invalid/MalformedConfiguration` | Story `...-002` |
+| AG-08 | Empty Work is rejected before provider effects and a later valid request can use the explicit session. | `TestAgentSharedProcess/Empty` | Story `...-002` (blocked by current 201 acceptance) |
+| AG-09 | Minimum single-part Work produces one Work/dispatch/attempt with the exact input marker and no duplicate. | `TestAgentSharedProcess/Minimum` | Story `...-002` |
+| AG-10 | Typed provider failure produces the current failed Work/dispatch classification without fallback and leaves the session closable. | `TestAgentSharedProcess/Failure` | Story `...-002` |
+| AG-11 | Deterministic timeout produces terminal timeout observations with retries on the same immutable route, no fallback, and zero active calls. | `TestAgentSharedProcess/Timeout` | Story `...-002` |
+| AG-12 | Canceling the held call produces the current terminal response-stream cancellation diagnostic and no active provider call. | `TestAgentSharedProcess/Cancel` | Story `...-002` |
+| AG-13 | A fresh explicit session accepts clean Codex input/output after adverse cases without a prior marker. | `TestAgentSharedProcess/Recovery` | Story `...-002` |
+| AG-14 | Intentional child failure remains visible while cleanup reports deleted sessions, closed stream/process/listener, zero active route/call, and absent roots. | `TestAgentSharedProcess/Cleanup` | Story `...-002` |
