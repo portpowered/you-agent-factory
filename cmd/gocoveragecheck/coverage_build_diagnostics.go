@@ -289,6 +289,10 @@ func canonicalCoverageInvocationArgs(args []string) []string {
 func runFailedCoverageBuildDiagnostic(outputPath string, run *coverageBuildDiagnosticRun, started time.Time, trace string, cause error) error {
 	run.diagnostics.Status = coverageBuildDiagnosticsStatusFailed
 	run.diagnostics.CompileProbe.WallSeconds = roundTimingSeconds(time.Since(started).Seconds())
+	// The test invocation never starts after a failed probe, so the observed
+	// compile-only interval is also the complete measured interval. Keep it in
+	// the failed artifact without presenting the observation as complete.
+	run.diagnostics.TotalMeasuredSeconds = run.diagnostics.CompileProbe.WallSeconds
 	if parsed, err := parseCoverageBuildTrace(trace, run.diagnostics.CompileProbe.ExpectedPackages); err == nil {
 		run.diagnostics.CompileProbe.CompilerCommands = parsed.CompilerCommands
 		run.diagnostics.CompileProbe.LinkerCommands = parsed.LinkerCommands
