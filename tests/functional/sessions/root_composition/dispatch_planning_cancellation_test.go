@@ -33,6 +33,7 @@ const dispatchPlanningCancellationWorkflow = `return (async function () {
 // dispatch was RUNNING before the control (published, but with no result).
 func TestFactoryRuntimeDispatchPlanningCancellationReachesPublishedWorkerThroughPublicDurableControl(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	provider := newDispatchPlanningCancellationProvider()
 	dir := support.ScaffoldFactory(t, dispatchPlanningCancellationFactoryConfig())

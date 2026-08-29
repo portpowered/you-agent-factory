@@ -60,6 +60,7 @@ const (
 //     facts while sharing no session or Work identity.
 func TestP3P7CanonicalPathPreservesTerminalCleanupAndReplayIsolation(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	t.Run("isolated sessions reach one terminal outcome and replay equivalent facts", func(t *testing.T) {
 		first := runP3P7CanonicalCorpus(t, "alpha", support.NewStaticSuccessCommandRunner(p3p7CorpusWorkerOutput))

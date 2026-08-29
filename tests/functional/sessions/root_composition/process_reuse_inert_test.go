@@ -36,6 +36,7 @@ const (
 // and response streams.
 func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	fixture := newRootProcessReuseFixture(t)
 	assertRootProcessBuildIsInert(t, fixture)
@@ -50,6 +51,7 @@ func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 
 func TestRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	workingDirectory := t.TempDir()
 	workflowPath := filepath.Join(workingDirectory, "workflow.js")

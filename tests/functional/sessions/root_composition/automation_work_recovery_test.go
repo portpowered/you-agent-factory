@@ -27,6 +27,7 @@ const (
 // change.
 func TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	fixturePath := testutil.MustRepoPath(t, automationRecoveryFixture)
 	fixture := testutil.LoadReplayArtifact(t, fixturePath)

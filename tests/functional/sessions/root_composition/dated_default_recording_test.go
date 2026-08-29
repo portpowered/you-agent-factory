@@ -59,6 +59,7 @@ func TestNamedRuntimeArtifactCollisionUsesUTCDateAndExplicitSuffix(t *testing.T)
 // contract and the public replay path observable through root.BuildProcess.
 func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	homeDir := t.TempDir()
 	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")
@@ -116,6 +117,7 @@ func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProc
 // use whole-file .json snapshots.
 func TestExplicitJSONLRecordingUsesAppendStorageThroughRootProcess(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	homeDir := t.TempDir()
 	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-explicit-jsonl-recording")

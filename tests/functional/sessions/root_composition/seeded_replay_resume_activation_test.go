@@ -24,6 +24,7 @@ import (
 // retains its terminal Work state.
 func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	for _, test := range []struct {
 		name     string

@@ -63,6 +63,7 @@ const (
 // received progress fragments during execution.
 func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstances(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	loaded := loadRunnerIdentityCodexGoldenCase(t)
 	dir := support.ScaffoldFactory(t, runnerIdentityFactoryConfig())
@@ -155,6 +156,7 @@ func TestRootBuildProcessRoutesProviderAndScriptWorkThroughInjectedRunnerInstanc
 // second Workers view handling the failure path instead.
 func TestRootBuildProcessRunnerFailureRoutesToFailedDispatchThroughInjectedInstance(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	dir := support.ScaffoldFactory(t, runnerIdentityFactoryConfig())
 	support.WriteAgentConfig(

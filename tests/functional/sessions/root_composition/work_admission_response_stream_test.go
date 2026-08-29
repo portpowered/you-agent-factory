@@ -31,6 +31,7 @@ const workAdmissionResponseStreamPrimaryResult = "primary result COMPLETE"
 // fields.
 func TestSessionsWorkAdmissionAndResponseStreamActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	dir := support.ScaffoldFactory(t, sessionsWorkAdmissionResponseStreamFactoryConfig())
 	support.WriteAgentConfig(

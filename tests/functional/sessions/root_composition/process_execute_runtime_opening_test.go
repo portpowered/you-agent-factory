@@ -22,6 +22,7 @@ import (
 // opening itself is performed by Process.Execute on the root-built process.
 func TestProcessExecuteOpensRequestedFactorySessionThroughRoot(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	factoryDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
 	api := support.NewProcessAPIServer()
@@ -120,6 +121,7 @@ func TestProcessExecuteOpensRequestedFactorySessionThroughRoot(t *testing.T) {
 // boundary and remains available for investigation.
 func TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	factoryDir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
 	recordPath := filepath.Join(factoryDir, "current-board.json")
@@ -159,6 +161,7 @@ func TestProcessExecuteCorruptCurrentBoardRecordingStopsOpening(t *testing.T) {
 // Factory Session or runtime identity allocation can publish partial state.
 func TestProcessExecuteUnavailableFactoryDoesNotRegisterSession(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	missingFactory := filepath.Join(t.TempDir(), "missing", "factory.json")
 	var sessionIDs atomic.Int32
@@ -202,6 +205,7 @@ func TestProcessExecuteUnavailableFactoryDoesNotRegisterSession(t *testing.T) {
 // boundary without attempting to assemble a live Factory Session.
 func TestProcessExecuteReplayLoaderFailureStopsBeforeLiveActivation(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
 		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {

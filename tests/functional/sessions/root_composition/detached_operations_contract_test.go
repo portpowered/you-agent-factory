@@ -17,6 +17,7 @@ import (
 // rather than merely checking that construction succeeds.
 func TestDetachedOperationsFunctionalContract(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)

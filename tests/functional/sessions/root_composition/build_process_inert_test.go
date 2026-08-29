@@ -21,6 +21,7 @@ var errRecordingSessionEffect = errors.New("recording session effect invoked dur
 // runtime lifecycle starts.
 func TestSessionsEffectsRemainInertThroughRootBuildProcessConstruction(t *testing.T) {
 	t.Parallel()
+	acquireRootCompositionFixtureSlot(t)
 
 	recorder := newSessionEffectRecorder()
 	_ = support.BuildProcess(t, recorder.edges())
