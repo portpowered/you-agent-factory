@@ -34,18 +34,11 @@ const (
 // ordinary customer Process.Execute invocations.
 func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	assetBody := []byte("network-free ASR asset")
-	assetClient := newPullToReadyAssetClient(assetBody)
+	backendBody := []byte("network-free ASR backend")
+	backendSelection := pullToReadyBackendSelection(backendBody)
+	assetClient := newPullToReadyAssetClient(assetBody, backendBody, backendSelection.Location)
 	homeDirectory := characterizationTempDir(t)
-	edges := serviceedges.Edges{
-		ModelAssetHTTPClient: assetClient,
-		ModelAssetEndpoints: modelsservice.RuntimeAssetEndpoints{
-			BaseURL:    "https://assets.invalid",
-			APIBaseURL: "https://api.invalid",
-		},
-		ModelAssetResolveHomeDirectory: func() (string, error) {
-			return homeDirectory, nil
-		},
-	}
+	edges := pullToReadyEdges(assetClient, homeDirectory, backendSelection)
 
 	firstProcess := buildPullToReadyProcess(t, edges)
 	pull := executePullToReadyCommand(t, firstProcess, homeDirectory, "models", "pull", pullToReadyModelName)
@@ -56,24 +49,26 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	assertPullToReadyList(t, listed, assetBody)
 	closePullToReadyProcess(t, firstProcess)
 
-	secondProcess := buildPullToReadyProcess(t, serviceedges.Edges{
-		ModelAssetHTTPClient: assetClient,
-		ModelAssetEndpoints: modelsservice.RuntimeAssetEndpoints{
-			BaseURL:    "https://assets.invalid",
-			APIBaseURL: "https://api.invalid",
-		},
-		ModelAssetResolveHomeDirectory: func() (string, error) {
-			return homeDirectory, nil
-		},
-	})
+	secondProcess := buildPullToReadyProcess(t, pullToReadyEdges(assetClient, homeDirectory, backendSelection))
 	secondInspect := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "inspect", pullToReadyModelName)
 	assertPullToReadyInspect(t, secondInspect, homeDirectory, assetBody)
 	secondList := executePullToReadyCommand(t, secondProcess, homeDirectory, "models", "list")
 	assertPullToReadyList(t, secondList, assetBody)
 	closePullToReadyProcess(t, secondProcess)
 
-	if got := assetClient.Calls(); got != 2 {
-		t.Fatalf("asset edge requests = %d, want one manifest and one asset request", got)
+	if got := assetClient.Calls(); got != 6 {
+		t.Fatalf("asset edge requests = %d (%#v), want the two scoped pull resolution attempts", got, assetClient.Requests())
+	}
+	wantRequests := []string{
+		http.MethodHead + " " + backendSelection.Location,
+		http.MethodGet + " https://api.invalid/models/ggerganov/whisper.cpp?revision=" + pullToReadyRevision,
+		http.MethodHead + " " + backendSelection.Location,
+		http.MethodGet + " https://api.invalid/models/ggerganov/whisper.cpp?revision=" + pullToReadyRevision,
+		http.MethodGet + " " + backendSelection.Location,
+		http.MethodGet + " https://assets.invalid/ggerganov/whisper.cpp/resolve/" + pullToReadyRevision + "/" + pullToReadyAsset + "?download=true",
+	}
+	if got := strings.Join(assetClient.Requests(), "\n"); got != strings.Join(wantRequests, "\n") {
+		t.Fatalf("asset edge request order = %q, want %q", got, strings.Join(wantRequests, "\n"))
 	}
 	t.Logf(
 		"pull-to-ready commands passed: downloadedBytes=%d inspectCacheBytes=%d restartInspectCacheBytes=%d cacheRoot=%s assetRequests=%d",
@@ -97,6 +92,29 @@ func buildPullToReadyProcess(t *testing.T, edges serviceedges.Edges) rootProcess
 	}
 	support.CleanupProcess(t, process)
 	return process
+}
+
+func pullToReadyEdges(
+	assetClient *pullToReadyAssetClient,
+	homeDirectory string,
+	backendSelection serviceedges.ModelBackendArtifactSelection,
+) serviceedges.Edges {
+	return serviceedges.Edges{
+		ModelAssetHTTPClient: assetClient,
+		ModelAssetEndpoints: modelsservice.RuntimeAssetEndpoints{
+			BaseURL:    "https://assets.invalid",
+			APIBaseURL: "https://api.invalid",
+		},
+		ModelAssetResolveHomeDirectory: func() (string, error) {
+			return homeDirectory, nil
+		},
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			return backendSelection, nil
+		},
+	}
 }
 
 type pullToReadyCapture struct {
@@ -243,40 +261,53 @@ func assertPullToReadyList(t *testing.T, capture pullToReadyCapture, assetBody [
 }
 
 type pullToReadyAssetClient struct {
-	manifest []byte
-	body     []byte
-	calls    atomic.Int64
+	manifest   []byte
+	model      []byte
+	backend    []byte
+	backendURL string
+	calls      atomic.Int64
+	requests   []string
 }
 
-func newPullToReadyAssetClient(body []byte) *pullToReadyAssetClient {
-	digest := sha256.Sum256(body)
+func newPullToReadyAssetClient(modelBody, backendBody []byte, backendURL string) *pullToReadyAssetClient {
+	digest := sha256.Sum256(modelBody)
 	manifest, err := json.Marshal(map[string]any{
 		"sha": pullToReadyRevision,
 		"siblings": []map[string]any{{
 			"rfilename": pullToReadyAsset,
-			"size":      len(body),
+			"size":      len(modelBody),
 			"lfs": map[string]any{
 				"oid":  hex.EncodeToString(digest[:]),
-				"size": len(body),
+				"size": len(modelBody),
 			},
 		}},
 	})
 	if err != nil {
 		panic(fmt.Sprintf("marshal pull-to-ready manifest: %v", err))
 	}
-	return &pullToReadyAssetClient{manifest: manifest, body: append([]byte(nil), body...)}
+	return &pullToReadyAssetClient{
+		manifest:   manifest,
+		model:      append([]byte(nil), modelBody...),
+		backend:    append([]byte(nil), backendBody...),
+		backendURL: backendURL,
+	}
 }
 
 func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response, error) {
 	c06Ledger.assetHTTPCalls.Add(1)
 	client.calls.Add(1)
-	var body io.Reader
+	client.requests = append(client.requests, request.Method+" "+request.URL.String())
+	var body []byte
 	switch request.URL.Path {
 	case "/models/ggerganov/whisper.cpp":
-		body = bytes.NewReader(client.manifest)
+		body = client.manifest
 	case "/ggerganov/whisper.cpp/resolve/" + pullToReadyRevision + "/" + pullToReadyAsset:
-		body = bytes.NewReader(client.body)
+		body = client.model
 	default:
+		if request.URL.String() == client.backendURL {
+			body = client.backend
+			break
+		}
 		return &http.Response{
 			StatusCode: http.StatusNotFound,
 			Body:       io.NopCloser(strings.NewReader("unexpected asset request")),
@@ -285,11 +316,31 @@ func (client *pullToReadyAssetClient) Do(request *http.Request) (*http.Response,
 	}
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Body:       io.NopCloser(body),
-		Request:    request,
+		Body:       io.NopCloser(bytes.NewReader(body)),
+		ContentLength: func() int64 {
+			if request.Method == http.MethodHead {
+				return int64(len(body))
+			}
+			return -1
+		}(),
+		Request: request,
 	}, nil
+}
+
+func pullToReadyBackendSelection(body []byte) serviceedges.ModelBackendArtifactSelection {
+	digest := sha256.Sum256(body)
+	return serviceedges.ModelBackendArtifactSelection{
+		Name:     "pull-to-ready-backend.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/pull-to-ready-fixture/pull-to-ready-backend.tar.gz",
+		Bytes:    int64(len(body)),
+		SHA256:   hex.EncodeToString(digest[:]),
+	}
 }
 
 func (client *pullToReadyAssetClient) Calls() int64 {
 	return client.calls.Load()
+}
+
+func (client *pullToReadyAssetClient) Requests() []string {
+	return append([]string(nil), client.requests...)
 }

@@ -279,13 +279,14 @@ func (s *service) headGenericArtifacts(
 	cached map[string]genericCachePath,
 	missing []genericArtifact,
 ) ([]genericArtifact, []genericArtifact, error) {
-	missingByName := make(map[string]struct{}, len(missing))
-	for _, artifact := range missing {
-		missingByName[artifact.requirement.Name] = struct{}{}
+	missingByName := make(map[string]int, len(missing))
+	for index, artifact := range missing {
+		missingByName[artifact.requirement.Name] = index
 	}
 	for index := range artifacts {
 		artifact := artifacts[index]
-		if _, isMissing := missingByName[artifact.requirement.Name]; !isMissing {
+		missingIndex, isMissing := missingByName[artifact.requirement.Name]
+		if !isMissing {
 			continue
 		}
 		if _, alreadyCached := cached[artifact.requirement.Name]; alreadyCached {
@@ -296,6 +297,7 @@ func (s *service) headGenericArtifacts(
 			return artifacts, missing, err
 		}
 		artifacts[index] = checked
+		missing[missingIndex] = checked
 	}
 	return artifacts, missing, nil
 }

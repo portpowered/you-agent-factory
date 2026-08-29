@@ -815,6 +815,64 @@ func TestPreflightGenericAssetsReportsMissingBytesWithoutReadingHEADBody(t *test
 	}
 }
 
+func TestPreflightGenericAssetsUsesHEADLengthForZeroDeclaredSizes(t *testing.T) {
+	t.Parallel()
+
+	modelBody := []byte("model weights")
+	backendBody := []byte("backend archive")
+	modelURL := "https://github.com/owner/model/releases/download/v1/model.bin"
+	backendURL := "https://github.com/owner/backend/releases/download/v1/backend.bin"
+	var requests []string
+	client := httpDoerFunc(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.Method+" "+request.URL.String())
+		var body []byte
+		switch request.URL.String() {
+		case modelURL:
+			body = modelBody
+		case backendURL:
+			body = backendBody
+		default:
+			return nil, fmt.Errorf("unexpected preflight URL %q", request.URL.String())
+		}
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Body:          io.NopCloser(bytes.NewReader(body)),
+			ContentLength: int64(len(body)),
+		}, nil
+	})
+	scopes := newScopes(t, "preflight-head-length")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, client, func(string) string { return "" })
+
+	result, err := service.PreflightModelAssets(context.Background(), models.PrepareModelAssetsRequest{
+		Scope:     scope,
+		Name:      "model",
+		Reference: models.ModelReference{NameOrURI: modelURL},
+		Artifacts: []models.AssetRequirement{{Name: "model.bin", Bytes: 0, SHA256: sha256Hex(modelBody)}},
+		Backend:   "fixture-backend",
+		BackendReference: models.ModelReference{
+			NameOrURI: backendURL,
+		},
+		BackendArtifacts: []models.AssetRequirement{{
+			Name: "backend.bin", Bytes: 0, SHA256: sha256Hex(backendBody),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PreflightModelAssets: %v", err)
+	}
+	wantModelBytes := int64(len(modelBody))
+	wantBackendBytes := int64(len(backendBody))
+	if result.ModelBytes != wantModelBytes || result.BackendBytes != wantBackendBytes ||
+		result.TotalBytes != wantModelBytes+wantBackendBytes ||
+		!result.ModelDownloadRequired || !result.BackendDownloadRequired {
+		t.Fatalf("preflight result = %#v, want HEAD-derived model/backend/total bytes", result)
+	}
+	wantRequests := []string{http.MethodHead + " " + backendURL, http.MethodHead + " " + modelURL}
+	if !reflect.DeepEqual(requests, wantRequests) {
+		t.Fatalf("preflight requests = %#v, want backend then model HEAD requests", requests)
+	}
+}
+
 func TestPreflightGenericAssetsStopsBeforeModelMetadataWhenBackendHEADFails(t *testing.T) {
 	t.Parallel()
 
