@@ -59,7 +59,7 @@ remain owned by the existing Go test cleanup and `TestMain` paths.
 | --- | --- | --- | --- |
 | `CASE-NB-001`–`CASE-NB-006` | Wire selector tests | PASS locally | Linux same-head evidence belongs to `GATE-LINUX`. |
 | `CASE-NB-007`–`CASE-NB-009`, `CASE-NB-020` | Harness environment and child-runner tests | PASS locally | Final clean-room audit belongs to `GATE-LOOPBACK`. |
-| `CASE-NB-010`–`CASE-NB-017` | Built CLI integration matrix on Windows | PASS locally | Linux sentinel and current-head CI evidence belong to `GATE-LINUX`. |
+| `CASE-NB-010`–`CASE-NB-017` | Built CLI integration matrix on Windows and current-head local Linux | PASS locally | Hosted same-head Linux CI evidence belongs to `GATE-LINUX`; Windows full-package cleanup remains owned by the existing process cleanup path. |
 | `CASE-NB-018` | No authorization contract exists | Not applicable | None. |
 | `CASE-NB-019` | Exact opt-out disables launcher construction | Not applicable under opt-out | Server deadline behavior remains owned by existing process tests. |
 
@@ -87,6 +87,10 @@ repaired.
 - Environment and configuration: Windows `windows/amd64`, Go `go1.25.0`,
   local controlled `rundll32.cmd` sentinel, isolated harness homes and random
   loopback ports. The source-plan path named by the PRD remains absent.
+- Additional local Linux environment: WSL2 Ubuntu, Go `1.26.0`,
+  `GOMAXPROCS=4`, and a controlled `xdg-open` sentinel; the complete package
+  retry used `GOFLAGS=-p=1` to keep its shared build within the harness's
+  90-second child-build context.
 - Customer entry point: the compiled `you` binary through `server --listen`.
 - Real and substituted dependencies: production Wire and the real built CLI;
   only the operating-system launcher was substituted with a fail-closed
@@ -101,7 +105,11 @@ repaired.
 | `go test ./internal/builtcliacceptance/... -count=1` | PASS, exit 0 | Exact-one environment normalization through the canonical helpers and child runner. |
 | `go test ./tests/integration/transport/cli/process -run '^TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases$' -count=1 -timeout 5m` | PASS, exit 0, 6.891s | C11 Windows readiness, occupied-port failure, recovery, cancellation, concurrency, port reuse, scanner join, and launcher-marker absence with clean focused teardown. |
 | `go test ./tests/integration/transport/cli/process -count=1 -timeout 10m` | FAIL, exit 1, 55.201s on the final attempt | All process tests printed `PASS`, but existing `TestMain` cleanup could not unlink `you.exe` under `you-cli-process-package-285162567` (`Access is denied`). |
+| `wsl -d Ubuntu -- bash -lc 'cd /mnt/c/Users/andre/work/portos/infinite-you/.claude/worktrees/functional-test-optimization-c11-no-browser-test-processes && GOTOOLCHAIN=go1.26.0 GOMAXPROCS=4 go test ./tests/integration/transport/cli/process -run "^TestBuiltCLINoBrowserOpenSuppressesLauncherAcrossLifecycleCases$" -count=1 -timeout 10m'` | PASS, exit 0, 67.721s | Current-head local Linux built-server readiness, occupied-port failure, recovery, cancellation, isolated concurrency, port reuse, scanner cleanup, and absence of the controlled `xdg-open` marker. |
+| `wsl -d Ubuntu -- bash -lc 'cd /mnt/c/Users/andre/work/portos/infinite-you/.claude/worktrees/functional-test-optimization-c11-no-browser-test-processes && GOTOOLCHAIN=go1.26.0 GOMAXPROCS=4 GOFLAGS=-p=1 go test ./tests/integration/transport/cli/process -count=1 -timeout 10m'` | PASS, exit 0, 101.405s | Current-head local Linux process package and package-level teardown pass; no Linux process-package temp directory, marker, worktree process, or owned listener remained. |
+| `wsl -d Ubuntu -- bash -lc 'cd /mnt/c/Users/andre/work/portos/infinite-you/.claude/worktrees/functional-test-optimization-c11-no-browser-test-processes && GOTOOLCHAIN=go1.26.0 GOMAXPROCS=4 go test ./tests/integration/transport/cli/process -count=1 -timeout 10m'` | FAIL, exit 1, 91.925s | The exact default-fan-out rerun hit the existing shared `buildYouBinary` 90-second context (`signal: killed`) before runtime assertions; the serialized `GOFLAGS=-p=1` retry above completed the same package. |
 | `make test-functional` | FAIL, exit 1 | The C11-owned `tests/functional/transport/cli/process` cell passed; the complete local lane failed in untouched model and ACP areas. |
+| `wsl -d Ubuntu -- bash -lc 'cd /mnt/c/Users/andre/work/portos/infinite-you/.claude/worktrees/functional-test-optimization-c11-no-browser-test-processes && GOTOOLCHAIN=go1.26.0 GOFLAGS=-p=1 FUNCTIONAL_DEFAULT_JOBS=1 make test-functional'` | FAIL, exit 1 | Current-head local Linux lane reached the C11 functional process cell successfully, but unrelated `provider_sessions/cli`, `providers/acp`, and `workers/mock` packages failed; no C11 code was changed. |
 | `go test ./tests/functional/providers/acp -count=1 -timeout 5m` | PASS, exit 0, 65.575s | The ACP failures observed only under full-lane contention are not reproducible in isolation on the rebased head. |
 
 The final full functional run reported
@@ -123,6 +131,14 @@ The model and ACP packages are outside this diff; no repair was made. The
 model-cache/root-build failure was previously reproduced on parent
 `d4ce490f7c`, and the ACP package passed in the isolated diagnostic above.
 
+The current-head WSL2 full functional run did not reproduce the model-cache
+failure: `tests/functional/models/root_composition` passed. It still exited 1
+because `tests/functional/provider_sessions/cli`,
+`tests/functional/providers/acp`, and `tests/functional/workers/mock` failed
+outside this diff; the C11-owned `tests/functional/transport/cli/process` cell
+passed. The WSL run used one functional worker and serialized Go builds to
+avoid the known shared-host build fan-out bottleneck.
+
 The available Linux run `33249826008` tested the pre-rebase implementation
 head `9f7968dc7015859527f4e63f174031a70e5be841` on Go `1.25.0`/Linux and
 passed the complete functional coverage job, including the existing
@@ -131,19 +147,26 @@ workflow does not invoke `tests/integration/transport/cli/process`, and no
 same-head Linux run exists for rebased head `a42201245e`; this run is not
 evidence for the Linux built-executable sentinel edge.
 
+The current rebased head was also exercised locally under WSL2 Ubuntu with
+Go `1.26.0` (the explicit toolchain was required because the Linux default
+toolchain rejected the repository's `tool` block). The focused C11 selector
+and the complete process package passed with the controlled `xdg-open`
+sentinel. This is local Linux evidence, not hosted CI evidence; the current
+workflow still has no Linux invocation of this integration package.
+
 ### Project criteria
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
 | Exact Wire opt-out and precedence | PASS | Focused Wire tests on the final implementation head; no-op selected before the controlled host factory for exact `YOU_NO_BROWSER_OPEN=1`. | A real production browser launch is intentionally not performed. |
-| Exact-one canonical child environment | PASS | Final-head builtcliacceptance suite passed. | A Linux built child using this helper. |
-| Built-server success, failure, cancellation, concurrency, recovery, and no launcher | BLOCKED | Windows C11 selector matrix passed; Linux integration package is not run by the current CI workflow. | Linux sentinel construction/invocation and Linux cleanup. |
-| CASE-NB-001 through CASE-NB-020 | BLOCKED | Windows and controlled selector cases are enumerated below; Linux cases remain unexercised. | Complete cross-platform matrix on the final pushed head. |
-| Named Wire, harness, and process commands | FAIL | Wire and harness passed; the focused C11 process selector passed, but the full named process package exited 1 in existing `TestMain` executable cleanup. | A clean full package teardown and Linux operating-system path. |
-| One final `make test-functional` pass | FAIL | The sole final rebased-head local invocation exited 1 in untouched model and ACP packages; C11's functional process cell passed. | A clean full-lane pass under an uncontended/baseline-clean environment. |
-| Windows/Linux cleanup and CI evidence | BLOCKED | Focused C11 cleanup, port reuse, scanner joins, and marker absence passed; full package teardown hit an existing Windows access-denied cleanup; Linux functional CI is stale/pre-rebase and has no integration-process invocation. | Same-head Linux process, marker, port, home, scanner, and artifact evidence plus full package teardown. |
+| Exact-one canonical child environment | PASS | Final-head builtcliacceptance suite and current-head local Linux built child passed. | Hosted Linux propagation evidence. |
+| Built-server success, failure, cancellation, concurrency, recovery, and no launcher | BLOCKED | Windows and current-head local Linux C11 matrices passed with controlled launcher sentinels; the required hosted Linux integration invocation is absent from the current CI workflow. | Hosted Linux sentinel construction/invocation and CI cleanup artifact. |
+| CASE-NB-001 through CASE-NB-020 | BLOCKED | Windows and current-head local Linux cases are enumerated below; same-head hosted Linux evidence remains unavailable. | Complete cross-platform CI matrix on the final pushed head. |
+| Named Wire, harness, and process commands | FAIL (Windows package cleanup) / PASS (Linux serialized run) | Wire and harness passed; the Windows full package still exits 1 in existing `TestMain` executable cleanup, while the complete current-head Linux package passes with `GOFLAGS=-p=1`. | Windows cleanup-owner disposition and hosted Linux execution. |
+| One final `make test-functional` pass | FAIL | The Windows final run exited 1 in untouched model/ACP areas, and the current-head WSL2 run exited 1 in untouched provider-sessions/ACP/workers-mock areas; the C11 functional process cell passed in both relevant runs. | A clean full-lane pass with owner-dispositioned unrelated failures. |
+| Windows/Linux cleanup and CI evidence | BLOCKED | Windows focused cleanup passed but the full package hit existing access-denied artifact cleanup; current-head local Linux full-package cleanup passed with no owned residue, while hosted Linux integration evidence is absent. | Windows cleanup-owner disposition and same-head hosted Linux process, marker, port, home, scanner, and artifact evidence. |
 | Contract and exclusion audit | PASS | `git diff --check` is clean; diff is limited to the intended Wire, harness, integration test, and ledger files. | None in the inspected diff. |
-| Security/privacy and non-UI scope | PASS | No real browser marker, remote product call, paid call, secret persistence, or inherited-environment dump was produced; UI checks are N/A. | Linux marker observation. |
+| Security/privacy and non-UI scope | PASS | No Windows or local Linux launcher marker, remote product call, paid call, secret persistence, or inherited-environment dump was produced; UI checks are N/A. | Hosted Linux marker observation. |
 | Validation loopback report | PASS (with BLOCKED verdict) | This report follows the required template and contains the delta plan below. | Delta-plan execution. |
 | Implementation delivery handoff | BLOCKED | The prior PR feedback code finding is fixed and the PR remains open, but this report still has Linux/full-functional blockers and the next head has not yet started CI. | Final pushed report head and review-owned terminal checks. |
 
@@ -165,9 +188,9 @@ evidence for the Linux built-executable sentinel edge.
 | CASE-NB-012 | PASS | Windows stop/cancellation joins the child scanner and leaves no launcher marker. |
 | CASE-NB-013 | PASS | Windows overlapping children use distinct homes/ports and both suppress the launcher. |
 | CASE-NB-014 | PASS | Controlled Windows `rundll32.cmd` sentinel is neither constructed nor invoked. |
-| CASE-NB-015 | BLOCKED | Linux `xdg-open` sentinel is implemented but the integration package has no current-head Linux CI invocation. |
-| CASE-NB-016 | BLOCKED (Windows package teardown) | The focused C11 selector rebinds ports, joins scanners, and removes its per-run resources; the full package's existing `TestMain` could not remove its reusable binary because Windows returned `Access is denied`. |
-| CASE-NB-017 | PASS (Windows) | Windows failure/recovery starts a fresh child and preserves the primary failure; Linux recovery remains unproven. |
+| CASE-NB-015 | PASS (local Linux); BLOCKED (hosted CI) | Current-head WSL2 Linux integration passed with the controlled `xdg-open` sentinel absent; the current CI workflow does not invoke this package. |
+| CASE-NB-016 | PASS (local Linux); BLOCKED (Windows package teardown) | The current-head Linux full package rebinds ports, joins scanners, and removes its process-package artifact; the Windows full package's existing `TestMain` could not remove its reusable binary because Windows returned `Access is denied`. |
+| CASE-NB-017 | PASS (Windows/local Linux) | Windows and current-head WSL2 Linux failure/recovery cases start fresh children and preserve the primary failure; hosted Linux recovery remains unproven. |
 | CASE-NB-018 | N/A | Local browser opening has no authorization contract. |
 | CASE-NB-019 | N/A under opt-out | The launcher is disabled before construction; no launcher timeout/outage behavior is applicable. Existing server deadlines remain covered by existing process tests. |
 | CASE-NB-020 | PASS | Repeated helper construction independently yields one canonical entry; no state accumulates across children. |
@@ -182,13 +205,21 @@ evidence for the Linux built-executable sentinel edge.
    concurrent children succeeded, cancellation completed, ports rebound, and
    no launcher marker appeared. The focused C11 selector teardown passed;
    the full package later failed only while removing its reusable binary.
-3. Ran the sole final rebased-head `make test-functional` invocation. The C11
-   functional process cell passed, but unrelated model and ACP packages caused
-   exit 1; the ACP package passed when subsequently run alone.
-4. Reviewed the available Linux CI. Its functional suite passed on the
+3. Ran the final rebased-head Windows `make test-functional` invocation. The
+   C11 functional process cell passed, but unrelated model and ACP packages
+   caused exit 1; the ACP package passed when subsequently run alone.
+4. Spawned the current rebased-head Linux binary under WSL2 with the
+   fail-closed `xdg-open` sentinel. The focused selector and the complete
+   process package passed; package temp directories, markers, worktree
+   processes, and owned listeners were absent after teardown.
+5. Ran the final rebased-head Linux `make test-functional` attempt with one
+   functional worker and serialized Go builds. The C11 functional process cell
+   passed, but unrelated provider-sessions, ACP, and workers-mock packages
+   caused exit 1.
+6. Reviewed the available Linux CI. Its functional suite passed on the
    pre-rebase head, but the required real built-process package is not part of
-   that workflow and no rebased-head Linux run exists, so the Linux journey
-   cannot be claimed complete.
+   that workflow and no rebased-head Linux integration run exists, so the
+   hosted Linux journey cannot be claimed complete.
 
 ### Cross-task integration and usability
 
@@ -219,6 +250,11 @@ evidence for the Linux built-executable sentinel edge.
   dated 2026-08-28 was observed without an owning process. It predates this
   validation and was left untouched to avoid deleting another checkout's
   generated artifact; it is not attributed to the current run.
+- The current-head WSL2 Linux full process-package run left no
+  `you-cli-process-package-*` directory, launcher marker, worktree process, or
+  owned listener. The WSL `ss` audit showed only unrelated system DNS
+  listeners; its `find` scan also reported permission-denied entries under
+  unrelated system-private temp directories, which were not touched.
 - No public CLI, OpenAPI, event, persisted contract, production auto-open
   default, functional shared support, C01 inventory, Project validation,
   baseline, stability-cleanup file, or unrelated source surface changed.
@@ -227,11 +263,11 @@ evidence for the Linux built-executable sentinel edge.
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| C11-F001 | BLOCKING | Inspect the current CI workflow and the available run `33249826008`. | Linux runs `go test ./tests/integration/transport/cli/process -count=1` with the controlled `xdg-open` sentinel. | The Linux job runs the functional tree and its existing functional CLI-process cell, but not the integration process package. | Workflow log and pre-rebase run `33249826008`; Linux process-package evidence is absent. |
-| C11-F002 | BLOCKING baseline/environment | Run the required final rebased-head `make test-functional`. | Complete local functional lane exits 0. | Exit 1: model root-composition baseline mismatch and ten ACP process-start/context-cancellation failures; the C11 functional process cell passes, and ACP passes in isolation. | Final local command output; package paths and test names recorded above. |
+| C11-F001 | BLOCKING | Inspect the current CI workflow and the available run `33249826008`; run the current head locally under WSL2. | Linux CI runs `go test ./tests/integration/transport/cli/process -count=1` with the controlled `xdg-open` sentinel. | Current-head local Linux focused and serialized full-package runs pass, but the Linux job runs the functional tree and its existing functional CLI-process cell, not the integration process package. | Workflow log, pre-rebase run `33249826008`, and local WSL2 runs above; hosted Linux process-package evidence remains absent. |
+| C11-F002 | BLOCKING baseline/environment | Run the required final rebased-head `make test-functional` on Windows and locally under WSL2 Linux. | Complete local functional lane exits 0. | Windows exited 1 in the documented model/ACP areas; current-head WSL2 exited 1 in `provider_sessions/cli`, `providers/acp`, and `workers/mock`. The C11 functional process cell passed in the WSL2 run, and no C11 package failed. | Final Windows and WSL2 command output; package paths and test names recorded above. |
 | C11-F003 | BLOCKING review-owned CI | Review required checks for prior implementation head `9f7968dc70`. | Required checks are terminal and green. | `Backend Unit Latency` failed on unrelated `pkg/transports/mcp/server/TestServeStdioValidatesRuntimeInputsAndCancellation`; `Verification Policy` consequently failed. Backend Lint and functional coverage were green. | Existing PR #2439 review evidence and Actions run `33249826008`; a new run is required for the rebased head. |
-| C11-F004 | BLOCKING baseline/environment | Run `go test ./tests/integration/transport/cli/process -count=1 -timeout 10m` on the rebased head. | Full named process package exits 0 and removes its reusable binary. | All tests printed `PASS`, but existing `TestMain` failed `RemoveAll` with Windows `Access is denied` for `you-cli-process-package-285162567`; the focused C11 selector cleaned up successfully. | Final process-package command output and read-only process/temp audit above. |
-| C11-F005 | NON-BLOCKING host hygiene | Inspect temp/process state after the current run. | A clean-room host has no unrelated generated residue. | One pre-existing process-package binary dated 2026-08-28 remains; no current process owns it and it was not deleted. | Read-only Windows temp/process audit above. |
+| C11-F004 | BLOCKING baseline/environment | Run the named process package on the rebased head on Windows and Linux. | Full named process package exits 0 and removes its reusable binary. | Windows `TestMain` still fails `RemoveAll` with `Access is denied` for `you-cli-process-package-285162567`; current-head WSL2 Linux passes with serialized build fan-out and removes its reusable artifact. | Windows and WSL2 process-package output plus read-only audits above. |
+| C11-F005 | NON-BLOCKING host hygiene | Inspect temp/process state after the current runs. | A clean-room host has no unrelated generated residue. | WSL2 has no current C11 residue; one pre-existing Windows process-package binary dated 2026-08-28 remains without an owning process and was left untouched. | Read-only Windows and WSL2 audits above. |
 
 ### Verdict
 
@@ -245,18 +281,19 @@ BLOCKED
   package teardown, and a green final functional pass.
 - Root-cause evidence or remaining uncertainty: the existing CI workflow has
   no Linux invocation of the integration process package; the available Linux
-  functional run is pre-rebase. The final local lane is contaminated by
-  unrelated model/ACP behavior, and the full process package has an existing
-  Windows executable-cleanup failure. The hosted required-check failure is in
-  an untouched MCP package. No C11 regression was observed in the focused
-  selector or its Windows real-binary behavior.
+  CI functional run is pre-rebase, although the current head passes the same
+  package locally under WSL2 with serialized build fan-out. The final local
+  lane is contaminated by unrelated model/ACP behavior, and the full Windows
+  process package has an existing executable-cleanup failure. The hosted
+  required-check failure is in an untouched MCP package. No C11 regression was
+  observed in the focused selector or either local real-binary path.
 - Smallest recommended correction/prerequisite: provide one current rebased-
-  head Linux run of `go test ./tests/integration/transport/cli/process
+  head Linux CI run of `go test ./tests/integration/transport/cli/process
   -count=1 -timeout 10m` with the fail-closed `xdg-open` sentinel and cleanup
   artifact; obtain a baseline-clean or owner-dispositioned full functional
-  run; and route the existing process-package teardown to its owning cleanup
-  lane. Do not change C11 implementation, model/ACP/MCP code, or unrelated CI
-  policy in this lane without an operator-authorized scope delta.
+  run; and route the existing Windows process-package teardown to its owning
+  cleanup lane. Do not change C11 implementation, model/ACP/MCP code, or
+  unrelated CI policy in this lane without an operator-authorized scope delta.
 - Dependencies and retest scope: a Linux CI/integration execution owner, the
   process-package cleanup owner, and the owners of the unrelated model, ACP,
   and MCP baseline failures; then rerun the process package, one final
@@ -267,8 +304,9 @@ BLOCKED
 
 The implementation review finding about the unreachable environment helper was
 fixed in the pre-rebase head `9f7968dc70` and is present in rebased commit
-`18315bea3f`. This loopback has supplied the requested Windows validation and
-explicit delta plan, but it does not claim story 002 or lane completion while
-C11-F001 through C11-F004 remain. The next action is to push this report in
-the open PR and post the evidence; the review workstation owns terminal CI,
-Linux evidence execution if provisioned, conflict resolution, and merge.
+`18315bea3f`. This loopback now supplies Windows and current-head local Linux
+validation plus the explicit delta plan, but it does not claim story 002 or
+lane completion while C11-F001 through C11-F004 remain. The next action is to
+push this report in the open PR and post the evidence; the review workstation
+owns terminal CI, hosted Linux evidence execution if provisioned, conflict
+resolution, and merge.
