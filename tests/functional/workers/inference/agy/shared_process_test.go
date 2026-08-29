@@ -261,10 +261,11 @@ func (fixture *agyProcessFixture) setup(t *testing.T) (setupErr error) {
 
 func (fixture *agyProcessFixture) createDirectories(rootDir string) error {
 	fixture.homeDir = filepath.Join(rootDir, "home")
-	fixture.hostDir = filepath.Join(rootDir, "host")
 	fixture.successDir = filepath.Join(rootDir, "success")
+	// The package host has no Work of its own; reuse the success Factory root.
+	fixture.hostDir = fixture.successDir
 	fixture.timeoutDir = filepath.Join(rootDir, "timeout")
-	for _, path := range []string{fixture.homeDir, fixture.hostDir, fixture.successDir, fixture.timeoutDir} {
+	for _, path := range []string{fixture.homeDir, fixture.successDir, fixture.timeoutDir} {
 		if err := os.MkdirAll(path, 0o755); err != nil {
 			return fmt.Errorf("create package fixture path %q: %w", path, err)
 		}
@@ -307,7 +308,7 @@ func (fixture *agyProcessFixture) loadScenarios(t *testing.T) error {
 
 func (fixture *agyProcessFixture) copyFactoryDirectories(t *testing.T) error {
 	legacyDir := support.LegacyFixtureDir(t, "executor_success")
-	for _, path := range []string{fixture.hostDir, fixture.successDir, fixture.timeoutDir} {
+	for _, path := range []string{fixture.successDir, fixture.timeoutDir} {
 		if err := copyAgyFactoryDirectory(legacyDir, path); err != nil {
 			return fmt.Errorf("copy legacy fixture to %q: %w", path, err)
 		}
@@ -317,9 +318,6 @@ func (fixture *agyProcessFixture) copyFactoryDirectories(t *testing.T) error {
 	}
 	successModel := fixture.scenarios[agyFinalOnlySuccessGoldenCase].request.Model
 	timeoutModel := fixture.scenarios[agyTimeoutGoldenCase].request.Model
-	if err := writeAgyWorkerConfig(fixture.hostDir, successModel); err != nil {
-		return err
-	}
 	if err := writeAgyWorkerConfig(fixture.successDir, successModel); err != nil {
 		return err
 	}
@@ -443,14 +441,14 @@ func (fixture *agyProcessFixture) runScenario(
 	if strings.TrimSpace(support.StringPointerValue(submitted.WorkId)) == "" || strings.TrimSpace(submitted.RequestId) == "" {
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
-	// Work completion is published asynchronously by the production session
-	// runtime; the controlled command edge cannot prove the public terminal
-	// status transition, so use the bounded session-scoped observation.
+	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
+	// Consume frames before terminal status so stream wait overlaps runtime
+	// completion; Work/Event reads remain post-terminal.
 	support.WaitForSessionTerminalStatus(t, fixture.baseURL, session.Id, agySharedScenarioTimeout)
-
 	listed := listAgySessionWork(t, fixture.baseURL, session.Id)
 	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.Id)
-	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
+	// Deletion followed by normal EOF proves no frame was hidden.
+	assertAgyResponseEventStreamClosed(t, run, agySharedScenarioTimeout, scenario.selector, len(responseEvents))
 	assertAgySessionObservations(t, scenario, session.Id, submitted, factoryEvents, responseEvents)
 	routeCalls := fixture.assertRouteRequests(t, scenario, routeRequestStart)
 
@@ -913,8 +911,9 @@ func assertAgyListenerClosed(baseURL string) error {
 }
 
 func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) error {
+	// http.Client{} uses http.DefaultTransport; keep its pool alive across the
+	// scenario's lifecycle requests instead of evicting reusable connections.
 	client := &http.Client{}
-	defer client.CloseIdleConnections()
 	cleanupCtx, cancel := context.WithTimeout(ctx, agySharedScenarioTimeout)
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
@@ -933,9 +932,15 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 	if readErr != nil {
 		return readErr
 	}
+	terminalObserved := false
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		if response.StatusCode != http.StatusNotFound &&
-			(response.StatusCode != http.StatusConflict || !strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`)) {
+		if response.StatusCode == http.StatusNotFound {
+			terminalObserved = true
+		} else if response.StatusCode == http.StatusConflict && strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`) {
+			// The public control response already proves that the session is
+			// terminal. Avoid repeating the status read before DELETE.
+			terminalObserved = true
+		} else {
 			return fmt.Errorf("terminate status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
 		}
 	}
@@ -943,29 +948,31 @@ func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) erro
 	// Termination is asynchronous and DELETE rejects an active Factory Session.
 	// This public status transition is the lifecycle boundary under test, so an
 	// edge-controlled result cannot replace this bounded polling observation.
-	poll := time.NewTicker(10 * time.Millisecond)
-	defer poll.Stop()
-	for {
-		statusRequest, err := http.NewRequestWithContext(cleanupCtx, http.MethodGet, endpoint+"/status", nil)
-		if err != nil {
-			return err
-		}
-		statusResponse, err := client.Do(statusRequest)
-		if err == nil {
-			statusBody, bodyErr := io.ReadAll(statusResponse.Body)
-			statusResponse.Body.Close()
-			if bodyErr == nil && statusResponse.StatusCode == http.StatusOK {
-				var status factoryapi.StatusResponse
-				if json.Unmarshal(statusBody, &status) == nil &&
-					(status.RuntimeStatus == "IDLE" || status.RuntimeStatus == "FINISHED") {
-					break
+	if !terminalObserved {
+		poll := time.NewTicker(10 * time.Millisecond)
+		defer poll.Stop()
+		for {
+			statusRequest, err := http.NewRequestWithContext(cleanupCtx, http.MethodGet, endpoint+"/status", nil)
+			if err != nil {
+				return err
+			}
+			statusResponse, err := client.Do(statusRequest)
+			if err == nil {
+				statusBody, bodyErr := io.ReadAll(statusResponse.Body)
+				statusResponse.Body.Close()
+				if bodyErr == nil && statusResponse.StatusCode == http.StatusOK {
+					var status factoryapi.StatusResponse
+					if json.Unmarshal(statusBody, &status) == nil &&
+						(status.RuntimeStatus == "IDLE" || status.RuntimeStatus == "FINISHED") {
+						break
+					}
 				}
 			}
-		}
-		select {
-		case <-cleanupCtx.Done():
-			return cleanupCtx.Err()
-		case <-poll.C:
+			select {
+			case <-cleanupCtx.Done():
+				return cleanupCtx.Err()
+			case <-poll.C:
+			}
 		}
 	}
 

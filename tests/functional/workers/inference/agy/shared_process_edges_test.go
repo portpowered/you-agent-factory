@@ -54,8 +54,9 @@ func waitForAgyRuntimeReady(baseURL string, timeout time.Duration) error {
 
 func assertAgyFactorySessionDeleted(baseURL, sessionID string) error {
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	// Keep the default transport pool reusable for the next public observation;
+	// the API server explicitly closes client connections during final shutdown.
 	client := &http.Client{Timeout: agySharedScenarioTimeout}
-	defer client.CloseIdleConnections()
 	response, err := client.Get(endpoint)
 	if err != nil {
 		return fmt.Errorf("GET deleted AGY Factory Session %q: %w", sessionID, err)
@@ -139,6 +140,17 @@ func readAgyResponseEvents(
 		}
 		events = append(events, result.Frame.Event)
 	}
+	return events
+}
+
+func assertAgyResponseEventStreamClosed(
+	t testing.TB,
+	run *agySharedScenarioRun,
+	timeout time.Duration,
+	selector string,
+	want int,
+) {
+	t.Helper()
 	if err := run.closeSession(context.Background()); err != nil {
 		t.Fatalf("AGY %q session cleanup before response stream close: %v", selector, err)
 	}
@@ -153,7 +165,6 @@ func readAgyResponseEvents(
 	default:
 		t.Fatalf("AGY %q response stream did not close normally after %d frames: %s", selector, want, terminal.Diagnostic())
 	}
-	return events
 }
 
 func assertAgySessionObservations(
