@@ -24,7 +24,7 @@ import (
 
 const planParallelSharedFixtureTimeout = 15 * time.Second
 
-const planParallelExpectedSessions = 6
+const planParallelExpectedSessions = 7
 
 // planParallelSharedFixture owns one root-built process and one continuous API
 // host for the package's compatible planning and fanout scenarios. Each child
@@ -198,6 +198,12 @@ func (router *planParallelProviderCommandRouter) unregister(paths []string) {
 	}
 }
 
+func (router *planParallelProviderCommandRouter) routeCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.runners)
+}
+
 func (router *planParallelProviderCommandRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -314,6 +320,9 @@ func newPlanParallelSharedFixture(t *testing.T) *planParallelSharedFixture {
 func (fixture *planParallelSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.lifecycle.assertClean(t)
+	if got := fixture.provider.routeCount(); got != 0 {
+		t.Errorf("PLAN-PARALLEL-CLEANUP-001 provider routes after cleanup = %d, want 0", got)
+	}
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.

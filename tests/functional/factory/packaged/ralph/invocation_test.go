@@ -50,6 +50,9 @@ func TestPackagedRalph(t *testing.T) {
 	t.Run("TestPackagedRalphFailsAfterBoundedIncompleteIterations", func(t *testing.T) {
 		testPackagedRalphFailsAfterBoundedIncompleteIterations(t, fixture)
 	})
+	t.Run("reuse after bounded iteration failure", func(t *testing.T) {
+		testPackagedRalphReusesProcessAfterBoundedFailure(t, fixture)
+	})
 }
 
 func testPackagedRalphPlansThenIteratesToCompletionThroughNamedCLI(t *testing.T, fixture *ralphSharedFixture) {
@@ -246,6 +249,23 @@ func testPackagedRalphFailsAfterBoundedIncompleteIterations(t *testing.T, fixtur
 	}
 	if got := len(runner.Requests()); got != 13 {
 		t.Fatalf("provider request count = %d, want planner plus twelve bounded iterator visits", got)
+	}
+}
+
+func testPackagedRalphReusesProcessAfterBoundedFailure(t *testing.T, fixture *ralphSharedFixture) {
+	runner := &packagedRalphCommandRunner{workspace: t.TempDir()}
+	scenario := fixture.newScenario(t, runner, packagedRalphFactoryName)
+	scenario.open(t)
+	response := postPackagedRalphInvocation(t, scenario, map[string]any{
+		"request":         "reuse the Ralph process after a bounded failure",
+		"plannerProvider": "CODEX", "plannerModel": "reuse-model",
+		"iteratorProvider": "CODEX", "iteratorModel": "reuse-model",
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed invocation after prior bounded failure", response)
+	}
+	if got := len(runner.Requests()); got != 3 {
+		t.Fatalf("provider request count = %d, want planner plus two iterator visits after reuse", got)
 	}
 }
 

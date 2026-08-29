@@ -23,7 +23,7 @@ import (
 
 const ralphSharedFixtureTimeout = 15 * time.Second
 
-const ralphExpectedSessions = 6
+const ralphExpectedSessions = 7
 
 // ralphSharedFixture owns one root-built process and one continuous API host
 // for the package's compatible iteration scenarios. Each child copies the
@@ -191,6 +191,12 @@ func (router *ralphProviderCommandRouter) unregister(paths []string) {
 	}
 }
 
+func (router *ralphProviderCommandRouter) routeCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.runners)
+}
+
 func (router *ralphProviderCommandRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -306,6 +312,9 @@ func newRalphSharedFixture(t *testing.T) *ralphSharedFixture {
 func (fixture *ralphSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.lifecycle.assertClean(t)
+	if got := fixture.provider.routeCount(); got != 0 {
+		t.Errorf("RALPH-CLEANUP-001 provider routes after cleanup = %d, want 0", got)
+	}
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.

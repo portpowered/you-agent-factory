@@ -43,6 +43,9 @@ func TestPackagedPlanParallel(t *testing.T) {
 	t.Run("TestPackagedPlanParallelChildFailureFansInWithoutMerge", func(t *testing.T) {
 		testPackagedPlanParallelChildFailureFansInWithoutMerge(t, fixture)
 	})
+	t.Run("reuse after child failure", func(t *testing.T) {
+		testPackagedPlanParallelReusesProcessAfterChildFailure(t, fixture)
+	})
 }
 
 func testPackagedPlanParallelMergerReceivesEveryUniqueCompletedChildResult(
@@ -429,6 +432,24 @@ func testPackagedPlanParallelChildFailureFansInWithoutMerge(
 	// comparison exact so an unbounded retry regression still fails here.
 	if runner.executionCount() != 1 || runner.mergeCount() != 0 {
 		t.Fatalf("executor calls = %d, merge calls = %d; want one terminal child attempt and no merge", runner.executionCount(), runner.mergeCount())
+	}
+}
+
+func testPackagedPlanParallelReusesProcessAfterChildFailure(
+	t *testing.T,
+	fixture *planParallelSharedFixture,
+) {
+	runner := newPlanParallelRunner(parallelDAG)
+	scenario := fixture.newScenario(t, runner)
+	scenario.open(t)
+	response := invokePlanParallel(t, scenario, map[string]any{
+		"request": "reuse the plan-parallel process after a child failure",
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed invocation after prior child failure", response)
+	}
+	if runner.executionCount() != 3 || runner.mergeCount() != 1 {
+		t.Fatalf("executor calls = %d, merge calls = %d; want 3 and 1 after reuse", runner.executionCount(), runner.mergeCount())
 	}
 }
 

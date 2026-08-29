@@ -197,6 +197,12 @@ func (router *planExecuteProviderCommandRouter) unregister(paths []string) {
 	}
 }
 
+func (router *planExecuteProviderCommandRouter) routeCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.runners)
+}
+
 func (router *planExecuteProviderCommandRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -313,6 +319,9 @@ func newPlanExecuteSharedFixture(t *testing.T) *planExecuteSharedFixture {
 func (fixture *planExecuteSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.lifecycle.assertClean(t)
+	if got := fixture.provider.routeCount(); got != 0 {
+		t.Errorf("PLAN-EXECUTE-CLEANUP-001 provider routes after cleanup = %d, want 0", got)
+	}
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.
