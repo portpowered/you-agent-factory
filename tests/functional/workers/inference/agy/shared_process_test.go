@@ -440,20 +440,14 @@ func (fixture *agyProcessFixture) runScenario(
 	if strings.TrimSpace(support.StringPointerValue(submitted.WorkId)) == "" || strings.TrimSpace(submitted.RequestId) == "" {
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
-	statusContext, cancelStatus := context.WithTimeout(context.Background(), agySharedScenarioTimeout)
-	defer cancelStatus()
-	statusResult := make(chan agyTerminalStatusResult, 1)
-	go func() {
-		status, err := waitForAgySessionTerminalStatus(statusContext, fixture.baseURL, session.Id, agySharedScenarioTimeout)
-		statusResult <- agyTerminalStatusResult{status: status, err: err}
-	}()
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	// Observe the public terminal status while consuming response frames. The
-	// status read remains a required session-boundary witness; overlapping its
-	// bounded poll with stream delivery removes only test-observer idle time.
-	terminalStatus := <-statusResult
-	if terminalStatus.err != nil {
-		t.Fatalf("AGY %q terminal session status: %v", scenario.selector, terminalStatus.err)
+	// The response stream is the hot production publication path. Wait for its
+	// exact characterized frame set before polling the separate public status
+	// endpoint so the observer cannot compete with runtime event publication.
+	// The status read remains a required session-boundary witness before the
+	// post-terminal Work and Factory Event snapshots.
+	if _, err := waitForAgySessionTerminalStatus(context.Background(), fixture.baseURL, session.Id, agySharedScenarioTimeout); err != nil {
+		t.Fatalf("AGY %q terminal session status: %v", scenario.selector, err)
 	}
 	listed := listAgySessionWork(t, fixture.baseURL, session.Id)
 	factoryEvents := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.Id)
