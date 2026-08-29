@@ -28,6 +28,10 @@ const (
 // golden: tests/functional/internal/support/testdata/provider-sessions/agy/final-only-success/manifest.json
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
+	// The two golden scenarios use distinct immutable routes and explicit
+	// Factory Sessions, so their independent runtime proofs can share the
+	// package process without serializing their public lifecycle work.
+	t.Parallel()
 	fixture := agySharedProcessForTest(t)
 	scenario := fixture.scenario(t, agyFinalOnlySuccessGoldenCase)
 	replay := fixture.runScenario(t, scenario, "agy golden final-only success")
@@ -86,6 +90,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 // rather than a PTY-specific exit-code sentinel.
 // golden: tests/functional/internal/support/testdata/provider-sessions/agy/timeout/manifest.json
 func TestAgyGoldenTimeout(t *testing.T) {
+	t.Parallel()
 	fixture := agySharedProcessForTest(t)
 	scenario := fixture.scenario(t, agyTimeoutGoldenCase)
 	replay := fixture.runScenario(t, scenario, "agy golden timeout")

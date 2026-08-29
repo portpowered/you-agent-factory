@@ -638,7 +638,7 @@ func (router *agySharedCommandRouter) requestCount() int {
 	return len(router.requests)
 }
 
-func (router *agySharedCommandRouter) requestsSince(start int) []platformprocess.CommandRequest {
+func (router *agySharedCommandRouter) requestsSinceForWorkDir(start int, workDir string) []platformprocess.CommandRequest {
 	router.mu.Lock()
 	defer router.mu.Unlock()
 	if start < 0 {
@@ -647,9 +647,16 @@ func (router *agySharedCommandRouter) requestsSince(start int) []platformprocess
 	if start > len(router.requests) {
 		start = len(router.requests)
 	}
-	requests := make([]platformprocess.CommandRequest, len(router.requests)-start)
-	for index, request := range router.requests[start:] {
-		requests[index] = cloneAgyCommandRequest(request)
+	absolute, err := filepath.Abs(filepath.Clean(workDir))
+	if err != nil {
+		return nil
+	}
+	requests := make([]platformprocess.CommandRequest, 0)
+	for _, request := range router.requests[start:] {
+		if request.WorkDir != absolute {
+			continue
+		}
+		requests = append(requests, cloneAgyCommandRequest(request))
 	}
 	return requests
 }

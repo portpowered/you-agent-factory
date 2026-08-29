@@ -650,6 +650,9 @@ func (fixture *agyProcessFixture) recordStreamClosed() {
 
 func (fixture *agyProcessFixture) assertProcessTopology(t *testing.T) {
 	t.Helper()
+	if err := fixture.waitForScenarioCleanup(agySharedScenarioTimeout); err != nil {
+		t.Fatalf("AGY scenario cleanup: %v", err)
+	}
 	if fixture.processBuilds != 1 || fixture.api.startCount() != 1 {
 		t.Fatalf("AGY shared process topology = root:%d http:%d, want one each", fixture.processBuilds, fixture.api.startCount())
 	}
@@ -673,13 +676,37 @@ func (fixture *agyProcessFixture) assertProcessTopology(t *testing.T) {
 	}
 }
 
+func (fixture *agyProcessFixture) waitForScenarioCleanup(timeout time.Duration) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	poll := time.NewTicker(10 * time.Millisecond)
+	defer poll.Stop()
+	for {
+		fixture.sessionMu.Lock()
+		active, runs := len(fixture.activeSessions), len(fixture.activeRuns)
+		opened, deleted := len(fixture.openedSessionIDs), len(fixture.deletedSessionID)
+		fixture.sessionMu.Unlock()
+		fixture.streamMu.Lock()
+		streamsOpened, streamsClosed := fixture.streamsOpened, fixture.streamsClosed
+		fixture.streamMu.Unlock()
+		if active == 0 && runs == 0 && opened == deleted && streamsOpened == streamsClosed && fixture.router.activeCallCount() == 0 {
+			return nil
+		}
+		select {
+		case <-deadline.C:
+			return fmt.Errorf("sessions opened:%d deleted:%d active:%d runs:%d streams opened:%d closed:%d active calls:%d", opened, deleted, active, runs, streamsOpened, streamsClosed, fixture.router.activeCallCount())
+		case <-poll.C:
+		}
+	}
+}
+
 func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *agySharedScenario, start int) int {
 	t.Helper()
 	want := 1
 	if scenario.selector == agySharedTimeoutSelector {
 		want = 9
 	}
-	requests := fixture.router.requestsSince(start)
+	requests := fixture.router.requestsSinceForWorkDir(start, scenario.factoryDir)
 	if len(requests) != want {
 		t.Fatalf("AGY %q routed requests = %d, want %d", scenario.selector, len(requests), want)
 	}
