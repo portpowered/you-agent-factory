@@ -65,6 +65,23 @@ func requireCompletionSuccess(t testing.TB, result completionCommandResult, oper
 	}
 }
 
+func requireCompletionHelp(t testing.TB, result completionCommandResult, operation string) {
+	t.Helper()
+	// Process.Execute returns nil for the successful exit status observed at
+	// this in-process boundary.
+	requireCompletionSuccess(t, result, operation+" help fallback")
+	if !strings.Contains(result.stdout, "Usage:\n  you completion [command]") {
+		t.Fatalf("%s help output = %q, want completion usage", operation, result.stdout)
+	}
+	if !strings.Contains(result.stdout, "Available Commands:") ||
+		!strings.Contains(result.stdout, "Generate the autocompletion script") {
+		t.Fatalf("%s help output = %q, want completion command inventory", operation, result.stdout)
+	}
+	if result.stderr != "" {
+		t.Fatalf("%s help stderr = %q, want empty", operation, result.stderr)
+	}
+}
+
 func writeShellCompletionFactory(t testing.TB, workingDirectory string) {
 	t.Helper()
 	definition := map[string]any{

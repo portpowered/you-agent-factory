@@ -8,21 +8,21 @@ import (
 )
 
 func TestCompletionFailureBoundariesAndReuse(t *testing.T) {
-	t.Run("unsupported shell falls back to clean completion help", func(t *testing.T) {
+	t.Run("missing and unsupported shells fall back to identical clean completion help", func(t *testing.T) {
 		invalid := executeCompletionCommand(
 			t,
 			completionProcess(t).invocation(t, false),
 			"completion", "tcsh",
 		)
-		if invalid.err != nil {
-			t.Fatalf("unsupported shell error = %v, want Cobra completion help fallback", invalid.err)
-		}
-		if !strings.Contains(invalid.stdout, "Available Commands:") ||
-			!strings.Contains(invalid.stdout, "Generate the autocompletion script") {
-			t.Fatalf("unsupported shell output = %q, want completion help", invalid.stdout)
-		}
-		if invalid.stderr != "" {
-			t.Fatalf("unsupported shell stderr = %q, want empty", invalid.stderr)
+		empty := executeCompletionCommand(
+			t,
+			completionProcess(t).invocation(t, false),
+			"completion",
+		)
+		requireCompletionHelp(t, invalid, "unsupported shell")
+		requireCompletionHelp(t, empty, "missing shell")
+		if invalid.stdout != empty.stdout {
+			t.Fatalf("unsupported and missing shell help differ:\nunsupported:\n%s\nmissing:\n%s", invalid.stdout, empty.stdout)
 		}
 
 		valid := executeCompletionCommand(
@@ -33,23 +33,6 @@ func TestCompletionFailureBoundariesAndReuse(t *testing.T) {
 		requireCompletionSuccess(t, valid, "retry supported shell")
 		if len(strings.TrimSpace(valid.stdout)) < 100 {
 			t.Fatalf("retry supported shell output is unexpectedly empty")
-		}
-	})
-
-	t.Run("empty shell input returns clean completion help", func(t *testing.T) {
-		result := executeCompletionCommand(
-			t,
-			completionProcess(t).invocation(t, false),
-			"completion",
-		)
-		if result.err != nil {
-			t.Fatalf("completion without a shell error = %v, want completion help", result.err)
-		}
-		if !strings.Contains(result.stdout, "Usage:\n  you completion [command]") {
-			t.Fatalf("completion without a shell output = %q, want completion help", result.stdout)
-		}
-		if result.stderr != "" {
-			t.Fatalf("completion without a shell stderr = %q, want empty", result.stderr)
 		}
 	})
 
