@@ -171,17 +171,25 @@ merge identities:
 
 | Lead | Observed result and relevance |
 | --- | --- |
-| [PR #2347](https://github.com/portpowered/you-agent-factory/pull/2347) | Merged as `fee3da73388514cfb5975307d2cd1e07b345cd84`; head `26594fb...`, base `6f6ad94...`; run [33141331219](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219) had Backend Lint, Backend Unit Latency, Backend Functional Coverage, and Verification Policy success. Its eight changed files were workflow/Makefile/generator sources and tests; neither comparison baseline changed. |
-| [PR #2408](https://github.com/portpowered/you-agent-factory/pull/2408) | Merged as `182ccb00da13c159eda46caee7a75c8640c97067`; head `8115631...`, base `0d56c18...`; run [33223243464](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464) had the relevant checks success. Its three changed files were workflow/helper/test files; neither comparison baseline changed. The operator's merge note explicitly treated the post-merge witness as follow-up, not merge-precondition evidence. |
-| [PR #2444](https://github.com/portpowered/you-agent-factory/pull/2444) | Merged source lead, merge `0228a6d5e081ea65b03f11ee9553f636071eaa01`; run `33253550758` relevant checks succeeded; five functional CLI-output test files, no comparison-baseline patch. |
-| [PR #2435](https://github.com/portpowered/you-agent-factory/pull/2435) | Merged bot lead, merge `3fa80f6e548a07ff7ec02a8047bffb37402a7039`; run `33240184371` relevant checks succeeded; one latency-budget `reference.baseCommit` patch, no deadcode-baseline patch. |
-| [PR #2338](https://github.com/portpowered/you-agent-factory/pull/2338) | Closed unmerged; Backend Unit Latency and Verification Policy failed. It is negative lineage evidence, not a merge. |
-| [PR #2345](https://github.com/portpowered/you-agent-factory/pull/2345) | Open unit-latency reference lead; observed 13.27% improvement against the 25% policy and failed Unit Latency/Verification Policy. It is not an admitted candidate. |
+| [PR #2347](https://github.com/portpowered/you-agent-factory/pull/2347) | Merged as `fee3da73388514cfb5975307d2cd1e07b345cd84`; head `26594fb95d34476d1e5473f0fc1e201e7cc44cb8`, base `6f6ad94c433d1fbec60c3fef0fe192094beae128`; run [33141331219](https://github.com/portpowered/you-agent-factory/actions/runs/33141331219) had Backend Lint, Backend Unit Latency, Backend Functional Coverage, and Verification Policy success. Its eight changed files were workflow/Makefile/generator sources and tests; neither comparison baseline changed. |
+| [PR #2408](https://github.com/portpowered/you-agent-factory/pull/2408) | Merged as `182ccb00da13c159eda46caee7a75c8640c97067`; head `8115631237e0cb6a317113c9dee9ead9e05cee86`, base `0d56c18b386ab77e823bd7d2da7988c2fdd636d1`; run [33223243464](https://github.com/portpowered/you-agent-factory/actions/runs/33223243464) had the relevant checks success. Its three changed files were workflow/helper/test files; neither comparison baseline changed. The operator's merge note explicitly treated the post-merge witness as follow-up, not merge-precondition evidence. |
+| [PR #2444](https://github.com/portpowered/you-agent-factory/pull/2444) | Merged source lead as `0228a6d5e081ea65b03f11ee9553f636071eaa01`; head `542bb48d169acbd18b912de5ee12edc264b6c7c7`, base `5b81ba3602c2875cf72fbabad759cac1687ee771`; run [33253550758](https://github.com/portpowered/you-agent-factory/actions/runs/33253550758) relevant checks succeeded; five functional CLI-output test files, no comparison-baseline patch. |
+| [PR #2435](https://github.com/portpowered/you-agent-factory/pull/2435) | Merged bot lead as `3fa80f6e548a07ff7ec02a8047bffb37402a7039`; head `319583426d659c5ae29ef0ab3c6ee66fa199f404`, base `64f6c992091a79aad6b7ebce84f9a94fdb7168e3`; run [33240184371](https://github.com/portpowered/you-agent-factory/actions/runs/33240184371) relevant checks succeeded; one latency-budget `reference.baseCommit` patch, no deadcode-baseline patch. |
+| [PR #2338](https://github.com/portpowered/you-agent-factory/pull/2338) | Closed unmerged; head `0989ac9a9320130ed5be2472442867e372dcfb43`, base `3d9bfe1d9ac891341639fff5e73bef39b5cb3b16`; run [33064719861](https://github.com/portpowered/you-agent-factory/actions/runs/33064719861) had Backend Unit Latency and Verification Policy failures. It is negative lineage evidence, not a merge. |
+| [PR #2345](https://github.com/portpowered/you-agent-factory/pull/2345) | Open unit-latency reference lead; head `a05a800aecdea0e60d1a6398a9eeda4b55e0f0eb`, base `6f6ad94c433d1fbec60c3fef0fe192094beae128`; run [33125634420](https://github.com/portpowered/you-agent-factory/actions/runs/33125634420) observed 13.27% improvement against the 25% policy and failed Unit Latency/Verification Policy. It is not an admitted candidate. |
+| [PR #2211](https://github.com/portpowered/you-agent-factory/pull/2211) | Open source/deadcode lead; head `ba3d766614437b88cf2fb65b7b432c5264cab85e`, base `5637f83a757d8727cc5acf3d7d5e8e87d25d1a10`; run [32638912321](https://github.com/portpowered/you-agent-factory/actions/runs/32638912321) had Backend Lint success but Backend Functional Coverage and Verification Policy failures. It is not an admitted candidate. |
 
-The selected bot-PR scan also inspected #2402, #2404, #2406, #2407, #2435,
-#2460, and #2462. Each inspected patch was limited to the latency budget's
-`reference.baseCommit`; no dual deadcode-plus-latency snapshot was observed in
-that scan.
+The selected bot-PR scan also inspected the following exact PR/base/head/merge
+lineages. Each patch changed only the latency budget's `reference.baseCommit`;
+no dual deadcode-plus-latency snapshot was observed in that scan.
+
+| Bot PR | Base SHA | Head SHA | Merge SHA |
+| --- | --- | --- | --- |
+| [#2402](https://github.com/portpowered/you-agent-factory/pull/2402) | `7ca60f6098eca7eb87634d0277117b31900698dd` | `4ce6add416589c99b11ef14269cb2aaf17be840d` | `f1bc372c1c16ef5401f05cfca1d497d817bc891a` |
+| [#2404](https://github.com/portpowered/you-agent-factory/pull/2404) | `fbc67210656779076210bcb066db2ecfe6067c7f` | `4a657eccaa9a64be8298e1da60ee9e0f98856f9d` | `72003ae42b2608a8f5f8c967b783ede8e198fd93` |
+| [#2406](https://github.com/portpowered/you-agent-factory/pull/2406) | `72003ae42b2608a8f5f8c967b783ede8e198fd93` | `c9010161ac536ceff31dd90b5e965db19aa5ef34` | `51733a283a1ce79a17e45bc5cd7859f0399f518b` |
+| [#2407](https://github.com/portpowered/you-agent-factory/pull/2407) | `51733a283a1ce79a17e45bc5cd7859f0399f518b` | `dc584218fb7d6291f891c45f358f1f4e06b186d9` | `31ba882786d5d9427b43c1c7cee7996a152a2a4d` |
+| [#2460](https://github.com/portpowered/you-agent-factory/pull/2460) | `4b2a0582d6db24e66482c3117d378bb28be32717` | `1f207cb5333a9dd7f2e73a0b3f6793a75f723065` | `7af39e5bc23c8fc74e1402da85981a438eb455c5` |
 
 ## Local-real probes and evidence boundaries
 
