@@ -229,3 +229,39 @@ spine, selector inventory, and exclusion boundary are independently reviewable
 without changing code or importing the excluded stability work. Stories 002
 and 003 must retain this baseline and record corrected focused/package/CI
 evidence instead of replacing it with a timing target.
+
+## Story 002 correction and local evidence
+
+- Correction commit: `4f4ada4f20` (`test(restart): bound each CLI operation independently`).
+- The owned scenario no longer stores or receives a cumulative `cliContext`.
+  Scenario setup, including the one fresh `go build`, runs under the test
+  context; each owned CLI submit, `work list`, `work show`, and Worker Session
+  list operation now creates and defers cancellation of a fresh
+  `context.WithTimeout(t.Context(), 30*time.Second)` immediately around that
+  subprocess call.
+- The low-level `runBoardPersistenceCLI` and `submitBatchThroughCLI` helper
+  boundary in excluded `board_persistence_cli_test.go` is unchanged. Process
+  start/stop, readiness, polling, build count, daemon count, public
+  assertions, and cleanup are unchanged.
+
+GATE-FOCUSED-001 was attempted on the corrected head with:
+
+```text
+go test -count=3 -cpu=2 -timeout=20m -run '^TestBoardPersistenceCLIRestartRoundTrip$' ./tests/functional/sessions/restart
+```
+
+The command exited non-zero after `1200.094s` when the package timeout fired.
+The goroutine dump shows the test had not entered the scenario: it was blocked
+in `buildBoardPersistenceBinary` at `board_persistence_process_test.go:49`
+waiting for the fresh `go build`. The shared Windows host had many concurrent
+Go test/build processes. No daemon, CLI operation, restart assertion, or
+cleanup assertion was reached, so this is contaminated environmental evidence
+and does not prove or disprove the corrected round trip. The post-change
+`go test ./tests/functional/sessions/restart -list '^Test'` output enumerated
+the unchanged seven selectors and printed `ok` before its wrapper was
+interrupted after the result had been emitted; the full focused run itself
+already compiled the edited package before reaching the build wait.
+
+Story 002 remains open pending one successful local-real focused repeat.
+Raised-parallelism CI, the full package proof, diff/ancestry audit, and clean
+room validation remain story 003 evidence.
