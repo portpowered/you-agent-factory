@@ -200,3 +200,72 @@ No package-wide coordinator, timeout inflation, serialization, workflow, or
 shared-support change was made in this story. The next safe implementation step
 is the package-local coordinator in story 002, using the exact six-selector
 denominator and the remaining phase-latency measurements above.
+
+## Story 002 lifecycle synchronization
+
+Status: `LIFECYCLE-C09-01` complete for story
+`functional-test-optimization-c09-workers-cli-lifecycle-contention-002`.
+
+The package now has one package-local `lifecycleCoordinator` in
+`tests/functional/workers/transports/cli/run/lifecycle/lifecycle_coordinator_test.go`.
+All six top-level selectors in `lifecycle_test.go`, including the file-backed
+subcases and detached server negative control, construct the production-shaped
+process through `support.BuildProcess`, prepare public inputs through the
+coordinator, and close through its bounded lifecycle owner. The coordinator
+also gives every direct invocation an isolated `HOME`/`USERPROFILE`, removing
+the shared operator-home staging collision from local package execution without
+changing production or shared functional support.
+
+The server-attached witness now has this observable order:
+
+    inputs -> Process.Execute -> API listener readiness -> public Factory Session
+    -> provider release -> terminal Work -> public Worker Session/Event/dispatch
+    correlation -> listener release -> command completion -> Process.Close
+
+Readiness is driven by `ProcessAPIServer`'s ready signal. Active and terminal
+state are read through public HTTP projections, with a 10ms retry cadence only
+for eventual projection visibility. Provider, listener, and correlation gates
+are idempotent and are released by coordinator cleanup on every assertion or
+phase failure. The phase guards are local safety ceilings (15s for readiness,
+observation, and command completion; 5s for close), not a package-wide timeout
+or a success-by-sleep mechanism. HTTP reads also have a 2s client deadline so
+one stalled projection cannot defeat the observation deadline.
+
+The coordinator emits diagnostics containing the failed phase, elapsed time,
+last public observation, topology, and the ordered transition ledger. A verbose
+server-attached run recorded readiness after `1.8069629s`, total hosted-process
+teardown after `2.0662366s`, and this transition sequence:
+
+    inputs, execute, readiness wait, readiness ready, active observation,
+    provider release, terminal Work, public correlation, listener release,
+    command done, process close
+
+The provider-failure selector inspects stdout/stderr only after
+`Process.Execute` returns its terminal error and the coordinator records the
+command-done phase. It continues to require empty success stdout and exactly
+one parseable public `ErrorResponse`; no assertion or serialization was removed.
+
+## Story 002 verification
+
+The following commands were run against the changed package with controlled
+provider effects and real root/process/session/API wiring:
+
+    go test -run '^$' ./tests/functional/workers/transports/cli/run/lifecycle
+
+Observed result: `ok` (compile-only, cached after the source compiled) and
+`git diff --check` passed.
+
+    go test -count=1 -timeout=15m -run '^(TestCLIRunCleanInvocationCompletesWithoutDashboardStartup|TestCLIRunServerAttachedInvocationTargetsExistingFactorySession|TestCLIRunCleanInvocationFailurePreservesPublicError)$' ./tests/functional/workers/transports/cli/run/lifecycle
+
+Observed result: `ok`; all three representative success/server/failure
+selectors passed in `7.438s`.
+
+    go test -count=3 -timeout=15m -run '^(TestCLIRunCleanInvocationCompletesWithoutDashboardStartup|TestCLIRunServerAttachedInvocationTargetsExistingFactorySession|TestCLIRunCleanInvocationFailurePreservesPublicError)$' ./tests/functional/workers/transports/cli/run/lifecycle
+
+Observed result: `ok`; all nine bounded repeat executions passed in `26.044s`.
+The verbose server-attached run also passed in `7.902s` and emitted the phase
+ledger above. The focused commands prove unchanged output/error/provider-call
+behavior and deterministic representative ordering; they do not prove the
+adverse cancellation/timeout matrix, race instrumentation, full-package
+coexistence, raised-parallelism CI, or clean-room loopback owned by stories
+003-004.
