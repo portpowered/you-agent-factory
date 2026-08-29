@@ -156,11 +156,6 @@ FUNCTIONAL_TEST_TIER ?= pr-short
 FUNCTIONAL_TEST_TRIGGER ?= local
 FUNCTIONAL_TEST_BUDGET ?= 35m
 FUNCTIONAL_SHORT ?= true
-CHANGED_TEST_STABILITY_BASE ?=
-CHANGED_TEST_STABILITY_HEAD ?= HEAD
-CHANGED_TEST_STABILITY_ATTEMPTS ?= 3
-CHANGED_TEST_STABILITY_BUDGET ?= 15m
-CHANGED_TEST_STABILITY_JOBS ?= 4
 UNIT_COVERAGE_DIR ?= .artifacts/unit-coverage
 GO_UNIT_COVERAGE_PROFILE ?= $(UNIT_COVERAGE_DIR)/coverage.out
 GO_UNIT_COVERAGE_JSON_OUTPUT ?= $(UNIT_COVERAGE_DIR)/coverage-summary.json
@@ -539,13 +534,6 @@ regenerate-shared-ci-baselines:
 	cd "$(BASELINE_REGEN_ROOT)" && $(BASELINE_REGEN_CLI_UPDATE_ENV) $(GO) test ./pkg/transports/cli/cliinputs -run "^TestWriteProductionInputsInventoryBaseline$$" -count=1
 	cd "$(BASELINE_REGEN_ROOT)" && $(GO) run ./cmd/mcptoolinventorygen -root .
 
-# Merge-base-aware changed-test flake prevention. The caller must provide the
-# pull-request base ref/SHA; the command resolves its merge-base with head,
-# then gives every selected top-level Go test 3 isolated attempts within one
-# 15-minute total budget.
-test-changed-test-stability:
-	$(GO) run ./cmd/teststability -base "$(CHANGED_TEST_STABILITY_BASE)" -head "$(CHANGED_TEST_STABILITY_HEAD)" -attempts $(CHANGED_TEST_STABILITY_ATTEMPTS) -budget $(CHANGED_TEST_STABILITY_BUDGET) -jobs $(CHANGED_TEST_STABILITY_JOBS)
-
 test-lane-audit:
 	$(GO) run ./cmd/testlanecheck
 
@@ -764,9 +752,10 @@ test-unit-coverage:
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of
-# this target) cannot succeed without a successful boundary check. gocoveragecheck
-# forces -count=1 for its instrumented run, so this target remains fresh even
-# though the ordinary developer lane is cache-aware. Boundary failures exit
+# this target) cannot succeed without a successful boundary check. The
+# instrumented gocoveragecheck invocation leaves test-count policy to Go, so an
+# eligible repeat may be served from the test cache; use test-functional-fresh
+# for an explicit fresh ordinary-functional run. Boundary failures exit
 # non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
