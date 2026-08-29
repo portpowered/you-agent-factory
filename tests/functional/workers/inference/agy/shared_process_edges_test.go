@@ -66,6 +66,9 @@ func waitForAgySessionTerminalStatus(
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/status"
 	observeContext, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// Session terminality is published asynchronously after response frames;
+	// this bounded public poll remains the lifecycle witness while its wait is
+	// overlapped with response delivery by the scenario helper.
 	poll := time.NewTicker(10 * time.Millisecond)
 	defer poll.Stop()
 	var last factoryapi.StatusResponse
