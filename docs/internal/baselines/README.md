@@ -172,7 +172,7 @@ content observations, not permission to rewrite a ratchet or snapshot.
 | R-05 | `go-functional-coverage-package-minimums.json` | 357 packages and 29 floor holds |
 | R-06 | `go-unit-coverage-package-minimums.json` | 403 packages and 33 floor holds |
 | S-02 | `go-unit-lane-latency-budget.v1.json` | 444 packages and 18,223 final-mode test identities |
-| R-07 | `hardcoded-ui-copy-baseline.txt` | 4 accepted literal findings |
+| R-07 | `hardcoded-ui-copy-baseline.txt` | 2 accepted literal findings |
 | R-08 | `package-structure-baseline.json` | 532 structure findings |
 | R-09 | `package-target-test-only-baseline.json` | 31 test-only migration findings |
 | R-10 | `petri-public-surface-baseline.json` | 93 public-surface findings |
