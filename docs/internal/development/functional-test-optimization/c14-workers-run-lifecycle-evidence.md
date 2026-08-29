@@ -301,3 +301,58 @@ was changed. The next story may edit only
 `tests/functional/workers/transports/cli/run/lifecycle/**` and append its
 implementation evidence here. `prd.json` and `progress.txt` remain local
 workflow scaffolding and must not enter the PR diff.
+
+## GATE-SPINE-001 — story 002 implementation evidence
+
+Story `fto-c14-pkg-workers-run-lifecycle-002` reused only the compatible finite
+one-shot cohort. A package-local `TestMain` owns one `support.BuildProcess`
+result and closes it after the package completes. Each shared invocation gets a
+fresh factory directory, HOME/USERPROFILE, working directory, and captured
+streams. A package-local command router keys the injected provider runner by
+that working directory, rejects duplicate active routes, unbinds every route
+after `Process.Execute`, and reports its registration/call topology at close.
+The hosted, server-attached, cancellation, timeout, partial/failure, and forced
+cleanup paths continue to use their dedicated coordinator/process fixtures.
+
+The compatible-cohort verification was:
+
+```text
+go test ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1 -parallel 1 -run '^(TestCLIRunCleanInvocationCompletesWithoutDashboardStartup|TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch|TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand|TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch)$' -v
+```
+
+It exited `0` in `9.168s`. The package-owned topology diagnostic was:
+
+```text
+C14 lifecycle shared topology: root_builds=1 process_executions=8 process_closes=1 active_invocations=0 provider_route_registers=8 provider_route_unbinds=8 provider_routes=0 provider_calls=3
+```
+
+The complete story gate was then run without selector filtering:
+
+```text
+go test ./tests/functional/workers/transports/cli/run/lifecycle/... -count=1 -v
+```
+
+The verbose gate exited `0` in `30.074s`, and the final exact package rerun
+after the helper cleanup exited `0` in `29.947s`. All seven top-level selectors
+and all adverse subtests passed, including FTM-01 through FTM-17. The same
+topology diagnostic
+reported one shared root build, eight serialized shared executions, eight
+route registrations/unregistrations, zero retained routes, one shared-process
+close, and three provider calls. The source-derived full-package root-build
+count is therefore reduced from 18 to 11: the eight compatible invocations now
+share one root, while the hosted and adverse groups retain their 3 and 7
+dedicated roots respectively. The full package still exercises 18
+`Process.Execute` invocations, eight API listeners, and one intentional
+forced-cleanup test-binary child.
+
+Post-change assertion inventory: **same or stronger**. The seven public
+selectors remain present; their existing output, error, provider-call,
+identity, ordering, cancellation, recovery, timeout, and cleanup assertions
+were retained. The shared fixture adds direct route exclusivity and cleanup
+topology checks, and the full package gate passed. No production, shared
+functional-support, API, generated, or public-contract file changed.
+
+Story 002 is complete at the semantic spine. Story 003 still owns repeated
+baseline/final measurement, race verification, clean-room reproduction, the
+performance decision, and PR/CI handoff; this evidence does not claim the
+parent's final performance floor or race result.
