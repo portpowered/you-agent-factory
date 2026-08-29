@@ -259,6 +259,9 @@ func assertSuccessfulCharacterization(
 	if observation.err != nil {
 		t.Fatalf("%s error = %v", name, observation.err)
 	}
+	if observation.providerCalls != 1 {
+		t.Fatalf("%s provider calls = %d, want exactly one successful dispatch", name, observation.providerCalls)
+	}
 	assertSuccessfulRunStderrEmpty(t, observation.stderr)
 }
 

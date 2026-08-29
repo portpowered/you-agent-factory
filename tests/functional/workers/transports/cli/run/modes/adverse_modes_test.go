@@ -330,7 +330,6 @@ func TestCLIRunConcurrentSessionsExposeMissingFactorySessionAuthority(t *testing
 	firstTerminal := decodeTerminalNDJSONInvocationResult(t, firstResult.stdout).Response
 	assertInvocationOutcome(t, firstTerminal, "CANCELED", "INVOCATION_CANCELED")
 	if firstResult.resources.id == secondResult.resources.id ||
-		firstResult.resources.sessionID == secondResult.resources.sessionID ||
 		firstResult.resources.workingRoot == secondResult.resources.workingRoot {
 		t.Fatalf("concurrent invocation resources were not distinct: first=%#v second=%#v", firstResult.resources, secondResult.resources)
 	}
@@ -476,6 +475,7 @@ func assertMachineSuccess(t *testing.T, result modesInvocationResult, want strin
 	if result.err != nil {
 		t.Fatalf("machine invocation error = %v\nstdout=%s\nstderr=%s", result.err, result.stdout, result.stderr)
 	}
+	assertSingleRequestForRoot(t, result)
 	if result.providerCalls != 1 || result.stderr != "" {
 		t.Fatalf("machine success calls=%d stderr=%q, want one call and empty stderr", result.providerCalls, result.stderr)
 	}
@@ -488,6 +488,7 @@ func assertJSONPrimarySuccess(t *testing.T, result modesInvocationResult, want s
 	if result.err != nil {
 		t.Fatalf("JSON primary invocation error = %v\nstdout=%s\nstderr=%s", result.err, result.stdout, result.stderr)
 	}
+	assertSingleRequestForRoot(t, result)
 	if result.providerCalls != 1 || result.stderr != "" {
 		t.Fatalf("JSON primary success calls=%d stderr=%q, want one call and empty stderr", result.providerCalls, result.stderr)
 	}
@@ -503,7 +504,7 @@ func assertInvocationOutcome(t *testing.T, response factoryapi.InvocationRespons
 
 func assertFreshInvocation(t *testing.T, prior, recovery modesInvocationResult) {
 	t.Helper()
-	if prior.resources.id == recovery.resources.id || prior.resources.sessionID == recovery.resources.sessionID || prior.resources.workingRoot == recovery.resources.workingRoot {
+	if prior.resources.id == recovery.resources.id || prior.resources.workingRoot == recovery.resources.workingRoot {
 		t.Fatalf("recovery reused invocation identity: prior=%#v recovery=%#v", prior.resources, recovery.resources)
 	}
 	if pathExists(prior.resources.workingRoot) || pathExists(recovery.resources.workingRoot) {

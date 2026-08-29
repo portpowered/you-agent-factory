@@ -30,8 +30,11 @@ const (
 
 // helpPackageFixture owns the one production-composed process used by every
 // help scenario. Each command still receives a unique invocation root and
-// identity ledger; only immutable process wiring and read-only fixture files
-// are shared.
+// fresh streams. Cleanup assertions are limited to resources observable at
+// this functional edge: Process.Close, invocation completion, provider calls,
+// and temporary roots. Factory/Worker Session, response-stream, subprocess,
+// listener, and port closure belong to their public/integration lifecycle
+// gates; this fixture must not manufacture identities or counters for them.
 type helpPackageFixture struct {
 	process        support.ApplicationProcess
 	providerRunner *testutil.ProviderCommandRunner
@@ -44,34 +47,21 @@ type helpPackageFixture struct {
 	emptyFactoryPath     string
 	malformedFactoryPath string
 
-	nextInvocation atomic.Uint64
-	mu             sync.Mutex
-	active         map[string]helpInvocationResources
-	openedCommands int
-	closedCommands int
-	openedRoutes   int
-	closedRoutes   int
-	openedSessions int
-	closedSessions int
-	openedStreams  int
-	closedStreams  int
-	closeOnce      sync.Once
-	closeErr       error
+	nextInvocation    atomic.Uint64
+	mu                sync.Mutex
+	activeInvocations map[string]struct{}
+	closeOnce         sync.Once
+	closeErr          error
 }
 
 type helpInvocationResources struct {
 	id          string
-	routeID     string
-	sessionID   string
-	streamID    string
-	resultID    string
 	workingRoot string
 }
 
 type helpInvocationResult struct {
-	inputs    *support.CapturedInputs
-	err       error
-	sessionID string
+	inputs *support.CapturedInputs
+	err    error
 }
 
 var helpPackageFixtureState struct {
@@ -113,10 +103,10 @@ func newHelpPackageFixture(t *testing.T) (*helpPackageFixture, error) {
 		return nil, fmt.Errorf("create help package root: %w", err)
 	}
 	fixture := &helpPackageFixture{
-		rootDir:     rootDir,
-		homeDir:     filepath.Join(rootDir, "home"),
-		workingRoot: filepath.Join(rootDir, "working"),
-		active:      make(map[string]helpInvocationResources),
+		rootDir:           rootDir,
+		homeDir:           filepath.Join(rootDir, "home"),
+		workingRoot:       filepath.Join(rootDir, "working"),
+		activeInvocations: make(map[string]struct{}),
 		providerRunner: testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 			ExitCode: helpUnexpectedProviderExit,
 			Stderr:   []byte("help must not dispatch external work"),
@@ -272,10 +262,6 @@ func (fixture *helpPackageFixture) execute(t *testing.T, args ...string) helpInv
 
 	resources := helpInvocationResources{
 		id:          id,
-		routeID:     id + "-route",
-		sessionID:   id + "-session",
-		streamID:    id + "-stream",
-		resultID:    id + "-result",
 		workingRoot: workingRoot,
 	}
 	fixture.openInvocation(resources)
@@ -285,7 +271,7 @@ func (fixture *helpPackageFixture) execute(t *testing.T, args ...string) helpInv
 	}()
 
 	err := fixture.process.Execute(inputs.Input)
-	return helpInvocationResult{inputs: inputs, err: err, sessionID: resources.sessionID}
+	return helpInvocationResult{inputs: inputs, err: err}
 }
 
 func copyHelpDirectory(source, target string) error {
@@ -332,24 +318,14 @@ func helpProcessEnvironment(homeDir string) []string {
 func (fixture *helpPackageFixture) openInvocation(resources helpInvocationResources) {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
-	fixture.active[resources.id] = resources
-	fixture.openedCommands++
-	fixture.openedRoutes++
-	fixture.openedSessions++
-	fixture.openedStreams++
+	fixture.activeInvocations[resources.id] = struct{}{}
 }
 
 func (fixture *helpPackageFixture) closeInvocation(t testing.TB, resources helpInvocationResources) {
 	t.Helper()
 	fixture.mu.Lock()
-	_, wasActive := fixture.active[resources.id]
-	delete(fixture.active, resources.id)
-	if wasActive {
-		fixture.closedCommands++
-		fixture.closedRoutes++
-		fixture.closedSessions++
-		fixture.closedStreams++
-	}
+	_, wasActive := fixture.activeInvocations[resources.id]
+	delete(fixture.activeInvocations, resources.id)
 	fixture.mu.Unlock()
 	if !wasActive {
 		t.Errorf("help invocation %q was closed more than once", resources.id)
@@ -374,26 +350,10 @@ func closeHelpPackageFixture() error {
 		}
 
 		fixture.mu.Lock()
-		active := len(fixture.active)
-		openedCommands, closedCommands := fixture.openedCommands, fixture.closedCommands
-		openedRoutes, closedRoutes := fixture.openedRoutes, fixture.closedRoutes
-		openedSessions, closedSessions := fixture.openedSessions, fixture.closedSessions
-		openedStreams, closedStreams := fixture.openedStreams, fixture.closedStreams
+		active := len(fixture.activeInvocations)
 		fixture.mu.Unlock()
 		if active != 0 {
-			errs = append(errs, fmt.Errorf("active help invocation resources after cleanup = %d", active))
-		}
-		if openedCommands != closedCommands {
-			errs = append(errs, fmt.Errorf("help command sessions = opened:%d closed:%d", openedCommands, closedCommands))
-		}
-		if openedRoutes != closedRoutes {
-			errs = append(errs, fmt.Errorf("help routes = opened:%d closed:%d", openedRoutes, closedRoutes))
-		}
-		if openedSessions != closedSessions {
-			errs = append(errs, fmt.Errorf("help sessions = opened:%d closed:%d", openedSessions, closedSessions))
-		}
-		if openedStreams != closedStreams {
-			errs = append(errs, fmt.Errorf("help streams = opened:%d closed:%d", openedStreams, closedStreams))
+			errs = append(errs, fmt.Errorf("active help invocation handles after cleanup = %d", active))
 		}
 		if got := fixture.processBuilds.Load(); got != 1 {
 			errs = append(errs, fmt.Errorf("root application builds = %d, want exactly one", got))
@@ -414,10 +374,8 @@ func closeHelpPackageFixture() error {
 		}
 		fmt.Fprintf(
 			os.Stderr,
-			"help package topology: builds=%d commands=%d/%d routes=%d/%d sessions=%d/%d streams=%d/%d provider_calls=%d process_closed=%t root_removed=%t\n",
-			fixture.processBuilds.Load(), openedCommands, closedCommands,
-			openedRoutes, closedRoutes, openedSessions, closedSessions,
-			openedStreams, closedStreams, fixture.providerRunner.CallCount(),
+			"help package topology: builds=%d active_invocations=%d provider_calls=%d process_closed=%t root_removed=%t\n",
+			fixture.processBuilds.Load(), active, fixture.providerRunner.CallCount(),
 			processCloseErr == nil, rootRemoved,
 		)
 		fixture.closeErr = errors.Join(errs...)

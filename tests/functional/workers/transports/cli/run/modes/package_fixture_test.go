@@ -19,6 +19,11 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+// This deadline is only a bounded failure guard around the deterministic
+// invocation-done, provider-started, cancellation, and Process.Close
+// signals below. Those channels synchronize the behavior; the deadline is
+// needed only to fail a genuinely hung production Execute/Close lifecycle,
+// which an edge mock cannot prove or replace.
 const modesProcessStopTimeout = 30 * time.Second
 
 type modesRouteBehavior string
@@ -52,9 +57,6 @@ type modesInvocationSpec struct {
 type modesInvocationResources struct {
 	id          string
 	routeID     string
-	sessionID   string
-	streamID    string
-	resultID    string
 	workingRoot string
 	homeDir     string
 	factoryPath string
@@ -82,6 +84,13 @@ type modesInvocationHandle struct {
 	finished   atomic.Bool
 }
 
+// modesPackageFixture substitutes only the ProviderCommandRunner edge for a
+// single root-built process. Cleanup assertions therefore cover the actual
+// process, invocation handles, registered edge routes, active provider calls,
+// and temporary roots. Factory/Worker Session and response-stream closure,
+// plus subprocess/listener/port lifecycle, remain owned by their public and
+// built-binary integration gates; this fixture does not fabricate counters for
+// those resources.
 type modesPackageFixture struct {
 	process     support.ApplicationProcess
 	router      *modesCommandRouter
@@ -91,20 +100,10 @@ type modesPackageFixture struct {
 	processBuilds  atomic.Int32
 	nextInvocation atomic.Uint64
 
-	mu             sync.Mutex
-	active         map[string]modesInvocationResources
-	openedCommands int
-	closedCommands int
-	openedRoutes   int
-	closedRoutes   int
-	openedSessions int
-	closedSessions int
-	openedStreams  int
-	closedStreams  int
-	openedResults  int
-	closedResults  int
-	closeOnce      sync.Once
-	closeErr       error
+	mu                sync.Mutex
+	activeInvocations map[string]struct{}
+	closeOnce         sync.Once
+	closeErr          error
 }
 
 var modesPackageFixtureState struct {
@@ -157,11 +156,11 @@ func newModesPackageFixture() (*modesPackageFixture, error) {
 		return nil, err
 	}
 	fixture := &modesPackageFixture{
-		process:     process,
-		router:      router,
-		rootDir:     rootDir,
-		factoryPath: factoryPath,
-		active:      make(map[string]modesInvocationResources),
+		process:           process,
+		router:            router,
+		rootDir:           rootDir,
+		factoryPath:       factoryPath,
+		activeInvocations: make(map[string]struct{}),
 	}
 	fixture.processBuilds.Store(1)
 	return fixture, nil
@@ -188,23 +187,8 @@ func (fixture *modesPackageFixture) close(ctx context.Context) error {
 	}
 
 	fixture.mu.Lock()
-	if len(fixture.active) != 0 {
-		errs = append(errs, fmt.Errorf("active invocation resources remain: %d", len(fixture.active)))
-	}
-	if fixture.openedCommands != fixture.closedCommands {
-		errs = append(errs, fmt.Errorf("commands opened=%d closed=%d", fixture.openedCommands, fixture.closedCommands))
-	}
-	if fixture.openedRoutes != fixture.closedRoutes {
-		errs = append(errs, fmt.Errorf("routes opened=%d closed=%d", fixture.openedRoutes, fixture.closedRoutes))
-	}
-	if fixture.openedSessions != fixture.closedSessions {
-		errs = append(errs, fmt.Errorf("sessions opened=%d closed=%d", fixture.openedSessions, fixture.closedSessions))
-	}
-	if fixture.openedStreams != fixture.closedStreams {
-		errs = append(errs, fmt.Errorf("streams opened=%d closed=%d", fixture.openedStreams, fixture.closedStreams))
-	}
-	if fixture.openedResults != fixture.closedResults {
-		errs = append(errs, fmt.Errorf("results opened=%d closed=%d", fixture.openedResults, fixture.closedResults))
+	if len(fixture.activeInvocations) != 0 {
+		errs = append(errs, fmt.Errorf("active invocation handles remain: %d", len(fixture.activeInvocations)))
 	}
 	fixture.mu.Unlock()
 	if active := fixture.router.ActiveCallCount(); active != 0 {
@@ -222,10 +206,8 @@ func (fixture *modesPackageFixture) close(ctx context.Context) error {
 
 	fmt.Fprintf(
 		os.Stderr,
-		"modes package topology: builds=%d commands=%d/%d routes=%d/%d sessions=%d/%d streams=%d/%d results=%d/%d provider_calls=%d active_provider_calls=%d root_removed=%t\n",
-		fixture.processBuilds.Load(), fixture.openedCommands, fixture.closedCommands,
-		fixture.openedRoutes, fixture.closedRoutes, fixture.openedSessions, fixture.closedSessions,
-		fixture.openedStreams, fixture.closedStreams, fixture.openedResults, fixture.closedResults,
+		"modes package topology: builds=%d active_invocations=%d provider_routes=%d provider_calls=%d active_provider_calls=%d root_removed=%t\n",
+		fixture.processBuilds.Load(), len(fixture.activeInvocations), fixture.router.RouteCount(),
 		fixture.router.CallCount(), fixture.router.ActiveCallCount(), !pathExists(fixture.rootDir),
 	)
 	return errors.Join(errs...)
@@ -253,9 +235,6 @@ func (fixture *modesPackageFixture) start(t testing.TB, spec modesInvocationSpec
 	resources := modesInvocationResources{
 		id:          id,
 		routeID:     id + "-route",
-		sessionID:   id + "-session",
-		streamID:    id + "-stream",
-		resultID:    id + "-result",
 		workingRoot: workingRoot,
 		homeDir:     homeDir,
 		factoryPath: invocationFactoryPath,
@@ -350,26 +329,16 @@ func (handle *modesInvocationHandle) finish() {
 func (fixture *modesPackageFixture) openInvocation(resources modesInvocationResources) {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
-	fixture.active[resources.id] = resources
-	fixture.openedCommands++
-	fixture.openedRoutes++
-	fixture.openedSessions++
-	fixture.openedStreams++
-	fixture.openedResults++
+	fixture.activeInvocations[resources.id] = struct{}{}
 }
 
 func (fixture *modesPackageFixture) closeInvocation(resources modesInvocationResources) {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
-	if _, ok := fixture.active[resources.id]; !ok {
+	if _, ok := fixture.activeInvocations[resources.id]; !ok {
 		return
 	}
-	delete(fixture.active, resources.id)
-	fixture.closedCommands++
-	fixture.closedRoutes++
-	fixture.closedSessions++
-	fixture.closedStreams++
-	fixture.closedResults++
+	delete(fixture.activeInvocations, resources.id)
 	_ = os.RemoveAll(resources.workingRoot)
 }
 
