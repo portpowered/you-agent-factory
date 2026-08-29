@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,19 +23,35 @@ import (
 
 func TestPackagedLoop(t *testing.T) {
 	fixture := newLoopSharedFixture(t)
+	primaryRan := false
 	t.Run("TestPackagedLoopUsesInvocationDurationAndSkipsOverlap", func(t *testing.T) {
+		primaryRan = true
 		testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t, fixture)
 	})
+	invalidRan := false
 	t.Run("TestPackagedLoopRejectsInvalidDurationBeforeWorkAdmission", func(t *testing.T) {
+		invalidRan = true
 		testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t, fixture)
 	})
+	boundaryCases := 0
 	t.Run("TestPackagedLoopDurationBoundaries", func(t *testing.T) {
-		testPackagedLoopDurationBoundaries(t, fixture)
+		boundaryCases = testPackagedLoopDurationBoundaries(t, fixture)
 	})
+	expected := boundaryCases
+	if primaryRan {
+		expected++
+	}
+	if invalidRan {
+		expected++
+	}
+	fixture.lifecycle.setExpectedSessions(expected)
 }
 
 func testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T, fixture *loopSharedFixture) {
+	observer := newLoopPhaseObserver(t)
+	defer observer.close()
 	start := fixture.clock.Now()
+	schedulerBeforeInvocation := fixture.clock.schedulerTimerRegistrations()
 	runner := newBlockingLoopRunner()
 	scenario := fixture.newScenario(t, runner)
 	scenario.open(t)
@@ -47,27 +64,28 @@ func testPackagedLoopUsesInvocationDurationAndSkipsOverlap(t *testing.T, fixture
 		t.Fatalf("invocation status = %q, want TIMED_OUT for long-lived controller", response.Status)
 	}
 
-	first := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
+	first := waitForLoopSubmission(observer, fixture.submissions, "scheduled-execution")
 	assertLoopSubmission(t, first, "init", "SCHEDULED", "1", start, start)
-	select {
-	case <-runner.started:
-	case <-time.After(time.Second):
-		t.Fatal("loop executor did not begin trigger-at-start execution")
-	}
+	observer.waitForSignal(
+		"provider execution start",
+		runner.started,
+		func() string { return fmt.Sprintf("provider_calls=%d", runner.calls()) },
+	)
 
-	waitForLoopSchedulerTimer(t, fixture.clock)
+	observer.waitForSchedulerTimer("scheduler initial registration", fixture.clock, schedulerBeforeInvocation)
+	schedulerBeforeAdvance := fixture.clock.schedulerTimerRegistrations()
 	fixture.clock.Advance(time.Minute)
-	skipped := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
+	skipped := waitForLoopSubmission(observer, fixture.submissions, "scheduled-execution")
 	assertLoopSubmission(t, skipped, "skipped", "SKIPPED_OVERLAP", "2", start.Add(time.Minute), start.Add(time.Minute))
 	if runner.calls() != 1 {
 		t.Fatalf("overlapping executor calls = %d, want 1", runner.calls())
 	}
 
-	close(runner.release)
-	waitForLoopDispatchCompletion(t, scenario)
-	waitForLoopSchedulerTimer(t, fixture.clock)
+	runner.Release()
+	waitForLoopDispatchCompletion(observer, scenario)
+	observer.waitForSchedulerTimer("scheduler re-arm", fixture.clock, schedulerBeforeAdvance)
 	fixture.clock.Advance(time.Minute)
-	recovered := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
+	recovered := waitForLoopSubmission(observer, fixture.submissions, "scheduled-execution")
 	assertLoopSubmission(t, recovered, "init", "SCHEDULED", "3", start.Add(2*time.Minute), start.Add(2*time.Minute))
 }
 
@@ -86,7 +104,7 @@ func testPackagedLoopRejectsInvalidDurationBeforeWorkAdmission(t *testing.T, fix
 	}
 }
 
-func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture) {
+func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture) int {
 	cases := []struct {
 		name     string
 		every    string
@@ -99,9 +117,11 @@ func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture
 		{name: "above_maximum_168h1s", every: "168h1s", accepted: false},
 		{name: "malformed_tomorrow", every: "tomorrow", accepted: false},
 	}
+	runCases := 0
 	for _, testCase := range cases {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
+			runCases++
 			scenario := fixture.newScenario(t, support.NewRecordingCommandRunner("duration boundary"))
 			scenario.open(t)
 			args := map[string]any{
@@ -125,10 +145,13 @@ func testPackagedLoopDurationBoundaries(t *testing.T, fixture *loopSharedFixture
 			if status != http.StatusOK {
 				t.Fatalf("duration %q status = %d, want 200", testCase.every, status)
 			}
-			submission := waitForLoopSubmission(t, fixture.submissions, "scheduled-execution")
+			observer := newLoopPhaseObserver(t)
+			defer observer.close()
+			submission := waitForLoopSubmission(observer, fixture.submissions, "scheduled-execution")
 			assertLoopSubmission(t, submission, "init", "SCHEDULED", "1", start, start)
 		})
 	}
+	return runCases
 }
 
 func assertNoLoopSubmission(t *testing.T, submissions <-chan work.FactorySubmissionRecord) {
@@ -141,11 +164,12 @@ func assertNoLoopSubmission(t *testing.T, submissions <-chan work.FactorySubmiss
 }
 
 type blockingLoopRunner struct {
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
-	mu      sync.Mutex
-	count   int
+	started     chan struct{}
+	release     chan struct{}
+	startOnce   sync.Once
+	releaseOnce sync.Once
+	mu          sync.Mutex
+	count       int
 }
 
 // loopSchedulerClock keeps the fake clock's scheduler-specific timer
@@ -154,7 +178,8 @@ type blockingLoopRunner struct {
 // advance before the loop scheduler re-arms.
 type loopSchedulerClock struct {
 	*clockwork.FakeClock
-	schedulerTimers chan struct{}
+	schedulerTimers     chan struct{}
+	schedulerTimerCount atomic.Uint64
 }
 
 var _ clockwork.Clock = (*loopSchedulerClock)(nil)
@@ -169,9 +194,17 @@ func newLoopSchedulerClockAt(start time.Time) *loopSchedulerClock {
 func (clock *loopSchedulerClock) AfterFunc(duration time.Duration, callback func()) clockwork.Timer {
 	timer := clock.FakeClock.AfterFunc(duration, callback)
 	if loopSchedulerTimerCaller() {
-		clock.schedulerTimers <- struct{}{}
+		clock.schedulerTimerCount.Add(1)
+		select {
+		case clock.schedulerTimers <- struct{}{}:
+		default:
+		}
 	}
 	return timer
+}
+
+func (clock *loopSchedulerClock) schedulerTimerRegistrations() uint64 {
+	return clock.schedulerTimerCount.Load()
 }
 
 func loopSchedulerTimerCaller() bool {
@@ -194,11 +227,18 @@ func newBlockingLoopRunner() *blockingLoopRunner {
 	return &blockingLoopRunner{started: make(chan struct{}), release: make(chan struct{})}
 }
 
+func (runner *blockingLoopRunner) Release() {
+	if runner == nil {
+		return
+	}
+	runner.releaseOnce.Do(func() { close(runner.release) })
+}
+
 func (runner *blockingLoopRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.mu.Lock()
 	runner.count++
 	runner.mu.Unlock()
-	runner.once.Do(func() { close(runner.started) })
+	runner.startOnce.Do(func() { close(runner.started) })
 	select {
 	case <-runner.release:
 		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("scheduled execution complete")}, nil
@@ -242,7 +282,19 @@ func postLoopInvocation(
 		t.Fatalf("marshal loop invocation: %v", err)
 	}
 	endpoint := scenario.fixture.baseURL + "/factory-sessions/" + scenario.sessionID + "/invocations"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	ctx, cancel := context.WithTimeout(t.Context(), loopSharedFixtureTimeout)
+	defer cancel()
+	requestWithContext, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		endpoint,
+		bytes.NewReader(payload),
+	)
+	if err != nil {
+		t.Fatalf("build loop invocation request: %v", err)
+	}
+	requestWithContext.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(requestWithContext)
 	if err != nil {
 		t.Fatalf("POST loop invocation: %v", err)
 	}
@@ -255,21 +307,6 @@ func postLoopInvocation(
 		decode(decoded)
 	}
 	return response.StatusCode
-}
-
-func waitForLoopSubmission(t *testing.T, submissions <-chan work.FactorySubmissionRecord, workType string) work.FactorySubmissionRecord {
-	t.Helper()
-	deadline := time.After(2 * time.Second)
-	for {
-		select {
-		case record := <-submissions:
-			if record.Request.WorkTypeID == workType {
-				return record
-			}
-		case <-deadline:
-			t.Fatalf("timed out waiting for %s submission", workType)
-		}
-	}
 }
 
 func assertLoopSubmission(
@@ -292,25 +329,141 @@ func assertLoopSubmission(
 	}
 }
 
-func waitForLoopSchedulerTimer(t *testing.T, clock *loopSchedulerClock) {
+type loopPhaseObserver struct {
+	t      testing.TB
+	ctx    context.Context
+	cancel context.CancelFunc
+	limit  time.Duration
+	phase  string
+	last   string
+}
+
+func newLoopPhaseObserver(t testing.TB) *loopPhaseObserver {
 	t.Helper()
-	select {
-	case <-clock.schedulerTimers:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for loop scheduler timer")
+	ctx, cancel := context.WithTimeout(t.Context(), loopSharedFixtureTimeout)
+	return &loopPhaseObserver{t: t, ctx: ctx, cancel: cancel, limit: loopSharedFixtureTimeout}
+}
+
+func (observer *loopPhaseObserver) close() {
+	if observer != nil && observer.cancel != nil {
+		observer.cancel()
 	}
 }
 
-func waitForLoopDispatchCompletion(t *testing.T, scenario *loopScenario) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
-		dispatches := support.ObserveDispatchEvents(t, events)
-		if len(dispatches) > 0 && dispatches[len(dispatches)-1].Response != nil {
+func (observer *loopPhaseObserver) begin(phase, last string) {
+	observer.phase = phase
+	observer.last = last
+}
+
+func (observer *loopPhaseObserver) fail(err error) {
+	observer.t.Fatalf(
+		"LOOP-CONTENTION-01 phase %q timed out after %s; last observation=%s; cause=%v",
+		observer.phase,
+		observer.limit,
+		observer.last,
+		err,
+	)
+}
+
+func (observer *loopPhaseObserver) waitForSignal(
+	phase string,
+	signal <-chan struct{},
+	last func() string,
+) {
+	observer.t.Helper()
+	observer.begin(phase, last())
+	select {
+	case <-signal:
+		observer.last = "signal received"
+	case <-observer.ctx.Done():
+		observer.fail(observer.ctx.Err())
+	}
+}
+
+func (observer *loopPhaseObserver) waitForSchedulerTimer(
+	phase string,
+	clock *loopSchedulerClock,
+	after uint64,
+) {
+	observer.t.Helper()
+	observer.begin(phase, fmt.Sprintf("scheduler_timer_registrations=%d want>%d", clock.schedulerTimerRegistrations(), after))
+	for {
+		registrations := clock.schedulerTimerRegistrations()
+		observer.last = fmt.Sprintf("scheduler_timer_registrations=%d want>%d", registrations, after)
+		if registrations > after {
 			return
 		}
-		runtime.Gosched()
+		select {
+		case <-clock.schedulerTimers:
+		case <-observer.ctx.Done():
+			observer.fail(observer.ctx.Err())
+		}
 	}
-	t.Fatal("timed out waiting for loop executor completion")
+}
+
+func waitForLoopSubmission(
+	observer *loopPhaseObserver,
+	submissions <-chan work.FactorySubmissionRecord,
+	workType string,
+) work.FactorySubmissionRecord {
+	observer.t.Helper()
+	observer.begin("public Work submission "+workType, "no matching Work submission")
+	for {
+		select {
+		case record := <-submissions:
+			observer.last = describeLoopSubmission(record)
+			if record.Request.WorkTypeID == workType {
+				return record
+			}
+		case <-observer.ctx.Done():
+			observer.fail(observer.ctx.Err())
+		}
+	}
+}
+
+func describeLoopSubmission(record work.FactorySubmissionRecord) string {
+	return fmt.Sprintf(
+		"work_type=%q target_state=%q outcome=%q sequence=%q",
+		record.Request.WorkTypeID,
+		record.Request.TargetState,
+		record.Request.Tags["agent_factory.time.trigger_outcome"],
+		record.Request.Tags["agent_factory.time.sequence"],
+	)
+}
+
+func waitForLoopDispatchCompletion(observer *loopPhaseObserver, scenario *loopScenario) {
+	observer.t.Helper()
+	observer.begin("public dispatch completion", "factory_events=0 dispatches=0 completed=false")
+	_, err := support.WaitForObservation(
+		observer.remaining(),
+		func() ([]factoryapi.FactoryEvent, error) {
+			events := support.GetFactoryEventsForSessionAt(observer.t, scenario.fixture.baseURL, scenario.sessionID)
+			dispatches := support.ObserveDispatchEvents(observer.t, events)
+			completed := len(dispatches) > 0 && dispatches[len(dispatches)-1].Response != nil
+			observer.last = fmt.Sprintf(
+				"factory_events=%d dispatches=%d completed=%t",
+				len(events), len(dispatches), completed,
+			)
+			return events, nil
+		},
+		func(events []factoryapi.FactoryEvent) bool {
+			dispatches := support.ObserveDispatchEvents(observer.t, events)
+			return len(dispatches) > 0 && dispatches[len(dispatches)-1].Response != nil
+		},
+	)
+	if err != nil {
+		observer.fail(fmt.Errorf("public dispatch observation: %w", err))
+	}
+}
+
+func (observer *loopPhaseObserver) remaining() time.Duration {
+	deadline, ok := observer.ctx.Deadline()
+	if !ok {
+		return observer.limit
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return time.Nanosecond
+	}
+	return remaining
 }

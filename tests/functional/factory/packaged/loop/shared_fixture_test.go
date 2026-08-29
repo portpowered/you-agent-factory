@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,6 +58,12 @@ type loopLifecycleLedger struct {
 
 func newLoopLifecycleLedger(expected int) *loopLifecycleLedger {
 	return &loopLifecycleLedger{expected: expected}
+}
+
+func (ledger *loopLifecycleLedger) setExpectedSessions(expected int) {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	ledger.expected = expected
 }
 
 func (ledger *loopLifecycleLedger) recordProcessStart() {
@@ -195,6 +200,12 @@ func (router *loopProviderCommandRouter) unregister(paths []string) {
 	}
 }
 
+func (router *loopProviderCommandRouter) registeredCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.runners)
+}
+
 func (router *loopProviderCommandRouter) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
@@ -243,6 +254,11 @@ type loopScenario struct {
 	workingDirectory string
 	selectorPaths    []string
 	sessionID        string
+	runner           platformprocess.CommandRunner
+	cleanup          *loopCleanupStack
+	sessionAbsent    bool
+	lifecycleTracked bool
+	rootRemoved      bool
 }
 
 func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
@@ -317,6 +333,9 @@ func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
 func (fixture *loopSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.lifecycle.assertClean(t)
+	if registered := fixture.provider.registeredCount(); registered != 0 {
+		t.Errorf("LOOP-CLEANUP-001 provider route registrations remaining = %d", registered)
+	}
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.
@@ -373,17 +392,23 @@ func (fixture *loopSharedFixture) newScenario(
 	environment := loopCustomerEnvironment(homeDir)
 	selectorPaths := []string{factoryDir, workingDirectory, fixture.factoryDir}
 	fixture.provider.register(selectorPaths, runner)
-	t.Cleanup(func() {
-		fixture.provider.unregister(selectorPaths)
-	})
-	return &loopScenario{
+	scenario := &loopScenario{
 		fixture:          fixture,
 		rootDir:          rootDir,
 		factoryDir:       factoryDir,
 		environment:      environment,
 		workingDirectory: workingDirectory,
 		selectorPaths:    selectorPaths,
+		runner:           runner,
+		cleanup:          newLoopCleanupStack(),
 	}
+	scenario.cleanup.add("scenario root", scenario.removeRoot)
+	scenario.cleanup.add("provider route registrations", func() error {
+		fixture.provider.unregister(selectorPaths)
+		return nil
+	})
+	t.Cleanup(func() { scenario.close(t) })
+	return scenario
 }
 
 func (scenario *loopScenario) open(t *testing.T) {
@@ -393,51 +418,29 @@ func (scenario *loopScenario) open(t *testing.T) {
 	if scenario.sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("opened loop Factory Session returned default session %q", scenario.sessionID)
 	}
-	t.Cleanup(func() {
-		scenario.close(t)
+	scenario.cleanup.add("Factory Session", func() error {
+		absent, err := closeLoopSession(scenario.fixture.baseURL, scenario.sessionID)
+		scenario.sessionAbsent = absent
+		return err
+	})
+	scenario.cleanup.add("controlled provider runner", func() error {
+		return releaseLoopRunner(scenario.runner)
 	})
 	if err := scenario.fixture.lifecycle.register(
 		scenario.sessionID, scenario.rootDir, scenario.factoryDir,
 	); err != nil {
 		t.Fatalf("register loop scenario lifecycle: %v", err)
 	}
+	scenario.lifecycleTracked = true
 }
 
 func (scenario *loopScenario) close(t testing.TB) {
 	t.Helper()
-	if scenario == nil || scenario.sessionID == "" {
+	if scenario == nil || scenario.cleanup == nil {
 		return
 	}
-	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
-	assertLoopSessionAbsent(t, scenario.fixture.baseURL, scenario.sessionID)
-	sessionAbsent := true
-	rootRemoved := false
-	if err := os.RemoveAll(scenario.rootDir); err != nil {
-		t.Errorf("LOOP-CLEANUP-001 remove scenario root %q: %v", scenario.rootDir, err)
-	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
-		t.Errorf("LOOP-CLEANUP-001 scenario root %q remains: %v", scenario.rootDir, err)
-	} else {
-		rootRemoved = true
-	}
-	if err := scenario.fixture.lifecycle.close(scenario.sessionID, sessionAbsent, rootRemoved); err != nil {
-		t.Errorf("record loop scenario cleanup: %v", err)
-	}
-}
-
-func assertLoopSessionAbsent(t testing.TB, baseURL, sessionID string) {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET deleted loop Factory Session %q: %v", sessionID, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf(
-			"GET deleted loop Factory Session %q status = %d, want 404: %s",
-			sessionID, response.StatusCode, strings.TrimSpace(string(payload)),
-		)
+	if err := scenario.cleanup.run(); err != nil {
+		t.Errorf("LOOP-CLEANUP-001 scenario cleanup: %v", err)
 	}
 }
 
