@@ -279,18 +279,9 @@ func (fixture *agyProcessFixture) createDirectories(rootDir string) error {
 		}
 	}
 	// Keep the long-lived API host's default session idle; scenario behavior
-	// runs through the two immutable explicit-session Factory roots below. The
-	// scenario parents also need a valid default root: named-target discovery
-	// probes the parent before selecting its child, and an invalid parent would
-	// emit a full discovery-failure diagnostic on every scenario open.
-	for label, path := range map[string]string{
-		"host":    fixture.hostDir,
-		"success": fixture.successFolderDir,
-		"timeout": fixture.timeoutFolderDir,
-	} {
-		if err := os.WriteFile(filepath.Join(path, "factory.json"), []byte(agySharedIdleHostFactory), 0o644); err != nil {
-			return fmt.Errorf("write idle AGY %s factory: %w", label, err)
-		}
+	// runs through the two immutable explicit-session Factory roots below.
+	if err := os.WriteFile(filepath.Join(fixture.hostDir, "factory.json"), []byte(agySharedIdleHostFactory), 0o644); err != nil {
+		return fmt.Errorf("write idle AGY host factory: %w", err)
 	}
 	return nil
 }
