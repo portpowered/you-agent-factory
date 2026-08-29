@@ -358,10 +358,10 @@ explicit absence is not mistaken for a migrated pass.
 | Field | Result |
 | --- | --- |
 | Validation status | PASS for the implementation-stage handoff; review owns terminal CI, conflict resolution, and merge. |
-| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once on the rebased final bounded cleanup pass in `41b2da8c5c`. Exit `0`; package elapsed `2.131s`. |
-| Repetition procedure | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/agy -run '^(TestAgyGoldenFinalOnlySuccess|TestAgyGoldenTimeout)$'` after the same pass. Exit `0`; package elapsed `5.415s`. |
-| Race procedure | `go test -race -count=1 -timeout=10m ./tests/functional/workers/inference/agy` after the same pass. Exit `0`; package elapsed `4.868s`. |
-| Full local gate | Fresh `make test` after the final lifecycle/error/stream changes: exit `0`, `157` tests passed, `1` skipped, `0` failed. The helper-only file split and final cleanup path were also covered by the package, race, and backend-size checks. |
+| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once on the bounded target-discovery optimization in `f667939178ab881c0fae043288dd2682dc299af9`. Exit `0`; package elapsed `1.853s`. |
+| Repetition procedure | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/agy` after the same pass. Exit `0`; package elapsed `4.703s`. |
+| Race procedure | `go test -race -count=1 -timeout=10m ./tests/functional/workers/inference/agy` after the same pass. Exit `0`; package elapsed `4.292s`. |
+| Full local gate | Fresh `make test` after the bounded target-discovery changes: exit `0`, `160` tests passed, `1` skipped, `0` failed. The shared-process route and named-target path were also covered by the package, race, and backend-size checks. |
 | Size gate | `go run ./cmd/backendsizecheck -- -root .` exit `0`; all owned Go files are within the 1000-line file and 100-line function limits. |
 | Dependency fidelity | Actual `root.BuildProcess`/`Process.Execute`, Factory Session, Work, Factory Event, response-stream, Workers-to-Providers path, and `edges.Edges` controlled command boundary; no built CLI or live AGY. |
 | Cost and data | Zero remote/paid AGY calls, zero credentials, zero customer data; checked-in sanitized fixtures and unchanged golden files. |
@@ -391,7 +391,7 @@ it does not claim an OS process-tree census after a forcibly killed child.
 | `AGY-CLEAN-003` | PASS | Normal finalization plus injected primary/assertion and cleanup failures preserve all errors and run every cleanup/check operation. | Forced OS child-process kill and nonzero `m.Run` path are not separately injected. |
 | `AGY-PKG-003` | PASS | The exact one-run package gate proves one process/API start, both golden outcomes, balanced sessions/streams, zero active calls, released routes, closed listener/process, and removed root. | OS-wide process inventory is not claimed. |
 | `AGY-SCOPE-003` | PASS | Final PR scope is limited to the c10 ledger and `tests/functional/workers/inference/agy/**`; no `prd.json`, `progress.txt`, provider/recovery, inventory, or unrelated product file is included. | The absent `docs/temp/functional-test-optimization.md` source plan remains a recorded planning dependency. |
-| `PR-CI-004` | RECORDED / REVIEW-OWNED | The comparison hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. The subsequent run on `dedb6ea407e90b995505f5a64ddeb22c6e529c25` (run `33250702051`) recorded the AGY package as passing at `3.399s`; its overall report was blocked by two failures in the unrelated `tests/functional/factory/packaged/goal` package. The final rebased cleanup pass is `41b2da8c5c`. | A fresh hosted timing comparison on the final head and terminal CI remain review-owned; local timings are diagnostic only. |
+| `PR-CI-004` | RECORDED / REVIEW-OWNED | The comparison hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. The preceding final-head run on `d1ccc5e205037b43acb8c6e59af1245fce6ea345` (run `33264251377`) recorded the AGY package as passing at `3.686s`; its required checks were green. The latest bounded local candidate is `f667939178ab881c0fae043288dd2682dc299af9`, pending fresh hosted measurement. | A fresh hosted timing comparison on the pushed head and terminal CI remain review-owned; local timings are diagnostic only. |
 | `VAL-005` | PASS | This report records the exact final package procedure, result, fidelity, cleanup census, scope, cost boundary, and proved/not-proved edges without mutating fixtures or runtime state. | Live AGY, malformed native output, non-timeout outage, canonical inventory, and merge remain outside this lane. |
 
 The hosted AGY package result remained above the comparison, so one bounded
@@ -453,6 +453,19 @@ the race package (`3.985s`), and `make test` (`160` passed, `1` skipped,
 `0` failed); backend-size, formatting, and `git diff --check` also passed.
 Hosted timing remains the authoritative comparison against `1.448s` and will
 be evaluated only from a fresh required CI run on the pushed head.
+
+The current bounded pass stages each unchanged AGY fixture under its own
+named-target parent folder and opens it through the public named-target
+Factory Session contract. This avoids discovery probes into the fixture's
+internal `workers` and `workstations` directories while retaining the split
+factory topology and exact customer-path witnesses. The runtime's actual
+parent-folder command directory is routed and asserted explicitly. The
+candidate in `f667939178ab881c0fae043288dd2682dc299af9` passed the exact
+package once (`1.853s`), package `-count=3` (`4.703s`), race package
+(`4.292s`), `make test` (`160` passed, `1` skipped, `0` failed), backend-size,
+formatting, and `git diff --check`. The prior hosted result was `3.686s`
+against the `1.448s` comparison; a fresh hosted timing result is required
+before claiming the PR timing criterion.
 
 ### Scope and ancestry audit
 
