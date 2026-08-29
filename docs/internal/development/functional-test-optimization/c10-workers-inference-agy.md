@@ -467,6 +467,16 @@ formatting, and `git diff --check`. The prior hosted result was `3.686s`
 against the `1.448s` comparison; a fresh hosted timing result is required
 before claiming the PR timing criterion.
 
+The latest bounded pass keeps that fixture topology unchanged while avoiding
+repeated staging reads and full command-request copies in the package-local
+harness. Immutable topology/prompt assets are loaded once and reused for both
+scenario roots; the route ledger retains only command/workdir witnesses, so
+timeout retries no longer copy prompt/environment payloads that are not part
+of the assertion. The exact package run passed (`3.016s`), the required
+`-count=3` repeat passed (`6.568s`), and the race package passed (`6.788s`),
+all with exit status `0`. These local timings are diagnostic; a fresh hosted
+Backend Functional Coverage result is still required for `PR-CI-004`.
+
 ### Scope and ancestry audit
 
 The read-only audit procedure is:

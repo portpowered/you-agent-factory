@@ -321,12 +321,13 @@ func (fixture *agyProcessFixture) loadScenarios(t *testing.T) error {
 
 func (fixture *agyProcessFixture) copyFactoryDirectories(t *testing.T) error {
 	legacyDir := support.LegacyFixtureDir(t, "executor_success")
+	assets, err := loadAgyFactoryAssets(legacyDir)
+	if err != nil {
+		return fmt.Errorf("load legacy fixture assets: %w", err)
+	}
 	for _, path := range []string{fixture.successDir, fixture.timeoutDir} {
-		if err := copyAgyFactoryDirectory(legacyDir, path); err != nil {
+		if err := copyAgyFactoryDirectory(assets, path); err != nil {
 			return fmt.Errorf("copy legacy fixture to %q: %w", path, err)
-		}
-		if err := os.RemoveAll(filepath.Join(path, "inputs")); err != nil {
-			return fmt.Errorf("clear seed inputs in %q: %w", path, err)
 		}
 	}
 	successModel := fixture.scenarios[agyFinalOnlySuccessGoldenCase].request.Model
@@ -725,8 +726,8 @@ func (fixture *agyProcessFixture) assertRouteRequests(t testing.TB, scenario *ag
 		t.Fatalf("AGY %q routed requests = %d, want %d", scenario.selector, len(requests), want)
 	}
 	for index, request := range requests {
-		if request.Command != agySharedCommand || request.WorkDir != scenario.folderDir {
-			t.Fatalf("AGY %q routed request[%d] = command:%q workdir:%q, want command:%q workdir:%q", scenario.selector, index, request.Command, request.WorkDir, agySharedCommand, scenario.folderDir)
+		if request.command != agySharedCommand || request.workDir != scenario.folderDir {
+			t.Fatalf("AGY %q routed request[%d] = command:%q workdir:%q, want command:%q workdir:%q", scenario.selector, index, request.command, request.workDir, agySharedCommand, scenario.folderDir)
 		}
 	}
 	return len(requests)

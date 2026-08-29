@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -433,11 +434,17 @@ func writeAgyWorkerConfig(factoryDir, model string) error {
 	return nil
 }
 
-func copyAgyFactoryDirectory(sourceDir, targetDir string) error {
-	// The worker file is authored immediately afterward for the case-specific
-	// model, and the checked-in fixture contains no other runtime assets. Copy
-	// only the immutable topology and workstation prompt to avoid walking and
-	// rewriting unused fixture entries for each shared-process scenario.
+type agyFactoryAsset struct {
+	relative string
+	data     []byte
+	mode     fs.FileMode
+}
+
+func loadAgyFactoryAssets(sourceDir string) ([]agyFactoryAsset, error) {
+	// The worker file is authored after these assets are staged for each case.
+	// Read the immutable topology and workstation prompt once for the package,
+	// then reuse the bytes for both scenario directories.
+	assets := make([]agyFactoryAsset, 0, 2)
 	for _, relative := range []string{
 		"factory.json",
 		filepath.Join("workstations", "process", "AGENTS.md"),
@@ -445,17 +452,32 @@ func copyAgyFactoryDirectory(sourceDir, targetDir string) error {
 		sourcePath := filepath.Join(sourceDir, relative)
 		info, err := os.Stat(sourcePath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		data, err := os.ReadFile(sourcePath)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		targetPath := filepath.Join(targetDir, relative)
+		assets = append(assets, agyFactoryAsset{
+			relative: relative,
+			data:     data,
+			mode:     info.Mode().Perm(),
+		})
+	}
+	return assets, nil
+}
+
+func copyAgyFactoryDirectory(assets []agyFactoryAsset, targetDir string) error {
+	// The worker file is authored immediately afterward for the case-specific
+	// model, and the checked-in fixture contains no other runtime assets. Copy
+	// only the immutable topology and workstation prompt to avoid walking and
+	// rewriting unused fixture entries for each shared-process scenario.
+	for _, asset := range assets {
+		targetPath := filepath.Join(targetDir, asset.relative)
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(targetPath, data, info.Mode().Perm()); err != nil {
+		if err := os.WriteFile(targetPath, asset.data, asset.mode); err != nil {
 			return err
 		}
 	}
@@ -591,13 +613,22 @@ type agySharedCommandRoute struct {
 	runner   platformprocess.CommandRunner
 }
 
+// agyRoutedCommandRequest retains only the public route witness. The command
+// payload can contain prompt and environment data; keeping full copies for
+// later assertions adds allocations on every timeout retry without proving a
+// behavior that the golden owns.
+type agyRoutedCommandRequest struct {
+	command string
+	workDir string
+}
+
 // agySharedCommandRouter is immutable after freeze. WorkDir is the only
 // selector used during execution, so no test-order or mutable scenario state
 // can redirect a provider call to the other golden.
 type agySharedCommandRouter struct {
 	mu       sync.Mutex
 	routes   map[string]agySharedCommandRoute
-	requests []platformprocess.CommandRequest
+	requests []agyRoutedCommandRequest
 	active   int
 	frozen   bool
 	released bool
@@ -679,7 +710,7 @@ func (router *agySharedCommandRouter) requestCount() int {
 	return len(router.requests)
 }
 
-func (router *agySharedCommandRouter) requestsSinceForWorkDir(start int, workDir string) []platformprocess.CommandRequest {
+func (router *agySharedCommandRouter) requestsSinceForWorkDir(start int, workDir string) []agyRoutedCommandRequest {
 	router.mu.Lock()
 	defer router.mu.Unlock()
 	if start < 0 {
@@ -692,12 +723,12 @@ func (router *agySharedCommandRouter) requestsSinceForWorkDir(start int, workDir
 	if err != nil {
 		return nil
 	}
-	requests := make([]platformprocess.CommandRequest, 0)
+	requests := make([]agyRoutedCommandRequest, 0)
 	for _, request := range router.requests[start:] {
-		if request.WorkDir != absolute {
+		if request.workDir != absolute {
 			continue
 		}
-		requests = append(requests, cloneAgyCommandRequest(request))
+		requests = append(requests, request)
 	}
 	return requests
 }
@@ -732,7 +763,10 @@ func (router *agySharedCommandRouter) Run(
 		router.mu.Unlock()
 		return platformprocess.CommandResult{}, err
 	}
-	router.requests = append(router.requests, cloneAgyCommandRequest(request))
+	router.requests = append(router.requests, agyRoutedCommandRequest{
+		command: request.Command,
+		workDir: workDir,
+	})
 	router.active++
 	router.mu.Unlock()
 	defer func() {
@@ -741,13 +775,6 @@ func (router *agySharedCommandRouter) Run(
 		router.mu.Unlock()
 	}()
 	return route.runner.Run(ctx, request)
-}
-
-func cloneAgyCommandRequest(request platformprocess.CommandRequest) platformprocess.CommandRequest {
-	request.Args = append([]string(nil), request.Args...)
-	request.Stdin = append([]byte(nil), request.Stdin...)
-	request.Env = append([]string(nil), request.Env...)
-	return request
 }
 
 func assertAgyRoutesRejectInvalidRegistrations(router *agySharedCommandRouter, rootDir, registeredWorkDir string) error {
