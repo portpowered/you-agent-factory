@@ -357,7 +357,7 @@ explicit absence is not mistaken for a migrated pass.
 | Field | Result |
 | --- | --- |
 | Validation status | PASS for the implementation-stage handoff; review owns terminal CI, conflict resolution, and merge. |
-| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once after the final bounded cleanup pass in `41b2da8c5c`. Exit `0`; package elapsed `2.068s`. |
+| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once on the rebased final bounded cleanup pass in `41b2da8c5c`. Exit `0`; package elapsed `2.131s`. |
 | Repetition procedure | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/agy -run '^(TestAgyGoldenFinalOnlySuccess|TestAgyGoldenTimeout)$'` after the same pass. Exit `0`; package elapsed `5.415s`. |
 | Race procedure | `go test -race -count=1 -timeout=10m ./tests/functional/workers/inference/agy` after the same pass. Exit `0`; package elapsed `4.868s`. |
 | Full local gate | Fresh `make test` after the final lifecycle/error/stream changes: exit `0`, `157` tests passed, `1` skipped, `0` failed. The helper-only file split and final cleanup path were also covered by the package, race, and backend-size checks. |
