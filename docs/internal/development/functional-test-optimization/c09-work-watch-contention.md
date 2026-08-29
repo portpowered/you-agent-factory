@@ -159,7 +159,7 @@ merge remain review-owned edges.
 
 ### Environment and artifact
 
-- Commit/build identifier: `45cd1813b18f9ad47255a74b14e86c13f3f31bfb` (exact
+- Commit/build identifier: `8d437797f4956c16a6b83238d3976d5d723cf056` (exact
   delivered implementation/test head; this report refresh is documentation-only).
 - Environment and configuration: detached clean worktree at the exact
   implementation/test head on Windows amd64; Go `go1.25.0`; no PRD or progress
@@ -182,7 +182,7 @@ go test -count=1 -timeout=10m ./tests/functional/work/watch
 It exited with code `0` and emitted:
 
 ```text
-ok  github.com/portpowered/infinite-you/tests/functional/work/watch  4.041s
+ok  github.com/portpowered/infinite-you/tests/functional/work/watch  5.279s
 ```
 
 The clean worktree had no tracked changes, and no package-matching process
@@ -201,8 +201,8 @@ only.
 | CASE-WW-011/012 cleanup and primary-error retention | PASS | local_real; applicable | Success, cancellation, deadline, conflict, disconnect, and replay witnesses wait on explicit close/done signals and assert that the original diagnostic is retained. | Process-driver residency on this shared host is recorded as ENV-001 below. |
 | GATE-FOCUSED | PASS | local_real | `go test -count=20 -run '^TestWorkWatchFollowsStateTransitionsUntilTerminal$' -timeout=10m ./tests/functional/work/watch` passed in `52.115s`; lifecycle witnesses also passed. | Not a whole-package or jobs=8 proof. |
 | GATE-RACE | PASS | local_real | Named race command passed in `11.950s`; the controlled lifecycle race passed in `12.198s`. | No claim about unexercised races. |
-| GATE-PACKAGE | PASS | local_real clean-room result | The delivered-head working-tree package rerun passed in `3.487s`. A detached clean worktree at exact delivered implementation/test head `45cd1813b18f9ad47255a74b14e86c13f3f31bfb` emitted `ok github.com/portpowered/infinite-you/tests/functional/work/watch 4.041s` with exit code `0`, no test failure output, and the clean-room worktree was removed after the command completed. No package-matching process remained after cleanup. | The package result does not prove full-suite `jobs=8` CI or terminal review state. |
-| GATE-LOOPBACK | PASS | local_real; applicable | This report was produced after the detached clean-worktree package proof at exact delivered implementation/test head `45cd1813b18f9ad47255a74b14e86c13f3f31bfb`; tracked-tree `git diff --check` is run after the report refresh. | Review-owned CI and merge remain outside loopback. |
+| GATE-PACKAGE | PASS | local_real clean-room result | The synced delivered-head working-tree package rerun passed in `4.808s`. A detached clean worktree at exact delivered implementation/test head `8d437797f4956c16a6b83238d3976d5d723cf056` emitted `ok github.com/portpowered/infinite-you/tests/functional/work/watch 5.279s` with exit code `0`, no test failure output, and the clean-room worktree was removed after the command completed. No package-matching process remained after cleanup. | The package result does not prove full-suite `jobs=8` CI or terminal review state. |
+| GATE-LOOPBACK | PASS | local_real; applicable | This report was produced after the detached clean-worktree package proof at exact delivered implementation/test head `8d437797f4956c16a6b83238d3976d5d723cf056`; tracked-tree `git diff --check` is run after the report refresh. | Review-owned CI and merge remain outside loopback. |
 | GATE-PR-CI | BLOCKED | remote_real PR runner; review-owned | The prior PR head's Backend Functional Coverage was green for the Work-watch package; this loopback intentionally leaves terminal status to the fresh raised `jobs=8` run on the final handoff head. | Review owns the final-head CI result and terminal merge decision after implementation handoff. |
 | Paid validation and sensitive evidence | PASS | none/controlled; applicable | No paid validation was used; the retained diagnostic is truncated and contains no secrets or raw payloads. | None. |
 | Accessibility and localization | PASS | not applicable | No UI or customer copy changed. | None. |
@@ -232,9 +232,9 @@ only.
 ### Customer journey
 
 1. From a detached clean worktree at exact delivered implementation/test head
-   `45cd1813b18f9ad47255a74b14e86c13f3f31bfb`, run `go test -count=1
+   `8d437797f4956c16a6b83238d3976d5d723cf056`, run `go test -count=1
    -timeout=10m ./tests/functional/work/watch`. The package emitted
-   `ok github.com/portpowered/infinite-you/tests/functional/work/watch 4.041s`
+   `ok github.com/portpowered/infinite-you/tests/functional/work/watch 5.279s`
    with exit code `0`;
    all package test cases therefore completed without a failure result.
 2. The test package's public journey remains root-built Process construction,
