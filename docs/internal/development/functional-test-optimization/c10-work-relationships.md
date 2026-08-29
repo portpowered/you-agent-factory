@@ -221,9 +221,16 @@ remain alongside the unchanged public projections.
 
 | After evidence | Command | Result and property proved |
 | --- | --- | --- |
-| Complete shared behavior | `go test -count=1 -run '^TestSharedServerRelationships$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 4.368s; all 23 eligible child scenarios plus the lifecycle probe group pass on one host, with unique explicit sessions and session-scoped observations. |
+| Complete shared behavior | `go test -count=1 -run '^TestSharedServerRelationships$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 4.827s after the review fix; all 23 eligible child scenarios plus the lifecycle probe group pass on one host, with unique explicit sessions and session-scoped observations. |
 | Retained process proofs | `go test -count=1 -run '^(TestParentChildLineageSurvivesDispatchAndReplay\|TestChildFailureProjectsToDocumentedParentView)$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 2.436s; both built-CLI cases preserve their public CLI, event/replay, lineage, and parent-failure projections. |
 | Final discovery | `go test ./tests/functional/work/relationships -list '^Test'` | exit 0; exactly three top-level tests: the two retained built-CLI tests and `TestSharedServerRelationships`. |
+
+### Review-fix evidence
+
+| Evidence | Command | Result and property proved |
+| --- | --- | --- |
+| Restored command-runner witnesses | `go test -count=1 -timeout=10m -run '^TestSharedServerRelationships$/(DependentWorkFailsWhenDirectPrerequisiteFails\|TransitiveDependencyFailureCascadesToFailedTerminals\|CompletedPrerequisiteIsNotCascadedWhenDependentFails)$' ./tests/functional/work/relationships` | exit 0; package 1.685s; REL-011 through REL-013 use per-fixture `ProviderCommandRunner` routes, retain exact call counts, and assert non-empty command and arguments alongside the public failure/relation/state checks. |
+| Backend size | `make backend-size` | exit 0; all owned Go backend files are within the function limit of 100 lines; `TestSharedServerRelationships` is split into bounded setup and scenario helpers. |
 
 ### LIFE-001 through LIFE-010 — lifecycle and isolation evidence
 
@@ -254,8 +261,8 @@ process, isolated provider state, and temporary-artifact proof.
 
 | Gate | Command | Result and property proved |
 | --- | --- | --- |
-| GATE-REPEAT | `go test -count=3 -run '^TestSharedServerRelationships$/(CrossBatchDependsOnRejectsCrossSessionTargetAtomically\|CrossBatchDependsOnFailedTargetCascadesAtAdmission\|DependentWorkDoesNotDispatchAfterPrerequisiteFailure\|FanInReleasesOnlyAfterEveryPrerequisite\|CrossBatchDependsOnActivePrerequisiteReleasesAfterCompletion)$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 8.257s; all five gated/failure/cross-session selectors pass three times with their existing Work, dispatch, and cleanup assertions. |
-| GATE-RACE | `go test -race -count=1 -run '^TestSharedServerRelationships$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 10.098s; no exercised race in shared routing, parallel sessions, gates, cancellation, or cleanup probes. |
+| GATE-REPEAT | `go test -count=3 -run '^TestSharedServerRelationships$/(CrossBatchDependsOnRejectsCrossSessionTargetAtomically\|CrossBatchDependsOnFailedTargetCascadesAtAdmission\|DependentWorkDoesNotDispatchAfterPrerequisiteFailure\|FanInReleasesOnlyAfterEveryPrerequisite\|CrossBatchDependsOnActivePrerequisiteReleasesAfterCompletion)$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 24.770s after the review fix; all five gated/failure/cross-session selectors pass three times with their existing Work, dispatch, and cleanup assertions. |
+| GATE-RACE | `go test -race -count=1 -run '^TestSharedServerRelationships$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 18.527s after the review fix; no exercised race in shared routing, parallel sessions, gates, cancellation, or cleanup probes. |
 | Lifecycle focused selector | `go test -count=1 -run '^TestSharedServerRelationships$/LifecycleCleanupProbes$' -timeout=10m ./tests/functional/work/relationships` | exit 0; package 2.777s; cancellation, bounded timeout, early-return diagnostic preservation, and host reuse pass. |
 
 The package-level result is intentionally not claimed here. GATE-PACKAGE,
