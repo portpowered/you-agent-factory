@@ -10,11 +10,11 @@ import (
 // Isolation: isolated-with-reason - shutdown join; a real blocked ACP peer
 // must be canceled and joined when the root process stops.
 func TestProvidersShutdownCancelsActivePromptAndJoinsACPProcess(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "block")
 	signal := filepath.Join(t.TempDir(), "prompt-started")
-	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", signal)
+	fixture := functionalACPFixture("block")
+	fixture.PromptSignalPath = signal
 	var starts atomic.Int32
-	server := startACPDaemonProcess(t, &starts)
+	server := startACPDaemonProcess(t, &starts, fixture)
 	defer server.Stop(t)
 	executionDone := make(chan error, 1)
 	go func() {

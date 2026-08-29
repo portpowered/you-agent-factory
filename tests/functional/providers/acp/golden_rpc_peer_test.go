@@ -14,8 +14,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 )
 
-const goldenACPModeEnvironment = "YOU_TEST_ACP_GOLDEN_MODE"
-
 type rpcEnvelope struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -31,11 +29,11 @@ type rpcError struct {
 	Data    any    `json:"data,omitempty"`
 }
 
-func goldenACPCommandFactory(starts *atomic.Int32) platformprocess.CommandFactory {
+func goldenACPCommandFactory(starts *atomic.Int32, fixture acpFixtureConfig) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if name == "cursor-agent" && len(args) == 1 && args[0] == "acp" {
 			starts.Add(1)
-			return exec.Command(os.Args[0], "-test.run=^TestACPGoldenRPCPeerProcess$")
+			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPGoldenRPCPeerProcess", fixture)...)
 		}
 		return exec.Command(name, args...)
 	}
@@ -44,12 +42,20 @@ func goldenACPCommandFactory(starts *atomic.Int32) platformprocess.CommandFactor
 // Isolation: isolated-with-reason - helper-process boundary; this child only
 // serves a parent-selected golden mode and owns no standalone product proof.
 func TestACPGoldenRPCPeerProcess(t *testing.T) {
-	mode := os.Getenv(goldenACPModeEnvironment)
-	if mode == "" {
+	fixture, present, err := loadACPFixtureFromArgs()
+	if !present {
 		return
 	}
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if fixture.Kind != acpFixtureKindGolden {
+		_, _ = fmt.Fprintf(os.Stderr, "acp fixture kind %q does not select the golden peer\n", fixture.Kind)
+		os.Exit(2)
+	}
 	peer := goldenRPCPeer{
-		mode:    mode,
+		mode:    fixture.Mode,
 		scanner: bufio.NewScanner(os.Stdin),
 		writer:  bufio.NewWriter(os.Stdout),
 	}

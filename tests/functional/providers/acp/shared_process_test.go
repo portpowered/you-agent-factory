@@ -30,8 +30,6 @@ const acpSharedProcessTimeout = 20 * time.Second
 // The controlled peer keys its protocol failure to the failure scenario, while
 // each explicit Factory Session retains its own peer boundary.
 func TestACPSharedProcess(t *testing.T) {
-	t.Setenv(acpHelperEnvironment, "shared-spine")
-	t.Setenv("YOU_TEST_ACP_SESSION_ID", "")
 	fixture := newACPSharedProcessFixture(t)
 	runACPSharedEligibleBehavior(t, fixture)
 	functionalevidence.Covers(t, "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list")
@@ -46,6 +44,7 @@ type acpSharedProcessFixture struct {
 	peerStartMarker string
 	peerExits       string
 	peerReady       string
+	peerFixture     acpFixtureConfig
 	legacy          *legacyProvider
 	rootBuilds      atomic.Int32
 	peerStarts      atomic.Int32
@@ -54,6 +53,16 @@ type acpSharedProcessFixture struct {
 	opened          map[string]struct{}
 	closed          map[string]struct{}
 	closeOnce       sync.Once
+}
+
+func (fixture *acpSharedProcessFixture) usePeerMode(mode string) {
+	fixture.peerFixture.Mode = mode
+	fixture.peerFixture.ContentSentinel = ""
+}
+
+func (fixture *acpSharedProcessFixture) usePeerContentMode(sentinel string) {
+	fixture.peerFixture.Mode = "content"
+	fixture.peerFixture.ContentSentinel = sentinel
 }
 
 type acpSharedSession struct {
@@ -78,9 +87,10 @@ func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 	peerStarts := filepath.Join(t.TempDir(), "peer-starts")
 	peerExits := filepath.Join(t.TempDir(), "peer-exits")
 	peerReady := filepath.Join(t.TempDir(), "peer-ready")
-	t.Setenv(acpHelperStartMarkerEnvironment, peerStarts)
-	t.Setenv(acpHelperExitMarkerEnvironment, peerExits)
-	t.Setenv(acpHelperReadyMarkerEnvironment, peerReady)
+	peerFixture := functionalACPFixture("shared-spine")
+	peerFixture.HelperStartMarkerPath = peerStarts
+	peerFixture.HelperExitMarkerPath = peerExits
+	peerFixture.HelperReadyMarkerPath = peerReady
 	installSharedACPIntegration(t, homeDir)
 	api := support.NewProcessAPIServer()
 	legacy := &legacyProvider{response: providers.ExecuteResult{Content: "legacy route COMPLETE"}}
@@ -90,6 +100,7 @@ func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 		peerStartMarker: peerStarts,
 		peerExits:       peerExits,
 		peerReady:       peerReady,
+		peerFixture:     peerFixture,
 		legacy:          legacy,
 		opened:          make(map[string]struct{}),
 		closed:          make(map[string]struct{}),
@@ -97,10 +108,13 @@ func newACPSharedProcessFixture(t *testing.T) *acpSharedProcessFixture {
 
 	fixture.rootBuilds.Add(1)
 	fixture.process = support.BuildProcess(t, serviceedges.Edges{
-		APIServerStarter:              api.Start,
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&fixture.peerStarts),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-		ProviderOverride:              legacy,
+		APIServerStarter: api.Start,
+		PlatformProcessCommandFactory: acpHelperCommandFactoryWithProvider(
+			&fixture.peerStarts,
+			func() acpFixtureConfig { return fixture.peerFixture },
+		),
+		ProvidersExecutableLocator: availableExecutableLocator{},
+		ProviderOverride:           legacy,
 	})
 
 	environment := append(os.Environ(),

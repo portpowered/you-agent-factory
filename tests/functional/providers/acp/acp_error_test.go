@@ -64,11 +64,11 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "workstations", "process", "AGENTS.md"), workstation, 0o600); err != nil {
 		t.Fatalf("write ACP workstation environment: %v", err)
 	}
-	t.Setenv(acpHelperEnvironment, "stderr")
+	fixture := functionalACPFixture("stderr")
 
 	var starts atomic.Int32
 	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -107,11 +107,11 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP failure"}`))
 			writeACPWorker(t, dir, "cursor-acp")
-			t.Setenv(acpHelperEnvironment, test.mode)
+			fixture := functionalACPFixture(test.mode)
 
 			var starts atomic.Int32
 			_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-				PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+				PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 				ProvidersExecutableLocator:    availableExecutableLocator{},
 			}, 20*time.Second)
 			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
@@ -134,7 +134,7 @@ func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *t
 
 	var starts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, functionalACPFixture("1")),
 		ProvidersExecutableLocator:    missingExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {

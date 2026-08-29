@@ -21,12 +21,12 @@ func TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP request"}`))
 	writeACPWorker(t, dir, "cursor-acp")
-	t.Setenv(goldenACPModeEnvironment, "success")
+	fixture := goldenACPFixture("success")
 	t.Setenv("YOU_ACP_GOLDEN_SENTINEL", "preserved")
 
 	var starts atomic.Int32
 	_, listed, factoryEvents, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: goldenACPCommandFactory(&starts),
+		PlatformProcessCommandFactory: goldenACPCommandFactory(&starts, fixture),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 
