@@ -29,6 +29,7 @@ var (
 
 type characterizationOriginOptions struct {
 	failManifest bool
+	failBackend  bool
 	blockModel   bool
 }
 
@@ -89,6 +90,10 @@ func (origin *characterizationOrigin) ServeHTTP(writer http.ResponseWriter, requ
 	case request.URL.Path == story001ModelResolvePath():
 		origin.serveModel(index, writer, request)
 	case strings.HasSuffix(request.URL.Path, "/"+story001BackendAsset):
+		if origin.options.failBackend {
+			origin.respond(index, writer, http.StatusServiceUnavailable, "text/plain", []byte("story-002 backend unavailable\n"))
+			return
+		}
 		origin.respond(index, writer, http.StatusOK, "application/octet-stream", story001BackendBody)
 	case request.URL.Path == "/embed":
 		origin.respondJSON(index, writer, http.StatusOK, map[string]any{
@@ -207,6 +212,16 @@ func (origin *characterizationOrigin) assetExchanges() []originExchange {
 		}
 	}
 	return assets
+}
+
+func (origin *characterizationOrigin) modelContentResponseBytes() int64 {
+	var total int64
+	for _, exchange := range origin.assetExchanges() {
+		if exchange.Method == http.MethodGet && exchange.Path == story001ModelResolvePath() {
+			total += exchange.ResponseBodyBytes
+		}
+	}
+	return total
 }
 
 func (origin *characterizationOrigin) modelStartCount() int {
