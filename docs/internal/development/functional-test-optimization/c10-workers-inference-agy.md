@@ -357,9 +357,10 @@ explicit absence is not mistaken for a migrated pass.
 | Field | Result |
 | --- | --- |
 | Validation status | PASS for the implementation-stage handoff; review owns terminal CI, conflict resolution, and merge. |
-| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once after the final functional-test refactor and size-gate split. Exit `0`; package elapsed `4.469s`. |
-| Repetition procedure | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/agy -run '^(TestAgyGoldenFinalOnlySuccess|TestAgyGoldenTimeout)$'` after the same split. Exit `0`; package elapsed `6.383s`. |
-| Full local gate | Fresh `make test` after the lifecycle/error/stream changes: exit `0`, `153` tests passed, `1` skipped, `0` failed. The later helper-only file split was covered by the final package run and backend-size check. |
+| Runtime procedure | `go test -count=1 -timeout=10m ./tests/functional/workers/inference/agy` run exactly once after the final bounded cleanup pass in `8db062fb06`. Exit `0`; package elapsed `2.068s`. |
+| Repetition procedure | `go test -count=3 -timeout=10m ./tests/functional/workers/inference/agy -run '^(TestAgyGoldenFinalOnlySuccess|TestAgyGoldenTimeout)$'` after the same pass. Exit `0`; package elapsed `5.415s`. |
+| Race procedure | `go test -race -count=1 -timeout=10m ./tests/functional/workers/inference/agy` after the same pass. Exit `0`; package elapsed `4.868s`. |
+| Full local gate | Fresh `make test` after the final lifecycle/error/stream changes: exit `0`, `157` tests passed, `1` skipped, `0` failed. The helper-only file split and final cleanup path were also covered by the package, race, and backend-size checks. |
 | Size gate | `go run ./cmd/backendsizecheck -- -root .` exit `0`; all owned Go files are within the 1000-line file and 100-line function limits. |
 | Dependency fidelity | Actual `root.BuildProcess`/`Process.Execute`, Factory Session, Work, Factory Event, response-stream, Workers-to-Providers path, and `edges.Edges` controlled command boundary; no built CLI or live AGY. |
 | Cost and data | Zero remote/paid AGY calls, zero credentials, zero customer data; checked-in sanitized fixtures and unchanged golden files. |
@@ -389,8 +390,17 @@ it does not claim an OS process-tree census after a forcibly killed child.
 | `AGY-CLEAN-003` | PASS | Normal finalization plus injected primary/assertion and cleanup failures preserve all errors and run every cleanup/check operation. | Forced OS child-process kill and nonzero `m.Run` path are not separately injected. |
 | `AGY-PKG-003` | PASS | The exact one-run package gate proves one process/API start, both golden outcomes, balanced sessions/streams, zero active calls, released routes, closed listener/process, and removed root. | OS-wide process inventory is not claimed. |
 | `AGY-SCOPE-003` | PASS | Final PR scope is limited to the c10 ledger and `tests/functional/workers/inference/agy/**`; no `prd.json`, `progress.txt`, provider/recovery, inventory, or unrelated product file is included. | The absent `docs/temp/functional-test-optimization.md` source plan remains a recorded planning dependency. |
-| `PR-CI-004` | RECORDED / REVIEW-OWNED | The prior hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. | A fresh hosted timing comparison on the final head, terminal CI, and the bounded non-improvement decision occur after push in review; local timings are diagnostic only. |
+| `PR-CI-004` | RECORDED / REVIEW-OWNED | The comparison hosted Backend Functional Coverage report at head `d23666349df3dfca97b21220bd7a38da17c0f074` (run `33235638878`) recorded the AGY package timing as `1.448s` with a passing package result. The subsequent run on `dedb6ea407e90b995505f5a64ddeb22c6e529c25` (run `33250702051`) recorded the AGY package as passing at `3.399s`; its overall report was blocked by two failures in the unrelated `tests/functional/factory/packaged/goal` package. The final cleanup pass is `8db062fb06`. | A fresh hosted timing comparison on the final head and terminal CI remain review-owned; local timings are diagnostic only. |
 | `VAL-005` | PASS | This report records the exact final package procedure, result, fidelity, cleanup census, scope, cost boundary, and proved/not-proved edges without mutating fixtures or runtime state. | Live AGY, malformed native output, non-timeout outage, canonical inventory, and merge remain outside this lane. |
+
+The hosted AGY package result remained above the comparison, so one bounded
+follow-up was applied: once the required terminal status witness exists, the
+cleanup path now treats the public session `DELETE` status (`204` or idempotent
+`404`) as the deletion witness and avoids a redundant serialized post-delete
+`GET`. Active-session conflicts retain the existing terminate/status/delete
+fallback. The exact response-stream EOF/no-extra-frame assertion, cleanup
+census, route ledger, and local functional behavior remained passing. A fresh
+hosted measurement for `8db062fb06` is handed to review after the final push.
 
 ### Scope and ancestry audit
 
