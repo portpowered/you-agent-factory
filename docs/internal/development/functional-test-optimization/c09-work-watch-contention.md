@@ -1,5 +1,30 @@
 # C09 Work-watch contention
 
+## Source-plan authority and conflict resolution
+
+The task packet names `docs/temp/functional-test-optimization.md` as its
+`context.sourcePlan`. That path is a gitignored temporary pointer and is not
+available in this checkout. The read-only authority checks performed on
+2026-08-28 were:
+
+- `Test-Path docs/temp/functional-test-optimization.md` -> `False`;
+- `git ls-tree -r origin/main -- docs/temp/functional-test-optimization.md` ->
+  no entry; and
+- `git log --all --full-history --oneline --
+  docs/temp/functional-test-optimization.md` -> no entry.
+
+This tracked c09 artifact is the explicit reviewable replacement authority and
+evidence record for the two retained source-plan references. The PRD remains
+the task packet's scope and acceptance authority; this resolution does not
+change it. `Scope 7 — winning raised-parallelism configuration must remain
+green` is preserved as the raised `jobs=8` PR-CI gate owned by review, without
+a local wall-clock threshold. `Functional test-case discipline` is preserved
+by the complete CASE-WW-001 through CASE-WW-017 matrix and the existing or
+not-applicable ownership recorded below. No source-plan requirement is
+removed, weakened, or reinterpreted, and no production, support, baseline,
+workflow, sibling, or generated surface is added. The absent temporary pointer
+is not used as a silent substitute or as a reason to broaden this lane.
+
 ## Pre-change CI diagnostic
 
 - Run: `33220840795`
@@ -108,17 +133,19 @@ The witnesses now cover CASE-WW-001 through CASE-WW-012 and CASE-WW-016:
 The implementation changes only the watch functional package and this evidence
 document. No production, generated, support, sibling, baseline, workflow, or
 customer-contract files changed. No sleep, polling loop, or blanket timeout
-increase was added. Clean-room execution, final validation-loopback, raised
-`jobs=8` CI, PR review, and merge remain unproven edges for the next story.
+increase was added. The exact-head clean-room execution and final
+validation-loopback are recorded below; raised `jobs=8` CI, PR review, and
+merge remain review-owned edges.
 
 ## Validation loopback report
 
 ### Environment and artifact
 
-- Commit/build identifier: `3df262bdea535cd21e17379659f8383ffa416c16`.
-- Environment and configuration: detached clean worktree at the delivered
-  commit on Windows amd64; Go `go1.25.0`; no PRD or progress scaffolding was
-  present in the clean worktree.
+- Commit/build identifier: `e3f8eca809d4eaca79e860dd887485050630154f` (exact
+  implementation/test head; this report refresh is documentation-only).
+- Environment and configuration: detached clean worktree at the exact
+  implementation/test head on Windows amd64; Go `go1.25.0`; no PRD or progress
+  scaffolding was present in the clean worktree.
 - Customer entry point: `root.BuildProcess` plus `Process.Execute`, using the
   public `you work watch` CLI contract.
 - Real and substituted dependencies: production root/CLI/HTTP/Work/Factory
@@ -127,6 +154,23 @@ increase was added. Clean-room execution, final validation-loopback, raised
   used for persisted replay.
 - Cost/call budget used: free local validation; no paid provider or remote
   dependency calls.
+
+The exact-head package proof was:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/work/watch
+```
+
+It exited with code `0` and emitted:
+
+```text
+ok  github.com/portpowered/infinite-you/tests/functional/work/watch  7.581s
+```
+
+The clean worktree had no tracked changes, and no package-matching process
+remained after the command completed. The report was refreshed after this
+proof against the same executable head; the refresh changes documentation
+only.
 
 ### Project criteria
 
@@ -139,9 +183,9 @@ increase was added. Clean-room execution, final validation-loopback, raised
 | CASE-WW-011/012 cleanup and primary-error retention | PASS | local_real; applicable | Success, cancellation, deadline, conflict, disconnect, and replay witnesses wait on explicit close/done signals and assert that the original diagnostic is retained. | Process-driver residency on this shared host is recorded as ENV-001 below. |
 | GATE-FOCUSED | PASS | local_real | `go test -count=20 -run '^TestWorkWatchFollowsStateTransitionsUntilTerminal$' -timeout=10m ./tests/functional/work/watch` passed in `52.115s`; lifecycle witnesses also passed. | Not a whole-package or jobs=8 proof. |
 | GATE-RACE | PASS | local_real | Named race command passed in `11.950s`; the controlled lifecycle race passed in `12.198s`. | No claim about unexercised races. |
-| GATE-PACKAGE | PASS | local_real clean-room result | The implementation checkout package run passed in `8.875s`. A detached clean worktree at this commit emitted `ok github.com/portpowered/infinite-you/tests/functional/work/watch 5.084s` with no test failure output and no matching clean-room processes after bounded driver cleanup. | The outer Go driver did not exit after emitting `ok` on this shared host and was interrupted after the result was captured; normal shell exit is an environmental edge, not a package assertion failure. |
-| GATE-LOOPBACK | PASS | local_real; applicable | This report was produced after the detached clean-worktree package proof; tracked-tree `git diff --check` passed at the delivered head. | Review-owned CI and merge remain outside loopback. |
-| GATE-PR-CI | BLOCKED | remote_real PR runner; review-owned | No PR had been opened at the time of this report, so raised `jobs=8` CI has not yet measured this head. | Open PR, start authoritative Backend Functional Coverage, and let review drive it terminal. |
+| GATE-PACKAGE | PASS | local_real clean-room result | The implementation/test-head package rerun passed in `7.082s`. A detached clean worktree at exact implementation/test head `e3f8eca809d4eaca79e860dd887485050630154f` emitted `ok github.com/portpowered/infinite-you/tests/functional/work/watch 7.581s` with exit code `0`, no test failure output, and no matching clean-room processes after cleanup. | The package result does not prove full-suite `jobs=8` CI or terminal review state. |
+| GATE-LOOPBACK | PASS | local_real; applicable | This report was produced after the detached clean-worktree package proof at exact head `e3f8eca809d4eaca79e860dd887485050630154f`; tracked-tree `git diff --check` is run after the report refresh. | Review-owned CI and merge remain outside loopback. |
+| GATE-PR-CI | BLOCKED | remote_real PR runner; review-owned | The exact-head loopback was captured before the final report-refresh push, so raised `jobs=8` CI has not yet measured the final head. | Push the final head, start authoritative Backend Functional Coverage, and let review drive it terminal. |
 | Paid validation and sensitive evidence | PASS | none/controlled; applicable | No paid validation was used; the retained diagnostic is truncated and contains no secrets or raw payloads. | None. |
 | Accessibility and localization | PASS | not applicable | No UI or customer copy changed. | None. |
 
@@ -169,17 +213,19 @@ increase was added. Clean-room execution, final validation-loopback, raised
 
 ### Customer journey
 
-1. From a detached clean worktree at the delivered commit, run `go test
-   -count=1 -timeout=10m ./tests/functional/work/watch`. The package emitted
-   `ok github.com/portpowered/infinite-you/tests/functional/work/watch 5.084s`;
+1. From a detached clean worktree at exact implementation/test head
+   `e3f8eca809d4eaca79e860dd887485050630154f`, run `go test -count=1
+   -timeout=10m ./tests/functional/work/watch`. The package emitted
+   `ok github.com/portpowered/infinite-you/tests/functional/work/watch 7.581s`
+   with exit code `0`;
    all package test cases therefore completed without a failure result.
 2. The test package's public journey remains root-built Process construction,
    public CLI invocation, production HTTP/Factory Event behavior, and the
    unchanged Work-watch NDJSON contract. The controlled stream cases use
    observable response, publication, delivery, and close signals.
-3. The tracked delivered tree passed `git diff --check`; the clean worktree was
-   removed after its result and no clean-room process matching the package
-   remained.
+3. The tracked delivered tree passed `git diff --check` after this report
+   refresh; the clean worktree was removed after its result and no clean-room
+   process matching the package remained.
 
 ### Cross-task integration and usability
 
@@ -199,7 +245,7 @@ increase was added. Clean-room execution, final validation-loopback, raised
 
 | ID | Severity | Reproduction | Expected | Actual | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| ENV-001 | non-blocking environmental | Run the package command through the shared Windows host runner. | The outer Go driver exits shortly after the package reports its result. | The package emitted `ok` and the driver remained resident; the exact clean-room driver was stopped after the result was captured, with no matching clean-room process remaining. | Clean-room package output above; same behavior was recorded during the implementation package runs. |
+| ENV-001 | non-blocking environmental | Run the package command through the shared Windows host runner. | The outer Go driver exits shortly after the package reports its result. | The package emitted `ok`; no package-matching clean-room process remained after the exact-head run. The shared host's occasional outer-driver residency remains recorded from the implementation runs, but it did not alter this clean-room exit code or package result. | Exact-head package output above; the implementation-run residency observation is retained without treating it as a package-owned leak. |
 
 ### Verdict
 
