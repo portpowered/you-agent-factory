@@ -9,10 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -24,16 +25,12 @@ import (
 
 const preparationFailureSensitiveValue = "credential-that-must-not-leak"
 
-// TestNamedInvocationSharedPreparationFailures keeps every preparation-only
-// failure on one immutable root process. Each case owns its Factory files,
-// HOME, working directory, and command output, so sharing the process cannot
-// hide cross-scenario state.
-func TestNamedInvocationSharedPreparationFailures(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for shared named-invocation preparation failures")
-	}
-
-	fixture := newNamedInvocationFailureFixture(t)
+// runNamedInvocationSharedPreparationFailures keeps every preparation-only
+// failure on the package's one immutable root process. Each case owns its
+// Factory files, HOME, working directory, and command output, so sharing the
+// process cannot hide cross-scenario state.
+func runNamedInvocationSharedPreparationFailures(t *testing.T, fixture *namedInvocationFixture) {
+	t.Helper()
 	tests := []struct {
 		name      string
 		selection string
@@ -130,91 +127,53 @@ type sharedPreparationFailureCase struct {
 	packaged  bool
 }
 
-type namedInvocationFailureFixture struct {
-	process                   support.ApplicationProcess
-	provider                  *testutil.ProviderCommandRunner
-	listener                  *listenerStartObservation
-	observation               *preparationSideEffectObservation
-	packagedFactorySource     string
-	packagedFactorySourceHome string
-	processBuilds             atomic.Int32
-}
-
-func newNamedInvocationFailureFixture(t *testing.T) *namedInvocationFailureFixture {
-	t.Helper()
-	fixture := &namedInvocationFailureFixture{
-		provider:                  testutil.NewProviderCommandRunner(),
-		listener:                  &listenerStartObservation{},
-		observation:               &preparationSideEffectObservation{},
-		packagedFactorySourceHome: t.TempDir(),
-	}
-	process, err := fixture.buildProcess(t.Context(), fixture.edges())
-	if err != nil {
-		t.Fatalf("build shared named-invocation failure process: %v", err)
-	}
-	fixture.process = process
-	// Register this assertion before CleanupProcess so the reusable process is
-	// closed before final route and effect counts are checked.
-	t.Cleanup(func() {
-		if got := fixture.processBuilds.Load(); got != 1 {
-			t.Errorf("shared named-invocation failure process constructions = %d, want 1", got)
-		}
-		if got := fixture.listener.calls.Load(); got != 0 {
-			t.Errorf("shared named-invocation failure HTTP listener starts = %d, want 0", got)
-		}
-		fixture.observation.assertZero(t, fixture.provider.CallCount(), fixture.listener.calls.Load())
-	})
-	support.CleanupProcess(t, process)
-	return fixture
-}
-
-func (fixture *namedInvocationFailureFixture) buildProcess(
-	ctx context.Context,
-	edges serviceedges.Edges,
-) (support.ApplicationProcess, error) {
-	fixture.processBuilds.Add(1)
-	return support.BuildProcessWithContext(ctx, edges)
-}
-
-func (fixture *namedInvocationFailureFixture) edges() serviceedges.Edges {
-	return preparationFailureEdges(fixture.observation, fixture.provider, fixture.listener)
-}
-
-func preparationFailureEdges(
-	observation *preparationSideEffectObservation,
-	provider *testutil.ProviderCommandRunner,
-	listener *listenerStartObservation,
-) serviceedges.Edges {
+func (fixture *namedInvocationFixture) edges() serviceedges.Edges {
 	return serviceedges.Edges{
-		APIServerStarter:          listener.Start,
-		ProviderCommandRunner:     provider,
-		FactorySessionIDGenerator: observation.nextSessionID,
-		RuntimeHostObserver:       observation.observeRuntimeHost,
-		WorkRequestIDGenerator:    observation.nextWorkRequestID,
-		SubmissionRecorder:        observation.recordSubmission,
-		DispatchRecorder:          observation.recordDispatch,
-		RecordingWriteFile:        observation.recordRecordingWrite,
-		RecordingAppendFile:       observation.recordRecordingAppend,
-		RecordingMakeDirectories:  observation.recordRecordingMakeDirectories,
-		RecordingCreateTempFile:   observation.recordRecordingCreateTempFile,
-		RecordingRemovePath:       observation.recordRecordingRemove,
-		RecordingRenamePath:       observation.recordRecordingRename,
-		RecordingReadFile:         observation.recordRecordingRead,
-		RecordingOpenFile:         observation.recordRecordingOpen,
-		RecordingReadDirectory:    observation.recordRecordingReadDirectory,
+		APIServerStarter:                          fixture.listener.Start,
+		ProviderCommandRunner:                     fixture.provider,
+		FactoryDefinitionAuthoredReaderFileSystem: fixture.authoredReader,
+		FactorySessionIDGenerator:                 fixture.nextSessionID,
+		RuntimeHostObserver:                       fixture.observation.observeRuntimeHost,
+		WorkRequestIDGenerator:                    fixture.nextWorkRequestID,
+		SubmissionRecorder:                        fixture.recordSubmission,
+		DispatchRecorder:                          fixture.observation.recordDispatch,
+		RecordingWriteFile:                        fixture.observation.recordRecordingWrite,
+		RecordingAppendFile:                       fixture.observation.recordRecordingAppend,
+		RecordingMakeDirectories:                  fixture.observation.recordRecordingMakeDirectories,
+		RecordingCreateTempFile:                   fixture.observation.recordRecordingCreateTempFile,
+		RecordingRemovePath:                       fixture.observation.recordRecordingRemove,
+		RecordingRenamePath:                       fixture.observation.recordRecordingRename,
+		RecordingReadFile:                         fixture.observation.recordRecordingRead,
+		RecordingOpenFile:                         fixture.observation.recordRecordingOpen,
+		RecordingReadDirectory:                    fixture.observation.recordRecordingReadDirectory,
 	}
+}
+
+func (fixture *namedInvocationFixture) nextSessionID() string {
+	fixture.observation.sessionIDs.Add(1)
+	return uuid.NewString()
+}
+
+func (fixture *namedInvocationFixture) nextWorkRequestID() string {
+	fixture.observation.workIDs.Add(1)
+	return uuid.NewString()
+}
+
+func (fixture *namedInvocationFixture) recordSubmission(record work.FactorySubmissionRecord) {
+	fixture.observation.recordSubmission(record)
+	fixture.submissions.observe(record)
 }
 
 func runSharedPreparationFailureCase(
 	t *testing.T,
-	fixture *namedInvocationFailureFixture,
+	fixture *namedInvocationFixture,
 	test sharedPreparationFailureCase,
 ) {
 	t.Helper()
-	scenario := newNamedInvocationFailureScenario(t)
+	scenario := fixture.newScenario(t)
 	factoryPath := filepath.Join(scenario.workingDirectory, "factory.json")
 	if test.packaged {
-		factoryDir := fixture.copyPackagedFactory(t, scenario)
+		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
 		factoryDir = support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
 		factoryPath = filepath.Join(factoryDir, "factory.json")
 		replaceInvocationSignatureFixture(t, factoryPath, test.signature)
@@ -236,50 +195,6 @@ func runSharedPreparationFailureCase(
 		t.Fatalf("%s leaked sensitive input: %s", test.name, observable)
 	}
 	after.delta(before).assertZero(t)
-}
-
-func (fixture *namedInvocationFailureFixture) copyPackagedFactory(
-	t *testing.T,
-	scenario namedInvocationFailureScenario,
-) string {
-	t.Helper()
-	if fixture.packagedFactorySource == "" {
-		initializedDir := initializePackagedFactory(
-			t, fixture.process, scenario.environment, scenario.workingDirectory,
-			scenario.homeDir, packagedGoalFactoryName,
-		)
-		fixture.packagedFactorySource = support.CopyFactoryAsNamed(
-			t, initializedDir, fixture.packagedFactorySourceHome, packagedGoalFactoryName,
-		)
-	}
-	return support.CopyFactoryAsNamed(
-		t, fixture.packagedFactorySource, scenario.homeDir, packagedGoalFactoryName,
-	)
-}
-
-type namedInvocationFailureScenario struct {
-	rootDir          string
-	homeDir          string
-	workingDirectory string
-	environment      []string
-}
-
-func newNamedInvocationFailureScenario(t *testing.T) namedInvocationFailureScenario {
-	t.Helper()
-	rootDir := t.TempDir()
-	homeDir := filepath.Join(rootDir, "home")
-	workingDirectory := filepath.Join(rootDir, "work")
-	for label, path := range map[string]string{"home": homeDir, "working directory": workingDirectory} {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			t.Fatalf("create named-invocation failure %s: %v", label, err)
-		}
-	}
-	return namedInvocationFailureScenario{
-		rootDir:          rootDir,
-		homeDir:          homeDir,
-		workingDirectory: workingDirectory,
-		environment:      namedInvocationEnvironment(homeDir),
-	}
 }
 
 func preparationFailureArguments(selection, factoryPath string, arguments []string) []string {
@@ -492,29 +407,15 @@ func (delta preparationEffectSnapshot) assertZero(t *testing.T) {
 	}
 }
 
-func (observation *preparationSideEffectObservation) assertZero(t *testing.T, providerCalls int, listenerStarts int32) {
-	t.Helper()
-	observation.snapshot(providerCalls, listenerStarts).assertZero(t)
-}
-
 var errCanceledFactoryRootLookup = errors.New("explicit Factory root lookup failed after cancellation")
 
-// TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects
-// retains the filesystem cancellation edge in its own process because the
-// injected lookup cancels the invocation context and is not reusable.
-func TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for explicit Factory root lookup cancellation")
-	}
-
-	t.Run("cancellation_during_explicit_file_root_lookup", func(t *testing.T) {
-		runIsolatedFactoryRootLookupCancellation(t)
-	})
-}
-
-func runIsolatedFactoryRootLookupCancellation(t *testing.T) {
+// runFactoryRootLookupCancellation retains the filesystem cancellation edge
+// on the package's shared process. Only the scenario-specific authored-file
+// route is mutable; the process and all other edges remain reusable.
+func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
-	workingDirectory := t.TempDir()
+	scenario := fixture.newScenario(t)
+	workingDirectory := scenario.workingDirectory
 	factoryPath := filepath.Join(workingDirectory, "factory.json")
 	factory := `{
   "name": "canceled",
@@ -531,34 +432,23 @@ func runIsolatedFactoryRootLookupCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	provider := testutil.NewProviderCommandRunner()
-	listener := &listenerStartObservation{}
-	observation := &preparationSideEffectObservation{}
-	processBuilds := atomic.Int32{}
-	edges := preparationFailureEdges(observation, provider, listener)
-	edges.FactoryDefinitionAuthoredReaderFileSystem = cancelingRootLookupFileSystem{
-		target: factoryPath,
-		cancel: cancel,
+	if err := fixture.authoredReader.registerCancellation(factoryPath, cancel); err != nil {
+		t.Fatalf("register authored-reader cancellation route: %v", err)
 	}
-	processBuilds.Add(1)
-	process, err := support.BuildProcessWithContext(t.Context(), edges)
-	if err != nil {
-		t.Fatalf("BuildProcess() error = %v", err)
-	}
-	before := observation.snapshot(provider.CallCount(), listener.calls.Load())
-	homeDir := t.TempDir()
+	t.Cleanup(func() { fixture.authoredReader.unregisterCancellation(factoryPath) })
+	before := fixture.observation.snapshot(fixture.provider.CallCount(), fixture.listener.calls.Load())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	stdinIsTTY := true
 	stdoutIsTTY := false
-	err = process.Execute(root.Input{
+	err := fixture.process.Execute(root.Input{
 		Args:  []string{"you", "run", "--factory", factoryPath, "--no-record", "--quiet", "draft"},
-		Env:   namedInvocationEnvironment(homeDir),
+		Env:   scenario.environment,
 		Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: &stderr,
 		Context: ctx, WorkingDirectory: workingDirectory,
 		StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
 	})
-	after := observation.snapshot(provider.CallCount(), listener.calls.Load())
+	after := fixture.observation.snapshot(fixture.provider.CallCount(), fixture.listener.calls.Load())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
 	}
@@ -570,32 +460,60 @@ func runIsolatedFactoryRootLookupCancellation(t *testing.T) {
 		t.Fatalf("cancellation leaked sensitive input: %s", observable)
 	}
 	after.delta(before).assertZero(t)
-	t.Cleanup(func() {
-		if got := processBuilds.Load(); got != 1 {
-			t.Errorf("isolated cancellation process constructions = %d, want 1", got)
-		}
-		if got := listener.calls.Load(); got != 0 {
-			t.Errorf("isolated cancellation HTTP listener starts = %d, want 0", got)
-		}
-		observation.assertZero(t, provider.CallCount(), listener.calls.Load())
-	})
-	support.CleanupProcess(t, process)
 }
 
-type cancelingRootLookupFileSystem struct {
-	target string
-	cancel context.CancelFunc
+type namedInvocationAuthoredReaderRouter struct {
+	mu                 sync.RWMutex
+	cancellationRoutes map[string]context.CancelFunc
 }
 
-func (filesystem cancelingRootLookupFileSystem) Stat(path string) (fs.FileInfo, error) {
-	if filepath.Clean(path) == filepath.Clean(filesystem.target) {
-		filesystem.cancel()
+func newNamedInvocationAuthoredReaderRouter() *namedInvocationAuthoredReaderRouter {
+	return &namedInvocationAuthoredReaderRouter{
+		cancellationRoutes: make(map[string]context.CancelFunc),
+	}
+}
+
+func (router *namedInvocationAuthoredReaderRouter) registerCancellation(
+	path string,
+	cancel context.CancelFunc,
+) error {
+	path = normalizeNamedInvocationWorkDir(path)
+	if path == "" || cancel == nil {
+		return errors.New("named-invocation authored-reader route requires a path and cancel function")
+	}
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	if _, exists := router.cancellationRoutes[path]; exists {
+		return errors.New("named-invocation authored-reader route is already registered")
+	}
+	router.cancellationRoutes[path] = cancel
+	return nil
+}
+
+func (router *namedInvocationAuthoredReaderRouter) unregisterCancellation(path string) {
+	router.mu.Lock()
+	delete(router.cancellationRoutes, normalizeNamedInvocationWorkDir(path))
+	router.mu.Unlock()
+}
+
+func (router *namedInvocationAuthoredReaderRouter) routeCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.cancellationRoutes)
+}
+
+func (router *namedInvocationAuthoredReaderRouter) Stat(path string) (fs.FileInfo, error) {
+	router.mu.RLock()
+	cancel := router.cancellationRoutes[normalizeNamedInvocationWorkDir(path)]
+	router.mu.RUnlock()
+	if cancel != nil {
+		cancel()
 		return nil, errCanceledFactoryRootLookup
 	}
 	return os.Stat(path)
 }
 
-func (filesystem cancelingRootLookupFileSystem) ReadFile(path string) ([]byte, error) {
+func (router *namedInvocationAuthoredReaderRouter) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 

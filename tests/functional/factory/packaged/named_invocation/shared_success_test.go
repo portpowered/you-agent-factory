@@ -21,15 +21,31 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestNamedInvocationSharedSuccess keeps all success-side named-invocation
-// behavior on one immutable root process. Each scenario still owns its home,
-// working directory, Factory copy, input files, and recording path.
-func TestNamedInvocationSharedSuccess(t *testing.T) {
+// TestNamedInvocationSharedProcess keeps every named-invocation scenario on
+// one immutable root process. Each scenario still owns its home, working
+// directory, Factory copy, input files, and recording path.
+func TestNamedInvocationSharedProcess(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test for shared named-invocation success behavior")
+		t.Skip("integration test for shared named-invocation behavior")
 	}
 
-	fixture := newNamedInvocationSuccessFixture(t)
+	fixture := newNamedInvocationFixture(t)
+	t.Run("TestNamedInvocationSharedSuccess", func(t *testing.T) {
+		runNamedInvocationSharedSuccess(t, fixture)
+	})
+	t.Run("TestNamedInvocationSharedPreparationFailures", func(t *testing.T) {
+		runNamedInvocationSharedPreparationFailures(t, fixture)
+	})
+	t.Run("TestRun_EffectiveSchemaPreparationFailuresStopBeforeExecutionSideEffects", func(t *testing.T) {
+		runFactoryRootLookupCancellation(t, fixture)
+	})
+	t.Run("reuse after cancellation", func(t *testing.T) {
+		runNamedGoalSuccess(t, fixture)
+	})
+}
+
+func runNamedInvocationSharedSuccess(t *testing.T, fixture *namedInvocationFixture) {
+	t.Helper()
 	t.Run("factory builder list and help", func(t *testing.T) {
 		runFactoryBuilderListAndHelp(t, fixture)
 	})
@@ -53,7 +69,7 @@ func TestNamedInvocationSharedSuccess(t *testing.T) {
 	})
 }
 
-func runFactoryBuilderListAndHelp(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runFactoryBuilderListAndHelp(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	scenario := fixture.newScenario(t)
 	helpOutput, helpStderr := executeCustomerCommand(
@@ -92,7 +108,7 @@ func runFactoryBuilderListAndHelp(t *testing.T, fixture *namedInvocationSuccessF
 	fixture.capturePackagedFactorySources(t, scenario.homeDir)
 }
 
-func runNamedGoalSuccess(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runNamedGoalSuccess(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	scenario := fixture.newScenario(t, support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult))
 	fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
@@ -106,7 +122,7 @@ func runNamedGoalSuccess(t *testing.T, fixture *namedInvocationSuccessFixture) {
 	}
 }
 
-func runNamedSubagentSuccess(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runNamedSubagentSuccess(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	requestText := "hermetic no-server named subagent prompt"
 	scenario := fixture.newScenario(t, platformprocess.CommandResult{
@@ -126,7 +142,7 @@ func runNamedSubagentSuccess(t *testing.T, fixture *namedInvocationSuccessFixtur
 	}
 }
 
-func runNoSignatureCompatibility(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runNoSignatureCompatibility(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	scenario := fixture.newScenario(t,
 		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
@@ -176,7 +192,7 @@ func runNoSignatureCompatibility(t *testing.T, fixture *namedInvocationSuccessFi
 	}
 }
 
-func runEffectiveSignatureParity(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runEffectiveSignatureParity(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	scenario := fixture.newScenario(t,
 		support.CodexDecisionCommandResult("canonical provider result"),
@@ -243,7 +259,7 @@ func runEffectiveSignatureParity(t *testing.T, fixture *namedInvocationSuccessFi
 	}
 }
 
-func runDefaultOnlyInput(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runDefaultOnlyInput(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	scenario := fixture.newScenario(t,
 		support.CodexDecisionCommandResult("default applied"),
@@ -297,7 +313,7 @@ func runDefaultOnlyInput(t *testing.T, fixture *namedInvocationSuccessFixture) {
 	}
 }
 
-func runRecordedNamedInvocation(t *testing.T, fixture *namedInvocationSuccessFixture) {
+func runRecordedNamedInvocation(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
 	scenario := fixture.newScenario(t,
 		support.CodexDecisionCommandResult(wantHermeticInvocationPrimaryResult),
@@ -454,11 +470,13 @@ func workInvocationArgumentDefault(value string) work.InvocationArgument {
 	}
 }
 
-type namedInvocationSuccessFixture struct {
+type namedInvocationFixture struct {
 	process                   support.ApplicationProcess
 	provider                  *namedInvocationProviderRouter
 	listener                  *listenerStartObservation
 	submissions               *canonicalSubmissionObservation
+	observation               *preparationSideEffectObservation
+	authoredReader            *namedInvocationAuthoredReaderRouter
 	packagedFactorySources    map[string]string
 	packagedFactorySourceHome string
 	processBuilds             atomic.Int32
@@ -472,20 +490,18 @@ type namedInvocationScenario struct {
 	provider         *testutil.ProviderCommandRunner
 }
 
-func newNamedInvocationSuccessFixture(t *testing.T) *namedInvocationSuccessFixture {
+func newNamedInvocationFixture(t *testing.T) *namedInvocationFixture {
 	t.Helper()
-	fixture := &namedInvocationSuccessFixture{
+	fixture := &namedInvocationFixture{
 		provider:                  newNamedInvocationProviderRouter(),
 		listener:                  &listenerStartObservation{},
 		submissions:               &canonicalSubmissionObservation{},
+		observation:               &preparationSideEffectObservation{},
+		authoredReader:            newNamedInvocationAuthoredReaderRouter(),
 		packagedFactorySources:    make(map[string]string),
 		packagedFactorySourceHome: t.TempDir(),
 	}
-	process, err := fixture.buildProcess(context.Background(), serviceedges.Edges{
-		APIServerStarter:      fixture.listener.Start,
-		ProviderCommandRunner: fixture.provider,
-		SubmissionRecorder:    fixture.submissions.observe,
-	})
+	process, err := fixture.buildProcess(context.Background(), fixture.edges())
 	if err != nil {
 		t.Fatalf("build shared named-invocation root process: %v", err)
 	}
@@ -502,12 +518,15 @@ func newNamedInvocationSuccessFixture(t *testing.T) *namedInvocationSuccessFixtu
 		if got := fixture.provider.routeCount(); got != 0 {
 			t.Errorf("shared named-invocation provider routes after cleanup = %d, want 0", got)
 		}
+		if got := fixture.authoredReader.routeCount(); got != 0 {
+			t.Errorf("shared named-invocation authored-reader routes after cleanup = %d, want 0", got)
+		}
 	})
 	support.CleanupProcess(t, process)
 	return fixture
 }
 
-func (fixture *namedInvocationSuccessFixture) buildProcess(
+func (fixture *namedInvocationFixture) buildProcess(
 	ctx context.Context,
 	edges serviceedges.Edges,
 ) (support.ApplicationProcess, error) {
@@ -515,7 +534,7 @@ func (fixture *namedInvocationSuccessFixture) buildProcess(
 	return support.BuildProcessWithContext(ctx, edges)
 }
 
-func (fixture *namedInvocationSuccessFixture) capturePackagedFactorySources(
+func (fixture *namedInvocationFixture) capturePackagedFactorySources(
 	t *testing.T,
 	homeDir string,
 ) {
@@ -535,7 +554,7 @@ func (fixture *namedInvocationSuccessFixture) capturePackagedFactorySources(
 	}
 }
 
-func (fixture *namedInvocationSuccessFixture) copyPackagedFactory(
+func (fixture *namedInvocationFixture) copyPackagedFactory(
 	t *testing.T,
 	scenario *namedInvocationScenario,
 	name string,
@@ -543,7 +562,14 @@ func (fixture *namedInvocationSuccessFixture) copyPackagedFactory(
 	t.Helper()
 	sourceDir := fixture.packagedFactorySources[name]
 	if sourceDir == "" {
-		t.Fatalf("packaged Factory %q has not been captured", name)
+		initializedDir := initializePackagedFactory(
+			t, fixture.process, scenario.environment, scenario.workingDirectory,
+			scenario.homeDir, name,
+		)
+		sourceDir = support.CopyFactoryAsNamed(
+			t, initializedDir, fixture.packagedFactorySourceHome, name,
+		)
+		fixture.packagedFactorySources[name] = sourceDir
 	}
 	return support.CopyFactoryAsNamed(t, sourceDir, scenario.homeDir, name)
 }
@@ -554,7 +580,7 @@ func packagedFactoryPath(homeDir, name string) string {
 	)
 }
 
-func (fixture *namedInvocationSuccessFixture) newScenario(
+func (fixture *namedInvocationFixture) newScenario(
 	t *testing.T,
 	results ...platformprocess.CommandResult,
 ) *namedInvocationScenario {
@@ -599,6 +625,7 @@ func namedInvocationEnvironment(homeDir string) []string {
 type namedInvocationProviderRouter struct {
 	mu     sync.RWMutex
 	routes map[string]platformprocess.CommandRunner
+	calls  atomic.Int32
 }
 
 func newNamedInvocationProviderRouter() *namedInvocationProviderRouter {
@@ -641,7 +668,12 @@ func (router *namedInvocationProviderRouter) Run(
 	if runner == nil {
 		return platformprocess.CommandResult{}, errors.New("named-invocation provider route unavailable")
 	}
+	router.calls.Add(1)
 	return runner.Run(ctx, request)
+}
+
+func (router *namedInvocationProviderRouter) CallCount() int {
+	return int(router.calls.Load())
 }
 
 func normalizeNamedInvocationWorkDir(path string) string {
