@@ -625,7 +625,6 @@ func namedInvocationEnvironment(homeDir string) []string {
 type namedInvocationProviderRouter struct {
 	mu     sync.RWMutex
 	routes map[string]platformprocess.CommandRunner
-	calls  atomic.Int32
 }
 
 func newNamedInvocationProviderRouter() *namedInvocationProviderRouter {
@@ -668,12 +667,7 @@ func (router *namedInvocationProviderRouter) Run(
 	if runner == nil {
 		return platformprocess.CommandResult{}, errors.New("named-invocation provider route unavailable")
 	}
-	router.calls.Add(1)
 	return runner.Run(ctx, request)
-}
-
-func (router *namedInvocationProviderRouter) CallCount() int {
-	return int(router.calls.Load())
 }
 
 func normalizeNamedInvocationWorkDir(path string) string {

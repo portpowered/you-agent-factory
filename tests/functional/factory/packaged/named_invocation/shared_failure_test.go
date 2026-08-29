@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -170,7 +171,7 @@ func runSharedPreparationFailureCase(
 	test sharedPreparationFailureCase,
 ) {
 	t.Helper()
-	scenario := fixture.newScenario(t)
+	scenario := fixture.newScenario(t, platformprocess.CommandResult{})
 	factoryPath := filepath.Join(scenario.workingDirectory, "factory.json")
 	if test.packaged {
 		factoryDir := fixture.copyPackagedFactory(t, scenario, packagedGoalFactoryName)
@@ -181,12 +182,12 @@ func runSharedPreparationFailureCase(
 		t.Fatalf("write Factory fixture: %v", err)
 	}
 
-	before := fixture.observation.snapshot(fixture.provider.CallCount(), fixture.listener.calls.Load())
+	before := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	stdout, stderr, err := executePreparationFailure(
 		t, fixture.process, scenario.environment, scenario.workingDirectory,
 		preparationFailureArguments(test.selection, factoryPath, test.arguments),
 	)
-	after := fixture.observation.snapshot(fixture.provider.CallCount(), fixture.listener.calls.Load())
+	after := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	if err == nil || !strings.Contains(err.Error(), test.wantCode) {
 		t.Fatalf("%s error = %v, want stable code %s", test.name, err, test.wantCode)
 	}
@@ -266,18 +267,8 @@ type preparationSideEffectObservation struct {
 	recordingDirectoriesRead atomic.Int32
 }
 
-func (observation *preparationSideEffectObservation) nextSessionID() string {
-	observation.sessionIDs.Add(1)
-	return "unexpected-session"
-}
-
 func (observation *preparationSideEffectObservation) observeRuntimeHost(factorysessions.RuntimeHostBinding) {
 	observation.runtimeHosts.Add(1)
-}
-
-func (observation *preparationSideEffectObservation) nextWorkRequestID() string {
-	observation.workIDs.Add(1)
-	return "unexpected-work"
 }
 
 func (observation *preparationSideEffectObservation) recordSubmission(work.FactorySubmissionRecord) {
@@ -414,7 +405,7 @@ var errCanceledFactoryRootLookup = errors.New("explicit Factory root lookup fail
 // route is mutable; the process and all other edges remain reusable.
 func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixture) {
 	t.Helper()
-	scenario := fixture.newScenario(t)
+	scenario := fixture.newScenario(t, platformprocess.CommandResult{})
 	workingDirectory := scenario.workingDirectory
 	factoryPath := filepath.Join(workingDirectory, "factory.json")
 	factory := `{
@@ -436,7 +427,7 @@ func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixt
 		t.Fatalf("register authored-reader cancellation route: %v", err)
 	}
 	t.Cleanup(func() { fixture.authoredReader.unregisterCancellation(factoryPath) })
-	before := fixture.observation.snapshot(fixture.provider.CallCount(), fixture.listener.calls.Load())
+	before := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	stdinIsTTY := true
@@ -448,7 +439,7 @@ func runFactoryRootLookupCancellation(t *testing.T, fixture *namedInvocationFixt
 		Context: ctx, WorkingDirectory: workingDirectory,
 		StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
 	})
-	after := fixture.observation.snapshot(fixture.provider.CallCount(), fixture.listener.calls.Load())
+	after := fixture.observation.snapshot(scenario.provider.CallCount(), fixture.listener.calls.Load())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
 	}
