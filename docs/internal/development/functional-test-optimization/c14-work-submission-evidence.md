@@ -241,3 +241,133 @@ Remaining edges are owned by later stories: harness optimization and focused
 equivalence (`fto-c14-pkg-work-submission-002`), final median/race/tagged/clean
 room/PR handoff (`fto-c14-pkg-work-submission-003`), remote PR CI (`GATE-PR-CI`),
 and merge (`GATE-DELIVERY`).
+
+## Story-003 final local validation
+
+The optimized functional-test sources were tested at implementation commit
+`ddd6b9070f6a28ddd2f0ce06be1481b71257248a` before this evidence-only ledger
+refresh. The ledger refresh does not alter the package artifact or its test
+sources. Environment was `go version go1.25.0 windows/amd64`, Windows build
+`26200`, `amd64`, with the shared compute-saturated host described above. All
+validation used local production wiring and controlled provider/command-runner
+edges; remote product calls and paid validation remained at `0` and `$0`.
+
+### GATE-FINAL-MEDIAN — optimized three-run denominator
+
+Each row is a separate invocation of the exact named package command:
+
+```text
+go test ./tests/functional/work/submission/... -count=1
+```
+
+| Run | Commit | Result / exit | Package-reported time | PowerShell wall time |
+| ---: | --- | --- | ---: | ---: |
+| 1 | `ddd6b9070f6a28ddd2f0ce06be1481b71257248a` | PASS / `0` | `20.300s` | `24.3596s` |
+| 2 | `ddd6b9070f6a28ddd2f0ce06be1481b71257248a` | PASS / `0` | `21.257s` | `24.6265s` |
+| 3 | `ddd6b9070f6a28ddd2f0ce06be1481b71257248a` | PASS / `0` | `21.393s` | `24.7242s` |
+
+The final wall-time median is **`24.6265s`**, versus the unchanged baseline
+median **`59.2423305s`**, for a **`58.43%` reduction**. The package-reported
+median is `21.257s` versus the unchanged `45.000s` median, a `52.76%`
+reduction. All three runs passed, so the PRD's one bounded retry was not
+needed. The wall spread is retained as host-contention diagnostic evidence;
+the package-level direction is the primary verdict.
+
+### GATE-PROFILE — post-pass distribution and topology
+
+The diagnostic command was run once against the optimized implementation
+commit:
+
+```text
+go test -json ./tests/functional/work/submission/... -count=1
+```
+
+It passed with exit `0`, package-reported time `22.777s`, and measured
+PowerShell wall time `26.6141s`. The transient JSON artifact was not committed.
+The grouped package profile reported these principal serialized cohorts:
+
+| Cohort | Package profile elapsed |
+| --- | ---: |
+| `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly` | `6.82s` |
+| `TestStructuredSubmissionSimplePipeline` | `1.98s` |
+| `TestWorkBatchDependencyOrderingNormalizesRuntimeWork` | `2.00s` |
+| `TestPayloadSizeHTTPSubmission` | `2.05s` |
+| `TestBlockedDispatchConcurrentBatchIngressRegression` | `1.58s` |
+| `TestWorkBatchCLIIngress` | `1.50s` |
+| `TestWorkBatchHTTPSubmission` | `1.17s` |
+
+Read-only owned-source accounting after the pass found 12 default-build
+`StartFunctionalAPIServer` call sites, 16 including the two tagged source
+files, zero `newRootProcessHarness`/`support.ExecuteProcess`/`CommandContext`
+CLI-root patterns, and zero package-local `time.Sleep` calls. The ordinary
+CLI cases therefore execute through the live server root. Shared public
+projection observation helpers remain because they prove asynchronously
+committed Work projections; the package adds no polling or timeout padding.
+
+### GATE-PACKAGE, GATE-RACE, and GATE-LONG
+
+The named default package command above passed three times. The supported race
+command also passed:
+
+```text
+go test -race ./tests/functional/work/submission/... -count=1
+```
+
+Result: PASS / exit `0`, measured wall time `71.9080s`; no race report was
+emitted. The tagged command passed as well:
+
+```text
+go test -tags=functionallong ./tests/functional/work/submission/... -count=1
+```
+
+Result: PASS / exit `0`, measured wall time `36.5535s`. This executed the two
+tagged witnesses and the shared optimized helpers. These gates prove local
+functional behavior and detected race safety for the changed package paths;
+they do not prove terminal PR CI or merge.
+
+### GATE-ASSERTIONS — post-edit same-or-stronger audit
+
+The pre-edit inventory above was audited against the optimized test and
+subtest identities. Every CASE-SUB row remains present with its prior
+observable assertions; rows moved into serialized fixture cohorts are marked
+as merged witnesses below. No assertion, failure marker, privacy check,
+atomicity check, event check, or cleanup check was removed or weakened.
+
+| Case | Optimized test/subtest witness | Audit result |
+| --- | --- | --- |
+| CASE-SUB-001 | `TestStructuredSubmissionSimplePipeline/TestAPIPOSTSubmitAndQueryWork` | Same assertions; merged into simple-pipeline cohort |
+| CASE-SUB-002 | `TestAPIBatchUpsertAcceptsWorksContent` | Same assertions |
+| CASE-SUB-003 | `TestStructuredSubmissionSimplePipeline/TestCLIWorkTypeNameReachesLiveAPIHandler` | Same assertions; moved into live-root cohort |
+| CASE-SUB-004 | `TestWorkBatchHTTPSubmission/TestAPISubmitBatchThenListAndGetWork` | Same assertions; merged into HTTP cohort |
+| CASE-SUB-005 | `TestWorkBatchHTTPSubmission/TestAPIUpsertWorkRequestUsesCanonicalIdentity` | Same assertions; merged into HTTP cohort |
+| CASE-SUB-006 | `TestWorkBatchHTTPSubmission/TestAPIUnknownWorkReturnsTypedNotFound` | Same assertions; merged into HTTP cohort |
+| CASE-SUB-007 | `TestWorkBatchCLIIngress/TestWorkBatchAcceptsInlineFileAndStdinShapes/inline` | Same assertions; merged into CLI cohort |
+| CASE-SUB-008 | `TestWorkBatchCLIIngress/TestWorkBatchAcceptsInlineFileAndStdinShapes/file` | Same assertions; merged into CLI cohort |
+| CASE-SUB-009 | `TestWorkBatchCLIIngress/TestWorkBatchAcceptsInlineFileAndStdinShapes/stdin` | Same assertions; merged into CLI cohort |
+| CASE-SUB-010 | `TestWorkBatchCLIIngress/TestWorkBatchSelectsDefaultAndExplicitWorkTypes/default` | Same assertions; merged into CLI cohort |
+| CASE-SUB-011 | `TestWorkBatchCLIIngress/TestWorkBatchSelectsDefaultAndExplicitWorkTypes/explicit` | Same assertions; merged into CLI cohort |
+| CASE-SUB-012 | `TestWorkBatchCLIIngress/TestWorkBatchRejectsUnknownTypeWithoutPartialMutation/unknown_type` | Same rejection, typed diagnostic, and no-mutation assertions |
+| CASE-SUB-013 | `TestWorkBatchCLIIngress/TestWorkBatchRejectsUnknownTypeWithoutPartialMutation/mixed_batch_no_partial_submit` | Same atomicity and no-mutation assertions |
+| CASE-SUB-014 | `TestBlockedDispatchConcurrentBatchIngressRegression` | Same public RUNNING/in-flight, idempotency, event, and deterministic-release assertions |
+| CASE-SUB-015 | `TestWorkBatchDependencyOrderingNormalizesRuntimeWork` | Same ordering, relation, event, identity, and completion assertions |
+| CASE-SUB-016 | `TestPayloadSizeHTTPSubmission/TestAPIBatchUpsertRejectsOversizedWorkAtomically` | Same typed error, privacy, atomicity, and no-event assertions; merged into boundary cohort |
+| CASE-SUB-017 | `TestPayloadSizeHTTPSubmission/TestAPIBatchUpsertAcceptsPayloadAtInclusiveLimit` | Same inclusive-boundary, identity, list, and event assertions |
+| CASE-SUB-018 | `TestWorkBatchHTTPSubmission/TestAPIStageAndSubmitFileCreatesExpectedWork` | Same staged-file and projected-image assertions; moved into HTTP cohort |
+| CASE-SUB-019 | `TestStructuredSubmissionSimplePipeline/TestAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission` | Same empty-content and completion assertions |
+| CASE-SUB-020 | `TestStructuredSubmissionSimplePipeline/TestAPISubmitWorkRejectsEmptyStructuredSubmission` | Same HTTP 400 assertion |
+| CASE-SUB-021 | `TestStructuredSubmissionSimplePipeline/TestAPISubmitWorkAcceptsOrderedTextSubmission` | Same ordered text and whitespace assertions |
+| CASE-SUB-022 | `TestStructuredSubmissionSimplePipeline/TestAPISubmitWorkAcceptsCanonicalContentParts` | Same canonical content ordering and whitespace assertions |
+| CASE-SUB-023 | `TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner` | Same controlled response and no-echo assertions |
+| CASE-SUB-024 | `TestAPISubmitWorkAcceptsMixedTextAndImageOnUnsupportedRunner` | Same failed status and zero-provider-call assertions |
+| CASE-SUB-025 | `TestStructuredSubmissionSimplePipeline/TestAPISubmitWorkRejectsForgedStructuredFileReference` | Same HTTP 400 security assertion; merged into simple-pipeline cohort |
+| CASE-SUB-026 | `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly/direct_POST_and_idempotent_PUT` | Same trace, idempotency, completion, and canonical-event assertions |
+| CASE-SUB-027 | `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly/startup_work_file_batch` | Same startup persistence and canonical-event assertions |
+| CASE-SUB-028 | `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly/file_watcher_non_batch_JSON` | Same watcher completion and canonical-event assertions |
+| CASE-SUB-029 | `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly/cron_internal_time_work` | Same fake-clock, tags, source, and canonical-event assertions |
+| CASE-SUB-030 | `TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests` (`functionallong`) | Same record/replay identity and canonical-event assertions |
+| CASE-SUB-031 | `TestWorkBatchPublicShapeStaysAlignedAcrossWatchedFileAndHTTP` (`functionallong`) | Same exact sorted public-shape and relation assertions |
+
+The optimized inventory is therefore explicitly **same or stronger** for
+CASE-SUB-001 through CASE-SUB-031. The only identity changes are parent
+fixture grouping and named subtest paths; the two tagged test identities and
+their assertions remain unchanged.
