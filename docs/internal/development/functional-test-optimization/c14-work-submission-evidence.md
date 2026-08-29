@@ -10,13 +10,15 @@ remaining PR CI/merge ownership; it does not claim terminal PR CI or merge.
 
 - PRD: `prd.json`, project `Reduce intrinsic wall time of Work submission functional tests`.
 - Behavior lane: `BEH-SUBMISSION-PERF`.
-- Story: `fto-c14-pkg-work-submission-001`.
+- Story: `fto-c14-pkg-work-submission-003` (including the retained evidence from
+  stories `001` and `002`).
 - Source-plan authority: `null` in the PRD; no operator amendment is present.
 - Dependency fidelity: local real production wiring with controlled provider and
   inference edges already used by the package.
-- Authorized change for this story: this evidence ledger only. No test,
-  production, shared-support, contract, generated, workflow, or sibling-package
-  file was edited.
+- Authorized change for this refresh: the evidence ledger; the implementation
+  review corrections are limited to the five submission-package test files
+  recorded at final head `d6688af10a`. No production, shared-support,
+  contract, generated, workflow, or sibling-package file was edited.
 - Cost and network: controlled local fixtures only; 0 remote product calls and
   `$0` paid cost.
 
@@ -244,14 +246,19 @@ and merge (`GATE-DELIVERY`).
 
 ## Story-003 final local validation
 
-The final rebased implementation was tested at clean detached head
-`2be8ec310527a246ff674749ea0a8d05f4e994c0` before this final evidence-only
-ledger refresh. The ledger refresh does not alter the package artifact or its
-test sources. Environment was `go version go1.25.0 windows/amd64`, Windows
-build `26200`, `amd64`, with the shared compute-saturated host described above.
-All validation used local production wiring and controlled
-provider/command-runner edges; remote product calls and paid validation
-remained at `0` and `$0`.
+The final implementation, including the review corrections, was tested from a
+clean worktree at head
+`d6688af10a5f66e67944fb1600fe13f50aec31de`. The ledger refresh does not alter
+the package artifact or its test sources. Environment was
+`go version go1.25.0 windows/amd64`, Windows build `26200`, `amd64`, with the
+shared compute-saturated host described above. All validation used local
+production wiring and controlled provider/command-runner edges; remote product
+calls and paid validation remained at `0` and `$0`.
+
+The five review findings addressed at this head were: direct top-level
+endpoint evidence placement, request-batch boundary imports, real Codex
+provider wiring in the affected tests, removal of the unused completion waiter,
+and replacement of stale final-head evidence.
 
 ### GATE-FINAL-MEDIAN — optimized three-run denominator
 
@@ -263,16 +270,27 @@ go test ./tests/functional/work/submission/... -count=1
 
 | Run | Commit | Result / exit | Package-reported time | PowerShell wall time |
 | ---: | --- | --- | ---: | ---: |
-| 1 | `2be8ec310527a246ff674749ea0a8d05f4e994c0` | PASS / `0` | `18.667s` | `22.1715s` |
-| 2 | `2be8ec310527a246ff674749ea0a8d05f4e994c0` | PASS / `0` | `17.599s` | `21.0997s` |
-| 3 | `2be8ec310527a246ff674749ea0a8d05f4e994c0` | PASS / `0` | `18.062s` | `21.3409s` |
+| 1 | `d6688af10a5f66e67944fb1600fe13f50aec31de` | PASS / `0` | `29.501s` | `35.063s` |
+| 2 | `d6688af10a5f66e67944fb1600fe13f50aec31de` | PASS / `0` | `36.655s` | `42.981s` |
+| 3 | `d6688af10a5f66e67944fb1600fe13f50aec31de` | PASS / `0` | `40.470s` | `46.494s` |
 
-The final rebased clean-room wall-time median is **`21.3409s`**, versus the
-unchanged baseline median **`59.2423305s`**, for a **`63.98%` reduction**. The
-package-reported median is `18.062s` versus the unchanged `45.000s` median, a
-`59.86%` reduction. All three runs passed, so the PRD's one bounded retry was
-not needed. The wall spread is retained as host-contention diagnostic evidence;
-the package-level direction is the primary verdict.
+The final clean-worktree wall-time median is **`42.981s`**, versus the unchanged
+baseline median **`59.2423305s`**, for a **`27.45%` reduction**. The
+package-reported median is `36.655s` versus the unchanged `45.000s` median, a
+`18.54%` reduction. All three runs passed. The final review correction changed
+the provider fixture path and therefore raised the measured package time, but
+the current package still materially follows the proven root-reuse and fixture
+grouping optimization. The wall spread is retained as host-contention
+diagnostic evidence; package-level behavior remains the primary verdict.
+
+The final fidelity-adjusted median is below the PRD's 40% target. The permitted
+profile-backed-floor alternative is satisfied after the one bounded optimization
+pass: current-head source accounting retains 12 default server/root call sites
+instead of the baseline 25 server plus 8 ordinary CLI roots, zero one-shot CLI
+root patterns, zero package-local sleeps, and the deterministic controlled-edge
+release for CASE-SUB-014. The current three-run measurements are the
+fidelity-adjusted floor for the full provider-wired package; no assertion,
+scope, or timeout weakening was used to obtain it.
 
 ### GATE-PROFILE — post-pass distribution and topology
 
@@ -297,34 +315,44 @@ The grouped package profile reported these principal serialized cohorts:
 | `TestWorkBatchCLIIngress` | `1.50s` |
 | `TestWorkBatchHTTPSubmission` | `1.17s` |
 
-Read-only owned-source accounting after the pass found 12 default-build
-`StartFunctionalAPIServer` call sites, 16 including the two tagged source
-files, zero `newRootProcessHarness`/`support.ExecuteProcess`/`CommandContext`
-CLI-root patterns, and zero package-local `time.Sleep` calls. The ordinary
-CLI cases therefore execute through the live server root. Shared public
-projection observation helpers remain because they prove asynchronously
+Read-only owned-source accounting at the final code/test head found 12
+default-build `StartFunctionalAPIServer` call sites, 16 including the two tagged
+source files, zero `newRootProcessHarness`/`support.ExecuteProcess`/
+`CommandContext` CLI-root patterns, and zero package-local `time.Sleep` calls.
+The ordinary CLI cases therefore execute through the live server root. Shared
+public projection observation helpers remain because they prove asynchronously
 committed Work projections; the package adds no polling or timeout padding.
 
 ### GATE-PACKAGE, GATE-RACE, and GATE-LONG
 
-The named default package command passed in the final clean-room three-run
-set above. The supported race command also passed at the final rebased head:
+The named default package command passed in the final clean-worktree three-run
+set above. The supported race command also passed at the final head:
 
 ```text
 go test -race ./tests/functional/work/submission/... -count=1
 ```
 
-Result: PASS / exit `0`, measured wall time `53.9840s`; no race report was
+Result: PASS / exit `0`, package-reported time `60.887s`; no race report was
 emitted. The tagged command passed as well at the same clean head:
 
 ```text
 go test -tags=functionallong ./tests/functional/work/submission/... -count=1
 ```
 
-Result: PASS / exit `0`, measured wall time `29.7917s`. This executed the two
+Result: PASS / exit `0`, package-reported time `35.175s`. This executed the two
 tagged witnesses and the shared optimized helpers. These gates prove local
 functional behavior and detected race safety for the changed package paths;
 they do not prove terminal PR CI or merge.
+
+The repository validators also passed at this head:
+
+```text
+go run ./cmd/functionalscenarioproject -check contracts/functional-scenarios.json
+go run ./cmd/functionalboundarycheck
+```
+
+The scenario validator emitted `154 reviewed scenarios are current`; the
+boundary validator exited `0` without diagnostics.
 
 ### GATE-ASSERTIONS — post-edit same-or-stronger audit
 
@@ -379,9 +407,9 @@ their assertions remain unchanged.
 
 ## Environment and artifact
 
-- Commit/build identifier: clean detached worktree at
-  `2be8ec3105` (`2be8ec310527a246ff674749ea0a8d05f4e994c0`); the tested
-  implementation is the optimized package plus the authorized evidence ledger.
+- Commit/build identifier: clean worktree at
+  `d6688af10a` (`d6688af10a5f66e67944fb1600fe13f50aec31de`); the tested
+  implementation is the optimized package plus the review corrections.
 - Environment and configuration: `go version go1.25.0 windows/amd64`,
   Windows build `26200`, `amd64`, shared compute-saturated host; no test
   flags beyond the commands listed below.
@@ -395,9 +423,9 @@ their assertions remain unchanged.
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3; all exit `0`, package median `18.062s`, wall median `21.3409s` | Terminal PR CI and merge |
-| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, wall `53.9840s`, no race report | Schedules outside this run |
-| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, wall `29.7917s` | Remote tagged workflow behavior |
+| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3; all exit `0`, package median `36.655s`, wall median `42.981s` | Terminal PR CI and merge |
+| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, package time `60.887s`, no race report | Schedules outside this run |
+| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, package time `35.175s` | Remote tagged workflow behavior |
 | GATE-ASSERTIONS: CASE-SUB-001..031 | PASS | Post-edit same-or-stronger table above; all 31 rows mapped to retained observable assertions | Untested real-remote systems |
 | Scope and cleanup | PASS | Final source accounting remains package-only, with no package-local sleeps and deterministic cleanup witnesses | Future changes after this head |
 
