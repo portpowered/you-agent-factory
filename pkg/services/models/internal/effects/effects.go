@@ -136,6 +136,14 @@ type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)
 type AssetOpenFile func(string) (io.ReadCloser, error)
 
+// AssetStagingCoordination is the exact cancellation-aware ownership effect
+// used to serialize cross-process asset staging. Models selects the identity
+// and transaction boundary; the effect only owns the filesystem lock
+// lifecycle.
+type AssetStagingCoordination interface {
+	Lock(context.Context, string) (io.Closer, error)
+}
+
 type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string

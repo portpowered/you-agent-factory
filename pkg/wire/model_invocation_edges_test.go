@@ -301,6 +301,19 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 	}
 }
 
+func TestModelsCompositionRejectsMissingAssetStagingCoordination(t *testing.T) {
+	t.Parallel()
+
+	_, err := provideModelsService(serviceedges.Edges{
+		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
+			return nil, nil
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Models Assets staging coordination is required") {
+		t.Fatalf("provideModelsService() error = %v, want missing staging coordination diagnostic", err)
+	}
+}
+
 func TestModelsCompositionAdaptsProtocolAndCompatibilityPorts(t *testing.T) {
 	t.Parallel()
 

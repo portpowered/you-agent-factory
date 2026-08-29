@@ -186,6 +186,9 @@ func (service *rootService) invokeGenericInScope(
 	if err != nil {
 		return true, err
 	}
+	if err := service.emitAssetEstimate(cfg.Context, scope, modelName, cfg.Diagnostics); err != nil {
+		return true, mapModelsClientError(assetPreflightInvocationError(modelName, operation, err))
+	}
 	request := joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog)
 	result, err := service.models.InvokeModel(cfg.Context, request)
 	if err == nil {

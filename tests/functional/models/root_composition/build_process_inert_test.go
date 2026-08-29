@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 var errRecordingModelEffect = errors.New("recording model effect invoked during BuildProcess")
@@ -40,6 +42,25 @@ func TestModelsEffectsRemainInertThroughRootBuildProcessConstruction(t *testing.
 	}
 	if got := recorder.totalInference(); got != 0 {
 		t.Fatalf("inference effect calls = %d during BuildProcess, want 0", got)
+	}
+}
+
+// TestModelsBuildProcessRejectsMissingAssetStagingCoordination proves the
+// canonical root composition reports a missing cross-process ownership effect
+// during construction, before a request can reach the Models runtime.
+func TestModelsBuildProcessRejectsMissingAssetStagingCoordination(t *testing.T) {
+	t.Parallel()
+
+	_, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
+			return nil, nil
+		},
+	})
+	if err == nil {
+		t.Fatal("BuildProcess() error = nil, want missing asset staging coordination failure")
+	}
+	if !strings.Contains(err.Error(), "Models Assets staging coordination is required") {
+		t.Fatalf("BuildProcess() error = %q, want staging coordination diagnostic", err)
 	}
 }
 

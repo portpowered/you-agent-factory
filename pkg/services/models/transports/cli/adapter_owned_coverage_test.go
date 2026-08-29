@@ -25,6 +25,7 @@ type ownedCoverageModelsRoot struct {
 	removeModel          func(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error)
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
 	getModelReadiness    func(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error)
+	preflightAssets      func(context.Context, modelinference.PrepareModelAssetsRequest) (modelinference.PreflightModelAssetsResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
 	invokeModel          func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 	invokeModelWithLease func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
@@ -83,6 +84,13 @@ func (stub ownedCoverageModelsRoot) PullModelForScope(ctx context.Context, reque
 
 func (stub ownedCoverageModelsRoot) PrepareModelAssets(context.Context, modelinference.PrepareModelAssetsRequest) (modelinference.PrepareModelAssetsResult, error) {
 	return modelinference.PrepareModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (stub ownedCoverageModelsRoot) PreflightModelAssets(ctx context.Context, request modelinference.PrepareModelAssetsRequest) (modelinference.PreflightModelAssetsResult, error) {
+	if stub.preflightAssets != nil {
+		return stub.preflightAssets(ctx, request)
+	}
+	return modelinference.PreflightModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
 func (stub ownedCoverageModelsRoot) InspectModelAssets(context.Context, modelinference.InspectModelAssetsRequest) (modelinference.InspectModelAssetsResult, error) {

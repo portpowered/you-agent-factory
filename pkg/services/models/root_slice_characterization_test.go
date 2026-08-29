@@ -107,6 +107,13 @@ func (*runtimeScopePeerService) GetModelReadiness(
 	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 }
 
+func (*runtimeScopePeerService) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (*runtimeScopePeerService) ListModels(context.Context) (models.List, error) {
 	return models.List{Results: []models.Summary{}}, nil
 }
@@ -342,6 +349,13 @@ func (unsupportedRuntimeScopePeer) CancelInvocation(
 	models.CancelInvocationRequest,
 ) (models.CancelInvocationResult, error) {
 	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+}
+
+func (unsupportedRuntimeScopePeer) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
 func (s catalogPeerService) GetModel(_ context.Context, name string) (models.Detail, error) {

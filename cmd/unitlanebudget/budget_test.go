@@ -34,12 +34,12 @@ func TestCommittedBudgetSchemaAndInstancePassDraft202012Compiler(t *testing.T) {
 	if err := problems.err(); err != nil {
 		t.Fatalf("populated budget semantic validation: %v", err)
 	}
-	// The retained timing samples remain the historical 18,122-test baseline.
+	// The retained timing samples remain the historical baseline.
 	// Final mode uses the reviewed current-head inventory from the latest
 	// complete Ubuntu unit-lane capture.
-	const reviewedCurrentHeadTestCount = 18223
-	if budget.Reference.MedianWallSeconds != 239.612 || len(budget.Reference.PackageInventory) != 444 || len(budget.Reference.TestInventory) != reviewedCurrentHeadTestCount {
-		t.Fatalf("loaded budget reference = median %.3f, packages %d, tests %d; want 239.612/444/%d", budget.Reference.MedianWallSeconds, len(budget.Reference.PackageInventory), len(budget.Reference.TestInventory), reviewedCurrentHeadTestCount)
+	const reviewedCurrentHeadTestCount = 18239
+	if budget.Reference.MedianWallSeconds != 239.612 || len(budget.Reference.PackageInventory) != 445 || len(budget.Reference.TestInventory) != reviewedCurrentHeadTestCount {
+		t.Fatalf("loaded budget reference = median %.3f, packages %d, tests %d; want 239.612/445/%d", budget.Reference.MedianWallSeconds, len(budget.Reference.PackageInventory), len(budget.Reference.TestInventory), reviewedCurrentHeadTestCount)
 	}
 }
 

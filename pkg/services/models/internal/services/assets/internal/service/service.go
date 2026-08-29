@@ -38,6 +38,7 @@ type service struct {
 	openFile           modelseffects.AssetOpenFile
 	resolveEnvironment modelseffects.AssetResolveEnvironment
 	resolveRevision    func(context.Context, string) (string, error)
+	coordination       modelseffects.AssetStagingCoordination
 
 	cacheMu  sync.Mutex
 	inflight map[string]*assetCacheCall
@@ -99,11 +100,13 @@ func New(
 ) assets.Service {
 	resolveEnvironment := modelseffects.AssetResolveEnvironment(func(string) string { return "" })
 	var resolveRevision func(context.Context, string) (string, error)
+	var coordination modelseffects.AssetStagingCoordination
 	if len(options) > 0 {
 		if options[0].ResolveEnvironment != nil {
 			resolveEnvironment = options[0].ResolveEnvironment
 		}
 		resolveRevision = options[0].ResolveRevision
+		coordination = options[0].Coordination
 	}
 	if resolveRevision == nil {
 		resolveRevision = func(context.Context, string) (string, error) {
@@ -127,6 +130,7 @@ func New(
 		openFile:           openFile,
 		resolveEnvironment: resolveEnvironment,
 		resolveRevision:    resolveRevision,
+		coordination:       coordination,
 		inflight:           make(map[string]*assetCacheCall),
 		activePulls:        make(map[string]activePullState),
 		pullFailure:        make(map[string]string),

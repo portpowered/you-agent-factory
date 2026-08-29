@@ -140,6 +140,7 @@ func NewService(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	return newService(
@@ -148,7 +149,7 @@ func NewService(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, invocationRuntimeOptions{},
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, nil, invocationRuntimeOptions{},
 		revisionResolvers...,
 	)
 }
@@ -187,6 +188,7 @@ func NewServiceWithBackendArtifactResolver(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
 	backendResolver BackendArtifactResolver,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
@@ -196,7 +198,7 @@ func NewServiceWithBackendArtifactResolver(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, invocationRuntimeOptions{},
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, backendResolver, invocationRuntimeOptions{},
 		revisionResolvers...,
 	)
 }
@@ -236,6 +238,7 @@ func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
 	backendResolver BackendArtifactResolver,
 	invocationProtocol InvocationProtocolClient,
 	protocolDialer InvocationProtocolDialer,
@@ -250,7 +253,7 @@ func NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialer(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, assetCoordination, backendResolver,
 		invocationRuntimeOptions{
 			Backend: invocationBackend, ASR: asrBackend, Embedding: embeddingBackend,
 			Client: invocationProtocol, Dialer: protocolDialer,
@@ -289,6 +292,7 @@ func newService(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
 	backendResolver BackendArtifactResolver,
 	runtimeOptions invocationRuntimeOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
@@ -351,7 +355,7 @@ func newService(
 		resolveEnvironment,
 		protocolNegotiator,
 		compatibilityChecker,
-		backendResolver, runtimeOptions, revisionResolvers...,
+		assetCoordination, backendResolver, runtimeOptions, revisionResolvers...,
 	)
 }
 
@@ -387,6 +391,7 @@ func composeModelsService(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
 	backendResolver BackendArtifactResolver,
 	runtimeOptions invocationRuntimeOptions,
 	revisionResolvers ...func(context.Context, string) (string, error),
@@ -400,7 +405,7 @@ func composeModelsService(
 		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
 		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
-		compatibilityChecker, runtimeOptions, now, issuerEntropy,
+		compatibilityChecker, assetCoordination, runtimeOptions, now, issuerEntropy,
 		firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
@@ -700,6 +705,7 @@ func buildModelsServiceComponents(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	assetCoordination AssetStagingCoordination,
 	runtimeOptions invocationRuntimeOptions,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
@@ -717,7 +723,11 @@ func buildModelsServiceComponents(
 		runtimeScopes, assetPlatform, assetHTTP, assetEndpoints,
 		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
 		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
-		scopedassets.ConstructionOptions{ResolveEnvironment: resolveEnvironment, ResolveRevision: revisionResolver},
+		scopedassets.ConstructionOptions{
+			ResolveEnvironment: resolveEnvironment,
+			ResolveRevision:    revisionResolver,
+			Coordination:       assetCoordination,
+		},
 	)
 	if err != nil {
 		return modelsServiceComponents{}, err

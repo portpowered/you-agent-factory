@@ -7,7 +7,9 @@ import (
 	"runtime"
 	"testing"
 
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -43,6 +45,10 @@ func newAssetPullerForTest(
 	if err != nil {
 		return nil, err
 	}
+	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		return nil, err
+	}
 	service, err := assetswire.NewService(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
@@ -60,6 +66,7 @@ func newAssetPullerForTest(
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		assets.ConstructionOptions{Coordination: coordination},
 	)
 	if err != nil {
 		return nil, err

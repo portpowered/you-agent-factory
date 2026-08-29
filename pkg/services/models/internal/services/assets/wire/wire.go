@@ -44,6 +44,9 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
+	if len(options) == 0 || options[0].Coordination == nil {
+		return nil, fmt.Errorf("Models Assets staging coordination is required")
+	}
 	return internalservice.New(
 		scopes,
 		platform,
@@ -59,7 +62,7 @@ func NewService(
 		readDirectory,
 		createFile,
 		openFile,
-		options...,
+		options[0],
 	), nil
 }
 

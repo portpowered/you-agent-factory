@@ -277,8 +277,9 @@ func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *test
 
 	stdout, stderr, err := runStory004CLI(t, process, factoryDir, environment,
 		[]string{"you", "models", "invoke", "embed", "--input", "text=Find similar work"})
-	if err != nil || stdout != `[0.1,0.2,0.3,0.4]` || stderr != "" {
-		t.Fatalf("EMBED cache-miss invocation = err %v stdout %q stderr %q", err, stdout, stderr)
+	wantEstimate := "models asset estimate modelName=\"embed\" backendBytes=34 modelBytes=34 totalBytes=68\n"
+	if err != nil || stdout != `[0.1,0.2,0.3,0.4]` || stderr != wantEstimate {
+		t.Fatalf("EMBED cache-miss invocation = err %v stdout %q stderr %q; want estimate %q", err, stdout, stderr, wantEstimate)
 	}
 	missCalls := assetFixture.Calls()
 	if missCalls < 3 {

@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -47,7 +50,7 @@ func (s *service) acquireGenericCache(
 		}
 		select {
 		case <-ctx.Done():
-			return genericCacheResult{}, ctx.Err()
+			return genericCacheResult{}, assetContextError(ctx)
 		case <-done:
 			return call.result, call.err
 		}
@@ -75,8 +78,8 @@ func (s *service) acquireGenericCacheOnce(
 	artifacts []genericArtifact,
 	roots []string,
 	offline bool,
-) (genericCacheResult, error) {
-	if len(artifacts) == 0 && source.kind == genericSourceHF {
+) (result genericCacheResult, err error) {
+	if source.kind == genericSourceHF && genericArtifactsNeedManifest(artifacts) {
 		if offline {
 			return genericCacheResult{}, &models.AssetOfflineError{
 				Missing: []string{source.repository},
@@ -86,12 +89,23 @@ func (s *service) acquireGenericCacheOnce(
 		if err != nil {
 			return genericCacheResult{}, err
 		}
-		artifacts = manifest
+		artifacts, err = mergeGenericManifest(artifacts, manifest)
+		if err != nil {
+			return genericCacheResult{}, err
+		}
 	}
 	s.addGenericURLs(source, artifacts)
 	if err := assetContextError(ctx); err != nil {
 		return genericCacheResult{}, err
 	}
+	lock, lockErr := s.lockGenericCache(ctx, kind, source, artifacts, roots)
+	if lockErr != nil {
+		return genericCacheResult{}, lockErr
+	}
+	defer func() {
+		err = closeAssetStagingLock(lock, err)
+	}()
+
 	cached, missing, inspectErr := s.inspectGenericCache(ctx, kind, source, artifacts, roots)
 	if inspectErr != nil {
 		return cacheResultFromPaths(artifactKind, artifacts, cached), inspectErr
@@ -102,24 +116,6 @@ func (s *service) acquireGenericCacheOnce(
 	if offline {
 		return cacheResultFromPaths(artifactKind, artifacts, cached), &models.AssetOfflineError{
 			Missing: missingArtifactNames(missing),
-		}
-	}
-	if source.kind == genericSourceHF {
-		manifest, err := s.fetchGenericManifest(ctx, source)
-		if err != nil {
-			return cacheResultFromPaths(artifactKind, artifacts, cached), err
-		}
-		artifacts, err = mergeGenericManifest(artifacts, manifest)
-		if err != nil {
-			return cacheResultFromPaths(artifactKind, artifacts, cached), err
-		}
-		s.addGenericURLs(source, artifacts)
-		cached, missing, inspectErr = s.inspectGenericCache(ctx, kind, source, artifacts, roots)
-		if inspectErr != nil {
-			return cacheResultFromPaths(artifactKind, artifacts, cached), inspectErr
-		}
-		if len(missing) == 0 {
-			return cacheResultFromPaths(artifactKind, artifacts, cached), nil
 		}
 	}
 	return s.publishGenericCache(ctx, kind, artifactKind, source, artifacts, cached, missing, roots)
@@ -610,4 +606,75 @@ func (s *service) removeTree(path string) error {
 		}
 	}
 	return s.removePath(path)
+}
+
+func (s *service) lockGenericCache(
+	ctx context.Context,
+	kind string,
+	source genericSource,
+	artifacts []genericArtifact,
+	roots []string,
+) (io.Closer, error) {
+	if len(roots) == 0 {
+		return nil, nil
+	}
+	identity := genericArtifactIdentityHash(kind, source, artifacts)
+	lockPath := filepath.Join(
+		roots[len(roots)-1], ".you-asset-locks", kind, identity+".lock",
+	)
+	return s.lockAssetStaging(ctx, lockPath)
+}
+
+func (s *service) lockGenericRuntime(
+	ctx context.Context,
+	cacheDirectory string,
+	modelName string,
+) (io.Closer, error) {
+	root, err := s.modelCacheRoot(cacheDirectory, canonicalModelName(modelName))
+	if err != nil {
+		return nil, err
+	}
+	identity := sha256.Sum256([]byte(canonicalModelName(modelName)))
+	return s.lockAssetStaging(
+		ctx,
+		filepath.Join(filepath.Dir(root), ".you-asset-locks", "runtime", hex.EncodeToString(identity[:])+".lock"),
+	)
+}
+
+func (s *service) lockAssetStaging(ctx context.Context, path string) (io.Closer, error) {
+	if s == nil || s.coordination == nil {
+		return nil, pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, "", "acquire asset staging ownership", "",
+			interruptedAssetError("acquire asset staging ownership", errors.New("coordination is unavailable")),
+		)
+	}
+	lock, err := s.coordination.Lock(ctx, path)
+	if err != nil {
+		if contextErr := assetContextError(ctx); contextErr != nil {
+			return nil, contextErr
+		}
+		return nil, pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, "", "acquire asset staging ownership", "",
+			interruptedAssetError("acquire asset staging ownership", err),
+		)
+	}
+	if err := assetContextError(ctx); err != nil {
+		_ = lock.Close()
+		return nil, err
+	}
+	return lock, nil
+}
+
+func closeAssetStagingLock(lock io.Closer, primary error) error {
+	if lock == nil {
+		return primary
+	}
+	if err := lock.Close(); err != nil {
+		closeErr := pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, "", "release asset staging ownership", "",
+			interruptedAssetError("release asset staging ownership", err),
+		)
+		return errors.Join(primary, closeErr)
+	}
+	return primary
 }

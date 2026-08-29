@@ -37,6 +37,10 @@ type compositionModelsRoot struct {
 	invokeModel func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 
+func (stub compositionModelsRoot) PreflightModelAssets(context.Context, modelinference.PrepareModelAssetsRequest) (modelinference.PreflightModelAssetsResult, error) {
+	return modelinference.PreflightModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub compositionModelsRoot) OpenRuntimeScope(context.Context, modelinference.OpenRuntimeScopeRequest) (modelinference.OpenRuntimeScopeResult, error) {
 	return modelinference.OpenRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
 }

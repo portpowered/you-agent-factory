@@ -558,14 +558,18 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	dialer := &edgeModelHostGRPCDialer{}
 	invocationDialer := platformgrpc.NetworkDialer{}
 	compatibility := &edgeModelHostCompatibilityChecker{}
+	coordinationFactory := AssetStagingCoordinationFactory(func() (AssetStagingCoordination, error) {
+		return nil, nil
+	})
 	merged := Merge(Edges{}, Edges{
-		ModelAssetResolveEnvironment:  environment,
-		ModelEmbeddingBackend:         embedding,
-		ModelResolveBackendArtifact:   backendArtifactResolver,
-		ModelHostProtocolNegotiator:   protocol,
-		ModelHostGRPCDialer:           dialer,
-		ModelInvocationGRPCDialer:     invocationDialer,
-		ModelHostCompatibilityChecker: compatibility,
+		ModelAssetResolveEnvironment:         environment,
+		ModelEmbeddingBackend:                embedding,
+		ModelResolveBackendArtifact:          backendArtifactResolver,
+		ModelAssetStagingCoordinationFactory: coordinationFactory,
+		ModelHostProtocolNegotiator:          protocol,
+		ModelHostGRPCDialer:                  dialer,
+		ModelInvocationGRPCDialer:            invocationDialer,
+		ModelHostCompatibilityChecker:        compatibility,
 	})
 	if merged.ModelAssetResolveEnvironment("CACHE") != "value:CACHE" {
 		t.Fatalf("asset environment edge was not replaced")
@@ -591,6 +595,13 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	}
 	if merged.ModelHostCompatibilityChecker != compatibility {
 		t.Fatal("compatibility checker edge was not replaced")
+	}
+	if merged.ModelAssetStagingCoordinationFactory == nil {
+		t.Fatal("asset staging coordination factory edge was not replaced")
+	}
+	coordination, err := merged.ModelAssetStagingCoordinationFactory()
+	if err != nil || coordination != nil {
+		t.Fatalf("asset staging coordination factory = (%#v, %v), want nil fixture result", coordination, err)
 	}
 }
 

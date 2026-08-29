@@ -51,14 +51,14 @@ func TestManagedRuntimePullMapping(t *testing.T) {
 	}
 
 	failure := models.PullResult{ManagedPullOutcome: "TIMED_OUT", ReadinessState: "FAILED"}
-	if got := managedRuntimePullHTTPStatus(failure); got != http.StatusGatewayTimeout {
-		t.Fatalf("status = %d, want %d", got, http.StatusGatewayTimeout)
-	}
 	cause := errors.Join(context.DeadlineExceeded, models.ErrSourceFetchFailed)
 	err := &models.PullError{Result: failure, Cause: cause}
 	var classified *models.PullError
 	if !errors.As(err, &classified) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("pull error = %v, want classified deadline failure", err)
+	}
+	if got := managedRuntimePullHTTPStatus(failure); got != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want %d", got, http.StatusGatewayTimeout)
 	}
 	httpFailure := models.PullResult{
 		ModelName:          "voice",

@@ -144,6 +144,90 @@ func (o *Root) ResolveModelReference(
 	return models.ResolveModelReferenceResult{Resolved: resolved}.Clone(), nil
 }
 
+// PreflightModelAssets resolves a name-only request into the same effective
+// model/backend asset request used by joined invocation, then delegates the
+// zero-body planning operation to Models Assets. Explicit asset requests are
+// retained unchanged for callers that already performed resolution.
+func (o *Root) PreflightModelAssets(
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	if o == nil || o.assets == nil {
+		return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	if err := request.Validate(); err != nil {
+		return models.PreflightModelAssetsResult{}, err
+	}
+	prepared, err := o.normalizeAssetPreflightRequest(ctx, request)
+	if err != nil {
+		return models.PreflightModelAssetsResult{}, err
+	}
+	return o.assets.PreflightModelAssets(ctx, prepared)
+}
+
+func (o *Root) normalizeAssetPreflightRequest(
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsRequest, error) {
+	if !request.Reference.IsZero() || request.Artifacts != nil ||
+		request.BackendArtifacts != nil || !request.BackendReference.IsZero() ||
+		strings.TrimSpace(request.Backend) != "" {
+		return request, nil
+	}
+	resolution, err := o.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
+		Scope: request.Scope,
+		Reference: models.ModelReference{
+			NameOrURI: request.Name,
+		},
+	})
+	if err != nil {
+		return models.PrepareModelAssetsRequest{}, err
+	}
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, resolution.Resolved.Definition)
+	if err != nil {
+		return models.PrepareModelAssetsRequest{}, err
+	}
+	return joinedAssetPreparationRequestWithBackend(
+		models.InvokeModelRequest{
+			Scope:   request.Scope,
+			Model:   models.ModelReference{NameOrURI: request.Name},
+			Offline: request.Offline,
+		},
+		resolution.Resolved.Definition.Name,
+		resolution.Resolved,
+		backendArtifact,
+	), nil
+}
+
+func joinedInvocationAssetError(
+	request models.InvokeModelRequest,
+	err error,
+) error {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	class := models.InvocationFailureClassAssetPreparation
+	message := "model asset preparation failed"
+	switch {
+	case errors.Is(err, models.ErrAssetBackendNotReady):
+		class = models.InvocationFailureClassBackendReadiness
+		message = "managed model backend is unavailable"
+	case errors.Is(err, models.ErrAssetOffline):
+		class = models.InvocationFailureClassOfflineCache
+		message = "required model assets are unavailable offline"
+	case errors.Is(err, models.ErrModelRevisionUnresolved):
+		class = models.InvocationFailureClassRevisionResolution
+		message = "model source revision could not be resolved to an immutable commit"
+	}
+	return &models.InvocationFailure{
+		Class:     class,
+		Message:   message,
+		Model:     request.Model,
+		Operation: strings.TrimSpace(request.Operation),
+		Cause:     err,
+	}
+}
+
 func resolveModelReference(
 	ctx context.Context,
 	reference models.ModelReference,

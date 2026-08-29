@@ -75,6 +75,13 @@ func (fake *recordingModelsService) ResolveModelReference(
 	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
 }
 
+func (fake *recordingModelsService) PreflightModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (fake *recordingModelsService) PrepareModelAssets(
 	context.Context,
 	models.PrepareModelAssetsRequest,

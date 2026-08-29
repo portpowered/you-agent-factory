@@ -1,0 +1,111 @@
+# Validation report: localmodels-fix-invoke-pull-order-and-robustness
+
+## Environment and artifact
+
+- Commit/build identifier: `b05a364cf64587d62c476c457630fac785f11834`; the
+  Models integration package's `TestMain` built `./cmd/factory` once with
+  `go build -buildvcs=false` and reused that delivered artifact for its
+  process probes.
+- Environment and configuration: Windows `amd64`, Go `go1.25.0`, Windows
+  build `10.0.26200.0`; each probe used a fresh temporary home, cache, and
+  factory. The source checkout was clean before validation, excluding ignored
+  factory scaffolding.
+- Customer entry point: built `you` Models invoke/server commands through
+  `tests/integration/models`.
+- Real and substituted dependencies: production wiring and local Windows
+  processes/filesystem were real; the asset origin was a controlled local HTTP
+  fixture selected by `YOU_MODELS_BACKEND_ENDPOINT`; no remote or paid
+  provider was contacted.
+- Cost/call budget used: `$0`, zero paid calls, zero remote calls, and no use
+  of port `7438`.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Cost-safe preflight and ordered acquisition | PASS | `TestStory002ProvesAssetPreflightAndBodyOrder` passed in the final built-package run: the ledger recorded backend HEAD and model metadata before content, backend content before model content, and the exact missing-byte estimate `backendBytes=25 modelBytes=23 totalBytes=48`. The focused preflight suite passed zero-body HEAD, backend-failure-before-model-metadata, and overflow-before-network assertions. | Real backend-tag availability and remote network behavior. |
+| Typed failed pull and same-process survival | PASS | `TestStory003FailedPullReturnsTypedResponseAndServerSurvives` passed: HTTP 500 with non-empty 92-byte typed JSON, unchanged PID, `/status` 200, and a later `/models` request 200. | A remote or production-hosted origin. |
+| Five deterministic failing invokes | PASS | `TestStory004RendersFiveFailingInvokesDeterministically` passed: all five exited 1, stdout was 0 bytes, stderr was 541 bytes with the same SHA-256, code `MODEL_ASSET_PREPARATION_FAILED`, non-empty message, and identical debug SHA-256; JSON mode kept diagnostics on stderr. | Closed or unwritable operating-system stderr. |
+| Cross-process staging and retry recovery | PASS | `TestStory005SerializesOverlappingBuiltInvokes` passed with `modelStarts=1`, both exits 0, no sharing/collision marker, and no partial cache entry. `TestStory005RecoversAfterOwnerExit` passed with `modelStarts=2`, retry exit 0, no collision, and no partial cache state. | Network-filesystem locking semantics. |
+| CASE-001 through CASE-020 and named quality gates | BLOCKED | The final `tests/integration/models` run, complete Models suite, focused race suites, `go vet`, `make cli-manifest-check`, and `make cli-contract-smoke` exited 0. `make lint LINT_JOBS=1` exited 1 with only the `deadcode` target failing: committed baseline `3074` findings versus `3073` current findings. UI lint/deadcode, package boundaries, maintainability, contracts, and all other lint targets passed. | An all-green repository lint gate until the shared deadcode baseline/checker owner reconciles the one-count Windows difference. |
+| Security, privacy, and forbidden-port behavior | PASS | The controlled fixture and isolated environments produced zero remote/paid calls; diagnostic assertions cover secret, body, prompt, cache, and path redaction. No request was made to port 7438. | Network monitoring outside the test process. |
+| LOOP-001 report and no-silent-repair rule | BLOCKED | This report was emitted from the final delivered Windows run and records the single failed quality gate plus a delta plan. No implementation or shared baseline was changed after the lint failure. | Re-run after the deadcode prerequisite is resolved. |
+
+## Customer journey
+
+1. The final source at `b05a364cf6` was validated on Windows `amd64` with
+   isolated temporary home/cache/factory roots and a controlled local origin.
+   The package build was performed once by `TestMain`; process probes reused
+   that binary.
+2. `GOMAXPROCS=2 GOFLAGS=-p=1 go test ./tests/integration/models -short
+   -count=1 -timeout 45m -v` exited 0 in 10.337s. The same run passed the
+   ordered acquisition, server-survival, five-repeat, overlap, and owner-exit
+   retry witnesses.
+3. The asset ledger observed backend HEAD and model metadata before content,
+   then one backend content response of 25 bytes before one model content
+   response of 23 bytes. The emitted missing-asset estimate was
+   `models asset estimate modelName="embed" backendBytes=25 modelBytes=23 totalBytes=48`.
+4. The failed pull returned typed JSON (`status=500`, `bodyBytes=92`), while
+   the server PID stayed unchanged and both health and subsequent model-list
+   requests returned 200.
+5. The five failing invokes each returned exit 1 with the stable typed code,
+   message, and debug chain described in the criteria table. Two overlapping
+   invokes transferred the model once; killing the owner and retrying produced
+   a usable completed cache with no partial artifact.
+6. `GOMAXPROCS=2 GOFLAGS=-p=1 go test -race ./tests/integration/models -run
+   '^TestStory(002|003|004|005)' -count=1 -timeout 45m -v` exited 0 in 9.591s.
+   The focused preflight suite exited 0 in 0.040s; the complete
+   `./pkg/services/models/...` suite and focused locking/asset/diagnostic/CLI
+   race suites also exited 0. `go vet` exited 0. Both named CLI gates exited
+   0.
+7. `make lint LINT_JOBS=1` exited 1 only at `deadcode` with baseline `3074`
+   and current `3073`. The implementation was not edited to disguise or
+   repair that shared-baseline result.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: this report is at
+  `validation/localmodels-fix-invoke-pull-order-and-robustness.md`; the
+  executable witnesses remain in `tests/integration/models`.
+- Permission and error behavior: typed pull and invoke failures are non-empty,
+  stable, and request/process scoped; sensitive wrapped causes are redacted.
+- Persistence/reload behavior: completed asset metadata and content survived
+  the overlap and owner-exit retry probes; no partial entry was ready.
+- Accessibility/keyboard/responsive behavior: not applicable; this lane has
+  no UI change.
+- Operational signals: exit status, bounded stdout/stderr sizes and hashes,
+  request/body-byte ledger, PID, health status, transfer count, cache
+  completeness, and race/vet/gate exit status were captured.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| VAL-001 | Blocker | Run `make lint LINT_JOBS=1` at commit `b05a364cf6`. | All required repository lint targets pass. | Only `deadcode` fails: the committed baseline has 3074 findings and the Windows scan has 3073. | Final lint output: `baseline findings: 3074, current findings: 3073`; all other targets passed. |
+
+## Verdict
+
+BLOCKED
+
+## Delta-plan request [Required for FAIL/BLOCKED]
+
+- Affected behavior and criterion: Story 006's named quality-gate criterion
+  requiring an all-green `make lint`, and the LOOP-001 integrated verdict.
+- Root-cause evidence or remaining uncertainty: the final Windows scan differs
+  from the committed deadcode baseline by one finding. Its platform-specific
+  entries differ from the baseline's Unix entries, and the current scan also
+  reports `pkg/services/models/internal/services/assets/internal/service/generic.go:
+  unreachable func: genericPreparationError`. This validator has no authority
+  to decide whether that helper needs an implementation cleanup or whether the
+  shared checker/baseline needs cross-platform reconciliation.
+- Smallest recommended correction/prerequisite: have the deadcode owner review
+  the `genericPreparationError` finding and reconcile the shared baseline or
+  checker for the Windows artifact, without weakening runtime assertions. Do
+  not silently change implementation or commit a baseline refresh from this
+  read-only validation lane.
+- Dependencies and retest scope: after that owner decision, rerun
+  `make lint LINT_JOBS=1`, `GOMAXPROCS=2 GOFLAGS=-p=1 go test
+  ./tests/integration/models -short -count=1 -timeout 45m -v`, the focused
+  preflight suite, the race-qualified built subset, `go vet`, and both CLI
+  contract gates. Emit a new clean-room report only from the resulting
+  delivered head.

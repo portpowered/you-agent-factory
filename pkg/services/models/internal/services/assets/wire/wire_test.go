@@ -6,8 +6,10 @@ import (
 	"os"
 	"testing"
 
+	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -23,6 +25,10 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 	readDirectory := modelseffects.AssetReadDirectory(os.ReadDir)
 	endpoints := models.RuntimeAssetEndpoints{
 		BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test",
+	}
+	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		t.Fatalf("construct asset coordination: %v", err)
 	}
 
 	tests := []struct {
@@ -87,6 +93,7 @@ func TestNewServiceRequiresScopedCacheInspectionDependencies(t *testing.T) {
 				test.readDir,
 				test.create,
 				test.open,
+				assets.ConstructionOptions{Coordination: coordination},
 			)
 			if test.wantError {
 				if service != nil || err == nil {

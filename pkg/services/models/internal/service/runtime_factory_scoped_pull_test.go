@@ -445,6 +445,10 @@ type removeGuardAssets struct {
 	removeCalls     int
 }
 
+func (assets *removeGuardAssets) PreflightModelAssets(context.Context, models.PrepareModelAssetsRequest) (models.PreflightModelAssetsResult, error) {
+	return models.PreflightModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (assets *removeGuardAssets) PrepareModelAssets(context.Context, models.PrepareModelAssetsRequest) (models.PrepareModelAssetsResult, error) {
 	return models.PrepareModelAssetsResult{}, models.ErrUnsupportedOperation
 }

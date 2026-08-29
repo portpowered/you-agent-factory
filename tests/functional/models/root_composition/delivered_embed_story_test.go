@@ -36,8 +36,9 @@ func TestDeliveredEmbedCLIArtifactReachesProtocolFixture(t *testing.T) {
 
 	first := runDeliveredEmbedCLI(t, binary, workDir, home, fixture.server.URL,
 		"models", "invoke", "embed", "--input", "text=Find similar work")
-	if first.exitCode != 0 || string(first.stdout) != `[0.1,0.2,0.3,0.4]` || len(first.stderr) != 0 {
-		t.Fatalf("delivered EMBED command exit=%d stdout=%q stderr=%q; want one vector and empty stderr", first.exitCode, first.stdout, first.stderr)
+	wantEstimate := "models asset estimate modelName=\"embed\" backendBytes=25 modelBytes=34 totalBytes=59\n"
+	if first.exitCode != 0 || string(first.stdout) != `[0.1,0.2,0.3,0.4]` || string(first.stderr) != wantEstimate {
+		t.Fatalf("delivered EMBED command exit=%d stdout=%q stderr=%q; want one vector and estimate %q", first.exitCode, first.stdout, first.stderr, wantEstimate)
 	}
 	t.Logf("delivered command: you models invoke embed --input text=Find similar work")
 	t.Logf("delivered output: exit=%d stdout=%q stderr=%q", first.exitCode, first.stdout, first.stderr)

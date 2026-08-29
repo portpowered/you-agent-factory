@@ -32,6 +32,7 @@ type AssetPuller interface {
 type assetPuller struct {
 	inner        assets.Service
 	resolveScope func() (models.RuntimeScopeRef, error)
+	prepare      func(context.Context, string, models.RuntimeScopeRef) (models.PrepareModelAssetsRequest, error)
 	scopeMu      sync.Mutex
 	scope        models.RuntimeScopeRef
 }
@@ -54,15 +55,37 @@ func NewScopedAssetPuller(inner assets.Service, scope models.RuntimeScopeRef) (A
 	}, nil
 }
 
+// NewScopedAssetPullerWithPreparation adapts the scoped asset service while
+// allowing the Models root to supply the already-resolved backend/model
+// request. The default constructor remains available for legacy callers that
+// intentionally use the plain name-only request.
+func NewScopedAssetPullerWithPreparation(
+	inner assets.Service,
+	scope models.RuntimeScopeRef,
+	prepare func(context.Context, string, models.RuntimeScopeRef) (models.PrepareModelAssetsRequest, error),
+) (AssetPuller, error) {
+	puller, err := NewScopedAssetPuller(inner, scope)
+	if err != nil {
+		return nil, err
+	}
+	adapter := puller.(*assetPuller)
+	adapter.prepare = prepare
+	return adapter, nil
+}
+
 func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, modelName string) (models.PullResult, error) {
 	scope, err := p.currentScope()
 	if err != nil {
 		return models.PullResult{}, err
 	}
-	result, err := p.inner.PrepareModelAssets(ctx, models.PrepareModelAssetsRequest{
-		Scope: scope,
-		Name:  modelName,
-	})
+	request := models.PrepareModelAssetsRequest{Scope: scope, Name: modelName}
+	if p.prepare != nil {
+		request, err = p.prepare(ctx, modelName, scope)
+		if err != nil {
+			return models.PullResult{}, err
+		}
+	}
+	result, err := p.inner.PrepareModelAssets(ctx, request)
 	projected := pullResultFromAssets(result)
 	if err != nil {
 		projected.Outcome = legacyPullOutcomeFailed

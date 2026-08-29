@@ -28,6 +28,10 @@ type stubModelsRoot struct {
 	invokeModel          func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 
+func (stub stubModelsRoot) PreflightModelAssets(context.Context, modelinference.PrepareModelAssetsRequest) (modelinference.PreflightModelAssetsResult, error) {
+	return modelinference.PreflightModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub stubModelsRoot) OpenRuntimeScope(context.Context, modelinference.OpenRuntimeScopeRequest) (modelinference.OpenRuntimeScopeResult, error) {
 	return modelinference.OpenRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
 }

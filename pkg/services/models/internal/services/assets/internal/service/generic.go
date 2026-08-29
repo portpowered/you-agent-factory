@@ -45,9 +45,10 @@ type genericSource struct {
 }
 
 type genericArtifact struct {
-	requirement models.AssetRequirement
-	url         string
-	localPath   string
+	requirement      models.AssetRequirement
+	url              string
+	localPath        string
+	metadataResolved bool
 }
 
 type genericCacheResult struct {
@@ -105,10 +106,11 @@ func (s *service) prepareGenericAssets(
 	if err := assetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
-	plan, err := s.genericPreparationPlan(ctx, request)
+	preflight, err := s.preflightGenericPreparation(ctx, request)
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	plan := preflight.plan
 	expected := make([]models.AssetRequirement, 0, len(plan.modelRequirements)+len(plan.backendRequirements))
 	for _, artifact := range plan.modelRequirements {
 		expected = append(expected, artifact.requirement)
@@ -118,13 +120,19 @@ func (s *service) prepareGenericAssets(
 	}
 	s.updateActivePull(request.Scope, request.Name, expected, plan.source.revision)
 
+	// Re-inspection under the root's mutation boundary is part of the prepare
+	// operation. The backend remains the first content-bearing transaction even
+	// when a preflight observed both sources as reachable.
+	backendResult, backendErr := s.acquireGenericBackend(ctx, plan, request.Offline)
+	if backendErr != nil {
+		return genericAssetFailureResult(plan.source, genericCacheResult{}, backendResult), backendErr
+	}
 	modelResult, modelErr := s.acquireGenericCache(
 		ctx, assetKindModel, models.AssetArtifactKindModel, plan.source,
 		plan.modelRequirements, plan.modelRoots, request.Offline,
 	)
-	backendResult, backendErr := s.acquireGenericBackend(ctx, plan, request.Offline)
-	if err := genericPreparationError(modelErr, backendErr); err != nil {
-		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
+	if modelErr != nil {
+		return genericAssetFailureResult(plan.source, modelResult, backendResult), modelErr
 	}
 	var runtimeInspection scopedassets.RuntimeCacheInspection
 	if modelResult.snapshotPath != "" {
@@ -257,19 +265,6 @@ func (s *service) acquireGenericBackend(
 	)
 }
 
-func genericPreparationError(modelErr, backendErr error) error {
-	if modelErr == nil && backendErr == nil {
-		return nil
-	}
-	if offlineErr := combinedOfflineError(modelErr, backendErr); offlineErr != nil {
-		return offlineErr
-	}
-	if modelErr != nil {
-		return modelErr
-	}
-	return backendErr
-}
-
 func genericAssetResult(
 	source genericSource,
 	modelResult genericCacheResult,
@@ -364,7 +359,11 @@ func (s *service) genericArtifactsFromRequirements(
 	}
 	artifacts := make([]genericArtifact, 0, len(requirements))
 	for _, requirement := range requirements {
-		artifact := genericArtifact{requirement: requirement}
+		artifact := genericArtifact{
+			requirement: requirement,
+			metadataResolved: source.kind != genericSourceHF ||
+				(requirement.Bytes > 0 && strings.TrimSpace(requirement.SHA256) != ""),
+		}
 		if source.kind == genericSourceLocal || source.kind == genericSourceFile {
 			artifact.localPath = source.localPath
 			if localDirectory {
@@ -655,7 +654,8 @@ func (s *service) fetchGenericManifest(
 			digest = strings.ToLower(strings.TrimSpace(sibling.LFS.OID))
 		}
 		result = append(result, genericArtifact{
-			requirement: models.AssetRequirement{Name: name, Bytes: size, SHA256: digest},
+			requirement:      models.AssetRequirement{Name: name, Bytes: size, SHA256: digest},
+			metadataResolved: true,
 		})
 	}
 	return result, nil
