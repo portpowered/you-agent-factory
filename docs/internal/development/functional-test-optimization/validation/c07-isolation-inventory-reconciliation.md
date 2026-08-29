@@ -3,10 +3,10 @@
 ## Environment and artifact
 
 - Commit/build identifier: clean-room head
-  `62fd5c96fa61b64ecc35474c8c7b7d06abe81f03`; executable source commit
+  `515f3bd3c125c37a18bb9e5fb79358c66fc58c9f`; executable source commit
   `ec194b5ab5d24803307b0cd8bb8895cb6d5ab9ee`. The paired artifact hashes in
   that committed checkout were JSON
-  `9c3fc27740c61b4bd4246e8758013427654888ef54f37a3b7ceca819c88546af` and
+  `ce864db14c3e8381e58cd724ea8df579c54a6ce2888bc317b38f0205d583465a` and
   Markdown
   `eec166d801c1414bdba9d90b5a146d1e7e2127bf7d61dd9edc2da3631e83c3a4`.
 - Environment and configuration: Windows `10.0.26200`, Go
