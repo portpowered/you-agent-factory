@@ -66354,7 +66354,7 @@
       }
     ],
     "specialCases": {
-      "rowId": "C07-F066-top-level-declaration-TestPackagedACPUnexpectedCommand",
+        "rowId": "C07-F066-top-level-test-TestPackagedACPUnexpectedCommand",
       "kind": "helper-only",
       "sourceReference": "tests/functional/providers/acp/packaged_acp_test.go:245",
       "assertionOwner": "sibling ACP protocol test",
