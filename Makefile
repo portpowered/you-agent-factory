@@ -752,9 +752,10 @@ test-unit-coverage:
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of
-# this target) cannot succeed without a successful boundary check. gocoveragecheck
-# forces -count=1 for its instrumented run, so this target remains fresh even
-# though the ordinary developer lane is cache-aware. Boundary failures exit
+# this target) cannot succeed without a successful boundary check. The
+# instrumented gocoveragecheck invocation leaves test-count policy to Go, so an
+# eligible repeat may be served from the test cache; use test-functional-fresh
+# for an explicit fresh ordinary-functional run. Boundary failures exit
 # non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
