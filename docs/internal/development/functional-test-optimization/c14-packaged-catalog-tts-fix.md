@@ -1,10 +1,10 @@
 # C14 packaged Catalog, TTS, and Fix baseline ledger
 
-Status: story `fto-c14-pkg-factory-packaged-cluster-001` is complete. This
-ledger freezes the pre-change denominator and characterization for the three
-owned functional packages. Stories `...-002` through `...-005` own
-optimization, final measurement, loopback, and review handoff; no improvement
-or measured-floor claim is made here.
+Status: stories `fto-c14-pkg-factory-packaged-cluster-001` and
+`...-002` are complete. This ledger freezes the pre-change denominator and
+characterization for the three owned functional packages and records the
+bounded Catalog optimization. Stories `...-003` through `...-005` own TTS,
+Fix, final measurement, loopback, and review handoff.
 
 ## Authority, scope, and artifact
 
@@ -249,14 +249,82 @@ candidate set, and remaining-edge properties. The next stories must use this
 ledger as their before state and must reconcile any base change before
 comparing results.
 
+## GATE-CAT-OPT: seed/copy setup reduction and result
+
+The Catalog profile selected the repeated packaged-installation setup in the
+18 required-input child rows. The implementation keeps one root-built public
+bootstrap as a read-only seed, then copies only the selected packaged Factory
+and a valid per-row system-config template into each fresh row home. Each row
+still runs its actual `you --json run --named ... --no-record` command through
+the shared root process with a fresh working directory, TTY stdin, environment,
+and provider recorder. The copied config receives a new local backend scope so
+row identity remains isolated.
+
+### Procedure and measured result
+
+The pre-change focused command was run before the fixture edit from the
+baseline parent; the after command used the current Catalog source. Both used
+the local-real root composition and controlled provider edge on the same
+Windows host described above.
+
+```text
+go test ./tests/functional/factory/packaged/catalog \
+  -run '^TestPackagedFactoriesRejectMissingRequiredInputs$' -count=1 -v
+go test ./tests/functional/factory/packaged/catalog/... -count=1 -v
+go test ./tests/functional/factory/packaged/catalog/... \
+  -run '^TestPackagedFactoriesRejectMissingRequiredInputs$' -count=3
+go test -race ./tests/functional/factory/packaged/catalog/... \
+  -run '^TestPackagedFactoriesRejectMissingRequiredInputs$' -count=1
+```
+
+| Evidence | Before | After | Exit |
+| --- | ---: | ---: | ---: |
+| Required-input focused test elapsed | `133.76s` | `65.45s` | `0` |
+| Complete Catalog package elapsed | `149.110s` baseline median | `78.029s` observed run | `0` |
+| Required-input repeat gate | not applicable before edit | `95.998s` for `-count=3` | `0` |
+| Required-input race gate | not applicable before edit | `61.411s` for `-race -count=1` | `0` |
+
+The focused required-input slice observed a `51.1%` wall reduction on this
+shared host. The complete-package after value is one post-change sample, not
+the lane's final three-run Catalog median; `GATE-PERF-C14` remains responsible
+for that denominator and verdict.
+
+### Catalog operation and identity handoff
+
+The baseline assertion inventory above remains unchanged: 13 Catalog
+top-level records plus 22 named records, including all 18 required-input
+identities. The full package run passed all 35 Catalog records. The focused
+repeat and race runs passed every required-input identity and retained the
+existing assertions for Factory/input diagnostics, non-completed results, and
+zero provider calls.
+
+| Operation or identity boundary | Before | After | Ownership/isolation retained |
+| --- | ---: | ---: | --- |
+| Root builds for Catalog package | `1` shared | `1` shared | `TestMain` closes it once; no production root change |
+| Public system-bootstrap probes for required-input rows | `18` | `1` seed | Seed is established through `InstallPackagedFactoryWithProcess` |
+| Public packaged-install setup calls for required-input rows | `18` | `1` seed | The selected Factory remains published/validated by the public path |
+| Package-local selected Factory copies | `0` | `18` | One fresh home and selected `@you/*` directory per row |
+| Package-local config template writes | `0` | `18` | Fresh config path and unique `local-<uuid>` scope per row |
+| Required-input CLI behavior invocations | `18` | `18` | Root-built `Process.Execute`, empty TTY stdin, fresh env/workdir |
+| Provider calls observed by required-input assertions | `0` | `0` | Per-row recorder remains installed and checked |
+| API host / cached discovery response | `1 / 1` | `1 / 1` | Existing API-owned loopback and immutable response cache unchanged |
+
+No Factory definition, API, CLI contract, shared support, production, or
+other package file changed. Source-failure delegates continue to reset after
+their sequential rows, the forced-unwind report remains owned by `TestMain`,
+and no sleep or timeout was added. The retained unproven edges are final
+three-run medians or a measured floor, TTS and Fix optimization, touched
+integrated loopback, current-head CI, and merge.
+
 ## Handoff artifacts
 
 - Durable ledger: `docs/internal/development/functional-test-optimization/c14-packaged-catalog-tts-fix.md`.
-- Ignored task state: `prd.json` marks story `...-001` `passes:true`; `progress.txt`
+- Ignored task state: `prd.json` marks stories `...-001` and `...-002`
+  `passes:true`; `progress.txt`
   records the concise iteration handoff and reusable patterns.
 - No generated, production, API, shared-support, workflow, baseline, CI, or
-  sibling-package file changed.
-- Unproven edges handed to later gates: Catalog setup reduction,
-  TTS root/model setup reduction, Fix root/Git setup reduction, post-change
-  repeat/race safety, final three-run medians or operation-level floors,
-  clean-room loopback, current-head CI, and merge.
+  sibling-package file changed; the Catalog change is confined to
+  `tests/functional/factory/packaged/catalog/required_inputs_test.go`.
+- Unproven edges handed to later gates: final three-run medians or
+  operation-level floors, TTS root/model setup reduction, Fix root/Git setup
+  reduction, clean-room loopback, current-head CI, and merge.
