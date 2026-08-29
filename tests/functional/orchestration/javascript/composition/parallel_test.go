@@ -4,18 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -57,12 +52,12 @@ const parallelPartialFailureWorkflow = `return (async function () {
 // public Factory Session and dispatch surfaces, using controllable provider edges
 // instead of wall-clock sleeps to observe concurrency.
 func runJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T, fixture *compositionFixture) {
-	provider := newGatedParallelChildProvider()
-	registerCompositionProvider(t, fixture, provider)
+	fixture.runner.beginConcurrentCase()
+	defer fixture.runner.releaseConcurrent()
 
 	started := startParallelCompositionWorkflowAsync(
 		t,
-		fixture.baseURL,
+		fixture,
 		"parallel-composition-concurrent-dispatch",
 		parallelConcurrentDispatchWorkflow,
 	)
@@ -71,26 +66,30 @@ func runJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T, fixture *
 		t.Fatal("session id unexpectedly empty")
 	}
 	fixture.trackLiveSession(t, sessionID)
-
-	provider.waitForConcurrentCalls(t, 5*time.Second)
-	provider.releaseAll()
-
-	completed := waitForParallelCompositionSessionStatus(
+	responseStream := support.OpenFactoryResponseEventStreamAt(
 		t,
-		fixture.baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-		10*time.Second,
+		support.SessionResponseEventsURL(fixture.baseURL, sessionID),
 	)
-	if completed.ResultSummary == nil ||
-		completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultSummary = %#v, want FINAL", completed.ResultSummary)
+	defer responseStream.Close()
+
+	waitContext, cancel := context.WithTimeout(t.Context(), compositionFixtureTimeout)
+	defer cancel()
+	if err := fixture.runner.waitForConcurrent(waitContext); err != nil {
+		t.Fatalf("wait for concurrent provider command calls: %v", err)
 	}
 
-	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		fixture.baseURL+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	fixture.runner.releaseConcurrent()
+	if err := fixture.runner.waitForConcurrentCompletion(waitContext); err != nil {
+		t.Fatalf("wait for concurrent provider command completion: %v", err)
+	}
+	responseStream.WaitClosed(compositionFixtureTimeout)
+	completed := readParallelCompositionSession(t, fixture.baseURL, sessionID)
+	if completed.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded ||
+		completed.ResultSummary == nil || completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("session = %#v, want SUCCEEDED with FINAL result", completed)
+	}
+
+	dispatches := fixture.publicDispatches(t, sessionID)
 	if len(dispatches.Dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want 2 public child dispatches", len(dispatches.Dispatches))
 	}
@@ -99,8 +98,8 @@ func runJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T, fixture *
 			t.Fatalf("dispatch %s status = %q, want COMPLETED", dispatch.Id, dispatch.Status)
 		}
 	}
-	if provider.peakActive() < 2 {
-		t.Fatalf("provider peak active child calls = %d, want at least 2 concurrent external calls", provider.peakActive())
+	if fixture.runner.peakActive() < 2 {
+		t.Fatalf("provider peak active child calls = %d, want at least 2 concurrent external calls", fixture.runner.peakActive())
 	}
 }
 
@@ -108,12 +107,16 @@ func runJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T, fixture *
 // returns child results in declared input order on the public Factory Session result
 // surface even when controllable external edges complete children in a different order.
 func runJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T, fixture *compositionFixture) {
-	provider := newLabelGatedParallelChildProvider(parallelDeclaredResultOrderingLabels)
-	registerCompositionProvider(t, fixture, provider)
+	fixture.runner.beginOrderingCase(parallelDeclaredResultOrderingLabels)
+	defer func() {
+		for _, label := range parallelDeclaredResultOrderingLabels {
+			fixture.runner.releaseLabel(label)
+		}
+	}()
 
 	started := startParallelCompositionWorkflowAsync(
 		t,
-		fixture.baseURL,
+		fixture,
 		"parallel-composition-declared-ordering",
 		parallelDeclaredResultOrderingWorkflow,
 	)
@@ -122,37 +125,40 @@ func runJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T, fixture 
 		t.Fatal("session id unexpectedly empty")
 	}
 	fixture.trackLiveSession(t, sessionID)
-
-	waitForParallelCompositionInFlightDispatches(t, fixture.baseURL, sessionID, 3, 5*time.Second)
-	for _, label := range []string{"child-gamma", "child-beta", "child-alpha"} {
-		provider.releaseLabel(label)
-		waitForParallelCompositionLabelCompletion(t, provider, label, 5*time.Second)
-	}
-
-	completed := waitForParallelCompositionSessionStatus(
+	responseStream := support.OpenFactoryResponseEventStreamAt(
 		t,
-		fixture.baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-		10*time.Second,
+		support.SessionResponseEventsURL(fixture.baseURL, sessionID),
 	)
-	if completed.ResultSummary == nil ||
-		completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultSummary = %#v, want FINAL", completed.ResultSummary)
+	defer responseStream.Close()
+
+	waitContext, cancel := context.WithTimeout(t.Context(), compositionFixtureTimeout)
+	defer cancel()
+	if err := fixture.runner.waitForOrderingStarted(waitContext); err != nil {
+		t.Fatalf("wait for ordered provider command calls: %v", err)
+	}
+	for _, label := range []string{"child-gamma", "child-beta", "child-alpha"} {
+		fixture.runner.releaseLabel(label)
+		if err := fixture.runner.waitForLabel(waitContext, label); err != nil {
+			t.Fatalf("wait for provider label %q: %v", label, err)
+		}
+	}
+	responseStream.WaitClosed(compositionFixtureTimeout)
+
+	completed := readParallelCompositionSession(t, fixture.baseURL, sessionID)
+	if completed.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded ||
+		completed.ResultSummary == nil || completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("session = %#v, want SUCCEEDED with FINAL result", completed)
 	}
 
 	wantCompletionOrder := []string{"child-gamma", "child-beta", "child-alpha"}
-	if got := provider.completionOrder(); !reflect.DeepEqual(got, wantCompletionOrder) {
+	if got := fixture.runner.completionOrder(); !reflect.DeepEqual(got, wantCompletionOrder) {
 		t.Fatalf("provider completion order = %v, want %v", got, wantCompletionOrder)
 	}
 
 	resultPayload := readParallelCompositionFinalResult(t, fixture.baseURL, sessionID)
 	assertParallelCompositionResultLabels(t, resultPayload, parallelDeclaredResultOrderingLabels)
 
-	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		fixture.baseURL+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	dispatches := fixture.publicDispatches(t, sessionID)
 	if len(dispatches.Dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
 	}
@@ -164,12 +170,10 @@ func runJavaScriptParallelPreservesDeclaredResultOrdering(t *testing.T, fixture 
 // successful siblings still complete, matching the documented partial-failure policy rather
 // than aborting the whole workflow call.
 func runJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T, fixture *compositionFixture) {
-	provider := newPartialFailureParallelChildProvider()
-	registerCompositionProvider(t, fixture, provider)
-
+	baselineCalls := fixture.runner.callCount()
 	started := startParallelCompositionWorkflowAsync(
 		t,
-		fixture.baseURL,
+		fixture,
 		"parallel-composition-partial-failure",
 		parallelPartialFailureWorkflow,
 	)
@@ -178,17 +182,22 @@ func runJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T, fixtu
 		t.Fatal("session id unexpectedly empty")
 	}
 	fixture.trackLiveSession(t, sessionID)
-
-	completed := waitForParallelCompositionSessionStatus(
+	responseStream := support.OpenFactoryResponseEventStreamAt(
 		t,
-		fixture.baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
-		15*time.Second,
+		support.SessionResponseEventsURL(fixture.baseURL, sessionID),
 	)
-	if completed.ResultSummary == nil ||
-		completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultSummary = %#v, want FINAL", completed.ResultSummary)
+	defer responseStream.Close()
+
+	waitContext, cancel := context.WithTimeout(t.Context(), compositionFixtureTimeout)
+	defer cancel()
+	if err := fixture.runner.waitForCallCount(waitContext, baselineCalls+3); err != nil {
+		t.Fatalf("wait for partial-failure provider command calls: %v", err)
+	}
+	responseStream.WaitClosed(compositionFixtureTimeout)
+	completed := readParallelCompositionSession(t, fixture.baseURL, sessionID)
+	if completed.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded ||
+		completed.ResultSummary == nil || completed.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("session = %#v, want SUCCEEDED with FINAL result", completed)
 	}
 	if completed.Progress == nil ||
 		intValueOrZero(completed.Progress.TotalDispatches) != 3 ||
@@ -200,10 +209,7 @@ func runJavaScriptParallelPartialFailureUsesDocumentedPolicy(t *testing.T, fixtu
 	resultPayload := readParallelCompositionFinalResult(t, fixture.baseURL, sessionID)
 	assertParallelCompositionPartialFailureResults(t, resultPayload, parallelDeclaredResultOrderingLabels)
 
-	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
-		t,
-		fixture.baseURL+"/factory-sessions/"+sessionID+"/dispatches",
-	)
+	dispatches := fixture.publicDispatches(t, sessionID)
 	if len(dispatches.Dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want 3 public child dispatches", len(dispatches.Dispatches))
 	}
@@ -253,13 +259,14 @@ func writeParallelCompositionGlobalConfig(t *testing.T, homeDir string) {
 
 func startParallelCompositionWorkflowAsync(
 	t *testing.T,
-	baseURL, requestID, workflowSource string,
+	fixture *compositionFixture,
+	requestID, workflowSource string,
 ) factoryapi.FactorySessionExecutionResponse {
 	t.Helper()
 
 	dialect := "you-workflow-v1"
 	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: requestID,
+		RequestId: fixture.nextRequestID(requestID),
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
 			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
@@ -278,7 +285,7 @@ func startParallelCompositionWorkflowAsync(
 	request, err := http.NewRequestWithContext(
 		t.Context(),
 		http.MethodPost,
-		baseURL+"/factory-sessions/async",
+		strings.TrimSuffix(fixture.baseURL, "/")+"/factory-sessions/async",
 		bytes.NewReader(payload),
 	)
 	if err != nil {
@@ -302,54 +309,6 @@ func startParallelCompositionWorkflowAsync(
 		t.Fatalf("decode async parallel workflow response: %v", err)
 	}
 	return started
-}
-
-func waitForParallelCompositionInFlightDispatches(
-	t *testing.T,
-	baseURL, sessionID string,
-	want int,
-	timeout time.Duration,
-) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readParallelCompositionSession(t, baseURL, sessionID)
-		if session.Progress != nil &&
-			intValueOrZero(session.Progress.InFlightDispatches) >= want {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	session := readParallelCompositionSession(t, baseURL, sessionID)
-	t.Fatalf(
-		"session %s inFlightDispatches = %#v, want at least %d within %s",
-		sessionID,
-		session.Progress,
-		want,
-		timeout,
-	)
-}
-
-func waitForParallelCompositionSessionStatus(
-	t *testing.T,
-	baseURL, sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-	timeout time.Duration,
-) factoryapi.FactorySessionDurableReadModel {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readParallelCompositionSession(t, baseURL, sessionID)
-		if session.Status == want {
-			return session
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	session := readParallelCompositionSession(t, baseURL, sessionID)
-	t.Fatalf("session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
-	return session
 }
 
 func readParallelCompositionSession(
@@ -530,223 +489,4 @@ func assertParallelCompositionDispatchLabels(
 			t.Fatalf("dispatch labels = %v, missing %q", gotLabels, wantLabel)
 		}
 	}
-}
-
-func waitForParallelCompositionLabelCompletion(
-	t *testing.T,
-	provider *labelGatedParallelChildProvider,
-	label string,
-	timeout time.Duration,
-) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if provider.hasCompleted(label) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("label %q did not complete within %s; completion order = %v", label, timeout, provider.completionOrder())
-}
-
-type gatedParallelChildProvider struct {
-	testutil.NativeProvider
-	mu                  sync.Mutex
-	active              int
-	peak                int
-	release             chan struct{}
-	concurrent          chan struct{}
-	releaseOnce         sync.Once
-	concurrentCallsOnce sync.Once
-}
-
-func newGatedParallelChildProvider() *gatedParallelChildProvider {
-	provider := &gatedParallelChildProvider{
-		release:    make(chan struct{}),
-		concurrent: make(chan struct{}),
-	}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (p *gatedParallelChildProvider) waitForConcurrentCalls(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-p.concurrent:
-	case <-timer.C:
-		t.Fatalf("provider did not observe two concurrent child calls within %s; peak active calls = %d", timeout, p.peakActive())
-	}
-}
-
-func (p *gatedParallelChildProvider) releaseAll() {
-	p.releaseOnce.Do(func() {
-		close(p.release)
-	})
-}
-
-func (p *gatedParallelChildProvider) peakActive() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.peak
-}
-
-func (p *gatedParallelChildProvider) Execute(
-	ctx context.Context,
-	req providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	p.mu.Lock()
-	p.active++
-	if p.active > p.peak {
-		p.peak = p.active
-	}
-	if p.active >= 2 {
-		p.concurrentCallsOnce.Do(func() { close(p.concurrent) })
-	}
-	p.mu.Unlock()
-
-	select {
-	case <-p.release:
-	case <-ctx.Done():
-		p.mu.Lock()
-		p.active--
-		p.mu.Unlock()
-		return providers.ExecuteResult{}, ctx.Err()
-	}
-
-	p.mu.Lock()
-	p.active--
-	p.mu.Unlock()
-
-	label := parallelChildLabelFromRequest(req)
-	return providers.ExecuteResult{
-		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
-	}, nil
-}
-
-func parallelChildLabelFromRequest(req providers.ExecuteRequest) string {
-	for _, token := range req.InputTokens {
-		payload, ok := token.(map[string]any)
-		if !ok {
-			continue
-		}
-		color, ok := payload["color"].(map[string]any)
-		if !ok {
-			continue
-		}
-		tags, ok := color["tags"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if label, ok := tags["label"].(string); ok && label != "" {
-			return label
-		}
-	}
-	message := strings.TrimSpace(req.UserMessage)
-	if message == "" {
-		return "child"
-	}
-	return message
-}
-
-type labelGatedParallelChildProvider struct {
-	testutil.NativeProvider
-	mu              sync.Mutex
-	gates           map[string]chan struct{}
-	releaseOnce     map[string]*sync.Once
-	completedLabels []string
-}
-
-func newLabelGatedParallelChildProvider(labels []string) *labelGatedParallelChildProvider {
-	provider := &labelGatedParallelChildProvider{
-		gates:       make(map[string]chan struct{}, len(labels)),
-		releaseOnce: make(map[string]*sync.Once, len(labels)),
-	}
-	for _, label := range labels {
-		provider.gates[label] = make(chan struct{})
-		provider.releaseOnce[label] = &sync.Once{}
-	}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (p *labelGatedParallelChildProvider) releaseLabel(label string) {
-	once, ok := p.releaseOnce[label]
-	if !ok {
-		return
-	}
-	once.Do(func() {
-		close(p.gates[label])
-	})
-}
-
-func (p *labelGatedParallelChildProvider) hasCompleted(label string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, completed := range p.completedLabels {
-		if completed == label {
-			return true
-		}
-	}
-	return false
-}
-
-func (p *labelGatedParallelChildProvider) completionOrder() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]string(nil), p.completedLabels...)
-}
-
-func (p *labelGatedParallelChildProvider) Execute(
-	ctx context.Context,
-	req providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	label := parallelChildLabelFromRequest(req)
-	gate, ok := p.gates[label]
-	if !ok {
-		return providers.ExecuteResult{}, fmt.Errorf("unexpected parallel child label %q", label)
-	}
-
-	select {
-	case <-gate:
-	case <-ctx.Done():
-		return providers.ExecuteResult{}, ctx.Err()
-	}
-
-	p.mu.Lock()
-	p.completedLabels = append(p.completedLabels, label)
-	p.mu.Unlock()
-
-	return providers.ExecuteResult{
-		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
-	}, nil
-}
-
-type partialFailureParallelChildProvider struct {
-	testutil.NativeProvider
-}
-
-func newPartialFailureParallelChildProvider() *partialFailureParallelChildProvider {
-	provider := &partialFailureParallelChildProvider{}
-	provider.NativeProvider.ExecuteFunc = provider.Execute
-	return provider
-}
-
-func (p *partialFailureParallelChildProvider) Execute(
-	_ context.Context,
-	req providers.ExecuteRequest,
-) (providers.ExecuteResult, error) {
-	if strings.Contains(req.UserMessage, "force provider failure") {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindInvalidRequest,
-			Message: "Provider rejected the request as invalid.",
-		}
-	}
-
-	label := parallelChildLabelFromRequest(req)
-	return providers.ExecuteResult{
-		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
-	}, nil
 }

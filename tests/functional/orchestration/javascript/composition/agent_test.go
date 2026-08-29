@@ -42,13 +42,13 @@ const (
 // completed child dispatch on the public Factory Session dispatch listing.
 func runJavaScriptAgentReturnsUnaryResult(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldAgentUnaryWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startAgentUnaryWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want a provider execution after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listAgentUnaryDispatches(t, fixture, started.SessionId)
@@ -61,13 +61,13 @@ func runJavaScriptAgentReturnsUnaryResult(t *testing.T, fixture *compositionFixt
 // dispatch listing and result surfaces without private JavaScript VM diagnostics.
 func runJavaScriptAgentFailureReturnsStableFailureRecord(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldAgentFailureWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startAgentFailureWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
 		t.Fatalf("session status = %q, want FAILED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child failure edge", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want a provider execution after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listAgentFailureDispatches(t, fixture, started.SessionId)
@@ -101,7 +101,7 @@ func startAgentUnaryWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-agent-unary-composition", dir)
+	return fixture.startPublicSync(t, "javascript-agent-unary-composition", dir)
 }
 
 func startAgentFailureWorkflow(
@@ -110,7 +110,7 @@ func startAgentFailureWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-agent-failure-composition", dir)
+	return fixture.startPublicSync(t, "javascript-agent-failure-composition", dir)
 }
 
 func listAgentUnaryDispatches(
@@ -119,7 +119,7 @@ func listAgentUnaryDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listAgentFailureDispatches(
@@ -128,7 +128,7 @@ func listAgentFailureDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertExactlyOneCompletedChildDispatch(
@@ -148,8 +148,8 @@ func assertExactlyOneCompletedChildDispatch(
 		t.Fatalf("dispatch label = %#v, want %q", dispatch.Label, agentUnaryChildLabel)
 	}
 	if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-		*dispatch.Javascript.ExecutionMode != "fake" {
-		t.Fatalf("dispatch javascript projection = %#v, want fake execution mode", dispatch.Javascript)
+		*dispatch.Javascript.ExecutionMode != "live-provider" {
+		t.Fatalf("dispatch javascript projection = %#v, want live-provider execution mode", dispatch.Javascript)
 	}
 }
 
@@ -184,8 +184,8 @@ func assertExactlyOneFailedChildDispatch(
 		}
 	}
 	if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-		*dispatch.Javascript.ExecutionMode != "fake" {
-		t.Fatalf("dispatch javascript projection = %#v, want fake execution mode", dispatch.Javascript)
+		*dispatch.Javascript.ExecutionMode != "live-provider" {
+		t.Fatalf("dispatch javascript projection = %#v, want live-provider execution mode", dispatch.Javascript)
 	}
 }
 

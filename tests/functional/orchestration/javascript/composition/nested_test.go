@@ -98,13 +98,13 @@ const (
 // Session dispatch listing surfaces.
 func runJavaScriptNestedPipelineParallelCompositionCompletes(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldNestedCompletionWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startNestedCompletionWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want provider executions after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listNestedCompletionDispatches(t, fixture, started.SessionId)
@@ -123,13 +123,13 @@ func runJavaScriptNestedPipelineParallelCompositionCompletes(t *testing.T, fixtu
 // dispatch diagnostics and primary result evidence without private VM stack frames.
 func runJavaScriptNestedFailureNamesChildAndStage(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldNestedFailureWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startNestedFailureWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child failure edge", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want provider executions after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listNestedFailureDispatches(t, fixture, started.SessionId)
@@ -172,7 +172,7 @@ func startNestedCompletionWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-nested-pipeline-parallel-composition", dir)
+	return fixture.startPublicSync(t, "javascript-nested-pipeline-parallel-composition", dir)
 }
 
 func startNestedFailureWorkflow(
@@ -181,7 +181,7 @@ func startNestedFailureWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-nested-pipeline-parallel-failure", dir)
+	return fixture.startPublicSync(t, "javascript-nested-pipeline-parallel-failure", dir)
 }
 
 func listNestedCompletionDispatches(
@@ -190,7 +190,7 @@ func listNestedCompletionDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listNestedFailureDispatches(
@@ -199,7 +199,7 @@ func listNestedFailureDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertThreeCompletedNestedChildDispatches(
@@ -218,8 +218,8 @@ func assertThreeCompletedNestedChildDispatches(
 			t.Fatalf("dispatch %q status = %q, want COMPLETED", dispatchLabel(dispatch), dispatch.Status)
 		}
 		if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-			*dispatch.Javascript.ExecutionMode != "fake" {
-			t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", dispatchLabel(dispatch), dispatch.Javascript)
+			*dispatch.Javascript.ExecutionMode != "live-provider" {
+			t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", dispatchLabel(dispatch), dispatch.Javascript)
 		}
 		byLabel[dispatchLabel(dispatch)] = dispatch
 	}
@@ -255,8 +255,8 @@ func assertNestedFailureChildDispatches(
 	byLabel := make(map[string]factoryapi.FactorySessionDispatchSummary, len(dispatches))
 	for _, dispatch := range dispatches {
 		if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-			*dispatch.Javascript.ExecutionMode != "fake" {
-			t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", dispatchLabel(dispatch), dispatch.Javascript)
+			*dispatch.Javascript.ExecutionMode != "live-provider" {
+			t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", dispatchLabel(dispatch), dispatch.Javascript)
 		}
 		byLabel[dispatchLabel(dispatch)] = dispatch
 	}

@@ -85,19 +85,19 @@ const (
 // the public primary result and Factory Session dispatch listing surfaces.
 func runJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldPipelineStageOutputWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startPipelineStageOutputWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got != providerCalls+2 {
+		t.Fatalf("provider command call count = %d, want two provider executions after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listPipelineStageOutputDispatches(t, fixture, started.SessionId)
 	stageOneDispatch, stageTwoDispatch := assertTwoCompletedPipelineChildDispatches(t, dispatches.Dispatches)
 	assertPipelineStageOutputPrimaryResult(t, started.Result, stageOneDispatch.Id, stageTwoDispatch.Id)
-	assertPipelineFactoryEventProjection(t, fixture.fakeEvents(t, started.SessionId),
+	assertPipelineFactoryEventProjection(t, fixture.publicEvents(t, started.SessionId),
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, stageOneDispatch.Id, stageTwoDispatch.Id)
 }
 
@@ -106,20 +106,20 @@ func runJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T, fixture *co
 // the stage failure on the public primary result and dispatch listing surfaces.
 func runJavaScriptPipelineStopsAfterStageFailure(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldPipelineStageFailureWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startPipelineStageFailureWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got != providerCalls+1 {
+		t.Fatalf("provider command call count = %d, want one failed provider execution after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listPipelineStageFailureDispatches(t, fixture, started.SessionId)
 	stageOneDispatch := assertSingleFailedPipelineStageOneDispatch(t, dispatches.Dispatches)
 	assertNoLaterPipelineStageDispatch(t, dispatches.Dispatches, pipelineStageTwoLabel)
 	assertPipelineStageFailurePrimaryResult(t, started.Result, stageOneDispatch.Id)
-	assertPipelineFactoryEventProjection(t, fixture.fakeEvents(t, started.SessionId),
+	assertPipelineFactoryEventProjection(t, fixture.publicEvents(t, started.SessionId),
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, "edit rejected")
 }
 
@@ -149,7 +149,7 @@ func startPipelineStageOutputWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-pipeline-stage-output-composition", dir)
+	return fixture.startPublicSync(t, "javascript-pipeline-stage-output-composition", dir)
 }
 
 func startPipelineStageFailureWorkflow(
@@ -158,7 +158,7 @@ func startPipelineStageFailureWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-pipeline-stage-failure-composition", dir)
+	return fixture.startPublicSync(t, "javascript-pipeline-stage-failure-composition", dir)
 }
 
 func listPipelineStageOutputDispatches(
@@ -167,7 +167,7 @@ func listPipelineStageOutputDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listPipelineStageFailureDispatches(
@@ -176,7 +176,7 @@ func listPipelineStageFailureDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertTwoCompletedPipelineChildDispatches(
@@ -195,8 +195,8 @@ func assertTwoCompletedPipelineChildDispatches(
 			t.Fatalf("dispatch %q status = %q, want COMPLETED", dispatchLabel(dispatch), dispatch.Status)
 		}
 		if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-			*dispatch.Javascript.ExecutionMode != "fake" {
-			t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", dispatchLabel(dispatch), dispatch.Javascript)
+			*dispatch.Javascript.ExecutionMode != "live-provider" {
+			t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", dispatchLabel(dispatch), dispatch.Javascript)
 		}
 		byLabel[dispatchLabel(dispatch)] = dispatch
 	}
@@ -232,8 +232,8 @@ func assertSingleFailedPipelineStageOneDispatch(
 		t.Fatalf("dispatch %q status = %q, want FAILED", dispatchLabel(stageOne), stageOne.Status)
 	}
 	if stageOne.Javascript == nil || stageOne.Javascript.ExecutionMode == nil ||
-		*stageOne.Javascript.ExecutionMode != "fake" {
-		t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", dispatchLabel(stageOne), stageOne.Javascript)
+		*stageOne.Javascript.ExecutionMode != "live-provider" {
+		t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", dispatchLabel(stageOne), stageOne.Javascript)
 	}
 	if stageOne.FailureDetail == nil || stageOne.FailureDetail.Message == "" {
 		t.Fatalf("dispatch %q failure detail = %#v, want customer-readable failure message", dispatchLabel(stageOne), stageOne.FailureDetail)

@@ -96,13 +96,13 @@ const (
 // private runtime state.
 func runJavaScriptForEachDispatchesEveryInputOnce(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldForEachCardinalityWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startForEachCardinalityWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want provider executions after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listForEachCardinalityDispatches(t, fixture, started.SessionId)
@@ -117,13 +117,13 @@ func runJavaScriptForEachDispatchesEveryInputOnce(t *testing.T, fixture *composi
 // otherwise make completion-order guessing unreliable.
 func runJavaScriptForEachPreservesInputResultCorrelation(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldForEachCorrelationWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startForEachCorrelationWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want provider executions after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listForEachCorrelationDispatches(t, fixture, started.SessionId)
@@ -137,13 +137,13 @@ func runJavaScriptForEachPreservesInputResultCorrelation(t *testing.T, fixture *
 // runtime leakage in public diagnostics.
 func runJavaScriptForEachEmptyInputDoesNotDispatch(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldForEachEmptyInputWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startForEachEmptyInputWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for empty for-each run", got, providerCalls)
+	if got := fixture.runner.callCount(); got != providerCalls {
+		t.Fatalf("provider command call count = %d, want no provider execution after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listForEachEmptyInputDispatches(t, fixture, started.SessionId)
@@ -187,7 +187,7 @@ func startForEachCardinalityWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-for-each-cardinality-composition", dir)
+	return fixture.startPublicSync(t, "javascript-for-each-cardinality-composition", dir)
 }
 
 func startForEachCorrelationWorkflow(
@@ -196,7 +196,7 @@ func startForEachCorrelationWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-for-each-correlation-composition", dir)
+	return fixture.startPublicSync(t, "javascript-for-each-correlation-composition", dir)
 }
 
 func startForEachEmptyInputWorkflow(
@@ -205,7 +205,7 @@ func startForEachEmptyInputWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-for-each-empty-input-composition", dir)
+	return fixture.startPublicSync(t, "javascript-for-each-empty-input-composition", dir)
 }
 
 func listForEachCardinalityDispatches(
@@ -214,7 +214,7 @@ func listForEachCardinalityDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listForEachCorrelationDispatches(
@@ -223,7 +223,7 @@ func listForEachCorrelationDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listForEachEmptyInputDispatches(
@@ -232,7 +232,7 @@ func listForEachEmptyInputDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertNoForEachChildDispatches(
@@ -322,8 +322,8 @@ func assertExactlyOneDispatchPerForEachInput(
 			t.Fatalf("dispatch %q status = %q, want COMPLETED", label, dispatch.Status)
 		}
 		if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-			*dispatch.Javascript.ExecutionMode != "fake" {
-			t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", label, dispatch.Javascript)
+			*dispatch.Javascript.ExecutionMode != "live-provider" {
+			t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", label, dispatch.Javascript)
 		}
 		byLabel[label] = dispatch
 	}

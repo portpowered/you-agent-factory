@@ -76,13 +76,13 @@ const (
 // identity and documented execution order.
 func runJavaScriptNamedStagesExposeOrderedProgress(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldNamedStagesWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startNamedStagesWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for fake child execution", got, providerCalls)
+	if got := fixture.runner.callCount(); got <= providerCalls {
+		t.Fatalf("provider command call count = %d, want provider executions after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listNamedStagesDispatches(t, fixture, started.SessionId)
@@ -95,7 +95,7 @@ func runJavaScriptNamedStagesExposeOrderedProgress(t *testing.T, fixture *compos
 		stageReviewDispatch.Id,
 	)
 
-	events := fixture.fakeEvents(t, started.SessionId)
+	events := fixture.publicEvents(t, started.SessionId)
 	assertNamedStagesOrderedPhaseProgress(t, events)
 }
 
@@ -105,13 +105,13 @@ func runJavaScriptNamedStagesExposeOrderedProgress(t *testing.T, fixture *compos
 // substituted only through edges.Edges.
 func runJavaScriptEmptyStageProducesDocumentedResult(t *testing.T, fixture *compositionFixture) {
 	dir := scaffoldEmptyStagesWorkflow(t)
-	providerCalls := fixture.provider.callCount()
+	providerCalls := fixture.runner.callCount()
 	started := startEmptyStagesWorkflow(t, fixture, dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if got := fixture.provider.callCount(); got != providerCalls {
-		t.Fatalf("provider call count = %d, want unchanged at %d for empty stage path", got, providerCalls)
+	if got := fixture.runner.callCount(); got != providerCalls {
+		t.Fatalf("provider command call count = %d, want no provider execution after baseline %d", got, providerCalls)
 	}
 
 	dispatches := listEmptyStagesDispatches(t, fixture, started.SessionId)
@@ -145,7 +145,7 @@ func startNamedStagesWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-named-stages-composition", dir)
+	return fixture.startPublicSync(t, "javascript-named-stages-composition", dir)
 }
 
 func startEmptyStagesWorkflow(
@@ -154,7 +154,7 @@ func startEmptyStagesWorkflow(
 	dir string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
-	return fixture.startFakeSync(t, "javascript-empty-stages-composition", dir)
+	return fixture.startPublicSync(t, "javascript-empty-stages-composition", dir)
 }
 
 func listNamedStagesDispatches(
@@ -163,7 +163,7 @@ func listNamedStagesDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func listEmptyStagesDispatches(
@@ -172,7 +172,7 @@ func listEmptyStagesDispatches(
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
-	return fixture.fakeDispatches(t, sessionID)
+	return fixture.publicDispatches(t, sessionID)
 }
 
 func assertTwoCompletedNamedStageDispatches(
@@ -191,8 +191,8 @@ func assertTwoCompletedNamedStageDispatches(
 			t.Fatalf("dispatch %q status = %q, want COMPLETED", dispatchLabel(dispatch), dispatch.Status)
 		}
 		if dispatch.Javascript == nil || dispatch.Javascript.ExecutionMode == nil ||
-			*dispatch.Javascript.ExecutionMode != "fake" {
-			t.Fatalf("dispatch %q javascript projection = %#v, want fake execution mode", dispatchLabel(dispatch), dispatch.Javascript)
+			*dispatch.Javascript.ExecutionMode != "live-provider" {
+			t.Fatalf("dispatch %q javascript projection = %#v, want live-provider execution mode", dispatchLabel(dispatch), dispatch.Javascript)
 		}
 		byLabel[dispatchLabel(dispatch)] = dispatch
 	}
