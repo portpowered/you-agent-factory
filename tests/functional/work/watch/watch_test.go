@@ -31,6 +31,7 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 		WaitForServiceModeRuntime: true,
 	})
 	defer server.Stop(t)
+	streamGate := newWorkWatchStreamGate(t, server.URL())
 
 	moveProcess, err := support.BuildProcessWithContext(t.Context(), serviceedges.Edges{})
 	if err != nil {
@@ -67,10 +68,11 @@ func TestWorkWatchFollowsStateTransitionsUntilTerminal(t *testing.T) {
 	workID := decodeSubmittedWorkID(t, submitInputs.Stdout())
 
 	watchInputs := workWatchInputs(t, []string{
-		"you", "--server", server.URL(), "work", "watch",
+		"you", "--server", streamGate.URL(), "work", "watch",
 		"--session", sessionID,
 	})
 	watchCommand := support.StartProcessCommand(t, watchProcess, watchInputs.Input)
+	streamGate.wait(t)
 	for _, state := range []string{"processing", "complete"} {
 		moveInputs := workWatchInputs(t, []string{
 			"you", "--server", server.URL(), "--json", "work", "move",
