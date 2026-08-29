@@ -17,6 +17,7 @@ import {
 	SHARED_BASELINE_BOT_BRANCH,
 	SHARED_BASELINE_PATHS,
 	SHARED_BASELINE_PR_TITLE,
+	SHARED_BASELINE_UNIT_BUDGET_PATH,
 	parsePorcelainPaths,
 	planReconciliation,
 	reconcileBotCandidate,
@@ -290,6 +291,102 @@ function writeLocalGitFile(repository, path, contents) {
 	const filePath = join(repository, path);
 	mkdirSync(dirname(filePath), { recursive: true });
 	writeFileSync(filePath, contents, "utf8");
+}
+
+function createWorkingTreeValidationFixture({
+	sourcePath = LOCAL_GIT_SNAPSHOT_PATH,
+	candidate = "identity",
+	staged = false,
+	sourceTopology = "single-parent",
+} = {}) {
+	const temporaryDirectory = mkdtempSync(join(tmpdir(), "shared-baseline-validation-"));
+	const repository = join(temporaryDirectory, "repository");
+	const githubOutput = join(temporaryDirectory, "github-output.txt");
+	const currentBudget = {
+		version: 1,
+		owner: "backend-unit-lane",
+		reference: {
+			baseCommit: SHA("a"),
+			runnerImage: "ubuntu-24.04",
+		},
+	};
+
+	try {
+		requireLocalGit(temporaryDirectory, ["init", repository]);
+		requireLocalGit(repository, ["config", "user.name", "shared-baseline-validation"]);
+		requireLocalGit(repository, ["config", "user.email", "shared-baseline-validation@example.invalid"]);
+		writeLocalGitFile(repository, SHARED_BASELINE_UNIT_BUDGET_PATH, JSON.stringify(currentBudget, null, 2) + "\n");
+		writeLocalGitFile(repository, sourcePath, "before source change\n");
+		requireLocalGit(repository, ["add", "--", SHARED_BASELINE_UNIT_BUDGET_PATH, sourcePath]);
+		requireLocalGit(repository, ["commit", "-m", "validation fixture base"]);
+		requireLocalGit(repository, ["branch", "-M", "main"]);
+		if (sourceTopology === "single-parent") {
+			writeLocalGitFile(repository, sourcePath, "after source change\n");
+			requireLocalGit(repository, ["add", "--", sourcePath]);
+			requireLocalGit(repository, ["commit", "-m", "validation fixture source"]);
+		} else if (sourceTopology === "two-parent-merge") {
+			requireLocalGit(repository, ["switch", "-c", "source-change"]);
+			writeLocalGitFile(repository, sourcePath, "after source change\n");
+			requireLocalGit(repository, ["add", "--", sourcePath]);
+			requireLocalGit(repository, ["commit", "-m", "validation fixture source branch"]);
+			requireLocalGit(repository, ["switch", "main"]);
+			requireLocalGit(repository, ["merge", "--no-ff", "source-change", "-m", "validation fixture merge"]);
+		} else {
+			throw new Error(`unsupported validation fixture source topology: ${sourceTopology}`);
+		}
+		const sourceSha = requireLocalGit(repository, ["rev-parse", "HEAD"]);
+
+		const candidateBudget = structuredClone(currentBudget);
+		if (candidate === "identity") {
+			candidateBudget.reference.baseCommit = sourceSha;
+		} else if (candidate === "material") {
+			candidateBudget.reference.baseCommit = sourceSha;
+			candidateBudget.reference.runnerImage = "ubuntu-25.04";
+		} else if (candidate === "malformed") {
+			writeLocalGitFile(repository, SHARED_BASELINE_UNIT_BUDGET_PATH, "{ malformed\n");
+		} else {
+			throw new Error(`unsupported validation fixture candidate: ${candidate}`);
+		}
+		if (candidate !== "malformed") {
+			writeLocalGitFile(repository, SHARED_BASELINE_UNIT_BUDGET_PATH, JSON.stringify(candidateBudget, null, 2) + "\n");
+		}
+		if (staged) requireLocalGit(repository, ["add", "--", SHARED_BASELINE_UNIT_BUDGET_PATH]);
+
+		return {
+			temporaryDirectory,
+			repository,
+			githubOutput,
+			sourceSha,
+			currentBudgetContents: JSON.stringify(currentBudget, null, 2) + "\n",
+			cleanup() {
+				rmSync(temporaryDirectory, { recursive: true, force: true });
+			},
+		};
+	} catch (error) {
+		rmSync(temporaryDirectory, { recursive: true, force: true });
+		throw error;
+	}
+}
+
+function runWorkingTreeValidation(fixture, extraArguments = []) {
+	return spawnSync(
+		process.execPath,
+		[
+			helper,
+			"validate-working-tree",
+			"--source-sha",
+			fixture.sourceSha,
+			"--github-output",
+			fixture.githubOutput,
+			...extraArguments,
+		],
+		{
+			cwd: fixture.repository,
+			env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
+			encoding: "utf8",
+			windowsHide: true,
+		},
+	);
 }
 
 function createLocalGitFixture({ botBase = "stale", onTemporaryDirectory } = {}) {
@@ -1029,6 +1126,12 @@ test("the delivered workflow follows successful main CI and owns only the bot PR
 	assert.match(workflow, /make regenerate-shared-ci-baselines/);
 	assert.match(workflow, /node scripts\/ci\/shared-baseline-regeneration-workflow\.mjs reconcile/);
 	assert.match(workflow, /CHANGED_PATHS: \$\{\{ steps\.candidate\.outputs\.paths \}\}/);
+	assert.match(
+		workflow,
+		/validate-working-tree[\s\S]+--source-sha "\$SOURCE_SHA"[\s\S]+--github-output "\$GITHUB_OUTPUT"/,
+	);
+	assert.match(helperSource, /quiescent/);
+	assert.match(helperSource, /reference\.baseCommit/);
 	assert.match(workflow, /BOT_BRANCH_SHA: \$\{\{ steps\.prepare\.outputs\.bot_branch_sha \}\}/);
 	assert.match(helperSource, /\"pr\",\s+\"list\"/);
 	assert.match(helperSource, /\"pr\",\s+\"create\"/);
@@ -1107,6 +1210,102 @@ test("selects completed CI runs for the default branch and lets artifacts judge 
 		if (input.workflowName === "CI" && input.headBranch === "main") {
 			assert.match(selection.reason, /only success or failure/);
 		}
+	}
+});
+
+test("F-06/F-20 local-real validation quiesces an identity-only unit budget and restores the clean tree", () => {
+	const fixture = createWorkingTreeValidationFixture({ sourcePath: LOCAL_GIT_SNAPSHOT_PATH });
+	try {
+		const result = runWorkingTreeValidation(fixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.match(
+			result.stdout,
+			/SHARED_BASELINE_CHANGED=false paths=\(none\) quiescent=true reason=.*reference\.baseCommit/,
+		);
+		assert.equal(readFileSync(fixture.githubOutput, "utf8").split(/\r?\n/).filter(Boolean)[0], "changed=false");
+		assert.match(readFileSync(fixture.githubOutput, "utf8"), /paths=\nquiescent=true\n/);
+		assert.equal(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+		assert.equal(
+			readFileSync(join(fixture.repository, SHARED_BASELINE_UNIT_BUDGET_PATH), "utf8"),
+			fixture.currentBudgetContents,
+		);
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-07 retains material unit-budget JSON drift for normal publication", () => {
+	const fixture = createWorkingTreeValidationFixture({ candidate: "material" });
+	try {
+		const result = runWorkingTreeValidation(fixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.match(
+			result.stdout,
+			new RegExp(`SHARED_BASELINE_CHANGED=true paths=${SHARED_BASELINE_UNIT_BUDGET_PATH.replaceAll("/", "\\/")} quiescent=false`),
+		);
+		assert.match(readFileSync(fixture.githubOutput, "utf8"), /changed=true/);
+		assert.match(readFileSync(fixture.githubOutput, "utf8"), /quiescent=false/);
+		assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-08 does not quiesce a baseCommit-only candidate when the source commit has real non-baseline drift", () => {
+	const fixture = createWorkingTreeValidationFixture({ sourcePath: "src/real-source-change.go" });
+	try {
+		const result = runWorkingTreeValidation(fixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.match(result.stdout, /SHARED_BASELINE_CHANGED=true/);
+		assert.match(result.stdout, /quiescent=false/);
+		assert.match(result.stdout, /src\/real-source-change\.go/);
+		assert.notEqual(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-01 accepts only a deterministic two-parent first-parent source merge", () => {
+	const fixture = createWorkingTreeValidationFixture({ sourceTopology: "two-parent-merge" });
+	try {
+		const result = runWorkingTreeValidation(fixture);
+		assert.equal(result.status, 0, result.stderr);
+		assert.match(result.stdout, /SHARED_BASELINE_CHANGED=false.*quiescent=true/);
+		assert.equal(requireLocalGit(fixture.repository, ["status", "--porcelain"]), "");
+	} finally {
+		fixture.cleanup();
+	}
+});
+
+test("F-01/F-19 fail closed for invalid source and malformed budget evidence before mutation", () => {
+	const invalidSourceFixture = createWorkingTreeValidationFixture();
+	try {
+		const result = spawnSync(
+			process.execPath,
+			[helper, "validate-working-tree", "--source-sha", "not-a-commit", "--github-output", invalidSourceFixture.githubOutput],
+			{
+				cwd: invalidSourceFixture.repository,
+				env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
+				encoding: "utf8",
+				windowsHide: true,
+			},
+		);
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /source revision must be a complete commit SHA/);
+		assert.equal(existsSync(invalidSourceFixture.githubOutput), false);
+	} finally {
+		invalidSourceFixture.cleanup();
+	}
+
+	const malformedFixture = createWorkingTreeValidationFixture({ candidate: "malformed" });
+	try {
+		const result = runWorkingTreeValidation(malformedFixture);
+		assert.notEqual(result.status, 0);
+		assert.match(result.stderr, /generated unit-latency budget is not valid JSON/);
+		assert.equal(existsSync(malformedFixture.githubOutput), false);
+		assert.notEqual(requireLocalGit(malformedFixture.repository, ["status", "--porcelain"]), "");
+	} finally {
+		malformedFixture.cleanup();
 	}
 });
 

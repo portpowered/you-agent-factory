@@ -17,12 +17,17 @@ export const SHARED_BASELINE_PATHS = Object.freeze([
 	"contracts/testdata/baseline/mcp-tools.json",
 ]);
 
+export const SHARED_BASELINE_UNIT_BUDGET_PATH =
+	"docs/internal/baselines/go-unit-lane-latency-budget.v1.json";
+
 export const SHARED_BASELINE_BOT_BRANCH = "automation/shared-ci-baselines";
 export const SHARED_BASELINE_PR_TITLE = "chore(ci): reconcile shared CI baselines";
 export const SHARED_BASELINE_COMMENT_MARKER =
 	"<!-- shared-ci-baseline-regeneration -->";
 
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
+const LOWERCASE_COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
+const SHARED_BASELINE_PATH_SET = new Set(SHARED_BASELINE_PATHS);
 const NO_DIFF_PULL_REQUEST_COMMENT =
 	"The latest successful main CI run regenerated no changes; this reconciliation is no longer needed.";
 
@@ -37,6 +42,18 @@ function sortedUnique(paths) {
 	return [...new Set(paths.map(normalizePath).filter(Boolean))].sort((left, right) =>
 		left < right ? -1 : left > right ? 1 : 0,
 	);
+}
+
+function parseGitNameOnlyPaths(output, label) {
+	const rawPaths = String(output || "")
+		.split("\0")
+		.filter(Boolean)
+		.map(normalizePath);
+	const paths = sortedUnique(rawPaths);
+	if (paths.length !== rawPaths.length) {
+		throw new Error(`${label} contained duplicate or ambiguous path entries`);
+	}
+	return paths;
 }
 
 export function parsePorcelainPaths(status) {
@@ -655,6 +672,170 @@ function runGit(args) {
 	return runExternalCommand("git", args).stdout;
 }
 
+function readSourceCommitEvidence(sourceSha) {
+	requireCommitSha(sourceSha, "source revision");
+	const normalizedSourceSha = String(sourceSha).toLowerCase();
+	const resolvedSourceSha = runGit([
+		"rev-parse",
+		"--verify",
+		`${normalizedSourceSha}^{commit}`,
+	]).trim();
+	if (resolvedSourceSha.toLowerCase() !== normalizedSourceSha) {
+		throw new Error(
+			`source revision ${sourceSha} did not resolve to the requested complete commit`,
+		);
+	}
+
+	const headSha = runGit(["rev-parse", "--verify", "HEAD"]).trim();
+	if (headSha.toLowerCase() !== normalizedSourceSha) {
+		throw new Error(
+			`checked-out HEAD ${headSha || "(unknown)"} does not match source revision ${sourceSha}`,
+		);
+	}
+
+	const revisionParts = runGit([
+		"rev-list",
+		"--parents",
+		"--max-count=1",
+		normalizedSourceSha,
+	])
+		.trim()
+		.split(/\s+/)
+		.filter(Boolean);
+	if (
+		(revisionParts.length !== 2 && revisionParts.length !== 3) ||
+		revisionParts[0].toLowerCase() !== normalizedSourceSha
+	) {
+		throw new Error(
+			`source revision ${sourceSha} has ambiguous ancestry; expected one parent or a two-parent first-parent merge`,
+		);
+	}
+	const parentSha = revisionParts[1];
+	requireCommitSha(parentSha, "source parent revision");
+	const sourcePaths = parseGitNameOnlyPaths(
+		runGit([
+			"diff",
+			"--name-only",
+			"-z",
+			parentSha,
+			normalizedSourceSha,
+			"--",
+		]),
+		"source commit diff",
+	);
+	return { sourceSha: normalizedSourceSha, parentSha, paths: sourcePaths };
+}
+
+function parseBudgetDocument(contents, label) {
+	let document;
+	try {
+		document = JSON.parse(contents);
+	} catch (error) {
+		throw new Error(`${label} is not valid JSON: ${error.message}`);
+	}
+	if (
+		!document ||
+		typeof document !== "object" ||
+		Array.isArray(document) ||
+		!document.reference ||
+		typeof document.reference !== "object" ||
+		Array.isArray(document.reference)
+	) {
+		throw new Error(`${label} has the wrong JSON shape; expected an object with reference.baseCommit`);
+	}
+	if (
+		typeof document.reference.baseCommit !== "string" ||
+		!LOWERCASE_COMMIT_SHA_PATTERN.test(document.reference.baseCommit)
+	) {
+		throw new Error(
+			`${label} reference.baseCommit must be a complete lowercase hexadecimal commit SHA`,
+		);
+	}
+	return document;
+}
+
+function canonicalJson(value, path = []) {
+	if (Array.isArray(value)) {
+		return `[${value.map((item, index) => canonicalJson(item, [...path, index])).join(",")}]`;
+	}
+	if (value && typeof value === "object") {
+		return `{${Object.keys(value)
+			.filter((key) => !(path.length === 1 && path[0] === "reference" && key === "baseCommit"))
+			.sort()
+			.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key], [...path, key])}`)
+			.join(",")}}`;
+	}
+	return JSON.stringify(value);
+}
+
+function readUnitBudgetEvidence() {
+	const currentContents = runGit(["show", `HEAD:${SHARED_BASELINE_UNIT_BUDGET_PATH}`]);
+	let candidateContents;
+	try {
+		candidateContents = readFileSync(resolve(SHARED_BASELINE_UNIT_BUDGET_PATH), "utf8");
+	} catch (error) {
+		throw new Error(`generated unit-latency budget could not be read: ${error.message}`);
+	}
+	const current = parseBudgetDocument(currentContents, "HEAD unit-latency budget");
+	const candidate = parseBudgetDocument(candidateContents, "generated unit-latency budget");
+	return {
+		matchesExceptBaseCommit:
+			canonicalJson(current) === canonicalJson(candidate),
+	};
+}
+
+function restoreIdentityOnlyBudget() {
+	runExternalCommand("git", [
+		"restore",
+		"--source=HEAD",
+		"--staged",
+		"--worktree",
+		"--",
+		SHARED_BASELINE_UNIT_BUDGET_PATH,
+	]);
+	const remainingPaths = parsePorcelainPaths(
+		runGit(["status", "--porcelain=v1", "--untracked-files=all"]),
+	);
+	if (remainingPaths.length > 0) {
+		throw new Error(
+			`identity-only unit-latency candidate was not fully restored; remaining path(s): ${remainingPaths.join(", ")}`,
+		);
+	}
+}
+
+function classifyWorkingTreeCandidate({ sourceEvidence, candidatePaths }) {
+	if (candidatePaths.length !== 1 || candidatePaths[0] !== SHARED_BASELINE_UNIT_BUDGET_PATH) {
+		return {
+			quiescent: false,
+			reason: candidatePaths.length === 0
+				? "no generated shared baseline changes"
+				: "generated candidate contains material or multiple shared baseline changes",
+		};
+	}
+
+	const budgetEvidence = readUnitBudgetEvidence();
+	if (!sourceEvidence.paths.every((path) => SHARED_BASELINE_PATH_SET.has(path))) {
+		const sourceOnlyPaths = sourceEvidence.paths.filter((path) => !SHARED_BASELINE_PATH_SET.has(path));
+		return {
+			quiescent: false,
+			reason: `source revision includes non-baseline path(s): ${sourceOnlyPaths.join(", ")}`,
+		};
+	}
+	if (!budgetEvidence.matchesExceptBaseCommit) {
+		return {
+			quiescent: false,
+			reason: "unit-latency budget contains material JSON drift beyond reference.baseCommit",
+		};
+	}
+
+	restoreIdentityOnlyBudget();
+	return {
+		quiescent: true,
+		reason:
+			"source revision changed only allowlisted snapshots and the unit-latency budget differs only at reference.baseCommit; restored the identity-only candidate",
+	};
+}
+
 function writeGitHubOutput(path, values) {
 	if (!path) return;
 	for (const [key, value] of Object.entries(values)) {
@@ -662,18 +843,36 @@ function writeGitHubOutput(path, values) {
 	}
 }
 
-function runValidateWorkingTree({ staged = false, requireChanges = false, githubOutput = "" } = {}) {
+function runValidateWorkingTree({
+	staged = false,
+	requireChanges = false,
+	githubOutput = "",
+	sourceSha = "",
+} = {}) {
 	const status = staged
 		? runGit(["diff", "--cached", "--name-only"])
 		: runGit(["status", "--porcelain=v1", "--untracked-files=all"]);
 	const paths = staged ? sortedUnique(status.split(/\r?\n/)) : parsePorcelainPaths(status);
 	validateAllowlistedPaths(paths, { requireChanges });
+	const sourceEvidence = sourceSha ? readSourceCommitEvidence(sourceSha) : null;
+	if (!staged && !sourceEvidence) {
+		throw new Error("validate-working-tree requires --source-sha with a complete commit SHA");
+	}
+	const classification = sourceEvidence
+		? classifyWorkingTreeCandidate({ sourceEvidence, candidatePaths: paths })
+		: {
+			quiescent: false,
+			reason: paths.length === 0 ? "no staged shared baseline changes" : "staged shared baseline changes retained",
+		};
+	const changedPaths = classification.quiescent ? [] : paths;
 	writeGitHubOutput(githubOutput, {
-		changed: paths.length > 0 ? "true" : "false",
-		paths: paths.join(","),
+		changed: changedPaths.length > 0 ? "true" : "false",
+		paths: changedPaths.join(","),
+		quiescent: classification.quiescent ? "true" : "false",
+		reason: classification.reason,
 	});
 	process.stdout.write(
-		`SHARED_BASELINE_CHANGED=${paths.length > 0 ? "true" : "false"} paths=${paths.join(",") || "(none)"}\n`,
+		`SHARED_BASELINE_CHANGED=${changedPaths.length > 0 ? "true" : "false"} paths=${changedPaths.join(",") || "(none)"} quiescent=${classification.quiescent ? "true" : "false"} reason=${classification.reason}\n`,
 	);
 }
 
@@ -719,8 +918,14 @@ function parseArguments(args) {
 			continue;
 		}
 		if (argument === "--source-sha" || argument === "--commit-sha" || argument === "--run-url") {
-			options[argument.slice(2).replaceAll("-", "")] = rest[++index];
-			if (!options[argument.slice(2).replaceAll("-", "")]) throw new Error(`${argument} requires a value`);
+			const optionName =
+				argument === "--source-sha"
+					? "sourceSha"
+					: argument === "--commit-sha"
+						? "commitSha"
+						: "runUrl";
+			options[optionName] = rest[++index];
+			if (!options[optionName]) throw new Error(`${argument} requires a value`);
 			continue;
 		}
 		if (argument === "--paths") {
@@ -759,9 +964,9 @@ function runCli(args) {
 	if (options.command === "render-body") {
 		process.stdout.write(
 			renderPullRequestBody({
-				sourceSha: options.sourcesha,
-				commitSha: options.commitsha,
-				runUrl: options.runurl,
+				sourceSha: options.sourceSha,
+				commitSha: options.commitSha,
+				runUrl: options.runUrl,
 				changedPaths: options.paths?.length ? options.paths : SHARED_BASELINE_PATHS,
 			}),
 		);
