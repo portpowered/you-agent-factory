@@ -70,7 +70,7 @@ func TestBuildCoverageCompileProbeInvocationPreservesCoverageShape(t *testing.T)
 			"-run=TestSubmit",
 			"./tests/functional/work",
 		},
-	}, filepath.Join(t.TempDir(), "compile-probe-bin"))
+	}, filepath.Join(t.TempDir(), "compile-probe-bin"), nil)
 	if err != nil {
 		t.Fatalf("buildCoverageCompileProbeInvocation() error = %v", err)
 	}

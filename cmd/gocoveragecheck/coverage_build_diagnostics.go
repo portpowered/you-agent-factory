@@ -146,10 +146,6 @@ func expectedCoveragePackageCount(packages []string) int {
 	return len(seen)
 }
 
-func buildCoverageCompileProbeInvocation(invocation commandInvocation, outputDir string) (commandInvocation, error) {
-	return buildCoverageCompileProbeInvocationForPackages(invocation, outputDir, nil)
-}
-
 func buildCoverageCompileProbeInvocations(invocation commandInvocation, outputDir string) ([]commandInvocation, error) {
 	packages, err := coverageInvocationPackageArgs(invocation.args)
 	if err != nil {
@@ -183,7 +179,7 @@ func buildCoverageCompileProbeInvocations(invocation commandInvocation, outputDi
 
 	probes := make([]commandInvocation, 0, len(groups))
 	for _, group := range groups {
-		probe, err := buildCoverageCompileProbeInvocationForPackages(invocation, outputDir, group.packages)
+		probe, err := buildCoverageCompileProbeInvocation(invocation, outputDir, group.packages)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +188,7 @@ func buildCoverageCompileProbeInvocations(invocation commandInvocation, outputDi
 	return probes, nil
 }
 
-func buildCoverageCompileProbeInvocationForPackages(invocation commandInvocation, outputDir string, selectedPackages []string) (commandInvocation, error) {
+func buildCoverageCompileProbeInvocation(invocation commandInvocation, outputDir string, selectedPackages []string) (commandInvocation, error) {
 	if len(invocation.args) == 0 || invocation.args[0] != "test" {
 		return commandInvocation{}, errors.New("prepare coverage compile probe: expected a go test invocation")
 	}
