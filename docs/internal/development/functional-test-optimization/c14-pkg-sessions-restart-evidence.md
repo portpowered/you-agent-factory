@@ -425,3 +425,139 @@ scenario isolation, and package teardown on the exact implementation head. It
 does not prove the final three-run performance median, supported race result,
 clean-room loopback, rebased-main ancestry, terminal PR CI, or merge; those
 remain owned by story `fto-c14-pkg-sessions-restart-003` and review.
+
+## GATE-PACKAGE
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PASS for the complete final package behavior on the current
+  implementation head**.
+- Tested head: `6d93bd20b3`; the implementation source is unchanged from the
+  focused/repeat head `6de3ad5b3e8aa853807919471b23324dfbcb702c`.
+- Dependency fidelity: `local_real` built CLI, real Windows daemon processes,
+  loopback, filesystem, recording, and the existing controlled provider edges.
+- Cost: zero paid or remote-provider calls.
+
+The exact final package procedure was run three times from PowerShell with the
+same command required by the PRD:
+
+```text
+go test ./tests/functional/sessions/restart/... -count=1
+```
+
+All three runs exited `0` and exercised the seven selectors discovered by:
+
+```text
+go test ./tests/functional/sessions/restart/... -list '^Test'
+```
+
+The final package results were:
+
+| Run | Outer stopwatch seconds | Exit | Observable result |
+| ---: | ---: | ---: | --- |
+| 1 | `39.6764` | `0` | Seven selectors passed; package/scenario cleanup completed. |
+| 2 | `62.5393` | `0` | Seven selectors passed; package/scenario cleanup completed. |
+| 3 | `88.8193` | `0` | Seven selectors passed; package/scenario cleanup completed. |
+
+The one-build log observations from `GATE-SPINE` and `GATE-REPEAT` remain
+applicable to this unchanged implementation: one package-scoped CLI build,
+zero helper builds, six real board-daemon starts, five production-composed
+server generations, thirteen built-CLI subprocesses, and three helper
+children per normal package run. The three board scenarios retain private
+Factory, HOME, recording, release-file, port, process, and expected-state
+ownership. The assertion denominator remains the seven-selector, 148 lexical
+failure-call-site inventory recorded by `GATE-CHAR`; no assertion or case row
+was removed or weakened.
+
+This gate proves complete local package behavior and topology on the final
+implementation source. It does not prove a quiet-host timing bound, terminal
+hosted CI, or merge.
+
+## GATE-RACE
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PASS**.
+- Tested head: `6d93bd20b3` implementation source.
+- Dependency fidelity: `local_real` Windows/amd64 race-enabled test process.
+
+The supported race procedure was:
+
+```text
+go test -race ./tests/functional/sessions/restart/... -count=1
+```
+
+It exited `0` on `2026-08-29` with Go `go1.25.0`, `GOOS=windows`,
+`GOARCH=amd64`, and `CGO_ENABLED=1`; the package reported `ok` in `51.512s`.
+No race report, test failure, helper recursion, orphan process, or cleanup
+failure was emitted. This proves the exercised package fixture and runtime
+test paths are race-clean on this supported platform, not all possible
+concurrency behavior or unsupported platforms.
+
+## GATE-PERF
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PASS via the permitted profile-backed measured-floor explanation;
+  the local timing sample itself is non-improving and host-contaminated**.
+- Baseline: authoritative unchanged-source median `44.1461053s` from
+  `GATE-CHAR`.
+- Final samples: `39.6764s`, `62.5393s`, and `88.8193s`, all exit `0` under
+  the exact package command; the sorted median is `62.5393s`.
+- Calculated change: `-41.66%` reduction (a `41.66%` median increase), so the
+  explicit 40% timing branch is not claimed.
+
+The final timing spread is contaminated by a pre-existing unrelated
+`you.exe` process outside this worktree. A read-only process probe during the
+measurements observed PID `50008` at normal priority consuming approximately
+`2.125` CPU-seconds during one wall second, with all-processor affinity. The
+process was not terminated or modified. An above-normal-priority diagnostic
+run of the same package still passed but took `57.3838s`; this confirms the
+host-load finding is diagnostic context, not a substitute final median.
+
+The measured floor explanation is bounded by the post-change topology and
+source-backed wait inventory:
+
+1. The only redundant package setup identified by `GATE-CHAR` was three
+   identical `go build ./cmd/factory` operations. The implemented bounded pass
+   reduces that count to exactly one normal-process build, asserts zero helper
+   builds, and keeps its artifact package-scoped until `TestMain` cleanup.
+2. The final package still requires six real daemon generations, five
+   production-composed server generations, thirteen built-CLI invocations,
+   three helper-child release boundaries, private mutable scenario state, and
+   every existing public HTTP, Factory Event, Worker Session, filesystem,
+   process, cancellation, malformed-state, missing-state, remap, resume, and
+   history observation. Removing any of those would remove or lower the
+   fidelity of a CASE row.
+3. The existing bounded polls observe public/process/filesystem/log
+   boundaries and carry failure diagnostics. The source profile found no
+   owned fixed sleep or timeout padding safe to remove, and no second
+   profile-backed reduction can be admitted without changing a witness or
+   broadening into shared support/production code. A standalone diagnostic
+   `go build ./cmd/factory` measured `16.4055s`, corroborating that build reuse
+   is the material owned setup reduction; it is not used as a package latency
+   claim.
+
+Therefore the package has completed its one authorized owned optimization pass
+and retains the measured real-edge floor rather than inventing a second,
+unprofiled optimization. The PR package result and hosted-runner timing remain
+the primary delivery verdict for review. This gate does not claim portable
+wall-clock behavior or terminal PR CI.
+
+## GATE-SCOPE
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PENDING final-main synchronization and clean-room audit**.
+
+The current three-dot path set is limited to the two owned restart test files
+and this C14 evidence ledger. `git diff --check` passes. The source scan found
+the same fresh 30-second per-operation CLI contexts in
+`board_persistence_cli_assertions_test.go`; no cumulative CLI context, new
+sleep, timeout increase, generated file, public contract, production file,
+shared support, workflow, or CI configuration is present. Final ancestry and
+the exact post-rebase path audit are recorded below after synchronization.
+
+## Evidence boundary and next gates
+
+`GATE-PACKAGE`, `GATE-RACE`, and the bounded `GATE-PERF` explanation prove the
+complete local behavior, supported race path, and owned topology decision on
+the current implementation source. `GATE-SCOPE` and `GATE-LOOPBACK` remain
+pending final-main synchronization and clean-room execution. `GATE-PR-CI`
+remains review-owned for terminal hosted CI and merge.
