@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,15 +24,11 @@ const (
 // status reflects paused then running states without inspecting orchestrator
 // internals.
 func TestPetriAndJavaScriptSessionsShareLifecycleControls(t *testing.T) {
-	dir := scaffoldSessionCompatibilityFactory(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
-
-	petriSession := support.GetDefaultSession(t, baseURL)
+	// CASE-X-001: both orchestrators use one production-composed host and
+	// explicit session identities for the shared lifecycle-control contract.
+	fixture := sharedCrossProcess(t)
+	petri := openSharedCrossLiveSession(t)
+	petriSession := readLiveSession(t, fixture.baseURL, petri.sessionID)
 	assertLiveSessionOrchestratorKind(
 		t,
 		petriSession.Id,
@@ -42,15 +36,16 @@ func TestPetriAndJavaScriptSessionsShareLifecycleControls(t *testing.T) {
 		factoryapi.PETRI,
 	)
 
-	javaSessionID := startBusyLoopJavaScriptSession(t, baseURL)
+	javascript := startSharedCrossJavaScriptSession(t)
+	javaSessionID := javascript.sessionID
 	waitForDurableSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		javaSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		sessionCompatTimeout,
 	)
-	javaSession := readDurableSession(t, baseURL, javaSessionID)
+	javaSession := readDurableSession(t, fixture.baseURL, javaSessionID)
 	assertDurableSessionOrchestratorKind(
 		t,
 		javaSession.SessionId,
@@ -64,52 +59,52 @@ func TestPetriAndJavaScriptSessionsShareLifecycleControls(t *testing.T) {
 
 	applyAcceptedLifecycleControl(
 		t,
-		baseURL,
+		fixture.baseURL,
 		petriSession.Id,
 		factoryapi.FactorySessionLifecycleControlKindPause,
 	)
 	assertLiveSessionLifecycleControlStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		petriSession.Id,
 		factoryapi.FactorySessionDurableLifecycleStatusPaused,
 	)
 
 	applyAcceptedLifecycleControl(
 		t,
-		baseURL,
+		fixture.baseURL,
 		javaSessionID,
 		factoryapi.FactorySessionLifecycleControlKindPause,
 	)
 	assertDurableSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		javaSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusPaused,
 	)
 
 	applyAcceptedLifecycleControl(
 		t,
-		baseURL,
+		fixture.baseURL,
 		petriSession.Id,
 		factoryapi.FactorySessionLifecycleControlKindResume,
 	)
 	assertLiveSessionLifecycleControlStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		petriSession.Id,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 	)
 
 	applyAcceptedLifecycleControl(
 		t,
-		baseURL,
+		fixture.baseURL,
 		javaSessionID,
 		factoryapi.FactorySessionLifecycleControlKindResume,
 	)
 	assertDurableSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		javaSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 	)
@@ -121,26 +116,23 @@ func TestPetriAndJavaScriptSessionsShareLifecycleControls(t *testing.T) {
 // runtime progress facts through the public session inspection contract without
 // relying on orchestrator-private projections.
 func TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts(t *testing.T) {
-	dir := scaffoldSessionCompatibilityFactory(t)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
-	baseURL := strings.TrimSuffix(server.URL(), "/")
+	// CASE-X-002: two explicit sessions remain independently readable while
+	// sharing the same root-built process and API listener.
+	fixture := sharedCrossProcess(t)
+	petri := openSharedCrossLiveSession(t)
+	petriSession := readLiveSession(t, fixture.baseURL, petri.sessionID)
+	assertCompatibleLiveSessionStatusFacts(t, fixture.baseURL, petriSession, factoryapi.PETRI)
 
-	petriSession := support.GetDefaultSession(t, baseURL)
-	assertCompatibleLiveSessionStatusFacts(t, baseURL, petriSession, factoryapi.PETRI)
-
-	javaSessionID := startBusyLoopJavaScriptSession(t, baseURL)
+	javascript := startSharedCrossJavaScriptSession(t)
+	javaSessionID := javascript.sessionID
 	waitForDurableSessionStatus(
 		t,
-		baseURL,
+		fixture.baseURL,
 		javaSessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusRunning,
 		sessionCompatTimeout,
 	)
-	javaSession := readDurableSession(t, baseURL, javaSessionID)
+	javaSession := readDurableSession(t, fixture.baseURL, javaSessionID)
 	assertCompatibleDurableSessionStatusFacts(t, javaSession, factoryapi.JAVASCRIPT)
 
 	if petriSession.Id == javaSession.SessionId {
@@ -148,85 +140,32 @@ func TestPetriAndJavaScriptSessionsExposeCompatibleStatusFacts(t *testing.T) {
 	}
 }
 
-func scaffoldSessionCompatibilityFactory(t *testing.T) string {
-	t.Helper()
-
-	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "session-compatibility",
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-		"workers": []map[string]string{{"name": "worker-a"}},
-		"workstations": []map[string]any{{
-			"name":      "process",
-			"worker":    "worker-a",
-			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
-			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
-			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
-		}},
-	})
-
-	workflowDir := filepath.Join(dir, ".claude", "workflows")
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	fixturePath := support.AgentFactoryPath(
-		t,
-		filepath.Join("tests", "fixtures", "javascript_runtime", busyLoopWorkflowName+".workflow.js"),
-	)
-	raw, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read workflow fixture %s: %v", fixturePath, err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, busyLoopWorkflowName+".js"), raw, 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	return dir
-}
-
-func startBusyLoopJavaScriptSession(t *testing.T, baseURL string) string {
-	t.Helper()
-
-	workflowName := busyLoopWorkflowName
-	started := postJSON[factoryapi.FactorySessionExecutionResponse](
-		t,
-		baseURL+"/factory-sessions/async",
-		factoryapi.FactorySessionExecutionRequest{
-			RequestId: "req-session-compat-busy-loop",
-			Source: factoryapi.FactorySessionExecutionSource{
-				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
-				WorkflowName: &workflowName,
-			},
-		},
-		"start busy-loop JavaScript Factory Session",
-	)
-	if started.SessionId == "" {
-		t.Fatalf("async JavaScript session id is empty: %#v", started)
-	}
-	return started.SessionId
-}
-
 func applyAcceptedLifecycleControl(
 	t *testing.T,
 	baseURL string,
 	sessionID string,
 	operation factoryapi.FactorySessionLifecycleControlKind,
+	requestIDs ...string,
 ) factoryapi.FactorySessionLifecycleControlResponse {
 	t.Helper()
 
 	pathSegment := "pause"
-	if operation == factoryapi.FactorySessionLifecycleControlKindResume {
+	switch operation {
+	case factoryapi.FactorySessionLifecycleControlKindResume:
 		pathSegment = "resume"
+	case factoryapi.FactorySessionLifecycleControlKindCancel:
+		pathSegment = "cancel"
+	case factoryapi.FactorySessionLifecycleControlKindTerminate:
+		pathSegment = "terminate"
+	}
+	var requestID *string
+	if len(requestIDs) > 0 && strings.TrimSpace(requestIDs[0]) != "" {
+		requestID = &requestIDs[0]
 	}
 	response := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		baseURL+"/factory-sessions/"+sessionID+"/"+pathSegment,
-		factoryapi.FactorySessionLifecycleControlRequest{},
+		factoryapi.FactorySessionLifecycleControlRequest{RequestId: requestID},
 		"apply "+string(operation)+" to session "+sessionID,
 	)
 	if response.Operation != operation {
@@ -419,6 +358,26 @@ func readLiveSessionStatus(
 	)
 }
 
+func readLiveSession(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.FactorySession {
+	t.Helper()
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		baseURL+"/factory-sessions/"+sessionID,
+	)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode live session %s: %v", sessionID, err)
+	}
+	if session.Id != sessionID {
+		t.Fatalf("live session id = %q, want %q", session.Id, sessionID)
+	}
+	return session
+}
+
 func assertLiveSessionLifecycleControlStatus(
 	t *testing.T,
 	baseURL string,
@@ -427,9 +386,9 @@ func assertLiveSessionLifecycleControlStatus(
 ) {
 	t.Helper()
 
-	session := support.GetDefaultSession(t, baseURL)
+	session := readLiveSession(t, baseURL, sessionID)
 	if session.Id != sessionID {
-		t.Fatalf("default live session id = %q, want %q", session.Id, sessionID)
+		t.Fatalf("live session id = %q, want %q", session.Id, sessionID)
 	}
 	if session.Runtime.LifecycleControlStatus == nil {
 		t.Fatalf("live session %s lifecycleControlStatus = nil, want %q", sessionID, want)
@@ -459,7 +418,7 @@ func assertDurableSessionStatus(
 }
 
 func readDurableSession(
-	t *testing.T,
+	t testing.TB,
 	baseURL string,
 	sessionID string,
 ) factoryapi.FactorySessionDurableReadModel {
@@ -488,16 +447,57 @@ func waitForDurableSessionStatus(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(15 * time.Millisecond)
+	defer ticker.Stop()
+	for {
 		session := readDurableSession(t, baseURL, sessionID)
 		if session.Status == want {
 			return
 		}
-		time.Sleep(15 * time.Millisecond)
+		// The public durable-session API has no readiness event for this
+		// transition. This short bounded poll is an observation barrier, not
+		// a workflow delay; it returns on the first matching projection.
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("durable session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
+		}
 	}
-	session := readDurableSession(t, baseURL, sessionID)
-	t.Fatalf("durable session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
+}
+
+func waitForDurableSessionTerminal(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(15 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		session := readDurableSession(t, baseURL, sessionID)
+		switch session.Status {
+		case factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+			factoryapi.FactorySessionDurableLifecycleStatusFailed,
+			factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+			factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+			factoryapi.FactorySessionDurableLifecycleStatusTerminated,
+			factoryapi.FactorySessionDurableLifecycleStatusTimedOut:
+			return
+		}
+		// Durable control completion is exposed through the public read model;
+		// observe that projection with a bounded poll and return immediately
+		// when it reaches a terminal state.
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("durable session %s status = %q, want terminal within %s", sessionID, session.Status, timeout)
+		}
+	}
 }
 
 func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
