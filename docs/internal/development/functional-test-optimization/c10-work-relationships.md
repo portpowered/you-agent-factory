@@ -259,3 +259,90 @@ process, isolated provider state, and temporary-artifact proof.
 The package-level result is intentionally not claimed here. GATE-PACKAGE,
 GATE-SCOPE, GATE-LOOPBACK, GATE-PR-CI, and the project-level AC3 suite remain
 owned by Story 003 or the review/project gates.
+
+## Story 003 — clean-room integrated proof and handoff
+
+Status: PASS for `functional-test-optimization-c10-work-relationships-003` at
+the implementation-stage handoff boundary. Review owns terminal CI, timing
+direction, conflicts, and merge.
+
+### Validation report
+
+## Environment and artifact
+
+- Commit/build identifier: rebased implementation head
+  `6b4c16b876d18039ba2d2d5c82bc7cb229afc419`, with `origin/main` at
+  `58e4ac2fa999ee93579ed243214a22e3b6f15443` before the evidence-only update.
+- Environment and configuration: Windows amd64, Go 1.25.0; tracked worktree
+  was clean apart from the untracked local `prd.json` and `progress.txt`
+  scaffolding, which are excluded from the PR.
+- Customer entry point: production `root.BuildProcess` through
+  `support.StartFunctionalAPIServer`, `Process.Execute`, public CLI commands,
+  and the two retained built-CLI process-boundary cases.
+- Real and substituted dependencies: production root, Work, Factory Session,
+  dispatch, Factory Event, and replay paths; controlled local command-runner
+  and mock-worker edges for external provider effects.
+- Cost/call budget used: local bounded Go test execution; no remote or paid
+  provider calls.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| 26-row REL inventory and C01 classification | PASS | Frozen matrix and source-plan trace in the inventory section; final discovery retains the two isolated rows and shared umbrella. | External C01 inventory consolidation remains owned by its inventory lane. |
+| REL-001 through REL-026 behavior mapping | PASS | Story-002 before/after mapping plus the final package proof; public Work, request, relation, dispatch, event, replay, retry, lineage, ordering, and count assertions remain owned by their selectors. | None within this package proof. |
+| LIFE-001 through LIFE-010 lifecycle/isolation witnesses | PASS | Shared-session probes, retained built-CLI rows, route checks, cancellation, bounded timeout, early-return, reuse, and cleanup evidence in Story 002; final package passed. | No universal host-wide process census or new capacity maximum is claimed. |
+| Three-root topology and five built-CLI executions | PASS | Reconciled construction ledger: one package-scoped shared root plus two isolated built-CLI roots; built-CLI command count remains five. | Host-wide process census precision is outside this lane. |
+| GATE-PACKAGE | PASS | `go test -count=1 -timeout=10m ./tests/functional/work/relationships` exited 0 on the post-sync final local implementation tree; package time 5.638s. | Full functional suite and project-level AC3 remain review/project-owned. |
+| GATE-SCOPE | PASS | `git diff --name-only origin/main...HEAD` contains only the C10 evidence document and `tests/functional/work/relationships/**`; `git diff --check` passed. | None for the delivered diff. |
+| GATE-LOOPBACK | PASS | This report reconciles the matrix, lifecycle inventory, topology, scope, and remaining edges without repair. | Independent clean-checkout reproduction is limited to the delivered local tree. |
+| GATE-PR-CI handoff | PASS | Final head is ready for push; implementation stops once the PR is open and Backend Functional Coverage has started. | Review owns terminal result, package timing direction, conflicts, and merge. |
+
+## Customer journey
+
+1. A package-scoped production root is built and one API host is started.
+2. Each eligible relationship scenario opens a unique explicit Factory Session,
+   submits through the public CLI boundary, and observes session-scoped Work,
+   Factory Events, dispatch, and terminal state.
+3. The retained parent/child scenarios execute the real built CLI and inspect
+   public Work, retained event history, replay, lineage, and failure output.
+4. Success, failure, cancellation, timeout, and early assertion paths close
+   their sessions and controlled routes; a later explicit session reuses the
+   shared host.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the canonical C10 evidence document records
+  the plan trace, selector matrix, topology ledger, gates, and handoff edges.
+- Permission and error behavior: existing public cross-session rejection,
+  dependency failure, timeout, and cancellation assertions remain unchanged.
+- Persistence/reload behavior: the retained built-CLI parent/child rows cover
+  listing, dispatch, retained history, replay, and Work show.
+- Accessibility/keyboard/responsive behavior: not applicable to this backend
+  functional-test package.
+- Operational signals: explicit session cleanup, route zeroing, provider
+  context cancellation, and host reuse are observed by the lifecycle probes.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| PLAN-001 | Informational | Inspect the task's source-plan reference. | The referenced temporary plan is available for direct inspection. | `docs/temp/functional-test-optimization.md` is absent in this checkout; the task-packet trace is retained and no excluded plan/inventory surface was changed. | Plan and scope trace above. |
+
+## Verdict
+
+PASS
+
+The implementation-stage finish line is satisfied after the final head is
+pushed, the PR is open, required Backend Functional Coverage has started, and
+blocking review feedback is addressed. Terminal CI, timing direction, merge,
+and the three consecutive uncached full-suite runs remain outside this stage.
+
+### Remaining unproven edges
+
+- Terminal Backend Functional Coverage and package timing direction → review
+  gate `GATE-PR-CI`.
+- Conflicts and merge → review ownership.
+- Three consecutive uncached full functional-suite runs across the complete
+  Project package set → Project-level AC3 after relevant slices merge.
+- External C01 inventory consolidation → external inventory-owner follow-up.
