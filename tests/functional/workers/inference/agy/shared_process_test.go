@@ -2,7 +2,6 @@ package agy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -908,89 +907,4 @@ func assertAgyListenerClosed(baseURL string) error {
 	defer response.Body.Close()
 	body, readErr := io.ReadAll(response.Body)
 	return fmt.Errorf("AGY listener remains reachable after cleanup: status=%d body=%q readError=%v", response.StatusCode, strings.TrimSpace(string(body)), readErr)
-}
-
-func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) error {
-	// http.Client{} uses http.DefaultTransport; keep its pool alive across the
-	// scenario's lifecycle requests instead of evicting reusable connections.
-	client := &http.Client{}
-	cleanupCtx, cancel := context.WithTimeout(ctx, agySharedScenarioTimeout)
-	defer cancel()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	terminateEndpoint := endpoint + "/terminate"
-	request, err := http.NewRequestWithContext(cleanupCtx, http.MethodPost, terminateEndpoint, strings.NewReader("{}"))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	body, readErr := io.ReadAll(response.Body)
-	response.Body.Close()
-	if readErr != nil {
-		return readErr
-	}
-	terminalObserved := false
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		if response.StatusCode == http.StatusNotFound {
-			terminalObserved = true
-		} else if response.StatusCode == http.StatusConflict && strings.Contains(string(body), `"outcome":"TERMINAL_SESSION"`) {
-			// The public control response already proves that the session is
-			// terminal. Avoid repeating the status read before DELETE.
-			terminalObserved = true
-		} else {
-			return fmt.Errorf("terminate status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
-		}
-	}
-
-	// Termination is asynchronous and DELETE rejects an active Factory Session.
-	// This public status transition is the lifecycle boundary under test, so an
-	// edge-controlled result cannot replace this bounded polling observation.
-	if !terminalObserved {
-		poll := time.NewTicker(10 * time.Millisecond)
-		defer poll.Stop()
-		for {
-			statusRequest, err := http.NewRequestWithContext(cleanupCtx, http.MethodGet, endpoint+"/status", nil)
-			if err != nil {
-				return err
-			}
-			statusResponse, err := client.Do(statusRequest)
-			if err == nil {
-				statusBody, bodyErr := io.ReadAll(statusResponse.Body)
-				statusResponse.Body.Close()
-				if bodyErr == nil && statusResponse.StatusCode == http.StatusOK {
-					var status factoryapi.StatusResponse
-					if json.Unmarshal(statusBody, &status) == nil &&
-						(status.RuntimeStatus == "IDLE" || status.RuntimeStatus == "FINISHED") {
-						break
-					}
-				}
-			}
-			select {
-			case <-cleanupCtx.Done():
-				return cleanupCtx.Err()
-			case <-poll.C:
-			}
-		}
-	}
-
-	deleteRequest, err := http.NewRequestWithContext(cleanupCtx, http.MethodDelete, endpoint, nil)
-	if err != nil {
-		return err
-	}
-	deleteResponse, err := client.Do(deleteRequest)
-	if err != nil {
-		return err
-	}
-	deleteBody, readErr := io.ReadAll(deleteResponse.Body)
-	deleteResponse.Body.Close()
-	if readErr != nil {
-		return readErr
-	}
-	if deleteResponse.StatusCode != http.StatusNoContent && deleteResponse.StatusCode != http.StatusNotFound {
-		return fmt.Errorf("delete status=%d body=%q", deleteResponse.StatusCode, strings.TrimSpace(string(deleteBody)))
-	}
-	return nil
 }

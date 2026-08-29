@@ -72,6 +72,112 @@ func assertAgyFactorySessionDeleted(baseURL, sessionID string) error {
 	return closeErr
 }
 
+// closeAgyFactorySession first attempts the cheap common path for a terminal
+// session. An active session still follows the public terminate/status/delete
+// lifecycle, so cleanup remains valid after assertion or setup failures.
+func closeAgyFactorySession(ctx context.Context, baseURL, sessionID string) error {
+	// http.Client{} uses http.DefaultTransport; keep its pool reusable across
+	// the scenario's lifecycle requests instead of evicting connections.
+	client := &http.Client{}
+	cleanupCtx, cancel := context.WithTimeout(ctx, agySharedScenarioTimeout)
+	defer cancel()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
+	deleteStatus, deleteBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
+	if err != nil {
+		return err
+	}
+	if deleteStatus == http.StatusNoContent || deleteStatus == http.StatusNotFound {
+		return nil
+	}
+	if deleteStatus != http.StatusConflict {
+		return fmt.Errorf("delete status=%d body=%q", deleteStatus, strings.TrimSpace(string(deleteBody)))
+	}
+
+	terminateStatus, terminateBody, err := requestAgyFactorySession(cleanupCtx, client, http.MethodPost, endpoint+"/terminate")
+	if err != nil {
+		return err
+	}
+	terminalObserved := false
+	if terminateStatus < http.StatusOK || terminateStatus >= http.StatusMultipleChoices {
+		if terminateStatus == http.StatusNotFound ||
+			(terminateStatus == http.StatusConflict && strings.Contains(string(terminateBody), `"outcome":"TERMINAL_SESSION"`)) {
+			// The public control response already proves terminality; avoid a
+			// redundant status read before the retry DELETE.
+			terminalObserved = true
+		} else {
+			return fmt.Errorf("terminate status=%d body=%q", terminateStatus, strings.TrimSpace(string(terminateBody)))
+		}
+	}
+
+	// Termination is asynchronous and DELETE rejects an active Factory Session.
+	// This public status transition is the lifecycle boundary under test, so an
+	// edge-controlled result cannot replace this bounded polling observation.
+	if !terminalObserved {
+		poll := time.NewTicker(10 * time.Millisecond)
+		defer poll.Stop()
+		for {
+			statusRequest, err := http.NewRequestWithContext(cleanupCtx, http.MethodGet, endpoint+"/status", nil)
+			if err != nil {
+				return err
+			}
+			statusResponse, err := client.Do(statusRequest)
+			if err == nil {
+				statusBody, bodyErr := io.ReadAll(statusResponse.Body)
+				statusResponse.Body.Close()
+				if bodyErr == nil && statusResponse.StatusCode == http.StatusOK {
+					var status factoryapi.StatusResponse
+					if json.Unmarshal(statusBody, &status) == nil &&
+						(status.RuntimeStatus == "IDLE" || status.RuntimeStatus == "FINISHED") {
+						break
+					}
+				}
+			}
+			select {
+			case <-cleanupCtx.Done():
+				return cleanupCtx.Err()
+			case <-poll.C:
+			}
+		}
+	}
+	deleteStatus, deleteBody, err = requestAgyFactorySession(cleanupCtx, client, http.MethodDelete, endpoint)
+	if err != nil {
+		return err
+	}
+	if deleteStatus != http.StatusNoContent && deleteStatus != http.StatusNotFound {
+		return fmt.Errorf("delete status=%d body=%q", deleteStatus, strings.TrimSpace(string(deleteBody)))
+	}
+	return nil
+}
+
+func requestAgyFactorySession(
+	ctx context.Context,
+	client *http.Client,
+	method string,
+	endpoint string,
+) (int, []byte, error) {
+	var body io.Reader
+	if method == http.MethodPost {
+		body = strings.NewReader("{}")
+	}
+	request, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+	if err != nil {
+		return 0, nil, err
+	}
+	if method == http.MethodPost {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return 0, nil, err
+	}
+	payload, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	if readErr != nil || closeErr != nil {
+		return response.StatusCode, payload, errors.Join(readErr, closeErr)
+	}
+	return response.StatusCode, payload, nil
+}
+
 func writeAgyWorkerConfig(factoryDir, model string) error {
 	config := strings.Replace(
 		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, model),
