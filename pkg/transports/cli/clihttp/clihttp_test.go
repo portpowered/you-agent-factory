@@ -137,11 +137,11 @@ func TestProtocolPreservesDurationOnTransportAndDecodeErrors(t *testing.T) {
 			t.Fatal("decode failure did not close response body")
 		}
 	})
+	assertProtocolRejectsTrailingJSONValues(t)
 }
 
-func TestProtocolRejectsTrailingJSONValues(t *testing.T) {
-	t.Parallel()
-
+func assertProtocolRejectsTrailingJSONValues(t *testing.T) {
+	t.Helper()
 	body := &trackedBody{Reader: strings.NewReader(`{"ok":true} {"unexpected":true}`)}
 	clock := &clockSequence{values: []time.Time{time.Unix(3, 0), time.Unix(3, int64(time.Millisecond))}}
 	protocol, err := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {

@@ -181,6 +181,7 @@ func TestGenericInvocationMappingPreservesRepeatedOMNIInputsAndJSONOrder(t *test
 	}
 	assertGenericInvocationMapping(t, mapped)
 	assertGenericInvocationRequestJSON(t, generated)
+	assertGenericInvocationMappingDecodesBinaryInput(t)
 }
 
 func TestGenericInvocationMappingPreservesEmbedInputsAndOmittedOperation(t *testing.T) {
@@ -502,11 +503,11 @@ func TestGenericInvocationRequestMappingRejectsInvalidArtifactAsTypedFailure(t *
 	if err == nil || !asInvocationFailure(err, &failure) || failure.Class != models.InvocationFailureClassArtifact {
 		t.Fatalf("error = %v, failure = %#v, want typed artifact failure", err, failure)
 	}
+	assertGenericInvocationMappingRejectsMultipleInputCarriers(t)
 }
 
-func TestGenericInvocationMappingDecodesBinaryInputWithoutChangingBytes(t *testing.T) {
-	t.Parallel()
-
+func assertGenericInvocationMappingDecodesBinaryInput(t *testing.T) {
+	t.Helper()
 	want := []byte{0x00, 0xff, 0x89, 0x50, 0x4e, 0x47}
 	inputs := []factoryapi.ModelInvocationInput{{
 		Name:          "image",
@@ -547,9 +548,8 @@ func TestGenericInvocationMappingDecodesBinaryInputWithoutChangingBytes(t *testi
 	}
 }
 
-func TestGenericInvocationMappingRejectsMultipleInputContentCarriers(t *testing.T) {
-	t.Parallel()
-
+func assertGenericInvocationMappingRejectsMultipleInputCarriers(t *testing.T) {
+	t.Helper()
 	content := "inline"
 	binary := []byte{0x01}
 	inputs := []factoryapi.ModelInvocationInput{{

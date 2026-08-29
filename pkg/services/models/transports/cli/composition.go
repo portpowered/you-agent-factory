@@ -244,14 +244,6 @@ func validateMissingGenericCLIInputSlots(
 	)
 }
 
-func (service *rootService) bindGenericCLIInputs(
-	cfg InvokeConfig,
-	mappings []genericCLIInputMapping,
-	slots map[string]modelinference.OperationSlot,
-) ([]modelinference.InferenceInput, error) {
-	return bindGenericCLIInputsWithReader(cfg, mappings, slots, service.inputFileReader)
-}
-
 func bindGenericCLIInputsWithReader(
 	cfg InvokeConfig,
 	mappings []genericCLIInputMapping,
@@ -298,14 +290,6 @@ func parseGenericCLIInputMappings(values []string) ([]genericCLIInputMapping, er
 		mappings = append(mappings, genericCLIInputMapping{slot: slot, value: parts[1]})
 	}
 	return mappings, nil
-}
-
-func (service *rootService) genericCLIInput(
-	cfg InvokeConfig,
-	mapping genericCLIInputMapping,
-	slot modelinference.OperationSlot,
-) (modelinference.InferenceInput, error) {
-	return genericCLIInputWithReader(cfg, mapping, slot, service.inputFileReader)
 }
 
 func genericCLIInputWithReader(

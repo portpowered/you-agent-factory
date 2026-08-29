@@ -657,21 +657,21 @@ func assertGenericCLIInputSuccessForms(
 	readLimit *int64,
 ) {
 	t.Helper()
-	text, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "inline text"}, textSlot)
+	text, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "inline text"}, textSlot, service.inputFileReader)
 	if err != nil || text.Content != "inline text" || text.MediaType != "text/plain" {
 		t.Fatalf("inline text input = %#v, error = %v", text, err)
 	}
-	parameters, err := service.genericCLIInput(cfg, genericCLIInputMapping{
+	parameters, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{
 		slot: "parameters", value: `json:{"normalize":true}`,
-	}, jsonSlot)
+	}, jsonSlot, service.inputFileReader)
 	if err != nil || parameters.Content != `{"normalize":true}` || parameters.MediaType != "application/json" {
 		t.Fatalf("inline JSON input = %#v, error = %v", parameters, err)
 	}
-	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "parameters", value: "json:not-json"}, jsonSlot); err == nil {
+	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "parameters", value: "json:not-json"}, jsonSlot, service.inputFileReader); err == nil {
 		t.Fatal("invalid JSON input error = nil")
 	}
 
-	fileInput, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot)
+	fileInput, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot, service.inputFileReader)
 	if err != nil || fileInput.Content != "file text" || fileInput.MediaType != "text/plain" {
 		t.Fatalf("file input = %#v, error = %v", fileInput, err)
 	}
@@ -687,17 +687,17 @@ func assertGenericCLIInputFailureForms(
 	textSlot, audioSlot modelinference.OperationSlot,
 ) {
 	t.Helper()
-	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "audio", value: "inline audio"}, audioSlot); err == nil {
+	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "audio", value: "inline audio"}, audioSlot, service.inputFileReader); err == nil {
 		t.Fatal("inline binary-like input error = nil")
 	}
-	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@"}, textSlot); err == nil {
+	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@"}, textSlot, service.inputFileReader); err == nil {
 		t.Fatal("empty file path error = nil")
 	}
 
 	tooLarge := &rootService{inputFileReader: func(context.Context, string, int64) ([]byte, error) {
 		return []byte(strings.Repeat("x", int(genericCLIInputMaxFileBytes+1))), nil
 	}}
-	if _, err := tooLarge.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot); err == nil {
+	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot, tooLarge.inputFileReader); err == nil {
 		t.Fatal("oversized file input error = nil")
 	}
 
@@ -706,16 +706,16 @@ func assertGenericCLIInputFailureForms(
 		cancel()
 		return []byte("late"), nil
 	}}
-	if _, err := cancelReader.genericCLIInput(InvokeConfig{Context: cancelled}, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot); err == nil {
+	if _, err := genericCLIInputWithReader(InvokeConfig{Context: cancelled}, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot, cancelReader.inputFileReader); err == nil {
 		t.Fatal("canceled file input error = nil")
 	}
 
-	if _, err := (&rootService{}).genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot); err == nil {
+	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot, nil); err == nil {
 		t.Fatal("unconfigured file reader error = nil")
 	}
-	if _, err := service.genericCLIInput(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, modelinference.OperationSlot{
+	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, modelinference.OperationSlot{
 		Name: "text", Modality: modelinference.ModalityText, MediaTypes: []string{"application/json"},
-	}); err == nil {
+	}, service.inputFileReader); err == nil {
 		t.Fatal("file media capability error = nil")
 	}
 }
