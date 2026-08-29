@@ -69,10 +69,7 @@ func TestProvideBrowserOpenerHonorsRootEdgeOverride(t *testing.T) {
 	}
 
 	for _, tc := range browserOpenerEnvironmentCases() {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			assertBrowserOpenerEnvironmentCase(t, tc)
-		})
+		assertBrowserOpenerEnvironmentCase(t, tc)
 	}
 
 	for _, value := range []string{"", "1"} {
