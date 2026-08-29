@@ -41,12 +41,15 @@ Run the audit from a clean detached checkout.
    package-test source.
 5. Record literal comparison paths, generator functions, and verification
    commands from those sources.
-6. Reverse-trace every recorded path with
-   `rg -n -F -- "$comparisonPath" --glob '!docs/internal/baselines/README.md'`.
-7. Sort and deduplicate both ledgers, then compare their exact path sets.
-8. Run each documented read-only consumer at the pinned revision.
-9. Recompute each committed path's raw SHA-256 and scalar content counts.
-10. Inspect hosted-only claims from the matching protected-main workflow run.
+6. Reverse-trace every literal path with
+   `rg -n -F --glob '!docs/internal/baselines/README.md' -- "$comparisonPath"`.
+7. For source-built or relative paths, run the source-aware resolver witnesses
+   below. Resolve each expression from its owning source, then verify the
+   resolved path with `git ls-files --error-unmatch -- "$comparisonPath"`.
+8. Sort and deduplicate both ledgers, then compare their exact path sets.
+9. Run each documented read-only consumer at the pinned revision.
+10. Recompute each committed path's raw SHA-256 and scalar content counts.
+11. Inspect hosted-only claims from the matching protected-main workflow run.
 
 The independent path-name sweep is only a completeness witness. This command
 returned 665 tracked candidates at the audit revision:
@@ -75,10 +78,42 @@ The required S-04 witness starts at its ownership consumer. The path is
 This source edge reaches S-04 even though its filename contains none of
 `baseline`, `inventory`, or `comparison`.
 
+The reverse pass has 26 literal path matches and two source-aware resolutions.
+The two non-literal paths use the following reproducible witnesses:
+
+A missing full-path literal is not an exclusion. Trace its owning source and
+record the expression, base directory, resolver rule, resolved Git path, and
+path-existence result.
+
+| Class | Owning source and expression | Resolution and path verification |
+| --- | --- | --- |
+| R-04 | `internal/functionaltestmetadata/baseline_repo_test.go:20` assigns `baselinePath` with `filepath.Join(repoRoot, "docs", "internal", "baselines", "functional-undocumented-tests.json")`. | Resolve from `repoRoot`, normalize to the Git path, and confirm the source and committed path with the commands below. |
+| R-17 | `ui/src/styles/palette-contrast-ratchet.component.test.ts:9` imports `./palette-contrast-baseline`. | Resolve the relative module from `ui/src/styles`, apply the repository's `.ts` module extension, and confirm the source and committed path with the commands below. |
+
+Run the source-aware witnesses from the repository root. Normalize output paths
+to Git separators before comparing ledger entries:
+
+```text
+rg -n -F --glob '*.go' -- 'functional-undocumented-tests.json' internal/functionaltestmetadata
+git ls-files --error-unmatch -- docs/internal/baselines/functional-undocumented-tests.json
+internal/functionaltestmetadata/baseline_repo_test.go:20: baselinePath := filepath.Join(repoRoot, "docs", "internal", "baselines", "functional-undocumented-tests.json")
+docs/internal/baselines/functional-undocumented-tests.json
+
+rg -n -F --glob '*.ts' -- 'from "./palette-contrast-baseline"' ui/src/styles
+git ls-files --error-unmatch -- ui/src/styles/palette-contrast-baseline.ts
+ui/src/styles/palette-contrast-ratchet.component.test.ts:9:import { PALETTE_CONTRAST_BASELINE } from "./palette-contrast-baseline";
+ui/src/styles/palette-contrast-baseline.ts
+```
+
+The full-path literal lookup is not used for these two rows. The source
+expression, resolver rule, and committed-path result form their reverse
+ledger entries.
+
 ### GATE-AUDIT bidirectional ledgers
 
 The following two ledgers were produced independently. They are sorted by
-repository path and show the same 28-path set.
+repository path and show the same 28-path set. The file-to-source ledger uses
+literal matches for 26 rows and the source-aware witnesses above for two rows.
 
 | # | Source-to-file ledger | File-to-source ledger |
 | ---: | --- | --- |
@@ -113,7 +148,9 @@ repository path and show the same 28-path set.
 
 GATE-AUDIT result: both ledgers contain 28 entries.
 Both ledgers have zero duplicate rows and zero unclassified active comparison files.
-Their set difference is empty at audit SHA `0c3bb857910bf4e356b01942954e7272572510f9`.
+The reverse ledger contains 26 literal matches and two source-aware resolutions
+for R-04 and R-17. Their set difference is empty at audit SHA
+`0c3bb857910bf4e356b01942954e7272572510f9`.
 The consumer blocker in GATE-BLOCKER does not change this set result.
 
 ### Repository quality and coverage comparisons
@@ -368,11 +405,12 @@ generated-file, schema, baseline, or code rollback.
 ### GATE-LOOPBACK and GATE-PR-CI
 
 GATE-LOOPBACK result: PASS for the delivered documentation content. A fresh
-detached checkout of that head had empty `git status --porcelain`. The source-first traversal and
-reverse row parser each produced 28 unique paths. Their set difference was
-empty, with zero duplicate paths, zero duplicate classes, zero missing files,
-and zero SHA mismatches. The S-04 witness reached `PathLeaseFreezeRelativePath`
-from `make ownership-inventory-check` through `VerifyFreeze`. Recomputed scalar
+detached checkout of that head had empty `git status --porcelain`. The source-first traversal
+produced 28 unique paths. The reverse pass produced 26 literal matches and two
+source-aware resolutions for R-04 and R-17. Their set difference was empty,
+with zero duplicate paths, zero duplicate classes, zero missing files, and zero
+SHA mismatches. The S-04 witness reached `PathLeaseFreezeRelativePath` from
+`make ownership-inventory-check` through `VerifyFreeze`. Recomputed scalar
 values matched the catalog at audit SHA
 `0c3bb857910bf4e356b01942954e7272572510f9`.
 
@@ -382,8 +420,8 @@ were:
 
 | Criterion | Status | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| C1 source/file reconciliation | PASS | 28 unique paths matched in both directions | Future source drift |
-| C2 S-04 and row provenance | PASS | Ownership consumer reached `PathLeaseFreezeRelativePath`, and 28 rows had source metadata | Future consumer changes |
+| C1 source/file reconciliation | PASS | 28 source paths matched 26 literal reverse matches and two source-aware resolutions | Future source drift |
+| C2 S-04 and row provenance | PASS | Ownership consumer reached `PathLeaseFreezeRelativePath`, and R-04/R-17 had resolver witnesses alongside the 28 row records | Future consumer changes |
 | C3 revision-pinned hashes and scalars | PASS | All 28 raw SHA-256 values and scalar observations matched | Future artifact changes |
 | C4 ratchet procedures | PASS | R-* rows retained deliberate shrink or manual-repin procedures | Semantic review of future procedures |
 | C5 hosted writer evidence | PASS | Source run 33230017359 and regeneration run 33230539939 both matched audit SHA and succeeded | Future protected-main runs |
