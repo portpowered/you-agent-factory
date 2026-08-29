@@ -1,6 +1,7 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 export const SHARED_BASELINE_PATHS = Object.freeze([
@@ -28,6 +29,7 @@ export const SHARED_BASELINE_COMMENT_MARKER =
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const LOWERCASE_COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const SHARED_BASELINE_PATH_SET = new Set(SHARED_BASELINE_PATHS);
+const MAX_METADATA_OUTPUT_BYTES = 64 * 1024;
 const NO_DIFF_PULL_REQUEST_COMMENT =
 	"The latest successful main CI run regenerated no changes; this reconciliation is no longer needed.";
 
@@ -44,14 +46,63 @@ function sortedUnique(paths) {
 	);
 }
 
-function parseGitNameOnlyPaths(output, label) {
+function parseGitLinePaths(output, label) {
 	const rawPaths = String(output || "")
-		.split("\0")
+		.split(/\r?\n/)
 		.filter(Boolean)
 		.map(normalizePath);
 	const paths = sortedUnique(rawPaths);
 	if (paths.length !== rawPaths.length) {
 		throw new Error(`${label} contained duplicate or ambiguous path entries`);
+	}
+	return paths;
+}
+
+function parseGitNameStatusPaths(output, label) {
+	const fields = String(output || "").split("\0").filter(Boolean);
+	const rawPaths = [];
+	for (let index = 0; index < fields.length; ) {
+		const status = fields[index++];
+		if (status.startsWith("R") || status.startsWith("C")) {
+			throw new Error(`${label} contained a rename or copy path record`);
+		}
+		if (!/^[A-Z]$/.test(status) || index >= fields.length || !fields[index]) {
+			throw new Error(`${label} contained an invalid path record`);
+		}
+		rawPaths.push(normalizePath(fields[index++]));
+	}
+	const paths = sortedUnique(rawPaths.filter(Boolean));
+	if (paths.length !== rawPaths.filter(Boolean).length) {
+		throw new Error(`${label} contained duplicate or ambiguous path entries`);
+	}
+	return paths;
+}
+
+function parseCandidatePorcelainPaths(status) {
+	const rawPaths = [];
+	for (const line of String(status || "").split(/\r?\n/)) {
+		if (line.length < 3) continue;
+		const indexStatus = line[0];
+		const worktreeStatus = line[1];
+		const path = line.slice(3);
+		if (indexStatus === "?" || worktreeStatus === "?") {
+			throw new Error(`generated candidate contains untracked path(s): ${normalizePath(path)}`);
+		}
+		if (
+			indexStatus === "R" ||
+			indexStatus === "C" ||
+			worktreeStatus === "R" ||
+			worktreeStatus === "C" ||
+			path.includes(" -> ")
+		) {
+			throw new Error("generated candidate contains a rename or copy path record");
+		}
+		rawPaths.push(normalizePath(path));
+	}
+	const normalizedPaths = rawPaths.filter(Boolean);
+	const paths = sortedUnique(normalizedPaths);
+	if (paths.length !== normalizedPaths.length) {
+		throw new Error("generated candidate contained duplicate or ambiguous path entries");
 	}
 	return paths;
 }
@@ -274,8 +325,10 @@ function checkCurrentMain(edge, { mainSha, defaultBranch, phase }) {
 		"--force",
 		"origin",
 		`refs/heads/${defaultBranch}:refs/remotes/origin/${defaultBranch}`,
-	]);
-	const currentMainSha = edge.git(["rev-parse", `origin/${defaultBranch}`]).stdout.trim();
+	], { maxBuffer: MAX_METADATA_OUTPUT_BYTES });
+	const currentMainSha = edge.git(["rev-parse", `origin/${defaultBranch}`], {
+		maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+	}).stdout.trim();
 	if (currentMainSha === mainSha) return null;
 	return {
 		action: "superseded",
@@ -286,21 +339,29 @@ function checkCurrentMain(edge, { mainSha, defaultBranch, phase }) {
 
 function inspectRemoteBranch(edge, { mainSha, botBranch, expectedSha }) {
 	const remoteRef = `origin/${botBranch}`;
-	const actualSha = edge.git(["rev-parse", remoteRef]).stdout.trim();
+	const actualSha = edge.git(["rev-parse", remoteRef], {
+		maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+	}).stdout.trim();
 	if (actualSha !== expectedSha) {
 		throw new Error(
 			`automation branch moved from ${expectedSha} to ${actualSha || "(unknown)"} before reconciliation; refusing to replace concurrent work`,
 		);
 	}
-	const baseSha = edge.git(["merge-base", mainSha, remoteRef]).stdout.trim();
+	const baseSha = edge.git(["merge-base", mainSha, remoteRef], {
+		maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+	}).stdout.trim();
 	requireCommitSha(baseSha, "automation branch base revision");
-	const parentSha = edge.git(["rev-parse", `${remoteRef}^`]).stdout.trim();
+	const parentSha = edge.git(["rev-parse", `${remoteRef}^`], {
+		maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+	}).stdout.trim();
 	requireCommitSha(parentSha, "automation branch parent revision");
-	const output = edge.git(["diff", "--name-only", baseSha, remoteRef]).stdout;
+	const output = edge.git(["diff", "--name-only", baseSha, remoteRef], {
+		maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+	}).stdout;
 	return {
 		baseSha,
 		parentSha,
-		paths: validateAllowlistedPaths(output.split(/\r?\n/).filter(Boolean)),
+		paths: validateAllowlistedPaths(parseGitLinePaths(output, "automation branch diff")),
 	};
 }
 
@@ -310,7 +371,7 @@ function refreshRemoteBranch(edge, botBranch) {
 		"--force",
 		"origin",
 		`refs/heads/${botBranch}:refs/remotes/origin/${botBranch}`,
-	]);
+	], { maxBuffer: MAX_METADATA_OUTPUT_BYTES });
 }
 
 function matchesRemoteCandidate(edge, botBranch) {
@@ -358,7 +419,9 @@ function validatePullRequestMetadata(metadata, {
 }
 
 function verifyCandidateBase(edge, { mainSha, revision, label }) {
-	const parentSha = edge.git(["rev-parse", `${revision}^`]).stdout.trim();
+	const parentSha = edge.git(["rev-parse", `${revision}^`], {
+		maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+	}).stdout.trim();
 	if (parentSha !== mainSha) {
 		throw new Error(
 			`${label} parent ${parentSha || "(unknown)"} does not match guarded main ${mainSha}`,
@@ -367,12 +430,14 @@ function verifyCandidateBase(edge, { mainSha, revision, label }) {
 }
 
 function readGeneratedCandidatePaths(edge, { mainSha, changedPaths }) {
-	const workingTreePaths = edge.git(["diff", "--name-only", mainSha]).stdout
-		.split(/\r?\n/)
-		.filter(Boolean);
-	const stagedPaths = edge.git(["diff", "--cached", "--name-only"]).stdout
-		.split(/\r?\n/)
-		.filter(Boolean);
+	const workingTreePaths = parseGitLinePaths(
+		edge.git(["diff", "--name-only", mainSha], { maxBuffer: MAX_METADATA_OUTPUT_BYTES }).stdout,
+		"generated working-tree diff",
+	);
+	const stagedPaths = parseGitLinePaths(
+		edge.git(["diff", "--cached", "--name-only"], { maxBuffer: MAX_METADATA_OUTPUT_BYTES }).stdout,
+		"generated staged diff",
+	);
 	return validateAllowlistedPaths([
 		...changedPaths,
 		...workingTreePaths,
@@ -507,10 +572,15 @@ export function reconcileBotCandidate({
 		edge.git(["config", "user.name", "github-actions[bot]"]);
 		edge.git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
 		edge.git(["add", "--", ...SHARED_BASELINE_PATHS]);
-		const stagedPaths = edge.git(["diff", "--cached", "--name-only"]).stdout.split(/\r?\n/).filter(Boolean);
+		const stagedPaths = parseGitLinePaths(
+			edge.git(["diff", "--cached", "--name-only"], { maxBuffer: MAX_METADATA_OUTPUT_BYTES }).stdout,
+			"staged generated candidate",
+		);
 		validateAllowlistedPaths(stagedPaths, { requireChanges: true });
 		edge.git(["commit", "-m", prTitle]);
-		const generatedCommitSha = edge.git(["rev-parse", "HEAD"]).stdout.trim();
+		const generatedCommitSha = edge.git(["rev-parse", "HEAD"], {
+			maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+		}).stdout.trim();
 		requireCommitSha(generatedCommitSha, "generated branch revision");
 		verifyCandidateBase(edge, {
 			mainSha,
@@ -655,8 +725,11 @@ function normalizeCommandResult(result) {
 	};
 }
 
-function runExternalCommand(command, args, { allowFailure = false } = {}) {
-	const raw = spawnSync(command, args, { encoding: "utf8", windowsHide: true });
+function runExternalCommand(command, args, { allowFailure = false, maxBuffer, stdio } = {}) {
+	const spawnOptions = { encoding: "utf8", windowsHide: true };
+	if (maxBuffer !== undefined) spawnOptions.maxBuffer = maxBuffer;
+	if (stdio !== undefined) spawnOptions.stdio = stdio;
+	const raw = spawnSync(command, args, spawnOptions);
 	if (raw.error) throw new Error(`unable to execute ${command}: ${raw.error.message}`);
 	const result = normalizeCommandResult(raw);
 	if (!allowFailure && result.status !== 0) {
@@ -668,14 +741,14 @@ function runExternalCommand(command, args, { allowFailure = false } = {}) {
 	return result;
 }
 
-function runGit(args) {
-	return runExternalCommand("git", args).stdout;
+function runMetadataGit(args) {
+	return runExternalCommand("git", args, { maxBuffer: MAX_METADATA_OUTPUT_BYTES }).stdout;
 }
 
 function readSourceCommitEvidence(sourceSha) {
 	requireCommitSha(sourceSha, "source revision");
 	const normalizedSourceSha = String(sourceSha).toLowerCase();
-	const resolvedSourceSha = runGit([
+	const resolvedSourceSha = runMetadataGit([
 		"rev-parse",
 		"--verify",
 		`${normalizedSourceSha}^{commit}`,
@@ -686,14 +759,14 @@ function readSourceCommitEvidence(sourceSha) {
 		);
 	}
 
-	const headSha = runGit(["rev-parse", "--verify", "HEAD"]).trim();
+	const headSha = runMetadataGit(["rev-parse", "--verify", "HEAD"]).trim();
 	if (headSha.toLowerCase() !== normalizedSourceSha) {
 		throw new Error(
 			`checked-out HEAD ${headSha || "(unknown)"} does not match source revision ${sourceSha}`,
 		);
 	}
 
-	const revisionParts = runGit([
+	const revisionParts = runMetadataGit([
 		"rev-list",
 		"--parents",
 		"--max-count=1",
@@ -712,11 +785,14 @@ function readSourceCommitEvidence(sourceSha) {
 	}
 	const parentSha = revisionParts[1];
 	requireCommitSha(parentSha, "source parent revision");
-	const sourcePaths = parseGitNameOnlyPaths(
-		runGit([
+	const sourcePaths = parseGitNameStatusPaths(
+		runMetadataGit([
 			"diff",
-			"--name-only",
+			"--name-status",
 			"-z",
+			"--find-renames",
+			"--find-copies",
+			"--find-copies-harder",
 			parentSha,
 			normalizedSourceSha,
 			"--",
@@ -724,6 +800,56 @@ function readSourceCommitEvidence(sourceSha) {
 		"source commit diff",
 	);
 	return { sourceSha: normalizedSourceSha, parentSha, paths: sourcePaths };
+}
+
+function readCommittedBlobWithoutPipe(revision, label) {
+	let temporaryDirectory = "";
+	let outputFileDescriptor;
+	let contents;
+	let operationError;
+	let cleanupError;
+
+	try {
+		temporaryDirectory = mkdtempSync(join(tmpdir(), "shared-baseline-blob-"));
+		const outputPath = join(temporaryDirectory, "blob");
+		outputFileDescriptor = openSync(outputPath, "w");
+		runExternalCommand("git", ["show", revision], {
+			maxBuffer: MAX_METADATA_OUTPUT_BYTES,
+			stdio: ["ignore", outputFileDescriptor, "pipe"],
+		});
+		const descriptor = outputFileDescriptor;
+		outputFileDescriptor = undefined;
+		closeSync(descriptor);
+		contents = readFileSync(outputPath, "utf8");
+	} catch (error) {
+		operationError = error;
+	}
+
+	if (outputFileDescriptor !== undefined) {
+		const descriptor = outputFileDescriptor;
+		outputFileDescriptor = undefined;
+		try {
+			closeSync(descriptor);
+		} catch (error) {
+			cleanupError = error;
+		}
+	}
+	if (temporaryDirectory) {
+		try {
+			rmSync(temporaryDirectory, { recursive: true, force: true });
+		} catch (error) {
+			cleanupError = cleanupError || error;
+		}
+	}
+
+	if (operationError) {
+		if (cleanupError) {
+			throw new Error(`${operationError.message}; ${label} temporary cleanup failed: ${cleanupError.message}`);
+		}
+		throw operationError;
+	}
+	if (cleanupError) throw new Error(`${label} temporary cleanup failed: ${cleanupError.message}`);
+	return contents;
 }
 
 function parseBudgetDocument(contents, label) {
@@ -769,7 +895,10 @@ function canonicalJson(value, path = []) {
 }
 
 function readUnitBudgetEvidence() {
-	const currentContents = runGit(["show", `HEAD:${SHARED_BASELINE_UNIT_BUDGET_PATH}`]);
+	const currentContents = readCommittedBlobWithoutPipe(
+		`HEAD:${SHARED_BASELINE_UNIT_BUDGET_PATH}`,
+		"HEAD unit-latency budget",
+	);
 	let candidateContents;
 	try {
 		candidateContents = readFileSync(resolve(SHARED_BASELINE_UNIT_BUDGET_PATH), "utf8");
@@ -794,7 +923,7 @@ function restoreIdentityOnlyBudget() {
 		SHARED_BASELINE_UNIT_BUDGET_PATH,
 	]);
 	const remainingPaths = parsePorcelainPaths(
-		runGit(["status", "--porcelain=v1", "--untracked-files=all"]),
+		runMetadataGit(["status", "--porcelain=v1", "--untracked-files=all"]),
 	);
 	if (remainingPaths.length > 0) {
 		throw new Error(
@@ -850,9 +979,9 @@ function runValidateWorkingTree({
 	sourceSha = "",
 } = {}) {
 	const status = staged
-		? runGit(["diff", "--cached", "--name-only"])
-		: runGit(["status", "--porcelain=v1", "--untracked-files=all"]);
-	const paths = staged ? sortedUnique(status.split(/\r?\n/)) : parsePorcelainPaths(status);
+		? runMetadataGit(["diff", "--cached", "--name-only"])
+		: runMetadataGit(["status", "--porcelain=v1", "--untracked-files=all"]);
+	const paths = staged ? parseGitLinePaths(status, "staged candidate") : parseCandidatePorcelainPaths(status);
 	validateAllowlistedPaths(paths, { requireChanges });
 	const sourceEvidence = sourceSha ? readSourceCommitEvidence(sourceSha) : null;
 	if (!staged && !sourceEvidence) {
