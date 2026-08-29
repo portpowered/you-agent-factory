@@ -14,16 +14,34 @@ available in this checkout. The read-only authority checks performed on
   docs/temp/functional-test-optimization.md` -> no entry.
 
 This tracked c09 artifact is the explicit reviewable replacement authority and
-evidence record for the two retained source-plan references. The PRD remains
-the task packet's scope and acceptance authority; this resolution does not
-change it. `Scope 7 — winning raised-parallelism configuration must remain
-green` is preserved as the raised `jobs=8` PR-CI gate owned by review, without
-a local wall-clock threshold. `Functional test-case discipline` is preserved
-by the complete CASE-WW-001 through CASE-WW-017 matrix and the existing or
+evidence record for the two retained source-plan references. The
+[operator/planning-owner disposition on PR #2412](https://github.com/portpowered/you-agent-factory/pull/2412#issuecomment-5460857653)
+grants that replacement authority under planning-standards §11 and supersedes
+the earlier implementer-authored declaration. The PRD remains the task
+packet's scope and acceptance authority; this resolution does not change it.
+`Scope 7 — winning raised-parallelism configuration must remain green` is
+preserved as the raised `jobs=8` PR-CI gate owned by review, without a local
+wall-clock threshold. `Functional test-case discipline` is preserved by the
+complete CASE-WW-001 through CASE-WW-017 matrix and the existing or
 not-applicable ownership recorded below. No source-plan requirement is
 removed, weakened, or reinterpreted, and no production, support, baseline,
 workflow, sibling, or generated surface is added. The absent temporary pointer
 is not used as a silent substitute or as a reason to broaden this lane.
+
+### Operator-authorized sourcePlanRef audit
+
+The linked disposition confirms that the operator-held source plan at revision
+`functional-test-optimization-v2` retains both references below unchanged.
+The PRD's `sourcePlanRef` values therefore align with the tracked replacement
+authority as follows:
+
+| PRD task | `sourcePlanRef` | Reported alignment |
+| --- | --- | --- |
+| `functional-test-optimization-c09-work-watch-contention-001` | `Scope 7 — winning raised-parallelism configuration must remain green; Functional test-case discipline; Acceptance Criteria 3 and 6` | PASS — this report retains the raised-concurrency review gate, the unchanged public Work-watch behavior, and the complete CASE-WW-001 through CASE-WW-017 discipline matrix. |
+| `functional-test-optimization-c09-work-watch-contention-002` | `Scope 7 — winning raised-parallelism configuration must remain green; Functional test-case discipline; Acceptance Criteria 3 and 6` | PASS — this report records the clean-room package proof, the validation loopback, and the review-owned raised-concurrency handoff without dropping or reinterpreting either retained reference. |
+
+No task is forked or delegated by this authority decision, and the audit does
+not alter the PRD scope or acceptance criteria.
 
 ## Pre-change CI diagnostic
 
@@ -185,7 +203,7 @@ only.
 | GATE-RACE | PASS | local_real | Named race command passed in `11.950s`; the controlled lifecycle race passed in `12.198s`. | No claim about unexercised races. |
 | GATE-PACKAGE | PASS | local_real clean-room result | The implementation/test-head package rerun passed in `6.927s`. A detached clean worktree at exact implementation/test head `e0a51a87ace61a2727c1c9e52f72ab1a494ca3e0` emitted `ok github.com/portpowered/infinite-you/tests/functional/work/watch 7.396s` with exit code `0`, no test failure output, and no matching clean-room processes after cleanup. | The package result does not prove full-suite `jobs=8` CI or terminal review state. |
 | GATE-LOOPBACK | PASS | local_real; applicable | This report was produced after the detached clean-worktree package proof at exact head `e0a51a87ace61a2727c1c9e52f72ab1a494ca3e0`; tracked-tree `git diff --check` is run after the report refresh. | Review-owned CI and merge remain outside loopback. |
-| GATE-PR-CI | BLOCKED | remote_real PR runner; review-owned | The exact-head loopback was captured before the final report-refresh push, so raised `jobs=8` CI has not yet measured the final head. | Push the final head, start authoritative Backend Functional Coverage, and let review drive it terminal. |
+| GATE-PR-CI | BLOCKED | remote_real PR runner; review-owned | The prior PR head's Backend Functional Coverage was green for the Work-watch package; this loopback intentionally leaves terminal status to the fresh raised `jobs=8` run on the final handoff head. | Review owns the final-head CI result and terminal merge decision after implementation handoff. |
 | Paid validation and sensitive evidence | PASS | none/controlled; applicable | No paid validation was used; the retained diagnostic is truncated and contains no secrets or raw payloads. | None. |
 | Accessibility and localization | PASS | not applicable | No UI or customer copy changed. | None. |
 
@@ -260,11 +278,12 @@ explicitly not claimed here and remain review-owned handoff edges.
 - Affected behavior and criterion: None for loopback; `GATE-PR-CI` is a
   review-owned delivery gate rather than a loopback failure.
 - Root-cause evidence or remaining uncertainty: the historical reducer suffix
-  is unavailable because the source artifact was truncated; raised-concurrency
-  CI has not yet run on this head.
-- Smallest recommended correction/prerequisite: open the requested PR and
-  start the authoritative Backend Functional Coverage check at `jobs=8`; do
-  not change the package based on ENV-001 unless review identifies a
-  reproducible package-owned leak.
+  is unavailable because the source artifact was truncated; terminal
+  raised-concurrency CI remains review-owned and is not claimed by this
+  loopback.
+- Smallest recommended correction/prerequisite: push the final report-refresh
+  head and start the authoritative Backend Functional Coverage check at
+  `jobs=8`; do not change the package based on ENV-001 unless review identifies
+  a reproducible package-owned leak.
 - Dependencies and retest scope: review-owned PR CI, then any concrete
   blocking feedback; no additional local re-run is required before handoff.
