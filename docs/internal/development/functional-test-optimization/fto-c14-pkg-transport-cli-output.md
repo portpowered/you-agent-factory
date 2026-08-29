@@ -407,34 +407,47 @@ go test -race ./tests/functional/transport/cli/output/... -run '^TestCLITextStre
 PASS, package-reported 12.884 s. No race was detected in the changed gated
 writer notification or shared fixture execution path.
 
-The corrected lifecycle selector command was also run at `-count=1`; each
-changed witness passed at least once. The slow-writer pass was in that corrected
-mixed selector run (5.01 s); the gated-human pass was 5.173 s, the continuous
-pass was 1.917 s, the writer-failure pass was 17.737 s, and the interruption
-pass was 4.455 s at package-reported time. A combined run reproduced the
-unchanged host-contended packaged-factory startup guard for writer failure and
-passed interruption; the failures occurred before the controlled writer or
-external-work boundary.
+The initially contended `-count=3` and `-race` attempts are retained as
+diagnostics: packaged-factory staging or initialization timed out before the
+owned notification boundary. Serial reruns then admitted every owned lifecycle
+boundary and completed the required evidence:
 
-The required `-count=3` slow-writer, writer-failure, and interruption attempts
-were retained as diagnostics rather than retried to reduce variance: concurrent
-host activity blocked packaged-factory staging or initialization before the
-owned notification boundary. The targeted combined `-race` command likewise
-failed before the slow-writer boundary under the same contention; the isolated
-gated-human race run passed. These diagnostics do not weaken the lifecycle
-assertions or claim race coverage for the blocked paths. A compile-only package
-run passed, and the post-edit sleep/deadline census returned zero sites.
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLISlowWriterDoesNotReorderResponseEvents$' -count=3 -v
+```
+
+PASS, package-reported 26.843 s. All three blocked-writer journeys remained
+incomplete before release and then produced monotonic records with one
+terminal result.
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLITextStreamInterruptedRunDoesNotClaimCompletion$' -count=3 -v
+go test ./tests/functional/transport/cli/output/... -run '^TestCLIWriterFailureCancelsInvocation$' -count=3 -v
+```
+
+PASS, package-reported 17.235 s and 11.854 s respectively. Every repetition
+preserved cancellation error/output, writer-error precedence, absence of a
+terminal record after writer failure, and external-work join.
+
+Targeted `-race` selectors passed for slow writer (11.373 s), writer failure
+(8.927 s), interrupted run (9.405 s), continuous listener (4.785 s), and the
+previously recorded gated human writer (12.884 s); no race was reported. The
+continuous listener repeat evidence above and this race run each performed one
+real local readiness request, cancellation/join, and same-port rebind. The
+final exact package command passed with package-reported time 42.406 s. The
+post-edit census remains zero `time.Sleep` sites and zero clock-driven
+deadline loops; remaining `time.After` calls are bounded failure or cleanup
+ceilings and do not drive success synchronization. `git diff --check` passed.
 
 This story proves deterministic success synchronization for the changed gated
 writers, one-request real listener readiness, cancellation/join behavior,
-isolated-root preservation, and the absence of polling sleeps. It does not
-prove the final three-sample performance target, exact-head loopback, terminal
-CI, or merge; those remain owned by GATE-PERF, VAL-001, and review.
+isolated-root preservation, repeat stability, targeted race safety, package
+cleanup, and the absence of polling sleeps. It does not prove the final
+three-sample performance target, exact-head loopback, terminal CI, or merge;
+those remain owned by GATE-PERF, VAL-001, and review.
 
 ## Later-gate inputs and remaining edges
 
-- `GATE-SUCCESS`: consolidate duplicate successful output evidence while
-  preserving every row above.
 - `GATE-PERF`: record three comparable final samples and compare their median
   with the 59.921 s baseline; if the 40% target is not reached, add the
   quantified profile-backed irreducible-floor explanation after the bounded
