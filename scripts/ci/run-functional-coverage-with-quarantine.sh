@@ -169,7 +169,7 @@ launch_child() {
   local status_path="$2"
   shift 2
 
-  setsid --wait "$script_path" --child "$label" "$status_path" "$timing_path" -- "$@" &
+  setsid --wait bash "$script_path" --child "$label" "$status_path" "$timing_path" -- "$@" &
   launched_pid=$!
 }
 
