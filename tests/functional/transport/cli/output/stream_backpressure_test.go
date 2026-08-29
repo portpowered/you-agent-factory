@@ -13,7 +13,6 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -28,7 +27,6 @@ const (
 // emission order when stdout is blocked by a slow consumer, so parsers never
 // observe reordered lifecycle or result records under backpressure.
 func TestCLISlowWriterDoesNotReorderResponseEvents(t *testing.T) {
-	t.Parallel()
 	writer := newGatedStdoutWriter()
 	stdout := runGoalResponseStreamWithStdout(t, writer)
 
@@ -162,28 +160,27 @@ func (writer *inFlightFailureStdoutWriter) writeAttempts() int64 {
 func runGoalResponseStreamWithStdout(t *testing.T, stdout *gatedStdoutWriter) *gatedStdoutWriter {
 	t.Helper()
 
+	// This case intentionally owns an independent root: the blocked stdout
+	// writer owns the response-stream backpressure and ordering lifecycle.
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
+	workingDirectory := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	args := []string{
 		"you", "--json", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic slow-writer ordering contract",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = workingDirectory
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: textStreamAcceptedProviderRunner(),
+	})
+	support.CleanupProcess(t, process)
+	support.InstallPackagedFactoryWithProcess(t, process, env, workingDirectory, goalFactoryName)
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)
@@ -205,7 +202,6 @@ func runGoalResponseStreamWithStdout(t *testing.T, stdout *gatedStdoutWriter) *g
 // CLI response-stream invocation unsuccessfully and cancels in-flight provider
 // external work so no orphaned subprocess remains after the CLI returns.
 func TestCLIWriterFailureCancelsInvocation(t *testing.T) {
-	t.Parallel()
 	externalWork := newCancellableExternalWorkRunner()
 	writer := newInFlightFailureStdoutWriter(errors.New(writerFailureStdoutError), externalWork)
 	runGoalResponseStreamWriterFailure(t, externalWork, writer)
@@ -405,21 +401,27 @@ func runGoalResponseStreamWriterFailure(
 ) {
 	t.Helper()
 
+	// This case intentionally owns an independent root: a failing writer must
+	// cancel and join only its own active external work.
 	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
+	workingDirectory := t.TempDir()
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	args := []string{
 		"you", "--json", "run", "--named", goalFactoryName,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic writer-failure cancellation contract",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = workingDirectory
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: externalWork,
 	})
+	support.CleanupProcess(t, process)
+	support.InstallPackagedFactoryWithProcess(t, process, env, workingDirectory, goalFactoryName)
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)
@@ -434,21 +436,6 @@ func runGoalResponseStreamWriterFailure(
 			t.Errorf("timed out waiting for invocation cleanup")
 		}
 	})
-}
-
-func writerFailureGoalMockWorkers() *workers.MockWorkersConfig {
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeScript,
-			ScriptConfig: &workers.MockWorkerScriptConfig{
-				Command: "you-writer-failure-external-work",
-				Args:    []string{"in-flight"},
-			},
-		}},
-	}
 }
 
 var _ platformprocess.CommandRunner = (*cancellableExternalWorkRunner)(nil)

@@ -265,6 +265,17 @@ func runMachineOutputInvocation(
 	effectsCounter *atomic.Int32,
 ) (stdout, stderr string, err error) {
 	t.Helper()
+	fixture, inputs := newMachineOutputInputs(t, args, packagedFactoryName)
+	err = fixture.execute(inputs, providerRunner, effectsCounter)
+	return inputs.Stdout(), inputs.Stderr(), err
+}
+
+func newMachineOutputInputs(
+	t testing.TB,
+	args []string,
+	packagedFactoryName string,
+) (*machineOutputFixture, *support.CapturedInputs) {
+	t.Helper()
 	fixture := sharedMachineOutputFixture(t)
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
@@ -279,20 +290,28 @@ func runMachineOutputInvocation(
 		}
 		support.CopyFactoryAsNamed(t, sourceDir, homeDir, packagedFactoryName)
 	}
+	return fixture, inputs
+}
 
+// execute serializes shared-process calls while keeping each invocation's
+// route, streams, environment, home, and session state independent.
+func (fixture *machineOutputFixture) execute(
+	inputs *support.CapturedInputs,
+	providerRunner platformprocess.CommandRunner,
+	effectsCounter *atomic.Int32,
+) error {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	fixture.effects.setCounter(effectsCounter)
 	defer fixture.effects.setCounter(nil)
 	var routeID string
 	if providerRunner != nil {
-		routeID = fixture.router.bind(workingDirectory, providerRunner)
+		routeID = fixture.router.bind(inputs.Input.WorkingDirectory, providerRunner)
 		defer fixture.router.unbind(routeID)
 	}
 	fixture.active.Add(1)
 	defer fixture.active.Add(-1)
-	err = fixture.process.Execute(inputs.Input)
-	return inputs.Stdout(), inputs.Stderr(), err
+	return fixture.process.Execute(inputs.Input)
 }
 
 func machineOutputAcceptedProviderRunner() platformprocess.CommandRunner {
