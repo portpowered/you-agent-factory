@@ -44,7 +44,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 	fixture := loadProductionLedgerFixture(t)
 	assertProductionLedgerFixture(t, fixture)
 
-	t.Run("finite drains terminal retained history", func(t *testing.T) {
+	t.Run("CASE-WW-008 finite drains terminal retained history", func(t *testing.T) {
 		stream := newProductionLedgerStream(t, fixture.Events)
 		process := support.BuildProcess(t, serviceedges.Edges{})
 		support.CleanupProcess(t, process)
@@ -58,7 +58,7 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		assertProductionFiniteLines(t, lines)
 	})
 
-	t.Run("finite exposes a replayed structured result on its first transition", func(t *testing.T) {
+	t.Run("CASE-WW-017 finite exposes a replayed structured result on its first transition", func(t *testing.T) {
 		events := productionLedgerEventsWithStructuredResult(t, fixture.Events)
 		stream := newProductionLedgerStream(t, events)
 		process := support.BuildProcess(t, serviceedges.Edges{})
@@ -80,11 +80,11 @@ func TestWorkWatchRecordedProductionRetryLedger(t *testing.T) {
 		}
 	})
 
-	t.Run("follow remains attached and consumes later transitions", func(t *testing.T) {
+	t.Run("CASE-WW-017 replayed ledger follow remains attached and consumes later transitions", func(t *testing.T) {
 		runProductionLedgerFollowCase(t, fixture.Events)
 	})
 
-	t.Run("rejects a same-sequence conflicting retry record", func(t *testing.T) {
+	t.Run("CASE-WW-005 rejects a same-sequence conflicting retry record", func(t *testing.T) {
 		responseIndex := productionLedgerEventIndex(t, fixture.Events, factoryapi.FactoryEventTypeModelResponse)
 		conflict := conflictingProductionLedgerEvent(t, fixture.Events[responseIndex], fixture.Events[responseIndex].Context.Sequence)
 		history := append([]factoryapi.FactoryEvent(nil), fixture.Events[:responseIndex+1]...)
