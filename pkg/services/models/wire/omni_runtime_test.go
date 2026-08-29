@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -169,6 +170,78 @@ func TestStory001ProductionDefaultRuntimeCharacterization(t *testing.T) {
 				t.Fatalf("default %s output lineage = %q, want input-echo characterization", testCase.operation, lineage)
 			}
 		})
+	}
+}
+
+func TestInferenceRuntimeBindsProductionASRWhenProtocolAndStagingArePresent(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+		Dialer:           &story001InvocationDialer{},
+		ASRTempDirectory: func() string { return "temp" },
+		ASRCreateTemp: func(string, string) (localai.TempFile, error) {
+			return nil, nil
+		},
+		ASRWriteFile:  func(string, []byte) error { return nil },
+		ASRRemoveFile: func(string) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("inferenceRuntime: %v", err)
+	}
+	composed, ok := runtime.(operationInvocationRuntime)
+	if !ok {
+		t.Fatalf("inferenceRuntime type = %T, want operationInvocationRuntime", runtime)
+	}
+	if composed.asr == nil {
+		t.Fatal("production ASR runtime = nil, want pinned adapter when protocol and staging are wired")
+	}
+}
+
+func TestInferenceRuntimeRoutesDefaultASRThroughPinnedProtocol(t *testing.T) {
+	t.Parallel()
+
+	responsePayload, err := proto.Marshal(&localai.TranscriptResult{
+		Text:     "routed transcript",
+		Segments: []*localai.TranscriptSegment{{Id: 0, Start: 0, End: 100, Text: "routed transcript"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal ASR response: %v", err)
+	}
+	endpoint := "grpc://127.0.0.1:45906"
+	dialer := &story001InvocationDialer{response: responsePayload}
+	tempDir := t.TempDir()
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+		Dialer:           dialer,
+		ASRTempDirectory: func() string { return tempDir },
+		ASRCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
+			return os.CreateTemp(directory, pattern)
+		},
+		ASRWriteFile: func(path string, content []byte) error {
+			return os.WriteFile(path, content, 0o600)
+		},
+		ASRRemoveFile: os.Remove,
+	})
+	if err != nil {
+		t.Fatalf("inferenceRuntime: %v", err)
+	}
+	operation, ok := (models.GenericOperationCatalog{}).GenericOperationContract(models.OperationASR)
+	if !ok {
+		t.Fatal("GenericOperationContract(ASR) = false")
+	}
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Scope: mustRoutingScope(t), Model: models.ModelReference{NameOrURI: "asr"},
+			Operation: models.OperationASR,
+			Inputs: []models.InferenceInput{{
+				Name: "audio", Modality: models.ModalityAudio,
+				ContentType: "audio/wav", MediaType: "audio/wav", Content: "audio",
+			}},
+		},
+		Operation: operation,
+		HostSlot:  inference.HostHandleSlot{Endpoint: endpoint},
+	})
+	if err != nil || len(result.Content) != 2 || result.Content[0].Content != "routed transcript" || dialer.endpoint != endpoint {
+		t.Fatalf("default ASR route = result:%#v error:%v endpoint:%q, want pinned response and selected endpoint", result, err, dialer.endpoint)
 	}
 }
 

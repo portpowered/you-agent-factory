@@ -441,6 +441,250 @@ func (x *Reply) GetChatDeltas() []*ChatDelta {
 	return nil
 }
 
+type TranscriptRequest struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Dst                    string                 `protobuf:"bytes,2,opt,name=dst,proto3" json:"dst,omitempty"`
+	Language               string                 `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	Threads                uint32                 `protobuf:"varint,4,opt,name=threads,proto3" json:"threads,omitempty"`
+	Translate              bool                   `protobuf:"varint,5,opt,name=translate,proto3" json:"translate,omitempty"`
+	Diarize                bool                   `protobuf:"varint,6,opt,name=diarize,proto3" json:"diarize,omitempty"`
+	Prompt                 string                 `protobuf:"bytes,7,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Temperature            float32                `protobuf:"fixed32,8,opt,name=temperature,proto3" json:"temperature,omitempty"`
+	TimestampGranularities []string               `protobuf:"bytes,9,rep,name=timestamp_granularities,json=timestampGranularities,proto3" json:"timestamp_granularities,omitempty"`
+	Stream                 bool                   `protobuf:"varint,10,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *TranscriptRequest) Reset() {
+	*x = TranscriptRequest{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TranscriptRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TranscriptRequest) ProtoMessage() {}
+
+func (x *TranscriptRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TranscriptRequest.ProtoReflect.Descriptor instead.
+func (*TranscriptRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TranscriptRequest) GetDst() string {
+	if x != nil {
+		return x.Dst
+	}
+	return ""
+}
+
+func (x *TranscriptRequest) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *TranscriptRequest) GetThreads() uint32 {
+	if x != nil {
+		return x.Threads
+	}
+	return 0
+}
+
+func (x *TranscriptRequest) GetTranslate() bool {
+	if x != nil {
+		return x.Translate
+	}
+	return false
+}
+
+func (x *TranscriptRequest) GetDiarize() bool {
+	if x != nil {
+		return x.Diarize
+	}
+	return false
+}
+
+func (x *TranscriptRequest) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *TranscriptRequest) GetTemperature() float32 {
+	if x != nil {
+		return x.Temperature
+	}
+	return 0
+}
+
+func (x *TranscriptRequest) GetTimestampGranularities() []string {
+	if x != nil {
+		return x.TimestampGranularities
+	}
+	return nil
+}
+
+func (x *TranscriptRequest) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
+}
+
+type TranscriptResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Segments      []*TranscriptSegment   `protobuf:"bytes,1,rep,name=segments,proto3" json:"segments,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Language      string                 `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	Duration      float32                `protobuf:"fixed32,4,opt,name=duration,proto3" json:"duration,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TranscriptResult) Reset() {
+	*x = TranscriptResult{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TranscriptResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TranscriptResult) ProtoMessage() {}
+
+func (x *TranscriptResult) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TranscriptResult.ProtoReflect.Descriptor instead.
+func (*TranscriptResult) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *TranscriptResult) GetSegments() []*TranscriptSegment {
+	if x != nil {
+		return x.Segments
+	}
+	return nil
+}
+
+func (x *TranscriptResult) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *TranscriptResult) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *TranscriptResult) GetDuration() float32 {
+	if x != nil {
+		return x.Duration
+	}
+	return 0
+}
+
+type TranscriptSegment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Start         int64                  `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
+	End           int64                  `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
+	Text          string                 `protobuf:"bytes,4,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TranscriptSegment) Reset() {
+	*x = TranscriptSegment{}
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TranscriptSegment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TranscriptSegment) ProtoMessage() {}
+
+func (x *TranscriptSegment) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TranscriptSegment.ProtoReflect.Descriptor instead.
+func (*TranscriptSegment) Descriptor() ([]byte, []int) {
+	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *TranscriptSegment) GetId() int32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *TranscriptSegment) GetStart() int64 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *TranscriptSegment) GetEnd() int64 {
+	if x != nil {
+		return x.End
+	}
+	return 0
+}
+
+func (x *TranscriptSegment) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
 var File_pkg_services_models_internal_backends_localai_backend_subset_proto protoreflect.FileDescriptor
 
 const file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc = "" +
@@ -478,7 +722,28 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"\x06tokens\x18\x02 \x01(\x05R\x06tokens\x12#\n" +
 	"\rprompt_tokens\x18\x03 \x01(\x05R\fpromptTokens\x123\n" +
 	"\vchat_deltas\x18\b \x03(\v2\x12.backend.ChatDeltaR\n" +
-	"chatDeltasB[ZYgithub.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai;localaib\x06proto3"
+	"chatDeltas\"\x9e\x02\n" +
+	"\x11TranscriptRequest\x12\x10\n" +
+	"\x03dst\x18\x02 \x01(\tR\x03dst\x12\x1a\n" +
+	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x18\n" +
+	"\athreads\x18\x04 \x01(\rR\athreads\x12\x1c\n" +
+	"\ttranslate\x18\x05 \x01(\bR\ttranslate\x12\x18\n" +
+	"\adiarize\x18\x06 \x01(\bR\adiarize\x12\x16\n" +
+	"\x06prompt\x18\a \x01(\tR\x06prompt\x12 \n" +
+	"\vtemperature\x18\b \x01(\x02R\vtemperature\x127\n" +
+	"\x17timestamp_granularities\x18\t \x03(\tR\x16timestampGranularities\x12\x16\n" +
+	"\x06stream\x18\n" +
+	" \x01(\bR\x06stream\"\x96\x01\n" +
+	"\x10TranscriptResult\x126\n" +
+	"\bsegments\x18\x01 \x03(\v2\x1a.backend.TranscriptSegmentR\bsegments\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x1a\n" +
+	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x1a\n" +
+	"\bduration\x18\x04 \x01(\x02R\bduration\"_\n" +
+	"\x11TranscriptSegment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x14\n" +
+	"\x05start\x18\x02 \x01(\x03R\x05start\x12\x10\n" +
+	"\x03end\x18\x03 \x01(\x03R\x03end\x12\x12\n" +
+	"\x04text\x18\x04 \x01(\tR\x04textB[ZYgithub.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai;localaib\x06proto3"
 
 var (
 	file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescOnce sync.Once
@@ -492,26 +757,30 @@ func file_pkg_services_models_internal_backends_localai_backend_subset_proto_raw
 	return file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDescData
 }
 
-var file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_pkg_services_models_internal_backends_localai_backend_subset_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_pkg_services_models_internal_backends_localai_backend_subset_proto_goTypes = []any{
-	(*HealthMessage)(nil),  // 0: backend.HealthMessage
-	(*ModelOptions)(nil),   // 1: backend.ModelOptions
-	(*Result)(nil),         // 2: backend.Result
-	(*ToolCallDelta)(nil),  // 3: backend.ToolCallDelta
-	(*ChatDelta)(nil),      // 4: backend.ChatDelta
-	(*PredictOptions)(nil), // 5: backend.PredictOptions
-	(*Reply)(nil),          // 6: backend.Reply
-	nil,                    // 7: backend.PredictOptions.MetadataEntry
+	(*HealthMessage)(nil),     // 0: backend.HealthMessage
+	(*ModelOptions)(nil),      // 1: backend.ModelOptions
+	(*Result)(nil),            // 2: backend.Result
+	(*ToolCallDelta)(nil),     // 3: backend.ToolCallDelta
+	(*ChatDelta)(nil),         // 4: backend.ChatDelta
+	(*PredictOptions)(nil),    // 5: backend.PredictOptions
+	(*Reply)(nil),             // 6: backend.Reply
+	(*TranscriptRequest)(nil), // 7: backend.TranscriptRequest
+	(*TranscriptResult)(nil),  // 8: backend.TranscriptResult
+	(*TranscriptSegment)(nil), // 9: backend.TranscriptSegment
+	nil,                       // 10: backend.PredictOptions.MetadataEntry
 }
 var file_pkg_services_models_internal_backends_localai_backend_subset_proto_depIdxs = []int32{
-	3, // 0: backend.ChatDelta.tool_calls:type_name -> backend.ToolCallDelta
-	7, // 1: backend.PredictOptions.Metadata:type_name -> backend.PredictOptions.MetadataEntry
-	4, // 2: backend.Reply.chat_deltas:type_name -> backend.ChatDelta
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3,  // 0: backend.ChatDelta.tool_calls:type_name -> backend.ToolCallDelta
+	10, // 1: backend.PredictOptions.Metadata:type_name -> backend.PredictOptions.MetadataEntry
+	4,  // 2: backend.Reply.chat_deltas:type_name -> backend.ChatDelta
+	9,  // 3: backend.TranscriptResult.segments:type_name -> backend.TranscriptSegment
+	4,  // [4:4] is the sub-list for method output_type
+	4,  // [4:4] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_pkg_services_models_internal_backends_localai_backend_subset_proto_init() }
@@ -525,7 +794,7 @@ func file_pkg_services_models_internal_backends_localai_backend_subset_proto_ini
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc), len(file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

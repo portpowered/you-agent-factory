@@ -48,3 +48,29 @@ message Reply {
   int32 prompt_tokens = 3;
   repeated ChatDelta chat_deltas = 8;
 }
+
+message TranscriptRequest {
+  string dst = 2;
+  string language = 3;
+  uint32 threads = 4;
+  bool translate = 5;
+  bool diarize = 6;
+  string prompt = 7;
+  float temperature = 8;
+  repeated string timestamp_granularities = 9;
+  bool stream = 10;
+}
+
+message TranscriptResult {
+  repeated TranscriptSegment segments = 1;
+  string text = 2;
+  string language = 3;
+  float duration = 4;
+}
+
+message TranscriptSegment {
+  int32 id = 1;
+  int64 start = 2;
+  int64 end = 3;
+  string text = 4;
+}
