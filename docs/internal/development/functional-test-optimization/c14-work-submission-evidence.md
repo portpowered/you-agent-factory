@@ -371,3 +371,66 @@ The optimized inventory is therefore explicitly **same or stronger** for
 CASE-SUB-001 through CASE-SUB-031. The only identity changes are parent
 fixture grouping and named subtest paths; the two tagged test identities and
 their assertions remain unchanged.
+
+## GATE-LOOPBACK — clean-room validation report
+
+# Validation report: BEH-SUBMISSION-PERF
+
+## Environment and artifact
+
+- Commit/build identifier: clean detached worktree at
+  `b553d5aed1` (`b553d5aed1ad52b8a1d1059b6326a7f6a4057fd5`); the tested
+  implementation is the optimized package plus the authorized evidence ledger.
+- Environment and configuration: `go version go1.25.0 windows/amd64`,
+  Windows build `26200`, `amd64`, shared compute-saturated host; no test
+  flags beyond the commands listed below.
+- Customer entry point: root-built functional process exercised through the
+  public Work HTTP and CLI contracts.
+- Real and substituted dependencies: local production wiring with controlled
+  provider/command-runner edges; no remote product dependency.
+- Cost/call budget used: `$0`, zero paid or real-remote calls.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1`; exit `0`, package `18.652s`, wall `38.4202s` | Terminal PR CI and merge |
+| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, wall `87.5406s`, no race report | Schedules outside this run |
+| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, wall `45.0223s` | Remote tagged workflow behavior |
+| GATE-ASSERTIONS: CASE-SUB-001..031 | PASS | Post-edit same-or-stronger table above; all 31 rows mapped to retained observable assertions | Untested real-remote systems |
+| Scope and cleanup | PASS | Final source accounting remains package-only, with no package-local sleeps and deterministic cleanup witnesses | Future changes after this head |
+
+## Customer journey
+
+1. From the clean detached final artifact, run the exact default package
+   command. All 29 default Work-submission cases pass through assembled local
+   production wiring, including HTTP, live-root CLI, Work projection, event,
+   persistence, failure, and controlled-edge assertions.
+2. Run the race and `functionallong` commands from the same clean artifact.
+   Both pass, preserving the two tagged witnesses and detecting no race in the
+   changed package paths.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: final measurements, topology, assertion map,
+  and loopback results are in the authorized C14 evidence ledger.
+- Permission and error behavior: existing typed HTTP/CLI rejection,
+  atomicity, privacy, and unsupported-capability assertions pass.
+- Persistence/reload behavior: startup-file, watcher, cron, record/replay,
+  Factory Event, and Work projection witnesses pass in the package/tagged
+  gates.
+- Accessibility/keyboard/responsive behavior: not applicable; no UI or
+  customer-copy changes.
+- Operational signals: test failures remain actionable through exact package,
+  race, tagged, and controlled-edge assertions; no sensitive payloads or
+  credentials are recorded.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| — | — | — | No loopback defect | No findings | All clean-room gates passed |
+
+## Verdict
+
+PASS
