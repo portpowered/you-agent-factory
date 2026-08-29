@@ -26,6 +26,18 @@ type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)
 type AssetOpenFile func(string) (io.ReadCloser, error)
 
+// AssetStagingCoordination is the exact cancellation-aware ownership effect
+// used to serialize cross-process asset staging. Models selects the identity
+// and transaction boundary; the edge supplies only the lock lifecycle.
+type AssetStagingCoordination interface {
+	Lock(context.Context, string) (io.Closer, error)
+}
+
+// AssetStagingCoordinationFactory constructs the Models asset staging effect.
+// The factory is injectable so root composition can report a missing platform
+// effect as a construction failure instead of allowing a later request panic.
+type AssetStagingCoordinationFactory func() (AssetStagingCoordination, error)
+
 // ModelCLIOutputCreateTempFile is the host effect used by the Models CLI
 // output publisher. The caller selects the directory, naming pattern, and
 // publication lifecycle; the edge supplies only the writable handle.

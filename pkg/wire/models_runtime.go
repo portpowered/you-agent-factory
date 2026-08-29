@@ -104,7 +104,13 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	if assetOpen == nil {
 		assetOpen = func(path string) (io.ReadCloser, error) { return os.Open(path) }
 	}
-	assetCoordination, coordinationErr := platformlocking.New(platformlocking.LocalFileSystem{})
+	var assetCoordination modelswire.AssetStagingCoordination
+	var coordinationErr error
+	if factory := edges.ModelAssetStagingCoordinationFactory; factory != nil {
+		assetCoordination, coordinationErr = factory()
+	} else {
+		assetCoordination, coordinationErr = platformlocking.New(platformlocking.LocalFileSystem{})
+	}
 	if coordinationErr != nil {
 		return nil, fmt.Errorf("construct Models asset staging coordination: %w", coordinationErr)
 	}

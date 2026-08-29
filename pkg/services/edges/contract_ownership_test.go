@@ -119,6 +119,7 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 		"AssetResolveHomeDirectory": {}, "AssetWriteFile": {}, "AssetRenamePath": {},
 		"AssetRemovePath": {}, "AssetReadFile": {}, "AssetReadDirectory": {},
 		"AssetCreateFile": {}, "AssetOpenFile": {},
+		"AssetStagingCoordination": {}, "AssetStagingCoordinationFactory": {},
 		"ModelCLIInputReadFile":        {},
 		"ModelCLIOutputCreateTempFile": {}, "ModelCLIOutputInspectPath": {},
 		"HostProcessStartSpec":                 {},

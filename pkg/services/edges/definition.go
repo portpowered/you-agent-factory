@@ -77,26 +77,27 @@ type Edges struct {
 	ModelAssetHTTPClient             interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	ModelAssetEndpoints             models.RuntimeAssetEndpoints
-	ModelAssetHostPlatform          models.AssetHostPlatform
-	ModelResolveHuggingFaceRevision func(context.Context, string) (string, error)
-	ModelAssetResolveEnvironment    func(string) string
-	ModelAssetMakeDirectories       AssetMakeDirectories
-	ModelAssetInspectPath           AssetInspectPath
-	ModelAssetResolveHomeDirectory  AssetResolveHomeDirectory
-	ModelAssetWriteFile             AssetWriteFile
-	ModelAssetRenamePath            AssetRenamePath
-	ModelAssetRemovePath            AssetRemovePath
-	ModelAssetReadFile              AssetReadFile
-	ModelAssetReadDirectory         AssetReadDirectory
-	ModelAssetCreateFile            AssetCreateFile
-	ModelAssetOpenFile              AssetOpenFile
-	ModelCLIInputReadFile           ModelCLIInputReadFile
-	ModelCLIOutputCreateTempFile    ModelCLIOutputCreateTempFile
-	ModelCLIOutputInspectPath       AssetInspectPath
-	ModelCLIOutputRemovePath        AssetRemovePath
-	ModelCLIOutputRenamePath        AssetRenamePath
-	ModelHostProcessLauncher        interface {
+	ModelAssetEndpoints                  models.RuntimeAssetEndpoints
+	ModelAssetHostPlatform               models.AssetHostPlatform
+	ModelResolveHuggingFaceRevision      func(context.Context, string) (string, error)
+	ModelAssetResolveEnvironment         func(string) string
+	ModelAssetMakeDirectories            AssetMakeDirectories
+	ModelAssetInspectPath                AssetInspectPath
+	ModelAssetResolveHomeDirectory       AssetResolveHomeDirectory
+	ModelAssetWriteFile                  AssetWriteFile
+	ModelAssetRenamePath                 AssetRenamePath
+	ModelAssetRemovePath                 AssetRemovePath
+	ModelAssetReadFile                   AssetReadFile
+	ModelAssetReadDirectory              AssetReadDirectory
+	ModelAssetCreateFile                 AssetCreateFile
+	ModelAssetOpenFile                   AssetOpenFile
+	ModelAssetStagingCoordinationFactory AssetStagingCoordinationFactory
+	ModelCLIInputReadFile                ModelCLIInputReadFile
+	ModelCLIOutputCreateTempFile         ModelCLIOutputCreateTempFile
+	ModelCLIOutputInspectPath            AssetInspectPath
+	ModelCLIOutputRemovePath             AssetRemovePath
+	ModelCLIOutputRenamePath             AssetRenamePath
+	ModelHostProcessLauncher             interface {
 		Start(context.Context, HostProcessStartSpec) (interface {
 			HealthEndpoint() string
 			Wait() error
@@ -392,6 +393,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
+	}
+	if replacements.ModelAssetStagingCoordinationFactory != nil {
+		defaults.ModelAssetStagingCoordinationFactory = replacements.ModelAssetStagingCoordinationFactory
 	}
 	if replacements.ModelCLIInputReadFile != nil {
 		defaults.ModelCLIInputReadFile = replacements.ModelCLIInputReadFile
