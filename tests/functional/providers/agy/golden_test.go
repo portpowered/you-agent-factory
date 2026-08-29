@@ -8,11 +8,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -194,23 +192,8 @@ func TestAgyStructuredJSONGoldenThroughRootBuildProcess(t *testing.T) {
 // refusal with exit code zero cannot become successful Work merely because the
 // native process reported status SUCCESS.
 func TestAgyMissingFileRefusalFailsWorkThroughRootBuildProcess(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	copyAgyGoldenAsset(t, dir, "clip-fixture.mp4")
-	copyAgyGoldenAsset(t, dir, "groundtruth-fixture.mp4")
-	support.WriteAgentConfig(t, dir, "worker", agyGoldenWorkerConfigWithStopToken("COMPLETE"))
-	support.WriteWorkstationConfig(t, dir, "process", agyGoldenWorkstationConfig(agyGoldenMissingPrompt, ""))
-	testutil.WriteSeedFile(t, dir, "task", []byte("{\"title\":\"agy missing media refusal\"}"))
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   readAgyGoldenAsset(t, "agy-trace-missing-file.stream.jsonl"),
-		ExitCode: 0,
-	})
-	_, listed, events, _ := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		30*time.Second,
-	)
+	fixture := agySharedProcess(t)
+	_, listed, events, route, callStart := fixture.runGolden(t, "golden-missing-file")
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
 		t.Fatalf("completed work = %d, want 0; listed=%#v", got, listed)
@@ -218,10 +201,10 @@ func TestAgyMissingFileRefusalFailsWorkThroughRootBuildProcess(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one", got)
 	}
-	assertAgyGoldenCommand(t, runner.LastRequest(), dir, agyGoldenMissingPrompt, "")
+	assertAgyGoldenCommand(t, route.lastRequest(), route.workDir, agyGoldenMissingPrompt, "")
 
 	providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
 	if providerResponse.Response == nil ||

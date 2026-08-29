@@ -317,3 +317,53 @@ The full 25-leaf cleanup census, adverse-route sharing, concurrency/recovery
 matrix, final package run, clean-room loopback, and PR-host timing remain
 unproved and stay assigned to `GATE-FAIL-001`, `GATE-ISO-001`,
 `GATE-CLEAN-001`, `GATE-PKG-001`, `VAL-001`, and `GATE-PR-FUNCTIONAL`.
+
+## Story 003 implementation and failure/isolation lifecycle gates
+
+- Story: `functional-test-optimization-c10-providers-agy-disposition-003`
+- Gates: `GATE-FAIL-001`, `GATE-ISO-001`, `GATE-CLEAN-001`,
+  `GATE-LIVE-001`, and `GATE-SECURITY-001`
+- Status: **PASS**.
+- The remaining direct conductor/native-failure/timeout/cancellation paths,
+  the missing-file golden path, and all adverse production-review role leaves
+  now use the same package-owned `support.BuildProcessWithContext` process and
+  frozen normalized `ProviderCommandRunner` route table. Each route retains
+  its own home, workspace, media, recording ledger, command ledger, and public
+  observations. The route table has 29 entries and is frozen before the one
+  process is built.
+- The lifecycle witnesses cover an exit-zero empty AGY result followed by a
+  valid result, an early stopped hosted call, and two seeded Factory Sessions
+  running concurrently on the shared process. They assert canonical failed or
+  completed Work, no fabricated primary result, per-invocation request/Work/
+  dispatch identity, ordered Work/dispatch Factory Events, session-scoped and
+  ordered Response Events, exact per-route command counts, sibling-output
+  exclusion, and active-call zero after early stop.
+- `TestMain` is the final owner ledger: the full package asserts one process
+  build and one close, zero active provider calls, 29 routes before clear and
+  zero afterward, all invocation recording paths absent, and the fixture root
+  absent. Hosted HTTP runs are waited closed; response streams and commands
+  have registered cleanup; role recording directories are removed immediately
+  and rechecked. The live test remains a skip unless
+  `YOU_AGY_LIVE_SMOKE=1`; CASE-AGY-27 was not run.
+
+### Story 003 verification
+
+The procedures below use the production root/services composition, real local
+media and pinned traces, and only the controlled `ProviderCommandRunner` edge;
+they make no remote AGY calls:
+
+| Procedure | Observed result | Property proved |
+| --- | --- | --- |
+| `go test ./tests/functional/providers/agy -run 'TestAgy(MultimodalGoldenThroughRootBuildProcess\|ClipQAGoldenPassThroughRootBuildProcess\|StructuredJSONGoldenThroughRootBuildProcess\|MissingFileRefusalFailsWorkThroughRootBuildProcess\|ConductorSuccessThroughRootBuildProcess\|NativeFailureThroughRootBuildProcessIsSafe\|TimeoutFailureThroughRootBuildProcess\|CommandCancellationThroughRootBuildProcessIsCanonical\|ProductionReviewRolesThroughRootBuildProcess)$' -count=3 -timeout=20m` | PASS, 344.219s | Exact nine offline top-level witnesses retain success, media, adverse, role, command, Work, event, Provider Session, and cleanup behavior across repeated executions. |
+| Same exact nine-offline selector with `-race -count=1` | PASS, 171.671s | Frozen route accounting and the supported shared process are race-clean. |
+| `go test ./tests/functional/providers/agy -run '^TestAgySharedProcess(EarlyHostedExitReleasesResources\|ConcurrentRoutesRemainIsolated\|FailureThenSuccessRecovers)$' -count=1 -timeout=15m` | PASS, 15.482s | Empty/recovery, early hosted stop, two-session overlap, ordered streams, and route isolation. |
+| Same lifecycle selector with `-race -count=1` | PASS, 40.274s | Lifecycle synchronization is race-clean. |
+| `go test ./tests/functional/providers/agy -count=1 -timeout=15m` | PASS, 84.836s | Final Story 003 package behavior, including all original 25 offline leaves plus three lifecycle witnesses. `TestMain` cleanup ledger passed. |
+| With `YOU_AGY_LIVE_SMOKE` explicitly removed: `go test ./tests/functional/providers/agy -run '^TestAgyLiveSmoke$' -count=1 -timeout=5m` | PASS, 0.109s; test skipped | Default validation makes no production AGY call and preserves the opt-in gate. |
+
+The native-failure witness serializes Factory Events and rejects both
+`/tmp/secret-key` and `secret-key`, while the controlled route prevents raw
+provider output from entering the public event stream. No generated, product,
+UI, or API contract files changed. The remaining edges are Story 004's
+clean-room loopback, final package/PR timing evidence, current-head CI handoff,
+and review-owned terminal CI/merge; real AGY remains externally owned.

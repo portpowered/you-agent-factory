@@ -3,13 +3,10 @@ package agy
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -117,13 +114,14 @@ func testAgyColdWatchIncompleteRealTracesFail(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			response, events, runner, assetPath := runAgyColdWatchInvocation(
-				t,
-				test.trace,
-				test.asset,
-				true,
-			)
+			fixture := agySharedProcess(t)
+			selector := "role-cold-watch-incomplete-" + test.name
+			route := fixture.routes[selector]
+			response, events, route, assetPath, callStart := fixture.runRoleFailure(t, selector, []string{
+				"you", "--json", "run",
+				"--named", agyColdWatchFactoryName,
+				"--cut-path", route.assetPath,
+			})
 			if response.Status != factoryapi.InvocationTerminalStatusFailed {
 				t.Fatalf("invocation status = %q, want FAILED for incomplete report; response=%#v", response.Status, response)
 			}
@@ -142,22 +140,24 @@ func testAgyColdWatchIncompleteRealTracesFail(t *testing.T) {
 					t.Fatalf("provider response missing real-trace evidence %q: %s", want, *providerResponse.Response)
 				}
 			}
-			if runner.CallCount() != 1 {
-				t.Fatalf("AGY provider command calls = %d, want exactly one", runner.CallCount())
+			if got := route.callCount() - callStart; got != 1 {
+				t.Fatalf("AGY provider command calls = %d, want exactly one", got)
 			}
-			assertAgyColdWatchCommand(t, runner.LastRequest(), assetPath)
+			assertAgyColdWatchCommand(t, route.lastRequest(), assetPath)
 			assertAgyColdWatchEventsFailure(t, events, "output contract failed")
 		})
 	}
 }
 
 func testAgyColdWatchMissingFile(t *testing.T) {
-	response, events, runner, assetPath := runAgyColdWatchInvocation(
-		t,
-		"agy-trace-missing-file.stream.jsonl",
-		"does-not-exist-xyz.mp4",
-		true,
-	)
+	fixture := agySharedProcess(t)
+	selector := "role-cold-watch-missing-file"
+	route := fixture.routes[selector]
+	response, events, route, assetPath, callStart := fixture.runRoleFailure(t, selector, []string{
+		"you", "--json", "run",
+		"--named", agyColdWatchFactoryName,
+		"--cut-path", route.assetPath,
+	})
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("invocation status = %q, want FAILED; response=%#v", response.Status, response)
 	}
@@ -167,10 +167,10 @@ func testAgyColdWatchMissingFile(t *testing.T) {
 	if response.Message == nil || strings.TrimSpace(*response.Message) == "" {
 		t.Fatalf("failure message = %#v, want actionable non-empty diagnostic", response.Message)
 	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("AGY provider command calls = %d, want exactly one", runner.CallCount())
+	if got := route.callCount() - callStart; got != 1 {
+		t.Fatalf("AGY provider command calls = %d, want exactly one", got)
 	}
-	assertAgyColdWatchCommand(t, runner.LastRequest(), assetPath)
+	assertAgyColdWatchCommand(t, route.lastRequest(), assetPath)
 	providerResponse := agyGoldenInferenceResponse(t, events, factoryapi.InferenceOutcomeSucceeded)
 	if providerResponse.Response == nil ||
 		!strings.Contains(*providerResponse.Response, "does-not-exist-xyz.mp4") {
@@ -276,64 +276,68 @@ func testAgyClipQASemanticInvalidResults(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+			fixture := agySharedProcess(t)
 			verdict := validAgyClipQAVerdictPayload()
 			test.mutate(verdict)
-			response, events, runner, assetPath := runAgyClipQAInvocationWithStdout(
-				t,
-				agyClipQAVerdictTrace(t, verdict),
-				"clip-fixture.mp4",
-				agyClipQAShotSpec,
-				platformprocess.CommandResult{ExitCode: 0},
-				true,
-			)
-			assertAgyClipQAFailedInvocation(t, response, events, runner, assetPath)
+			selector := "role-clipqa-invalid-" + agyRouteSlug(test.name)
+			route := fixture.routes[selector]
+			response, events, route, assetPath, callStart := fixture.runRoleFailure(t, selector, []string{
+				"you", "--json", "run",
+				"--named", agyClipQAFactoryName,
+				"--clip-path", route.assetPath,
+				"--shot-specification", agyClipQAShotSpec,
+			})
+			assertAgyClipQAFailedSharedInvocation(t, response, events, route, assetPath, callStart)
 		})
 	}
 }
 
 func testAgyClipQAMissingFile(t *testing.T) {
-	response, events, runner, assetPath := runAgyClipQAInvocation(
-		t,
-		"agy-trace-missing-file.stream.jsonl",
-		"does-not-exist-xyz.mp4",
-		agyClipQAShotSpec,
-		platformprocess.CommandResult{ExitCode: 0},
-		true,
-	)
-	assertAgyClipQAFailedInvocation(t, response, events, runner, assetPath)
+	fixture := agySharedProcess(t)
+	selector := "role-clipqa-missing-file"
+	route := fixture.routes[selector]
+	response, events, route, assetPath, callStart := fixture.runRoleFailure(t, selector, []string{
+		"you", "--json", "run",
+		"--named", agyClipQAFactoryName,
+		"--clip-path", route.assetPath,
+		"--shot-specification", agyClipQAShotSpec,
+	})
+	assertAgyClipQAFailedSharedInvocation(t, response, events, route, assetPath, callStart)
 }
 
 func testAgyClipQASchemaInvalid(t *testing.T) {
-	response, events, runner, assetPath := runAgyClipQAInvocation(
-		t,
-		"agy-trace-structured.json",
-		"clip-fixture.mp4",
-		agyClipQAShotSpec,
-		platformprocess.CommandResult{ExitCode: 0},
-		true,
-	)
-	assertAgyClipQAFailedInvocation(t, response, events, runner, assetPath)
+	fixture := agySharedProcess(t)
+	selector := "role-clipqa-schema-invalid"
+	route := fixture.routes[selector]
+	response, events, route, assetPath, callStart := fixture.runRoleFailure(t, selector, []string{
+		"you", "--json", "run",
+		"--named", agyClipQAFactoryName,
+		"--clip-path", route.assetPath,
+		"--shot-specification", agyClipQAShotSpec,
+	})
+	assertAgyClipQAFailedSharedInvocation(t, response, events, route, assetPath, callStart)
 }
 
 func testAgyClipQAProviderFailure(t *testing.T) {
-	response, events, runner, assetPath := runAgyClipQAInvocation(
-		t,
-		"",
-		"clip-fixture.mp4",
-		agyClipQAShotSpec,
-		platformprocess.CommandResult{Stderr: []byte("agy unavailable"), ExitCode: 17},
-		true,
-	)
-	assertAgyClipQAFailedInvocation(t, response, events, runner, assetPath)
+	fixture := agySharedProcess(t)
+	selector := "role-clipqa-provider-failure"
+	route := fixture.routes[selector]
+	response, events, route, assetPath, callStart := fixture.runRoleFailure(t, selector, []string{
+		"you", "--json", "run",
+		"--named", agyClipQAFactoryName,
+		"--clip-path", route.assetPath,
+		"--shot-specification", agyClipQAShotSpec,
+	})
+	assertAgyClipQAFailedSharedInvocation(t, response, events, route, assetPath, callStart)
 }
 
-func assertAgyClipQAFailedInvocation(
+func assertAgyClipQAFailedSharedInvocation(
 	t *testing.T,
 	response factoryapi.InvocationResponse,
 	events []factoryapi.FactoryEvent,
-	runner *testutil.ProviderCommandRunner,
+	route *agySharedCommandRoute,
 	assetPath string,
+	callStart int,
 ) {
 	t.Helper()
 
@@ -346,140 +350,11 @@ func assertAgyClipQAFailedInvocation(
 	if response.Message == nil || strings.TrimSpace(*response.Message) == "" {
 		t.Fatalf("failure message = %#v, want actionable non-empty diagnostic", response.Message)
 	}
-	if runner.CallCount() == 0 {
+	if got := route.callCount() - callStart; got == 0 {
 		t.Fatal("AGY provider command calls = 0, want at least one failure attempt")
 	}
-	assertAgyClipQACommand(t, runner.LastRequest(), assetPath, agyClipQAShotSpec)
+	assertAgyClipQACommand(t, route.lastRequest(), assetPath, agyClipQAShotSpec)
 	assertAgyGoldenDispatchFailure(t, events)
-}
-
-func runAgyColdWatchInvocation(
-	t *testing.T,
-	trace string,
-	asset string,
-	expectFailure bool,
-) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *testutil.ProviderCommandRunner, string) {
-	t.Helper()
-	return runAgyColdWatchInvocationWithStdout(
-		t,
-		readAgyGoldenAsset(t, trace),
-		asset,
-		expectFailure,
-	)
-}
-
-func runAgyColdWatchInvocationWithStdout(
-	t *testing.T,
-	stdout []byte,
-	asset string,
-	expectFailure bool,
-) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *testutil.ProviderCommandRunner, string) {
-	t.Helper()
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, agyColdWatchFactoryName)
-
-	assetPath := filepath.Join(workingDirectory, asset)
-	if !strings.Contains(asset, "does-not-exist") {
-		if err := os.WriteFile(assetPath, readAgyGoldenAsset(t, asset), 0o644); err != nil {
-			t.Fatalf("write AGY media fixture %q: %v", assetPath, err)
-		}
-	}
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   stdout,
-		ExitCode: 0,
-	})
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	recordingPath := filepath.Join(t.TempDir(), "agy-cold-watch.replay.json")
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run",
-		"--named", agyColdWatchFactoryName,
-		"--cut-path", assetPath,
-		"--record", recordingPath,
-		"--output", "primary",
-	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = workingDirectory
-	err := process.Execute(inputs.Input)
-	if !expectFailure && err != nil {
-		t.Fatalf("Process.Execute(cold-watch) error = %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-	if expectFailure && err == nil {
-		t.Fatal("Process.Execute(cold-watch missing-file) error = nil, want terminal failure")
-	}
-
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
-	events := readAgyColdWatchRecording(t, recordingPath)
-	return response, events, runner, assetPath
-}
-
-func runAgyClipQAInvocation(
-	t *testing.T,
-	trace string,
-	asset string,
-	shotSpecification string,
-	result platformprocess.CommandResult,
-	expectFailure bool,
-) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *testutil.ProviderCommandRunner, string) {
-	t.Helper()
-	stdout := []byte(nil)
-	if strings.TrimSpace(trace) != "" {
-		stdout = readAgyGoldenAsset(t, trace)
-	}
-	return runAgyClipQAInvocationWithStdout(t, stdout, asset, shotSpecification, result, expectFailure)
-}
-
-func runAgyClipQAInvocationWithStdout(
-	t *testing.T,
-	stdout []byte,
-	asset string,
-	shotSpecification string,
-	result platformprocess.CommandResult,
-	expectFailure bool,
-) (factoryapi.InvocationResponse, []factoryapi.FactoryEvent, *testutil.ProviderCommandRunner, string) {
-	t.Helper()
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, agyClipQAFactoryName)
-
-	assetPath := filepath.Join(workingDirectory, asset)
-	if !strings.Contains(asset, "does-not-exist") {
-		if err := os.WriteFile(assetPath, readAgyGoldenAsset(t, asset), 0o644); err != nil {
-			t.Fatalf("write AGY media fixture %q: %v", assetPath, err)
-		}
-	}
-	stdout = alignAgyClipQAReplaySchema(t, stdout)
-	result.Stdout = stdout
-
-	runner := testutil.NewProviderCommandRunner(result)
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	recordingPath := filepath.Join(t.TempDir(), "agy-clip-qa.replay.json")
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "run",
-		"--named", agyClipQAFactoryName,
-		"--clip-path", assetPath,
-		"--shot-specification", shotSpecification,
-		"--record", recordingPath,
-		"--output", "primary",
-	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = workingDirectory
-	err := process.Execute(inputs.Input)
-	if !expectFailure && err != nil {
-		t.Fatalf("Process.Execute(clip-QA) error = %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-	if expectFailure && err == nil {
-		t.Fatal("Process.Execute(clip-QA failure) error = nil, want terminal failure")
-	}
-
-	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
-	events := readAgyRecording(t, recordingPath, "AGY clip-QA")
-	return response, events, runner, assetPath
 }
 
 func alignAgyClipQAReplaySchema(t *testing.T, stdout []byte) []byte {
