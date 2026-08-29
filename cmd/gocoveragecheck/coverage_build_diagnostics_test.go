@@ -11,8 +11,6 @@ import (
 )
 
 func TestParseCoverageBuildTraceCountsCompilerAndLinkerActions(t *testing.T) {
-	t.Parallel()
-
 	trace := strings.Join([]string{
 		"WORK=/tmp/go-build",
 		"mkdir -p $WORK/b001/",
@@ -20,118 +18,59 @@ func TestParseCoverageBuildTraceCountsCompilerAndLinkerActions(t *testing.T) {
 		`"/go/pkg/tool/linux_amd64/link" -o "$WORK/b001/example.test"`,
 	}, "\n")
 
-	got, err := parseCoverageBuildTrace(trace, 4)
+	got, err := parseCoverageBuildTrace(trace)
 	if err != nil {
 		t.Fatalf("parseCoverageBuildTrace() error = %v", err)
 	}
-	if got.CompilerCommands != 1 || got.LinkerCommands != 1 {
-		t.Fatalf("action counts = %+v, want one compiler and linker action", got)
-	}
-	if got.Misses != 2 || got.InferredHits != 2 || got.ExpectedPackages != 4 {
-		t.Fatalf("cache inference = %+v, want misses=2 inferredHits=2 expectedPackages=4", got)
+	if !got.classifiable || got.compilerCommands != 1 || got.linkerCommands != 1 || got.buildActions != 2 {
+		t.Fatalf("trace summary = %+v, want one compiler, one linker, and two build actions", got)
 	}
 }
 
-func TestParseCoverageBuildTraceAcceptsAllHitTrace(t *testing.T) {
-	t.Parallel()
-
-	got, err := parseCoverageBuildTrace("WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n", 3)
+func TestParseCoverageBuildTraceAcceptsZeroActionTrace(t *testing.T) {
+	got, err := parseCoverageBuildTrace("WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n")
 	if err != nil {
-		t.Fatalf("parseCoverageBuildTrace() error = %v, want cached trace to be classifiable", err)
+		t.Fatalf("parseCoverageBuildTrace() error = %v, want classifiable zero-action trace", err)
 	}
-	if got.CompilerCommands != 0 || got.LinkerCommands != 0 || got.Misses != 0 || got.InferredHits != 3 {
-		t.Fatalf("cached trace summary = %+v, want all three actions inferred as hits", got)
+	if !got.classifiable || got.compilerCommands != 0 || got.linkerCommands != 0 || got.buildActions != 0 {
+		t.Fatalf("zero-action trace summary = %+v", got)
 	}
 }
 
 func TestParseCoverageBuildTraceRejectsUnclassifiableTrace(t *testing.T) {
-	t.Parallel()
-
-	_, err := parseCoverageBuildTrace("compiler output without go test -x markers", 1)
+	_, err := parseCoverageBuildTrace("compiler output without go test -x markers")
 	if err == nil || !strings.Contains(err.Error(), "unclassifiable go test -x trace") {
 		t.Fatalf("parseCoverageBuildTrace() error = %v, want unclassifiable trace diagnostic", err)
 	}
 }
 
-func TestBuildCoverageCompileProbeInvocationPreservesCoverageShape(t *testing.T) {
-	t.Parallel()
-
-	invocation, err := buildCoverageCompileProbeInvocation(commandInvocation{
-		name: "go",
-		args: []string{
-			"test",
-			"-coverpkg=github.com/example/project/pkg/...",
-			"-p=8",
-			"-short",
-			"-covermode=count",
-			"-timeout=10m",
-			"-json",
-			"-coverprofile=/tmp/coverage.out",
-			"-run=TestSubmit",
-			"./tests/functional/work",
-		},
-	}, filepath.Join(t.TempDir(), "compile-probe-bin"), nil)
-	if err != nil {
-		t.Fatalf("buildCoverageCompileProbeInvocation() error = %v", err)
+func TestAddCoverageBuildDiagnosticFlagsInstrumentsExactCoverageInvocation(t *testing.T) {
+	plan := diagnosticCoveragePlan()
+	if err := addCoverageBuildDiagnosticFlags(&plan); err != nil {
+		t.Fatalf("addCoverageBuildDiagnosticFlags() error = %v", err)
 	}
 
-	if got, want := invocation.args[:5], []string{"test", "-c", "-o", invocation.args[3], "-x"}; !slicesEqual(got, want) {
-		t.Fatalf("probe prefix = %v, want %v", got, want)
+	if len(plan.invocations) != 1 {
+		t.Fatalf("invocation count = %d, want one", len(plan.invocations))
 	}
-	for _, forbidden := range []string{"-json", "-coverprofile=/tmp/coverage.out", "-count=1", "-parallel"} {
-		if slicesContains(invocation.args, forbidden) {
-			t.Fatalf("probe args = %v, must not contain %q", invocation.args, forbidden)
-		}
+	args := plan.invocations[0].args
+	if slicesContains(args, "-c") {
+		t.Fatalf("diagnostic args = %v, must not compile a probe", args)
 	}
-	for _, required := range []string{"-coverpkg=github.com/example/project/pkg/...", "-p=8", "-covermode=count", "-timeout=10m", "-run=TestSubmit", "./tests/functional/work"} {
-		if !slicesContains(invocation.args, required) {
-			t.Fatalf("probe args = %v, missing preserved argument %q", invocation.args, required)
-		}
+	if countArgs(args, "-x") != 1 || countArgs(args, "-json") != 1 {
+		t.Fatalf("diagnostic args = %v, want one -x and one -json", args)
+	}
+	if !helperHasArgPrefix(args, "-coverprofile=") || !slicesContains(args, "example/tests/functional/work") {
+		t.Fatalf("diagnostic args = %v, lost coverage profile or package selection", args)
+	}
+	if indexOf(args, "-x") > indexOf(args, "example/tests/functional/work") || indexOf(args, "-json") > indexOf(args, "example/tests/functional/work") {
+		t.Fatalf("diagnostic flags must precede package arguments: %v", args)
 	}
 }
 
-func TestBuildCoverageCompileProbeInvocationsSplitDuplicatePackageNames(t *testing.T) {
-	t.Parallel()
+func TestCoverageBuildDiagnosticRunWritesSchemaV2FromOneExactInvocation(t *testing.T) {
+	setActionCacheIdentity(t, "build-key", "build-key", "true")
 
-	probes, err := buildCoverageCompileProbeInvocations(commandInvocation{
-		name: "go",
-		args: []string{
-			"test",
-			"-run=TestSubmit",
-			"-coverprofile=coverage.out",
-			"-json",
-			"github.com/example/recordings/process",
-			"github.com/example/transport/process",
-			"github.com/example/transport/stdio",
-		},
-	}, filepath.Join(t.TempDir(), "compile-probe-bin"))
-	if err != nil {
-		t.Fatalf("buildCoverageCompileProbeInvocations() error = %v", err)
-	}
-	if len(probes) != 2 {
-		t.Fatalf("probe count = %d, want two unique-basename groups", len(probes))
-	}
-
-	for _, probe := range probes {
-		processCount := 0
-		for _, packagePath := range []string{
-			"github.com/example/recordings/process",
-			"github.com/example/transport/process",
-		} {
-			if slicesContains(probe.args, packagePath) {
-				processCount++
-			}
-		}
-		if processCount > 1 {
-			t.Fatalf("probe args = %v, duplicate process basenames remain in one command", probe.args)
-		}
-	}
-	if !slicesContains(probes[0].args, "github.com/example/transport/stdio") {
-		t.Fatalf("first probe args = %v, distinct basename was not packed with the first group", probes[0].args)
-	}
-}
-
-func TestCoverageBuildDiagnosticRunWritesCompleteSummaryAndCleansBinaries(t *testing.T) {
 	originalRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
@@ -146,38 +85,21 @@ func TestCoverageBuildDiagnosticRunWritesCompleteSummaryAndCleansBinaries(t *tes
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	var invocations []commandInvocation
-	var probeDir string
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
 		invocations = append(invocations, invocation)
 		if slicesContains(invocation.args, "-c") {
-			probeDir = argumentAfter(invocation.args, "-o")
-			if err := os.WriteFile(filepath.Join(probeDir, "fake.test"), []byte("binary"), 0o600); err != nil {
-				return "", "", err
-			}
-			return strings.Join([]string{
-				"WORK=/tmp/go-build",
-				"mkdir -p $WORK/b001/",
-				`"/go/pkg/tool/linux_amd64/compile" -o "$WORK/b001/_pkg_.a" -p example.test`,
-				`"/go/pkg/tool/linux_amd64/link" -o "$WORK/b001/example.test"`,
-			}, "\n"), "", nil
+			return "", "", errors.New("compile probe must not run")
 		}
-		if !helperHasArgPrefix(invocation.args, "-coverprofile=") {
-			return "", "", errors.New("unexpected coverage test invocation")
+		if countArgs(invocation.args, "-x") != 1 || countArgs(invocation.args, "-json") != 1 {
+			return "", "", errors.New("diagnostics must instrument the coverage command")
 		}
-		return "coverage test ran once\n", "", nil
+		return "coverage test ran once\n", "WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n", nil
 	}
 
 	diagnosticPath := filepath.Join(t.TempDir(), "coverage-build-diagnostics.json")
-	plan := coverageInvocationPlan{
-		invocations: []commandInvocation{{
-			name: "go",
-			args: []string{"test", "-coverpkg=example/pkg/...", "-coverprofile=coverage.out", "example/tests/functional/work"},
-		}},
-		cleanup: func() error { return nil },
-	}
 	if err := executeCoverageInvocationPlan(
 		config{coverageBuildDiagnosticsOutput: diagnosticPath},
-		plan,
+		diagnosticCoveragePlan(),
 		[]string{"example/tests/functional/work"},
 		filepath.Join(t.TempDir(), "coverage.out"),
 		".",
@@ -188,125 +110,148 @@ func TestCoverageBuildDiagnosticRunWritesCompleteSummaryAndCleansBinaries(t *tes
 		t.Fatalf("executeCoverageInvocationPlan() error = %v", err)
 	}
 
-	if len(invocations) != 2 {
-		t.Fatalf("go invocations = %d, want one compile probe and one test run", len(invocations))
+	if len(invocations) != 1 {
+		t.Fatalf("go invocations = %d, want one authoritative coverage invocation", len(invocations))
 	}
-	if _, err := os.Stat(probeDir); !os.IsNotExist(err) {
-		t.Fatalf("compile probe directory still exists, stat error = %v", err)
-	}
-	diagnostics := readCoverageBuildDiagnostics(t, diagnosticPath)
+	diagnostics, raw := readCoverageBuildDiagnostics(t, diagnosticPath)
 	if diagnostics.Status != coverageBuildDiagnosticsStatusComplete {
 		t.Fatalf("diagnostic status = %q, want complete", diagnostics.Status)
 	}
-	if diagnostics.SchemaVersion != coverageBuildDiagnosticsSchemaVersion || diagnostics.GoVersion == "" || !strings.HasPrefix(diagnostics.CoverageInvocationHash, "sha256:") {
-		t.Fatalf("diagnostic identity = %+v, want version, Go version, and sha256 hash", diagnostics)
+	if diagnostics.SchemaVersion != 2 || diagnostics.GoVersion == "" || !strings.HasPrefix(diagnostics.CoverageInvocationHash, "sha256:") {
+		t.Fatalf("diagnostic identity = %+v, want schema v2, Go version, and invocation hash", diagnostics)
 	}
-	if diagnostics.CompileProbe.ExpectedPackages != 1 || diagnostics.CompileProbe.CompilerCommands != 1 || diagnostics.CompileProbe.LinkerCommands != 1 || diagnostics.CompileProbe.Misses != 2 {
-		t.Fatalf("compile probe summary = %+v, want observed command counts", diagnostics.CompileProbe)
+	if diagnostics.ActionCache.PrimaryKey != "build-key" || diagnostics.ActionCache.MatchedKey != "build-key" || !diagnostics.ActionCache.ExactPrimaryHit {
+		t.Fatalf("action-cache identity = %+v, want an exact primary hit", diagnostics.ActionCache)
 	}
-	if diagnostics.CompileProbe.WallSeconds < 0 || diagnostics.TestRunWallSeconds < 0 || diagnostics.TotalMeasuredSeconds < diagnostics.TestRunWallSeconds {
-		t.Fatalf("diagnostic timings = %+v, want non-negative sequential measurements", diagnostics)
+	invocation := diagnostics.CoverageInvocation
+	if invocation.ExpectedPackages != 1 || invocation.CompilerCommands != 0 || invocation.LinkerCommands != 0 || invocation.BuildActions != 0 {
+		t.Fatalf("coverage invocation summary = %+v, want one zero-action invocation", invocation)
 	}
-	if !strings.Contains(stdout.String(), "Coverage build diagnostic:") || stderr.Len() != 0 {
+	if invocation.CacheReuse != coverageBuildCacheReuseExactInvocationHit || invocation.CommandResult != coverageBuildCommandResultPassed {
+		t.Fatalf("coverage invocation classification = %+v, want exact hit and passed", invocation)
+	}
+	if invocation.WallSeconds < 0 || diagnostics.TotalMeasuredSeconds != invocation.WallSeconds {
+		t.Fatalf("diagnostic timing = %+v, want one authoritative wall measurement", diagnostics)
+	}
+	for _, forbidden := range []string{"compileProbe", "inferredHits", "misses", "testRunWallSeconds"} {
+		if strings.Contains(raw, forbidden) {
+			t.Fatalf("schema-v2 diagnostic retains removed field %q: %s", forbidden, raw)
+		}
+	}
+	if !strings.Contains(stdout.String(), "cache-reuse=exact-invocation-hit") || stderr.Len() != 0 {
 		t.Fatalf("diagnostic streams = stdout %q stderr %q, want concise stdout evidence only", stdout.String(), stderr.String())
 	}
 }
 
-func TestCoverageBuildDiagnosticFailureStopsTestAndWritesFailedSummary(t *testing.T) {
+func TestCoverageBuildDiagnosticReportsObservedCompileWorkWithoutInferredHits(t *testing.T) {
+	setActionCacheIdentity(t, "build-key", "older-key", "false")
+
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
-
-	callCount := 0
-	var probeDir string
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
-		callCount++
-		if !slicesContains(invocation.args, "-c") {
-			return "", "", errors.New("coverage test must not start after probe failure")
-		}
-		probeDir = argumentAfter(invocation.args, "-o")
-		return "WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n", "original compiler failure", errors.New("exit status 2")
+		return "coverage test ran once\n", strings.Join([]string{
+			"WORK=/tmp/go-build",
+			"mkdir -p $WORK/b001/",
+			`"/go/pkg/tool/linux_amd64/compile" -o "$WORK/b001/_pkg_.a" -p example.test`,
+			`"/go/pkg/tool/linux_amd64/link" -o "$WORK/b001/example.test"`,
+		}, "\n"), nil
 	}
 
 	diagnosticPath := filepath.Join(t.TempDir(), "coverage-build-diagnostics.json")
-	plan := coverageInvocationPlan{
-		invocations: []commandInvocation{{
-			name: "go",
-			args: []string{"test", "-coverpkg=example/pkg/...", "-coverprofile=coverage.out", "example/tests/functional/work"},
-		}},
-		cleanup: func() error { return nil },
+	if err := executeCoverageInvocationPlan(config{coverageBuildDiagnosticsOutput: diagnosticPath}, diagnosticCoveragePlan(), []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil); err != nil {
+		t.Fatalf("executeCoverageInvocationPlan() error = %v", err)
 	}
-	err := executeCoverageInvocationPlan(
-		config{coverageBuildDiagnosticsOutput: diagnosticPath},
-		plan,
-		[]string{"example/tests/functional/work"},
-		"coverage.out",
-		".",
-		nil,
-		"run coverage",
-		nil,
-	)
-	if err == nil || !strings.Contains(err.Error(), "original compiler failure") {
-		t.Fatalf("executeCoverageInvocationPlan() error = %v, want original compiler failure", err)
+	diagnostics, raw := readCoverageBuildDiagnostics(t, diagnosticPath)
+	if diagnostics.CoverageInvocation.CompilerCommands != 1 || diagnostics.CoverageInvocation.LinkerCommands != 1 || diagnostics.CoverageInvocation.BuildActions != 2 {
+		t.Fatalf("coverage invocation summary = %+v, want observed compiler/linker actions", diagnostics.CoverageInvocation)
 	}
-	if callCount != 1 {
-		t.Fatalf("go invocation count = %d, want probe only", callCount)
+	if diagnostics.CoverageInvocation.CacheReuse != coverageBuildCacheReuseCompileWorkObserved {
+		t.Fatalf("cache reuse = %q, want compile-work-observed", diagnostics.CoverageInvocation.CacheReuse)
 	}
-	if _, err := os.Stat(probeDir); !os.IsNotExist(err) {
-		t.Fatalf("failed compile probe directory still exists, stat error = %v", err)
-	}
-	diagnostics := readCoverageBuildDiagnostics(t, diagnosticPath)
-	if diagnostics.Status != coverageBuildDiagnosticsStatusFailed {
-		t.Fatalf("diagnostic status = %q, want failed", diagnostics.Status)
-	}
-	if diagnostics.TestRunWallSeconds != 0 || diagnostics.TotalMeasuredSeconds != diagnostics.CompileProbe.WallSeconds {
-		t.Fatalf("failed diagnostic timings = %+v, want no test timing and compile-only total", diagnostics)
+	if strings.Contains(raw, "inferredHits") || strings.Contains(raw, "misses") {
+		t.Fatalf("diagnostic contains inferred cache arithmetic: %s", raw)
 	}
 }
 
-func TestCoverageBuildDiagnosticUnclassifiableTraceStopsTest(t *testing.T) {
+func TestCoverageBuildDiagnosticFailureDoesNotClaimExactReuse(t *testing.T) {
+	setActionCacheIdentity(t, "build-key", "build-key", "true")
+
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
-
-	callCount := 0
 	commandRunner = func(invocation commandInvocation) (string, string, error) {
-		callCount++
-		if !slicesContains(invocation.args, "-c") {
-			return "", "", errors.New("coverage test must not start after an unclassifiable probe")
-		}
-		return "WORK=/tmp/go-build\n", "", nil
+		return "WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n", "original test failure", errors.New("exit status 1")
 	}
 
 	diagnosticPath := filepath.Join(t.TempDir(), "coverage-build-diagnostics.json")
-	plan := coverageInvocationPlan{
-		invocations: []commandInvocation{{
-			name: "go",
-			args: []string{"test", "-coverpkg=example/pkg/...", "-coverprofile=coverage.out", "example/tests/functional/work"},
-		}},
-		cleanup: func() error { return nil },
+	err := executeCoverageInvocationPlan(config{coverageBuildDiagnosticsOutput: diagnosticPath}, diagnosticCoveragePlan(), []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil)
+	if err == nil || !strings.Contains(err.Error(), "original test failure") {
+		t.Fatalf("executeCoverageInvocationPlan() error = %v, want original test failure", err)
 	}
-	err := executeCoverageInvocationPlan(
-		config{coverageBuildDiagnosticsOutput: diagnosticPath},
-		plan,
-		[]string{"example/tests/functional/work"},
-		"coverage.out",
-		".",
-		nil,
-		"run coverage",
-		nil,
-	)
+	diagnostics, _ := readCoverageBuildDiagnostics(t, diagnosticPath)
+	if diagnostics.Status != coverageBuildDiagnosticsStatusFailed || diagnostics.CoverageInvocation.CommandResult != coverageBuildCommandResultFailed {
+		t.Fatalf("failed diagnostic = %+v, want failed command and artifact", diagnostics)
+	}
+	if diagnostics.CoverageInvocation.CacheReuse == coverageBuildCacheReuseExactInvocationHit {
+		t.Fatalf("failed diagnostic claimed exact reuse: %+v", diagnostics.CoverageInvocation)
+	}
+}
+
+func TestCoverageBuildDiagnosticMalformedIdentityIsFailClosed(t *testing.T) {
+	setActionCacheIdentity(t, "build-key", "different-key", "true")
+
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		return "WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n", "", nil
+	}
+
+	diagnosticPath := filepath.Join(t.TempDir(), "coverage-build-diagnostics.json")
+	err := executeCoverageInvocationPlan(config{coverageBuildDiagnosticsOutput: diagnosticPath}, diagnosticCoveragePlan(), []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil)
+	if err == nil || !strings.Contains(err.Error(), "exact cache hit identity is inconsistent") {
+		t.Fatalf("executeCoverageInvocationPlan() error = %v, want invalid identity", err)
+	}
+	diagnostics, _ := readCoverageBuildDiagnostics(t, diagnosticPath)
+	if diagnostics.ActionCache.ExactPrimaryHit || diagnostics.CoverageInvocation.CacheReuse == coverageBuildCacheReuseExactInvocationHit {
+		t.Fatalf("malformed identity produced exact reuse: %+v / %+v", diagnostics.ActionCache, diagnostics.CoverageInvocation)
+	}
+}
+
+func TestCoverageBuildDiagnosticUnclassifiableTraceIsFailClosed(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		return "coverage test ran once\n", "", nil
+	}
+
+	diagnosticPath := filepath.Join(t.TempDir(), "coverage-build-diagnostics.json")
+	err := executeCoverageInvocationPlan(config{coverageBuildDiagnosticsOutput: diagnosticPath}, diagnosticCoveragePlan(), []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil)
 	if err == nil || !strings.Contains(err.Error(), "unclassifiable go test -x trace") {
 		t.Fatalf("executeCoverageInvocationPlan() error = %v, want unclassifiable trace diagnostic", err)
 	}
-	if callCount != 1 {
-		t.Fatalf("go invocation count = %d, want probe only", callCount)
-	}
-	diagnostics := readCoverageBuildDiagnostics(t, diagnosticPath)
-	if diagnostics.Status != coverageBuildDiagnosticsStatusFailed {
-		t.Fatalf("diagnostic status = %q, want failed", diagnostics.Status)
+	diagnostics, _ := readCoverageBuildDiagnostics(t, diagnosticPath)
+	if diagnostics.Status != coverageBuildDiagnosticsStatusFailed || diagnostics.CoverageInvocation.CacheReuse == coverageBuildCacheReuseExactInvocationHit {
+		t.Fatalf("unclassifiable diagnostic = %+v, want failed non-exact result", diagnostics)
 	}
 }
 
-func TestCoverageBuildDiagnosticDisabledPreservesSingleTestInvocation(t *testing.T) {
+func TestCoverageBuildDiagnosticWriterFailurePreservesCoverageFailure(t *testing.T) {
+	originalRunner := commandRunner
+	t.Cleanup(func() { commandRunner = originalRunner })
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		return "WORK=/tmp/go-build\nmkdir -p $WORK/b001/\n", "original coverage failure", errors.New("exit status 2")
+	}
+
+	outputDirectory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outputDirectory, "child"), []byte("keep"), 0o600); err != nil {
+		t.Fatalf("prepare diagnostic output directory: %v", err)
+	}
+	err := executeCoverageInvocationPlan(config{coverageBuildDiagnosticsOutput: outputDirectory}, diagnosticCoveragePlan(), []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil)
+	if err == nil || !strings.Contains(err.Error(), "original coverage failure") || !strings.Contains(err.Error(), "write coverage build diagnostics json") {
+		t.Fatalf("executeCoverageInvocationPlan() error = %v, want coverage and writer failures", err)
+	}
+}
+
+func TestCoverageBuildDiagnosticDisabledPreservesSingleUntracedInvocation(t *testing.T) {
 	originalRunner := commandRunner
 	t.Cleanup(func() { commandRunner = originalRunner })
 
@@ -315,24 +260,41 @@ func TestCoverageBuildDiagnosticDisabledPreservesSingleTestInvocation(t *testing
 		invocations = append(invocations, invocation)
 		return "", "", nil
 	}
-	plan := coverageInvocationPlan{
-		invocations: []commandInvocation{{
-			name: "go",
-			args: []string{"test", "-coverpkg=example/pkg/...", "-coverprofile=coverage.out", "example/tests/functional/work"},
-		}},
-		cleanup: func() error { return nil },
-	}
-	if err := executeCoverageInvocationPlan(config{}, plan, []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil); err != nil {
+	diagnosticPath := filepath.Join(t.TempDir(), "coverage-build-diagnostics.json")
+	if err := executeCoverageInvocationPlan(config{}, diagnosticCoveragePlan(), []string{"example/tests/functional/work"}, "coverage.out", ".", nil, "run coverage", nil); err != nil {
 		t.Fatalf("executeCoverageInvocationPlan() error = %v", err)
 	}
-	if len(invocations) != 1 || slicesContains(invocations[0].args, "-c") {
-		t.Fatalf("default diagnostic invocations = %+v, want one unchanged test invocation", invocations)
+	if len(invocations) != 1 || slicesContains(invocations[0].args, "-x") || slicesContains(invocations[0].args, "-json") || slicesContains(invocations[0].args, "-c") {
+		t.Fatalf("disabled diagnostic invocations = %+v, want one unchanged untraced invocation", invocations)
+	}
+	if _, err := os.Stat(diagnosticPath); !os.IsNotExist(err) {
+		t.Fatalf("disabled diagnostic file exists, stat error = %v", err)
+	}
+}
+
+func TestCoverageActionCacheIdentityAcceptsPrefixAndMissResults(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		matched string
+		hit     string
+	}{
+		{name: "prefix", matched: "older-key", hit: "false"},
+		{name: "miss", matched: "", hit: "false"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setActionCacheIdentity(t, "build-key", tc.matched, tc.hit)
+			identity, err := coverageActionCacheIdentityFromEnvironment()
+			if err != nil {
+				t.Fatalf("coverageActionCacheIdentityFromEnvironment() error = %v", err)
+			}
+			if !identity.configured || identity.primaryKey != "build-key" || identity.matchedKey != tc.matched || identity.exactPrimaryHit {
+				t.Fatalf("identity = %+v, want non-exact %s result", identity, tc.name)
+			}
+		})
 	}
 }
 
 func TestCoverageInvocationHashIgnoresProfilePath(t *testing.T) {
-	t.Parallel()
-
 	left := coverageInvocationPlan{invocations: []commandInvocation{{name: "go", args: []string{"test", "-coverprofile=/tmp/left.out", "./tests/functional"}}}}
 	right := coverageInvocationPlan{invocations: []commandInvocation{{name: "go", args: []string{"test", "-coverprofile=/tmp/right.out", "./tests/functional"}}}}
 	if coverageInvocationHash(left) != coverageInvocationHash(right) {
@@ -340,7 +302,24 @@ func TestCoverageInvocationHashIgnoresProfilePath(t *testing.T) {
 	}
 }
 
-func readCoverageBuildDiagnostics(t *testing.T, path string) coverageBuildDiagnosticsJSON {
+func diagnosticCoveragePlan() coverageInvocationPlan {
+	return coverageInvocationPlan{
+		invocations: []commandInvocation{{
+			name: "go",
+			args: []string{"test", "-coverpkg=example/pkg/...", "-coverprofile=coverage.out", "example/tests/functional/work"},
+		}},
+		cleanup: func() error { return nil },
+	}
+}
+
+func setActionCacheIdentity(t *testing.T, primary, matched, exact string) {
+	t.Helper()
+	t.Setenv(coverageBuildActionCachePrimaryKeyEnv, primary)
+	t.Setenv(coverageBuildActionCacheMatchedKeyEnv, matched)
+	t.Setenv(coverageBuildActionCacheExactHitEnv, exact)
+}
+
+func readCoverageBuildDiagnostics(t *testing.T, path string) (coverageBuildDiagnosticsJSON, string) {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -350,26 +329,24 @@ func readCoverageBuildDiagnostics(t *testing.T, path string) coverageBuildDiagno
 	if err := json.Unmarshal(data, &diagnostics); err != nil {
 		t.Fatalf("decode coverage build diagnostics: %v", err)
 	}
-	return diagnostics
+	return diagnostics, string(data)
 }
 
-func argumentAfter(args []string, name string) string {
-	for index, arg := range args[:len(args)-1] {
-		if arg == name {
-			return args[index+1]
+func countArgs(args []string, wanted string) int {
+	count := 0
+	for _, arg := range args {
+		if arg == wanted {
+			count++
 		}
 	}
-	return ""
+	return count
 }
 
-func slicesEqual(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
+func indexOf(args []string, wanted string) int {
+	for index, arg := range args {
+		if arg == wanted {
+			return index
 		}
 	}
-	return true
+	return len(args)
 }

@@ -241,7 +241,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.varianceAnnotations, "variance-annotations", "", "optional validated JSON annotations to append to a variance report")
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
 	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
-	flag.StringVar(&cfg.coverageBuildDiagnosticsOutput, "coverage-build-diagnostics-output", "", "optional path for a coverage compile-probe cache diagnostic JSON document")
+	flag.StringVar(&cfg.coverageBuildDiagnosticsOutput, "coverage-build-diagnostics-output", "", "optional path for a coverage build-cache diagnostic JSON document")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
