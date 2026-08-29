@@ -345,10 +345,10 @@ GATE-HOSTED passes for this audit revision. Local timing remains diagnostic.
 | C11-R04-001 | `GATE-CONSUMERS`, `internal/functionaltestmetadata` maintainers | At audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`, run `go test ./internal/functionaltestmetadata -run ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`. The checker returned exit 1 with 330 committed identities and 296 discovered identities. | Review the 34-entry set difference, document any still-undocumented test, and manually remove only resolved baseline rows. Rerun the checker in a separately owned correction. This lane makes no baseline edit. |
 | C11-CONTRACT-002 | `GATE-CONSUMERS`, CLI contract owner | At audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`, run `make test-contract`. The command returned exit 1 at `contracts/session_command_family_test.go:116`: `you.session.list --scope default = all, want live`. Focused S-09 and S-10 comparisons still passed. | Confirm the intended default at the contract and production-command sources, then correct the owning contract surface and rerun `make test-contract`. This lane makes no fixture or generated-file edit. |
 
-These blockers keep the catalog lane open. The local dead-code, component-runner,
-and missing latency-artifact results are environment limitations. They are not
-combined with either current-main blocker and do not justify changing a
-comparison file.
+These blockers remain assigned to separate correction lanes. The local dead-code,
+component-runner, and missing latency-artifact results are environment
+limitations. They are not combined with either current-main blocker and do not
+justify changing a comparison file.
 
 ### GATE-DOC-REVIEW
 
@@ -367,11 +367,44 @@ generated-file, schema, baseline, or code rollback.
 
 ### GATE-LOOPBACK and GATE-PR-CI
 
-GATE-LOOPBACK remains PENDING for the independent clean-room story. The
-verifier must use `factory/docs/standards/validation-loopback-template.md`,
-report every criterion as PASS, FAIL, or BLOCKED, and make no repair. No PR
-exists for this incomplete lane, so GATE-PR-CI is also PENDING. Review owns
-terminal CI and merge after a final head is pushed.
+GATE-LOOPBACK result: PASS for the final documentation content at delivered head
+`b905584c77172e7fa23ffaa611a2988e2111ca20`. A second fresh detached checkout at
+that head had empty `git status --porcelain`. The source-first traversal and
+reverse row parser each produced 28 unique paths. Their set difference was
+empty, with zero duplicate paths, zero duplicate classes, zero missing files,
+and zero SHA mismatches. The S-04 witness reached `PathLeaseFreezeRelativePath`
+from `make ownership-inventory-check` through `VerifyFreeze`. Recomputed scalar
+values matched the catalog at audit SHA
+`022888528c6b3ae6192a9936db235bd4102fe597`.
+
+The loopback used the report shape from
+`factory/docs/standards/validation-loopback-template.md`. Its project criteria
+were:
+
+| Criterion | Status | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| C1 source/file reconciliation | PASS | 28 unique paths matched in both directions | Future source drift |
+| C2 S-04 and row provenance | PASS | Ownership consumer reached `PathLeaseFreezeRelativePath`, and 28 rows had source metadata | Future consumer changes |
+| C3 revision-pinned hashes and scalars | PASS | All 28 raw SHA-256 values and scalar observations matched | Future artifact changes |
+| C4 ratchet procedures | PASS | R-* rows retained deliberate shrink or manual-repin procedures | Semantic review of future procedures |
+| C5 hosted writer evidence | PASS | Source run 33228272233 and regeneration run 33228682483 both matched audit SHA and succeeded | Future protected-main runs |
+| C6 defect handling | PASS | R-04 and contract defects were reproduced and left unchanged | Separately owned corrections |
+| C7 performance scope | PASS | Hosted latency remained authoritative, while local timing and UI wall time remained diagnostic | Future hosted samples |
+| C8 security, scope, and rollback | PASS | Clean status, one README diff, no secrets, and one-file revert path | Review-time merge state |
+| C9 documentation review | PASS | README and prose checks passed with no typed-surface change | Reviewer interpretation |
+| C10 PR CI | BLOCKED | No PR existed before the implementation handoff | Required CI on final pushed head |
+| C11 explicit status report | PASS | This table records PASS, FAIL, or BLOCKED for every criterion | None for this report |
+| C12 implementation handoff | BLOCKED | Final push and PR creation remained after loopback capture | Review-owned terminal CI and merge |
+
+The unchanged source was exercised in the preceding clean worktree at parent head
+`8137e86303c00039ddc0e94728a31088d132d466`. `make ui-component-test` executed
+1,079 tests with zero test failures and exited 1 because Windows wall time was
+217.06 seconds against the 150.00-second budget. The final head changes only
+this README, so the result remains a local runner limitation.
+
+GATE-PR-CI is the implementation handoff gate. It becomes satisfied when the
+final head is pushed, a PR is open, and required CI has started. Review owns
+terminal CI, merge conflicts, and merge after that handoff.
 
 ### Unit identity reconciliation
 
