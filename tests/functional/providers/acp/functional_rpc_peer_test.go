@@ -326,7 +326,7 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 			if err := p.respondError(request.ID, -32001, "temporarily unavailable", nil); err != nil {
 				return err
 			}
-			return holdFailedRetryPeer(p.fixture.RetryHoldPath)
+			return holdFailedRetryPeer(p.fixture.RetryHoldPath, p.scanner)
 		case 2:
 			break
 		default:
@@ -414,7 +414,7 @@ func sharedSpineFailurePrompt(request rpcEnvelope) bool {
 	return false
 }
 
-func holdFailedRetryPeer(holdMarker string) error {
+func holdFailedRetryPeer(holdMarker string, scanner *bufio.Scanner) error {
 	if holdMarker == "" {
 		return nil
 	}
@@ -422,12 +422,13 @@ func holdFailedRetryPeer(holdMarker string) error {
 		return err
 	}
 	// Keep the failed peer alive and unresponsive so the public retry can only
-	// succeed after the provider retires this process. The production stop
-	// deadline is the failure guard for this fixture; no test-side delay is
-	// needed.
-	for {
-		runtime.Gosched()
+	// succeed after the provider retires this process. Waiting for stdin EOF
+	// observes the provider's real stop operation without a CPU spin or a
+	// test-side delay; daemon.stopLocked closes this pipe before terminating a
+	// peer that does not exit on its own.
+	for scanner.Scan() {
 	}
+	return scanner.Err()
 }
 
 // respondToPackagedPrompt handles the prompt() modes whose reply depends on
