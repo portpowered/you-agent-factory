@@ -17,7 +17,7 @@ remaining PR CI/merge ownership; it does not claim terminal PR CI or merge.
   inference edges already used by the package.
 - Authorized change for this refresh: the evidence ledger; the implementation
   review corrections are limited to the five submission-package test files
-  recorded at final head `d6688af10a`. No production, shared-support,
+  recorded at final code/test head `0c2ee1fd34`. No production, shared-support,
   contract, generated, workflow, or sibling-package file was edited.
 - Cost and network: controlled local fixtures only; 0 remote product calls and
   `$0` paid cost.
@@ -247,8 +247,8 @@ and merge (`GATE-DELIVERY`).
 ## Story-003 final local validation
 
 The final implementation, including the review corrections, was tested from a
-clean worktree at head
-`d6688af10a5f66e67944fb1600fe13f50aec31de`. The ledger refresh does not alter
+clean worktree at current head
+`bc73c00ff2b16bff2ab70e07c258da7405dd782a`. The ledger refresh does not alter
 the package artifact or its test sources. Environment was
 `go version go1.25.0 windows/amd64`, Windows build `26200`, `amd64`, with the
 shared compute-saturated host described above. All validation used local
@@ -270,27 +270,22 @@ go test ./tests/functional/work/submission/... -count=1
 
 | Run | Commit | Result / exit | Package-reported time | PowerShell wall time |
 | ---: | --- | --- | ---: | ---: |
-| 1 | `d6688af10a5f66e67944fb1600fe13f50aec31de` | PASS / `0` | `29.501s` | `35.063s` |
-| 2 | `d6688af10a5f66e67944fb1600fe13f50aec31de` | PASS / `0` | `36.655s` | `42.981s` |
-| 3 | `d6688af10a5f66e67944fb1600fe13f50aec31de` | PASS / `0` | `40.470s` | `46.494s` |
+| 1 | `bc73c00ff2b16bff2ab70e07c258da7405dd782a` | PASS / `0` | `25.561s` | `30.237s` |
+| 2 | `bc73c00ff2b16bff2ab70e07c258da7405dd782a` | PASS / `0` | `29.093s` | `34.327s` |
+| 3 | `bc73c00ff2b16bff2ab70e07c258da7405dd782a` | PASS / `0` | `28.488s` | `32.732s` |
 
-The final clean-worktree wall-time median is **`42.981s`**, versus the unchanged
-baseline median **`59.2423305s`**, for a **`27.45%` reduction**. The
-package-reported median is `36.655s` versus the unchanged `45.000s` median, a
-`18.54%` reduction. All three runs passed. The final review correction changed
-the provider fixture path and therefore raised the measured package time, but
-the current package still materially follows the proven root-reuse and fixture
-grouping optimization. The wall spread is retained as host-contention
-diagnostic evidence; package-level behavior remains the primary verdict.
+The final clean-worktree wall-time median is **`32.732s`**, versus the unchanged
+baseline median **`59.2423305s`**, for a **`44.75%` reduction**. The
+package-reported median is `28.488s` versus the unchanged `45.000s` median, a
+`36.69%` reduction. All three runs passed and the wall median clears the PRD's
+40% target. The wall spread is retained as host-contention diagnostic evidence;
+package-level behavior remains the primary verdict.
 
-The final fidelity-adjusted median is below the PRD's 40% target. The permitted
-profile-backed-floor alternative is satisfied after the one bounded optimization
-pass: current-head source accounting retains 12 default server/root call sites
+Current-head source accounting also retains 12 default server/root call sites
 instead of the baseline 25 server plus 8 ordinary CLI roots, zero one-shot CLI
 root patterns, zero package-local sleeps, and the deterministic controlled-edge
-release for CASE-SUB-014. The current three-run measurements are the
-fidelity-adjusted floor for the full provider-wired package; no assertion,
-scope, or timeout weakening was used to obtain it.
+release for CASE-SUB-014. No assertion, scope, or timeout weakening was used to
+obtain the measured improvement.
 
 ### GATE-PROFILE — post-pass distribution and topology
 
@@ -332,14 +327,14 @@ set above. The supported race command also passed at the final head:
 go test -race ./tests/functional/work/submission/... -count=1
 ```
 
-Result: PASS / exit `0`, package-reported time `60.887s`; no race report was
+Result: PASS / exit `0`, package-reported time `64.501s`; no race report was
 emitted. The tagged command passed as well at the same clean head:
 
 ```text
 go test -tags=functionallong ./tests/functional/work/submission/... -count=1
 ```
 
-Result: PASS / exit `0`, package-reported time `35.175s`. This executed the two
+Result: PASS / exit `0`, package-reported time `36.846s`. This executed the two
 tagged witnesses and the shared optimized helpers. These gates prove local
 functional behavior and detected race safety for the changed package paths;
 they do not prove terminal PR CI or merge.
@@ -408,7 +403,7 @@ their assertions remain unchanged.
 ## Environment and artifact
 
 - Commit/build identifier: clean worktree at
-  `d6688af10a` (`d6688af10a5f66e67944fb1600fe13f50aec31de`); the tested
+  `bc73c00ff2` (`bc73c00ff2b16bff2ab70e07c258da7405dd782a`); the tested
   implementation is the optimized package plus the review corrections.
 - Environment and configuration: `go version go1.25.0 windows/amd64`,
   Windows build `26200`, `amd64`, shared compute-saturated host; no test
@@ -423,9 +418,9 @@ their assertions remain unchanged.
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3; all exit `0`, package median `36.655s`, wall median `42.981s` | Terminal PR CI and merge |
-| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, package time `60.887s`, no race report | Schedules outside this run |
-| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, package time `35.175s` | Remote tagged workflow behavior |
+| GATE-PACKAGE: default Work submission package | PASS | `go test ./tests/functional/work/submission/... -count=1` x3; all exit `0`, package median `28.488s`, wall median `32.732s` | Terminal PR CI and merge |
+| GATE-RACE: changed package race safety | PASS | `go test -race ./tests/functional/work/submission/... -count=1`; exit `0`, package time `64.501s`, no race report | Schedules outside this run |
+| GATE-LONG: tagged replay and compatibility witnesses | PASS | `go test -tags=functionallong ./tests/functional/work/submission/... -count=1`; exit `0`, package time `36.846s` | Remote tagged workflow behavior |
 | GATE-ASSERTIONS: CASE-SUB-001..031 | PASS | Post-edit same-or-stronger table above; all 31 rows mapped to retained observable assertions | Untested real-remote systems |
 | Scope and cleanup | PASS | Final source accounting remains package-only, with no package-local sleeps and deterministic cleanup witnesses | Future changes after this head |
 
