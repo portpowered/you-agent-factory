@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -27,6 +27,70 @@ const (
 	policyBehaviorSessionCount = 3
 	policyHostWorkflow         = `return "javascript-policy-host";`
 )
+
+// policyStreamLifecycle observes the actual public SSE handler lifetime at
+// the injected HTTP edge rather than maintaining a private application map.
+type policyStreamLifecycle struct {
+	active          atomic.Int32
+	opened          atomic.Int32
+	closed          atomic.Int32
+	sessionRequests atomic.Int32
+}
+
+func (lifecycle *policyStreamLifecycle) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/factory-sessions") {
+			lifecycle.sessionRequests.Add(1)
+		}
+		isStream := strings.HasSuffix(request.URL.Path, "/events") ||
+			strings.HasSuffix(request.URL.Path, "/response-events")
+		if !isStream {
+			next.ServeHTTP(writer, request)
+			return
+		}
+		lifecycle.opened.Add(1)
+		lifecycle.active.Add(1)
+		defer func() {
+			lifecycle.active.Add(-1)
+			lifecycle.closed.Add(1)
+		}()
+		next.ServeHTTP(writer, request)
+	})
+}
+
+// policyProviderCommandRunner instruments the immutable provider command edge
+// while retaining the shared recording runner's customer-visible behavior.
+type policyProviderCommandRunner struct {
+	inner  *support.RecordingCommandRunner
+	mu     sync.Mutex
+	active int
+}
+
+func newPolicyProviderCommandRunner(stdout string) *policyProviderCommandRunner {
+	return &policyProviderCommandRunner{inner: support.NewRecordingCommandRunner(stdout)}
+}
+
+func (runner *policyProviderCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.active++
+	runner.mu.Unlock()
+	defer func() {
+		runner.mu.Lock()
+		runner.active--
+		runner.mu.Unlock()
+	}()
+	return runner.inner.Run(ctx, request)
+}
+
+func (runner *policyProviderCommandRunner) CallCount() int {
+	return runner.inner.CallCount()
+}
+
+func (runner *policyProviderCommandRunner) ActiveCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.active
+}
 
 var (
 	policyFixtureMu     sync.Mutex
@@ -67,21 +131,14 @@ func TestJavaScriptPolicyFixturePartialStartUnwinds(t *testing.T) {
 	homeDir := t.TempDir()
 
 	original := errors.New("injected policy fixture start failure")
-	var listenerURL atomic.Value
-	var listenerOpen atomic.Int32
+	partialAPI := support.NewProcessAPIServer()
+	partialStopped := make(chan struct{})
+	partialStreams := &policyStreamLifecycle{}
+	var listenerURL string
 	var starterCalls atomic.Int32
-	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
-		starterCalls.Add(1)
-		server := httptest.NewServer(request.Handler)
-		listenerURL.Store(server.URL)
-		listenerOpen.Store(1)
-		server.CloseClientConnections()
-		server.Close()
-		listenerOpen.Store(0)
-		return original
-	}
+	failingStarter := newPolicyPartialStartStarter(original, partialAPI, partialStopped, partialStreams, &listenerURL, &starterCalls)
 
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	runner := newPolicyProviderCommandRunner("unexpected live provider execution")
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      failingStarter,
 		ProviderCommandRunner: runner,
@@ -107,32 +164,86 @@ func TestJavaScriptPolicyFixturePartialStartUnwinds(t *testing.T) {
 	inputs.Input.Env = policyCustomerEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostDir
 	got := process.Execute(inputs.Input)
-	if closeErr := closeProcess(); closeErr != nil {
+	closeErr := process.Close(context.Background())
+	if closeErr != nil {
 		t.Fatalf("close partial-start process: %v", closeErr)
 	}
-	closed = true
+	closed = closeErr == nil
 	if !errors.Is(got, original) && (got == nil || !strings.Contains(got.Error(), original.Error())) {
 		t.Fatalf("partial-start error = %v, want original error %q", got, original)
 	}
 	if got := starterCalls.Load(); got != 1 {
 		t.Fatalf("partial-start API starter calls = %d, want one", got)
 	}
-	if got := listenerOpen.Load(); got != 0 {
-		t.Fatalf("partial-start listeners still open = %d, want zero", got)
-	}
 	if got := runner.CallCount(); got != 0 {
 		t.Fatalf("partial-start provider command calls = %d, want zero", got)
 	}
-	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
+	listenerClosed := false
+	<-partialStopped
+	listenerClosed = true
+	if partialStreams.active.Load() != 0 || partialStreams.opened.Load() != partialStreams.closed.Load() {
+		t.Fatalf("partial policy stream edge did not close: active=%d opened=%d closed=%d", partialStreams.active.Load(), partialStreams.opened.Load(), partialStreams.closed.Load())
+	}
+	if strings.TrimSpace(listenerURL) != "" {
 		client := http.Client{Timeout: time.Second}
-		response, probeErr := client.Get(rawURL + "/status")
+		response, probeErr := client.Get(listenerURL + "/status")
 		if probeErr == nil {
+			listenerClosed = false
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
 			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
 		}
+	} else {
+		t.Fatal("partial-start application listener URL was not recorded")
 	}
-	t.Logf("policy partial-start lifecycle report: process_closed=%t api_starter_calls=%d listener_open=%d provider_calls=%d original_error=%q", closed, starterCalls.Load(), listenerOpen.Load(), runner.CallCount(), original)
+	sessionActive := int(partialStreams.sessionRequests.Load())
+	if sessionActive != 0 {
+		t.Fatalf("partial-start Factory Session requests = %d, want zero", sessionActive)
+	}
+	processActive := boolToInt(!closed)
+	portActive := boolToInt(!listenerClosed)
+	streamActive := int(partialStreams.active.Load())
+	routeActive := runner.ActiveCount()
+	rootActive := boolToInt(!closed)
+	worktreeActive, err := removeAndObservePath(hostDir)
+	if err != nil {
+		t.Fatalf("remove policy partial-start factory: %v", err)
+	}
+	mutableStateActive := sessionActive + streamActive + routeActive + rootActive + worktreeActive
+	if processActive != 0 || portActive != 0 || streamActive != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		t.Fatalf("policy partial-start active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
+	}
+	t.Logf("policy partial-start lifecycle report: process_closed=%t api_starter_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d} streams_opened=%d streams_closed=%d provider_calls=%d original_error=%q", closed, starterCalls.Load(), processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive, partialStreams.opened.Load(), partialStreams.closed.Load(), runner.CallCount(), original)
+}
+
+func newPolicyPartialStartStarter(
+	original error,
+	api *support.ProcessAPIServer,
+	stopped chan struct{},
+	streams *policyStreamLifecycle,
+	listenerURL *string,
+	starterCalls *atomic.Int32,
+) func(context.Context, platformhttpserver.StartRequest) error {
+	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		partialContext, cancelPartial := context.WithCancel(ctx)
+		request.OnBound = nil
+		request.Handler = streams.wrap(request.Handler)
+		go func() {
+			_ = api.Start(partialContext, request)
+			close(stopped)
+		}()
+		baseURL, err := api.WaitForBaseURL(policyFixtureTimeout)
+		if err != nil {
+			cancelPartial()
+			<-stopped
+			return err
+		}
+		*listenerURL = baseURL
+		cancelPartial()
+		<-stopped
+		return original
+	}
 }
 
 func policyFixtureForTest(t *testing.T) *policyFixture {
@@ -149,7 +260,7 @@ func policyFixtureForTest(t *testing.T) *policyFixture {
 type policyFixture struct {
 	process        support.ApplicationProcess
 	api            *support.ProcessAPIServer
-	providerRunner *support.RecordingCommandRunner
+	providerRunner *policyProviderCommandRunner
 	baseURL        string
 	hostDir        string
 	homeDir        string
@@ -166,6 +277,7 @@ type policyFixture struct {
 	processErr    error
 	apiStopped    chan struct{}
 	apiStopOnce   sync.Once
+	stream        policyStreamLifecycle
 
 	startMu sync.Mutex
 
@@ -199,7 +311,7 @@ func newPolicyFixture(t *testing.T) *policyFixture {
 	}
 
 	api := support.NewProcessAPIServer()
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	runner := newPolicyProviderCommandRunner("unexpected live provider execution")
 	fixture := &policyFixture{
 		api:            api,
 		providerRunner: runner,
@@ -250,6 +362,7 @@ func (fixture *policyFixture) startAPIServer(
 	request platformhttpserver.StartRequest,
 ) error {
 	fixture.apiStarts.Add(1)
+	request.Handler = fixture.stream.wrap(request.Handler)
 	err := fixture.api.Start(ctx, request)
 	fixture.apiStopOnce.Do(func() { close(fixture.apiStopped) })
 	return err
@@ -466,8 +579,10 @@ func (fixture *policyFixture) shutdown() error {
 	if got := fixture.apiStarts.Load(); got > 1 {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy API starts = %d, want at most one", got))
 	}
+	listenerClosed := fixture.apiStarts.Load() == 0
 	if fixture.apiStarts.Load() > 0 {
 		<-fixture.apiStopped
+		listenerClosed = true
 	}
 	if got := fixture.providerRunner.CallCount(); got != 0 {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy provider command calls = %d, want zero", got))
@@ -488,6 +603,7 @@ func (fixture *policyFixture) shutdown() error {
 		client := http.Client{Timeout: time.Second}
 		response, err := client.Get(strings.TrimSuffix(fixture.baseURL, "/") + "/status")
 		if err == nil {
+			listenerClosed = false
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
 			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
@@ -499,6 +615,70 @@ func (fixture *policyFixture) shutdown() error {
 	if err := os.RemoveAll(fixture.homeDir); err != nil {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove policy home: %w", err))
 	}
-	fmt.Fprintf(os.Stderr, "policy lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:0 port:0 listener:0 session:0 stream:0 route:0 root:0 worktree:0 mutable-state:0}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.providerRunner.CallCount())
+	streamActive := fixture.stream.active.Load()
+	if streamActive != 0 || fixture.stream.opened.Load() != fixture.stream.closed.Load() {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy SSE streams active=%d opened=%d closed=%d", streamActive, fixture.stream.opened.Load(), fixture.stream.closed.Load()))
+	}
+	processClosed := fixture.processStarts.Load() == fixture.processStops.Load() && closeErr == nil
+	processActive := boolToInt(!processClosed)
+	portActive := boolToInt(!listenerClosed)
+	sessionActive := policyMaxInt(tracked-closed, 0)
+	streamActiveCount := int(streamActive)
+	routeActive := fixture.providerRunner.ActiveCount()
+	rootActive := policyMaxInt(int(fixture.rootBuilds.Load())-boolToInt(processClosed), 0)
+	worktreeActive := fixture.activePolicyRoots()
+	mutableStateActive := sessionActive + streamActiveCount + routeActive + rootActive + worktreeActive
+	if processActive != 0 || portActive != 0 || sessionActive != 0 || streamActiveCount != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive))
+	}
+	fmt.Fprintf(os.Stderr, "policy lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.providerRunner.CallCount(), processActive, portActive, portActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive)
 	return shutdownErr
+}
+
+func (fixture *policyFixture) activePolicyRoots() int {
+	fixture.sessionMu.Lock()
+	defer fixture.sessionMu.Unlock()
+	seen := make(map[string]struct{}, len(fixture.sessions))
+	active := 0
+	for _, session := range fixture.sessions {
+		rootDir := strings.TrimSpace(session.rootDir)
+		if rootDir == "" {
+			continue
+		}
+		rootDir = filepath.Clean(rootDir)
+		if _, ok := seen[rootDir]; ok {
+			continue
+		}
+		seen[rootDir] = struct{}{}
+		if _, err := os.Stat(rootDir); err == nil || !errors.Is(err, os.ErrNotExist) {
+			active++
+		}
+	}
+	return active
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func policyMaxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func removeAndObservePath(path string) (int, error) {
+	if err := os.RemoveAll(path); err != nil {
+		return 1, err
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	} else if err != nil {
+		return 1, err
+	}
+	return 1, nil
 }

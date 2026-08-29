@@ -21,6 +21,7 @@ type compositionCommandRunner struct {
 	mu sync.Mutex
 
 	requests []platformprocess.CommandRequest
+	inFlight int
 	active   int
 	peak     int
 
@@ -55,6 +56,12 @@ func (runner *compositionCommandRunner) Run(
 	prompt := strings.TrimSpace(string(request.Stdin))
 
 	runner.mu.Lock()
+	runner.inFlight++
+	defer func() {
+		runner.mu.Lock()
+		runner.inFlight--
+		runner.mu.Unlock()
+	}()
 	runner.requests = append(runner.requests, request)
 	close(runner.callChanged)
 	runner.callChanged = make(chan struct{})
@@ -277,7 +284,7 @@ func (runner *compositionCommandRunner) waitForCallCount(ctx context.Context, wa
 func (runner *compositionCommandRunner) activeCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	return runner.active
+	return runner.inFlight
 }
 
 func (runner *compositionCommandRunner) peakActive() int {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +29,36 @@ const (
 	loadingHostWorkflow   = `return "javascript-loading-host";`
 	loadingRecoveryResult = "<LOADING_RECOVERY>"
 )
+
+// loadingStreamLifecycle observes the actual public SSE handler lifetime at
+// the injected HTTP edge, without rebuilding an application resource ledger.
+type loadingStreamLifecycle struct {
+	active          atomic.Int32
+	opened          atomic.Int32
+	closed          atomic.Int32
+	sessionRequests atomic.Int32
+}
+
+func (lifecycle *loadingStreamLifecycle) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/factory-sessions") {
+			lifecycle.sessionRequests.Add(1)
+		}
+		isStream := strings.HasSuffix(request.URL.Path, "/events") ||
+			strings.HasSuffix(request.URL.Path, "/response-events")
+		if !isStream {
+			next.ServeHTTP(writer, request)
+			return
+		}
+		lifecycle.opened.Add(1)
+		lifecycle.active.Add(1)
+		defer func() {
+			lifecycle.active.Add(-1)
+			lifecycle.closed.Add(1)
+		}()
+		next.ServeHTTP(writer, request)
+	})
+}
 
 var (
 	loadingFixtureMu     sync.Mutex
@@ -63,19 +92,12 @@ func TestJavaScriptLoadingFixturePartialStartUnwinds(t *testing.T) {
 	writeLoadingGlobalConfig(t, homeDir)
 
 	original := errors.New("injected loading fixture start failure")
-	var listenerURL atomic.Value
-	var listenerOpen atomic.Int32
+	partialAPI := support.NewProcessAPIServer()
+	partialStopped := make(chan struct{})
+	partialStreams := &loadingStreamLifecycle{}
+	var listenerURL string
 	var starterCalls atomic.Int32
-	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
-		starterCalls.Add(1)
-		server := httptest.NewServer(request.Handler)
-		listenerURL.Store(server.URL)
-		listenerOpen.Store(1)
-		server.CloseClientConnections()
-		server.Close()
-		listenerOpen.Store(0)
-		return original
-	}
+	failingStarter := newLoadingPartialStartStarter(original, partialAPI, partialStopped, partialStreams, &listenerURL, &starterCalls)
 
 	runner := newLoadingCommandRunner()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
@@ -95,9 +117,7 @@ func TestJavaScriptLoadingFixturePartialStartUnwinds(t *testing.T) {
 	inputs.Input.Env = loadingCustomerEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostDir
 	got := process.Execute(inputs.Input)
-	closeContext, cancel := context.WithTimeout(context.Background(), loadingFixtureTimeout)
-	closeErr := process.Close(closeContext)
-	cancel()
+	closeErr := process.Close(context.Background())
 	if closeErr != nil {
 		t.Fatalf("close partial-start process: %v", closeErr)
 	}
@@ -107,22 +127,75 @@ func TestJavaScriptLoadingFixturePartialStartUnwinds(t *testing.T) {
 	if got := starterCalls.Load(); got != 1 {
 		t.Fatalf("partial-start API starter calls = %d, want one", got)
 	}
-	if got := listenerOpen.Load(); got != 0 {
-		t.Fatalf("partial-start listener state = %d, want closed", got)
-	}
 	if got := runner.CallCount(); got != 0 {
 		t.Fatalf("partial-start provider calls = %d, want zero", got)
 	}
-	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
+	listenerClosed := false
+	<-partialStopped
+	listenerClosed = true
+	if partialStreams.active.Load() != 0 || partialStreams.opened.Load() != partialStreams.closed.Load() {
+		t.Fatalf("partial loading stream edge did not close: active=%d opened=%d closed=%d", partialStreams.active.Load(), partialStreams.opened.Load(), partialStreams.closed.Load())
+	}
+	if strings.TrimSpace(listenerURL) != "" {
 		client := http.Client{Timeout: time.Second}
-		response, probeErr := client.Get(rawURL + "/status")
+		response, probeErr := client.Get(listenerURL + "/status")
 		if probeErr == nil {
+			listenerClosed = false
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
 			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
 		}
+	} else {
+		t.Fatal("partial-start application listener URL was not recorded")
 	}
-	t.Logf("loading partial-start lifecycle report: process_closed=true api_starter_calls=%d listener_open=%d provider_calls=%d original_error=%q", starterCalls.Load(), listenerOpen.Load(), runner.CallCount(), original)
+	sessionActive := int(partialStreams.sessionRequests.Load())
+	if sessionActive != 0 {
+		t.Fatalf("partial-start Factory Session requests = %d, want zero", sessionActive)
+	}
+	processActive := boolToInt(closeErr != nil)
+	portActive := boolToInt(!listenerClosed)
+	streamActive := int(partialStreams.active.Load())
+	routeActive := runner.ActiveCount()
+	rootActive := boolToInt(closeErr != nil)
+	worktreeActive, err := removeAndObservePath(hostDir)
+	if err != nil {
+		t.Fatalf("remove loading partial-start factory: %v", err)
+	}
+	mutableStateActive := sessionActive + streamActive + routeActive + rootActive + worktreeActive
+	if processActive != 0 || portActive != 0 || streamActive != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		t.Fatalf("loading partial-start active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
+	}
+	t.Logf("loading partial-start lifecycle report: process_closed=%t api_starter_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d} streams_opened=%d streams_closed=%d provider_calls=%d original_error=%q", closeErr == nil, starterCalls.Load(), processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive, partialStreams.opened.Load(), partialStreams.closed.Load(), runner.CallCount(), original)
+}
+
+func newLoadingPartialStartStarter(
+	original error,
+	api *support.ProcessAPIServer,
+	stopped chan struct{},
+	streams *loadingStreamLifecycle,
+	listenerURL *string,
+	starterCalls *atomic.Int32,
+) func(context.Context, platformhttpserver.StartRequest) error {
+	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		partialContext, cancelPartial := context.WithCancel(ctx)
+		request.OnBound = nil
+		request.Handler = streams.wrap(request.Handler)
+		go func() {
+			_ = api.Start(partialContext, request)
+			close(stopped)
+		}()
+		baseURL, err := api.WaitForBaseURL(loadingFixtureTimeout)
+		if err != nil {
+			cancelPartial()
+			<-stopped
+			return err
+		}
+		*listenerURL = baseURL
+		cancelPartial()
+		<-stopped
+		return original
+	}
 }
 
 func gotErrorText(err error) string {
@@ -228,6 +301,7 @@ type loadingFixture struct {
 	processErr    error
 	apiStopped    chan struct{}
 	apiStopOnce   sync.Once
+	stream        loadingStreamLifecycle
 
 	sessionMu sync.Mutex
 	sessions  map[string]loadingSession
@@ -252,6 +326,7 @@ type loadingSession struct {
 type loadingCommandRunner struct {
 	mu       sync.Mutex
 	requests []platformprocess.CommandRequest
+	active   int
 }
 
 func newLoadingCommandRunner() *loadingCommandRunner {
@@ -266,6 +341,12 @@ func (runner *loadingCommandRunner) Run(
 		return platformprocess.CommandResult{}, err
 	}
 	runner.mu.Lock()
+	runner.active++
+	defer func() {
+		runner.mu.Lock()
+		runner.active--
+		runner.mu.Unlock()
+	}()
 	request.Args = append([]string(nil), request.Args...)
 	request.Stdin = append([]byte(nil), request.Stdin...)
 	request.Env = append([]string(nil), request.Env...)
@@ -288,6 +369,12 @@ func (runner *loadingCommandRunner) CallCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return len(runner.requests)
+}
+
+func (runner *loadingCommandRunner) ActiveCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.active
 }
 
 var _ platformprocess.CommandRunner = (*loadingCommandRunner)(nil)
@@ -368,6 +455,7 @@ func (fixture *loadingFixture) serveAPIServer(
 	request platformhttpserver.StartRequest,
 ) error {
 	fixture.apiStarts.Add(1)
+	request.Handler = fixture.stream.wrap(request.Handler)
 	err := fixture.api.Start(ctx, request)
 	fixture.apiStopOnce.Do(func() { close(fixture.apiStopped) })
 	return err
@@ -402,9 +490,6 @@ func (fixture *loadingFixture) startAPIServer(t *testing.T) {
 		t.Fatalf("wait for loading API: %v", err)
 	}
 	fixture.baseURL = baseURL
-	support.WaitForStatus(t, baseURL, loadingFixtureTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
 	if got := fixture.apiStarts.Load(); got != 1 {
 		t.Fatalf("loading API server starts = %d, want one", got)
 	}
@@ -778,12 +863,76 @@ func (fixture *loadingFixture) shutdown() error {
 			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
 		}
 	}
+	streamActive := fixture.stream.active.Load()
+	if streamActive != 0 || fixture.stream.opened.Load() != fixture.stream.closed.Load() {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading SSE streams active=%d opened=%d closed=%d", streamActive, fixture.stream.opened.Load(), fixture.stream.closed.Load()))
+	}
 	if err := os.RemoveAll(fixture.hostDir); err != nil {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove loading factory: %w", err))
 	}
 	if err := os.RemoveAll(fixture.homeDir); err != nil {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove loading home: %w", err))
 	}
-	fmt.Fprintf(os.Stderr, "loading lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d listener_closed=%t\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.provider.CallCount(), listenerClosed)
+	processClosed := fixture.processStarts.Load() == fixture.processStops.Load() && closeErr == nil
+	processActive := boolToInt(!processClosed)
+	listenerActive := boolToInt(!listenerClosed)
+	sessionActive := loadingMaxInt(tracked-closed, 0)
+	streamActiveCount := int(streamActive)
+	routeActive := fixture.provider.ActiveCount()
+	rootActive := loadingMaxInt(int(fixture.rootBuilds.Load())-boolToInt(processClosed), 0)
+	worktreeActive := fixture.activeLoadingRoots()
+	mutableStateActive := sessionActive + streamActiveCount + routeActive + rootActive + worktreeActive
+	if processActive != 0 || listenerActive != 0 || sessionActive != 0 || streamActiveCount != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("loading active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, listenerActive, listenerActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive))
+	}
+	fmt.Fprintf(os.Stderr, "loading lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.provider.CallCount(), processActive, listenerActive, listenerActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive)
 	return shutdownErr
+}
+
+func (fixture *loadingFixture) activeLoadingRoots() int {
+	fixture.sessionMu.Lock()
+	defer fixture.sessionMu.Unlock()
+	seen := make(map[string]struct{}, len(fixture.sessions))
+	active := 0
+	for _, session := range fixture.sessions {
+		rootDir := strings.TrimSpace(session.rootDir)
+		if rootDir == "" {
+			continue
+		}
+		rootDir = filepath.Clean(rootDir)
+		if _, ok := seen[rootDir]; ok {
+			continue
+		}
+		seen[rootDir] = struct{}{}
+		if _, err := os.Stat(rootDir); err == nil || !errors.Is(err, os.ErrNotExist) {
+			active++
+		}
+	}
+	return active
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func loadingMaxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func removeAndObservePath(path string) (int, error) {
+	if err := os.RemoveAll(path); err != nil {
+		return 1, err
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	} else if err != nil {
+		return 1, err
+	}
+	return 1, nil
 }

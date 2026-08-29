@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +29,70 @@ const (
 	contractBehaviorCount  = 8
 	contractHostWorkflow   = "return \"contract-host\";"
 )
+
+// contractStreamLifecycle observes active public Factory Event SSE handlers at
+// the injected HTTP edge. It does not recreate an application resource map.
+type contractStreamLifecycle struct {
+	active          atomic.Int32
+	opened          atomic.Int32
+	closed          atomic.Int32
+	sessionRequests atomic.Int32
+}
+
+// contractProviderCommandRunner keeps provider execution at the immutable
+// external-effect edge while exposing its in-flight count for teardown proof.
+type contractProviderCommandRunner struct {
+	inner  *testutil.ProviderCommandRunner
+	mu     sync.Mutex
+	active int
+}
+
+func newContractProviderCommandRunner(results ...platformprocess.CommandResult) *contractProviderCommandRunner {
+	return &contractProviderCommandRunner{inner: testutil.NewProviderCommandRunner(results...)}
+}
+
+func (runner *contractProviderCommandRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.active++
+	runner.mu.Unlock()
+	defer func() {
+		runner.mu.Lock()
+		runner.active--
+		runner.mu.Unlock()
+	}()
+	return runner.inner.Run(ctx, request)
+}
+
+func (runner *contractProviderCommandRunner) CallCount() int {
+	return runner.inner.CallCount()
+}
+
+func (runner *contractProviderCommandRunner) ActiveCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.active
+}
+
+func (lifecycle *contractStreamLifecycle) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/factory-sessions") {
+			lifecycle.sessionRequests.Add(1)
+		}
+		isStream := strings.HasSuffix(request.URL.Path, "/events") ||
+			strings.HasSuffix(request.URL.Path, "/response-events")
+		if !isStream {
+			next.ServeHTTP(writer, request)
+			return
+		}
+		lifecycle.opened.Add(1)
+		lifecycle.active.Add(1)
+		defer func() {
+			lifecycle.active.Add(-1)
+			lifecycle.closed.Add(1)
+		}()
+		next.ServeHTTP(writer, request)
+	})
+}
 
 var (
 	contractFixtureMu     sync.Mutex
@@ -64,22 +127,13 @@ func TestJavaScriptContractFixturePartialStartUnwinds(t *testing.T) {
 	hostDir := scaffoldContractHostFactory(t)
 	homeDir := t.TempDir()
 	original := errors.New("injected contract fixture start failure")
-	var (
-		listenerURL  atomic.Value
-		listenerOpen atomic.Int32
-		starterCalls atomic.Int32
-	)
-	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
-		starterCalls.Add(1)
-		server := httptest.NewServer(request.Handler)
-		listenerURL.Store(server.URL)
-		listenerOpen.Store(1)
-		server.CloseClientConnections()
-		server.Close()
-		listenerOpen.Store(0)
-		return original
-	}
-	runner := testutil.NewProviderCommandRunner()
+	partialAPI := support.NewProcessAPIServer()
+	partialStopped := make(chan struct{})
+	partialStreams := &contractStreamLifecycle{}
+	var listenerURL string
+	var starterCalls atomic.Int32
+	failingStarter := newContractPartialStartStarter(original, partialAPI, partialStopped, partialStreams, &listenerURL, &starterCalls)
+	runner := newContractProviderCommandRunner()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      failingStarter,
 		ProviderCommandRunner: runner,
@@ -94,10 +148,15 @@ func TestJavaScriptContractFixturePartialStartUnwinds(t *testing.T) {
 	inputs.Input.WorkingDirectory = hostDir
 	got := process.Execute(inputs.Input)
 
-	closeContext, cancel := context.WithTimeout(context.Background(), contractFixtureTimeout)
-	defer cancel()
-	if closeErr := process.Close(closeContext); closeErr != nil {
+	closeErr := process.Close(context.Background())
+	if closeErr != nil {
 		t.Fatalf("close contract partial-start process: %v", closeErr)
+	}
+	listenerClosed := false
+	<-partialStopped
+	listenerClosed = true
+	if partialStreams.active.Load() != 0 || partialStreams.opened.Load() != partialStreams.closed.Load() {
+		t.Fatalf("partial contract stream edge did not close: active=%d opened=%d closed=%d", partialStreams.active.Load(), partialStreams.opened.Load(), partialStreams.closed.Load())
 	}
 	if !errors.Is(got, original) && (got == nil || !strings.Contains(got.Error(), original.Error())) {
 		t.Fatalf("partial-start error = %v, want original error %q", got, original)
@@ -105,22 +164,72 @@ func TestJavaScriptContractFixturePartialStartUnwinds(t *testing.T) {
 	if got := starterCalls.Load(); got != 1 {
 		t.Fatalf("partial-start API starter calls = %d, want one", got)
 	}
-	if got := listenerOpen.Load(); got != 0 {
-		t.Fatalf("partial-start listeners still open = %d, want zero", got)
-	}
 	if got := runner.CallCount(); got != 0 {
 		t.Fatalf("partial-start provider command calls = %d, want zero", got)
 	}
-	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
+	if strings.TrimSpace(listenerURL) != "" {
 		client := http.Client{Timeout: time.Second}
-		response, probeErr := client.Get(rawURL + "/status")
+		response, probeErr := client.Get(listenerURL + "/status")
 		if probeErr == nil {
+			listenerClosed = false
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
 			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
 		}
+	} else {
+		t.Fatal("partial-start application listener URL was not recorded")
 	}
-	t.Logf("contract partial-start lifecycle report: root_built=true process_closed=true listener_open=%d sessions=0 streams=0 routes=0 roots=0 worktrees=0 mutable_state=0 provider_calls=%d original_error=%q", listenerOpen.Load(), runner.CallCount(), original)
+	sessionActive := int(partialStreams.sessionRequests.Load())
+	if sessionActive != 0 {
+		t.Fatalf("partial-start Factory Session requests = %d, want zero", sessionActive)
+	}
+	processActive := boolToInt(closeErr != nil)
+	portActive := boolToInt(!listenerClosed)
+	streamActive := int(partialStreams.active.Load())
+	routeActive := runner.ActiveCount()
+	rootActive := boolToInt(closeErr != nil)
+	worktreeActive, err := removeAndObservePath(hostDir)
+	if err != nil {
+		t.Fatalf("remove contracts partial-start factory: %v", err)
+	}
+	mutableStateActive := sessionActive + streamActive + routeActive + rootActive + worktreeActive
+	if processActive != 0 || portActive != 0 || streamActive != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		t.Fatalf("contracts partial-start active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
+	}
+	t.Logf("contract partial-start lifecycle report: process_closed=%t api_starter_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d} streams_opened=%d streams_closed=%d provider_calls=%d original_error=%q", closeErr == nil, starterCalls.Load(), processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive, partialStreams.opened.Load(), partialStreams.closed.Load(), runner.CallCount(), original)
+}
+
+func newContractPartialStartStarter(
+	original error,
+	api *support.ProcessAPIServer,
+	stopped chan struct{},
+	streams *contractStreamLifecycle,
+	listenerURL *string,
+	starterCalls *atomic.Int32,
+) func(context.Context, platformhttpserver.StartRequest) error {
+	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		partialContext, cancelPartial := context.WithCancel(ctx)
+		request.OnBound = nil
+		request.Handler = streams.wrap(request.Handler)
+		go func() {
+			_ = api.Start(partialContext, request)
+			close(stopped)
+		}()
+		baseURL, err := api.WaitForBaseURL(contractFixtureTimeout)
+		if err != nil {
+			cancelPartial()
+			<-stopped
+			return err
+		}
+		*listenerURL = baseURL
+		cancelPartial()
+		<-stopped
+		if streams.active.Load() != 0 || streams.opened.Load() != streams.closed.Load() {
+			return fmt.Errorf("partial contract stream edge did not close: active=%d opened=%d closed=%d", streams.active.Load(), streams.opened.Load(), streams.closed.Load())
+		}
+		return original
+	}
 }
 
 // The original top-level behavior names remain the selectable witnesses. Each
@@ -162,7 +271,7 @@ type contractFixture struct {
 	process    support.ApplicationProcess
 	api        *support.ProcessAPIServer
 	apiStarter *contractAPIServerStarter
-	provider   *testutil.ProviderCommandRunner
+	provider   *contractProviderCommandRunner
 	baseURL    string
 	hostDir    string
 	homeDir    string
@@ -190,6 +299,7 @@ type contractSession struct {
 
 type contractAPIServerStarter struct {
 	api      *support.ProcessAPIServer
+	streams  *contractStreamLifecycle
 	starts   atomic.Int32
 	stopped  chan struct{}
 	stopOnce sync.Once
@@ -200,6 +310,7 @@ func (starter *contractAPIServerStarter) Start(
 	request platformhttpserver.StartRequest,
 ) error {
 	starter.starts.Add(1)
+	request.Handler = starter.streams.wrap(request.Handler)
 	err := starter.api.Start(ctx, request)
 	starter.stopOnce.Do(func() { close(starter.stopped) })
 	return err
@@ -238,7 +349,7 @@ func newContractFixture(t *testing.T) *contractFixture {
 	// Go's -count flag repeats m.Run inside one test process, so TestMain's
 	// package fixture serves every repetition. Queue one valid child response
 	// for each response-event scenario in the aggregate -count=3 gate.
-	runner := testutil.NewProviderCommandRunner(
+	runner := newContractProviderCommandRunner(
 		childResult,
 		childResult,
 		childResult,
@@ -249,6 +360,7 @@ func newContractFixture(t *testing.T) *contractFixture {
 	api := support.NewProcessAPIServer()
 	apiStarter := &contractAPIServerStarter{
 		api:     api,
+		streams: &contractStreamLifecycle{},
 		stopped: make(chan struct{}),
 	}
 	fixture := &contractFixture{
@@ -301,9 +413,6 @@ func newContractFixture(t *testing.T) *contractFixture {
 		t.Fatalf("wait for contracts API: %v", err)
 	}
 	fixture.baseURL = baseURL
-	support.WaitForStatus(t, baseURL, contractFixtureTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
 	if got := fixture.apiStarter.starts.Load(); got != 1 {
 		t.Fatalf("contracts API server starts = %d, want one", got)
 	}
@@ -560,10 +669,15 @@ func (fixture *contractFixture) shutdown() error {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts sessions closed = %d/%d", closed, tracked))
 	}
 
+	listenerClosed := fixture.apiStarter.starts.Load() == 0
+	if fixture.apiStarter.starts.Load() > 0 {
+		listenerClosed = true
+	}
 	if strings.TrimSpace(fixture.baseURL) != "" {
 		client := http.Client{Timeout: time.Second}
 		response, err := client.Get(strings.TrimSuffix(fixture.baseURL, "/") + "/status")
 		if err == nil {
+			listenerClosed = false
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
 			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
@@ -575,6 +689,69 @@ func (fixture *contractFixture) shutdown() error {
 	if err := os.RemoveAll(fixture.homeDir); err != nil {
 		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove contracts home: %w", err))
 	}
-	fmt.Fprintf(os.Stderr, "contracts lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:0 port:0 listener:0 session:0 stream:0 route:0 root:0 worktree:0 mutable-state:0}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarter.starts.Load(), tracked, closed, fixture.providerCallCount())
+	streamActive := fixture.apiStarter.streams.active.Load()
+	if streamActive != 0 || fixture.apiStarter.streams.opened.Load() != fixture.apiStarter.streams.closed.Load() {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts SSE streams active=%d opened=%d closed=%d", streamActive, fixture.apiStarter.streams.opened.Load(), fixture.apiStarter.streams.closed.Load()))
+	}
+	processClosed := fixture.processStarts.Load() == fixture.processStops.Load() && closeErr == nil
+	processActive := boolToInt(!processClosed)
+	portActive := boolToInt(!listenerClosed)
+	sessionActive := contractMaxInt(tracked-closed, 0)
+	streamActiveCount := int(streamActive)
+	routeActive := fixture.provider.ActiveCount()
+	rootActive := contractMaxInt(int(fixture.rootBuilds.Load())-boolToInt(processClosed), 0)
+	worktreeActive := fixture.activeContractRoots()
+	mutableStateActive := sessionActive + streamActiveCount + routeActive + rootActive + worktreeActive
+	if processActive != 0 || portActive != 0 || sessionActive != 0 || streamActiveCount != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("contracts active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive))
+	}
+	fmt.Fprintf(os.Stderr, "contracts lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarter.starts.Load(), tracked, closed, fixture.providerCallCount(), processActive, portActive, portActive, sessionActive, streamActiveCount, routeActive, rootActive, worktreeActive, mutableStateActive)
 	return shutdownErr
+}
+
+func (fixture *contractFixture) activeContractRoots() int {
+	fixture.sessionMu.Lock()
+	defer fixture.sessionMu.Unlock()
+	active := 0
+	seen := make(map[string]struct{}, len(fixture.sessions))
+	for _, session := range fixture.sessions {
+		rootDir := filepath.Clean(session.rootDir)
+		if rootDir == "." {
+			continue
+		}
+		if _, ok := seen[rootDir]; ok {
+			continue
+		}
+		seen[rootDir] = struct{}{}
+		if _, err := os.Stat(rootDir); err == nil || !errors.Is(err, os.ErrNotExist) {
+			active++
+		}
+	}
+	return active
+}
+
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func contractMaxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func removeAndObservePath(path string) (int, error) {
+	if err := os.RemoveAll(path); err != nil {
+		return 1, err
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	} else if err != nil {
+		return 1, err
+	}
+	return 1, nil
 }

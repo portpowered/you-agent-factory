@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -24,6 +23,36 @@ const (
 	durabilityWorkflowName   = "resumable-two-step-fake-children"
 )
 
+// durabilityStreamLifecycle observes the actual public SSE handler lifetime
+// at the injected HTTP edge. It is not an application-owned resource ledger.
+type durabilityStreamLifecycle struct {
+	active          atomic.Int32
+	opened          atomic.Int32
+	closed          atomic.Int32
+	sessionRequests atomic.Int32
+}
+
+func (lifecycle *durabilityStreamLifecycle) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if strings.Contains(request.URL.Path, "/factory-sessions") {
+			lifecycle.sessionRequests.Add(1)
+		}
+		isStream := strings.HasSuffix(request.URL.Path, "/events") ||
+			strings.HasSuffix(request.URL.Path, "/response-events")
+		if !isStream {
+			next.ServeHTTP(writer, request)
+			return
+		}
+		lifecycle.opened.Add(1)
+		lifecycle.active.Add(1)
+		defer func() {
+			lifecycle.active.Add(-1)
+			lifecycle.closed.Add(1)
+		}()
+		next.ServeHTTP(writer, request)
+	})
+}
+
 // TestJavaScriptDurabilityFixturePartialStartUnwinds proves a real process
 // startup failure preserves the original error and closes the listener
 // acquired by the injected HTTP transport edge. No session or provider work
@@ -32,19 +61,12 @@ func TestJavaScriptDurabilityFixturePartialStartUnwinds(t *testing.T) {
 	hostDir := setupJavaScriptDurabilityResumeWorkflowFixture(t, durabilityWorkflowName)
 	homeDir := t.TempDir()
 	original := errors.New("injected durability fixture start failure")
-	var listenerURL atomic.Value
-	var listenerOpen atomic.Int32
+	partialAPI := support.NewProcessAPIServer()
+	partialStopped := make(chan struct{})
+	partialStreams := &durabilityStreamLifecycle{}
+	var listenerURL string
 	var starterCalls atomic.Int32
-	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
-		starterCalls.Add(1)
-		server := httptest.NewServer(request.Handler)
-		listenerURL.Store(server.URL)
-		listenerOpen.Store(1)
-		server.CloseClientConnections()
-		server.Close()
-		listenerOpen.Store(0)
-		return original
-	}
+	failingStarter := newDurabilityPartialStartStarter(original, partialAPI, partialStopped, partialStreams, &listenerURL, &starterCalls)
 	runner := support.NewRecordingCommandRunner("unexpected durability provider execution")
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:      failingStarter,
@@ -66,9 +88,7 @@ func TestJavaScriptDurabilityFixturePartialStartUnwinds(t *testing.T) {
 	inputs.Input.Env = durabilityCustomerEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostDir
 	got := process.Execute(inputs.Input)
-	closeContext, cancel := context.WithTimeout(context.Background(), durabilityFixtureTimeout)
-	closeErr := process.Close(closeContext)
-	cancel()
+	closeErr := process.Close(context.Background())
 	if closeErr != nil {
 		t.Fatalf("close durability partial-start process: %v", closeErr)
 	}
@@ -79,18 +99,68 @@ func TestJavaScriptDurabilityFixturePartialStartUnwinds(t *testing.T) {
 	if got := starterCalls.Load(); got != 1 {
 		t.Fatalf("partial-start API starter calls = %d, want one", got)
 	}
-	if got := listenerOpen.Load(); got != 0 {
-		t.Fatalf("partial-start listener state = %d, want closed", got)
-	}
 	if got := runner.CallCount(); got != 0 {
 		t.Fatalf("partial-start provider calls = %d, want zero", got)
 	}
-	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
-		durabilityRequireListenerUnavailable(t, rawURL, "partial-start")
+	listenerClosed := false
+	<-partialStopped
+	listenerClosed = true
+	if partialStreams.active.Load() != 0 || partialStreams.opened.Load() != partialStreams.closed.Load() {
+		t.Fatalf("partial durability stream edge did not close: active=%d opened=%d closed=%d", partialStreams.active.Load(), partialStreams.opened.Load(), partialStreams.closed.Load())
+	}
+	if strings.TrimSpace(listenerURL) != "" {
+		listenerClosed = durabilityRequireListenerUnavailable(t, listenerURL, "partial-start")
 	} else {
 		t.Fatal("partial-start listener URL was not recorded")
 	}
-	t.Logf("durability partial-start lifecycle report: process_closed=%t api_starter_calls=%d listener_open=%d provider_calls=%d original_error=%q", closed, starterCalls.Load(), listenerOpen.Load(), runner.CallCount(), original)
+	sessionActive := int(partialStreams.sessionRequests.Load())
+	if sessionActive != 0 {
+		t.Fatalf("partial-start Factory Session requests = %d, want zero", sessionActive)
+	}
+	processActive := boolToInt(!closed)
+	portActive := boolToInt(!listenerClosed)
+	streamActive := int(partialStreams.active.Load())
+	routeActive := boolToInt(runner.CallCount() != 0)
+	rootActive := boolToInt(!closed)
+	worktreeActive, err := removeAndObservePath(hostDir)
+	if err != nil {
+		t.Fatalf("remove durability partial-start factory: %v", err)
+	}
+	mutableStateActive := sessionActive + streamActive + routeActive + rootActive + worktreeActive
+	if processActive != 0 || portActive != 0 || streamActive != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		t.Fatalf("durability partial-start active resources process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
+	}
+	t.Logf("durability partial-start lifecycle report: process_closed=%t api_starter_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d} streams_opened=%d streams_closed=%d provider_calls=%d original_error=%q", closed, starterCalls.Load(), processActive, portActive, portActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive, partialStreams.opened.Load(), partialStreams.closed.Load(), runner.CallCount(), original)
+}
+
+func newDurabilityPartialStartStarter(
+	original error,
+	api *support.ProcessAPIServer,
+	stopped chan struct{},
+	streams *durabilityStreamLifecycle,
+	listenerURL *string,
+	starterCalls *atomic.Int32,
+) func(context.Context, platformhttpserver.StartRequest) error {
+	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		partialContext, cancelPartial := context.WithCancel(ctx)
+		request.OnBound = nil
+		request.Handler = streams.wrap(request.Handler)
+		go func() {
+			_ = api.Start(partialContext, request)
+			close(stopped)
+		}()
+		baseURL, err := api.WaitForBaseURL(durabilityFixtureTimeout)
+		if err != nil {
+			cancelPartial()
+			<-stopped
+			return err
+		}
+		*listenerURL = baseURL
+		cancelPartial()
+		<-stopped
+		return original
+	}
 }
 
 func durabilityErrorText(err error) string {
@@ -136,6 +206,7 @@ type durabilitySession struct {
 
 type durabilityAPIServerStarter struct {
 	api      *support.ProcessAPIServer
+	streams  *durabilityStreamLifecycle
 	starts   atomic.Int32
 	stopped  chan struct{}
 	stopOnce sync.Once
@@ -146,6 +217,7 @@ func (starter *durabilityAPIServerStarter) Start(
 	request platformhttpserver.StartRequest,
 ) error {
 	starter.starts.Add(1)
+	request.Handler = starter.streams.wrap(request.Handler)
 	err := starter.api.Start(ctx, request)
 	starter.stopOnce.Do(func() { close(starter.stopped) })
 	return err
@@ -160,6 +232,7 @@ func newDurabilityFixture(t *testing.T) *durabilityFixture {
 	api := support.NewProcessAPIServer()
 	apiStarter := &durabilityAPIServerStarter{
 		api:     api,
+		streams: &durabilityStreamLifecycle{},
 		stopped: make(chan struct{}),
 	}
 	fixture := &durabilityFixture{
@@ -197,9 +270,6 @@ func newDurabilityFixture(t *testing.T) *durabilityFixture {
 		t.Fatalf("wait for durability API: %v", err)
 	}
 	fixture.baseURL = baseURL
-	support.WaitForStatus(t, baseURL, durabilityFixtureTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
 	if got := apiStarter.starts.Load(); got != 1 {
 		t.Fatalf("durability API server starts = %d, want one", got)
 	}
@@ -288,12 +358,8 @@ func (fixture *durabilityFixture) assertCleanup(t testing.TB) {
 	}
 	processStopped := false
 	if fixture.command != nil {
-		select {
-		case <-fixture.command.Done():
-			processStopped = true
-		case <-time.After(durabilityFixtureTimeout):
-			t.Errorf("durability shared Process.Execute did not stop")
-		}
+		<-fixture.command.Done()
+		processStopped = true
 	}
 	processStops := 0
 	if processStopped {
@@ -304,18 +370,14 @@ func (fixture *durabilityFixture) assertCleanup(t testing.TB) {
 	}
 	listenerClosed := false
 	if fixture.apiStarter.starts.Load() > 0 {
-		select {
-		case <-fixture.apiStarter.stopped:
-			listenerClosed = true
-		case <-time.After(durabilityFixtureTimeout):
-			t.Errorf("durability shared API listener did not stop")
-		}
+		<-fixture.apiStarter.stopped
+		listenerClosed = true
 	}
 	if fixture.closeErr != nil {
 		t.Errorf("durability shared process close error = %v", fixture.closeErr)
 	}
 	if strings.TrimSpace(fixture.baseURL) != "" {
-		durabilityRequireListenerUnavailable(t, fixture.baseURL, "shared cleanup")
+		listenerClosed = durabilityRequireListenerUnavailable(t, fixture.baseURL, "shared cleanup")
 	}
 	providerActive := fixture.provider.activeCount()
 	if providerActive != 0 {
@@ -341,22 +403,57 @@ func (fixture *durabilityFixture) assertCleanup(t testing.TB) {
 		durableSnapshotRetained = err == nil
 	}
 	fixture.sessionMu.Unlock()
-	processActive := boolToInt(!processStopped || fixture.closeErr != nil)
+	processClosed := processStopped && fixture.closeErr == nil
+	processActive := boolToInt(!processClosed)
 	listenerActive := boolToInt(!listenerClosed)
-	sessionActive := boolToInt(closed == 0)
-	t.Logf("durability lifecycle report: shared_root_builds=%d shared_process_starts=%d shared_process_stops=%d shared_api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d isolated_process_pairs=2 process_closed=%t listener_closed=%t provider_active=%d durable_snapshot_retained=%t active_runtime={process:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}", fixture.rootBuilds.Load(), fixture.processStarts.Load(), processStops, fixture.apiStarter.starts.Load(), tracked, closed, fixture.provider.callCount(), fixture.closeErr == nil && processStopped, listenerClosed, providerActive, durableSnapshotRetained, processActive, listenerActive, sessionActive, 0, processActive, processActive, processActive, processActive)
+	sessionActive := boolToInt(closed != tracked)
+	streamActive := fixture.apiStarter.streams.active.Load()
+	if streamActive != 0 || fixture.apiStarter.streams.opened.Load() != fixture.apiStarter.streams.closed.Load() {
+		t.Errorf("durability shared SSE streams active=%d opened=%d closed=%d", streamActive, fixture.apiStarter.streams.opened.Load(), fixture.apiStarter.streams.closed.Load())
+	}
+	routeActive := providerActive
+	rootActive := maxInt(int(fixture.rootBuilds.Load())-boolToInt(processClosed), 0)
+	worktreeActive, err := removeAndObservePath(fixture.projectRoot)
+	if err != nil {
+		t.Errorf("remove durability project root: %v", err)
+	}
+	mutableStateActive := sessionActive + int(streamActive) + routeActive + rootActive + worktreeActive
+	if processActive != 0 || listenerActive != 0 || sessionActive != 0 || streamActive != 0 || routeActive != 0 || rootActive != 0 || worktreeActive != 0 || mutableStateActive != 0 {
+		t.Errorf("durability active resources process=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d", processActive, listenerActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
+	}
+	t.Logf("durability lifecycle report: shared_root_builds=%d shared_process_starts=%d shared_process_stops=%d shared_api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d isolated_process_pairs=2 process_closed=%t listener_closed=%t provider_active=%d durable_snapshot_retained=%t active_runtime={process:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}", fixture.rootBuilds.Load(), fixture.processStarts.Load(), processStops, fixture.apiStarter.starts.Load(), tracked, closed, fixture.provider.callCount(), processClosed, listenerClosed, providerActive, durableSnapshotRetained, processActive, listenerActive, sessionActive, streamActive, routeActive, rootActive, worktreeActive, mutableStateActive)
 }
 
-func durabilityRequireListenerUnavailable(t testing.TB, baseURL, label string) {
+func durabilityRequireListenerUnavailable(t testing.TB, baseURL, label string) bool {
 	t.Helper()
 	client := http.Client{Timeout: time.Second}
 	response, err := client.Get(strings.TrimSuffix(baseURL, "/") + "/status")
 	if err != nil {
-		return
+		return true
 	}
 	body, _ := io.ReadAll(response.Body)
 	response.Body.Close()
 	t.Errorf("durability %s API listener remained available after cleanup: status=%d body=%q", label, response.StatusCode, strings.TrimSpace(string(body)))
+	return false
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}
+
+func removeAndObservePath(path string) (int, error) {
+	if err := os.RemoveAll(path); err != nil {
+		return 1, err
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	} else if err != nil {
+		return 1, err
+	}
+	return 1, nil
 }
 
 func boolToInt(value bool) int {
