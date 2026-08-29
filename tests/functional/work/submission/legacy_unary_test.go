@@ -28,9 +28,12 @@ func TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly(t *testing.T
 	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatalf("create input dir: %v", err)
 	}
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
+		FactoryDir: factoryDir,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: submissionStaticProviderRunner(),
+		},
 	})
 	defer server.Stop(t)
 
@@ -98,11 +101,14 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 		Payload:    []byte(`{"title":"startup file canonical submit"}`),
 	})
 
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--work", workFile},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: submissionStaticProviderRunner(),
+		},
 	})
 	defer server.Stop(t)
 
@@ -142,12 +148,13 @@ func assertLegacyUnaryCronSubmitPath(t *testing.T) {
 	fakeClock := clockwork.NewFakeClockAt(start)
 	factoryDir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
 	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
+	configureSubmissionCodexWorkers(t, factoryDir, "cron-worker")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Edges: serviceedges.Edges{
-			Clock: fakeClock,
+			Clock:                 fakeClock,
+			ProviderCommandRunner: submissionStaticProviderRunner(),
 			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
 				observedSubmissions <- record
 			},

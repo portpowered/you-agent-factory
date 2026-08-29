@@ -34,14 +34,13 @@ const (
 // parts. Its top-level name is retained because the functional-evidence
 // registry owns this public endpoint coverage identity.
 func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
+	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
 	defer server.Stop(t)
 
 	assertAPIBatchUpsertAcceptsWorksContent(t, server)
+	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
 // assertAPIPOSTSubmitAndQueryWork proves REST POST /work submission and GET
@@ -121,7 +120,6 @@ func assertAPIBatchUpsertAcceptsWorksContent(t *testing.T, server *support.Funct
 	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
 		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
 	}
-	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
 // assertCLIWorkTypeNameReachesLiveAPIHandler proves CLI submit with an

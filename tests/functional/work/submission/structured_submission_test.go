@@ -16,11 +16,9 @@ import (
 // case uses a distinct name or trace, so prior completed Work cannot satisfy a
 // later case's public projection assertions.
 func TestStructuredSubmissionSimplePipeline(t *testing.T) {
-	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
+	factoryDir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionInputPreservingProviderRunner()))
 	defer server.Stop(t)
 
 	t.Run("TestAPIPOSTSubmitAndQueryWork", func(t *testing.T) {

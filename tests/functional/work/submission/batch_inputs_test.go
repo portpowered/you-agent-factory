@@ -16,8 +16,6 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -59,10 +57,8 @@ const (
 // includes both task and review so every existing CLI shape remains valid.
 func TestWorkBatchCLIIngress(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
+	configureSubmissionCodexWorkers(t, factoryDir, "mock-worker")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionStaticProviderRunner()))
 	defer server.Stop(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -84,10 +80,8 @@ func TestWorkBatchCLIIngress(t *testing.T) {
 // unambiguous.
 func TestWorkBatchHTTPSubmission(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: true,
-	})
+	configureSubmissionCodexWorkers(t, factoryDir, "mock-worker")
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, submissionStaticProviderRunner()))
 	defer server.Stop(t)
 
 	t.Run("TestAPISubmitBatchThenListAndGetWork", func(t *testing.T) {
@@ -269,20 +263,10 @@ func assertWorkBatchRejectsUnknownTypeWithoutPartialMutation(
 // dispatch remains blocked, and same-request-ID replay stays idempotent.
 func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, simplePipelineFactoryConfig())
-	support.WriteAgentConfig(
-		t,
-		factoryDir,
-		"worker-a",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-	)
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a")
 	dispatchRunner := newSubmissionBlockingCommandRunner()
 	t.Cleanup(dispatchRunner.Release)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: factoryDir,
-		Edges: serviceedges.Edges{
-			ProviderCommandRunner: dispatchRunner,
-		},
-	})
+	server := support.StartFunctionalAPIServer(t, submissionServerConfig(factoryDir, dispatchRunner))
 	defer server.Stop(t)
 
 	baseURL := server.URL()
@@ -421,11 +405,10 @@ func batchIngressWorkListingContainsID(listed factoryapi.ListWorkResponse, workI
 // outcomes and preserves canonical work type names in public projections.
 func TestWorkBatchDependencyOrderingNormalizesRuntimeWork(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, competingPipelineFactoryConfig())
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-	})
+	configureSubmissionCodexWorkers(t, factoryDir, "worker-a", "worker-b")
+	serverConfig := submissionServerConfig(factoryDir, submissionStaticProviderRunner())
+	serverConfig.WaitForServiceModeRuntime = true
+	server := support.StartFunctionalAPIServer(t, serverConfig)
 	defer server.Stop(t)
 
 	stream := support.OpenFactoryEventStreamAt(
