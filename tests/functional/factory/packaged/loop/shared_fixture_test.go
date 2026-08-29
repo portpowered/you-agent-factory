@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,22 +23,71 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const loopSharedFixtureTimeout = 15 * time.Second
+const (
+	// Process startup includes production dependency construction and the first
+	// loopback bind. This ceiling is intentionally scoped to fixture readiness;
+	// it is not reused by scenario phase observations or cleanup.
+	loopFixtureReadyTimeout = 15 * time.Second
 
-const loopExpectedSessions = 2
+	// These budgets preserve the old two-second public Work/dispatch bounds and
+	// give only the direct runner/scheduler readiness edges a measured margin
+	// over their former one-second scheduling opportunities.
+	loopProviderPhaseBudget  = 3 * time.Second
+	loopSchedulerPhaseBudget = 3 * time.Second
+	loopWorkPhaseBudget      = 2 * time.Second
+	loopDispatchPhaseBudget  = 2 * time.Second
+
+	// A session cleanup has one bounded total budget. The four operation budgets
+	// add to that total, so a stuck phase cannot multiply the old ceiling.
+	loopSessionCleanupBudget   = 5 * time.Second
+	loopSessionTerminateBudget = 1 * time.Second
+	loopSessionStoppedBudget   = 2 * time.Second
+	loopSessionDeleteBudget    = 1 * time.Second
+	loopSessionAbsentBudget    = 1 * time.Second
+
+	// The HTTP request carries a 20 ms product timeout. This client ceiling only
+	// prevents a transport defect from hiding the requested terminal response.
+	loopInvocationRequestBudget = 2 * time.Second
+	// This applies only while opening a stream. Once response headers arrive,
+	// the stream uses its test-context-derived cancellation instead of a client
+	// timeout so a successful SSE body can remain open for the scenario.
+	loopStreamOpenBudget     = 2 * time.Second
+	loopStreamErrorBodyLimit = 4 << 10
+	loopStreamCloseBudget    = 1 * time.Second
+)
+
+const loopExpectedSessions = 8
 
 // loopSharedFixture owns one root-built process and one continuous API host
 // for the package's compatible scheduler scenarios. Each child copies the
 // packaged Factory into a private home and opens a non-default Factory Session.
 type loopSharedFixture struct {
-	rootDir     string
-	process     support.ApplicationProcess
-	provider    *loopProviderCommandRouter
-	clock       *loopSchedulerClock
-	baseURL     string
-	factoryDir  string
-	submissions chan work.FactorySubmissionRecord
-	lifecycle   *loopLifecycleLedger
+	rootDir        string
+	process        *loopCountingApplicationProcess
+	processCommand *support.ProcessCommand
+	provider       *loopProviderCommandRouter
+	clock          *loopSchedulerClock
+	baseURL        string
+	factoryDir     string
+	submissions    chan work.FactorySubmissionRecord
+	lifecycle      *loopLifecycleLedger
+}
+
+type loopCountingApplicationProcess struct {
+	support.ApplicationProcess
+	closeCalls atomic.Uint32
+}
+
+func (process *loopCountingApplicationProcess) Close(ctx context.Context) error {
+	process.closeCalls.Add(1)
+	return process.ApplicationProcess.Close(ctx)
+}
+
+func (process *loopCountingApplicationProcess) closeCount() uint32 {
+	if process == nil {
+		return 0
+	}
+	return process.closeCalls.Load()
 }
 
 type loopLifecycleResource struct {
@@ -54,6 +103,7 @@ type loopLifecycleLedger struct {
 	mu            sync.Mutex
 	expected      int
 	processStarts int
+	processStops  int
 	resources     []loopLifecycleResource
 }
 
@@ -61,10 +111,22 @@ func newLoopLifecycleLedger(expected int) *loopLifecycleLedger {
 	return &loopLifecycleLedger{expected: expected}
 }
 
+func (ledger *loopLifecycleLedger) setExpectedSessions(expected int) {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	ledger.expected = expected
+}
+
 func (ledger *loopLifecycleLedger) recordProcessStart() {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	ledger.processStarts++
+}
+
+func (ledger *loopLifecycleLedger) recordProcessStop() {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	ledger.processStops++
 }
 
 func (ledger *loopLifecycleLedger) register(sessionID, rootDir, factoryDir string) error {
@@ -117,12 +179,16 @@ func (ledger *loopLifecycleLedger) assertClean(t testing.TB) {
 	t.Helper()
 	ledger.mu.Lock()
 	processStarts := ledger.processStarts
+	processStops := ledger.processStops
 	resources := append([]loopLifecycleResource(nil), ledger.resources...)
 	expected := ledger.expected
 	ledger.mu.Unlock()
 
 	if processStarts != 1 {
 		t.Errorf("LOOP-SPINE-001 process starts = %d, want 1 observed API host start", processStarts)
+	}
+	if processStops != processStarts {
+		t.Errorf("LOOP-CLEANUP-001 API listener stops = %d, want %d", processStops, processStarts)
 	}
 	if len(resources) != expected {
 		t.Errorf("LOOP-SPINE-001 explicit sessions opened = %d, want %d", len(resources), expected)
@@ -160,16 +226,17 @@ func (ledger *loopLifecycleLedger) assertClean(t testing.TB) {
 		t.Errorf("explicit sessions closed = %d, want %d", closed, len(resources))
 	}
 	t.Logf(
-		"loop lifecycle: process_starts=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=0",
-		processStarts, len(resources), closed, len(sessions), len(roots),
+		"loop lifecycle: process_starts=%d process_stops=%d explicit_sessions_opened=%d explicit_sessions_closed=%d unique_session_ids=%d scenario_roots_removed=%d runtime_artifacts=0 isolated_rows=0",
+		processStarts, processStops, len(resources), closed, len(sessions), len(roots),
 	)
 }
 
 // loopProviderCommandRouter keeps the process edge immutable while selecting
 // each scenario's synchronized runner by Factory or work path.
 type loopProviderCommandRouter struct {
-	mu      sync.RWMutex
-	runners map[string]platformprocess.CommandRunner
+	mu                 sync.RWMutex
+	runners            map[string]platformprocess.CommandRunner
+	unregisterAttempts uint64
 }
 
 func newLoopProviderCommandRouter() *loopProviderCommandRouter {
@@ -190,9 +257,22 @@ func (router *loopProviderCommandRouter) register(
 func (router *loopProviderCommandRouter) unregister(paths []string) {
 	router.mu.Lock()
 	defer router.mu.Unlock()
+	router.unregisterAttempts++
 	for _, path := range paths {
 		delete(router.runners, loopPathKey(path))
 	}
+}
+
+func (router *loopProviderCommandRouter) unregisterCount() uint64 {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return router.unregisterAttempts
+}
+
+func (router *loopProviderCommandRouter) registeredCount() int {
+	router.mu.RLock()
+	defer router.mu.RUnlock()
+	return len(router.runners)
 }
 
 func (router *loopProviderCommandRouter) Run(
@@ -236,16 +316,26 @@ func loopPathContains(root, candidate string) bool {
 }
 
 type loopScenario struct {
-	fixture          *loopSharedFixture
-	rootDir          string
-	factoryDir       string
-	environment      []string
-	workingDirectory string
-	selectorPaths    []string
-	sessionID        string
+	fixture               *loopSharedFixture
+	rootDir               string
+	factoryDir            string
+	environment           []string
+	workingDirectory      string
+	selectorPaths         []string
+	routeUnregisterBefore uint64
+	sessionID             string
+	runner                platformprocess.CommandRunner
+	cleanup               *loopCleanupStack
+	sessionAbsent         bool
+	lifecycleTracked      bool
+	rootRemoved           bool
 }
 
 func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
+	return newLoopSharedFixtureWithExpected(t, loopExpectedSessions)
+}
+
+func newLoopSharedFixtureWithExpected(t *testing.T, expectedSessions int) *loopSharedFixture {
 	t.Helper()
 	rootDir := t.TempDir()
 	homeDir := filepath.Join(rootDir, "home")
@@ -261,11 +351,13 @@ func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
 	provider := newLoopProviderCommandRouter()
 	clock := newLoopSchedulerClockAt(time.Date(2026, time.July, 29, 20, 0, 0, 0, time.UTC))
 	submissions := make(chan work.FactorySubmissionRecord, 16)
-	lifecycle := newLoopLifecycleLedger(loopExpectedSessions)
-	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+	lifecycle := newLoopLifecycleLedger(expectedSessions)
+	builtProcess, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			lifecycle.recordProcessStart()
-			return api.Start(ctx, request)
+			err := api.Start(ctx, request)
+			lifecycle.recordProcessStop()
+			return err
 		},
 		Clock:                 clock,
 		ProviderCommandRunner: provider,
@@ -274,6 +366,7 @@ func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
 	if err != nil {
 		t.Fatalf("BuildProcess(loop): %v", err)
 	}
+	process := &loopCountingApplicationProcess{ApplicationProcess: builtProcess}
 	fixture := &loopSharedFixture{
 		rootDir:     rootDir,
 		process:     process,
@@ -303,9 +396,9 @@ func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
 	})
 	inputs.Input.Env = environment
 	inputs.Input.WorkingDirectory = factoryDir
-	support.StartProcessCommand(t, process, inputs.Input)
+	fixture.processCommand = support.StartProcessCommand(t, process, inputs.Input)
 	baseURL := api.WaitForURL(t)
-	support.WaitForStatus(t, baseURL, loopSharedFixtureTimeout, func(status factoryapi.StatusResponse) bool {
+	support.WaitForStatus(t, baseURL, loopFixtureReadyTimeout, func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 
@@ -317,6 +410,19 @@ func newLoopSharedFixture(t *testing.T) *loopSharedFixture {
 func (fixture *loopSharedFixture) cleanup(t testing.TB) {
 	t.Helper()
 	fixture.lifecycle.assertClean(t)
+	if fixture.processCommand != nil {
+		select {
+		case <-fixture.processCommand.Done():
+		default:
+			t.Errorf("LOOP-CLEANUP-001 Process.Execute goroutine remains after cleanup")
+		}
+	}
+	if got := fixture.process.closeCount(); got != 1 {
+		t.Errorf("LOOP-CLEANUP-001 reusable process close calls = %d, want 1", got)
+	}
+	if registered := fixture.provider.registeredCount(); registered != 0 {
+		t.Errorf("LOOP-CLEANUP-001 provider route registrations remaining = %d", registered)
+	}
 	if fixture.baseURL != "" {
 		// This is a single bounded shutdown probe, not synchronization: after the
 		// reusable process closes, its injected listener must reject /status.
@@ -372,18 +478,26 @@ func (fixture *loopSharedFixture) newScenario(
 	)
 	environment := loopCustomerEnvironment(homeDir)
 	selectorPaths := []string{factoryDir, workingDirectory, fixture.factoryDir}
+	routeUnregisterBefore := fixture.provider.unregisterCount()
 	fixture.provider.register(selectorPaths, runner)
-	t.Cleanup(func() {
-		fixture.provider.unregister(selectorPaths)
-	})
-	return &loopScenario{
-		fixture:          fixture,
-		rootDir:          rootDir,
-		factoryDir:       factoryDir,
-		environment:      environment,
-		workingDirectory: workingDirectory,
-		selectorPaths:    selectorPaths,
+	scenario := &loopScenario{
+		fixture:               fixture,
+		rootDir:               rootDir,
+		factoryDir:            factoryDir,
+		environment:           environment,
+		workingDirectory:      workingDirectory,
+		selectorPaths:         selectorPaths,
+		routeUnregisterBefore: routeUnregisterBefore,
+		runner:                runner,
+		cleanup:               newLoopCleanupStack(),
 	}
+	scenario.cleanup.add("scenario root", scenario.removeRoot)
+	scenario.cleanup.add("provider route registrations", func() error {
+		fixture.provider.unregister(selectorPaths)
+		return nil
+	})
+	t.Cleanup(func() { scenario.close(t) })
+	return scenario
 }
 
 func (scenario *loopScenario) open(t *testing.T) {
@@ -393,51 +507,30 @@ func (scenario *loopScenario) open(t *testing.T) {
 	if scenario.sessionID == factorysessions.DefaultSessionID {
 		t.Fatalf("opened loop Factory Session returned default session %q", scenario.sessionID)
 	}
-	t.Cleanup(func() {
-		scenario.close(t)
+	scenario.cleanup.add("Factory Session", func() error {
+		absent, err := closeLoopSession(scenario.fixture.baseURL, scenario.sessionID)
+		scenario.sessionAbsent = absent
+		return err
+	})
+	scenario.cleanup.add("controlled provider runner", func() error {
+		return releaseLoopRunner(scenario.runner)
 	})
 	if err := scenario.fixture.lifecycle.register(
 		scenario.sessionID, scenario.rootDir, scenario.factoryDir,
 	); err != nil {
 		t.Fatalf("register loop scenario lifecycle: %v", err)
 	}
+	scenario.lifecycleTracked = true
 }
 
 func (scenario *loopScenario) close(t testing.TB) {
 	t.Helper()
-	if scenario == nil || scenario.sessionID == "" {
+	if scenario == nil || scenario.cleanup == nil {
 		return
 	}
-	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
-	assertLoopSessionAbsent(t, scenario.fixture.baseURL, scenario.sessionID)
-	sessionAbsent := true
-	rootRemoved := false
-	if err := os.RemoveAll(scenario.rootDir); err != nil {
-		t.Errorf("LOOP-CLEANUP-001 remove scenario root %q: %v", scenario.rootDir, err)
-	} else if _, err := os.Stat(scenario.rootDir); !os.IsNotExist(err) {
-		t.Errorf("LOOP-CLEANUP-001 scenario root %q remains: %v", scenario.rootDir, err)
-	} else {
-		rootRemoved = true
-	}
-	if err := scenario.fixture.lifecycle.close(scenario.sessionID, sessionAbsent, rootRemoved); err != nil {
-		t.Errorf("record loop scenario cleanup: %v", err)
-	}
-}
-
-func assertLoopSessionAbsent(t testing.TB, baseURL, sessionID string) {
-	t.Helper()
-	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET deleted loop Factory Session %q: %v", sessionID, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf(
-			"GET deleted loop Factory Session %q status = %d, want 404: %s",
-			sessionID, response.StatusCode, strings.TrimSpace(string(payload)),
-		)
+	alreadyRun := scenario.cleanup.hasRun()
+	if err := scenario.cleanup.run(); err != nil && !alreadyRun {
+		t.Errorf("LOOP-CLEANUP-001 scenario cleanup: %v", err)
 	}
 }
 
