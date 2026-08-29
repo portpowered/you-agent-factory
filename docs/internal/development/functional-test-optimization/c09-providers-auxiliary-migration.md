@@ -1,9 +1,9 @@
 # C09 Auxiliary Provider Characterization Ledger
 
-Status: stories `functional-test-optimization-c09-providers-auxiliary-migration-001`
-and `-002` complete. The Claude golden migration and its focused functional
-evidence are recorded below; discovery/permission proof, integrated cleanup,
-and PR-CI evidence remain later stories.
+Status: stories `functional-test-optimization-c09-providers-auxiliary-migration-001`,
+`-002`, and `-003` complete. The Claude golden migration and the discovery/
+permission functional evidence are recorded below; integrated cleanup and PR-CI
+evidence remain later story `-004`.
 
 ## Authority and scope
 
@@ -11,7 +11,7 @@ and PR-CI evidence remain later stories.
 - Branch: `functional-test-optimization-c09-providers-auxiliary-migration`
 - Discovery head and `origin/main`: `254bb71db2`
 - PRD stories: `functional-test-optimization-c09-providers-auxiliary-migration-001`,
-  `-002`
+  `-002`, `-003`, and `-004`
 - Parent behavior: `BEH-01` — preserve auxiliary provider behavior while
   removing eligible repeated Claude construction.
 - Owned surfaces inspected:
@@ -78,8 +78,8 @@ command. Named subcases are included in the row that owns them.
 | --- | --- | --- | ---: | --- |
 | `providers/claude` | `TestClaudeHaikuStreamJSONGoldens` — `haiku_golden_test.go:51` | Manifest order: `alias`, `family`, `pinned`; each case validates its embedded stream and checksum before start, prepares a copied fixture with a Factory-directory working route, opens one unique explicit Factory Session, submits Work through the session API, and observes session-scoped Work plus Factory Events. | 3 | 1 shared golden process with 3 explicit sessions; immutable routes are prepared before start. |
 | `providers/claude` | `TestClaudeStreamJSONCommandThroughRootBuildProcess` — `process_harness_test.go:18` | One standalone Claude `claude-sonnet-5` command case; observes done/failed Work, one command call, command identity, and stream-json flags. | 1 | 1 retained independent command-boundary process. |
-| `providers/discovery` | `TestProvidersListThroughRootBuildProcess` — `discovery_test.go:23` | One `BuildProcess`; three sequential `Process.Execute` calls for human list, JSON list, and unsupported-flag failure. Observes catalog output, diagnostics, and zero provider command calls. | 1 | 1 retained process; no per-command rebuild exists. |
-| `providers/discovery` | `TestPackagedACPProjectionRejectsInvalidRuntimeBindings` — `discovery_test.go:63` | Four pure subcases: unknown profile, unsupported transport, argument drift, and canonical alias duplication. Calls catalog projection directly and creates no process/session. | 0 | Pure/no-fixture retained; a process would be synthetic overhead. |
+| `providers/discovery` | `TestProvidersListThroughRootBuildProcess` — `discovery_test.go:25` | One `BuildProcess`; three sequential `Process.Execute` calls for human list, JSON list, and unsupported-flag failure. Observes catalog output, diagnostics, and zero provider command calls. | 1 | 1 retained process; no per-command rebuild exists. |
+| `providers/discovery` | `TestPackagedACPProjectionRejectsInvalidRuntimeBindings` — `discovery_test.go:65` | Four pure subcases: unknown profile, unsupported transport, argument drift, and canonical alias duplication. Calls catalog projection directly and creates no process/session. | 0 | Pure/no-fixture retained; a process would be synthetic overhead. |
 | `providers/permission` | `TestProviderPermissionBypassFunctionalContract` — `permission_bypass_test.go:19` | `capable Codex route uses the command edge` and `registered incapable Codex route fails before the command edge`; each subtest copies a fixture and calls one completion helper. | 2 | 2 isolated processes retained because capability wiring is immutable and differs before process construction. |
 
 ### Start-count derivation
@@ -319,5 +319,53 @@ note above.
 | Dependency fidelity | PASS for story 002 | Production root composition and public Factory Session/Work/Event HTTP boundaries were used with a controlled `ProviderCommandRunner` and sanitized embedded streams; no live Claude call was made. |
 | PR package timing | NOT CLAIMED | Package-level Backend Functional Coverage timing remains story 004/PR-CI evidence. |
 
-The next bounded step is story 003: re-prove discovery and permission while
-retaining their no-change and isolated-process dispositions.
+## Story 003 evidence boundary
+
+Story 003 retains the existing discovery and permission behavior paths. The
+only source changes are comments that make the already-characterized topology
+explicit: discovery uses one immutable root-built process for its three public
+invocations, its ACP projection validation is pure, and the two permission
+subcases remain on separate processes because capability overrides are
+immutable construction-time wiring.
+
+The declared verification was run with the local controlled edges:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/providers/discovery ./tests/functional/providers/permission
+```
+
+Both package test binaries reported success:
+
+```text
+ok  github.com/portpowered/infinite-you/tests/functional/providers/discovery  0.325s
+ok  github.com/portpowered/infinite-you/tests/functional/providers/permission 3.972s
+```
+
+On this shared Windows host, the Go wrapper remained alive after emitting those
+package results for more than 60 seconds; the invocation was then canceled
+(shell exit status `1` from that cancellation). A process-tree check found no
+remaining C09 test, server, or provider process. This is an environmental
+wrapper/host observation, not a test assertion failure; the prior declared
+package run in the characterization section exited `0`, and the current run
+reached `ok` for both unchanged behavior packages.
+
+### Disposition and witnesses
+
+| Area | Result | Evidence and property proved |
+| --- | --- | --- |
+| Discovery human list (`DS-H1`) | PASS | `TestProvidersListThroughRootBuildProcess` executes `you providers list` through one root-built process and retains exact provider identity, readiness, model, modality, tool, effort, limit, capability, and empty-stderr assertions. |
+| Discovery JSON list (`DS-H2`, `DS-O1`, `DS-DUP1`, `DS-E1`, `DS-CAP1`) | PASS | The same process executes `you providers list --json`; decoded public output retains exact count/IDs, sorted ordering, duplicate rejection, explicit non-null arrays, aliases, capabilities, models, limits, and readiness facts. |
+| Discovery invalid command (`DS-U1`, `DS-A1`) | PASS | The same process executes the unsupported flag, retains the bounded `unknown flag` error and empty stdout, and the counting command runner remains at zero. |
+| Pure ACP projection (`DS-U2`, `DS-T1`, `DS-PS1`, `DS-R1`) | PASS | Four direct projection subcases retain `unknown runtime profile`, `unsupported transport`, `command arguments drift`, and canonical-identity duplication diagnostics without constructing a process, session, port, or external edge. No timeout, persistence, or recovery claim is added. |
+| Permission capable (`PM-H1`, `PM-E1`, `PM-O1`, `PM-CAP1`) | PASS | The capable isolated root process completes one Work, emits one Codex command request, and retains `--dangerously-bypass-approvals-and-sandbox`; capability selection is explicit rather than inferred. |
+| Permission incapable (`PM-U1`, `PM-D1`, `PM-P1`) | PASS | The separate process with an immutable prompt-only Codex capability view emits one failed Work and one terminal dispatch with the bounded permanent-bad-request diagnostic, no command detail, and zero provider command calls. |
+| Permission disposition (`PM-C1`, `PM-N1`, `PM-PS1`, `PM-R1`) | PASS | The two subcases remain isolated and sequential; each helper owns a copied `t.TempDir` fixture and its own root/process cleanup. No mutable capability state, shared route, persistence, timeout, duplicate-request, or idempotency claim is introduced. |
+
+This evidence proves all story-003 discovery and permission witnesses at the
+functional/pure-validation level with real root composition and controlled
+command/permission edges. It does not prove remote provider behavior, Claude
+adverse cleanup, host-level resource absence beyond the process-tree check, or
+PR Backend Functional Coverage timing; those remain story 004 gates.
+
+The next bounded step is story 004: integrated cleanup, exclusions, clean-room
+loopback, and delivery handoff.

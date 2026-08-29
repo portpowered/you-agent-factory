@@ -17,6 +17,9 @@ import (
 )
 
 func TestProviderPermissionBypassFunctionalContract(t *testing.T) {
+	// Keep the cases on separate root-built processes: capability overrides are
+	// immutable construction-time provider wiring. Sharing one process would
+	// require mutable capability state or post-start routing.
 	t.Run("capable Codex route uses the command edge", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 		support.WriteAgentConfig(t, dir, "worker", permissionBypassWorkerConfig("codex"))

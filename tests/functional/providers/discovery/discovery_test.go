@@ -20,6 +20,8 @@ import (
 // reaches the injected Providers service through the canonical process graph.
 // The command runner is deliberately instrumented: discovery must not invoke
 // a provider process, even though the same edge is available to execution.
+// Keep one immutable root-built process for the three public invocations below;
+// the ACP projection cases are pure and intentionally acquire no process.
 func TestProvidersListThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
