@@ -430,6 +430,22 @@ func (fixture *agyProcessFixture) runScenario(
 	)
 	run.stream = stream
 	fixture.recordStreamOpened()
+	wantFactoryEvents := 11
+	if scenario.selector == agySharedTimeoutSelector {
+		wantFactoryEvents = 23
+	}
+	factoryEventObservation := newAgySharedFactoryEventObservation(
+		fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
+	)
+	// The observer is registered after the scenario cleanup, so a failed
+	// assertion cancels the public Factory Event stream before the session and
+	// response stream are released by run.close.
+	t.Cleanup(func() {
+		result := factoryEventObservation.stop()
+		if result.err != nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
+			t.Errorf("AGY %q Factory Event observation cleanup: %v", scenario.selector, result.err)
+		}
+	})
 
 	routeRequestStart := fixture.router.requestCount()
 	name := workTitle
@@ -445,16 +461,11 @@ func (fixture *agyProcessFixture) runScenario(
 		t.Fatalf("AGY %q submitted Work identity = %#v, want Work and request IDs", scenario.selector, submitted)
 	}
 	responseEvents := readAgyResponseEvents(t, run, agySharedScenarioTimeout, scenario.selector)
-	wantFactoryEvents := 11
-	if scenario.selector == agySharedTimeoutSelector {
-		wantFactoryEvents = 23
+	factoryEventResult := factoryEventObservation.finish()
+	if factoryEventResult.err != nil {
+		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, factoryEventResult.err)
 	}
-	factoryEvents, err := waitForAgySessionFactoryEvents(
-		context.Background(), fixture.baseURL, session.Id, wantFactoryEvents, agySharedScenarioTimeout,
-	)
-	if err != nil {
-		t.Fatalf("AGY %q terminal Factory Events: %v", scenario.selector, err)
-	}
+	factoryEvents := factoryEventResult.events
 	run.terminalObserved = true
 	listed, err := readAgySessionWork(context.Background(), fixture.baseURL, session.Id)
 	if err != nil {
@@ -474,6 +485,55 @@ func (fixture *agyProcessFixture) runScenario(
 		ResponseEvents: responseEvents,
 		RouteCalls:     routeCalls,
 	}
+}
+
+type agySharedFactoryEventObservationResult struct {
+	events []factoryapi.FactoryEvent
+	err    error
+}
+
+type agySharedFactoryEventObservation struct {
+	cancel context.CancelFunc
+	done   chan agySharedFactoryEventObservationResult
+
+	once   sync.Once
+	result agySharedFactoryEventObservationResult
+}
+
+func newAgySharedFactoryEventObservation(
+	baseURL string,
+	sessionID string,
+	want int,
+	timeout time.Duration,
+) *agySharedFactoryEventObservation {
+	observeContext, cancel := context.WithCancel(context.Background())
+	done := make(chan agySharedFactoryEventObservationResult, 1)
+	go func() {
+		events, err := waitForAgySessionFactoryEvents(observeContext, baseURL, sessionID, want, timeout)
+		done <- agySharedFactoryEventObservationResult{events: events, err: err}
+	}()
+	return &agySharedFactoryEventObservation{cancel: cancel, done: done}
+}
+
+func (observation *agySharedFactoryEventObservation) finish() agySharedFactoryEventObservationResult {
+	if observation == nil {
+		return agySharedFactoryEventObservationResult{}
+	}
+	observation.once.Do(func() {
+		observation.result = <-observation.done
+	})
+	return observation.result
+}
+
+func (observation *agySharedFactoryEventObservation) stop() agySharedFactoryEventObservationResult {
+	if observation == nil {
+		return agySharedFactoryEventObservationResult{}
+	}
+	observation.once.Do(func() {
+		observation.cancel()
+		observation.result = <-observation.done
+	})
+	return observation.result
 }
 
 type agySharedScenarioRun struct {
