@@ -31,9 +31,10 @@ const (
 	textStreamPromptRunWorkType    = "prompt-task"
 )
 
-// TestCLITextStreamSurfacesIncrementalMessages proves a human response-stream
-// CLI run surfaces lifecycle progress on stdout while the invocation is still
-// in flight, before the terminal primary result is written.
+// TestCLITextStreamSurfacesIncrementalMessages proves one gated human
+// response-stream CLI run surfaces lifecycle progress on stdout while the
+// invocation is in flight, then completes with canonical presentation and no
+// structured or operator noise.
 func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	writer := newFirstChunkGatedStdoutWriter()
 	runGoalHumanResponseStreamWithStdout(t, writer)
@@ -61,6 +62,7 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	assertStableWorkerProgress(t, writer.diagnosticText())
 
 	stdout := writer.String()
+	assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
 	lines := nonEmptyStdoutLines(stdout)
 	if len(lines) < 3 {
 		t.Fatalf("stdout lines = %#v, want lifecycle, separator, and final response", lines)
@@ -78,25 +80,10 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	}
 }
 
-// TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise proves human text
-// presentation on stdout stays free of NDJSON envelopes, single-JSON
-// InvocationResponse wrappers, retired automation record shapes, and operator
-// lifecycle chatter that clean invocation output must suppress.
+// TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise proves quiet human
+// output stays free of structured envelopes, retired automation record shapes,
+// and operator lifecycle chatter.
 func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
-	t.Run("human response-stream lifecycle presentation", func(t *testing.T) {
-		stdout, stderr := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
-		assertStableWorkerProgress(t, stderr)
-		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
-		for _, line := range nonEmptyStdoutLines(stdout) {
-			if line == "--- primary result ---" || line == textStreamPrimaryResult {
-				continue
-			}
-			if !isHumanFactoryLifecycleLine(line) {
-				t.Fatalf("stdout line %q is not canonical customer lifecycle output\nstdout:\n%s", line, stdout)
-			}
-		}
-	})
-
 	t.Run("quiet clean primary result", func(t *testing.T) {
 		stdout, stderr := runGoalHumanInvocation(t, []string{"--quiet"})
 		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)

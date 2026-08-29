@@ -177,6 +177,49 @@ accessibility, keyboard, responsive, and localization checks are not
 applicable because this lane changes only functional-test sources and its
 evidence ledger.
 
+## Story 002 — GATE-SUCCESS
+
+The successful-output assertions were consolidated onto the existing captured
+executions without changing CLI arguments, output modes, controlled provider
+results, root construction, or cleanup boundaries:
+
+| Cases | Retained witness | Consolidation and assertion parity |
+| --- | --- | --- |
+| CASE-001 and CASE-013 | `TestCLIJSONSuccessDecodesToPublicInvocationResult` | One default-JSON capture now proves completed status, exact primary text, empty stderr, public decoding, and private-runtime-field absence. The former success subtest in `TestCLIJSONContainsNoPrivateRuntimeFields` was removed as a duplicate. |
+| CASE-011 and applicable CASE-021 | `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` | One response-stream capture now proves public Factory Event shape, event-before-terminal ordering, strictly increasing Factory and Factory Session sequences, privacy, exactly one terminal result, and terminal EOF. The former `TestCLINDJSONSequenceIsMonotonic` journey was removed as a duplicate. |
+| CASE-015 | `TestCLITextStreamSurfacesIncrementalMessages` | The existing first-chunk-gated capture now also runs the final structured-envelope/operator-noise assertions after release, retaining the in-flight ordering, stable progress, canonical lifecycle, separator, and primary-result checks. |
+| CASE-018 | `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise/quiet_clean_primary_result` | Quiet remains a distinct accepted execution and still proves raw primary stdout, empty stderr, and no structured/operator noise. |
+| CASE-021 | Retained JSON/NDJSON decode helpers and terminal loops | Existing all-record decoding and terminal-position checks remain on the retained captures; no trailing output is accepted by the existing stream assertions. |
+| CASE-022 | Shared fixture and existing cleanup paths | No root, route, stream, or cleanup ownership changed. |
+
+The shared root's successful journey count fell from 18 to 15: accepted JSON
+success/privacy went from 2 to 1, accepted NDJSON shape/sequence went from 2
+to 1, and gated human success/presentation went from 2 to 1. Quiet remains
+one journey. The four isolated lifecycle roots remain unchanged, so the total
+package denominator is now 19 `Process.Execute` journeys across five roots,
+down from 22.
+
+Focused verification used the real in-process CLI and controlled command-runner
+edges:
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^(TestCLIJSONSuccessDecodesToPublicInvocationResult|TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult|TestCLITextStreamSurfacesIncrementalMessages|TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise)$' -count=1 -v
+```
+
+PASS, package-reported 11.679 s. The same combined `-count=3` command had one
+host-contended timeout in the existing 5 s first-human-chunk guard while
+packaged-factory staging logged an active-owner contention diagnostic. The
+bounded isolated repeat then passed the changed human selector 3/3 in 9.819 s,
+and the grouped JSON/NDJSON/quiet selectors passed 3/3 in 22.812 s. The
+contended run is retained as diagnostic evidence; no timeout, sleep, or
+assertion was changed.
+
+This story proves successful public output parity and the lower duplicate
+journey count. It does not prove bad-input overlap, failure recovery, isolated
+lifecycle behavior, the final package median, exact-head loopback, terminal
+CI, or merge; those remain owned by GATE-PREACT, GATE-FAILURE,
+GATE-LIFECYCLE, GATE-PERF, VAL-001, and review.
+
 ## Later-gate inputs and remaining edges
 
 - `GATE-SUCCESS`: consolidate duplicate successful output evidence while

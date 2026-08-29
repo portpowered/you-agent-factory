@@ -16,9 +16,10 @@ const (
 	wantInvocationResultText = "mock worker accepted"
 )
 
-// TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult proves a successful
-// CLI NDJSON response-stream run emits public Factory Event records followed by
-// exactly one terminal InvocationResult that decodes through the public contract.
+// TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult proves one
+// successful CLI NDJSON response-stream run emits public Factory Event records
+// with monotonic sequences, followed by exactly one terminal InvocationResult
+// that decodes through the public contract without private stream vocabulary.
 func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T) {
 	t.Parallel()
 	stdout := runGoalResponseStream(t)
@@ -30,15 +31,23 @@ func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T)
 
 	factoryEventCount := 0
 	invocationResultCount := 0
+	previousSequence := -1
+	previousSessionSequence := -1
+	invocationResultSeen := false
 	for index, record := range records {
 		switch record.RecordType {
 		case factoryEventRecordType:
-			if invocationResultCount != 0 {
+			if invocationResultSeen {
 				t.Fatalf("Factory Event record %d follows terminal invocation result", index)
 			}
 			assertFactoryEventRecord(t, record, index)
+			assertFactoryEventSequenceMonotonic(t, record, index, &previousSequence, &previousSessionSequence)
 			factoryEventCount++
 		case invocationResultType:
+			if invocationResultSeen {
+				t.Fatalf("second invocation_result at record %d", index)
+			}
+			invocationResultSeen = true
 			invocationResultCount++
 			if index != len(records)-1 {
 				t.Fatalf("invocation_result record index = %d, want terminal index %d", index, len(records)-1)
@@ -54,6 +63,9 @@ func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T)
 	if invocationResultCount != 1 {
 		t.Fatalf("invocation_result record count = %d, want exactly 1", invocationResultCount)
 	}
+	if previousSessionSequence < 0 {
+		t.Fatal("Factory Event records contain no public Factory Session sequence data")
+	}
 
 	for _, forbidden := range []string{
 		"FactoryResponseEvent", "response_event", "provider_session", "providerSession",
@@ -64,50 +76,6 @@ func TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult(t *testing.T)
 		if strings.Contains(stdout, forbidden) {
 			t.Fatalf("NDJSON exposed private or retired stream vocabulary %q:\n%s", forbidden, stdout)
 		}
-	}
-}
-
-// TestCLINDJSONSequenceIsMonotonic proves CLI NDJSON response-stream Factory Event
-// records expose strictly increasing context.sequence values and, when present,
-// strictly increasing Factory Session sequence values, with no records after the
-// terminal InvocationResult.
-func TestCLINDJSONSequenceIsMonotonic(t *testing.T) {
-	t.Parallel()
-	stdout := runGoalResponseStream(t)
-	records := decodeNDJSONRecords(t, stdout)
-
-	previousSequence := -1
-	previousSessionSequence := -1
-	factoryEventCount := 0
-	invocationResultSeen := false
-	for index, record := range records {
-		switch record.RecordType {
-		case factoryEventRecordType:
-			if invocationResultSeen {
-				t.Fatalf("Factory Event record %d follows terminal invocation result", index)
-			}
-			assertFactoryEventSequenceMonotonic(t, record, index, &previousSequence, &previousSessionSequence)
-			factoryEventCount++
-		case invocationResultType:
-			if invocationResultSeen {
-				t.Fatalf("second invocation_result at record %d", index)
-			}
-			invocationResultSeen = true
-			if index != len(records)-1 {
-				t.Fatalf("invocation_result record index = %d, want terminal index %d", index, len(records)-1)
-			}
-		default:
-			t.Fatalf("record %d has unsupported recordType %q", index, record.RecordType)
-		}
-	}
-	if factoryEventCount == 0 {
-		t.Fatal("response stream contains no Factory Event records to order")
-	}
-	if previousSessionSequence < 0 {
-		t.Fatal("Factory Event records contain no public Factory Session sequence data")
-	}
-	if !invocationResultSeen {
-		t.Fatal("response stream missing terminal invocation_result")
 	}
 }
 

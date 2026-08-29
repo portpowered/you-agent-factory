@@ -20,8 +20,8 @@ const (
 )
 
 // TestCLIJSONSuccessDecodesToPublicInvocationResult proves the default JSON
-// stream ends with an InvocationResponse that decodes through the public
-// contract with completed terminal status.
+// stream ends with a public, private-field-free InvocationResponse that
+// decodes through the contract with completed terminal status.
 func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
 	t.Parallel()
 	stdout := runGoalSingleJSON(t)
@@ -32,6 +32,7 @@ func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
 	if got := invocationPrimaryResultText(t, response); got != jsonWantInvocationResultText {
 		t.Fatalf("primaryResult = %q, want %q", got, jsonWantInvocationResultText)
 	}
+	assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
 }
 
 // TestCLIJSONFailureRemainsValidJSON proves CLI JSON failures stay
@@ -179,16 +180,11 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 	}
 }
 
-// TestCLIJSONContainsNoPrivateRuntimeFields proves terminal JSON success and
-// failure payloads decode through the public contract and omit private runtime
+// TestCLIJSONFailureContainsNoPrivateRuntimeFields proves terminal JSON failure
+// payloads decode through the public contract and omit private runtime
 // vocabulary such as Petri internals and provider-session chunk fields.
-func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
+func TestCLIJSONFailureContainsNoPrivateRuntimeFields(t *testing.T) {
 	t.Parallel()
-	t.Run("success stdout stays on public InvocationResponse fields", func(t *testing.T) {
-		stdout := runGoalSingleJSON(t)
-		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
-	})
-
 	t.Run("terminal failure stdout and stderr stay on public contract fields", func(t *testing.T) {
 		stdout, stderr, err := runSingleJSONInvocation(t, []string{
 			"you", "--json", "run", "--named", jsonGoalFactoryName, "--no-record",
