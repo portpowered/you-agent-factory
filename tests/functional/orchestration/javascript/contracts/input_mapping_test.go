@@ -1,15 +1,12 @@
 package contracts
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -59,25 +56,18 @@ var privateJavaScriptVMDiagnosticMarkers = []string{
 // string, number, boolean, object, and array Work Request inputs reach a
 // JavaScript Factory invocation with preserved types on the public primary
 // Factory Session result surface after a root-built process run.
-func TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldTypedInputMappingWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	started := startTypedInputMappingWorkflow(t, server.URL(), dir)
+	providerCalls := fixture.providerCallCount()
+	started := startTypedInputMappingWorkflow(t, fixture, dir, fixture.nextRequestID("typed-input"))
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for typed-input echo workflow", runner.CallCount())
+	if got := fixture.providerCallCount(); got != providerCalls {
+		t.Fatalf("provider command runner call count = %d, want unchanged at %d for typed-input echo workflow", got, providerCalls)
 	}
 
 	assertTypedInputMappingPrimaryResult(t, started.Result)
@@ -88,25 +78,40 @@ func TestJavaScriptInvocationReceivesStringNumberBooleanObjectAndArrayInputs(t *
 // required JavaScript Factory request input fails with an actionable customer
 // diagnostic before any child worker or provider dispatch when invoked through
 // the public you run customer process boundary after a root-built process run.
-func TestJavaScriptMissingRequiredInputFailsBeforeChildDispatch(t *testing.T) {
-	t.Parallel()
-
+func runJavaScriptMissingRequiredInputFailsBeforeChildDispatch(
+	t *testing.T,
+	fixture *contractFixture,
+) {
 	dir := scaffoldMissingRequiredInputMappingFactory(t)
-	run := runMissingRequiredInputJavaScriptInvocation(t, dir)
+	run := runMissingRequiredInputJavaScriptInvocation(t, fixture, dir)
 
 	assertMissingRequiredInputInvocationOutcome(t, run.outcome)
-	if run.providerRunner.CallCount() != 0 {
+	if got := fixture.providerCallCount(); got != 0 {
 		t.Fatalf(
 			"provider command runner call count = %d, want 0 before missing-required-input validation",
-			run.providerRunner.CallCount(),
+			got,
 		)
 	}
 	assertNoPrivateJavaScriptVMDiagnostics(t, run.outcome.diagnostic)
+
+	// The rejected CLI request must not poison the next explicit Factory
+	// Session. Use a fresh authored root so this is also a direct witness for
+	// source and mutable-runtime isolation after the adverse path.
+	recoveryDir := scaffoldTypedInputMappingWorkflow(t)
+	recovered := startTypedInputMappingWorkflow(
+		t,
+		fixture,
+		recoveryDir,
+		fixture.nextRequestID("missing-input-recovery"),
+	)
+	if recovered.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("post-missing-input session status = %q, want SUCCEEDED", recovered.Status)
+	}
+	assertTypedInputMappingPrimaryResult(t, recovered.Result)
 }
 
 type missingRequiredInputInvocationRun struct {
-	providerRunner *support.RecordingCommandRunner
-	outcome        missingRequiredInputInvocationOutcome
+	outcome missingRequiredInputInvocationOutcome
 }
 
 type missingRequiredInputInvocationOutcome struct {
@@ -172,11 +177,11 @@ func scaffoldMissingRequiredInputMappingFactory(t *testing.T) string {
 
 func runMissingRequiredInputJavaScriptInvocation(
 	t *testing.T,
+	fixture *contractFixture,
 	dir string,
 ) missingRequiredInputInvocationRun {
 	t.Helper()
 
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
@@ -188,9 +193,7 @@ func runMissingRequiredInputJavaScriptInvocation(
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = dir
 
-	err := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}).Execute(inputs.Input)
+	err := fixture.process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf(
 			"Process.Execute() error = nil, want missing required input failure before child dispatch\nstdout:\n%s\nstderr:\n%s",
@@ -211,9 +214,16 @@ func runMissingRequiredInputJavaScriptInvocation(
 			t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", decodeErr, stderr)
 		}
 	}
+	if outcome.response.SessionId != nil && strings.TrimSpace(*outcome.response.SessionId) != "" {
+		fixture.trackLocalSession(
+			t,
+			*outcome.response.SessionId,
+			outcome.response.RequestId,
+			dir,
+		)
+	}
 	return missingRequiredInputInvocationRun{
-		providerRunner: runner,
-		outcome:        outcome,
+		outcome: outcome,
 	}
 }
 
@@ -309,7 +319,8 @@ func scaffoldTypedInputMappingWorkflow(t *testing.T) string {
 
 func startTypedInputMappingWorkflow(
 	t *testing.T,
-	serverURL, dir string,
+	fixture *contractFixture,
+	dir, requestID string,
 ) factoryapi.FactorySessionSyncExecutionResponse {
 	t.Helper()
 
@@ -321,38 +332,14 @@ func startTypedInputMappingWorkflow(
 		"metadata": map[string]any{"region": typedInputRegionValue},
 		"tags":     []any{typedInputTagAlphaValue, typedInputTagBetaValue},
 	}
-	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "javascript-typed-input-mapping",
+	return fixture.startSync(t, factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
 			WorkflowFile: &workflowPath,
 		},
 		Args: &args,
-	})
-	if err != nil {
-		t.Fatalf("marshal typed input workflow request: %v", err)
-	}
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
-	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build typed input workflow request: %v", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("start typed input workflow: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		var body bytes.Buffer
-		_, _ = body.ReadFrom(response.Body)
-		t.Fatalf("start typed input workflow status = %d: %s", response.StatusCode, body.String())
-	}
-	var started factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
-		t.Fatalf("decode typed input workflow response: %v", err)
-	}
-	return started
+	}, dir)
 }
 
 func assertTypedInputMappingPrimaryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
