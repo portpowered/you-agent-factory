@@ -42,6 +42,9 @@ const (
 // retained Factory Event history that PARENT_CHILD lineage on a child work item
 // remains observable after the child dispatches and after event-history
 // reconstruction from the same session.
+// Isolation rationale (REL-006): shared complete-boundary execution would
+// replace the built `you` executable -> server -> provider process boundary
+// and invalidate the retained-history and replay proof.
 func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	t.Parallel()
 
@@ -144,6 +147,10 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 // failed terminal state, the documented parent-aware failure projection
 // (ANY_CHILD_FAILED) surfaces on the parent Work as a failed customer-visible
 // state while PARENT_CHILD lineage remains observable on the child.
+// Isolation rationale (REL-007): shared complete-boundary execution would
+// collapse the built-CLI child-failure path and isolate neither server nor
+// provider state, invalidating the public CLI, event-order, and parent-
+// projection proof.
 func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	t.Parallel()
 
@@ -231,12 +238,11 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	assertParentChildFailureProjectionInFactoryEvents(t, events, parentChildFailureRequestID, parentChildFailureChildID)
 }
 
-// TestDispatchPreservesSubmittedWorkPayloadTagsAndType proves through provider
+// testDispatchPreservesSubmittedWorkPayloadTagsAndType proves through provider
 // dispatch observations that the executor input preserves the submitted payload,
 // tags, and work type identity for dispatched Work.
-func TestDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T) {
-	t.Parallel()
-
+func testDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	payload := []byte(`{"feature": "dark mode", "priority": "high"}`)
@@ -250,7 +256,8 @@ func TestDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "COMPLETE"},
 		workerexecution.InferenceResponse{Content: "COMPLETE"},
 	)
-	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	host.provider.register(t, dir, provider)
+	runSharedRelationshipFactoryToCompletion(t, host, dir, 10*time.Second)
 
 	sweCalls := support.ProviderCallsForWorker(provider, "swe")
 	if len(sweCalls) != 1 {
@@ -277,12 +284,11 @@ func TestDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T) {
 	}
 }
 
-// TestRejectionFeedbackSurfacesOnExecutorRetry proves reviewer rejection feedback
+// testRejectionFeedbackSurfacesOnExecutorRetry proves reviewer rejection feedback
 // is attached to the next executor dispatch payload while the first dispatch
 // remains free of rejection-feedback tags.
-func TestRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T) {
-	t.Parallel()
-
+func testRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
@@ -291,7 +297,8 @@ func TestRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T) {
 		"swe":      {support.AcceptedProviderResponse(), support.AcceptedProviderResponse()},
 		"reviewer": {{Content: "needs unit tests"}, support.AcceptedProviderResponse()},
 	})
-	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	host.provider.register(t, dir, provider)
+	runSharedRelationshipFactoryToCompletion(t, host, dir, 10*time.Second)
 
 	if got := provider.CallCount("swe"); got != 2 {
 		t.Fatalf("swe dispatch count = %d, want 2", got)
@@ -309,12 +316,11 @@ func TestRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T) {
 	}
 }
 
-// TestParentAndDependsOnLineageSurviveOnChildDispatch proves PARENT_CHILD and
+// testParentAndDependsOnLineageSurviveOnChildDispatch proves PARENT_CHILD and
 // DEPENDS_ON relations remain observable on the child dispatch token after both
 // prerequisite completion and child submission.
-func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
-	t.Parallel()
-
+func testParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -344,7 +350,8 @@ func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "COMPLETE"},
 		workerexecution.InferenceResponse{Content: "COMPLETE"},
 	)
-	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	host.provider.register(t, dir, provider)
+	runSharedRelationshipFactoryToCompletion(t, host, dir, 10*time.Second)
 
 	sweCalls := support.ProviderCallsForWorker(provider, "swe")
 	if len(sweCalls) != 1 {
@@ -386,13 +393,12 @@ func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
 	}
 }
 
-// TestDependentWorkFailsWhenDirectPrerequisiteFails proves through public Work
+// testDependentWorkFailsWhenDirectPrerequisiteFails proves through public Work
 // listings and captured provider command invocations that when a DEPENDS_ON
 // prerequisite fails before reaching its required state, the dependent Work
 // projects to failed without reaching a successful terminal state.
-func TestDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T) {
-	t.Parallel()
-
+func testDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	parentWorkID := "parent-work-id"
@@ -413,12 +419,8 @@ func TestDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(
 		cascadingFailureProviderError("upstream service down"),
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		10*time.Second,
-	)
+	host.provider.registerCommandRunner(t, dir, runner)
+	_, listed, _ := runSharedRelationshipFactoryToCompletionAndClose(t, host, dir, 10*time.Second)
 
 	assertCascadingFailurePlaces(t, listed, map[string]int{
 		"task:failed":     2,
@@ -436,13 +438,12 @@ func TestDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T) {
 	assertCascadingFailureProviderRequests(t, runner)
 }
 
-// TestTransitiveDependencyFailureCascadesToFailedTerminals proves through public
+// testTransitiveDependencyFailureCascadesToFailedTerminals proves through public
 // Work listings and captured provider command invocations that a
 // parent→child→grandchild DEPENDS_ON chain reaches failed terminals on every
 // related Work item when the upstream finisher path fails.
-func TestTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T) {
-	t.Parallel()
-
+func testTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	pWorkID := "P-work-id"
@@ -477,12 +478,8 @@ func TestTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T) {
 		cascadingFailureProviderSuccess(),
 		cascadingFailureProviderError("crash"),
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		10*time.Second,
-	)
+	host.provider.registerCommandRunner(t, dir, runner)
+	_, listed, _ := runSharedRelationshipFactoryToCompletionAndClose(t, host, dir, 10*time.Second)
 
 	assertCascadingFailurePlaces(t, listed, map[string]int{
 		"task:failed":     3,
@@ -501,12 +498,11 @@ func TestTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T) {
 	assertCascadingFailureProviderRequests(t, runner)
 }
 
-// TestCompletedPrerequisiteIsNotCascadedWhenDependentFails proves through public
+// testCompletedPrerequisiteIsNotCascadedWhenDependentFails proves through public
 // Work listings and captured provider command invocations that a prerequisite
 // Work already at complete is left unchanged when a later dependent Work fails.
-func TestCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T) {
-	t.Parallel()
-
+func testCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	aWorkID := "A-work-id"
@@ -529,12 +525,8 @@ func TestCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T) {
 		cascadingFailureProviderSuccess(),
 		cascadingFailureProviderError("oops"),
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		10*time.Second,
-	)
+	host.provider.registerCommandRunner(t, dir, runner)
+	_, listed, _ := runSharedRelationshipFactoryToCompletionAndClose(t, host, dir, 10*time.Second)
 
 	assertCascadingFailurePlaces(t, listed, map[string]int{
 		"task:complete": 1,

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -18,29 +19,27 @@ const (
 	crossBatchCrossSessionSiblingID     = "work-cross-session-sibling"
 )
 
-// TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically proves that a
+// testCrossBatchDependsOnRejectsCrossSessionTargetAtomically proves that a
 // target visible in one Factory Session cannot satisfy admission in another,
 // and that the rejected batch admits none of its Work items.
-func TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T) {
-	t.Parallel()
+func testCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 
-	run := newCrossBatchFunctionalRun(t)
+	factoryDir := scaffoldCrossBatchFactory(t)
+	baseURL := host.URL()
+	sourceSession, sourceClose := openSharedRelationshipSession(t, baseURL, factoryDir)
+	otherSession, otherClose := openSharedRelationshipSession(t, baseURL, factoryDir)
+	baseline := listCrossBatchSessionWork(t, baseURL, otherSession.Id)
 
-	opened := support.OpenFactorySessionAt(t, run.baseURL, run.session.FolderPath)
-	if opened.Session == nil {
-		t.Fatalf("cross-session open response missing session: %#v", opened)
-	}
-	otherSessionID := opened.Session.Id
-	baseline := listCrossBatchSessionWork(t, run.baseURL, otherSessionID)
-
-	executeCrossBatchSubmitForSessionOnServer(t, run.server, run.session.Id, crossBatchPrerequisiteBatchJSON())
-	assertCrossBatchWorkState(t, run.baseURL, crossBatchPrerequisiteID, "complete", "completed source-session target")
+	executeCrossBatchSubmitForSessionOnServer(t, host.server, sourceSession.Id, crossBatchPrerequisiteBatchJSON())
+	support.WaitForSessionTerminalStatus(t, baseURL, sourceSession.Id, 15*time.Second)
+	assertCrossBatchWorkStateForSession(t, baseURL, sourceSession.Id, crossBatchPrerequisiteID, "complete", "completed source-session target")
 
 	stdout, stderr, err := executeCrossBatchSubmitForSessionExpectingError(
 		t,
-		run.server,
-		run.baseURL,
-		otherSessionID,
+		host.server,
+		baseURL,
+		otherSession.Id,
 		crossBatchCrossSessionBatchJSON(),
 	)
 	if err == nil {
@@ -60,7 +59,7 @@ func TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T) {
 		}
 	}
 
-	listed := listCrossBatchSessionWork(t, run.baseURL, otherSessionID)
+	listed := listCrossBatchSessionWork(t, baseURL, otherSession.Id)
 	if len(listed.Results) != len(baseline.Results) {
 		t.Fatalf("cross-session rejection changed Work count from %d to %d: %#v", len(baseline.Results), len(listed.Results), listed.Results)
 	}
@@ -69,6 +68,9 @@ func TestCrossBatchDependsOnRejectsCrossSessionTargetAtomically(t *testing.T) {
 			t.Fatalf("rejected cross-session batch admitted Work %q: %#v", workID, listed.Results)
 		}
 	}
+	sourceClose()
+	otherClose()
+	runSharedHostReuseProbe(t, baseURL)
 }
 
 func crossBatchCrossSessionBatchJSON() string {
