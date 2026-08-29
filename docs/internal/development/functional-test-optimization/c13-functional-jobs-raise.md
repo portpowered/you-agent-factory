@@ -60,11 +60,11 @@ authoritative-width cap:
 
 | Boundary | Source behavior |
 | --- | --- |
-| Workflow selection | `.github/workflows/ci.yml` selects `functional_jobs=8`, logs `logical_cpus` and `jobs`, and writes `jobs` to `GITHUB_OUTPUT`. |
+| Workflow selection | `.github/workflows/ci.yml` selected `functional_jobs=8` for the baseline and `functional_jobs=12` for the accepted candidate, logging `logical_cpus` and `jobs` and writing `jobs` to `GITHUB_OUTPUT`. |
 | Workflow environment | The functional supervisor receives `FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}`. |
 | Make default/forwarding | `Makefile` defines `FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)` and passes it to `functional-test-viz -jobs $(FUNCTIONAL_DEFAULT_JOBS)` and `test-functional-coverage ... gocoveragecheck ... -jobs $(FUNCTIONAL_DEFAULT_JOBS)`. |
 | Report runner | `cmd/functionaltestviz/suite.go` records `jobs=%d` and builds `gocoveragecheck -suite functional ... -jobs <value>`. |
-| Coverage runner | `cmd/gocoveragecheck/coverage_phases.go` builds `go test ... -p=<cfg.testJobs(...)>`. `config.testJobs` returns a positive explicit `cfg.jobs` unchanged, so the authoritative functional invocation receives `-p=8` for the baseline. |
+| Coverage runner | `cmd/gocoveragecheck/coverage_phases.go` builds `go test ... -p=<cfg.testJobs(...)>`. `config.testJobs` returns a positive explicit `cfg.jobs` unchanged, so the authoritative functional invocation receives `-p=8` for the baseline and `-p=12` for the accepted candidate. |
 | Package scheduler | Go owns package scheduling at the final `go test -p` boundary; no discovery helper cap rewrites that value. |
 
 Preparatory paths have independent bounded caps and are not the coverage
@@ -91,12 +91,51 @@ prerequisites:
 | 8 | green | `6:06.02` | `789,104 kB` | selected |
 | 16 | six functional failures; coverage not evaluated | `6:08.12` | `792,988 kB` | ineligible |
 
-These values are decision context, not a current acceptance threshold. The
-current story selects width `16` as the first bounded candidate because the
-named prerequisites are now on main and story 002 will validate the complete
-unchanged lane on the real runner. A failure or capacity symptom must be
-diagnosed from its package and artifact evidence and may recover only through
-`16 -> 12 -> 10`; it must not return to `8` or change test/policy inputs.
+These values are decision context, not a current acceptance threshold. Story
+002 selected width `16` as the first bounded candidate because the named
+prerequisites were on main. A failure or capacity symptom was diagnosed from
+its package and artifact evidence, and recovery was limited to `16 -> 12`;
+width `12` was accepted without needing the final `10` candidate. The value
+must not return to `8` or change test/policy inputs.
+
+## Story 002 measured result and bounded recovery
+
+The accepted authored workflow value is `functional_jobs=12`. Both hosted
+candidate runs used Ubuntu 24.04 with four logical CPUs and the unchanged
+complete functional lane:
+
+| Candidate | Selected jobs | Supervised step | Functional test wall | Result | Decision evidence |
+| --- | ---: | ---: | ---: | --- | --- |
+| Width-16 candidate | `16` | `1010.457s` | `793.348s` | Failed: `tests/functional/transport/acp/stdio` timed out at `600.419s`; coverage was not evaluated | New timeout relative to the green jobs-8 baseline; recorded in the PR comment and recovered to `12` |
+| Width-12 candidate | `12` | `485.685s` | `275.462s` | Green: `149/149` selected packages, `1,066` pass / `0` fail / `1` skip; coverage `61.3%` against `33.1%` minimum | Accepted first green raised width; quarantine, coverage, ACP, timing, diagnostics, command, and required verdict artifacts were present |
+
+Compared with the eligible jobs-8 baseline (`512.524s` supervised and
+`302.721s` functional test wall), the accepted jobs-12 run reduced supervised
+time by `26.839s` (`5.2%`) and functional test wall time by `27.259s`
+(`9.0%`). The observed width-attributable bottleneck was package contention in
+the ACP stdio functional package at width 16; width 12 completed the same
+package in `16.444s` and preserved the complete green lane. No width-10 run
+was required after the first green raised candidate.
+
+The PR evidence comment retains the exact run and job URLs, full heads,
+timestamp boundaries, selected-width logs, artifact URLs, and failed
+package/width pair. No raw CI log or artifact is committed here.
+
+## Story 002 verification
+
+Local focused gates on the width-12 authored workflow all passed:
+
+- `make test-ci-workflows` — exit `0`; `160` tests passed and `1` supported
+  environment-conditional test was skipped.
+- `actionlint .github/workflows/ci.yml` — exit `0`.
+- `node --test scripts/ci/lane-budget.test.mjs scripts/ci/functional-coverage-workflow.test.mjs`
+  — exit `0`; `6/6` tests passed.
+
+Remote candidate evidence passed at width 12 as summarized above. It proves
+the hosted four-CPU runner selected the raised value, the value reached the
+authoritative package scheduler, and the complete functional coverage lane
+remained green with its required artifacts. Final-head independent loopback
+and review-owned terminal CI/merge remain unproven here.
 
 ## Story 001 verification
 
