@@ -245,9 +245,26 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        if: matrix.suite == 'unit'
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/setup-go@v5
+        if: matrix.suite == 'functional'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Restore functional coverage Go cache
+        if: matrix.suite == 'functional'
+        id: functional-go-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: functional-coverage-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            functional-coverage-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:
