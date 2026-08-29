@@ -12,8 +12,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -416,11 +416,10 @@ func testDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T, host *share
 		},
 	})
 
-	provider := testutil.NewNativeMockProviderWithErrors(
-		[]providers.ExecuteResult{{}},
-		[]error{errors.New("upstream service down")},
+	runner := testutil.NewProviderCommandRunner(
+		cascadingFailureProviderError("upstream service down"),
 	)
-	host.provider.register(t, dir, provider)
+	host.provider.registerCommandRunner(t, dir, runner)
 	_, listed, _ := runSharedRelationshipFactoryToCompletionAndClose(t, host, dir, 10*time.Second)
 
 	assertCascadingFailurePlaces(t, listed, map[string]int{
@@ -430,13 +429,13 @@ func testDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T, host *share
 		"task:complete":   0,
 	})
 	assertFailedDependsOnWork(t, listed, parentWorkID)
-	if provider.CallCount() != 1 {
+	if runner.CallCount() != 1 {
 		t.Fatalf(
 			"provider command runner calls = %d, want 1 finisher failure for prerequisite already at processing",
-			provider.CallCount(),
+			runner.CallCount(),
 		)
 	}
-	assertCascadingFailureProviderRequests(t, provider.Calls())
+	assertCascadingFailureProviderRequests(t, runner)
 }
 
 // testTransitiveDependencyFailureCascadesToFailedTerminals proves through public
@@ -471,11 +470,15 @@ func testTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T, host
 		},
 	})
 
-	provider := testutil.NewNativeMockProviderWithErrors(
-		[]providers.ExecuteResult{sharedRelationshipAcceptedResult(), {}},
-		[]error{nil, errors.New("crash")},
+	runner := testutil.NewProviderCommandRunner(
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("crash"),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("crash"),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("crash"),
 	)
-	host.provider.register(t, dir, provider)
+	host.provider.registerCommandRunner(t, dir, runner)
 	_, listed, _ := runSharedRelationshipFactoryToCompletionAndClose(t, host, dir, 10*time.Second)
 
 	assertCascadingFailurePlaces(t, listed, map[string]int{
@@ -486,13 +489,13 @@ func testTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T, host
 	})
 	assertFailedDependsOnWork(t, listed, pWorkID)
 	assertFailedDependsOnWork(t, listed, c1WorkID)
-	if provider.CallCount() != 2 {
+	if runner.CallCount() != 2 {
 		t.Fatalf(
 			"provider command runner calls = %d, want 2 starter and finisher invocations before dependents cascade to failed",
-			provider.CallCount(),
+			runner.CallCount(),
 		)
 	}
-	assertCascadingFailureProviderRequests(t, provider.Calls())
+	assertCascadingFailureProviderRequests(t, runner)
 }
 
 // testCompletedPrerequisiteIsNotCascadedWhenDependentFails proves through public
@@ -516,16 +519,13 @@ func testCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T, host
 		},
 	})
 
-	provider := testutil.NewNativeMockProviderWithErrors(
-		[]providers.ExecuteResult{
-			sharedRelationshipAcceptedResult(),
-			sharedRelationshipAcceptedResult(),
-			sharedRelationshipAcceptedResult(),
-			{},
-		},
-		[]error{nil, nil, nil, errors.New("oops")},
+	runner := testutil.NewProviderCommandRunner(
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("oops"),
 	)
-	host.provider.register(t, dir, provider)
+	host.provider.registerCommandRunner(t, dir, runner)
 	_, listed, _ := runSharedRelationshipFactoryToCompletionAndClose(t, host, dir, 10*time.Second)
 
 	assertCascadingFailurePlaces(t, listed, map[string]int{
@@ -535,29 +535,34 @@ func testCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T, host
 	if !support.HasWorkAtCustomerState(listed, aWorkID, support.WorkCustomerLocation("task", "complete")) {
 		t.Fatalf("prerequisite work %q not at complete after dependent failure: %#v", aWorkID, listed.Results)
 	}
-	if provider.CallCount() != 4 {
+	if runner.CallCount() != 4 {
 		t.Fatalf(
 			"provider command runner calls = %d, want 4 starter and finisher invocations for prerequisite then dependent",
-			provider.CallCount(),
+			runner.CallCount(),
 		)
 	}
-	assertCascadingFailureProviderRequests(t, provider.Calls())
+	assertCascadingFailureProviderRequests(t, runner)
 }
 
-func assertCascadingFailureProviderRequests(t *testing.T, requests []providers.ExecuteRequest) {
+func assertCascadingFailureProviderRequests(t *testing.T, runner *testutil.ProviderCommandRunner) {
 	t.Helper()
 
-	for index, request := range requests {
-		if strings.TrimSpace(request.TransitionID) == "" {
-			t.Fatalf("provider execution request %d missing transition: %#v", index, request)
+	for index, request := range runner.Requests() {
+		if strings.TrimSpace(request.Command) == "" {
+			t.Fatalf("provider command request %d missing command: %#v", index, request)
 		}
-		if len(request.Correlation.WorkIDs) == 0 {
-			t.Fatalf("provider execution request %d missing Work IDs: %#v", index, request)
-		}
-		if strings.TrimSpace(request.FactoryDirectory) == "" {
-			t.Fatalf("provider execution request %d missing Factory directory: %#v", index, request)
+		if len(request.Args) == 0 {
+			t.Fatalf("provider command request %d missing args: %#v", index, request)
 		}
 	}
+}
+
+func cascadingFailureProviderSuccess() platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}
+}
+
+func cascadingFailureProviderError(message string) platformprocess.CommandResult {
+	return platformprocess.CommandResult{ExitCode: 1, Stderr: []byte(message)}
 }
 
 func assertCascadingFailurePlaces(

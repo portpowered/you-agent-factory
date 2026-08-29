@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -76,6 +77,18 @@ func (router *sharedRelationshipProviderRouter) register(
 	})
 }
 
+func (router *sharedRelationshipProviderRouter) registerCommandRunner(
+	t testing.TB,
+	factoryDir string,
+	runner *testutil.ProviderCommandRunner,
+) {
+	t.Helper()
+	if runner == nil {
+		t.Fatal("shared relationship command runner is nil")
+	}
+	router.register(t, factoryDir, &sharedRelationshipCommandRunnerProvider{router: router, runner: runner})
+}
+
 func (router *sharedRelationshipProviderRouter) unregister(factoryDir string) error {
 	key := sharedRelationshipPathKey(factoryDir)
 	router.mu.Lock()
@@ -108,6 +121,93 @@ func (router *sharedRelationshipProviderRouter) routeCount() int {
 	router.mu.RLock()
 	defer router.mu.RUnlock()
 	return len(router.routes)
+}
+
+// Run exposes the same fixture-selected command edge to the production
+// composition boundary. ProviderOverride routes direct native requests for
+// the shared host, while command-runner rows project back through this edge so
+// their command shape remains observable.
+func (router *sharedRelationshipProviderRouter) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return router.runCommand(ctx, request.WorkDir, request)
+}
+
+func (router *sharedRelationshipProviderRouter) runCommand(
+	ctx context.Context,
+	factoryDir string,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	key := sharedRelationshipPathKey(factoryDir)
+	router.mu.RLock()
+	provider := router.routes[key]
+	router.mu.RUnlock()
+	commandProvider, ok := provider.(*sharedRelationshipCommandRunnerProvider)
+	if !ok || commandProvider == nil || commandProvider.runner == nil {
+		return platformprocess.CommandResult{}, fmt.Errorf("shared relationship command route %q is not registered", key)
+	}
+	return commandProvider.runner.Run(ctx, request)
+}
+
+// sharedRelationshipCommandRunnerProvider keeps the original command-runner
+// witness for failure rows while the surrounding router selects the fixture
+// route for the shared process. The runner remains the injected external edge;
+// this adapter only projects the command result onto the Providers override
+// contract used by the shared host.
+type sharedRelationshipCommandRunnerProvider struct {
+	router *sharedRelationshipProviderRouter
+	testutil.NativeProvider
+	runner *testutil.ProviderCommandRunner
+}
+
+func (provider *sharedRelationshipCommandRunnerProvider) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	command := sharedRelationshipProviderCommand(request)
+	result, err := provider.router.runCommand(ctx, request.FactoryDirectory, command)
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	if result.ExitCode == 0 {
+		return sharedRelationshipAcceptedResult(), nil
+	}
+	message := strings.TrimSpace(string(result.Stderr))
+	if message == "" {
+		message = fmt.Sprintf("provider command exited with code %d", result.ExitCode)
+	}
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindUnknown,
+		Message: message,
+		Diagnostics: &providers.ExecuteDiagnostics{
+			Command: &providers.ExecuteCommandDiagnostics{
+				Command:    command.Command,
+				Args:       append([]string(nil), command.Args...),
+				Stderr:     message,
+				ExitCode:   result.ExitCode,
+				WorkingDir: command.WorkDir,
+			},
+		},
+	}
+}
+
+func sharedRelationshipProviderCommand(request providers.ExecuteRequest) platformprocess.CommandRequest {
+	args := []string{"exec", "--json"}
+	if request.SkipPermissions {
+		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	}
+	if model := strings.TrimSpace(request.Model); model != "" {
+		args = append(args, "--model", model)
+	}
+	args = append(args, "-")
+	return platformprocess.CommandRequest{
+		Command: string(providers.IDCodex),
+		Args:    args,
+		Stdin:   []byte(request.UserMessage),
+		Env:     append([]string(nil), request.ProcessEnvironment...),
+		WorkDir: request.WorkingDirectory,
+	}
 }
 
 func sharedRelationshipAcceptedResult() providers.ExecuteResult {
@@ -246,24 +346,36 @@ func sharedRelationshipFailureProvider(targetWorkID string, failure error) provi
 // boundary proof.
 func TestSharedServerRelationships(t *testing.T) {
 	t.Parallel()
+	host := newSharedRelationshipHost(t)
+	runSharedRelationshipScenarios(t, host)
+	t.Run("LifecycleCleanupProbes", func(t *testing.T) {
+		runSharedRelationshipLifecycleProbes(t, host)
+	})
+}
 
+func newSharedRelationshipHost(t *testing.T) *sharedRelationshipHost {
+	t.Helper()
 	hostFactoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_simple_dir"))
 	providerRouter := newSharedRelationshipProviderRouter()
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: hostFactoryDir,
 		Edges: serviceedges.Edges{
-			ProviderOverride:    providerRouter,
-			ScriptCommandRunner: support.NewStaticSuccessCommandRunner("COMPLETE"),
+			ProviderOverride:      providerRouter,
+			ProviderCommandRunner: providerRouter,
+			ScriptCommandRunner:   support.NewStaticSuccessCommandRunner("COMPLETE"),
 		},
 		WaitForServiceModeRuntime: true,
 	})
-	host := &sharedRelationshipHost{server: server, provider: providerRouter}
 	t.Cleanup(func() {
 		if got := providerRouter.routeCount(); got != 0 {
 			t.Errorf("shared relationship provider routes after child cleanup = %d, want zero", got)
 		}
 	})
+	return &sharedRelationshipHost{server: server, provider: providerRouter}
+}
 
+func runSharedRelationshipScenarios(t *testing.T, host *sharedRelationshipHost) {
+	t.Helper()
 	tests := []struct {
 		name string
 		run  func(*testing.T, *sharedRelationshipHost)
@@ -346,9 +458,6 @@ func TestSharedServerRelationships(t *testing.T) {
 			test.run(t, host)
 		})
 	}
-	t.Run("LifecycleCleanupProbes", func(t *testing.T) {
-		runSharedRelationshipLifecycleProbes(t, host)
-	})
 }
 
 func runSharedRelationshipLifecycleProbes(t *testing.T, host *sharedRelationshipHost) {
