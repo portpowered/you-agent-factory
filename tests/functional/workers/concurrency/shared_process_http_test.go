@@ -217,6 +217,52 @@ func listConcurrencyWork(t testing.TB, baseURL, sessionID string) factoryapi.Lis
 	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
 }
 
+func listConcurrencyWorkerSessions(
+	t testing.TB,
+	baseURL, sessionID string,
+	workID *string,
+) factoryapi.ListWorkerSessionsResponse {
+	t.Helper()
+	work := stringPointerValue(workID)
+	if work == "" {
+		t.Fatal("Worker Session lookup Work ID is empty")
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(work)
+	return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
+}
+
+func cancelConcurrencyWorkerSession(
+	t testing.TB,
+	baseURL, workerSessionID string,
+) (int, string, factoryapi.WorkerSessionControlResponse) {
+	t.Helper()
+	if strings.TrimSpace(workerSessionID) == "" {
+		t.Fatal("Worker Session control ID is empty")
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/worker-sessions/" + url.PathEscape(workerSessionID) + "/cancel"
+	request, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("build POST %s: %v", endpoint, err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s: %v", endpoint, err)
+	}
+	var control factoryapi.WorkerSessionControlResponse
+	if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+		if err := json.Unmarshal(body, &control); err != nil {
+			t.Fatalf("decode POST %s: %v", endpoint, err)
+		}
+	}
+	return response.StatusCode, string(body), control
+}
+
 func concurrencySessionEvents(t testing.TB, baseURL, sessionID string) []factoryapi.FactoryEvent {
 	t.Helper()
 	return support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)

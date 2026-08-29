@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -164,14 +165,64 @@ func (fixture *concurrencySharedProcessFixture) runSessionCancellationIsolation(
 
 func (fixture *concurrencySharedProcessFixture) runWorkerSessionCancellation(t *testing.T) {
 	t.Helper()
-	// The public Factory Session worker-session observation endpoint exposes
-	// runtime-owned Worker Sessions, while the top-level worker-session control
-	// endpoint owns a separate direct Worker Sessions service. There is no
-	// public Factory Session-scoped cancellation route for this queued-work
-	// witness. Keep the acceptance edge explicit until the public ownership
-	// boundary is corrected; do not turn the misleading control response into
-	// false cancellation evidence.
-	t.Skip("CC-05 blocked: public Worker Session cancel does not control a Factory Session runtime Worker Session")
+	session := fixture.openCase(t, "CC-05", 1, concurrencyRunnerHold, "cc05-first", "", 0)
+	first := submitConcurrencyWork(t, session, "cc05-first")
+	session.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	second := submitConcurrencyWork(t, session, "cc05-second")
+	waitConcurrencyCategories(t, fixture.baseURL, session.id, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial >= 1
+	})
+
+	workerSessions := listConcurrencyWorkerSessions(t, fixture.baseURL, session.id, first.WorkId)
+	if len(workerSessions.Sessions) != 1 {
+		t.Fatalf("CC-05 runtime Worker Session list = %#v, want one observation", workerSessions)
+	}
+	workerSessionID := workerSessions.Sessions[0].WorkerSessionId
+	if strings.TrimSpace(workerSessionID) == "" {
+		t.Fatalf("CC-05 runtime Worker Session observation = %#v, want identity", workerSessions.Sessions[0])
+	}
+
+	status, body, control := cancelConcurrencyWorkerSession(t, fixture.baseURL, workerSessionID)
+	if status != http.StatusNotFound || !strings.Contains(body, `"code":"NOT_FOUND"`) ||
+		!strings.Contains(body, "Worker Session not found") {
+		t.Fatalf("CC-05 top-level cancel = status %d body %q response=%#v, want current runtime-owned Worker Session not-found result", status, body, control)
+	}
+	// The top-level control lookup does not reach the runtime-owned Worker
+	// Session, and the dispatch remains in the controlled runner. Characterize
+	// that ownership gap before releasing the edge: the capacity slot is still
+	// occupied and the queued successor has not started.
+	if got := session.runner.activeCallCount(); got != 1 {
+		t.Fatalf("CC-05 active calls after top-level cancel = %d, want one until controlled release", got)
+	}
+	if got := session.runner.callCount(); got != 1 {
+		t.Fatalf("CC-05 provider calls after top-level cancel = %d, want one with successor queued", got)
+	}
+	if got := session.runner.canceledCount(); got != 0 {
+		t.Fatalf("CC-05 controlled cancellations after top-level cancel = %d, want zero", got)
+	}
+	t.Logf("CC-05 characterization: top-level cancel returned HTTP 404 NOT_FOUND for runtime Worker Session %q, leaving the runtime capacity slot occupied; controlled edge release is required before B starts", workerSessionID)
+
+	session.runner.releaseCall(1)
+	started := session.runner.waitStarted(t, concurrencySharedProcessTimeout)
+	if !commandRequestContains(started.request, "cc05-second") {
+		t.Fatalf("CC-05 successor command = %#v, want cc05-second after controlled release", started.request)
+	}
+	if got := session.runner.callsForMarker("cc05-second"); got != 1 {
+		t.Fatalf("CC-05 successor provider calls = %d, want exactly one", got)
+	}
+	session.runner.releaseCall(2)
+	waitConcurrencyWorkSettled(t, fixture.baseURL, session.id, 2)
+	assertConcurrencyWorkCompleted(t, session, first.WorkId, "cc05-first")
+	assertConcurrencyWorkCompleted(t, session, second.WorkId, "cc05-second")
+	secondWork := concurrencyWorkByID(t, session, second.WorkId)
+	secondContent := workContentText(t, secondWork)
+	if strings.Contains(secondContent, "cc05-first") {
+		t.Fatalf("CC-05 successor Work contains canceled target marker: %q", secondContent)
+	}
+	if got := session.runner.activeCallCount(); got != 0 {
+		t.Fatalf("CC-05 active calls after successor completion = %d, want zero", got)
+	}
+	session.closeAndAssertGone(t)
 }
 
 func (fixture *concurrencySharedProcessFixture) runIdempotentRequest(t *testing.T) {
@@ -202,18 +253,25 @@ func (fixture *concurrencySharedProcessFixture) runDuplicateConflict(t *testing.
 	request := concurrencyWorkRequest("cc07-request", "cc07-original", "cc07-name")
 	first := upsertConcurrencyWorkRequest(t, fixture.baseURL, session.id, request)
 	waitConcurrencyWorkSettled(t, fixture.baseURL, session.id, 1)
+	originalWorkID := stringPointer(first.Works[0].WorkId)
+	beforeWork := concurrencyWorkByID(t, session, originalWorkID)
 	beforeEvents := concurrencySessionEvents(t, fixture.baseURL, session.id)
 	conflicting := concurrencyWorkRequest("cc07-request", "cc07-conflict", "cc07-name")
 	status, body, second := upsertConcurrencyWorkRequestStatus(t, fixture.baseURL, session.id, conflicting)
 	if status != http.StatusCreated || second.RequestId != first.RequestId || second.TraceId != first.TraceId || len(second.Works) != 1 || second.Works[0] != first.Works[0] {
-		t.Fatalf("CC-07 duplicate request = status %d body %q response=%#v first=%#v, want current idempotent replay", status, body, second, first)
+		t.Fatalf("CC-07 changed-body replay = status %d body %q response=%#v first=%#v, want current idempotent replay", status, body, second, first)
 	}
 	afterEvents := concurrencySessionEvents(t, fixture.baseURL, session.id)
-	assertConcurrencyEventIDsUnchanged(t, beforeEvents, afterEvents, "CC-07 conflict")
+	assertConcurrencyEventIDsUnchanged(t, beforeEvents, afterEvents, "CC-07 changed-body replay")
+	afterWork := concurrencyWorkByID(t, session, originalWorkID)
+	if !reflect.DeepEqual(beforeWork, afterWork) {
+		t.Fatalf("CC-07 original Work changed after changed-body replay: before=%#v after=%#v", beforeWork, afterWork)
+	}
 	assertConcurrencyWorkCompleted(t, session, stringPointer(first.Works[0].WorkId), "cc07-original")
 	if got := session.runner.callCount(); got != 1 {
-		t.Fatalf("CC-07 provider calls = %d, want one", got)
+		t.Fatalf("CC-07 provider calls after changed-body replay = %d, want one", got)
 	}
+	t.Logf("CC-07 characterization: changed-body request-ID replay returned HTTP %d with the original Work/result unchanged and no additional event or provider call", status)
 	session.closeAndAssertGone(t)
 }
 
