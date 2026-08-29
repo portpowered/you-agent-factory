@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -221,4 +223,56 @@ func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime
 		Locality:            factoryapi.WorkerModelLocality(runtime.Locality),
 		SupportedOperations: operationsToGenerated(runtime.SupportedOperations), Diagnostics: &diagnostics,
 	}
+}
+
+func genericCLIResultFromGenerated(
+	response factoryapi.GenericModelInvocationResponse,
+	modelName string,
+	operation string,
+) (models.InvokeModelResult, error) {
+	result := models.InvokeModelResult{
+		ModelName: modelName,
+		Operation: operation,
+		Outputs:   make([]models.InferenceOutput, len(response.Outputs)),
+	}
+	for index, output := range response.Outputs {
+		mapped := models.InferenceOutput{
+			Name:     output.Name,
+			Modality: models.Modality(output.Modality),
+		}
+		if output.ContentType != nil {
+			mapped.ContentType = *output.ContentType
+		}
+		if output.MediaType != nil {
+			mapped.MediaType = *output.MediaType
+		}
+		if output.Content != nil {
+			mapped.Content = *output.Content
+		}
+		if output.Artifact != nil {
+			artifactRef, err := (models.InferenceArtifactRef{}).Parse(output.Artifact.ArtifactRef)
+			if err != nil {
+				return models.InvokeModelResult{}, fmt.Errorf("malformed models invocation response: output artifact reference is invalid")
+			}
+			artifact := &models.InferenceArtifact{Artifact: artifactRef}
+			if output.Artifact.Name != nil {
+				artifact.Name = *output.Artifact.Name
+			}
+			if output.Artifact.MediaType != nil {
+				artifact.MediaType = *output.Artifact.MediaType
+			}
+			if output.Artifact.SizeBytes != nil {
+				artifact.SizeBytes = *output.Artifact.SizeBytes
+			}
+			if output.Artifact.Properties != nil {
+				artifact.Properties = make(map[string]string, len(*output.Artifact.Properties))
+				for key, value := range *output.Artifact.Properties {
+					artifact.Properties[key] = value
+				}
+			}
+			mapped.Artifact = artifact
+		}
+		result.Outputs[index] = mapped
+	}
+	return result, nil
 }

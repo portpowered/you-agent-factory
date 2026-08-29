@@ -457,36 +457,27 @@ func (fixture *remoteRepeatedFixture) read(_ context.Context, path string, _ int
 
 func exerciseRemoteInputFailures(t *testing.T) {
 	t.Helper()
-	var getCalls, postCalls int
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Method == http.MethodGet {
-			getCalls++
-			writeRemoteOMNICatalog(writer)
-			return
-		}
-		postCalls++
-		http.Error(writer, "unexpected invocation", http.StatusInternalServerError)
-	}))
+	fixture := &remoteInputFailureFixture{}
+	server := httptest.NewServer(http.HandlerFunc(fixture.serve))
 	t.Cleanup(server.Close)
-	reader := func(_ context.Context, path string, maxBytes int64) ([]byte, error) {
-		switch path {
-		case "missing.png":
-			return nil, errors.New("file does not exist")
-		case "empty.png":
-			return []byte{}, nil
-		case "large.png":
-			return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
-		default:
-			return []byte("not an image"), nil
-		}
+	service := remoteHTTPService(t, fixture.read)
+	for _, testCase := range remoteInputFailureCases() {
+		assertRemoteInputFailureCase(t, service, server.URL, fixture, testCase)
 	}
-	service := remoteHTTPService(t, reader)
-	cases := []struct {
-		inputs []string
-		want   string
-		cause  string
-		gets   int
-	}{
+	if fixture.getCalls != 3 || fixture.postCalls != 0 {
+		t.Fatalf("input failure requests = GET:%d POST:%d, want catalog GET only for dynamic validation and zero invocation POSTs", fixture.getCalls, fixture.postCalls)
+	}
+}
+
+type remoteInputFailureCase struct {
+	inputs []string
+	want   string
+	cause  string
+	gets   int
+}
+
+func remoteInputFailureCases() []remoteInputFailureCase {
+	return []remoteInputFailureCase{
 		{inputs: []string{"prompt"}, want: "expected slot=value"},
 		{inputs: []string{"prompt=hello"}, want: "required input slot is missing", gets: 1},
 		{inputs: []string{"prompt=one", "prompt=two", "image=@ok.png"}, want: "at most one value", gets: 1},
@@ -495,27 +486,60 @@ func exerciseRemoteInputFailures(t *testing.T) {
 		{inputs: []string{"prompt=hello", "image=@empty.png"}, want: "failed to load --input input", cause: "file is empty"},
 		{inputs: []string{"prompt=hello", "image=@large.png"}, want: "failed to load --input input", cause: "exceeds"},
 	}
-	for _, testCase := range cases {
-		beforeGets := getCalls
-		var output bytes.Buffer
-		cfg := remoteInvokeConfig(context.Background(), server.URL, testCase.inputs, &output)
-		cfg.JSON = true
-		err := service.Invoke(cfg)
-		if err == nil || !strings.Contains(err.Error(), testCase.want) || output.Len() != 0 {
-			t.Fatalf("remote input failure error/output = %v/%q, want %q and empty output", err, output.String(), testCase.want)
-		}
-		if testCase.cause != "" {
-			var failure *clidiag.LocalFailure
-			if !errors.As(err, &failure) || failure.Cause == nil || !strings.Contains(failure.Cause.Error(), testCase.cause) {
-				t.Fatalf("remote local failure = %#v, want cause %q", failure, testCase.cause)
-			}
-		}
-		if got := getCalls - beforeGets; got != testCase.gets {
-			t.Fatalf("catalog GETs for inputs %#v = %d, want %d", testCase.inputs, got, testCase.gets)
+}
+
+func assertRemoteInputFailureCase(
+	t *testing.T,
+	service *httpService,
+	serverURL string,
+	fixture *remoteInputFailureFixture,
+	testCase remoteInputFailureCase,
+) {
+	t.Helper()
+	beforeGets := fixture.getCalls
+	var output bytes.Buffer
+	cfg := remoteInvokeConfig(context.Background(), serverURL, testCase.inputs, &output)
+	cfg.JSON = true
+	err := service.Invoke(cfg)
+	if err == nil || !strings.Contains(err.Error(), testCase.want) || output.Len() != 0 {
+		t.Fatalf("remote input failure error/output = %v/%q, want %q and empty output", err, output.String(), testCase.want)
+	}
+	if testCase.cause != "" {
+		var failure *clidiag.LocalFailure
+		if !errors.As(err, &failure) || failure.Cause == nil || !strings.Contains(failure.Cause.Error(), testCase.cause) {
+			t.Fatalf("remote local failure = %#v, want cause %q", failure, testCase.cause)
 		}
 	}
-	if getCalls != 3 || postCalls != 0 {
-		t.Fatalf("input failure requests = GET:%d POST:%d, want catalog GET only for dynamic validation and zero invocation POSTs", getCalls, postCalls)
+	if got := fixture.getCalls - beforeGets; got != testCase.gets {
+		t.Fatalf("catalog GETs for inputs %#v = %d, want %d", testCase.inputs, got, testCase.gets)
+	}
+}
+
+type remoteInputFailureFixture struct {
+	getCalls  int
+	postCalls int
+}
+
+func (fixture *remoteInputFailureFixture) serve(writer http.ResponseWriter, request *http.Request) {
+	if request.Method == http.MethodGet {
+		fixture.getCalls++
+		writeRemoteOMNICatalog(writer)
+		return
+	}
+	fixture.postCalls++
+	http.Error(writer, "unexpected invocation", http.StatusInternalServerError)
+}
+
+func (fixture *remoteInputFailureFixture) read(_ context.Context, path string, maxBytes int64) ([]byte, error) {
+	switch path {
+	case "missing.png":
+		return nil, errors.New("file does not exist")
+	case "empty.png":
+		return []byte{}, nil
+	case "large.png":
+		return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
+	default:
+		return []byte("not an image"), nil
 	}
 }
 
