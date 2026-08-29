@@ -185,7 +185,7 @@ results, root construction, or cleanup boundaries:
 
 | Cases | Retained witness | Consolidation and assertion parity |
 | --- | --- | --- |
-| CASE-001 and CASE-013 | `TestCLIJSONSuccessDecodesToPublicInvocationResult` | One default-JSON capture now proves completed status, exact primary text, empty stderr, public decoding, and private-runtime-field absence. The former success subtest in `TestCLIJSONContainsNoPrivateRuntimeFields` was removed as a duplicate. |
+| CASE-001 and CASE-013 | `TestCLIJSONFailureRemainsValidJSON/success_recovers_after_terminal_failure_on_the_shared_root` | One default-JSON capture now proves completed status, exact primary text, empty stderr, public decoding, and private-runtime-field absence. The former success subtest in `TestCLIJSONContainsNoPrivateRuntimeFields` was removed as a duplicate; story 003 later placed the retained success capture after a terminal-failure recovery step. |
 | CASE-011 and applicable CASE-021 | `TestCLINDJSONEmitsDecodableResponseEventsThenInvocationResult` | One response-stream capture now proves public Factory Event shape, event-before-terminal ordering, strictly increasing Factory and Factory Session sequences, privacy, exactly one terminal result, and terminal EOF. The former `TestCLINDJSONSequenceIsMonotonic` journey was removed as a duplicate. |
 | CASE-015 | `TestCLITextStreamSurfacesIncrementalMessages` | The existing first-chunk-gated capture now also runs the final structured-envelope/operator-noise assertions after release, retaining the in-flight ordering, stable progress, canonical lifecycle, separator, and primary-result checks. |
 | CASE-018 | `TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise/quiet_clean_primary_result` | Quiet remains a distinct accepted execution and still proves raw primary stdout, empty stderr, and no structured/operator noise. |
@@ -220,12 +220,118 @@ lifecycle behavior, the final package median, exact-head loopback, terminal
 CI, or merge; those remain owned by GATE-PREACT, GATE-FAILURE,
 GATE-LIFECYCLE, GATE-PERF, VAL-001, and review.
 
+## Story 003 — GATE-PREACT / GATE-FAILURE
+
+The bad-input and failure paths retain the pre-edit assertion denominator while
+admitting only the proven pre-activation cases concurrently. No production,
+shared-support, generated, or isolated-lifecycle source changed.
+
+### Post-edit source hashes
+
+| Source | SHA-256 |
+| --- | --- |
+| `tests/functional/transport/cli/output/json_result_test.go` | `5864FE8BD0E4F919CE63C13FD742A7DBFD2D6D93D2A2B9E83D351CCB72D7F17E` |
+| `tests/functional/transport/cli/output/ndjson_stream_test.go` | `48F8DB2C3CFA0D97D6DE4BE6924B2BE5412F7B6070FA0520F379254E5941AEC2` |
+| `tests/functional/transport/cli/output/shared_fixture_test.go` | `0BADA8079152BF3F69B8ED0532568E0770C22C6B7DFF6BBFAB7FCE5C2F68C03A` |
+| `tests/functional/transport/cli/output/stream_backpressure_test.go` | `CA65105955D35612222FC418710E206F32A35BE94D690315542D5F8211D3EA97` |
+| `tests/functional/transport/cli/output/text_stream_test.go` | `751C26B1F0FC1A130E82E838A614AA5A2E9791D6270EE51B717F6936DAEBB088` |
+
+### Bounded pre-activation batch and assertion parity
+
+`TestCLIInvalidInputsAreBadRequest` now prepares seven independent
+`Process.Execute` inputs and admits them through one shared-root,
+test-owned start barrier. CASE-004 through CASE-007 retain their distinct
+unknown-argument and missing-value inputs; CASE-008 through CASE-010 retain
+their quiet/JSON conflict and unsupported-output inputs. Each input owns a
+fresh home, working directory, captured stdout/stderr, and controlled provider
+route. Every provider runner recorded zero calls, the aggregate activation
+effect counter remained zero, and the router and active-invocation counts were
+zero after the batch. The observed maximum concurrency was 7 for all 7 cases.
+
+The batch is bounded to this exact seven-case pre-activation set. The shared
+fixture mutex still excludes all ordinary shared-root executions, and the four
+isolated lifecycle roots remain independent. No product activation, successful
+runtime, listener, or external-work path is admitted to this overlap.
+
+The failure denominator remains distinct: missing Factory and logical terminal
+failure stay in `TestCLIJSONFailureRemainsValidJSON`; controlled provider
+rejection remains in `TestCLIJSONFailureContainsNoPrivateRuntimeFields` and
+`TestCLINDJSONFailureEndsWithOneTerminalResult`. The JSON failure test now
+executes a fresh successful JSON input immediately after its terminal failure
+subtest and checks completed status, primary text, privacy, route cleanup, and
+active-invocation cleanup. This proves shared-root failure-to-success recovery
+without adding a duplicate success journey. CASE-021 terminal/EOF checks and
+CASE-022 package and isolated cleanup ownership remain unchanged or stronger.
+
+The package topology is still five roots and 19 `Process.Execute` journeys:
+15 shared-root journeys (including the seven-entry pre-activation batch) and
+four isolated lifecycle journeys. The four existing polling/sleep sites in
+the isolated lifecycle witnesses are unchanged; this story adds only channel
+barriers and no sleep or timeout site.
+
+### Verification evidence
+
+All commands exercised the real in-process customer CLI through
+`support.BuildProcess`/`Process.Execute`, with controlled provider and effect
+edges and unique invocation streams:
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLIInvalidInputsAreBadRequest$' -count=1 -v
+```
+
+PASS, package-reported 2.662 s. The test log recorded
+`cases=7 max_concurrent=7 provider_calls=0 product_effects=0 routes_after=0 active_after=0`;
+all seven subtests returned their expected BAD_REQUEST response, empty stdout,
+and zero provider calls.
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^(TestCLIInvalidInputsAreBadRequest|TestCLIJSONFailureRemainsValidJSON|TestCLIJSONFailureContainsNoPrivateRuntimeFields|TestCLINDJSONFailureEndsWithOneTerminalResult)$' -count=3
+```
+
+PASS, package-reported 36.804 s across three repetitions on the final formatted
+source. This proves repeat
+stability for the bounded overlap, missing-Factory/logical/provider/NDJSON
+failure contracts, privacy, and shared-root recovery.
+
+```text
+go test -race ./tests/functional/transport/cli/output/... -run '^TestCLIInvalidInputsAreBadRequest$' -count=1 -v
+```
+
+PASS, package-reported 8.892 s. No race was detected in the test-owned
+pre-activation overlap, per-case stream/route handling, or aggregate effect
+observation.
+
+```text
+go test ./tests/functional/transport/cli/output/... -run '^TestCLIInvalidInputsAreBadRequest$' -count=1 -v
+```
+
+PASS on the final source, with the same 7-case/7-concurrent observation. The
+full package command also passed:
+
+```text
+go test ./tests/functional/transport/cli/output/... -count=1
+```
+
+PASS, package-reported 32.926 s. Two earlier bounded attempts on this same
+source were retained as host-contended diagnostics: one timed out in the
+unchanged `TestCLISlowWriterDoesNotReorderResponseEvents` stdout-write guard,
+and one timed out in the unchanged `TestCLIWriterFailureCancelsInvocation`
+provider-work-start guard. No lifecycle timeout, sleep, production, or shared
+support source was changed; the subsequent exact command passed. All current success, failure, privacy,
+backpressure, listener, interruption, ordering, and cleanup witnesses passed
+together. `git diff --check` passed.
+
+This story proves the bounded pre-activation overlap, all seven distinct
+BAD_REQUEST cases, failure parity, recovery, race safety for the changed
+concurrent path, and package-level cleanup. It does not prove the final
+three-sample performance target, isolated lifecycle synchronization changes,
+clean exact-head loopback, terminal CI, or merge; those remain owned by
+GATE-LIFECYCLE, GATE-PERF, VAL-001, and review.
+
 ## Later-gate inputs and remaining edges
 
 - `GATE-SUCCESS`: consolidate duplicate successful output evidence while
   preserving every row above.
-- `GATE-PREACT` / `GATE-FAILURE`: prove bounded bad-input overlap and every
-  failure/recovery contract, including provider/effect zero counts.
 - `GATE-LIFECYCLE`: replace eligible polling with deterministic test-owned
   notifications without removing isolated roots or adding sleeps.
 - `GATE-PERF`: record three comparable final samples and compare their median

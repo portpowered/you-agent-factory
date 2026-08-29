@@ -19,26 +19,11 @@ const (
 	jsonWantInvocationResultText = "mock worker accepted"
 )
 
-// TestCLIJSONSuccessDecodesToPublicInvocationResult proves the default JSON
-// stream ends with a public, private-field-free InvocationResponse that
-// decodes through the contract with completed terminal status.
-func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
-	t.Parallel()
-	stdout := runGoalSingleJSON(t)
-	response := decodeSingleJSONInvocationResponse(t, stdout)
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
-	}
-	if got := invocationPrimaryResultText(t, response); got != jsonWantInvocationResultText {
-		t.Fatalf("primaryResult = %q, want %q", got, jsonWantInvocationResultText)
-	}
-	assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
-}
-
 // TestCLIJSONFailureRemainsValidJSON proves CLI JSON failures stay
 // machine-parseable: pre-terminal errors emit exactly one stderr ErrorResponse
-// with empty stdout, and terminal invocation failures end their stdout stream
-// with a failed InvocationResponse plus one stderr ErrorResponse.
+// with empty stdout, terminal invocation failures end their stdout stream with
+// a failed InvocationResponse plus one stderr ErrorResponse, and a later
+// successful invocation recovers on the same shared root.
 func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 	t.Parallel()
 	t.Run("pre-terminal failure leaves stdout empty with one stderr ErrorResponse", func(t *testing.T) {
@@ -85,6 +70,21 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 			t.Fatalf("ErrorResponse = %#v, want code %s and message prefix %q", errorResponse, *response.ErrorCode, *response.Message)
 		}
 	})
+
+	t.Run("success recovers after terminal failure on the shared root", func(t *testing.T) {
+		fixture := sharedMachineOutputFixture(t)
+		assertMachineOutputFixtureIdle(t, fixture)
+		stdout := runGoalSingleJSON(t)
+		response := decodeSingleJSONInvocationResponse(t, stdout)
+		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+			t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
+		}
+		if got := invocationPrimaryResultText(t, response); got != jsonWantInvocationResultText {
+			t.Fatalf("primaryResult = %q, want %q", got, jsonWantInvocationResultText)
+		}
+		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
+		assertMachineOutputFixtureIdle(t, fixture)
+	})
 }
 
 func jsonTerminalFailureFactoryPath(t *testing.T) string {
@@ -112,15 +112,18 @@ func jsonTerminalFailureFactoryPath(t *testing.T) string {
 	})
 }
 
-// TestCLIInvocationArgumentFailuresAreBadRequest proves malformed Factory
-// invocation arguments produce one standard client-error response in both
-// normal and quiet modes, before provider execution or runtime activation.
-func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
+// TestCLIInvalidInputsAreBadRequest proves the bounded pre-activation input
+// batch keeps every malformed argument and output-selector contract distinct.
+// The seven invocations share one root only while CLI parsing/output
+// validation rejects them; each retains its own streams, working directory,
+// provider route, and public error assertion.
+func TestCLIInvalidInputsAreBadRequest(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		args     []string
-		wantCode factoryapi.ErrorResponseCode
+		name                string
+		args                []string
+		packagedFactoryName string
+		wantCode            factoryapi.ErrorResponseCode
 	}{
 		{
 			name: "unknown argument in normal JSON mode",
@@ -128,7 +131,8 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 				"you", "--json", "run", "--named", "@you/plan-parallel", "--no-record",
 				"--planer-model", "bad-model", "--to", "reproduce the typo",
 			},
-			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
+			packagedFactoryName: "@you/plan-parallel",
+			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
 		},
 		{
 			name: "unknown argument in quiet mode",
@@ -136,7 +140,8 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
 				"--planer-model", "bad-model", "--to", "reproduce the typo",
 			},
-			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
+			packagedFactoryName: "@you/plan-parallel",
+			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
 		},
 		{
 			name: "missing value before next invocation flag",
@@ -144,25 +149,57 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
 				"--planner-model", "--to", "request without a planner model",
 			},
-			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
+			packagedFactoryName: "@you/plan-parallel",
+			wantCode:            factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
 		},
 		{
 			name:     "missing value for run flag",
 			args:     []string{"you", "run", "--quiet", "--factory", "--no-record"},
 			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
 		},
+		{
+			name:     "quiet and global JSON",
+			args:     []string{"you", "--json", "run", "--quiet"},
+			wantCode: runcli.InvocationOutputConflictCode,
+		},
+		{
+			name:     "quiet and explicit output",
+			args:     []string{"you", "run", "--quiet", "--output", "primary"},
+			wantCode: runcli.InvocationOutputConflictCode,
+		},
+		{
+			name:     "unsupported explicit output",
+			args:     []string{"you", "run", "--output", "provider-chunks"},
+			wantCode: runcli.InvocationOutputUnsupportedCode,
+		},
 	}
 
-	for _, test := range tests {
+	fixture := sharedMachineOutputFixture(t)
+	invocations := make([]machineOutputPreActivationInvocation, len(tests))
+	providerRunners := make([]*testutil.ProviderCommandRunner, len(tests))
+	for index, test := range tests {
+		_, inputs := newMachineOutputInputs(t, test.args, test.packagedFactoryName)
+		providerRunners[index] = testutil.NewProviderCommandRunner()
+		invocations[index] = machineOutputPreActivationInvocation{
+			inputs:         inputs,
+			providerRunner: providerRunners[index],
+		}
+	}
+	var effects atomic.Int32
+	batch := fixture.executePreActivationBatch(invocations, &effects)
+	t.Logf("pre-activation batch: cases=%d max_concurrent=%d provider_calls=0 product_effects=%d routes_after=0 active_after=0", len(invocations), batch.maxConcurrent, effects.Load())
+	if batch.maxConcurrent < 2 {
+		t.Fatalf("pre-activation batch concurrency = %d, want at least 2", batch.maxConcurrent)
+	}
+	assertMachineOutputFixtureIdle(t, fixture)
+	if got := effects.Load(); got != 0 {
+		t.Fatalf("product effects after pre-activation batch = %d, want 0", got)
+	}
+
+	for index, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			providerRunner := testutil.NewProviderCommandRunner()
-			stdout, stderr, err := runMachineOutputInvocation(
-				t,
-				test.args,
-				"@you/plan-parallel",
-				providerRunner,
-				nil,
-			)
+			inputs := invocations[index].inputs
+			stdout, stderr, err := inputs.Stdout(), inputs.Stderr(), batch.errors[index]
 			if err == nil {
 				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, stdout, stderr)
 			}
@@ -173,8 +210,8 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
 				t.Fatalf("ErrorResponse = %#v, want code %s and family BAD_REQUEST", response, test.wantCode)
 			}
-			if providerRunner.CallCount() != 0 {
-				t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+			if providerRunners[index].CallCount() != 0 {
+				t.Fatalf("provider dispatch calls = %d, want 0", providerRunners[index].CallCount())
 			}
 		})
 	}
@@ -197,53 +234,6 @@ func TestCLIJSONFailureContainsNoPrivateRuntimeFields(t *testing.T) {
 		assertPublicSingleJSONInvocationPayload(t, stdout, "stdout")
 		assertPublicSingleJSONErrorPayload(t, stderr, "stderr")
 	})
-}
-
-// TestCLIJSONOutputSelectionFailsBeforeProductActivation proves invalid CLI
-// output selectors fail before product activation with one stderr ErrorResponse
-// and no product side effects.
-func TestCLIJSONOutputSelectionFailsBeforeProductActivation(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		args     []string
-		wantCode factoryapi.ErrorResponseCode
-	}{
-		{
-			name:     "quiet and global JSON",
-			args:     []string{"you", "--json", "run", "--quiet"},
-			wantCode: runcli.InvocationOutputConflictCode,
-		},
-		{
-			name:     "quiet and explicit output",
-			args:     []string{"you", "run", "--quiet", "--output", "primary"},
-			wantCode: runcli.InvocationOutputConflictCode,
-		},
-		{
-			name:     "unsupported explicit output",
-			args:     []string{"you", "run", "--output", "provider-chunks"},
-			wantCode: runcli.InvocationOutputUnsupportedCode,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var effects atomic.Int32
-			stdout, stderr, err := runMachineOutputInvocation(t, test.args, "", nil, &effects)
-			if err == nil {
-				t.Fatal("Process.Execute error = nil, want output-selection failure")
-			}
-			if stdout != "" {
-				t.Fatalf("stdout = %q, want empty", stdout)
-			}
-			response := decodeSingleJSONErrorResponse(t, stderr)
-			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
-				t.Fatalf("ErrorResponse = %#v, want code %s", response, test.wantCode)
-			}
-			if effects.Load() != 0 {
-				t.Fatalf("product effects = %d, want 0", effects.Load())
-			}
-		})
-	}
 }
 
 func runGoalSingleJSON(t *testing.T) string {
