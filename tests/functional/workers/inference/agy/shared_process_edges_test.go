@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -608,9 +609,10 @@ func agyFactoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.Factory
 }
 
 type agySharedCommandRoute struct {
-	selector string
-	workDir  string
-	runner   platformprocess.CommandRunner
+	selector     string
+	workDir      string
+	runner       platformprocess.CommandRunner
+	runStreaming func(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
 }
 
 // agyRoutedCommandRequest retains only the public route witness. The command
@@ -626,16 +628,21 @@ type agyRoutedCommandRequest struct {
 // selector used during execution, so no test-order or mutable scenario state
 // can redirect a provider call to the other golden.
 type agySharedCommandRouter struct {
+	routeMu         sync.Mutex
+	routes          map[string]agySharedCommandRoute
+	publishedRoutes atomic.Value
+	frozen          bool
+	released        atomic.Bool
+
 	mu       sync.Mutex
-	routes   map[string]agySharedCommandRoute
 	requests []agyRoutedCommandRequest
 	active   int
-	frozen   bool
-	released bool
 }
 
 func newAgySharedCommandRouter() *agySharedCommandRouter {
-	return &agySharedCommandRouter{routes: make(map[string]agySharedCommandRoute)}
+	router := &agySharedCommandRouter{routes: make(map[string]agySharedCommandRoute)}
+	router.publishedRoutes.Store(map[string]agySharedCommandRoute{})
+	return router
 }
 
 func (router *agySharedCommandRouter) register(selector, workDir string, runner platformprocess.CommandRunner) error {
@@ -648,12 +655,12 @@ func (router *agySharedCommandRouter) register(selector, workDir string, runner 
 	if err != nil {
 		return fmt.Errorf("normalize AGY route WorkDir: %w", err)
 	}
-	router.mu.Lock()
-	defer router.mu.Unlock()
+	router.routeMu.Lock()
+	defer router.routeMu.Unlock()
 	if router.frozen {
 		return fmt.Errorf("AGY routes are already frozen")
 	}
-	if router.released {
+	if router.released.Load() {
 		return fmt.Errorf("AGY routes have been released")
 	}
 	if _, exists := router.routes[absolute]; exists {
@@ -664,38 +671,47 @@ func (router *agySharedCommandRouter) register(selector, workDir string, runner 
 			return fmt.Errorf("AGY route selector %q is already registered", selector)
 		}
 	}
-	router.routes[absolute] = agySharedCommandRoute{selector: selector, workDir: absolute, runner: runner}
+	route := agySharedCommandRoute{selector: selector, workDir: absolute, runner: runner}
+	if streaming, ok := runner.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	}); ok {
+		route.runStreaming = streaming.RunStreaming
+	}
+	router.routes[absolute] = route
+	router.publishRoutesLocked()
 	return nil
 }
 
 func (router *agySharedCommandRouter) freeze() error {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	if router.released {
+	router.routeMu.Lock()
+	defer router.routeMu.Unlock()
+	if router.released.Load() {
 		return fmt.Errorf("AGY routes have been released")
 	}
 	if len(router.routes) == 0 {
 		return fmt.Errorf("AGY route table is empty")
 	}
+	router.publishRoutesLocked()
 	router.frozen = true
 	return nil
 }
 
 func (router *agySharedCommandRouter) releaseAll() error {
+	router.routeMu.Lock()
+	defer router.routeMu.Unlock()
 	router.mu.Lock()
 	defer router.mu.Unlock()
 	if router.active != 0 {
 		return fmt.Errorf("cannot release AGY routes with %d active calls", router.active)
 	}
+	router.released.Store(true)
 	router.routes = make(map[string]agySharedCommandRoute)
-	router.released = true
+	router.publishRoutesLocked()
 	return nil
 }
 
 func (router *agySharedCommandRouter) routeCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.routes)
+	return len(router.publishedRoutes.Load().(map[string]agySharedCommandRoute))
 }
 
 func (router *agySharedCommandRouter) activeCallCount() int {
@@ -758,10 +774,8 @@ func (router *agySharedCommandRouter) RunStreaming(
 		return platformprocess.CommandResult{}, err
 	}
 	defer router.endCall()
-	if streaming, ok := route.runner.(interface {
-		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
-	}); ok {
-		return streaming.RunStreaming(ctx, request, observer)
+	if route.runStreaming != nil {
+		return route.runStreaming(ctx, request, observer)
 	}
 	result, err := route.runner.Run(ctx, request)
 	if observer != nil {
@@ -783,27 +797,30 @@ func (router *agySharedCommandRouter) beginCall(
 	if rawWorkDir == "" {
 		return agySharedCommandRoute{}, fmt.Errorf("AGY command WorkDir is required")
 	}
-	workDir, err := filepath.Abs(filepath.Clean(rawWorkDir))
-	if err != nil {
-		return agySharedCommandRoute{}, fmt.Errorf("normalize AGY command WorkDir: %w", err)
-	}
-	router.mu.Lock()
-	if router.released {
-		router.mu.Unlock()
-		return agySharedCommandRoute{}, fmt.Errorf("AGY route table is released")
-	}
-	route, ok := router.routes[workDir]
+	routes := router.publishedRoutes.Load().(map[string]agySharedCommandRoute)
+	workDir := rawWorkDir
+	route, ok := routes[workDir]
 	if !ok {
-		router.mu.Unlock()
+		var err error
+		workDir, err = filepath.Abs(filepath.Clean(rawWorkDir))
+		if err != nil {
+			return agySharedCommandRoute{}, fmt.Errorf("normalize AGY command WorkDir: %w", err)
+		}
+		route, ok = routes[workDir]
+	}
+	if !ok {
 		return agySharedCommandRoute{}, fmt.Errorf("no AGY route matched WorkDir %q", workDir)
 	}
 	if request.Command != agySharedCommand {
-		router.mu.Unlock()
 		return agySharedCommandRoute{}, fmt.Errorf("AGY route %q received command %q", route.selector, request.Command)
 	}
 	if err := ctx.Err(); err != nil {
-		router.mu.Unlock()
 		return agySharedCommandRoute{}, err
+	}
+	router.mu.Lock()
+	if router.released.Load() {
+		router.mu.Unlock()
+		return agySharedCommandRoute{}, fmt.Errorf("AGY route table is released")
 	}
 	router.requests = append(router.requests, agyRoutedCommandRequest{
 		command: request.Command,
@@ -812,6 +829,14 @@ func (router *agySharedCommandRouter) beginCall(
 	router.active++
 	router.mu.Unlock()
 	return route, nil
+}
+
+func (router *agySharedCommandRouter) publishRoutesLocked() {
+	snapshot := make(map[string]agySharedCommandRoute, len(router.routes))
+	for workDir, route := range router.routes {
+		snapshot[workDir] = route
+	}
+	router.publishedRoutes.Store(snapshot)
 }
 
 func (router *agySharedCommandRouter) endCall() {
