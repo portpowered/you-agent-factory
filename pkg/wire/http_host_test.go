@@ -69,6 +69,104 @@ func TestProvideBrowserOpenerHonorsRootEdgeOverride(t *testing.T) {
 	}
 }
 
+func TestProvideBrowserOpenerUsesExactOptOutBeforeHostFactory(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		present  bool
+		value    string
+		wantNoOp bool
+	}{
+		{name: "missing"},
+		{name: "empty", present: true},
+		{name: "zero", present: true, value: "0"},
+		{name: "true", present: true, value: "true"},
+		{name: "whitespace", present: true, value: " 1"},
+		{name: "exact one", present: true, value: "1", wantNoOp: true},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var hostFactoryCalls int
+			fallbackCalled := false
+			fallbackErr := errors.New("controlled browser fallback")
+			fallback := platformbrowser.Opener(func(context.Context, string) error {
+				fallbackCalled = true
+				return fallbackErr
+			})
+			selected := provideBrowserOpenerWith(
+				serviceedges.Edges{},
+				func(string) (string, bool) { return tc.value, tc.present },
+				func() platformbrowser.Opener {
+					hostFactoryCalls++
+					return fallback
+				},
+			)
+			if selected == nil {
+				t.Fatal("selected browser opener = nil")
+			}
+
+			err := selected(context.Background(), "https://factory.example")
+			if tc.wantNoOp {
+				if err != nil {
+					t.Fatalf("opt-out opener error = %v, want nil", err)
+				}
+				if hostFactoryCalls != 0 {
+					t.Fatalf("host factory calls = %d, want 0 under exact opt-out", hostFactoryCalls)
+				}
+				if fallbackCalled {
+					t.Fatal("real fallback was called under exact opt-out")
+				}
+				return
+			}
+			if !errors.Is(err, fallbackErr) {
+				t.Fatalf("fallback error = %v, want %v", err, fallbackErr)
+			}
+			if hostFactoryCalls != 1 {
+				t.Fatalf("host factory calls = %d, want exactly 1", hostFactoryCalls)
+			}
+			if !fallbackCalled {
+				t.Fatal("controlled real fallback was not called")
+			}
+		})
+	}
+}
+
+func TestProvideBrowserOpenerInjectionPrecedesEnvironmentAndHostFactory(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"", "1"} {
+		value := value
+		t.Run("environment="+value, func(t *testing.T) {
+			injectedCalled := false
+			injected := platformbrowser.Opener(func(context.Context, string) error {
+				injectedCalled = true
+				return nil
+			})
+			hostFactoryCalls := 0
+			selected := provideBrowserOpenerWith(
+				serviceedges.Edges{BrowserOpener: injected},
+				func(string) (string, bool) { return value, true },
+				func() platformbrowser.Opener {
+					hostFactoryCalls++
+					return func(context.Context, string) error {
+						return errors.New("host fallback must not be selected")
+					}
+				},
+			)
+			if err := selected(context.Background(), "https://factory.example"); err != nil {
+				t.Fatalf("injected opener error = %v", err)
+			}
+			if !injectedCalled {
+				t.Fatal("injected opener was not called")
+			}
+			if hostFactoryCalls != 0 {
+				t.Fatalf("host factory calls = %d, want 0 for explicit injection", hostFactoryCalls)
+			}
+		})
+	}
+}
+
 func TestFactoryWebhooksDefaultClientDoesNotFollowRedirects(t *testing.T) {
 	var targetMu sync.Mutex
 	targetRequests := 0

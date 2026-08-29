@@ -70,6 +70,75 @@ func TestProcessEnvForIsolatedHome_ReplacesHomeVariables(t *testing.T) {
 	}
 }
 
+func TestProcessEnvForIsolatedHome_NormalizesBrowserOpenOptOut(t *testing.T) {
+	t.Setenv(browserOpenOptOutEnvironment, "0")
+	t.Setenv("BUILT_CHILD_UNRELATED", "preserved")
+
+	env := ProcessEnvForIsolatedHome(filepath.Join(t.TempDir(), "isolated-home"))
+	entries := envEntries(env, browserOpenOptOutEnvironment)
+	if len(entries) != 1 || entries[0] != browserOpenOptOutEnvironment+"=1" {
+		t.Fatalf("browser opt-out entries = %#v, want exactly one canonical entry", entries)
+	}
+	if got := envValue(env, "BUILT_CHILD_UNRELATED"); got != "preserved" {
+		t.Fatalf("unrelated environment = %q, want preserved value", got)
+	}
+}
+
+func TestProcessEnvWithRetainsCanonicalBrowserOpenOptOutAcrossOverrides(t *testing.T) {
+	session := &Session{HomeDir: filepath.Join(t.TempDir(), "isolated-home")}
+	for _, extra := range []string{
+		browserOpenOptOutEnvironment + "=",
+		browserOpenOptOutEnvironment + "=0",
+		browserOpenOptOutEnvironment + "=true",
+		browserOpenOptOutEnvironment + "=1",
+	} {
+		extra := extra
+		t.Run(extra, func(t *testing.T) {
+			env := session.ProcessEnvWith(extra, "BUILT_CHILD_EXTRA=preserved")
+			entries := envEntries(env, browserOpenOptOutEnvironment)
+			if len(entries) != 1 || entries[0] != browserOpenOptOutEnvironment+"=1" {
+				t.Fatalf("browser opt-out entries = %#v, want exactly one canonical entry", entries)
+			}
+			if got := envValue(env, "BUILT_CHILD_EXTRA"); got != "preserved" {
+				t.Fatalf("extra environment = %q, want preserved value", got)
+			}
+			if got := envValue(env, "HOME"); got != session.HomeDir {
+				t.Fatalf("HOME = %q, want isolated home %q", got, session.HomeDir)
+			}
+		})
+	}
+}
+
+func TestRunWithEnvPassesCanonicalBrowserOpenOptOutToChildRunner(t *testing.T) {
+	const extraValue = "child-runner-extra"
+	process := &recordingReusableProcess{}
+	process.execute = func(input root.Input) error {
+		entries := envEntries(input.Env, browserOpenOptOutEnvironment)
+		if len(entries) != 1 || entries[0] != browserOpenOptOutEnvironment+"=1" {
+			t.Fatalf("child browser opt-out entries = %#v, want exactly one canonical entry", entries)
+		}
+		if got := envValue(input.Env, "BUILT_CHILD_EXTRA"); got != extraValue {
+			t.Fatalf("child extra environment = %q, want %q", got, extraValue)
+		}
+		return nil
+	}
+	harness := newTestReusableHarness(process)
+	session := &Session{
+		harness: harness,
+		HomeDir: filepath.Join(t.TempDir(), "isolated-home"),
+		WorkDir: t.TempDir(),
+	}
+	if _, err := session.RunWithEnv(context.Background(), []string{
+		browserOpenOptOutEnvironment + "=false",
+		"BUILT_CHILD_EXTRA=" + extraValue,
+	}, "docs"); err != nil {
+		t.Fatalf("RunWithEnv() error = %v", err)
+	}
+	if err := harness.Close(context.Background()); err != nil {
+		t.Fatalf("harness.Close() error = %v", err)
+	}
+}
+
 func TestScenarioFailure_ErrorIncludesDiagnostics(t *testing.T) {
 	failure := &ScenarioFailure{
 		Scenario:        "invalid-goal",
@@ -106,6 +175,17 @@ func envValue(env []string, key string) string {
 		}
 	}
 	return ""
+}
+
+func envEntries(env []string, key string) []string {
+	entries := make([]string, 0)
+	for _, entry := range env {
+		entryKey, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(entryKey, key) {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }
 
 func TestReusableHarnessPreservesInvocationLocalInputsAcrossSuccessFailureSuccess(t *testing.T) {

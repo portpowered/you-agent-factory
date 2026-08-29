@@ -422,13 +422,14 @@ func (s *Session) ProcessEnv() []string {
 	return ProcessEnvForIsolatedHome(s.HomeDir)
 }
 
-// ProcessEnvWith returns ProcessEnv plus additional KEY=value entries.
+// ProcessEnvWith returns ProcessEnv plus additional KEY=value entries while
+// retaining the canonical browser-open opt-out.
 func (s *Session) ProcessEnvWith(extra ...string) []string {
 	env := s.ProcessEnv()
 	if len(extra) == 0 {
 		return env
 	}
-	return append(env, extra...)
+	return normalizeBrowserOpenEnvironment(append(env, extra...))
 }
 
 // Run executes the built you binary with the session's hermetic environment.

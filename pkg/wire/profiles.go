@@ -104,10 +104,29 @@ func provideRunDirectoryCreator() platformfilesystem.DirectoryCreator {
 }
 
 func provideBrowserOpener(edges serviceedges.Edges) platformbrowser.Opener {
+	return provideBrowserOpenerWith(
+		edges,
+		os.LookupEnv,
+		func() platformbrowser.Opener {
+			return platformbrowser.NewHost(runtime.GOOS).Open
+		},
+	)
+}
+
+const browserOpenOptOutEnvironment = "YOU_NO_BROWSER_OPEN"
+
+func provideBrowserOpenerWith(
+	edges serviceedges.Edges,
+	lookupEnv func(string) (string, bool),
+	hostFactory func() platformbrowser.Opener,
+) platformbrowser.Opener {
 	if edges.BrowserOpener != nil {
 		return edges.BrowserOpener
 	}
-	return platformbrowser.NewHost(runtime.GOOS).Open
+	if value, ok := lookupEnv(browserOpenOptOutEnvironment); ok && value == "1" {
+		return func(context.Context, string) error { return nil }
+	}
+	return hostFactory()
 }
 
 func provideFactorySessionsWorkingDirectory(
