@@ -561,3 +561,61 @@ complete local behavior, supported race path, and owned topology decision on
 the current implementation source. `GATE-SCOPE` and `GATE-LOOPBACK` remain
 pending final-main synchronization and clean-room execution. `GATE-PR-CI`
 remains review-owned for terminal hosted CI and merge.
+
+## GATE-SCOPE (final)
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PASS** for the rebased implementation scope.
+- Rebased implementation head: `d7d296dbba` on current `origin/main`.
+
+The final three-dot audit after synchronization reported only these owned
+paths: the two restart test files and the C14 evidence files under
+`docs/internal/development/functional-test-optimization/`. `git diff --check`
+passed. The final source scan confirms the C09 fresh per-operation
+30-second CLI contexts are unchanged; no cumulative deadline, new sleep,
+timeout increase, assertion loss, public contract, generated output,
+production code, shared support, workflow, or CI configuration entered the
+lane. `git rebase origin/main` completed without conflict before the clean-room
+proof.
+
+This gate proves authority, ancestry, owned scope, C09 preservation, and
+assertion parity on the final local source. It does not prove terminal hosted
+CI or merge.
+
+## GATE-LOOPBACK
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PASS for the local clean-room loopback**.
+- Dependency fidelity: `clean local_real` detached worktree at
+  `d7d296dbba`; no implementation repair was made.
+- Report: `c14-pkg-sessions-restart-validation-loopback.md`.
+
+The exact procedure was:
+
+```text
+git worktree add --detach <temporary-path> d7d296dbba
+go test ./tests/functional/sessions/restart/... -count=1
+git worktree remove <temporary-path>
+```
+
+The detached worktree was clean before removal. The package command exited `0`
+and reported `41.726s`; all seven selectors passed, including the real CLI,
+daemon/server, restart, persistence, malformed/missing state, remap, resume,
+history, cancellation, and cleanup witnesses. The canonical report records
+the criteria, customer journey, evidence boundary, host-timing finding, and
+review-owned edges without changing implementation.
+
+This gate proves exact-head clean-room reproducibility and local integrated
+behavior. It does not prove terminal PR CI, conflict-free merge, or future host
+behavior.
+
+## GATE-PR-CI
+
+- Story: `fto-c14-pkg-sessions-restart-003`
+- Status: **PENDING implementation handoff / review**.
+
+The implementation handoff must push the final head, open or update the named
+PR, confirm required CI has started on that exact head, and comment the
+authoritative before median `44.1461053s`, final local median `62.5393s`, and
+the PR CI run URL. Review owns terminal CI, any later conflict request, and
+merge; no CI result is committed to this branch.
