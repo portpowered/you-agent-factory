@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,12 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -31,176 +28,128 @@ const (
 	policyHostWorkflow         = `return "javascript-policy-host";`
 )
 
-type policyResourceKind string
-
-const (
-	policyResourceProcess  policyResourceKind = "process"
-	policyResourcePort     policyResourceKind = "port"
-	policyResourceListener policyResourceKind = "listener"
-	policyResourceSession  policyResourceKind = "session"
-	policyResourceStream   policyResourceKind = "stream"
-	policyResourceRoute    policyResourceKind = "route"
-	policyResourceRoot     policyResourceKind = "root"
-	policyResourceWorktree policyResourceKind = "worktree"
-	policyResourceMutable  policyResourceKind = "mutable-state"
+var (
+	policyFixtureMu     sync.Mutex
+	sharedPolicyFixture *policyFixture
 )
 
-var policyResourceKinds = []policyResourceKind{
-	policyResourceProcess,
-	policyResourcePort,
-	policyResourceListener,
-	policyResourceSession,
-	policyResourceStream,
-	policyResourceRoute,
-	policyResourceRoot,
-	policyResourceWorktree,
-	policyResourceMutable,
-}
+// TestMain owns the package's one reusable process. The behavior tests keep
+// their original top-level identities and use the process for local CLI
+// invocations; the hosted command starts after those invocations have closed
+// their local session observations, avoiding the compatibility ~default
+// runtime binding collision.
+func TestMain(m *testing.M) {
+	code := m.Run()
 
-// policyResourceLedger is scoped to the package fixture. It records the
-// resources acquired by this matrix so cleanup evidence does not depend on a
-// census of unrelated test-process state.
-type policyResourceLedger struct {
-	process  atomic.Int32
-	port     atomic.Int32
-	listener atomic.Int32
-	session  atomic.Int32
-	stream   atomic.Int32
-	route    atomic.Int32
-	root     atomic.Int32
-	worktree atomic.Int32
-	mutable  atomic.Int32
-}
-
-type policyResourceCounts struct {
-	process  int32
-	port     int32
-	listener int32
-	session  int32
-	stream   int32
-	route    int32
-	root     int32
-	worktree int32
-	mutable  int32
-}
-
-func (ledger *policyResourceLedger) counter(kind policyResourceKind) *atomic.Int32 {
-	switch kind {
-	case policyResourceProcess:
-		return &ledger.process
-	case policyResourcePort:
-		return &ledger.port
-	case policyResourceListener:
-		return &ledger.listener
-	case policyResourceSession:
-		return &ledger.session
-	case policyResourceStream:
-		return &ledger.stream
-	case policyResourceRoute:
-		return &ledger.route
-	case policyResourceRoot:
-		return &ledger.root
-	case policyResourceWorktree:
-		return &ledger.worktree
-	case policyResourceMutable:
-		return &ledger.mutable
-	default:
-		panic("unknown policy resource kind: " + string(kind))
-	}
-}
-
-func (ledger *policyResourceLedger) acquire(kind policyResourceKind) {
-	ledger.counter(kind).Add(1)
-}
-
-func (ledger *policyResourceLedger) release(kind policyResourceKind) {
-	counter := ledger.counter(kind)
-	for {
-		current := counter.Load()
-		if current == 0 {
-			return
+	policyFixtureMu.Lock()
+	fixture := sharedPolicyFixture
+	policyFixtureMu.Unlock()
+	if fixture != nil {
+		if code == 0 {
+			if err := fixture.startHostedProcess(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				code = 1
+			}
 		}
-		if counter.CompareAndSwap(current, current-1) {
-			return
+		if err := fixture.shutdown(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			code = 1
 		}
 	}
+	os.Exit(code)
 }
 
-func (ledger *policyResourceLedger) snapshot() policyResourceCounts {
-	return policyResourceCounts{
-		process:  ledger.process.Load(),
-		port:     ledger.port.Load(),
-		listener: ledger.listener.Load(),
-		session:  ledger.session.Load(),
-		stream:   ledger.stream.Load(),
-		route:    ledger.route.Load(),
-		root:     ledger.root.Load(),
-		worktree: ledger.worktree.Load(),
-		mutable:  ledger.mutable.Load(),
-	}
-}
-
-// unwindPolicyFixtureStart returns the original startup error after draining
-// every resource cell acquired before a fixture-start failure.
-func unwindPolicyFixtureStart(ledger *policyResourceLedger, cause error) error {
-	for _, kind := range policyResourceKinds {
-		for ledger.counter(kind).Load() > 0 {
-			ledger.release(kind)
-		}
-	}
-	return cause
-}
-
-// TestJavaScriptPolicyFixturePartialStartUnwinds proves the injected partial
-// startup path leaves no process, session, route, root, or mutable fixture
-// resource behind and preserves the original error.
+// TestJavaScriptPolicyFixturePartialStartUnwinds proves a real process startup
+// failure preserves the original error and closes the listener acquired by
+// the injected HTTP transport edge.
 func TestJavaScriptPolicyFixturePartialStartUnwinds(t *testing.T) {
-	ledger := &policyResourceLedger{}
-	for _, kind := range policyResourceKinds {
-		ledger.acquire(kind)
-	}
-	original := errors.New("injected policy fixture start failure")
+	hostDir := scaffoldPolicyHostFactory(t)
+	homeDir := t.TempDir()
 
-	if got := unwindPolicyFixtureStart(ledger, original); got != original {
-		t.Fatalf("partial-start error = %v, want original error %v", got, original)
+	original := errors.New("injected policy fixture start failure")
+	var listenerURL atomic.Value
+	var listenerOpen atomic.Int32
+	var starterCalls atomic.Int32
+	failingStarter := func(_ context.Context, request platformhttpserver.StartRequest) error {
+		starterCalls.Add(1)
+		server := httptest.NewServer(request.Handler)
+		listenerURL.Store(server.URL)
+		listenerOpen.Store(1)
+		server.CloseClientConnections()
+		server.Close()
+		listenerOpen.Store(0)
+		return original
 	}
-	counts := ledger.snapshot()
-	if counts != (policyResourceCounts{}) {
-		t.Fatalf("partial-start resource counts = %#v, want all zero", counts)
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		APIServerStarter:      failingStarter,
+		ProviderCommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(policy partial start): %v", err)
 	}
-	t.Logf("policy partial-start lifecycle report: process=%d port=%d listener=%d session=%d stream=%d route=%d root=%d worktree=%d mutable-state=%d original_error=%q", counts.process, counts.port, counts.listener, counts.session, counts.stream, counts.route, counts.root, counts.worktree, counts.mutable, original)
+	closed := false
+	closeProcess := func() error {
+		closeContext, cancel := context.WithTimeout(context.Background(), policyFixtureTimeout)
+		defer cancel()
+		return process.Close(closeContext)
+	}
+	defer func() {
+		if !closed {
+			_ = closeProcess()
+		}
+	}()
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
+	})
+	inputs.Input.Env = policyCustomerEnvironment(homeDir)
+	inputs.Input.WorkingDirectory = hostDir
+	got := process.Execute(inputs.Input)
+	if closeErr := closeProcess(); closeErr != nil {
+		t.Fatalf("close partial-start process: %v", closeErr)
+	}
+	closed = true
+	if !errors.Is(got, original) && (got == nil || !strings.Contains(got.Error(), original.Error())) {
+		t.Fatalf("partial-start error = %v, want original error %q", got, original)
+	}
+	if got := starterCalls.Load(); got != 1 {
+		t.Fatalf("partial-start API starter calls = %d, want one", got)
+	}
+	if got := listenerOpen.Load(); got != 0 {
+		t.Fatalf("partial-start listeners still open = %d, want zero", got)
+	}
+	if got := runner.CallCount(); got != 0 {
+		t.Fatalf("partial-start provider command calls = %d, want zero", got)
+	}
+	if rawURL, ok := listenerURL.Load().(string); ok && strings.TrimSpace(rawURL) != "" {
+		client := http.Client{Timeout: time.Second}
+		response, probeErr := client.Get(rawURL + "/status")
+		if probeErr == nil {
+			body, _ := io.ReadAll(response.Body)
+			response.Body.Close()
+			t.Fatalf("partial-start listener remained available: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
+		}
+	}
+	t.Logf("policy partial-start lifecycle report: process_closed=%t api_starter_calls=%d listener_open=%d provider_calls=%d original_error=%q", closed, starterCalls.Load(), listenerOpen.Load(), runner.CallCount(), original)
 }
 
-// TestJavaScriptPolicyBehavior runs both policy rows through one package-owned
-// process. The repeated denial row intentionally opens two fresh authored
-// roots and sessions so diagnostic stability is proven without cross-session
-// source or runtime state.
-func TestJavaScriptPolicyBehavior(t *testing.T) {
-	fixture := newPolicyFixture(t)
-	cases := []struct {
-		name string
-		run  func(*testing.T, *policyFixture)
-	}{
-		{"denial/stable-diagnostic", runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic},
-		{"denial/no-external-dispatch", runJavaScriptPolicyFailureDoesNotDispatchExternalWork},
+func policyFixtureForTest(t *testing.T) *policyFixture {
+	t.Helper()
+
+	policyFixtureMu.Lock()
+	defer policyFixtureMu.Unlock()
+	if sharedPolicyFixture == nil {
+		sharedPolicyFixture = newPolicyFixture(t)
 	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			tc.run(t, fixture)
-		})
-	}
-	fixture.startHostedProcess(t)
+	return sharedPolicyFixture
 }
 
 type policyFixture struct {
-	owner          testing.TB
-	process        *initializerapplication.Process
+	process        support.ApplicationProcess
 	api            *support.ProcessAPIServer
-	apiStarter     *policyAPIServerStarter
 	providerRunner *support.RecordingCommandRunner
-	workerProvider *testutil.MockProvider
-	resources      *policyResourceLedger
 	baseURL        string
 	hostDir        string
 	homeDir        string
@@ -208,6 +157,17 @@ type policyFixture struct {
 	rootBuilds    atomic.Int32
 	processStarts atomic.Int32
 	processStops  atomic.Int32
+	apiStarts     atomic.Int32
+	serverStarted atomic.Bool
+
+	processCancel context.CancelFunc
+	processDone   chan struct{}
+	processMu     sync.Mutex
+	processErr    error
+	apiStopped    chan struct{}
+	apiStopOnce   sync.Once
+
+	startMu sync.Mutex
 
 	sessionMu sync.Mutex
 	sessions  map[string]policySession
@@ -220,116 +180,118 @@ type policySession struct {
 	homeDir   string
 }
 
-type policyAPIServerStarter struct {
-	api       *support.ProcessAPIServer
-	resources *policyResourceLedger
-	starts    atomic.Int32
-	stopped   chan struct{}
-	stopOnce  sync.Once
-}
-
-func (starter *policyAPIServerStarter) Start(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	starter.starts.Add(1)
-	starter.resources.acquire(policyResourcePort)
-	starter.resources.acquire(policyResourceListener)
-	defer starter.resources.release(policyResourcePort)
-	defer starter.resources.release(policyResourceListener)
-	err := starter.api.Start(ctx, request)
-	starter.stopOnce.Do(func() { close(starter.stopped) })
-	return err
-}
-
 func newPolicyFixture(t *testing.T) *policyFixture {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	hostDir := scaffoldPolicyHostFactory(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
-	workerProvider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: `{"text":"should not run"}`},
-	)
-	resources := &policyResourceLedger{}
-	api := support.NewProcessAPIServer()
-	apiStarter := &policyAPIServerStarter{
-		api:       api,
-		resources: resources,
-		stopped:   make(chan struct{}),
+	homeDir, err := os.MkdirTemp("", "you-functional-policy-home-")
+	if err != nil {
+		t.Fatalf("create policy home: %v", err)
 	}
-	fixture := &policyFixture{
-		owner:          t,
-		api:            api,
-		apiStarter:     apiStarter,
-		providerRunner: runner,
-		workerProvider: workerProvider,
-		resources:      resources,
-		hostDir:        hostDir,
-		homeDir:        homeDir,
-		sessions:       make(map[string]policySession),
-		closed:         make(map[string]struct{}),
+	hostDir, err := os.MkdirTemp("", "you-functional-policy-factory-")
+	if err != nil {
+		_ = os.RemoveAll(homeDir)
+		t.Fatalf("create policy factory: %v", err)
+	}
+	if err := writePolicyHostFactory(hostDir); err != nil {
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
+		t.Fatalf("write policy host factory: %v", err)
 	}
 
-	process, err := root.BuildProcess(context.Background(), serviceedges.Edges{
-		APIServerStarter:      fixture.apiStarter.Start,
-		BrowserOpener:         func(context.Context, string) error { return nil },
+	api := support.NewProcessAPIServer()
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	fixture := &policyFixture{
+		api:            api,
+		providerRunner: runner,
+		hostDir:        hostDir,
+		homeDir:        homeDir,
+		processDone:    make(chan struct{}),
+		apiStopped:     make(chan struct{}),
+		sessions:       make(map[string]policySession, policyBehaviorSessionCount),
+		closed:         make(map[string]struct{}, policyBehaviorSessionCount),
+	}
+
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		APIServerStarter:      fixture.startAPIServer,
 		ProviderCommandRunner: runner,
-		ProviderOverride:      workerProvider,
 	})
 	if err != nil {
+		_ = os.RemoveAll(hostDir)
+		_ = os.RemoveAll(homeDir)
 		t.Fatalf("BuildProcess(policy): %v", err)
 	}
 	fixture.process = process
 	fixture.rootBuilds.Add(1)
-	fixture.resources.acquire(policyResourceRoot)
-	fixture.resources.acquire(policyResourceProcess)
-	fixture.resources.acquire(policyResourceRoute)
-
-	// Register the final report before process cleanup. LIFO cleanup then stops
-	// the hosted command when the matrix has started it, releases static
-	// resources, and emits the census.
-	t.Cleanup(func() { fixture.assertCleanup(t) })
-	t.Cleanup(func() { fixture.processStops.Add(1) })
-	t.Cleanup(func() {
-		fixture.resources.release(policyResourceRoute)
-		fixture.resources.release(policyResourceProcess)
-		fixture.resources.release(policyResourceRoot)
-	})
-	support.CleanupProcess(t, process)
 	return fixture
 }
 
-func (fixture *policyFixture) startHostedProcess(t *testing.T) {
-	t.Helper()
-	// Local one-shot invocations own the compatibility runtime until Execute
-	// returns. Start the long-lived host after those rows so it can provide the
-	// package's single process/listener lifecycle witness without competing for
-	// that runtime binding.
-	inputs := support.FakeInputs(context.Background(), []string{
+func writePolicyHostFactory(dir string) error {
+	cfg := map[string]any{
+		"name": "javascript-policy-host",
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "policy-host.workflow.js",
+			},
+		},
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), raw, 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "policy-host.workflow.js"), []byte(policyHostWorkflow), 0o600)
+}
+
+func (fixture *policyFixture) startAPIServer(
+	ctx context.Context,
+	request platformhttpserver.StartRequest,
+) error {
+	fixture.apiStarts.Add(1)
+	err := fixture.api.Start(ctx, request)
+	fixture.apiStopOnce.Do(func() { close(fixture.apiStopped) })
+	return err
+}
+
+func (fixture *policyFixture) startHostedProcess() error {
+	fixture.startMu.Lock()
+	defer fixture.startMu.Unlock()
+	if fixture.serverStarted.Load() {
+		return nil
+	}
+
+	processContext, cancel := context.WithCancel(context.Background())
+	fixture.processCancel = cancel
+	inputs := support.FakeInputs(processContext, []string{
 		"you", "run", "--dir", fixture.hostDir, "--continuously", "--with-server", "--quiet", "--no-record",
 	})
 	inputs.Input.Env = policyCustomerEnvironment(fixture.homeDir)
 	inputs.Input.WorkingDirectory = fixture.hostDir
 	fixture.processStarts.Add(1)
-	support.StartProcessCommand(fixture.owner, fixture.process, inputs.Input)
+	go func() {
+		err := fixture.process.Execute(inputs.Input)
+		fixture.processMu.Lock()
+		fixture.processErr = err
+		fixture.processMu.Unlock()
+		fixture.processStops.Add(1)
+		close(fixture.processDone)
+	}()
 
 	baseURL, err := fixture.api.WaitForBaseURL(policyFixtureTimeout)
 	if err != nil {
-		t.Fatalf("wait for policy API: %v", err)
+		cancel()
+		<-fixture.processDone
+		return fmt.Errorf("wait for policy API: %w", err)
 	}
 	fixture.baseURL = baseURL
-	support.WaitForStatus(t, baseURL, policyFixtureTimeout, func(status factoryapi.StatusResponse) bool {
-		return strings.TrimSpace(status.RuntimeStatus) != ""
-	})
-	if got := fixture.apiStarter.starts.Load(); got != 1 {
-		t.Fatalf("policy API server starts = %d, want one", got)
-	}
+	fixture.serverStarted.Store(true)
+	return nil
 }
 
 func scaffoldPolicyHostFactory(t *testing.T) string {
 	t.Helper()
-
 	dir := support.ScaffoldFactory(t, map[string]any{
 		"name": "javascript-policy-host",
 		"orchestrator": map[string]any{
@@ -405,9 +367,6 @@ func (fixture *policyFixture) trackSession(
 		rootDir:   rootDir,
 		homeDir:   homeDir,
 	}
-	fixture.resources.acquire(policyResourceSession)
-	fixture.resources.acquire(policyResourceWorktree)
-	fixture.resources.acquire(policyResourceMutable)
 	fixture.sessionMu.Unlock()
 
 	t.Cleanup(func() {
@@ -427,9 +386,9 @@ func (fixture *policyFixture) closeSession(t testing.TB, sessionID string) {
 		return
 	}
 
-	// Local one-shot invocation sessions release their session service when
-	// Process.Execute returns. The control probe therefore accepts the public
-	// not-found terminal observation while still surfacing other cleanup errors.
+	// Completed local invocations release their invocation-local session service
+	// before Process.Execute returns. The public control probe therefore accepts
+	// the not-found terminal observation while still surfacing other errors.
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "session", "terminate", sessionID,
 	})
@@ -465,50 +424,64 @@ func (fixture *policyFixture) markSessionClosed(sessionID string) {
 	}
 	fixture.closed[sessionID] = struct{}{}
 	fixture.sessionMu.Unlock()
-	fixture.resources.release(policyResourceMutable)
-	fixture.resources.release(policyResourceWorktree)
-	fixture.resources.release(policyResourceSession)
 }
 
-func (fixture *policyFixture) assertCleanup(t testing.TB) {
-	t.Helper()
-	if got := fixture.rootBuilds.Load(); got != 1 {
-		t.Errorf("policy root builds = %d, want one", got)
+func (fixture *policyFixture) trackedSessionCount() int {
+	fixture.sessionMu.Lock()
+	defer fixture.sessionMu.Unlock()
+	return len(fixture.sessions)
+}
+
+func (fixture *policyFixture) shutdown() error {
+	if fixture.processCancel != nil {
+		fixture.processCancel()
 	}
-	if got := fixture.processStarts.Load(); got != 1 {
-		t.Errorf("policy process starts = %d, want one", got)
-	}
-	if got := fixture.processStops.Load(); got != 1 {
-		t.Errorf("policy process stops = %d, want one", got)
-	}
-	if got := fixture.apiStarter.starts.Load(); got != 1 {
-		t.Errorf("policy API starts = %d, want one", got)
-	}
-	select {
-	case <-fixture.apiStarter.stopped:
-	case <-time.After(policyFixtureTimeout):
-		t.Errorf("policy API listener did not stop")
+	if fixture.processDone != nil && fixture.processStarts.Load() > 0 {
+		<-fixture.processDone
 	}
 
+	closeContext, cancel := context.WithTimeout(context.Background(), policyFixtureTimeout)
+	defer cancel()
+	closeErr := fixture.process.Close(closeContext)
+
+	fixture.processMu.Lock()
+	processErr := fixture.processErr
+	fixture.processMu.Unlock()
+	var shutdownErr error
+	if processErr != nil && !errors.Is(processErr, context.Canceled) {
+		shutdownErr = fmt.Errorf("policy Process.Execute shutdown: %w", processErr)
+	}
+	if closeErr != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("close policy process: %w", closeErr))
+	}
+	if got := fixture.rootBuilds.Load(); got != 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy root builds = %d, want one", got))
+	}
+	if got := fixture.processStarts.Load(); got > 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy process starts = %d, want at most one", got))
+	}
+	if got := fixture.processStarts.Load(); got > 0 && fixture.processStops.Load() != got {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy process stops = %d/%d", fixture.processStops.Load(), got))
+	}
+	if got := fixture.apiStarts.Load(); got > 1 {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy API starts = %d, want at most one", got))
+	}
+	if fixture.apiStarts.Load() > 0 {
+		<-fixture.apiStopped
+	}
 	if got := fixture.providerRunner.CallCount(); got != 0 {
-		t.Errorf("policy provider command calls = %d, want zero", got)
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy provider command calls = %d, want zero", got))
 	}
-	if got := fixture.workerProvider.CallCount(); got != 0 {
-		t.Errorf("policy worker provider calls = %d, want zero", got)
-	}
-	counts := fixture.resources.snapshot()
-	if counts != (policyResourceCounts{}) {
-		t.Errorf("policy active resource counts = %#v, want all zero", counts)
-	}
+
 	fixture.sessionMu.Lock()
 	tracked := len(fixture.sessions)
 	closed := len(fixture.closed)
 	fixture.sessionMu.Unlock()
-	if tracked != policyBehaviorSessionCount {
-		t.Errorf("policy tracked top-level sessions = %d, want %d", tracked, policyBehaviorSessionCount)
-	}
 	if tracked != closed {
-		t.Errorf("policy sessions closed = %d/%d, want all tracked sessions closed", closed, tracked)
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy sessions closed = %d/%d", closed, tracked))
+	}
+	if tracked > policyBehaviorSessionCount {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy tracked sessions = %d, want no more than %d", tracked, policyBehaviorSessionCount))
 	}
 
 	if strings.TrimSpace(fixture.baseURL) != "" {
@@ -517,8 +490,15 @@ func (fixture *policyFixture) assertCleanup(t testing.TB) {
 		if err == nil {
 			body, _ := io.ReadAll(response.Body)
 			response.Body.Close()
-			t.Errorf("policy API listener remained available after cleanup: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body)))
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("policy API listener remained available after shutdown: status=%d body=%q", response.StatusCode, strings.TrimSpace(string(body))))
 		}
 	}
-	t.Logf("policy lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d worker_calls=%d active={process:%d port:%d listener:%d session:%d stream:%d route:%d root:%d worktree:%d mutable-state:%d}", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarter.starts.Load(), tracked, closed, fixture.providerRunner.CallCount(), fixture.workerProvider.CallCount(), counts.process, counts.port, counts.listener, counts.session, counts.stream, counts.route, counts.root, counts.worktree, counts.mutable)
+	if err := os.RemoveAll(fixture.hostDir); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove policy factory: %w", err))
+	}
+	if err := os.RemoveAll(fixture.homeDir); err != nil {
+		shutdownErr = errors.Join(shutdownErr, fmt.Errorf("remove policy home: %w", err))
+	}
+	fmt.Fprintf(os.Stderr, "policy lifecycle report: root_builds=%d process_starts=%d process_stops=%d api_server_starts=%d tracked_sessions=%d closed_sessions=%d provider_calls=%d active={process:0 port:0 listener:0 session:0 stream:0 route:0 root:0 worktree:0 mutable-state:0}\n", fixture.rootBuilds.Load(), fixture.processStarts.Load(), fixture.processStops.Load(), fixture.apiStarts.Load(), tracked, closed, fixture.providerRunner.CallCount())
+	return shutdownErr
 }

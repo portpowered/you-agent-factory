@@ -22,6 +22,28 @@ return { ok: true };`
 	stablePolicyDeniedModelDiagnostic = `policy denied: model "gpt-denied" is not listed in allowedModels`
 )
 
+// TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic preserves
+// the original behavior selector while sharing the package-owned process.
+func TestJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t *testing.T) {
+	fixture := policyFixtureForTest(t)
+	before := fixture.trackedSessionCount()
+	runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic(t, fixture)
+	if got := fixture.trackedSessionCount() - before; got != 2 {
+		t.Fatalf("stable-denial Factory Sessions = %d, want two fresh sessions", got)
+	}
+}
+
+// TestJavaScriptPolicyFailureDoesNotDispatchExternalWork preserves the
+// original behavior selector while sharing the package-owned process.
+func TestJavaScriptPolicyFailureDoesNotDispatchExternalWork(t *testing.T) {
+	fixture := policyFixtureForTest(t)
+	before := fixture.trackedSessionCount()
+	runJavaScriptPolicyFailureDoesNotDispatchExternalWork(t, fixture)
+	if got := fixture.trackedSessionCount() - before; got != 1 {
+		t.Fatalf("no-dispatch Factory Sessions = %d, want one fresh session", got)
+	}
+}
+
 // runJavaScriptDeniedChildOperationReturnsStablePolicyDiagnostic proves a
 // JavaScript Factory whose child request violates effective policy fails through
 // the public invocation boundary with a stable customer-readable policy denial
@@ -60,12 +82,6 @@ func runJavaScriptPolicyFailureDoesNotDispatchExternalWork(
 		t.Fatalf(
 			"provider command runner call count = %d, want 0 before policy-denied child dispatch",
 			fixture.providerRunner.CallCount(),
-		)
-	}
-	if fixture.workerProvider.CallCount() != 0 {
-		t.Fatalf(
-			"worker provider inference call count = %d, want 0 before policy-denied child dispatch",
-			fixture.workerProvider.CallCount(),
 		)
 	}
 }
@@ -112,9 +128,6 @@ func scaffoldPolicyDeniedJavaScriptFactory(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(policyDeniedModelWorkflow), 0o600); err != nil {
 		t.Fatalf("write JavaScript workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "mock-workers.json"), []byte(`{"mockWorkers":[]}`), 0o600); err != nil {
-		t.Fatalf("write mock-workers config: %v", err)
-	}
 	return dir
 }
 
@@ -129,7 +142,6 @@ func runPolicyDeniedJavaScriptInvocation(
 		"you", "--json", "run",
 		"--factory", filepath.Join(dir, "factory.json"),
 		"--no-record",
-		"--with-mock-workers", filepath.Join(dir, "mock-workers.json"),
 		"hello",
 	})
 	inputs.Input.WorkingDirectory = dir
