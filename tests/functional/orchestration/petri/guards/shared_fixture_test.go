@@ -252,6 +252,9 @@ func (command *sharedGuardHostedCommand) stop() error {
 		return nil
 	}
 	command.cancel()
+	// Hosted shutdown has no completion channel exposed by the public process
+	// contract; this bounded wait is cleanup protection for a missing exit, not
+	// a workflow delay or polling-based readiness assertion.
 	select {
 	case <-command.done:
 		command.mu.Lock()
@@ -507,10 +510,6 @@ func sharedGuardProviderOutput(content string) sharedGuardCommandResponse {
 	return sharedGuardCommandResponse{providerOutput: content, shapeProviderOutput: true}
 }
 
-func sharedGuardCommandError(err error) sharedGuardCommandResponse {
-	return sharedGuardCommandResponse{err: err}
-}
-
 func sharedGuardProviderSequence(responses ...sharedGuardCommandResponse) sharedGuardCommandResponder {
 	var mu sync.Mutex
 	next := 0
@@ -608,6 +607,10 @@ type sharedGuardSession struct {
 
 func supportWaitForGuardTerminal(t *testing.T, session *sharedGuardSession) {
 	t.Helper()
+	// Terminal completion is exposed by the public Factory Session status
+	// projection, not by the controlled Worker edge. The shared helper's
+	// bounded observation is therefore a readiness barrier, not a workflow
+	// delay.
 	support.WaitForSessionTerminalStatus(
 		t,
 		session.fixture.baseURL,

@@ -247,6 +247,9 @@ func (command *sharedCrossHostedCommand) stop() error {
 		return nil
 	}
 	command.cancel()
+	// Hosted shutdown has no completion channel exposed by the public process
+	// contract; this bounded wait is cleanup protection for a missing exit, not
+	// a workflow delay or polling-based readiness assertion.
 	select {
 	case <-command.done:
 		command.mu.Lock()

@@ -584,6 +584,10 @@ func assertGuardSessionEventOrdering(t testing.TB, sessionID string, events []fa
 
 func waitForGuardDispatchResponse(t testing.TB, session *sharedGuardSession, transitionID string) {
 	t.Helper()
+	// The controlled command edge can return before the public Factory Event
+	// ledger commits its dispatch response. The public API exposes no readiness
+	// channel for that projection, so this bounded first-match poll is an
+	// observation barrier, not a workflow delay.
 	deadline := time.NewTimer(sharedGuardFixtureShutdownTimeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -600,8 +604,36 @@ func waitForGuardDispatchResponse(t testing.TB, session *sharedGuardSession, tra
 	}
 }
 
+func waitForGuardFactoryEvent(t testing.TB, session *sharedGuardSession, eventType factoryapi.FactoryEventType, label string) {
+	t.Helper()
+	// The runtime edge and the retained public Factory Event projection are
+	// separate completion boundaries. No public readiness event exists for an
+	// arbitrary event kind; return on the first committed match and reserve the
+	// deadline only for a missing edge or cancellation.
+	deadline := time.NewTimer(sharedGuardFixtureShutdownTimeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		for _, event := range support.GetFactoryEventsForSessionAt(t, session.fixture.baseURL, session.sessionID) {
+			if event.Type == eventType {
+				return
+			}
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for %s Factory Event", label)
+		}
+	}
+}
+
 func waitForGuardWorkState(t testing.TB, session *sharedGuardSession, workID, wantState string) {
 	t.Helper()
+	// A Worker response edge can complete before the public Work read model
+	// applies its state change. The read API has no readiness channel; this
+	// bounded first-match poll is the projection observation barrier, not a
+	// delay inserted into the Factory workflow.
 	deadline := time.NewTimer(sharedGuardFixtureShutdownTimeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)

@@ -44,18 +44,6 @@ func TestDependsOnSecondaryJoinedInput(t *testing.T) {
 		WorkTypeID: "plan",
 		Payload:    []byte(`{"role":"primary join input"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		Name:       secondaryJoinName,
-		WorkID:     secondaryJoinTaskWorkID,
-		WorkTypeID: "task",
-		Payload:    []byte(`{"role":"secondary join input"}`),
-		Relations: []work.Relation{{
-			Type:          work.RelationDependsOn,
-			TargetWorkID:  secondaryJoinProducerWorkID,
-			RequiredState: "complete",
-		}},
-	})
-
 	fixture := sharedGuardProcess(t)
 	dispatchCountBefore := len(fixture.dispatches.Snapshot())
 	gate := newSharedGuardCommandGate()
@@ -76,6 +64,29 @@ func TestDependsOnSecondaryJoinedInput(t *testing.T) {
 	}
 	session := openSharedGuardSession(t, dir, sharedGuardRouteConfig{provider: provider})
 	waitForSharedGuardSignal(t, gate.started, "producer dispatch")
+	waitForGuardFactoryEvent(t, session, factoryapi.FactoryEventTypeModelRequest, "producer model request")
+	taskWorkType := "task"
+	taskWorkID := secondaryJoinTaskWorkID
+	targetWorkID := secondaryJoinProducerWorkID
+	requiredState := "complete"
+	upsertSharedGuardWorkRequest(t, session, factoryapi.WorkRequest{
+		RequestId: "secondary-join-task-request",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         secondaryJoinName,
+			WorkId:       &taskWorkID,
+			WorkTypeName: &taskWorkType,
+			Payload:      map[string]string{"role": "secondary join input"},
+		}},
+		Relations: &[]factoryapi.WorkRequestRelation{{
+			SourceWorkName: secondaryJoinName,
+			TargetWorkId:   &targetWorkID,
+			RequiredState:  &requiredState,
+			Type:           factoryapi.RelationTypeDependsOn,
+		}},
+	})
+	waitForGuardFactoryEvent(t, session, factoryapi.FactoryEventTypeRelationshipChangeRequest, "joined dependency relationship")
+	waitForGuardWorkState(t, session, secondaryJoinTaskWorkID, "ready")
 	blocked := support.GetFactoryEventsForSessionAt(t, fixture.baseURL, session.sessionID)
 	if got := len(dispatchRequestsForTransition(t, blocked, secondaryJoinTransition)); got != 0 {
 		t.Fatalf("joined dispatches before producer release = %d, want zero; dispatches=%#v", got, blocked)
@@ -266,6 +277,9 @@ func dispatchRequestsForTransition(
 
 func waitForSharedGuardSignal(t *testing.T, signal <-chan struct{}, label string) {
 	t.Helper()
+	// This channel is an edge-owned completion signal from the controlled
+	// provider; the deadline only bounds a missing edge or cancellation and is
+	// not a delay inserted into the Factory workflow.
 	select {
 	case <-signal:
 	case <-time.After(sharedGuardFixtureShutdownTimeout):
