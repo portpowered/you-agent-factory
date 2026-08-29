@@ -401,3 +401,57 @@ This evidence proves the local revived behavior and exercised deterministic
 cleanup. It does not prove tagged full-stream/tool goldens, the exact final
 package command, GitHub-hosted contention/performance, independent loopback
 convergence, or remote Claude compatibility; those remain story-003 gates.
+
+## Story 003 — final runtime proof and successor handoff
+
+The successor is [PR #2423](https://github.com/portpowered/you-agent-factory/pull/2423),
+created from the current-main c10 branch
+`functional-test-optimization-c10-workers-inference-claude-disposition`. It is
+the explicit successor to closed, unmerged [PR #2331](https://github.com/portpowered/you-agent-factory/pull/2331);
+the linkage was recorded in both PR conversations. The old PR's protected
+dead-code-baseline closure remains historical context only.
+
+The final branch head is the commit containing this handoff section. Its exact
+identifier is captured with `git rev-parse HEAD` immediately before the final
+push and in the successor PR handoff comment. No code or protected fixture is
+changed after the story-002 implementation head `b8ea73092e`.
+
+### Final topology and performance direction
+
+| Boundary | Current-main characterization | Revived successor characterization |
+| --- | --- | --- |
+| Root-built process/API server | Four independent default test processes and servers | One production-composed process/API server serves four compatible default scenarios through explicit sessions |
+| Factory Session boundary | Four implicit default sessions, without cross-session identity proof | Four unique non-default explicit sessions, immutable Factory-directory routes, session-scoped Work/Event/response observations, and explicit deletion |
+| External inference | Per-test controlled runner | One immutable route per scenario; exact success/cancellation/structured-failure calls and nine timeout calls remain route-local |
+| Cleanup | Ordinary test cleanup only | Process, listener, session, stream, active-call, route, and temporary-directory census, including adverse assertion cleanup |
+
+The raw local direction is intentionally noisy and has no fixed threshold. The
+current-main characterization was package `11.155s` / wall `16.135s`; the
+revived focused, repeat, race, and adverse probes reported package times
+`7.890s`, `18.623s` across three repetitions, `14.158s`, and `1.889s`.
+These samples are not a CI performance claim. Review's current-head Backend
+Functional Coverage package result and timing are the authoritative
+`CI-C10-01` evidence; a non-improving result gets one bounded pass.
+
+### Final verification and loopback ownership
+
+The implementation-stage final proof procedure is exactly:
+
+```text
+go test -count=1 -timeout=10m ./tests/functional/workers/inference/claude
+```
+
+It runs once after this handoff section is committed at the final local head.
+The exit status, package timing, public witnesses, cleanup census, final head,
+and remaining unproven edges are recorded in the successor PR conversation;
+CI-run results are not committed to this branch. The unchanged tagged
+full-stream and tool goldens remain isolated under `functionallong`, so no
+risk-triggered tagged rerun is required. `LOOPBACK-C10-01` is read-only and
+uses the validation-loopback template from a clean checkout; it reports every
+criterion and requests a delta rather than silently repairing implementation.
+
+The complete three-dot ownership, five-commit mapping, protected-file hashes,
+excluded-path result, and current-before/after topology above remain the
+repository-review evidence for `AUDIT-C10-01`, `DIFF-C10-01`, and
+`CI-C10-01`. Review owns terminal CI, contention/performance classification,
+clean-room convergence, conflict resolution, and merge.
