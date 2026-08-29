@@ -14,14 +14,38 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const boardPersistenceCLIOperationTimeout = 30 * time.Second
+
+func runBoardPersistenceCLIWithFreshContext(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, baseURL string,
+	args ...string,
+) ([]byte, error) {
+	t.Helper()
+	cliContext, cancel := context.WithTimeout(t.Context(), boardPersistenceCLIOperationTimeout)
+	defer cancel()
+	return runBoardPersistenceCLI(cliContext, binaryPath, factoryDir, homeDir, baseURL, args...)
+}
+
+func submitBoardPersistenceBatchThroughCLI(
+	t *testing.T,
+	daemon *boardPersistenceDaemon,
+	binaryPath, factoryDir, homeDir, batchJSON, requestID string,
+	wantWorkCount int,
+) {
+	t.Helper()
+	cliContext, cancel := context.WithTimeout(t.Context(), boardPersistenceCLIOperationTimeout)
+	defer cancel()
+	submitBatchThroughCLI(t, cliContext, daemon, binaryPath, factoryDir, homeDir, batchJSON, requestID, wantWorkCount)
+}
+
 func assertBoardCLIWorkerSessionsForWork(
 	t *testing.T,
-	ctx context.Context,
 	daemon *boardPersistenceDaemon,
 	binaryPath, factoryDir, homeDir, workID string,
 ) {
 	t.Helper()
-	output, err := runBoardPersistenceCLI(ctx, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "worker-sessions", "list", "--work-id", workID)
+	output, err := runBoardPersistenceCLIWithFreshContext(t, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "worker-sessions", "list", "--work-id", workID)
 	if err != nil {
 		t.Fatalf("you worker-sessions list --work-id %s after restart: %v\noutput:\n%s", workID, err, output)
 	}
@@ -341,13 +365,12 @@ func assertBoardList(t *testing.T, listed factoryapi.ListWorkResponse, expected 
 
 func assertBoardCLIListAndShows(
 	t *testing.T,
-	ctx context.Context,
 	daemon *boardPersistenceDaemon,
 	binaryPath, factoryDir, homeDir string,
 	expected map[string]boardPersistenceExpectedWork,
 ) {
 	t.Helper()
-	listOutput, err := runBoardPersistenceCLI(ctx, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "work", "list")
+	listOutput, err := runBoardPersistenceCLIWithFreshContext(t, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "work", "list")
 	if err != nil {
 		t.Fatalf("you work list: %v\noutput:\n%s", err, listOutput)
 	}
@@ -358,7 +381,7 @@ func assertBoardCLIListAndShows(
 	assertBoardList(t, listed, expected)
 
 	for workID, want := range expected {
-		showOutput, err := runBoardPersistenceCLI(ctx, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "work", "show", workID)
+		showOutput, err := runBoardPersistenceCLIWithFreshContext(t, binaryPath, factoryDir, homeDir, daemon.baseURL, "--json", "work", "show", workID)
 		if err != nil {
 			t.Fatalf("you work show %s: %v\noutput:\n%s", workID, err, showOutput)
 		}

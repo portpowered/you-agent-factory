@@ -2,7 +2,6 @@ package restart_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,9 +54,7 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 // cover service composition; this test intentionally crosses the OS boundary
 // because a daemon restart is the failure boundary being repaired.
 func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
-	cliContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	scenario := newBoardPersistenceScenario(t, cliContext)
+	scenario := newBoardPersistenceScenario(t)
 	runBoardPersistenceInitialGeneration(t, scenario)
 	runBoardPersistenceRecoveryGeneration(t, scenario)
 	runBoardPersistenceSecondRestart(t, scenario)
@@ -69,16 +66,14 @@ func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
 // process boundary is intentional: BuildProcess covers composition, while
 // only a real child process can prove kill-and-reopen behavior.
 func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *testing.T) {
-	cliContext, cancel := context.WithTimeout(t.Context(), 45*time.Second)
-	defer cancel()
-	scenario := newBoardPersistenceScenario(t, cliContext)
+	scenario := newBoardPersistenceScenario(t)
 	first := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
 	batchJSON := boardPersistenceBatchJSON(t, boardPersistenceRequestID, []boardPersistenceBatchWork{
 		{Name: "board-init", WorkID: boardPersistenceInitialWorkID, State: "init", TraceID: "trace-board-init", Content: "durable init content"},
 		{Name: "board-processing", WorkID: boardPersistenceProcessingWorkID, State: "processing", TraceID: "trace-board-processing", Content: "durable processing content"},
 		{Name: "board-awaiting-ci", WorkID: boardPersistenceAwaitingWorkID, State: "awaiting-ci", TraceID: "trace-board-awaiting-ci", Content: "durable awaiting-ci content"},
 	})
-	submitBatchThroughCLI(t, cliContext, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batchJSON, boardPersistenceRequestID, 3)
+	submitBoardPersistenceBatchThroughCLI(t, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batchJSON, boardPersistenceRequestID, 3)
 	waitForBoardStates(t, first.baseURL, map[string]string{
 		boardPersistenceInitialWorkID:    "init",
 		boardPersistenceProcessingWorkID: "processing",
@@ -141,9 +136,7 @@ func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *tes
 // write. The child process is intentional so the assertion covers the actual
 // operator-facing startup diagnostic emitted by the real CLI.
 func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) {
-	cliContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-	scenario := newBoardPersistenceScenario(t, cliContext)
+	scenario := newBoardPersistenceScenario(t)
 	corruptPayload := []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`)
 	if err := os.WriteFile(scenario.recordPath, corruptPayload, 0o600); err != nil {
 		t.Fatalf("write corrupt current-board recording: %v", err)
@@ -207,14 +200,13 @@ type boardPersistenceScenario struct {
 	homeDir               string
 	releasePath           string
 	recordPath            string
-	cliContext            context.Context
 	expected              map[string]boardPersistenceExpectedWork
 	activeDispatchID      string
 	activeWorkerSessionID string
 	second                *boardPersistenceDaemon
 }
 
-func newBoardPersistenceScenario(t *testing.T, cliContext context.Context) *boardPersistenceScenario {
+func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 	t.Helper()
 	binaryPath := buildBoardPersistenceBinary(t)
 	factoryDir := support.ScaffoldFactory(t, boardPersistenceFactoryConfig())
@@ -233,7 +225,7 @@ func newBoardPersistenceScenario(t *testing.T, cliContext context.Context) *boar
 	)
 	return &boardPersistenceScenario{
 		binaryPath: binaryPath, factoryDir: factoryDir, homeDir: homeDir,
-		releasePath: releasePath, recordPath: recordPath, cliContext: cliContext,
+		releasePath: releasePath, recordPath: recordPath,
 		expected: boardPersistenceExpectedWorks(),
 	}
 }
@@ -246,7 +238,7 @@ func runBoardPersistenceInitialGeneration(t *testing.T, scenario *boardPersisten
 		{Name: "board-processing", WorkID: boardPersistenceProcessingWorkID, State: "processing", TraceID: "trace-board-processing", Content: "durable processing content"},
 		{Name: "board-awaiting-ci", WorkID: boardPersistenceAwaitingWorkID, State: "awaiting-ci", TraceID: "trace-board-awaiting-ci", Content: "durable awaiting-ci content"},
 	})
-	submitBatchThroughCLI(t, scenario.cliContext, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batchJSON, boardPersistenceRequestID, 3)
+	submitBoardPersistenceBatchThroughCLI(t, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batchJSON, boardPersistenceRequestID, 3)
 
 	beforeRestart := waitForBoardStates(t, first.baseURL, map[string]string{
 		boardPersistenceInitialWorkID:    "init",
@@ -282,7 +274,7 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 		boardPersistenceAwaitingWorkID:   "awaiting-ci",
 	}, 30*time.Second)
 	assertBoardList(t, afterFirstRestart, scenario.expected)
-	assertBoardCLIListAndShows(t, scenario.cliContext, second, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
+	assertBoardCLIListAndShows(t, second, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
 
 	rearmedDispatchID := waitForBoardRearmedDispatch(t, second.baseURL, boardPersistenceProcessingWorkID, scenario.activeDispatchID, 30*time.Second)
 	rearmedObservation := waitForBoardWorkerObservation(t, second.baseURL, second.sessionID, boardPersistenceProcessingWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
@@ -315,7 +307,7 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 	newBatchJSON := boardPersistenceBatchJSON(t, boardPersistenceNewRequestID, []boardPersistenceBatchWork{{
 		Name: "board-new-work", WorkID: boardPersistenceNewWorkID, State: "init", TraceID: "trace-board-new-work", Content: "new work after recovery",
 	}})
-	submitBatchThroughCLI(t, scenario.cliContext, second, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, newBatchJSON, boardPersistenceNewRequestID, 1)
+	submitBoardPersistenceBatchThroughCLI(t, second, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, newBatchJSON, boardPersistenceNewRequestID, 1)
 	scenario.expected[boardPersistenceNewWorkID] = boardPersistenceExpectedWork{
 		Name:           "board-new-work",
 		WorkID:         boardPersistenceNewWorkID,
@@ -341,7 +333,7 @@ func runBoardPersistenceSecondRestart(t *testing.T, scenario *boardPersistenceSc
 		boardPersistenceNewWorkID:        "init",
 	}, 30*time.Second)
 	assertBoardList(t, afterSecondRestart, scenario.expected)
-	assertBoardCLIListAndShows(t, scenario.cliContext, third, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
+	assertBoardCLIListAndShows(t, third, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.expected)
 
 	finalDispatches := waitForBoardDispatchStates(t, third.baseURL, 30*time.Second)
 	if got := activeBoardDispatches(finalDispatches, boardPersistenceProcessingWorkID); len(got) != 0 {
@@ -353,7 +345,6 @@ func runBoardPersistenceSecondRestart(t *testing.T, scenario *boardPersistenceSc
 	}
 	assertBoardCLIWorkerSessionsForWork(
 		t,
-		scenario.cliContext,
 		third,
 		scenario.binaryPath,
 		scenario.factoryDir,
