@@ -1,14 +1,10 @@
 package guards
 
 import (
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -17,12 +13,10 @@ import (
 // TestLogicalRoundTripFactoryBoundaryProvesProductiveRejectionsSurvive proves
 // the customer runtime accepts a productive process/review lane beyond the
 // former aggregate raw-visit boundary while keeping the logical budget.
+// CASE-G-001 and CASE-G-005 cover productive rejection cycles and the
+// configured maximum visit boundary.
 func TestLogicalRoundTripFactoryBoundaryProvesProductiveRejectionsSurvive(t *testing.T) {
-	dir := support.ScaffoldFactory(t, logicalRoundTripFactoryConfig(8, 16))
-	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	support.WriteAgentConfig(t, dir, "reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	support.WriteWorkstationConfig(t, dir, "executor-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
-	support.WriteWorkstationConfig(t, dir, "review-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
+	dir := newSharedGuardScenario(t, logicalRoundTripFactoryConfig(8, 16))
 
 	const traceID = "trace-logical-round-trip-productive"
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -42,14 +36,10 @@ func TestLogicalRoundTripFactoryBoundaryProvesProductiveRejectionsSurvive(t *tes
 		codexCommandResult("HEAD head-final\nDone. COMPLETE"),
 		codexCommandResult("HEAD head-final\nDone. COMPLETE"),
 	)
-	runner := support.NewShapedProviderCommandRunner(responses...)
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	route := sharedGuardProviderSequence(sharedGuardCommandResponsesFromResults(responses)...)
+	session := openSharedGuardSession(t, dir, sharedGuardRouteConfig{provider: route})
+	supportWaitForGuardTerminal(t, session)
+	publicSession, listed, events := readSharedGuardSession(t, session)
 
 	processIndexes := dispatchResponseIndexesForTransition(t, events, "process")
 	reviewIndexes := dispatchResponseIndexesForTransition(t, events, "review")
@@ -71,21 +61,19 @@ func TestLogicalRoundTripFactoryBoundaryProvesProductiveRejectionsSurvive(t *tes
 	if got := dispatchResponseIndexesForTransition(t, events, "review-loop-breaker"); len(got) != 0 {
 		t.Fatalf("review-loop-breaker dispatch count = %d, want 0", len(got))
 	}
-	assertQuiescentSession(t, session, 1, 0)
+	assertQuiescentSession(t, publicSession, 1, 0)
 	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
-	if runner.CallCount() != 16 {
-		t.Fatalf("provider command calls = %d, want 16", runner.CallCount())
+	if got := session.fixture.router.providerCallsFor(dir); got != 16 {
+		t.Fatalf("provider command calls = %d, want 16", got)
 	}
 }
 
 // TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute proves that a
 // route that never completes a pair reaches the configured raw backstop.
+// CASE-G-002 and CASE-G-005 cover the false guard and minimum/backstop
+// boundary without an off-by-one failure route.
 func TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute(t *testing.T) {
-	dir := support.ScaffoldFactory(t, logicalRoundTripFactoryConfig(3, 4))
-	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	support.WriteAgentConfig(t, dir, "reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	support.WriteWorkstationConfig(t, dir, "executor-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
-	support.WriteWorkstationConfig(t, dir, "review-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
+	dir := newSharedGuardScenario(t, logicalRoundTripFactoryConfig(3, 4))
 
 	const traceID = "trace-logical-round-trip-backstop"
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -93,19 +81,14 @@ func TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute(t *testing.T) {
 		TraceID:    traceID,
 		Payload:    []byte(`{"title":"logical round-trip raw backstop"}`),
 	})
-	runner := support.NewShapedProviderCommandRunner(
-		codexCommandResult("HEAD unchanged\nDone. COMPLETE"),
-		codexCommandResult("HEAD unchanged\nneeds more work"),
-		codexCommandResult("HEAD unchanged\nDone. COMPLETE"),
-		codexCommandResult("HEAD unchanged\nneeds more work"),
-	)
-
-	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
+	session := openSharedGuardSession(t, dir, sharedGuardRouteConfig{provider: sharedGuardProviderSequence(
+		sharedGuardProviderOutput("HEAD unchanged\nDone. COMPLETE"),
+		sharedGuardProviderOutput("HEAD unchanged\nneeds more work"),
+		sharedGuardProviderOutput("HEAD unchanged\nDone. COMPLETE"),
+		sharedGuardProviderOutput("HEAD unchanged\nneeds more work"),
+	)})
+	supportWaitForGuardTerminal(t, session)
+	publicSession, listed, events := readSharedGuardSession(t, session)
 
 	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("story", "failed")); got != 1 {
 		t.Fatalf("failed work count = %d, want 1; listed=%#v", got, listed)
@@ -119,67 +102,61 @@ func TestLogicalRoundTripFactoryBoundaryStopsUnbalancedRoute(t *testing.T) {
 	if got := dispatchResponseIndexesForTransition(t, events, "review-loop-breaker"); len(got) != 0 {
 		t.Fatalf("review-loop-breaker dispatch count = %d, want 0", len(got))
 	}
-	assertQuiescentSession(t, session, 0, 1)
+	assertQuiescentSession(t, publicSession, 0, 1)
 	assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
-	if runner.CallCount() != 4 {
-		t.Fatalf("provider command calls = %d, want 4", runner.CallCount())
+	if got := session.fixture.router.providerCallsFor(dir); got != 4 {
+		t.Fatalf("provider command calls = %d, want 4", got)
 	}
 }
 
 // TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection proves
 // a recorded logical round trip across the Factory boundary preserves its
 // terminal projection through replay.
+// CASE-G-016 covers retained canonical history recovery without another Worker call.
 func TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection(t *testing.T) {
-	dir := support.ScaffoldFactory(t, logicalRoundTripFactoryConfig(3, 6))
-	support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	support.WriteAgentConfig(t, dir, "reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
-	support.WriteWorkstationConfig(t, dir, "executor-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
-	support.WriteWorkstationConfig(t, dir, "review-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
+	dir := newSharedGuardScenario(t, logicalRoundTripFactoryConfig(3, 6))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "story",
 		TraceID:    "trace-logical-round-trip-replay",
 		Payload:    []byte(`{"title":"logical round-trip replay"}`),
 	})
 
-	artifactPath := filepath.Join(t.TempDir(), "logical-round-trip.replay.json")
-	runner := support.NewShapedProviderCommandRunner(
-		codexCommandResult("HEAD stable\nDone. COMPLETE"),
-		codexCommandResult("HEAD stable\nneeds more work"),
-		codexCommandResult("HEAD stable\nDone. COMPLETE"),
-		codexCommandResult("HEAD stable\nneeds more work"),
-		codexCommandResult("HEAD stable\nDone. COMPLETE"),
-		codexCommandResult("HEAD stable\nneeds more work"),
-	)
-	liveServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		Args:                      []string{"--record", artifactPath},
-		WaitForServiceModeRuntime: true,
-		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
-	})
-	support.WaitForTerminalStatus(t, liveServer.URL(), 15*time.Second)
-	liveWork := support.ListDefaultSessionWork(t, liveServer.URL())
-	liveEvents := liveServer.GetFactoryEvents(t)
-	liveServer.Stop(t)
+	session := openSharedGuardSession(t, dir, sharedGuardRouteConfig{provider: sharedGuardProviderSequence(
+		sharedGuardProviderOutput("HEAD stable\nDone. COMPLETE"),
+		sharedGuardProviderOutput("HEAD stable\nneeds more work"),
+		sharedGuardProviderOutput("HEAD stable\nDone. COMPLETE"),
+		sharedGuardProviderOutput("HEAD stable\nneeds more work"),
+		sharedGuardProviderOutput("HEAD stable\nDone. COMPLETE"),
+		sharedGuardProviderOutput("HEAD stable\nneeds more work"),
+	)})
+	supportWaitForGuardTerminal(t, session)
+	_, liveWork, liveEvents := readSharedGuardSession(t, session)
 
 	if got := support.CountWorkAtCustomerState(liveWork, support.WorkCustomerLocation("story", "failed")); got != 1 {
 		t.Fatalf("live failed work count = %d, want 1; listed=%#v", got, liveWork)
 	}
-	if runner.CallCount() != 6 {
-		t.Fatalf("live provider command calls = %d, want 6", runner.CallCount())
+	if got := session.fixture.router.providerCallsFor(dir); got != 6 {
+		t.Fatalf("live provider command calls = %d, want 6", got)
 	}
 
-	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	if len(artifact.Events) == 0 {
-		t.Fatal("recorded logical round-trip artifact has no events")
+	if len(liveEvents) < 2 {
+		t.Fatalf("live logical round-trip event history = %d, want replayable history", len(liveEvents))
 	}
-	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                t.TempDir(),
-		Args:                      []string{"--replay", artifactPath, "--no-record"},
-		WaitForServiceModeRuntime: true,
-	})
-	support.WaitForTerminalStatus(t, replayServer.URL(), 15*time.Second)
-	replayedWork := support.ListDefaultSessionWork(t, replayServer.URL())
-	replayedEvents := replayServer.GetFactoryEvents(t)
+	replayedTail := support.GetFactoryEventsAfterForSessionAt(
+		t,
+		session.fixture.baseURL,
+		session.sessionID,
+		support.FactoryEventReadCursor{AfterEventID: liveEvents[0].Id},
+	)
+	if len(replayedTail) != len(liveEvents)-1 {
+		t.Fatalf("replayed event tail length = %d, want %d", len(replayedTail), len(liveEvents)-1)
+	}
+	for index, event := range replayedTail {
+		if event.Id != liveEvents[index+1].Id || event.Context.Sequence != liveEvents[index+1].Context.Sequence {
+			t.Fatalf("replayed event[%d] = %#v, want live event %#v", index+1, event, liveEvents[index+1])
+		}
+	}
+	_, replayedWork, replayedEvents := readSharedGuardSession(t, session)
 
 	if got := support.CountWorkAtCustomerState(replayedWork, support.WorkCustomerLocation("story", "failed")); got != 1 {
 		t.Fatalf("replayed failed work count = %d, want 1; listed=%#v", got, replayedWork)
@@ -194,9 +171,17 @@ func TestLogicalRoundTripFactoryBoundaryRecordReplayPreservesTerminalProjection(
 			t.Fatalf("%s replay visits = %d, live visits = %d; want three each", transitionID, replayedVisits, liveVisits)
 		}
 	}
-	if runner.CallCount() != 6 {
-		t.Fatalf("provider command calls after replay = %d, want unchanged 6", runner.CallCount())
+	if got := session.fixture.router.providerCallsFor(dir); got != 6 {
+		t.Fatalf("provider command calls after replay = %d, want unchanged 6", got)
 	}
+}
+
+func sharedGuardCommandResponsesFromResults(results []platformprocess.CommandResult) []sharedGuardCommandResponse {
+	responses := make([]sharedGuardCommandResponse, 0, len(results))
+	for _, result := range results {
+		responses = append(responses, sharedGuardCommandResponse{result: result})
+	}
+	return responses
 }
 
 func logicalRoundTripFactoryConfig(maxVisits, maxRawVisits int) map[string]any {
