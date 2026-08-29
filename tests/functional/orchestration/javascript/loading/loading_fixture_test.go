@@ -247,25 +247,6 @@ func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 	runNamedJavaScriptFactoryRunsThroughAPIInvocation(t, loadingFixtureForTest(t))
 }
 
-func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
-	fixture := loadingFixtureForTest(t)
-	// The Go test runner reuses one TestMain process for -count repetitions.
-	// This is the final selector in the package's normal registration order;
-	// release the hosted compatibility runtime after its session cleanups so
-	// the next repetition can build its own one-process fixture.
-	t.Cleanup(func() {
-		if err := fixture.shutdown(); err != nil {
-			t.Errorf("reset loading fixture after repeated run: %v", err)
-		}
-		loadingFixtureMu.Lock()
-		if sharedLoadingFixture == fixture {
-			sharedLoadingFixture = nil
-		}
-		loadingFixtureMu.Unlock()
-	})
-	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, fixture)
-}
-
 func loadingFixtureForTest(t *testing.T) *loadingFixture {
 	t.Helper()
 

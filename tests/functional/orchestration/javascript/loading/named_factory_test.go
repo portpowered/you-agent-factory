@@ -23,6 +23,26 @@ const (
 	namedJavaScriptSessionControlWait = 10 * time.Second
 )
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
+	fixture := loadingFixtureForTest(t)
+	// The Go test runner reuses one TestMain process for -count repetitions.
+	// This is the final selector in the package's normal registration order;
+	// release the hosted compatibility runtime after its session cleanups so
+	// the next repetition can build its own one-process fixture.
+	t.Cleanup(func() {
+		if err := fixture.shutdown(); err != nil {
+			t.Errorf("reset loading fixture after repeated run: %v", err)
+		}
+		loadingFixtureMu.Lock()
+		if sharedLoadingFixture == fixture {
+			sharedLoadingFixture = nil
+		}
+		loadingFixtureMu.Unlock()
+	})
+	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, fixture)
+}
+
 // TestNamedJavaScriptFactoryRunsThroughStandardCLI proves a named JavaScript
 // Factory resolves by name and completes through the public you run customer
 // process boundary with a terminal COMPLETED primary outcome tied to the named
