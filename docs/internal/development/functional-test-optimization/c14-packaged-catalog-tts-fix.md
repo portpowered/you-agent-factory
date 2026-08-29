@@ -1,10 +1,10 @@
 # C14 packaged Catalog, TTS, and Fix baseline ledger
 
 Status: stories `fto-c14-pkg-factory-packaged-cluster-001` through
-`...-003` are complete. This ledger freezes the pre-change denominator and
+`...-004` are complete. This ledger freezes the pre-change denominator and
 characterization for the three owned functional packages and records the
-bounded Catalog and TTS optimizations. Stories `...-004` and `...-005` own
-Fix, final measurement, loopback, and review handoff.
+bounded Catalog, TTS, and Fix optimizations. Story `...-005` owns final
+measurement, loopback, and review handoff.
 
 ## Authority, scope, and artifact
 
@@ -382,13 +382,79 @@ replay; the fixture cleanup observed balanced model-host starts/stops (`2/2`).
 No assertion was removed or weakened, no production/shared-support file
 changed, and no sleep, remote call, paid call, or real VibeVoice claim was
 introduced. Remaining unproven edges are the final three-run TTS median or
-measured floor, Fix optimization, final rebase, clean-room loopback,
+measured floor, the final Fix median or measured floor, final rebase, clean-room loopback,
 current-head CI, PR review, and merge.
+
+## GATE-FIX-OPT: reusable CLI root and real Git metadata seed
+
+The Fix profile selected repeated non-hosted CLI root construction, packaged
+Factory materialization, and local Git repository setup. The implementation
+adds a package-local serialized CLI process with one public `@you/fix` seed and
+fresh per-invocation homes, backend scopes, selected Factory copies, and
+provider-selector registrations. The existing continuous API/session fixture
+is unchanged. Every customer CLI invocation still crosses `Process.Execute`;
+the selector-keyed provider edge, real local Git/worktree operations, provider
+failure, and non-Git failure rows remain intact.
+
+The Git optimization creates one real repository with the same user config and
+empty initial commit, then copies its `.git` metadata into each scenario. The
+copied repositories remain independent local-real Git repositories. The
+non-Git failure and path-validation rows do not receive a Git seed, and runtime
+worktrees remain per scenario.
+
+### Procedure and measured result
+
+The commands below ran on the current source with local-real Git/filesystem
+behavior and controlled provider command edges. Expected provider, validation,
+and non-Git failure logs remained part of passing assertions.
+
+```text
+go test ./tests/functional/factory/packaged/fix/... -count=1 -v
+go test ./tests/functional/factory/packaged/fix/... \
+  -run '^TestPackagedFix(UsesNamedWorktreeAndIndependentReview|SharedProcess|RejectsMissingAndUnsafeWorktreeNamesBeforeProviderExecution|WorktreeCreationFailureIsStable|WorkerFailureIsStable)$' \
+  -count=3
+go test -race ./tests/functional/factory/packaged/fix/... -count=1
+```
+
+| Evidence | Before | After | Exit |
+| --- | ---: | ---: | ---: |
+| Complete Fix package | `22.266s` baseline median | `21.005s` observed run | `0` |
+| Complete Fix focused repeat | not applicable before edit | `77.283s` for `-count=3` | `0` |
+| Complete Fix race gate | not applicable before edit | `42.164s` for `-race -count=1` | `0` |
+
+The one after-package sample is an observed host value, not the lane's final
+three-run median or a 40-percent verdict; `GATE-PERF-C14` owns that final
+denominator and any measured-floor disposition.
+
+### Fix operation, identity, and cleanup handoff
+
+The Fix inventory remains five top-level and 16 named records. The full run
+retained all 21 records and the existing exact role, prompt, response, Work,
+Factory Event, replay, provider-call, local-real Git, validation, failure, and
+cleanup assertions.
+
+| Operation or identity boundary | Before | After | Ownership/isolation retained |
+| --- | ---: | ---: | --- |
+| Fixture root processes | `5` characterized roots | `2` fixture roots (`1` continuous + `1` serialized CLI) | The continuous API/session root remains distinct; customer CLI calls are serialized on the non-hosted root. |
+| Public packaged-Factory seed setup | Repeated per independent CLI root | `1` CLI seed install plus the existing `1` continuous seed | Each CLI call receives a fresh selected `@you/fix` copy and config. |
+| CLI customer executions | Six retained executions | Six retained executions | Every invocation still uses public `Process.Execute`; no scenario was deleted or merged. |
+| CLI Factory copies/config scopes | Repeated materialization | `6` Factory copies and `6` fresh config scopes | Homes, backend scopes, workspaces, and provider selectors remain unique. |
+| Real Git repository setup | Nine scenario repositories each ran init/config/commit setup | One real seed init/config/commit plus `9` `.git` metadata copies | Copied repositories remain local-real; non-Git and path-validation failures stay uninitialized. |
+| Explicit test-owned Git worktree setup | `1` unrelated worktree add | `1` unrelated worktree add | The named Fix runtime still creates and asserts its requested worktree; unrelated worktree preservation remains covered. |
+| Provider edge | Per-scenario controlled runner | Selector-keyed per-scenario runners | Success/rejection role counts, zero-call validation/Git failure, and worker failure bounds remain asserted. |
+| Shared resource census | Existing six scenario identities | `6` unique factories/workspaces/worktrees/requests/Works/plans; `255` event IDs | `selectors=0`, all six roots/sessions/definitions/workspaces/worktrees/plans/runtime/replay resources absent. |
+| Cleanup causes | Existing seven cause paths | `success=7,rejection=4,failure=1,cancellation=2,timeout=1,assertion-failure=1,package-teardown=1` | Every declared cleanup cause remains observed; original failure causes are not hidden. |
+
+No assertion was removed or weakened, no production/shared-support file
+changed, and no new sleep, timeout increase, remote call, paid call, provider
+substitute outside `Edges`, or resource leak was introduced. Remaining
+unproven edges are the final three-run Fix median or measured floor, final
+rebase, clean-room loopback, current-head CI, PR review, and merge.
 
 ## Handoff artifacts
 
 - Durable ledger: `docs/internal/development/functional-test-optimization/c14-packaged-catalog-tts-fix.md`.
-- Ignored task state: `prd.json` marks stories `...-001` through `...-003`
+- Ignored task state: `prd.json` marks stories `...-001` through `...-004`
   `passes:true`; `progress.txt`
   records the concise iteration handoff and reusable patterns.
 - No generated, production, API, shared-support, workflow, baseline, CI, or
@@ -396,6 +462,8 @@ current-head CI, PR review, and merge.
   `tests/functional/factory/packaged/catalog/required_inputs_test.go`, and the
   TTS change is confined to
   `tests/functional/factory/packaged/tts/{local_runtime_invocation_test.go,models_replay_helpers_test.go,models_replay_test.go}`.
+  The Fix change is confined to
+  `tests/functional/factory/packaged/fix/{invocation_test.go,shared_fixture_test.go}`.
 - Unproven edges handed to later gates: final three-run medians or
-  operation-level floors, Fix root/Git setup reduction, clean-room loopback,
+  operation-level floors, clean-room loopback,
   current-head CI, and merge.

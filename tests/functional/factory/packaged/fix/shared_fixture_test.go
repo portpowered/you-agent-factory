@@ -2,15 +2,18 @@ package fix
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -97,8 +100,300 @@ var (
 	packagedFixFixtureErr  error
 )
 
+// packagedFixCLIProcessFixture owns the reusable non-hosted customer CLI
+// process. Calls are serialized because support.Process documents reusable
+// process execution for sequential public invocations; each call still gets a
+// fresh home, config scope, Factory copy, workspace, and provider selector.
+type packagedFixCLIProcessFixture struct {
+	rootDir        string
+	factorySeedDir string
+	configSeed     []byte
+	process        support.ApplicationProcess
+	providerRunner *packagedFixSelectorRunner
+
+	mu              sync.Mutex
+	processBuilds   int
+	factoryInstalls int
+	factoryCopies   int
+	configCopies    int
+	executions      int
+}
+
+var (
+	packagedFixCLIProcessFixtureOnce     sync.Once
+	packagedFixCLIProcessFixtureInstance *packagedFixCLIProcessFixture
+	packagedFixCLIProcessFixtureErr      error
+)
+
+func sharedPackagedFixCLIProcessFixture(t *testing.T) *packagedFixCLIProcessFixture {
+	t.Helper()
+	packagedFixCLIProcessFixtureOnce.Do(func() {
+		packagedFixCLIProcessFixtureInstance, packagedFixCLIProcessFixtureErr =
+			startPackagedFixCLIProcessFixture()
+	})
+	if packagedFixCLIProcessFixtureErr != nil {
+		t.Fatalf("start shared packaged Fix CLI process: %v", packagedFixCLIProcessFixtureErr)
+	}
+	if packagedFixCLIProcessFixtureInstance == nil {
+		t.Fatal("shared packaged Fix CLI process is unavailable")
+	}
+	return packagedFixCLIProcessFixtureInstance
+}
+
+func startPackagedFixCLIProcessFixture() (*packagedFixCLIProcessFixture, error) {
+	rootDir, err := os.MkdirTemp("", "you-functional-packaged-fix-cli-")
+	if err != nil {
+		return nil, fmt.Errorf("create CLI fixture root: %w", err)
+	}
+	cleanupRoot := func() { _ = os.RemoveAll(rootDir) }
+	homeDir := filepath.Join(rootDir, "home")
+	workingDir := filepath.Join(rootDir, "work")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		cleanupRoot()
+		return nil, fmt.Errorf("create CLI fixture home: %w", err)
+	}
+	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+		cleanupRoot()
+		return nil, fmt.Errorf("create CLI fixture working directory: %w", err)
+	}
+
+	providerRunner := &packagedFixSelectorRunner{}
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	})
+	if err != nil {
+		cleanupRoot()
+		return nil, fmt.Errorf("build CLI root process: %w", err)
+	}
+	env := packagedFixFixtureEnvironment(homeDir)
+	if err := initializePackagedFixHome(process, env, workingDir); err != nil {
+		closePackagedFixProcess(process)
+		cleanupRoot()
+		return nil, fmt.Errorf("initialize packaged CLI Factory home: %w", err)
+	}
+	factorySeedDir := filepath.Join(
+		homeDir,
+		".you-agent-factory",
+		"factories",
+		filepath.FromSlash(packagedFixFactoryName),
+	)
+	if _, err := os.Stat(filepath.Join(factorySeedDir, factorydefinitions.FactoryConfigFile)); err != nil {
+		closePackagedFixProcess(process)
+		cleanupRoot()
+		return nil, fmt.Errorf("find packaged Fix CLI seed at %s: %w", factorySeedDir, err)
+	}
+	configSeed, err := os.ReadFile(filepath.Join(homeDir, ".you-agent-factory", "config.json"))
+	if err != nil {
+		closePackagedFixProcess(process)
+		cleanupRoot()
+		return nil, fmt.Errorf("read packaged Fix CLI config seed: %w", err)
+	}
+	return &packagedFixCLIProcessFixture{
+		rootDir:         rootDir,
+		factorySeedDir:  factorySeedDir,
+		configSeed:      configSeed,
+		process:         process,
+		providerRunner:  providerRunner,
+		processBuilds:   1,
+		factoryInstalls: 1,
+	}, nil
+}
+
+func (fixture *packagedFixCLIProcessFixture) copyFactory(
+	t *testing.T,
+	homeDir string,
+) string {
+	t.Helper()
+	factoryDir := support.CopyFactoryAsNamed(
+		t,
+		fixture.factorySeedDir,
+		homeDir,
+		packagedFixFactoryName,
+	)
+	fixture.copySystemConfig(t, homeDir)
+	fixture.mu.Lock()
+	fixture.factoryCopies++
+	fixture.mu.Unlock()
+	return factoryDir
+}
+
+func (fixture *packagedFixCLIProcessFixture) copySystemConfig(
+	t *testing.T,
+	homeDir string,
+) {
+	t.Helper()
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(fixture.configSeed, &document); err != nil {
+		t.Fatalf("decode packaged Fix CLI config seed: %v", err)
+	}
+	backendScopeID, err := json.Marshal("local-" + uuid.NewString())
+	if err != nil {
+		t.Fatalf("encode packaged Fix CLI backend scope: %v", err)
+	}
+	document["backendScopeID"] = backendScopeID
+	config, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode packaged Fix CLI config: %v", err)
+	}
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create packaged Fix CLI config directory: %v", err)
+	}
+	if err := os.WriteFile(configPath, config, 0o600); err != nil {
+		t.Fatalf("copy packaged Fix CLI config: %v", err)
+	}
+	fixture.mu.Lock()
+	fixture.configCopies++
+	fixture.mu.Unlock()
+}
+
+func (fixture *packagedFixCLIProcessFixture) execute(
+	t *testing.T,
+	inputs *support.CapturedInputs,
+) error {
+	t.Helper()
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	fixture.executions++
+	return fixture.process.Execute(inputs.Input)
+}
+
+func (fixture *packagedFixCLIProcessFixture) close() error {
+	if fixture == nil {
+		return nil
+	}
+	closeContext, cancel := context.WithTimeout(context.Background(), packagedFixFixtureShutdownTimeout)
+	closeErr := fixture.process.Close(closeContext)
+	cancel()
+	if closeErr != nil {
+		closeErr = fmt.Errorf("close reusable CLI root process: %w", closeErr)
+	}
+	if fixture.providerRunner.registeredCount() != 0 {
+		closeErr = errors.Join(closeErr, fmt.Errorf(
+			"%d provider selectors remain after CLI fixture cleanup",
+			fixture.providerRunner.registeredCount(),
+		))
+	}
+	if err := os.RemoveAll(fixture.rootDir); err != nil {
+		closeErr = errors.Join(closeErr, fmt.Errorf("remove CLI fixture root: %w", err))
+	}
+	if _, err := os.Stat(fixture.rootDir); !errors.Is(err, os.ErrNotExist) {
+		closeErr = errors.Join(closeErr, fmt.Errorf("CLI fixture root remains: %v", err))
+	}
+	fixture.mu.Lock()
+	fmt.Fprintf(os.Stderr,
+		"GATE-FIX-OPT Fix CLI reuse counts: roots=%d installs=%d factoryCopies=%d configCopies=%d executions=%d selectors=%d\n",
+		fixture.processBuilds, fixture.factoryInstalls, fixture.factoryCopies,
+		fixture.configCopies, fixture.executions, fixture.providerRunner.registeredCount(),
+	)
+	fixture.mu.Unlock()
+	return closeErr
+}
+
+// packagedFixGitSeed is an immutable real Git repository used only as a
+// metadata seed. Each scenario receives a distinct copied .git directory and
+// retains real Git worktree creation and failure behavior.
+type packagedFixGitSeed struct {
+	rootDir string
+
+	mu              sync.Mutex
+	metadataCopies  int
+	worktreeCreates int
+}
+
+var (
+	packagedFixGitSeedOnce     sync.Once
+	packagedFixGitSeedInstance *packagedFixGitSeed
+	packagedFixGitSeedErr      error
+)
+
+func sharedPackagedFixGitSeed(t *testing.T) *packagedFixGitSeed {
+	t.Helper()
+	packagedFixGitSeedOnce.Do(func() {
+		packagedFixGitSeedInstance, packagedFixGitSeedErr = startPackagedFixGitSeed()
+	})
+	if packagedFixGitSeedErr != nil {
+		t.Fatalf("start packaged Fix Git seed: %v", packagedFixGitSeedErr)
+	}
+	if packagedFixGitSeedInstance == nil {
+		t.Fatal("packaged Fix Git seed is unavailable")
+	}
+	return packagedFixGitSeedInstance
+}
+
+func startPackagedFixGitSeed() (*packagedFixGitSeed, error) {
+	rootDir, err := os.MkdirTemp("", "you-functional-packaged-fix-git-seed-")
+	if err != nil {
+		return nil, fmt.Errorf("create Git seed root: %w", err)
+	}
+	cleanupRoot := func() { _ = os.RemoveAll(rootDir) }
+	commands := [][]string{
+		{"init"},
+		{"config", "user.email", "fix-functional@example.com"},
+		{"config", "user.name", "fix functional"},
+		{"commit", "--allow-empty", "-m", "initial Fix functional repository"},
+	}
+	for _, args := range commands {
+		command := exec.Command("git", args...)
+		command.Dir = rootDir
+		if output, err := command.CombinedOutput(); err != nil {
+			cleanupRoot()
+			return nil, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, output)
+		}
+	}
+	return &packagedFixGitSeed{rootDir: rootDir}, nil
+}
+
+func (seed *packagedFixGitSeed) copyMetadata(t *testing.T, workspace string) {
+	t.Helper()
+	if err := os.CopyFS(
+		filepath.Join(workspace, ".git"),
+		os.DirFS(filepath.Join(seed.rootDir, ".git")),
+	); err != nil {
+		t.Fatalf("copy packaged Fix Git metadata: %v", err)
+	}
+	seed.mu.Lock()
+	seed.metadataCopies++
+	seed.mu.Unlock()
+}
+
+func (seed *packagedFixGitSeed) recordWorktreeCreate() {
+	seed.mu.Lock()
+	defer seed.mu.Unlock()
+	seed.worktreeCreates++
+}
+
+func (seed *packagedFixGitSeed) close() error {
+	if seed == nil {
+		return nil
+	}
+	seed.mu.Lock()
+	metadataCopies := seed.metadataCopies
+	worktreeCreates := seed.worktreeCreates
+	seed.mu.Unlock()
+	fmt.Fprintf(os.Stderr,
+		"GATE-FIX-OPT Fix Git seed counts: gitInit=1 metadataCopies=%d worktreeCreates=%d\n",
+		metadataCopies, worktreeCreates,
+	)
+	if err := os.RemoveAll(seed.rootDir); err != nil {
+		return fmt.Errorf("remove Git seed root: %w", err)
+	}
+	if _, err := os.Stat(seed.rootDir); !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("Git seed root remains: %v", err)
+	}
+	return nil
+}
+
 func TestMain(m *testing.M) {
 	code := m.Run()
+	if packagedFixCLIProcessFixtureInstance != nil {
+		if err := packagedFixCLIProcessFixtureInstance.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close shared packaged Fix CLI process: %v\n", err)
+			if code == 0 {
+				code = 1
+			}
+		}
+	}
 	var closeErr error
 	if packagedFixFixture != nil {
 		closeErr = packagedFixFixture.close()
@@ -113,6 +408,14 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "write packaged Fix forced-unwind report: %v\n", err)
 		if code == 0 {
 			code = 1
+		}
+	}
+	if packagedFixGitSeedInstance != nil {
+		if err := packagedFixGitSeedInstance.close(); err != nil {
+			fmt.Fprintf(os.Stderr, "close packaged Fix Git seed: %v\n", err)
+			if code == 0 {
+				code = 1
+			}
 		}
 	}
 	os.Exit(code)
@@ -418,8 +721,5 @@ func openPackagedFixScenario(
 
 func initPackagedFixGitRepositoryAt(t *testing.T, workspace string) {
 	t.Helper()
-	runPackagedFixGit(t, workspace, "init")
-	runPackagedFixGit(t, workspace, "config", "user.email", "fix-functional@example.com")
-	runPackagedFixGit(t, workspace, "config", "user.name", "fix functional")
-	runPackagedFixGit(t, workspace, "commit", "--allow-empty", "-m", "initial Fix functional repository")
+	sharedPackagedFixGitSeed(t).copyMetadata(t, workspace)
 }
