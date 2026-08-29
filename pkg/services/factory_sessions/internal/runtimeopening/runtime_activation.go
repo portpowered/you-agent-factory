@@ -462,7 +462,7 @@ func ensureDefaultCanonicalSessionID(
 	request *factorysessions.RuntimeOpeningRequest,
 	generateID factorysessions.RuntimeInstanceIDGenerator,
 ) error {
-	if request == nil || strings.TrimSpace(request.Recordings.ReplayPath) != "" || strings.TrimSpace(request.Recordings.ResumePath) != "" {
+	if request == nil || strings.TrimSpace(request.Recordings.ReplayPath) != "" {
 		return nil
 	}
 	sessionID := strings.TrimSpace(request.FactorySession.FactorySessionID)

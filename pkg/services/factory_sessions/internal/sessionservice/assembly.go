@@ -398,6 +398,10 @@ func (a *Assembly) Complete(
 	if session == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
+	session.RetainedRuntimeMetricsSessionIDs = retainedRuntimeMetricsSessionIDs(
+		livesession.CanonicalID(session),
+		startupSpec.ResumeSourceCanonicalSessionID,
+	)
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
@@ -513,6 +517,27 @@ func selectCompletionSessionIdentity(factorySessionID string, startupSpec factor
 		}
 	}
 	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
+}
+
+func retainedRuntimeMetricsSessionIDs(currentID, sourceID string) []string {
+	ids := make([]string, 0, 2)
+	for _, candidate := range []string{currentID, sourceID} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		alreadyRetained := false
+		for _, retained := range ids {
+			if retained == candidate {
+				alreadyRetained = true
+				break
+			}
+		}
+		if !alreadyRetained {
+			ids = append(ids, candidate)
+		}
+	}
+	return ids
 }
 
 type definitionHost struct {

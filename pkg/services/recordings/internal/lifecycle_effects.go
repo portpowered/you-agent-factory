@@ -203,10 +203,11 @@ func writeReplayV2Header(
 	if state.headerEmitted {
 		return nil
 	}
-	line, err := replayimpl.MarshalReplayV2Header(
-		artifact,
-		snapshot.Status.Scope.FactorySessionID,
-	)
+	headerSessionID := strings.TrimSpace(snapshot.CanonicalSessionID)
+	if headerSessionID == "" {
+		headerSessionID = snapshot.Status.Scope.FactorySessionID
+	}
+	line, err := replayimpl.MarshalReplayV2Header(artifact, headerSessionID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
 	}
@@ -316,8 +317,9 @@ func redactedRecordingSnapshot(
 		return recordings.RecordingSnapshot{}, err
 	}
 	return recordings.RecordingSnapshot{
-		Status: snapshot.Status,
-		Events: events,
+		Status:             snapshot.Status,
+		Events:             events,
+		CanonicalSessionID: snapshot.CanonicalSessionID,
 	}, nil
 }
 

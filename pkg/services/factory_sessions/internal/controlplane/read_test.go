@@ -156,6 +156,10 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 		ID:                      factorysessions.DefaultSessionID,
 		IsDefault:               true,
 		RuntimeFactorySessionID: allocatedSessionID,
+		RetainedRuntimeMetricsSessionIDs: []string{
+			allocatedSessionID,
+			"550e8400-e29b-41d4-a716-446655440000",
+		},
 		SessionState: livesession.SessionState{
 			FactoryDir: "/tmp/default/factory",
 			FolderPath: "/tmp/default",
@@ -184,12 +188,20 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 		t.Fatalf("ListLiveFactorySessions: %v", err)
 	}
 	assertDefaultSessionListProjection(t, listed, allocatedSessionID)
+	if got := listed[0].Runtime.RetainedMetricsSessionIDs; len(got) != 2 ||
+		got[0] != allocatedSessionID || got[1] != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("listed retained metrics IDs = %#v, want successor/source lineage", got)
+	}
 
 	got, err := controlplane.GetLiveFactorySession(context.Background(), host, factorysessions.DefaultSessionID)
 	if err != nil {
 		t.Fatalf("GetLiveFactorySession(%q): %v", factorysessions.DefaultSessionID, err)
 	}
 	assertDefaultSessionDetailProjection(t, got.Context, allocatedSessionID)
+	if retained := got.Runtime.RetainedMetricsSessionIDs; len(retained) != 2 ||
+		retained[0] != allocatedSessionID || retained[1] != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("detail retained metrics IDs = %#v, want successor/source lineage", retained)
+	}
 
 	preflight, err := controlplane.GetLiveFactorySessionSyncPreflight(
 		context.Background(),

@@ -52,10 +52,29 @@ func (resolver runtimeMetricsScopeResolver) ResolveRuntimeMetricsScope(
 			requestedID,
 		)
 	}
-	canonicalID := strings.TrimSpace(identity.FactorySessionID)
+	retainedIDs := make([]string, 0, len(projection.Runtime.RetainedMetricsSessionIDs)+1)
+	for _, retainedID := range projection.Runtime.RetainedMetricsSessionIDs {
+		retainedID = strings.TrimSpace(retainedID)
+		if retainedID == "" {
+			continue
+		}
+		alreadyRetained := false
+		for _, existingID := range retainedIDs {
+			if existingID == retainedID {
+				alreadyRetained = true
+				break
+			}
+		}
+		if !alreadyRetained {
+			retainedIDs = append(retainedIDs, retainedID)
+		}
+	}
+	if len(retainedIDs) == 0 {
+		retainedIDs = append(retainedIDs, strings.TrimSpace(identity.FactorySessionID))
+	}
 	return factorysessions.RuntimeMetricsScope{
 		RequestedFactorySessionID: requestedID,
-		RetainedFactorySessionIDs: []string{canonicalID},
+		RetainedFactorySessionIDs: retainedIDs,
 	}, nil
 }
 

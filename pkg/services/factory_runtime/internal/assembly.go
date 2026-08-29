@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -206,6 +207,9 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
 	spec.MetricsSessionID = firstNonEmptySessionID(metricsSessionID, defaultSessionID)
+	if resumeInput != nil {
+		spec.ResumeSourceCanonicalSessionID = strings.TrimSpace(resumeInput.SourceCanonicalSessionID)
+	}
 	if _, ok := replayProvider.(interface {
 		InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 	}); ok {

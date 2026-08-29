@@ -300,6 +300,7 @@ func TestLifecycleRuntimeRecorderBindsConcreteRecordingIdentity(t *testing.T) {
 	recorder := newLifecycleRecorderWithIDForTest(
 		t, startedAt, string(recordingID), "identity-check.json",
 	)
+	recorder.canonicalSessionID = "550e8400-e29b-41d4-a716-446655440000"
 
 	if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{
 		FactorySessionID: "session-identity-check",
@@ -308,6 +309,15 @@ func TestLifecycleRuntimeRecorderBindsConcreteRecordingIdentity(t *testing.T) {
 	}
 	if lifecycle.beginRequest.RecordingID != recordingID {
 		t.Fatalf("Begin recording identity = %q, want %q", lifecycle.beginRequest.RecordingID, recordingID)
+	}
+	if lifecycle.beginRequest.CanonicalSessionID != recorder.canonicalSessionID ||
+		lifecycle.beginRequest.ReportedSessionID != "session-identity-check" {
+		t.Fatalf("Begin recording identities = canonical=%q reported=%q, want canonical=%q reported=%q",
+			lifecycle.beginRequest.CanonicalSessionID,
+			lifecycle.beginRequest.ReportedSessionID,
+			recorder.canonicalSessionID,
+			"session-identity-check",
+		)
 	}
 	if recorder.recordingID != recordingID {
 		t.Fatalf("bound recording identity = %q, want %q", recorder.recordingID, recordingID)

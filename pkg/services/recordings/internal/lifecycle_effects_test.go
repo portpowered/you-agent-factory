@@ -248,6 +248,7 @@ func TestNewReplayRecordingSnapshotWriterAppendsPendingV2Records(t *testing.T) {
 		},
 	)
 	first := v2LifecycleSnapshot(time.Date(2026, 8, 23, 14, 0, 0, 0, time.UTC), 1, false)
+	first.CanonicalSessionID = "550e8400-e29b-41d4-a716-446655440000"
 	if err := writer("session.jsonl", first); err != nil {
 		t.Fatalf("first v2 flush: %v", err)
 	}
@@ -274,6 +275,9 @@ func TestNewReplayRecordingSnapshotWriterAppendsPendingV2Records(t *testing.T) {
 	}
 	if len(stream.Events) != 2 || stream.Terminal == nil || stream.TruncatedTail {
 		t.Fatalf("v2 stream = %#v, want two events and one terminal", stream)
+	}
+	if stream.Header.SessionID != first.CanonicalSessionID {
+		t.Fatalf("v2 header session ID = %q, want canonical %q", stream.Header.SessionID, first.CanonicalSessionID)
 	}
 }
 

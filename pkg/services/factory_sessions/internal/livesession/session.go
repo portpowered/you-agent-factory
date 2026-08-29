@@ -32,9 +32,14 @@ type LiveSession struct {
 	Project                 string
 	Target                  factorysessions.TargetRef
 	RuntimeFactorySessionID string
-	ResponseEvents          *responseeventstore.SessionResponseEventStore
-	JavaScriptCheckpoints   factoryruntime.JavaScriptCheckpointStore
-	LiveChangeMu            sync.Mutex
+	// RetainedRuntimeMetricsSessionIDs is the ordered, deduplicated canonical
+	// lineage selected when this session was opened. It is read by the
+	// Factory Sessions metrics-scope projection and is never serialized as a
+	// public session field.
+	RetainedRuntimeMetricsSessionIDs []string
+	ResponseEvents                   *responseeventstore.SessionResponseEventStore
+	JavaScriptCheckpoints            factoryruntime.JavaScriptCheckpointStore
+	LiveChangeMu                     sync.Mutex
 }
 
 // CompleteResponseEvents marks the session-owned response-event publication

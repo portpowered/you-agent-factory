@@ -233,13 +233,14 @@ func (f *RuntimeFactory) Build(
 		return nil, err
 	}
 	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
-		Topology:         net,
-		Definitions:      loadedFactoryCfg,
-		LoadedFactory:    loaded,
-		Now:              clock.Now,
-		RecordingID:      runtimeInstanceID,
-		RecordPath:       recordPath,
-		FactorySessionID: sessionID,
+		Topology:           net,
+		Definitions:        loadedFactoryCfg,
+		LoadedFactory:      loaded,
+		Now:                clock.Now,
+		RecordingID:        runtimeInstanceID,
+		RecordPath:         recordPath,
+		FactorySessionID:   sessionID,
+		CanonicalSessionID: metricsSessionID,
 	})
 	if openErr != nil {
 		return nil, openErr

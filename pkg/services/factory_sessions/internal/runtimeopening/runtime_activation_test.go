@@ -675,6 +675,61 @@ func TestActivationRequestAllocatesCanonicalIdentityForFreshDefault(t *testing.T
 	}
 }
 
+func TestActivationOpeningAllocatesCanonicalIdentityForResumeSuccessor(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	generated := []string{canonicalID, "runtime-1"}
+	factory := &Factory{
+		generateRuntimeInstanceID: func() string {
+			identity := generated[0]
+			generated = generated[1:]
+			return identity
+		},
+	}
+	opening, runtimeID, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
+		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+			FactorySessionID: factorysessions.DefaultSessionID,
+		},
+		Recordings: recordings.RuntimeOpeningRequest{
+			ResumePath: "source.recording.json",
+			ResumeInput: recordings.LoadResumeInputResult{
+				SourceCanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("activationOpening(resume) error = %v", err)
+	}
+	if runtimeID != "runtime-1" {
+		t.Fatalf("runtime ID = %q, want runtime-1", runtimeID)
+	}
+	if opening.FactorySession.CanonicalSessionID != canonicalID {
+		t.Fatalf("successor canonical session ID = %q, want %q", opening.FactorySession.CanonicalSessionID, canonicalID)
+	}
+	if !opening.FactorySession.CanonicalSessionIDGenerated {
+		t.Fatal("successor canonical session ID marked generated = false, want true")
+	}
+}
+
+func TestActivationOpeningAllocatesCanonicalIdentityForAliasOnlyResume(t *testing.T) {
+	t.Parallel()
+
+	const canonicalID = "550e8400-e29b-41d4-a716-446655440000"
+	factory := &Factory{
+		generateRuntimeInstanceID: func() string { return canonicalID },
+	}
+	opening, _, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
+		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "alias-only.recording.json"},
+	})
+	if err != nil {
+		t.Fatalf("activationOpening(alias-only resume) error = %v", err)
+	}
+	if opening.FactorySession.CanonicalSessionID != canonicalID {
+		t.Fatalf("alias-only successor canonical session ID = %q, want %q", opening.FactorySession.CanonicalSessionID, canonicalID)
+	}
+}
+
 func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 	t.Parallel()
 

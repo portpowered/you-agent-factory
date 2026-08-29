@@ -35,16 +35,21 @@ type SessionBuildSpec struct {
 	// runtime identity was allocated before runtime construction. Factory
 	// Sessions uses it to preserve the legacy completion-time session-ID edge.
 	CanonicalSessionIDGenerated bool
-	ExecutionBaseDir          string
-	LoadedFactoryCfg          LoadedConfig
-	BaseLogger                *zap.Logger
-	RuntimeInstanceID         string
-	Clock                     Clock
-	RecordPath                string
-	WorkflowID                string
-	ProviderOverride          providers.Service
-	ProviderCommandRunner     platformprocess.CommandRunner
-	CommandRunnerOverride     platformprocess.CommandRunner
+	// ResumeSourceCanonicalSessionID is the Recordings-owned source identity
+	// selected for a live successor. It is carried to Factory Sessions so the
+	// successor's retained metrics scope can include the source without
+	// copying or aliasing its rows.
+	ResumeSourceCanonicalSessionID string
+	ExecutionBaseDir               string
+	LoadedFactoryCfg               LoadedConfig
+	BaseLogger                     *zap.Logger
+	RuntimeInstanceID              string
+	Clock                          Clock
+	RecordPath                     string
+	WorkflowID                     string
+	ProviderOverride               providers.Service
+	ProviderCommandRunner          platformprocess.CommandRunner
+	CommandRunnerOverride          platformprocess.CommandRunner
 	// RestoredWorldState is an optional detached state reconstructed by
 	// Recordings. Factory Runtime converts only its recorded Work placement;
 	// current-definition resources are always generated during construction.

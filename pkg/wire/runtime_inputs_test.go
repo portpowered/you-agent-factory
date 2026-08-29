@@ -104,6 +104,30 @@ func TestRuntimeMetricsScopeResolverUsesOnlyCanonicalProjectionIdentity(t *testi
 	}
 }
 
+func TestRuntimeMetricsScopeResolverRetainsOrderedSuccessorLineage(t *testing.T) {
+	reader := &metricsSessionProjectionReaderStub{
+		projection: factorysessions.SessionProjection{
+			Runtime: factorysessions.RuntimeProjection{
+				StreamIdentity: &factorysessions.RuntimeStreamIdentity{
+					FactorySessionID: "successor-runtime-id",
+				},
+				RetainedMetricsSessionIDs: []string{
+					"successor-runtime-id", "source-runtime-id", "source-runtime-id",
+				},
+			},
+		},
+	}
+	resolver := factorysessionwire.NewRuntimeMetricsScopeResolver(reader)
+	got, err := resolver.ResolveRuntimeMetricsScope(context.Background(), "~default")
+	if err != nil {
+		t.Fatalf("ResolveRuntimeMetricsScope() error = %v", err)
+	}
+	want := []string{"successor-runtime-id", "source-runtime-id"}
+	if !reflect.DeepEqual(got.RetainedFactorySessionIDs, want) {
+		t.Fatalf("retained IDs = %#v, want ordered deduplicated lineage %#v", got.RetainedFactorySessionIDs, want)
+	}
+}
+
 func TestRuntimeMetricsScopeResolverRejectsDiscoverableProjectionWithoutRetainedIdentity(t *testing.T) {
 	resolver := factorysessionwire.NewRuntimeMetricsScopeResolver(&metricsSessionProjectionReaderStub{
 		projection: factorysessions.SessionProjection{
