@@ -35,7 +35,8 @@ func listClaudeSessionWork(t *testing.T, baseURL, sessionID string) factoryapi.L
 func assertClaudeSessionDeleted(t *testing.T, baseURL, sessionID string) {
 	t.Helper()
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID)
-	response, err := http.Get(endpoint)
+	client := http.Client{Timeout: claudeConductorRunTimeout}
+	response, err := client.Get(endpoint)
 	if err != nil {
 		t.Fatalf("GET deleted Factory Session %q: %v", sessionID, err)
 	}

@@ -232,6 +232,11 @@ func readClaudeResponseEventsUntilTerminal(
 	timeout time.Duration,
 ) []factoryapi.FactoryResponseEvent {
 	t.Helper()
+	// Response Events arrive as multiple frames, and no single read can identify
+	// the terminal phase while preserving the public event order. Consume the
+	// already-open SSE stream until its terminal frame; the shared deadline keeps
+	// this deterministic and bounded. Status polling or a sleep cannot replace
+	// this observation because they do not prove the response-event sequence.
 	deadline := time.Now().Add(timeout)
 	events := make([]factoryapi.FactoryResponseEvent, 0, 8)
 	for {

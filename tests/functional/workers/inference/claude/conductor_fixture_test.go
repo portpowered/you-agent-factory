@@ -19,21 +19,23 @@ import (
 )
 
 type claudeDefaultLaneFixture struct {
-	process       support.ApplicationProcess
-	command       *support.ProcessCommand
-	api           *support.ProcessAPIServer
-	baseURL       string
-	hostDir       string
-	apiStopped    <-chan struct{}
-	router        *claudeCommandRouter
-	identities    *claudeIdentityGenerator
-	apiStarts     *atomic.Int32
-	processClosed atomic.Bool
-	scenarios     []claudeScenario
-	opened        atomic.Int32
-	closed        atomic.Int32
-	streamsOpened atomic.Int32
-	streamsClosed atomic.Int32
+	process           support.ApplicationProcess
+	command           *support.ProcessCommand
+	api               *support.ProcessAPIServer
+	baseURL           string
+	hostDir           string
+	apiStopped        <-chan struct{}
+	router            *claudeCommandRouter
+	identities        *claudeIdentityGenerator
+	apiStarts         *atomic.Int32
+	processClosed     atomic.Bool
+	scenarios         []claudeScenario
+	defaultScenarios  []claudeScenario
+	recoveryScenarios []claudeScenario
+	opened            atomic.Int32
+	closed            atomic.Int32
+	streamsOpened     atomic.Int32
+	streamsClosed     atomic.Int32
 
 	ledgerMu sync.Mutex
 	ledger   map[string]claudeScenarioObservation
@@ -88,8 +90,12 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 
 	identities := &claudeIdentityGenerator{}
 	fixtures := loadClaudeScenarioFixtures(t)
+	recoveryFixtures := loadClaudeRecoveryScenarioFixtures()
 	hostDir := newClaudeHostDir(t)
-	routes, scenarios := newClaudeScenarios(t, fixtures)
+	defaultRoutes, defaultScenarios := newClaudeScenarios(t, fixtures)
+	recoveryRoutes, recoveryScenarios := newClaudeScenarios(t, recoveryFixtures)
+	routes := append(defaultRoutes, recoveryRoutes...)
+	scenarios := append(defaultScenarios, recoveryScenarios...)
 	router, err := newClaudeCommandRouter(routes)
 	if err != nil {
 		t.Fatalf("newClaudeCommandRouter: %v", err)
@@ -102,17 +108,19 @@ func newClaudeDefaultLaneFixture(t *testing.T) *claudeDefaultLaneFixture {
 		identities,
 	)
 	return &claudeDefaultLaneFixture{
-		process:    process,
-		command:    command,
-		api:        api,
-		baseURL:    baseURL,
-		hostDir:    hostDir,
-		apiStopped: apiStopped,
-		router:     router,
-		identities: identities,
-		apiStarts:  apiStarts,
-		scenarios:  scenarios,
-		ledger:     make(map[string]claudeScenarioObservation, len(scenarios)),
+		process:           process,
+		command:           command,
+		api:               api,
+		baseURL:           baseURL,
+		hostDir:           hostDir,
+		apiStopped:        apiStopped,
+		router:            router,
+		identities:        identities,
+		apiStarts:         apiStarts,
+		scenarios:         scenarios,
+		defaultScenarios:  defaultScenarios,
+		recoveryScenarios: recoveryScenarios,
+		ledger:            make(map[string]claudeScenarioObservation, len(scenarios)),
 	}
 }
 
@@ -185,6 +193,40 @@ func loadClaudeScenarioFixtures(t *testing.T) []claudeScenarioFixture {
 			wantFailure:       "provider invocation timed out",
 			wantProviderCalls: claudeGoldenTimeoutCommandInvocations,
 			wantDispatches:    3,
+		},
+	}
+}
+
+func loadClaudeRecoveryScenarioFixtures() []claudeScenarioFixture {
+	return []claudeScenarioFixture{
+		{
+			name:              "RecoveryCancellation",
+			model:             claudeConductorModel,
+			requestID:         "claude-c03-recovery-cancellation-request",
+			workID:            "claude-c03-recovery-cancellation-work",
+			traceID:           "claude-c03-recovery-cancellation-trace",
+			results:           []platformprocess.CommandResult{{}},
+			runErr:            context.Canceled,
+			wantWorkState:     "task:failed",
+			wantOutcome:       factoryapi.WorkOutcomeFailed,
+			wantFailure:       claudeCancellationMessage,
+			wantProviderCalls: 1,
+			wantDispatches:    1,
+		},
+		{
+			name:              "RecoveryFreshSuccess",
+			model:             claudeConductorModel,
+			requestID:         "claude-c03-recovery-success-request",
+			workID:            "claude-c03-recovery-success-work",
+			traceID:           "claude-c03-recovery-success-trace",
+			providerSessionID: "claude-c03-recovery-success-provider-session",
+			results: []platformprocess.CommandResult{{Stdout: []byte(
+				`{"type":"result","subtype":"success","is_error":false,"result":"claude recovery answer COMPLETE","session_id":"claude-c03-recovery-success-provider-session"}` + "\n",
+			)}},
+			wantWorkState:     "task:done",
+			wantOutcome:       factoryapi.WorkOutcomeAccepted,
+			wantProviderCalls: 1,
+			wantDispatches:    1,
 		},
 	}
 }
