@@ -413,8 +413,8 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 		namedFailure.Family == factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("named built-in parity retained a worker-lookup failure: %#v", namedFailure)
 	}
-	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || protocol.Calls() != 0 || compatibility.Calls() != 0 {
-		t.Fatalf("built-in parity effects = network %d, starts %d, protocol %d, compatibility %d; want no external effects for the cache-backed generic attempt or named readiness rejection", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 1 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
+		t.Fatalf("built-in parity effects = network %d, starts %d, protocol %d, compatibility %d; want one cache-backed generic fixture lifecycle and no named-route effects", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
 	}
 }
 
@@ -699,6 +699,27 @@ func genericHTTPInvocationEdges(
 		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
+		// Generic route coverage supplies an explicit fixture backend. The
+		// production composition intentionally fails closed when no operation
+		// adapter is bound, so this test must not rely on input echo.
+		ModelInvocationBackend: func(ctx context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
+			inputs := request.Inputs
+			if len(inputs) == 0 {
+				inputs = []models.InferenceInput{request.Input}
+			}
+			values := make([]string, 0, len(inputs))
+			for _, input := range inputs {
+				values = append(values, input.Content)
+			}
+			return []models.InferenceContent{{
+				Name: "audio", Modality: models.ModalityAudio,
+				ContentType: "audio/wav", MediaType: "audio/wav",
+				Content: strings.Join(values, "\n"),
+			}}, nil, nil
+		},
 	}
 }
 

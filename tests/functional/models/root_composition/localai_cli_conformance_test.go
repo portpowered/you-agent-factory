@@ -140,7 +140,7 @@ func executeLocalAICLIConformanceRow(
 	if len(row.Inputs) == 0 {
 		args = append(args, "--text", text)
 	}
-	for _, parameter := range conformanceParameters() {
+	for _, parameter := range conformanceParametersForOperation(row.Operation.Name) {
 		value, err := json.Marshal(struct {
 			Name  string `json:"name"`
 			Value any    `json:"value"`

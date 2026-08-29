@@ -47,6 +47,31 @@ func TestEmbedCodecMapsRequestToFixtureProtocol(t *testing.T) {
 	}
 }
 
+func TestEmbedCodecAcceptsGenericLogicalContentTypes(t *testing.T) {
+	codec := codecs.NewEmbedCodec()
+	request := models.InvokeModelRequest{
+		Operation: models.OperationEMBED,
+		Inputs: []models.InferenceInput{
+			{
+				Name: "text", Modality: models.ModalityText,
+				ContentType: "TEXT", MediaType: "text/plain", Content: "logical type",
+			},
+			{
+				Name: "parameters", Modality: models.ModalityJSON,
+				ContentType: "JSON", MediaType: "application/json", Content: `{"normalize":true}`,
+			},
+		},
+	}
+
+	got, err := codec.EncodeRequest(request)
+	if err != nil {
+		t.Fatalf("EncodeRequest() error = %v", err)
+	}
+	if got.Prompt != "logical type" || got.Parameters["normalize"] != true {
+		t.Fatalf("EncodeRequest() = %#v, want logical content types mapped", got)
+	}
+}
+
 func TestEmbedCodecMapsFixtureResponseToOneCanonicalOutput(t *testing.T) {
 	codec := codecs.NewEmbedCodec()
 	payload, err := os.ReadFile("testdata/embed-response.json")

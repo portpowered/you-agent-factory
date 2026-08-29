@@ -50,7 +50,7 @@ func TestLocalAIFailureDiagnosticsReachHTTPAndCLI(t *testing.T) {
 			class:       models.InvocationFailureClassMalformedResponse,
 			httpStatus:  http.StatusBadGateway,
 			httpCode:    "MODEL_BACKEND_FAILURE",
-			messagePart: "LocalAI backend returned malformed response",
+			messagePart: "EMBED backend response is malformed",
 		},
 	} {
 		test := test

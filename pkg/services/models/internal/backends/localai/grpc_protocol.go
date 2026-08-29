@@ -10,6 +10,8 @@ import (
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -17,6 +19,7 @@ const (
 	localAIHealthMethod    = "/backend.Backend/Health"
 	localAILoadModelMethod = "/backend.Backend/LoadModel"
 	localAIPredictMethod   = "/backend.Backend/Predict"
+	localAIEmbeddingMethod = "/backend.Backend/Embedding"
 	localAIModelBatchSize  = 512
 )
 
@@ -40,6 +43,19 @@ func NewPinnedGRPCProtocolClient(dialer platformgrpc.Dialer) ProtocolClient {
 		return nil
 	}
 	return grpcProtocolClient{dialer: dialer}
+}
+
+// NewPinnedEmbeddingBackend constructs the production adapter for LocalAI's
+// pinned Embedding RPC. It returns nil when no transport was supplied so the
+// Models wire can keep an unbound composition fail-closed.
+func NewPinnedEmbeddingBackend(
+	dialer platformgrpc.Dialer,
+) func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
+	if dialer == nil {
+		return nil
+	}
+	client := grpcProtocolClient{dialer: dialer}
+	return client.Embedding
 }
 
 // NewPinnedGRPCHostProtocolNegotiator creates the matching readiness probe
@@ -218,6 +234,80 @@ func (client grpcProtocolClient) Predict(
 	}, nil
 }
 
+func (client grpcProtocolClient) Embedding(
+	ctx context.Context,
+	request models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return models.EmbeddingBackendResponse{}, err
+	}
+	endpoint, _ := ctx.Value(invocationEndpointContextKey{}).(string)
+	if strings.TrimSpace(endpoint) == "" {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding endpoint is unavailable", nil,
+		)
+	}
+	if client.dialer == nil {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding dialer is unavailable", models.ErrUnavailable,
+		)
+	}
+	options, err := embeddingOptions(request)
+	if err != nil {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding request could not be encoded", err,
+		)
+	}
+	payload, err := proto.Marshal(options)
+	if err != nil {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding request could not be serialized", err,
+		)
+	}
+	connection, err := client.dialer.Dial(ctx, endpoint)
+	if err != nil {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding connection failed", err,
+		)
+	}
+	if connection == nil {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding connection is unavailable", models.ErrUnavailable,
+		)
+	}
+	defer func() { _ = connection.Close() }()
+	responsePayload, err := connection.Invoke(ctx, localAIEmbeddingMethod, payload)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return models.EmbeddingBackendResponse{}, contextErr
+		}
+		return models.EmbeddingBackendResponse{}, embeddingRPCFailure(err)
+	}
+	response := &EmbeddingResult{}
+	if err := proto.Unmarshal(responsePayload, response); err != nil {
+		return models.EmbeddingBackendResponse{}, embeddingProtocolFailure(
+			"LocalAI Embedding response was malformed", err,
+		)
+	}
+	embeddings := response.GetEmbeddings()
+	values := make([]float64, len(embeddings))
+	for index, value := range embeddings {
+		values[index] = float64(value)
+	}
+	return models.EmbeddingBackendResponse{Embeddings: values}, nil
+}
+
+func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, error) {
+	parameters := make([]models.OperationParameter, 0, len(request.Parameters))
+	for name, value := range request.Parameters {
+		parameters = append(parameters, models.OperationParameter{Name: name, Value: value})
+	}
+	return predictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters})
+}
+
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
 	for _, input := range request.Inputs {
@@ -285,5 +375,32 @@ func protocolFailure(message string, cause error) error {
 		Operation: models.OperationOMNI,
 		Message:   message,
 		Cause:     cause,
+	}
+}
+
+func embeddingProtocolFailure(message string, cause error) error {
+	return &models.InvocationFailure{
+		Class:     models.InvocationFailureClassBackendProtocol,
+		Operation: models.OperationEMBED,
+		Message:   message,
+		Cause:     cause,
+	}
+}
+
+func embeddingRPCFailure(err error) error {
+	message := "LocalAI backend returned an unusable response; verify the pinned LocalAI backend contract"
+	class := models.InvocationFailureClassBackendProtocol
+	switch status.Code(err) {
+	case codes.Unavailable:
+		class = models.InvocationFailureClassBackendReadiness
+		message = "LocalAI backend is unavailable; start the managed backend and verify its health"
+	case codes.FailedPrecondition:
+		message = "LocalAI backend protocol is incompatible; use the pinned LocalAI backend protocol"
+	}
+	return &models.InvocationFailure{
+		Class:     class,
+		Operation: models.OperationEMBED,
+		Message:   message,
+		Cause:     err,
 	}
 }

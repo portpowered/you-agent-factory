@@ -212,8 +212,8 @@ func hasInput(input models.InferenceInput) bool {
 
 func validateTextInput(input models.InferenceInput) error {
 	if input.Modality != models.ModalityText ||
-		(input.ContentType != "" && input.ContentType != "text/plain") ||
-		(input.MediaType != "" && input.MediaType != "text/plain") ||
+		!acceptsContentType(input.ContentType, "text/plain", "text") ||
+		!acceptsContentType(input.MediaType, "text/plain", "") ||
 		input.Artifact != nil || strings.TrimSpace(input.Content) == "" {
 		return invalidTextInputFailure()
 	}
@@ -222,12 +222,22 @@ func validateTextInput(input models.InferenceInput) error {
 
 func validateParametersInput(input models.InferenceInput) error {
 	if input.Modality != models.ModalityJSON ||
-		(input.ContentType != "" && input.ContentType != "application/json") ||
-		(input.MediaType != "" && input.MediaType != "application/json") ||
+		!acceptsContentType(input.ContentType, "application/json", "json") ||
+		!acceptsContentType(input.MediaType, "application/json", "") ||
 		input.Artifact != nil {
 		return invalidParametersFailure()
 	}
 	return nil
+}
+
+// acceptsContentType permits both the public logical content-type labels used
+// by the generic operation matrix (for example TEXT and JSON) and their MIME
+// equivalents at this provider boundary. MediaType calls this with no logical
+// alias, so it remains a MIME-only check.
+func acceptsContentType(actual, mime, logical string) bool {
+	actual = strings.TrimSpace(actual)
+	return actual == "" || strings.EqualFold(actual, mime) ||
+		(logical != "" && strings.EqualFold(actual, logical))
 }
 
 func parseParameterObject(content string) (map[string]any, error) {

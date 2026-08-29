@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -100,7 +101,7 @@ func TestNewInvocationRuntimeFailsClosedWhenOmniProtocolIsUnbound(t *testing.T) 
 	}
 }
 
-func TestStory001ProductionDefaultRuntimeCharacterization(t *testing.T) {
+func TestStory001ProductionDefaultRuntimeFailsClosedWithoutAdapters(t *testing.T) {
 	t.Parallel()
 
 	runtime, err := inferenceRuntime(invocationRuntimeOptions{})
@@ -114,8 +115,8 @@ func TestStory001ProductionDefaultRuntimeCharacterization(t *testing.T) {
 	if composed.asr != nil || composed.embedding != nil {
 		t.Fatalf("production default operation runtimes = asr:%T embed:%T, want unbound", composed.asr, composed.embedding)
 	}
-	if _, ok := composed.generic.(inference.InputEchoInvocationRuntime); !ok {
-		t.Fatalf("production default generic runtime = %T, want InputEchoInvocationRuntime", composed.generic)
+	if _, ok := composed.generic.(failClosedInvocationRuntime); !ok {
+		t.Fatalf("production default generic runtime = %T, want fail-closed runtime", composed.generic)
 	}
 
 	catalog := models.GenericOperationCatalog{}
@@ -142,34 +143,67 @@ func TestStory001ProductionDefaultRuntimeCharacterization(t *testing.T) {
 				Inputs:    []models.InferenceInput{{Name: testCase.name, Modality: testCase.modality, ContentType: testCase.mediaType, MediaType: testCase.mediaType, Content: testCase.content}},
 			}
 			result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{Request: request, Operation: operation})
-			if err != nil {
-				t.Fatalf("Invoke error = %v", err)
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassConfiguration {
+				t.Fatalf("Invoke error = %v, failure = %#v, want typed configuration failure", err, failure)
 			}
-			if len(result.Content) != len(operation.Outputs) {
-				t.Fatalf("Invoke outputs = %#v, want %d declared outputs", result.Content, len(operation.Outputs))
-			}
-			outputValues := make([]string, len(result.Content))
-			allInputsEchoed := len(result.Content) > 0
-			for index, output := range result.Content {
-				outputValues[index] = output.Content
-				if output.Content != testCase.content {
-					allInputsEchoed = false
-				}
-			}
-			lineage := "backend-generated"
-			if allInputsEchoed {
-				lineage = "input-echo"
+			if len(result.Content) != 0 {
+				t.Fatalf("Invoke outputs = %#v, want no output", result.Content)
 			}
 			observation := story001InvocationObservation{
-				Operation: testCase.operation, SelectedRuntime: "InputEchoInvocationRuntime", BackendBound: false,
+				Operation: testCase.operation, SelectedRuntime: "failClosedInvocationRuntime", BackendBound: false,
 				BackendCalls: 0, EndpointPresent: false, InputSHA256: story001SHA256(testCase.content),
-				OutputSHA256: story001SHA256(strings.Join(outputValues, "\n")), OutputLineage: lineage,
+				OutputSHA256: story001SHA256(""), OutputLineage: "unavailable-no-output",
 			}
 			t.Logf("STORY-001-EVIDENCE ledger=%+v", observation)
-			if !allInputsEchoed {
-				t.Fatalf("default %s output lineage = %q, want input-echo characterization", testCase.operation, lineage)
-			}
 		})
+	}
+}
+
+func TestInferenceRuntimeBindsProductionEmbeddingWhenProtocolIsPresent(t *testing.T) {
+	t.Parallel()
+
+	response, err := proto.Marshal(&localai.EmbeddingResult{
+		Embeddings: []float32{0.1, 0.2, 0.3},
+	})
+	if err != nil {
+		t.Fatalf("marshal EMBED response: %v", err)
+	}
+	endpoint := "grpc://127.0.0.1:45907"
+	dialer := &story001InvocationDialer{response: response}
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{Dialer: dialer})
+	if err != nil {
+		t.Fatalf("inferenceRuntime: %v", err)
+	}
+	composed, ok := runtime.(operationInvocationRuntime)
+	if !ok || composed.embedding == nil {
+		t.Fatalf("production EMBED runtime = %T/%v, want pinned adapter", runtime, composed.embedding)
+	}
+	operation, ok := (models.GenericOperationCatalog{}).GenericOperationContract(models.OperationEMBED)
+	if !ok {
+		t.Fatal("GenericOperationContract(EMBED) = false")
+	}
+	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
+		Request: models.InvokeModelRequest{
+			Scope: mustRoutingScope(t), Model: models.ModelReference{NameOrURI: "embed"},
+			Operation: models.OperationEMBED,
+			Inputs:    []models.InferenceInput{{Name: "text", Modality: models.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "Find similar work"}},
+		},
+		Operation: operation,
+		HostSlot:  inference.HostHandleSlot{Endpoint: endpoint},
+	})
+	if err != nil {
+		t.Fatalf("default EMBED route: %v", err)
+	}
+	if dialer.endpoint != endpoint || dialer.calls != 1 {
+		t.Fatalf("EMBED transport facts = endpoint %q calls %d, want selected endpoint and one call", dialer.endpoint, dialer.calls)
+	}
+	if len(result.Content) != 1 || result.Content[0].Name != "embedding" {
+		t.Fatalf("EMBED output = %#v, want one named embedding", result.Content)
+	}
+	var vector []float64
+	if err := json.Unmarshal([]byte(result.Content[0].Content), &vector); err != nil || len(vector) != 3 {
+		t.Fatalf("EMBED output JSON = %q/%v, want three numeric values", result.Content[0].Content, err)
 	}
 }
 
@@ -341,7 +375,7 @@ func TestNewInvocationRuntimeForwardsOmniInputsAndDeclaredUsage(t *testing.T) {
 	}
 }
 
-func TestNewInvocationRuntimeUsesGenericFallbackForNonOmni(t *testing.T) {
+func TestNewInvocationRuntimeUsesFailClosedFallbackForNonOmni(t *testing.T) {
 	t.Parallel()
 
 	runtime := newInvocationRuntime(nil, nil)
@@ -356,11 +390,15 @@ func TestNewInvocationRuntimeUsesGenericFallbackForNonOmni(t *testing.T) {
 		},
 		Operation: operation,
 	})
-	if err != nil {
-		t.Fatalf("non-OMNI Invoke error = %v", err)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassConfiguration {
+		t.Fatalf("non-OMNI Invoke error = %v, failure = %#v, want typed configuration failure", err, failure)
 	}
-	if len(result.Content) != 1 || result.Content[0].Content != "hello" {
-		t.Fatalf("non-OMNI content = %#v, want input echo", result.Content)
+	if !errors.Is(err, models.ErrUnavailable) {
+		t.Fatalf("non-OMNI Invoke error = %v, want ErrUnavailable cause", err)
+	}
+	if len(result.Content) != 0 {
+		t.Fatalf("non-OMNI content = %#v, want no input echo", result.Content)
 	}
 }
 

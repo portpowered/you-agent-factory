@@ -294,7 +294,7 @@ func postConformanceInvocationForModel(
 			ContentType: &contentType, MediaType: &mediaType, Content: &content,
 		})
 	}
-	parameterValues := conformanceParameters()
+	parameterValues := conformanceParametersForOperation(row.Operation.Name)
 	parameters := make([]factoryapi.ModelInvocationParameter, 0, len(parameterValues))
 	for _, parameter := range parameterValues {
 		parameters = append(parameters, factoryapi.ModelInvocationParameter{
@@ -341,10 +341,15 @@ func postConformanceInvocationForModel(
 	return result, factoryapi.ErrorResponse{}, response.StatusCode, nil
 }
 
-func conformanceParameters() []models.OperationParameter {
-	return []models.OperationParameter{{
-		Name: "temperature", Value: map[string]any{"value": 0.2},
-	}}
+func conformanceParametersForOperation(operation string) []models.OperationParameter {
+	switch strings.ToUpper(strings.TrimSpace(operation)) {
+	case models.OperationEMBED:
+		return []models.OperationParameter{{Name: "normalize", Value: true}}
+	case models.OperationASR, models.OperationOMNI, models.OperationTTS:
+		return []models.OperationParameter{{Name: "temperature", Value: 0.2}}
+	default:
+		return nil
+	}
 }
 
 func conformanceModelName(operation string) string {

@@ -471,7 +471,9 @@ func (runtime operationInvocationRuntime) Invoke(
 		return runtime.omni.Invoke(ctx, request)
 	}
 	if runtime.embedding != nil && isEmbeddingOperation(request) {
-		return runtime.embedding.Invoke(ctx, request)
+		return runtime.embedding.Invoke(
+			localai.WithInvocationEndpoint(ctx, request.HostSlot.Endpoint), request,
+		)
 	}
 	return runtime.generic.Invoke(ctx, request)
 }
@@ -496,8 +498,12 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 		}
 		runtime.asr = asr
 	}
-	if options.Embedding != nil {
-		embedding, err := newEmbeddingInvocationRuntime(options.Embedding)
+	embeddingBackend := options.Embedding
+	if embeddingBackend == nil {
+		embeddingBackend = localai.NewPinnedEmbeddingBackend(options.Dialer)
+	}
+	if embeddingBackend != nil {
+		embedding, err := newEmbeddingInvocationRuntime(embeddingBackend)
 		if err != nil {
 			return nil, err
 		}
@@ -508,7 +514,7 @@ func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, erro
 
 func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 	if backend == nil {
-		return inference.InputEchoInvocationRuntime{}
+		return failClosedInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
 }
@@ -559,13 +565,13 @@ type omniInvocationRuntime struct {
 }
 
 // newInvocationRuntime keeps OMNI on the pinned protocol path. A missing
-// client fails closed for OMNI while non-OMNI operations retain the generic
-// input-echo behavior used by lightweight composition tests.
+// client fails closed for OMNI, while non-OMNI operations also fail closed
+// unless an explicit operation backend is composed.
 func newInvocationRuntime(
 	client InvocationProtocolClient,
 	dialer InvocationProtocolDialer,
 ) invocationRuntime {
-	fallback := inference.InputEchoInvocationRuntime{}
+	fallback := failClosedInvocationRuntime{}
 	if isNilDependency(client) {
 		client = nil
 	}

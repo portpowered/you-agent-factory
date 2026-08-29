@@ -114,6 +114,13 @@ func New(options Options) (*Fixture, error) {
 	fixture.backend = &backendServer{options: options}
 	fixture.server = grpc.NewServer()
 	localaiproto.RegisterBackendServer(fixture.server, fixture.backend)
+	// Keep the fixture's protobuf descriptors in their isolated functional
+	// namespace, while also accepting the production pinned service name. The
+	// raw production adapter deliberately invokes /backend.Backend/* and the
+	// fixture must exercise that exact transport boundary.
+	pinnedService := localaiproto.Backend_ServiceDesc
+	pinnedService.ServiceName = "backend.Backend"
+	fixture.server.RegisterService(&pinnedService, fixture.backend)
 	go fixture.serve()
 	<-fixture.serveReady
 	return fixture, nil

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -58,8 +59,17 @@ func (runtime embedding) Invoke(
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return inference.InvocationRuntimeResult{}, err
 		}
+		var invocationFailure *models.InvocationFailure
+		if errors.As(err, &invocationFailure) {
+			return inference.InvocationRuntimeResult{}, enrichFailure(request.Request, invocationFailure)
+		}
+		model := request.Request.Model
+		if model.IsZero() {
+			model = models.ModelReference{NameOrURI: strings.TrimSpace(request.Request.ModelName)}
+		}
 		return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
 			Class:     models.InvocationFailureClassBackendProtocol,
+			Model:     model,
 			Operation: models.OperationEMBED,
 			Message:   "EMBED backend invocation failed",
 			Cause:     models.ErrInferenceFailed,
@@ -71,7 +81,44 @@ func (runtime embedding) Invoke(
 
 	content, err := runtime.codec.DecodeResponseValue(backendResponse)
 	if err != nil {
+		var invocationFailure *models.InvocationFailure
+		if errors.As(err, &invocationFailure) {
+			return inference.InvocationRuntimeResult{}, enrichFailure(request.Request, invocationFailure)
+		}
 		return inference.InvocationRuntimeResult{}, err
 	}
 	return inference.InvocationRuntimeResult{Content: []models.InferenceContent{content}}, nil
+}
+
+func enrichFailure(request models.InvokeModelRequest, failure *models.InvocationFailure) error {
+	if failure == nil {
+		return nil
+	}
+	clone := *failure
+	if clone.Model.IsZero() {
+		clone.Model = request.Model
+		if clone.Model.IsZero() {
+			clone.Model = models.ModelReference{NameOrURI: strings.TrimSpace(request.ModelName)}
+		}
+	}
+	if strings.TrimSpace(clone.Operation) == "" {
+		clone.Operation = models.OperationEMBED
+	}
+	clone.ValidNames = append([]string(nil), clone.ValidNames...)
+	modelName := strings.TrimSpace(clone.Model.NameOrURI)
+	if modelName == "" {
+		modelName = strings.TrimSpace(request.ModelName)
+	}
+	if modelName == "" {
+		modelName = models.BuiltInModelNameEmbed
+	}
+	if clone.Model.IsZero() {
+		clone.Model = models.ModelReference{NameOrURI: modelName}
+	}
+	if modelName != "" && !strings.Contains(strings.ToLower(clone.Message), "for model") {
+		clone.Message = fmt.Sprintf(
+			"%s for model %q operation %q", clone.Message, modelName, clone.Operation,
+		)
+	}
+	return &clone
 }

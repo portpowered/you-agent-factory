@@ -49,6 +49,10 @@ message Reply {
   repeated ChatDelta chat_deltas = 8;
 }
 
+message EmbeddingResult {
+  repeated float embeddings = 1;
+}
+
 message TranscriptRequest {
   string dst = 2;
   string language = 3;
