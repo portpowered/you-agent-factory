@@ -1,9 +1,9 @@
 # C09 Auxiliary Provider Characterization Ledger
 
 Status: stories `functional-test-optimization-c09-providers-auxiliary-migration-001`,
-`-002`, and `-003` complete. The Claude golden migration and the discovery/
-permission functional evidence are recorded below; integrated cleanup and PR-CI
-evidence remain later story `-004`.
+`-002`, `-003`, and `-004` complete. The Claude golden migration, discovery/
+permission functional evidence, and final validation-loopback evidence are
+recorded below. Terminal CI and merge remain review-owned.
 
 ## Authority and scope
 
@@ -287,8 +287,8 @@ preserve:
   immutable configurations.
 
 The focused Claude run proves normal shared-process/session/route cleanup. The
-full adverse cleanup loopback, host resource counts, and clean-checkout
-integration remain story 004 evidence.
+final loopback below adds the integrated package run, clean tracked checkout,
+host process-tree check, and exclusion/ancestry evidence.
 
 ## Story 001 evidence boundary
 
@@ -367,5 +367,73 @@ command/permission edges. It does not prove remote provider behavior, Claude
 adverse cleanup, host-level resource absence beyond the process-tree check, or
 PR Backend Functional Coverage timing; those remain story 004 gates.
 
-The next bounded step is story 004: integrated cleanup, exclusions, clean-room
-loopback, and delivery handoff.
+## Story 004 validation loopback
+
+# Validation report: BEH-01 — Preserve auxiliary provider behavior while removing eligible repeated Claude construction
+
+## Environment and artifact
+
+- Commit/build identifier: `9a7d256a40` executable final head before this documentation-only loopback report; the report does not change executable sources.
+- Environment and configuration: Windows PowerShell on the shared local host; tracked worktree clean (`git status --porcelain --untracked-files=no` empty); ignored `prd.json` and `progress.txt` remain local scaffolding.
+- Customer entry point: real `root.BuildProcess`/`Process.Execute` functional paths and public Factory Session HTTP boundaries exercised by the owned tests.
+- Real and substituted dependencies: real repository root/provider composition; controlled local `ProviderCommandRunner` and permission edges; checked-in sanitized, checksum-validated Claude streams; no remote provider or paid dependency.
+- Cost/call budget used: zero remote calls, zero paid calls, `$0`.
+
+## Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| Integrated owned-package behavior | PASS | `go test -count=1 -timeout=10m ./tests/functional/providers/claude ./tests/functional/providers/discovery ./tests/functional/providers/permission` emitted `ok` for Claude (`4.811s`), discovery (`0.348s`), and permission (`3.643s`). The package test binaries covered the five top-level tests listed in the characterization ledger. | Remote providers and the lane-wide functional suite remain outside this local run. |
+| Touched Claude determinism | PASS | `go test -count=3 -timeout=10m ./tests/functional/providers/claude -run '^TestClaudeHaikuStreamJSONGoldens$'` emitted package `ok` in `10.197s`; three manifest-order replays retained their existing stream, command, Work, Factory Event, and explicit-session assertions. | The Windows wrapper stayed alive after output and was canceled; this is not a test assertion failure. |
+| Cleanup and topology | PASS | The focused test asserts three unique non-default sessions, one request per route, and zero routes after `router.Close`; the integrated and repeat commands emitted `ok`. After each wrapper cancellation, a process-tree query found no C09 package test, server, or provider process. `t.Cleanup` ownership covers success, assertion, and cancellation paths; copied fixtures remain `t.TempDir` owned. | This read-only loopback does not force a new failing assertion or OS-level listener census; terminal CI owns its own cleanup evidence. |
+| Process disposition | PASS | Source-derived application starts are Claude `4 -> 2`, discovery `1 -> 1`, permission `2 -> 2`. The shared Claude fixture has one root-built process, three explicit sessions, and three pre-start immutable routes; discovery and permission retain their justified topologies. | Package PR timing is supplied by Backend Functional Coverage rather than contaminated local wall-clock observations. |
+| Exclusions and ancestry | PASS | `git diff --name-only origin/main...HEAD` contains only the ledger plus the four owned test files; `git diff --check` passed. Neither PR #2316 commit (`66430639c09a...`, `d7c545090d4...`) is an ancestor of `HEAD`; no AGY, ACP, Codex, root Providers, shared support, inventory, baseline, or workflow file is changed. | Review may still report a merge conflict after new main commits. |
+| Security/privacy and compatibility | PASS | All provider outputs are sanitized checked-in streams validated by fixture shape and SHA-256; route errors are bounded and do not include request/environment values. No API, CLI, Factory Event, persisted schema, production, generated, or configuration file changed. | Real credentials, customer data, and remote-provider behavior are intentionally untested. |
+| `VAL-006` validation-loopback | PASS | This report records exact procedures, artifacts, observed results, and remaining edges without modifying implementation in response to the host wrapper behavior. No FAIL/BLOCKED finding or delta plan is required. | Terminal required CI, conflict resolution, merge, and lane-wide project gates remain review-owned. |
+| `PR-CI-005` handoff | PASS | The final implementation head is ready for a PR; Backend Functional Coverage is the authoritative source for final package timing and full functional-gate output. The handoff records the local directional topology improvement and does not substitute local timing for the PR comment. | The workflow comment cannot exist until the PR is opened and CI starts; implementation stops at that boundary. |
+
+## Customer journey
+
+1. A clean tracked checkout executes the three owned provider packages through
+   real root/provider composition and controlled command/permission edges. The
+   five characterized top-level tests and all package assertions report `ok`.
+2. Claude Haiku alias, family, and pinned goldens execute in manifest order in
+   one process through three unique explicit Factory Sessions. Each route
+   retains one Claude request, successful Work, expected Model Response Factory
+   Event, and deterministic session/route cleanup.
+3. Discovery retains one process for human, JSON, and invalid-flag calls plus a
+   pure ACP projection test. Permission retains separate capable/incapable
+   processes because capability overrides are immutable construction-time
+   wiring; the incapable route fails before the command edge.
+
+## Cross-task integration and usability
+
+- Documentation discoverability: the C09 ledger contains the full matrix,
+  dispositions, cleanup ownership, and this final loopback report.
+- Permission and error behavior: existing bounded capability and invalid-input
+  diagnostics remain asserted; no command detail is exposed for the incapable
+  route.
+- Persistence/reload behavior: no persistence or restart claim is made; the
+  tests use transient `--no-record` fixtures.
+- Accessibility/keyboard/responsive behavior: not applicable to provider
+  functional packages.
+- Operational signals: command-call counts, explicit session IDs, Factory
+  Events, route counts, package outcomes, and process-tree cleanup are observed.
+
+## Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| ENV-WIN-GO-WRAPPER | Informational | Run either declared Go command on this shared Windows host. | The wrapper exits after printing package results. | Package binaries print `ok`, but the wrapper remains alive for more than 60 seconds and is canceled with Ctrl+C; no C09 test/server/provider process remains. | Integrated and focused command output plus post-cancel process-tree queries. |
+
+## Verdict
+
+PASS — the owned behavior, topology, cleanup boundary, exclusions, and
+read-only validation loopback are complete. The final handoff is ready once
+the branch is pushed, the PR is opened, and required CI has started. Review
+owns terminal CI, any conflict, and merge.
+
+## Delta-plan request [Required for FAIL/BLOCKED]
+
+Not applicable: no FAIL or BLOCKED finding was observed, so no implementation
+delta is requested.
