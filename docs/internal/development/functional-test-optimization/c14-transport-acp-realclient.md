@@ -1,22 +1,24 @@
 # C14 — transport/acp/realclient characterization ledger
 
-Status: BLOCKED at characterization. The supported enabled/required local
-baseline cannot be recorded on this host because Node.js is `v22.12.0` and the
-pinned `acpx@0.13.0` prerequisite requires `v22.13.0` or later. No test
+Status: CHARACTERIZED. Three supported enabled/required local baseline runs
+passed after using an isolated official Node.js `v22.13.0` runtime. No test
 topology or test assertion was edited while recording this ledger.
 
 This is the task-owned ledger for
-`fto-c14-pkg-transport-acp-realclient-001`. It records what was observed at
-the pre-edit head and does not claim a valid performance denominator.
+`fto-c14-pkg-transport-acp-realclient-001`. It records the pre-edit
+denominator and the supported discovery/profile observations.
 
 ## Authority and scope
 
-- Recorded head: `fea2e30a499384182d2fabe7038767e3c2f9c5e5`.
+- Recorded head for the pre-change denominator: `030c045f4cf617a9fa135092a5cda6e6052ac8f2`.
 - Package: `github.com/portpowered/infinite-you/tests/functional/transport/acp/realclient`.
 - Allowed implementation surface: the real-client test tree and this ledger.
 - No operator amendment is present in `prd.json`.
 - The pre-edit worktree was clean. `prd.json` and `progress.txt` are ignored
   factory scaffolding and are not PR files.
+- A gated timing trace and external ancestry capture were used for one
+  diagnostic profile run only; the trace hook was removed after profiling and
+  is not part of the implementation.
 
 ## Environment and baseline authority
 
@@ -24,19 +26,44 @@ the pre-edit head and does not claim a valid performance denominator.
 | --- | --- |
 | OS/architecture | Windows `Microsoft Windows NT 10.0.26200.0`, `windows/amd64` |
 | Go | `go1.25.0 windows/amd64` |
-| Node | `v22.12.0` — unsupported for the pinned client |
-| npm | `10.9.0` |
+| Node | `v22.13.0` — isolated official Windows runtime, prepended only for these runs |
+| npm | `10.9.2` |
 | Pinned dependency | `acpx@0.13.0` from the existing test source |
 | Enable gate | `INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1` |
 | Required gate | `INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT=1` |
 | Short mode | Not used for a valid baseline; required mode rejects `-short` |
-| npm/cache policy | No valid client run reached npm. The source allocates an isolated `t.TempDir` home/cache per happy-path case; no cache/network observation is claimed here. |
+| npm/cache policy | Each happy-path case allocated a fresh `t.TempDir` home and `npm_config_cache`; the first `npx --yes --package acpx@0.13.0 acpx` phase acquired the public package and later phases reused that run's isolated cache. No request payloads or credentials were retained. |
 | Paid/remote calls | Zero; the deterministic provider was not started. |
 
-The required three-run baseline procedure was therefore not authoritative. No
-pre-change median is reported, and the unsupported Node diagnostic is excluded
-from `GATE-BASELINE` rather than being treated as a skipped or substituted
-sample.
+The earlier host-installed Node `v22.12.0` diagnostic remains unsupported
+evidence and is excluded from `GATE-BASELINE`. The isolated `v22.13.0` runtime
+is the supported denominator; it is the same pinned client and test path, not a
+mock or a client substitution.
+
+## Valid pre-change baseline
+
+Procedure, repeated as three separate processes before the characterization
+comment edit:
+
+```text
+go test ./tests/functional/transport/acp/realclient/... -count=1
+```
+
+Environment for each run: `INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1`,
+`INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT=1`, no `-short`, Node `v22.13.0` and
+npm `10.9.2` from the isolated official runtime, and the test's own fresh
+temporary npm cache/evidence directory. A PowerShell stopwatch captured the
+outer process wall; the Go package wall is retained as a cross-check.
+
+| Run | Outer wall | Go package wall | Result |
+| --- | ---: | ---: | --- |
+| 1 | `38.932s` | `38.062s` | exit `0`, all three tests passed |
+| 2 | `44.615s` | `43.551s` | exit `0`, all three tests passed |
+| 3 | `49.555s` | `48.535s` | exit `0`, all three tests passed |
+
+`GATE-BASELINE` denominator: outer median `44.615s` (package median
+`43.551s`). The spread is retained as observed host contention; no sample was
+discarded and no unsupported or skipped run was substituted.
 
 ## Discovery
 
@@ -137,31 +164,53 @@ The happy-path assertions that remain active in the source are:
 - sanitized evidence: only revision, version, protocol/session/target
   classifications, provider name/count, cleanup, and outcome are emitted.
 
-Two pre-existing source discrepancies are recorded for the optimization story
-to resolve without weakening the runtime assertion: the source comment says
-the normal direct-start count is `2 + 2 + 6 = 10` while the Node prerequisite
-probe adds a seventh happy-path parent start, and `emitEvidence` currently
-serializes/logs `providerInvocations=1` even though the executable assertion
-requires exactly two. Neither discrepancy was changed in this
-characterization-only iteration.
+The source direct-start comment was corrected after the profile to describe the
+seven happy-path starts. One evidence discrepancy remains for the optimization
+story to resolve without weakening the runtime assertion: `emitEvidence`
+currently serializes/logs `providerInvocations=1` even though the executable
+assertion requires exactly two. The baseline's sanitized evidence preserves
+that mismatch as an observed pre-change finding.
 
 ## Process, phase, wait, and cleanup profile
 
 ### Direct and descendant starts
 
-The corrected pre-edit accounting is:
+The source-level pre-edit accounting is nine test-owned direct starts: two
+helper parents plus seven happy-path commands. The seven happy-path starts are
+the Node prerequisite, Git revision, Go build, ACPX version, session creation,
+prompt, and close. The profile tracer matched all nine starts to their named
+phases; the helper descendants are started by the real `os.Args[0]` test
+binary, not by a substitute process.
 
 | Owner/path | Direct parent starts | Descendant/process ownership | Wait/cleanup witness |
 | --- | ---: | --- | --- |
-| Timeout helper | 1 bounded parent + 1 helper descendant | Real `os.Args[0]`; process group/Job Object | one-second timeout, tree termination, recorded PID inactive |
-| Non-zero helper | 1 bounded parent + 1 helper descendant | Real `os.Args[0]`; process group/Job Object | non-zero classification, tree termination, recorded PID inactive |
-| Happy path | 7: Node probe, Git revision, Go build, ACPX version, session creation, prompt, close | `npx`/ACPX starts the configured current binary; the binary starts the deterministic provider. These descendants were not reached on this host. | one-minute bounded phase waits; prompt also carries ACPX `--timeout 45`; close plus `t.Cleanup` and zero queue owners |
+| Timeout helper | 1 bounded parent + 1 helper descendant | Windows Job Object with kill-on-close; recorded descendant PID | one-second timeout, tree termination, PID inactivity poll |
+| Non-zero helper | 1 bounded parent + 1 helper descendant | Windows Job Object with kill-on-close; recorded descendant PID | non-zero classification, tree termination, PID inactivity poll |
+| Happy path | 7: Node probe, Git revision, Go build, ACPX version, session creation, prompt, close | Four `npx` launches resolve through Windows command hosts to Node/ACPX; session and prompt launch the configured current `you.exe`; the prompt launches the deterministic provider twice. | one-minute bounded phase waits; prompt also carries ACPX `--timeout 45`; close plus `t.Cleanup` and zero queue owners |
 
-Thus the prior `10` normal-path direct-start figure is `2 + 2 + 6` before
-counting the Node probe; the current pre-edit total is `11` external starts
-when the prerequisite probe is included. Internal starts performed by Go,
-`npx`, ACPX, or the built executable are not counted as direct test-owned
-starts, but are retained as descendant edges to profile in the supported run.
+An external Windows ancestry capture of one supported profile run observed 46
+process instances below the test invocation. It retained only process names,
+parent relationships, and relative observation order; no command-line payload,
+prompt, response, environment value, or host path was retained.
+
+| Observed process name | Instances | Profile interpretation |
+| --- | ---: | --- |
+| `node.exe` | 12 | npm/ACPX and provider-side Node descendants |
+| `cmd.exe` | 10 | `npx.cmd`, provider command, and Windows command-host edges |
+| `git.exe` | 8 | Git's process chain for revision/build metadata |
+| `go.exe` | 3 | test/build tool descendants |
+| `link.exe` | 2 | Go linker descendants |
+| `you.exe` | 2 | configured production executable descendants |
+| `realclient.test.exe` | 3 | package test process and helper process edge observed by the sampler |
+| `tasklist.exe` | 2 | Windows PID-state probes in cleanup witnesses |
+| `esbuild.exe` | 1 | ACPX/npm dependency descendant |
+| `conhost.exe` | 3 | Windows console descendants |
+
+The profile run's direct phase trace is authoritative for the nine bounded
+test-owned starts. The ancestry sampler is supplementary for short-lived
+descendants (some can exit between 50ms snapshots); it confirms the external
+process families and ownership edges without turning a sampled count into a
+false exact-start claim.
 
 ### Wait and timeout topology
 
@@ -182,24 +231,40 @@ starts, but are retained as descendant edges to profile in the supported run.
 
 ### Phase and cache observations
 
-No supported happy-path phase wall, descendant PID, npm download/cache result,
-ACP session record, provider marker, or queue teardown result is available:
-the required Node gate failed in `0.04s` inside the `2738ms` package wall.
-The valid three-sample baseline and full phase/process profile remain blocked
-until a supported Node runtime is available. Existing C06 evidence reports
-the old `10`-start accounting and an explicit Node `v22.12.0` skip/fail-close;
-it is historical context, not a valid C14 denominator.
+One supported diagnostic profile run (instrumented only with a temporary gated
+trace, package wall `32.564s`, outer ancestry-capture wall `34.066s`) produced
+the following phase walls. The trace recorded no arguments or output payloads.
+
+| Phase | Bound | Observed wall | Outcome |
+| --- | ---: | ---: | --- |
+| Node prerequisite probe | none | `51.8ms` | supported version |
+| `read-revision` / Git | `60s` | `80.4ms` | success |
+| `build-current-you` / Go | `60s` | `7.388s` | success |
+| `verify-acpx-version` / npx | `60s` | `9.063s` | success |
+| `create-session` / npx | `60s` | `3.460s` | success |
+| `complete-prompt` / npx | `60s` plus ACPX `45s` | `5.088s` | success |
+| `close-session` / npx | `60s` | `4.479s` | success |
+| Timeout helper | `1s` | `1.012s` | expected timeout, cleanup passed |
+| Non-zero helper | `1s` | `48.4ms` | expected non-zero, cleanup passed |
+
+The four separate ACPX phases account for `22.090s` in this profile and each
+starts a fresh `npx` process while retaining the same scenario-local npm
+cache. The first version phase includes public npm acquisition; later phases
+reuse the same isolated cache. This identifies phase/process startup and
+package acquisition as the smallest safe optimization candidate. The build
+and helper process witnesses are retained because they prove the current
+binary and process-tree failure semantics.
 
 ## Matrix disposition and smallest safe next step
 
 | Matrix rows | Current disposition |
 | --- | --- |
-| RC-PREREQ-001 through RC-PREREQ-006 | Observed/reconciled above; optional absence skips and required absence fails closed before startup. |
+| RC-PREREQ-001 through RC-PREREQ-006 | Observed/reconciled above; optional absence skips and required absence fails closed before startup. The original Node `v22.12.0` required-lane failure remains unsupported evidence; the `v22.13.0` enabled/required runs passed. |
 | RC-PROC-001 and RC-PROC-002 | Exercised by the focused local-real Windows helper run; both process-tree cleanup witnesses passed. |
-| RC-CLIENT-001 | Retained in source, not executable on the unsupported runtime; no success evidence claimed. |
+| RC-CLIENT-001 | Exercised in the supported profile and all three baseline runs through pinned ACPX, the current built binary, real stdio, and the deterministic provider; sanitized evidence was emitted. |
 | RC-CLIENT-002 and RC-CLIENT-003 | Retained by bounded runner/parser/assertion and registered cleanup ownership; direct malformed/output/recovery injection remains with the unchanged lower ACP gates and later real-client run. |
 | RC-CLIENT-004 and RC-CLIENT-005 | Later repeat/race gates; not claimed here. |
-| RC-BOUNDARY-001 | Retained source assertion for the 16-character ephemeral prompt, one prompt result, and two provider calls; not claimed exercised here. |
+| RC-BOUNDARY-001 | Supported happy path observed one 16-character ephemeral prompt, one prompt result, and exactly two provider markers; the sanitized evidence field still reports one and is a story-002 correction target. |
 | RC-AUTH-001 | Not applicable by contract; no credential-bearing edge was added. |
 | RC-CAPACITY-001 | Not applicable by contract; no load claim is made. |
 
@@ -209,25 +274,18 @@ intrinsic cost, then consider only a test-local consolidation that preserves
 the pinned package, fresh session state, current binary, real stdio/process
 edges, each phase assertion, and cleanup. The helper process cases are not a
 candidate for consolidation because their independent timeout and non-zero
-process-tree witnesses are the behavior under test. The two evidence/comment
-discrepancies above must also be corrected in the preservation story, not
-used as a reason to weaken the exact two-call assertion.
+process-tree witnesses are the behavior under test. The evidence-count
+discrepancy must be corrected in the preservation story, not used as a reason
+to weaken the exact two-call assertion.
 
-## Structured blocker
+## Characterization result
 
-- Failed gate: `GATE-BASELINE` and the supported happy-path portion of
-  `GATE-PROFILE`.
-- Reproduction: on the unchanged recorded head, run with
-  `INFINITE_YOU_RUN_ACPX_REAL_CLIENT=1` and
-  `INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT=1`; the package exits `1` with
-  `real ACP evidence prerequisite failed: Node.js 22.13.0 or later is required`.
-- Impact: no valid three-run pre-edit median or real ACPX phase/process/cache
-  profile exists, so optimization would have no supported denominator and
-  could silently replace the real edge.
-- Safe work completed: discovery, prerequisite matrix, helper process-tree
-  witnesses, source assertion inventory, direct-start correction, and
-  cleanup/wait ownership record.
-- Narrowest delta requested: provide a supported Node.js `22.13.0+` runtime
-  for this unchanged checkout, then rerun the exact three isolated required
-  package samples and finish the missing real-client profile before any test
-  topology edit. Do not substitute, skip, or restructure the client.
+`GATE-BASELINE`, `GATE-PROFILE`, `GATE-DISCOVERY`, and `GATE-PREREQ` are
+satisfied for story 001. The initial host-installed Node `v22.12.0` result was
+a real, safe prerequisite diagnostic but did not satisfy the denominator. The
+narrow environmental remedy was an official, isolated Node `v22.13.0`
+runtime; the three required runs then passed without client substitution,
+skipping, or topology restructuring.
+
+Remaining gates are optimization parity/performance, repeat/race, clean-room
+validation, and current-head PR evidence owned by stories 002 and 003.
