@@ -8,16 +8,26 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestInstalledDocumentationBehaviorThroughPublicProcess proves the shipped
 // docs/help path and the copied Factory examples through the customer process.
-// The mock-worker run keeps this documentation proof local and avoids model or
-// paid-provider effects while still crossing validation and runtime loading.
+// The provider command edge keeps this documentation proof local and avoids
+// model or paid-provider effects while still crossing validation, runtime
+// loading, and provider-backed worker execution.
 func TestInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	providerRunner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("documentation example completed. COMPLETE"),
+	}, platformprocess.CommandResult{
+		Stdout: []byte("documentation example completed. COMPLETE"),
+	})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	})
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
@@ -27,7 +37,7 @@ func TestInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
 	})
 
 	t.Run("Factory examples validate and run", func(t *testing.T) {
-		testFactoryDocumentationExamples(t, process)
+		testFactoryDocumentationExamples(t, process, providerRunner)
 	})
 	t.Run("Models topic documents names costs and safety", func(t *testing.T) {
 		testModelsDocumentation(t, process)
@@ -37,24 +47,55 @@ func TestInstalledDocumentationBehaviorThroughPublicProcess(t *testing.T) {
 	})
 }
 
-func testFactoryDocumentationExamples(t *testing.T, process support.Process) {
+func testFactoryDocumentationExamples(
+	t *testing.T,
+	process support.Process,
+	providerRunner *support.ShapedProviderCommandRunner,
+) {
 	t.Helper()
 	for _, example := range []struct {
-		name    string
-		topic   string
-		heading string
+		name            string
+		topic           string
+		heading         string
+		workerName      string
+		workstationName string
 	}{
-		{name: "config", topic: "config", heading: "## Minimum Factory Authoring Contract"},
-		{name: "authoring-factories", topic: "authoring-factories", heading: "## Minimal Workflow"},
+		{
+			name:            "config",
+			topic:           "config",
+			heading:         "## Minimum Factory Authoring Contract",
+			workerName:      "reviewer",
+			workstationName: "review",
+		},
+		{
+			name:            "authoring-factories",
+			topic:           "authoring-factories",
+			heading:         "## Minimal Workflow",
+			workerName:      "processor",
+			workstationName: "process-task",
+		},
 	} {
 		example := example
 		t.Run(example.name, func(t *testing.T) {
-			testFactoryDocumentationExample(t, process, example.topic, example.heading)
+			testFactoryDocumentationExample(
+				t,
+				process,
+				providerRunner,
+				example.topic,
+				example.heading,
+				example.workerName,
+				example.workstationName,
+			)
 		})
 	}
 }
 
-func testFactoryDocumentationExample(t *testing.T, process support.Process, topic, heading string) {
+func testFactoryDocumentationExample(
+	t *testing.T,
+	process support.Process,
+	providerRunner *support.ShapedProviderCommandRunner,
+	topic, heading, workerName, workstationName string,
+) {
 	t.Helper()
 	env := isolatedDocumentationEnvironment(t)
 	markdown := executeDocumentationCommand(t, process, env, t.TempDir(), "docs", topic)
@@ -63,6 +104,18 @@ func testFactoryDocumentationExample(t *testing.T, process support.Process, topi
 	if err := os.WriteFile(factoryPath, extractJSONExample(t, markdown, heading), 0o600); err != nil {
 		t.Fatalf("write copied %s Factory example: %v", topic, err)
 	}
+	support.WriteAgentConfig(
+		t,
+		factoryDir,
+		workerName,
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "test-model"),
+	)
+	support.WriteWorkstationConfig(
+		t,
+		factoryDir,
+		workstationName,
+		"---\ntype: MODEL_WORKSTATION\n---\nProcess the documentation example.\n",
+	)
 
 	validate := executeDocumentationCommandResult(t, process, env, factoryDir, "factory", "config", "validate", factoryPath)
 	if validate.err != nil {
@@ -76,14 +129,18 @@ func testFactoryDocumentationExample(t *testing.T, process support.Process, topi
 	if err := os.WriteFile(workPath, []byte(documentationFactoryWork), 0o600); err != nil {
 		t.Fatalf("write %s Factory work: %v", topic, err)
 	}
+	providerCallsBefore := providerRunner.CallCount()
 	run := executeDocumentationCommandResult(t, process, env, factoryDir,
-		"run", "--dir", factoryDir, "--with-mock-workers", "--no-record", "--quiet", "--work", workPath,
+		"run", "--dir", factoryDir, "--no-record", "--quiet", "--work", workPath,
 	)
 	if run.err != nil {
 		t.Fatalf("run copied %s Factory example: %v\nstdout:\n%s\nstderr:\n%s", topic, run.err, run.stdout, run.stderr)
 	}
 	if !strings.Contains(run.stdout, "Batch completed successfully.") {
 		t.Fatalf("run copied %s Factory example omitted completion:\n%s", topic, run.stdout)
+	}
+	if got := providerRunner.CallCount() - providerCallsBefore; got != 1 {
+		t.Fatalf("provider command runner calls for copied %s Factory example = %d, want 1", topic, got)
 	}
 }
 
