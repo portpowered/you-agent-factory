@@ -1,11 +1,12 @@
 # C09 Auxiliary Provider Characterization Ledger
 
 Status: stories `functional-test-optimization-c09-providers-auxiliary-migration-001`,
-`-002`, `-003`, and `-004` complete. The Claude golden migration,
-discovery/permission functional evidence, and final validation-loopback
-evidence are recorded below. The operator has resolved the source-plan
-authority and classified the earlier unrelated unit-lane sample; terminal CI,
-conflict resolution, and merge remain review-owned.
+`-002`, and `-003` complete. Story `-004` remains open for a fresh
+validation-loopback after the current-head evidence corrections. The Claude
+golden migration and discovery/permission functional evidence are recorded
+below. The operator has resolved the source-plan authority and classified the
+earlier unrelated unit-lane sample; terminal CI, conflict resolution, and merge
+remain review-owned.
 
 ## Authority and scope
 
@@ -40,20 +41,38 @@ after-counts and package PR timing are recorded in the final loopback below.
 
 ## Characterization procedure and result
 
-The current local Go toolchain was used with the controlled command and
-permission edges already present in the tests.
+The review-base artifact was used to establish the pre-migration inventory with
+the controlled command and permission edges already present in the tests.
 
 ```text
 go test ./tests/functional/providers/claude ./tests/functional/providers/discovery ./tests/functional/providers/permission -list '^Test'
 ```
 
-Exit status: `0`. The command reported exactly these five top-level tests:
+Exit status: `0` at review base. The command reported exactly these five
+pre-migration top-level tests:
 
 - `TestClaudeHaikuStreamJSONGoldens`
 - `TestClaudeStreamJSONCommandThroughRootBuildProcess`
 - `TestProvidersListThroughRootBuildProcess`
 - `TestPackagedACPProjectionRejectsInvalidRuntimeBindings`
 - `TestProviderPermissionBypassFunctionalContract`
+
+The current-head inventory was then checked independently at
+`328d32a6fa95047912e131a2459796bf1f5ff179` with the same command. It exited
+with status `0` and reported eight top-level tests:
+
+- `TestClaudeHaikuGoldenAdverseValidationFailsBeforeRouting`
+- `TestClaudeHaikuGoldenRouterRejectsInvalidRoutesWithoutLeaks`
+- `TestClaudeHaikuGoldenAdverseProcessPathsReclaimResources`
+- `TestClaudeHaikuStreamJSONGoldens`
+- `TestClaudeStreamJSONCommandThroughRootBuildProcess`
+- `TestProvidersListThroughRootBuildProcess`
+- `TestPackagedACPProjectionRejectsInvalidRuntimeBindings`
+- `TestProviderPermissionBypassFunctionalContract`
+
+The three additional current-head tests are the Story 002 adverse validation,
+route, and process-cleanup tests. They are assigned to Story 002 below; they
+were not part of the five-test pre-migration behavior denominator.
 
 The one pre-change package diagnostic was then run once at the declared story
 scope:
@@ -89,12 +108,14 @@ ok  github.com/portpowered/infinite-you/tests/functional/providers/permission 3.
 
 This is direct functional characterization through the existing real
 `root.BuildProcess`/`Process.Execute` paths and controlled command or
-permission edges. The five top-level tests retain the public witnesses listed
-below: Claude stream/command, Work, and Factory Event assertions; discovery
-catalog, ordering, invalid-flag, and zero-provider-call assertions; and
-capable/incapable permission Work, dispatch, bypass-flag, bounded-diagnostic,
-and command-call assertions. It proves the pre-migration behavior baseline;
-it does not prove the migrated topology or parity after structural change.
+permission edges. The five review-base top-level tests retain the public
+witnesses listed below: Claude stream/command, Work, and Factory Event
+assertions; discovery catalog, ordering, invalid-flag, and zero-provider-call
+assertions; and capable/incapable permission Work, dispatch, bypass-flag,
+bounded-diagnostic, and command-call assertions. It proves the pre-migration
+behavior baseline; it does not prove the migrated topology or parity after
+structural change. The three current-head adverse tests are separately assigned
+to Story 002 and are not retroactively included in this baseline.
 
 The command completed in 13.351 seconds on the shared Windows host. This is a
 contaminated local timing observation, not a threshold or a PR performance
@@ -102,8 +123,13 @@ verdict.
 
 ## Exact top-level inventory and source-derived topology
 
-The five rows below are the complete default-tag denominator from the test-list
-command. Named subcases are included in the row that owns them.
+### Pre-migration inventory
+
+The five rows below are the complete review-base default-tag denominator from
+the pre-migration test-list command. Named subcases are included in the row
+that owns them. This is the comparison set for the `4 -> 2` Claude process
+disposition; it must not be confused with the current eight-test source
+inventory above.
 
 | Package | Top-level test and source | Executable cases and public boundary | Before starts | After story 002 / disposition |
 | --- | --- | --- | ---: | --- |
@@ -112,6 +138,30 @@ command. Named subcases are included in the row that owns them.
 | `providers/discovery` | `TestProvidersListThroughRootBuildProcess` — `discovery_test.go:25` | One `BuildProcess`; three sequential `Process.Execute` calls for human list, JSON list, and unsupported-flag failure. Observes catalog output, diagnostics, and zero provider command calls. | 1 | 1 retained process; no per-command rebuild exists. |
 | `providers/discovery` | `TestPackagedACPProjectionRejectsInvalidRuntimeBindings` — `discovery_test.go:65` | Four pure subcases: unknown profile, unsupported transport, argument drift, and canonical alias duplication. Calls catalog projection directly and creates no process/session. | 0 | Pure/no-fixture retained; a process would be synthetic overhead. |
 | `providers/permission` | `TestProviderPermissionBypassFunctionalContract` — `permission_bypass_test.go:19` | `capable Codex route uses the command edge` and `registered incapable Codex route fails before the command edge`; each subtest copies a fixture and calls one completion helper. | 2 | 2 isolated processes retained because capability wiring is immutable and differs before process construction. |
+
+### Current-head inventory
+
+At current head `328d32a6fa95047912e131a2459796bf1f5ff179`, the same default-tag
+list reports eight top-level tests: the five pre-migration tests above plus the
+three Story 002 adverse tests below. This current inventory is the accepted
+source denominator for the corrected characterization ledger.
+
+| Package | Current top-level test and source | Story ownership and executable boundary |
+| --- | --- | --- |
+| `providers/claude` | `TestClaudeHaikuGoldenAdverseValidationFailsBeforeRouting` — `haiku_adverse_test.go:22` | Story 002; validates empty, malformed, partial, unsanitized, and checksum-invalid fixtures before any route call. It owns a direct bounded router fixture, not an application process or Factory Session. |
+| `providers/claude` | `TestClaudeHaikuGoldenRouterRejectsInvalidRoutesWithoutLeaks` — `haiku_adverse_test.go:72` | Story 002; rejects duplicate, unknown, mismatched, unexpected-provider, and closed routes through the controlled command edge. It owns a direct bounded router fixture and no application process. |
+| `providers/claude` | `TestClaudeHaikuGoldenAdverseProcessPathsReclaimResources` — `haiku_adverse_test.go:144` | Story 002; runs partial-result/assertion-failure and cancellation cleanup probes through public Factory Session boundaries. Its two subcases create bounded test-local process probes; those probes are adverse cleanup evidence and do not change the migrated golden `4 -> 2` comparison. |
+| `providers/claude` | `TestClaudeHaikuStreamJSONGoldens` — `haiku_golden_test.go:50` | Story 002; the three migrated manifest-order golden cases share one process and three explicit sessions. |
+| `providers/claude` | `TestClaudeStreamJSONCommandThroughRootBuildProcess` — `process_harness_test.go:18` | Pre-migration behavior retained by Story 002; one standalone Claude command process remains independent. |
+| `providers/discovery` | `TestProvidersListThroughRootBuildProcess` — `discovery_test.go:25` | Story 003; one process serves the human, JSON, and unsupported-flag invocations. |
+| `providers/discovery` | `TestPackagedACPProjectionRejectsInvalidRuntimeBindings` — `discovery_test.go:65` | Story 003; four pure projection subcases create no process or session. |
+| `providers/permission` | `TestProviderPermissionBypassFunctionalContract` — `permission_bypass_test.go:19` | Story 003; two separate processes retain immutable capable/incapable capability configurations. |
+
+The current-head adverse process probes are reported separately because they
+were added after the pre-migration artifact to exercise failure cleanup. The
+planned topology comparison remains the customer-path migration count: Claude
+`3 golden helper processes + 1 standalone = 4` before, and `1 shared golden
+process + 1 standalone = 2` after.
 
 ### Start-count derivation
 
@@ -328,7 +378,7 @@ evidence.
 
 | Criterion / gate | Result in this story | Evidence and remaining edge |
 | --- | --- | --- |
-| `AUX-CHAR-001` | PASS | Five top-level tests from the `-list` command, source-derived subcases, 47 one-row matrix entries, exact public witnesses, cleanup obligations, and package dispositions are recorded above. No migrated parity is claimed. |
+| `AUX-CHAR-001` | PASS | The review-base `-list` command records the complete five-test pre-migration denominator; the current-head `-list` command records all eight tests and assigns the three added adverse tests to Story 002. The 47 one-row matrix entries, exact public witnesses, cleanup obligations, and package dispositions are recorded above. No migrated parity is claimed by this characterization row. |
 | Direct behavioral characterization | PASS | Clean review-base artifact `177ebdd07a176863221f11410ab84fd075f1eb80` passed the declared three-package command with exit status `0` (Claude `6.630s`, discovery `0.350s`, permission `3.161s`). The existing tests exercised real root/public boundaries and retained the Claude stream/command/Work/Event, discovery catalog/diagnostic/zero-call, and permission success/failure/dispatch/bypass/zero-call witnesses listed above. | This is the pre-migration baseline; migrated parity remains owned by stories 002 and 003. |
 | Current topology basis | PASS | Source inspection derives Claude `4`, discovery `1`, and permission `2` application-process starts; the planned `2/1/2` target is explicitly marked unproven. |
 | Dependency fidelity | PASS for characterization | Real root composition and current controlled command/permission edges were inspected and the declared package suite passed. No remote provider call was made. |
@@ -338,10 +388,11 @@ evidence.
 | Exclusions and ancestry | NOT CLAIMED | Final `origin/main...HEAD` and PR #2316 checks belong to story 004. |
 
 No topology mismatch was found between the PRD and current source. The
-source-plan file is absent from the review base and all inspected refs, so
-source-plan alignment remains an explicit unresolved conflict requiring
-Project Lead / operator resolution; this ledger does not reinterpret the PRD
-as a substitute source plan.
+source-plan file is absent from the review base and all inspected refs because
+it is operator-held by design; the operator disposition linked above grants
+this tracked ledger replacement authority under planning-standards §11 and
+confirms Scope 10 at `functional-test-optimization-v2`. This ledger does not
+silently reconstruct the absent source plan.
 
 ## Story 002 evidence boundary
 
@@ -404,7 +455,14 @@ command/permission edges. It does not prove remote provider behavior, Claude
 adverse cleanup, host-level resource absence beyond the process-tree check, or
 PR Backend Functional Coverage timing; those remain story 004 gates.
 
-## Story 004 validation loopback
+## Story 004 validation loopback (pending current-head rerun)
+
+The report below is retained as the prior loopback record, but it is not a
+current passing verdict. The current-head inventory correction adds three
+Story 002 adverse top-level tests to the five-test pre-migration denominator,
+and the integrated report must be rerun against that corrected distinction.
+Until that read-only rerun is complete, Story 004 and `VAL-006` remain
+blocked; no prior PASS below is used to claim final completion.
 
 # Validation report: BEH-01 — Preserve auxiliary provider behavior while removing eligible repeated Claude construction
 
@@ -422,21 +480,23 @@ PR Backend Functional Coverage timing; those remain story 004 gates.
 
 | Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
 | --- | --- | --- | --- |
-| Integrated owned-package behavior | PASS | `go test -count=1 -timeout=10m ./tests/functional/providers/claude ./tests/functional/providers/discovery ./tests/functional/providers/permission` emitted `ok` for Claude (`4.811s`), discovery (`0.348s`), and permission (`3.643s`). The package test binaries covered the five top-level tests listed in the characterization ledger. | Remote providers and the lane-wide functional suite remain outside this local run. |
+| Integrated owned-package behavior | BLOCKED | The prior run emitted `ok` for Claude (`4.811s`), discovery (`0.348s`), and permission (`3.643s`), but its evidence described only the five-test characterization inventory. A current-head rerun must explicitly account for the eight listed tests, including the three Story 002 adverse tests. | Remote providers and the lane-wide functional suite remain outside this local run; current-head loopback evidence is pending. |
 | Touched Claude determinism | PASS | `go test -count=3 -timeout=10m ./tests/functional/providers/claude -run '^TestClaudeHaikuStreamJSONGoldens$'` emitted package `ok` in `10.197s`; three manifest-order replays retained their existing stream, command, Work, Factory Event, and explicit-session assertions. | The Windows wrapper stayed alive after output and was canceled; this is not a test assertion failure. |
-| Cleanup and topology | PASS | The focused test asserts three unique non-default sessions, one request per route, and zero routes after `router.Close`; the integrated and repeat commands emitted `ok`. After each wrapper cancellation, a process-tree query found no C09 package test, server, or provider process. `t.Cleanup` ownership covers success, assertion, and cancellation paths; copied fixtures remain `t.TempDir` owned. | This read-only loopback does not force a new failing assertion or OS-level listener census; terminal CI owns its own cleanup evidence. |
+| Cleanup and topology | BLOCKED | Story 002’s focused evidence covers shared-route and adverse cleanup, but the retained loopback predates the corrected current eight-test inventory. The current-head read-only loopback must re-record integrated cleanup and process-tree evidence. | This loopback does not force an OS-wide listener census; terminal CI owns its own cleanup evidence. |
 | Process disposition | PASS | Source-derived application starts are Claude `4 -> 2`, discovery `1 -> 1`, permission `2 -> 2`. The shared Claude fixture has one root-built process, three explicit sessions, and three pre-start immutable routes; discovery and permission retain their justified topologies. | Package PR timing is supplied by Backend Functional Coverage rather than contaminated local wall-clock observations. |
-| Exclusions and ancestry | PASS | `git diff --name-only origin/main...HEAD` contains only the ledger plus the four owned test files; `git diff --check` passed. Neither PR #2316 commit (`66430639c09a...`, `d7c545090d4...`) is an ancestor of `HEAD`; no AGY, ACP, Codex, root Providers, shared support, inventory, baseline, or workflow file is changed. | Review may still report a merge conflict after new main commits. |
+| Exclusions and ancestry | NOT CLAIMED | The retained report predates the current-head inventory/evidence correction. The next loopback must rerun `git diff --name-only origin/main...HEAD`, `git diff --check`, and the PR #2316 ancestry checks against its own final artifact. | Review may still report a merge conflict after new main commits. |
 | Security/privacy and compatibility | PASS | All provider outputs are sanitized checked-in streams validated by fixture shape and SHA-256; route errors are bounded and do not include request/environment values. No API, CLI, Factory Event, persisted schema, production, generated, or configuration file changed. | Real credentials, customer data, and remote-provider behavior are intentionally untested. |
 | Required unit/full gate | PASS | The final-head hosted run [33232246174](https://github.com/portpowered/you-agent-factory/actions/runs/33232246174) reports Backend Unit Latency, Backend Unit Coverage, Backend Lint, Backend Functional Coverage, Backend Test Stability, UI Backend Integration, and Verification Policy as passing on `fa7350034071a3a3fcf3b299c71bddffa33c9f15`. The earlier failed sample in untouched package `pkg/services/providers/internal/services/acp/internal/service` is retained as historical evidence and is classified by the operator as an unowned intermittent; no ACP repair was made. | Review-owned terminal CI on the authority-reconciliation head, conflict resolution, and merge. |
-| `VAL-006` validation-loopback | PASS | This read-only report preserves the exact owned-package, cleanup, topology, exclusion, and performance evidence. The operator disposition on [PR #2416](https://github.com/portpowered/you-agent-factory/pull/2416#issuecomment-5461024854) resolves `PLAN-AUTH-001` by granting the tracked ledger replacement authority under planning-standards §11, confirming Scope 10 retention at `functional-test-optimization-v2`, and classifying the unrelated unit-latency sample; the final-head checks are green. | Real or paid providers remain intentionally untested; review owns terminal CI on the new authority-reconciliation head, conflict resolution, and merge. |
+| `VAL-006` validation-loopback | BLOCKED | The operator disposition resolves `PLAN-AUTH-001`, but this retained report must be rerun after the current eight-test inventory correction and must update its dependent PASS claims from the new final artifact. | Real or paid providers remain intentionally untested; review owns terminal CI on the final implementation head, conflict resolution, and merge. |
 | `PR-CI-005` handoff | PASS | The final implementation head is ready for a PR; Backend Functional Coverage is the authoritative source for final package timing and full functional-gate output. The handoff records the local directional topology improvement and does not substitute local timing for the PR comment. | The workflow comment cannot exist until the PR is opened and CI starts; implementation stops at that boundary. |
 
 ## Customer journey
 
 1. A clean tracked checkout executes the three owned provider packages through
    real root/provider composition and controlled command/permission edges. The
-   five characterized top-level tests and all package assertions report `ok`.
+   current eight-test inventory consists of the five characterized top-level
+   tests plus the three Story 002 adverse tests; the corrected loopback must
+   report all eight package tests and their assertions.
 2. Claude Haiku alias, family, and pinned goldens execute in manifest order in
    one process through three unique explicit Factory Sessions. Each route
    retains one Claude request, successful Work, expected Model Response Factory
@@ -470,10 +530,24 @@ PR Backend Functional Coverage timing; those remain story 004 gates.
 
 ## Verdict
 
-PASS — the owned behavior, topology, cleanup boundary, exclusions, adverse
-cleanup evidence, source-plan authority, and required final-head checks are
-resolved and recorded. The operator disposition linked above closes
-`PLAN-AUTH-001`, grants the tracked ledger replacement authority, confirms
-Scope 10 retention, and classifies the unrelated earlier unit-latency sample
-as unowned. Review owns terminal CI on the new authority-reconciliation head,
-conflict resolution, and merge.
+BLOCKED — the current inventory and Story 002 evidence correction are recorded,
+but the integrated read-only loopback must be rerun against the corrected
+current-head denominator before Story 004 or `VAL-006` can pass. The operator
+disposition linked above still closes `PLAN-AUTH-001`, grants the tracked
+ledger replacement authority, confirms Scope 10 retention, and classifies the
+unrelated earlier unit-latency sample as unowned.
+
+## Delta-plan request [Required for BLOCKED]
+
+- Affected behavior and criterion: Story 004 integrated validation and
+  `VAL-006`; the loopback must use the corrected eight-test current inventory
+  while preserving the five-test pre-migration comparison.
+- Root-cause evidence or remaining uncertainty: the retained report labels a
+  historical five-test denominator as if it covered the current source and
+  therefore does not independently prove the corrected final artifact.
+- Smallest recommended correction/prerequisite: rerun the declared read-only
+  three-package suite, cleanup/process checks, exclusion/ancestry checks, and
+  update the dependent table rows against that final head.
+- Dependencies and retest scope: Story 001 inventory reconciliation and Story
+  002 adverse evidence are now present; rerun Story 004’s declared loopback
+  scope only, without changing production or excluded surfaces.
