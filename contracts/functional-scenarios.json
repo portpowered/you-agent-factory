@@ -600,7 +600,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -615,7 +615,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -630,7 +630,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -645,7 +645,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -675,7 +675,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -705,7 +705,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]
@@ -750,7 +750,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestInvokeContinueSharedProcess",
           "boundary": "cli"
         }
       ]

@@ -6,16 +6,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -51,65 +50,81 @@ type directWorkerSessionInterruptCLIResult struct {
 
 func TestInvokeContinueSharedProcess(t *testing.T) {
 	fixture := ensureInvokeContinuePackageFixture(t)
-	t.Run("InvokeContinueLocal", func(t *testing.T) {
-		runDirectWorkerSessionInvokeContinueLocal(t, fixture)
-	})
+	tests := []struct {
+		name string
+		run  func(*testing.T, *invokeContinuePackageFixture)
+	}{
+		{"InvokeContinueLocal", runDirectWorkerSessionInvokeContinueLocal},
+		{"InvokeExecutionFileFutureFields", runDirectWorkerSessionInvokeExecutionFileToleratesFutureFields},
+		{"ResumeRecordedProviderSession", runWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession},
+		{"UnsupportedProviderContinuation", runDirectWorkerSessionContinueUnsupportedProvider},
+		{"RemoteInterrupt", runDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots},
+		{"RemoteControls", runDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback},
+		{"ContinueUnknownSource", runDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall},
+		{"ContinueUnassociatedSource", runDirectWorkerSessionContinueUnassociatedSourceRejectsWithoutProviderContinuation},
+		{"ContinueStaleProviderSession", runDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart},
+		{"RemoteContinueProviderFailures", runDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback},
+		{"RemoteInvokeStreamFailure", runDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess},
+		{"RemoteInvokeCancellation", runDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess},
+		{"EmptyUserMessage", runDirectWorkerSessionEmptyUserMessageRejectsWithoutProviderCall},
+		{"ExactDuplicateContinuation", runDirectWorkerSessionExactDuplicateContinuationIsIdempotent},
+		{"DependencyCancellationRecovery", runDirectWorkerSessionDependencyCancellationCancelsOnceAndRecovers},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) { test.run(t, fixture) })
+	}
 	fixture.assertSpine(t)
-	functionalevidence.Covers(t, "cli/you.worker-sessions.continue", "cli/you.worker-sessions.invoke")
+	functionalevidence.Covers(t,
+		"cli/you.worker-sessions.continue",
+		"cli/you.worker-sessions.invoke",
+		"cli/you.worker-sessions.interrupt",
+		"cli/you.worker-sessions.cancel",
+		"cli/you.worker-sessions.pause",
+		"cli/you.worker-sessions.resume",
+		"cli/you.worker-sessions.terminate",
+	)
 }
 
-func runDirectWorkerSessionInvokeContinueLocal(
-	t *testing.T,
-	fixture *invokeContinuePackageFixture,
-) {
+func runDirectWorkerSessionInvokeContinueLocal(t *testing.T, fixture *invokeContinuePackageFixture) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	runner := fixture.runner
+	scenario := fixture.scenario(t, "local")
+	runner := scenario.providerRunner
 	process := fixture.process
-	workingDirectory := fixture.workingDirectory
-	env := invokeContinueEnvironment(fixture.homeDir)
 	if got := runner.CallCount(); got != 0 {
 		t.Fatalf("provider command runner calls before CASE-01 = %d, want zero", got)
 	}
-	session := fixture.openSession(t)
 	executionPath := filepath.Join(fixture.rootDir, "local-invoke-execution.json")
-	writeInvokeContinueExecution(t, executionPath, session.id, workingDirectory)
+	writeInvokeContinueExecution(t, executionPath, scenario.session.id, scenario.workingDirectory)
 
-	invoke := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "invoke",
-		"--execution", executionPath,
-	})
-	invoke.Input.Env = env
-	invoke.Input.WorkingDirectory = workingDirectory
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env = invokeContinueEnvironment(fixture.homeDir)
+	invoke.Input.WorkingDirectory = scenario.workingDirectory
 	if err := process.Execute(invoke.Input); err != nil {
 		t.Fatalf("local invoke: %v\nrequests:%#v\nstdout:\n%s\nstderr:\n%s", err, runner.Requests(), invoke.Stdout(), invoke.Stderr())
 	}
 	var invoked directWorkerSessionCLIResult
 	decodeDirectWorkerSessionResult(t, invoke.Stdout(), &invoked)
-	if !invoked.Accepted || invoked.RequestID != "local-invoke-request" ||
-		invoked.WorkerSessionID != "local-source-session" || invoked.State != "COMPLETED" {
+	if !invoked.Accepted || invoked.RequestID != "local-invoke-request" || invoked.WorkerSessionID != "local-source-session" || invoked.State != "COMPLETED" {
 		t.Fatalf("local invoke result = %#v, want accepted completed source", invoked)
 	}
 	if !strings.Contains(invoked.Output, "initial direct output COMPLETE") {
-		t.Fatalf("local invoke output = %q, want provider output\nstdout:\n%s\nstderr:\n%s", invoked.Output, invoke.Stdout(), invoke.Stderr())
+		t.Fatalf("local invoke output = %q, want provider output; calls=%d requests=%#v\nstdout:\n%s\nstderr:\n%s", invoked.Output, runner.CallCount(), runner.Requests(), invoke.Stdout(), invoke.Stderr())
 	}
 
 	cont := support.FakeInputs(ctx, []string{
 		"you", "--json", "worker-sessions", "continue", "local-source-session",
-		"--request-id", "local-continue-request",
-		"--successor-worker-session-id", "local-successor-session",
+		"--request-id", "local-continue-request", "--successor-worker-session-id", "local-successor-session",
 		"--user-message", "continued direct prompt",
 	})
-	cont.Input.Env = env
-	cont.Input.WorkingDirectory = workingDirectory
+	cont.Input.Env = scenario.environment()
+	cont.Input.WorkingDirectory = scenario.workingDirectory
 	if err := process.Execute(cont.Input); err != nil {
 		t.Fatalf("local continuation: %v\nrequests:%#v\nstdout:\n%s\nstderr:\n%s", err, runner.Requests(), cont.Stdout(), cont.Stderr())
 	}
 	var continued directWorkerSessionCLIResult
 	decodeDirectWorkerSessionResult(t, cont.Stdout(), &continued)
-	if !continued.Accepted || continued.RequestID != "local-continue-request" ||
-		continued.SourceWorkerSessionID != "local-source-session" ||
-		continued.SuccessorWorkerSessionID != "local-successor-session" || continued.State != "COMPLETED" {
+	if !continued.Accepted || continued.RequestID != "local-continue-request" || continued.SourceWorkerSessionID != "local-source-session" || continued.SuccessorWorkerSessionID != "local-successor-session" || continued.State != "COMPLETED" {
 		t.Fatalf("local continuation result = %#v, want accepted successor lineage", continued)
 	}
 	if !strings.Contains(continued.Output, "continued direct output COMPLETE") {
@@ -133,8 +148,8 @@ func runDirectWorkerSessionInvokeContinueLocal(
 		"--request-id", "local-continue-request", "--successor-worker-session-id", "different-successor",
 		"--user-message", "different immutable input", "--async",
 	})
-	conflict.Input.Env = env
-	conflict.Input.WorkingDirectory = workingDirectory
+	conflict.Input.Env = scenario.environment()
+	conflict.Input.WorkingDirectory = scenario.workingDirectory
 	if err := process.Execute(conflict.Input); err == nil {
 		t.Fatal("continuation request-id reuse succeeded, want conflict")
 	}
@@ -142,62 +157,34 @@ func runDirectWorkerSessionInvokeContinueLocal(
 	if requests := runner.Requests(); len(requests) != 2 {
 		t.Fatalf("provider command requests after idempotency conflict = %d, want two", len(requests))
 	}
-
-	assertLocalTerminalWorkerSessionControls(t, ctx, process, env, workingDirectory)
-	session.close(t)
-	session.assertDeleted(t)
+	assertLocalTerminalWorkerSessionControls(t, ctx, process, scenario.environment(), scenario.workingDirectory)
+	scenario.close(t)
 }
 
-// TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields proves direct invocation tolerates future execution-file fields.
-func TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields(t *testing.T) {
+func runDirectWorkerSessionInvokeExecutionFileToleratesFutureFields(t *testing.T, fixture *invokeContinuePackageFixture) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: directCodexSessionOutput("future-file-thread", "future-file output COMPLETE")},
-	)
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
-	executionPath := filepath.Join(t.TempDir(), "future-execution.json")
-	executionDocument := `{
-		"requestId": "future-file-request",
-		"workerSessionId": "future-file-session",
-		"futureTopLevel": "top-secret",
-		"execution": {
-			"workstationName": "direct",
-			"futureExecution": {"value": "execution-secret"},
-			"dispatch": {
-				"dispatchId": "future-file-dispatch",
-				"workstationName": "direct",
-				"workerType": "direct-worker",
-				"futureDispatch": "dispatch-secret"
-			},
-			"workerType": "direct-worker",
-			"runnerId": "codex",
-			"modelProvider": "codex",
-			"model": "functional-model",
-			"userMessage": "future-file prompt"
-		}
-	}`
-	if err := os.WriteFile(executionPath, []byte(executionDocument), 0o600); err != nil {
-		t.Fatalf("write future direct Worker execution file: %v", err)
-	}
-
-	inputs := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "invoke", "--execution", executionPath,
+	scenario := fixture.scenario(t, "future-fields")
+	document := invokeContinueExecutionDocument(invokeContinueExecutionSpec{
+		requestID: "future-file-request", workerSessionID: "future-file-session", dispatchID: "future-file-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "future-file prompt",
 	})
-	homeDir := t.TempDir()
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := process.Execute(inputs.Input); err != nil {
+	document["futureTopLevel"] = "top-secret"
+	execution := document["execution"].(map[string]any)
+	execution["futureExecution"] = map[string]any{"value": "execution-secret"}
+	execution["dispatch"].(map[string]any)["futureDispatch"] = "dispatch-secret"
+	executionPath := filepath.Join(fixture.rootDir, "future-execution.json")
+	writeInvokeContinueJSON(t, executionPath, document)
+
+	inputs := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("future direct Worker execution: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-
 	var result directWorkerSessionCLIResult
 	decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
-	if !result.Accepted || result.RequestID != "future-file-request" ||
-		result.WorkerSessionID != "future-file-session" || result.State != "COMPLETED" ||
-		!strings.Contains(result.Output, "future-file output COMPLETE") {
+	if !result.Accepted || result.RequestID != "future-file-request" || result.WorkerSessionID != "future-file-session" || result.State != "COMPLETED" || !strings.Contains(result.Output, "future-file output COMPLETE") {
 		t.Fatalf("future direct Worker result = %#v, want successful known execution", result)
 	}
 	wantWarning := "warning: ignored unknown direct Worker execution fields at $.execution.dispatch.futureDispatch, $.execution.futureExecution, $.futureTopLevel"
@@ -210,44 +197,37 @@ func TestDirectWorkerSessionInvokeExecutionFileToleratesFutureFields(t *testing.
 	if strings.TrimSpace(inputs.Stdout()) == "" || strings.Contains(inputs.Stdout(), "futureTopLevel") {
 		t.Fatalf("stdout = %q, want normal structured result without ignored fields", inputs.Stdout())
 	}
+	scenario.close(t)
 }
 
-// WSR-FT-015: root.BuildProcess/Process.Execute admits a paused Worker
+// WSR-FT-015 proves the shared root-built process admits a paused Worker
 // Session through the exact recorded Provider Session and refuses an unknown
 // resume without another provider command side effect.
-func TestWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession(t *testing.T) {
+func runWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession(t *testing.T, fixture *invokeContinuePackageFixture) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	runner := newWSRFT015StreamingProviderRunner()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
-	homeDir := t.TempDir()
-	workingDirectory := t.TempDir()
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-
-	invoke := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "invoke",
-		"--request-id", "wsr-015-invoke-request",
-		"--worker-session-id", "wsr-015-session",
-		"--dispatch-id", "wsr-015-dispatch",
-		"--workstation", "direct",
-		"--worker-type", "direct-worker",
-		"--runner", "codex",
-		"--provider", "codex",
-		"--model", "functional-model",
-		"--user-message", "hold the recorded provider session",
+	scenario := fixture.scenario(t, "recorded-provider-session")
+	runner := scenario.streamingRunner
+	executionPath := filepath.Join(fixture.rootDir, "wsr-015-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "wsr-015-invoke-request", workerSessionID: "wsr-015-session", dispatchID: "wsr-015-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "hold the recorded provider session",
 	})
-	invoke.Input.Env = env
-	invoke.Input.WorkingDirectory = workingDirectory
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env = scenario.environment()
+	invoke.Input.WorkingDirectory = scenario.workingDirectory
 	invokeDone := make(chan error, 1)
-	go func() { invokeDone <- process.Execute(invoke.Input) }()
-	<-runner.initialSessionObserved
+	go func() { invokeDone <- fixture.process.Execute(invoke.Input) }()
+	select {
+	case <-runner.initialSessionObserved:
+	case <-ctx.Done():
+		t.Fatalf("WSR-FT-015 initial Provider Session was not observed: %v", ctx.Err())
+	}
 
 	pause := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "pause", "wsr-015-session"})
-	pause.Input.Env = env
-	pause.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(pause.Input); err != nil {
+	pause.Input.Env = scenario.environment()
+	pause.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(pause.Input); err != nil {
 		t.Fatalf("WSR-FT-015 pause: %v\nstdout:%s\nstderr:%s", err, pause.Stdout(), pause.Stderr())
 	}
 	var paused struct {
@@ -262,9 +242,9 @@ func TestWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession(t *te
 	}
 
 	resume := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "resume", "wsr-015-session"})
-	resume.Input.Env = env
-	resume.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(resume.Input); err != nil {
+	resume.Input.Env = scenario.environment()
+	resume.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(resume.Input); err != nil {
 		t.Fatalf("WSR-FT-015 resume: %v\nstdout:%s\nstderr:%s", err, resume.Stdout(), resume.Stderr())
 	}
 	var resumed struct {
@@ -277,9 +257,13 @@ func TestWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession(t *te
 	if resumed.Outcome != "APPLIED" || (resumed.State != "RUNNING" && resumed.State != "COMPLETED") {
 		t.Fatalf("WSR-FT-015 resume result = %#v, want APPLIED/RUNNING or COMPLETED", resumed)
 	}
-
-	if err := <-invokeDone; err != nil {
-		t.Fatalf("WSR-FT-015 invoke after resume: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
+	select {
+	case err := <-invokeDone:
+		if err != nil {
+			t.Fatalf("WSR-FT-015 invoke after resume: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
+		}
+	case <-ctx.Done():
+		t.Fatalf("WSR-FT-015 invoke did not finish after resume: %v", ctx.Err())
 	}
 	var invoked directWorkerSessionCLIResult
 	decodeDirectWorkerSessionResult(t, invoke.Stdout(), &invoked)
@@ -298,17 +282,17 @@ func TestWSRFT015DirectWorkerSessionResumeUsesExactRecordedProviderSession(t *te
 	if !strings.Contains(resumeArgs, "resume") || !strings.Contains(resumeArgs, "wsr-015-recorded-thread") {
 		t.Fatalf("WSR-FT-015 resume provider command = %#v, want exact recorded session", requests[1].Args)
 	}
-
 	refusal := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "resume", "wsr-015-unknown-session"})
-	refusal.Input.Env = env
-	refusal.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(refusal.Input); err == nil {
+	refusal.Input.Env = scenario.environment()
+	refusal.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(refusal.Input); err == nil {
 		t.Fatal("WSR-FT-015 unknown resume succeeded, want NOT_FOUND without provider side effect")
 	}
 	assertDirectWorkerSessionCLIError(t, refusal, string(factoryapi.ErrorResponseCodeNOTFOUND))
 	if runner.CallCount() != 2 {
 		t.Fatalf("WSR-FT-015 provider command calls after refused resume = %d, want 2", runner.CallCount())
 	}
+	scenario.close(t)
 }
 
 type wsrFT015StreamingProviderRunner struct {
@@ -322,19 +306,14 @@ func newWSRFT015StreamingProviderRunner() *wsrFT015StreamingProviderRunner {
 	return &wsrFT015StreamingProviderRunner{initialSessionObserved: make(chan struct{})}
 }
 
-func (r *wsrFT015StreamingProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return r.RunStreaming(ctx, request, nil)
+func (runner *wsrFT015StreamingProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner.RunStreaming(ctx, request, nil)
 }
 
-func (r *wsrFT015StreamingProviderRunner) RunStreaming(
-	ctx context.Context,
-	request platformprocess.CommandRequest,
-	observe platformprocess.OutputChunkObserver,
-) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	r.requests = append(r.requests, platformprocess.CommandRequest{Command: request.Command, Args: append([]string(nil), request.Args...)})
-	r.mu.Unlock()
-
+func (runner *wsrFT015StreamingProviderRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, platformprocess.CommandRequest{Command: request.Command, Args: append([]string(nil), request.Args...)})
+	runner.mu.Unlock()
 	args := strings.Join(request.Args, " ")
 	if strings.Contains(args, "resume") {
 		emitWSRFT015CodexOutput(observe, directCodexSessionOutput("wsr-015-recorded-thread", "resumed exact output"))
@@ -345,25 +324,25 @@ func (r *wsrFT015StreamingProviderRunner) RunStreaming(
 		line := strings.SplitN(string(initial), "\n", 2)[0] + "\n"
 		observe(platformprocess.OutputStreamStdout, []byte(line))
 	}
-	r.initialOnce.Do(func() { close(r.initialSessionObserved) })
+	runner.initialOnce.Do(func() { close(runner.initialSessionObserved) })
 	<-ctx.Done()
 	return platformprocess.CommandResult{}, ctx.Err()
 }
 
-func (r *wsrFT015StreamingProviderRunner) Requests() []platformprocess.CommandRequest {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	requests := make([]platformprocess.CommandRequest, len(r.requests))
-	for i, request := range r.requests {
-		requests[i] = platformprocess.CommandRequest{Command: request.Command, Args: append([]string(nil), request.Args...)}
+func (runner *wsrFT015StreamingProviderRunner) Requests() []platformprocess.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, len(runner.requests))
+	for index, request := range runner.requests {
+		requests[index] = platformprocess.CommandRequest{Command: request.Command, Args: append([]string(nil), request.Args...)}
 	}
 	return requests
 }
 
-func (r *wsrFT015StreamingProviderRunner) CallCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.requests)
+func (runner *wsrFT015StreamingProviderRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return len(runner.requests)
 }
 
 func emitWSRFT015CodexOutput(observe platformprocess.OutputChunkObserver, output []byte) {
@@ -376,6 +355,51 @@ func emitWSRFT015CodexOutput(observe platformprocess.OutputChunkObserver, output
 }
 
 var _ platformprocess.CommandRunner = (*wsrFT015StreamingProviderRunner)(nil)
+
+func runDirectWorkerSessionContinueUnsupportedProvider(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "unsupported-provider")
+	provider := scenario.unsupportedProvider
+	executionPath := filepath.Join(fixture.rootDir, "unsupported-execution.json")
+	document := invokeContinueExecutionDocument(invokeContinueExecutionSpec{
+		requestID: "unsupported-invoke-request", workerSessionID: "unsupported-source", dispatchID: "unsupported-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial provider output",
+	})
+	delete(document["execution"].(map[string]any), "executorProvider")
+	writeInvokeContinueJSON(t, executionPath, document)
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env = scenario.environment()
+	invoke.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("unsupported continuation source invoke: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	continuation := support.FakeInputs(ctx, []string{
+		"you", "--json", "worker-sessions", "continue", "unsupported-source", "--request-id", "unsupported-continue-request",
+		"--successor-worker-session-id", "unsupported-successor", "--user-message", "must not fresh start",
+	})
+	continuation.Input.Env = scenario.environment()
+	continuation.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(continuation.Input); err == nil {
+		t.Fatal("unsupported provider continuation succeeded, want one terminal failure")
+	}
+	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_FAILED")
+	if got := provider.CallCount(); got != 1 {
+		t.Fatalf("provider Execute/Infer calls after unsupported continuation = %d, want initial call only", got)
+	}
+	if got := provider.continuationCalls.Load(); got != 1 {
+		t.Fatalf("provider ContinueReference calls = %d, want one opaque continuation attempt", got)
+	}
+	gotReference, ok := provider.continuationReference.Load().(providers.ContinuationRef)
+	if !ok {
+		t.Fatal("provider ContinueReference did not receive a detached continuation reference")
+	}
+	wantReference := providers.ContinuationRef{Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ProviderSessionID: "unsupported-source-thread", ExternalRef: "unsupported-source-thread"}
+	if gotReference != wantReference {
+		t.Fatalf("provider continuation reference = %#v, want exact opaque identity %#v", gotReference, wantReference)
+	}
+	scenario.close(t)
+}
 
 func assertLocalTerminalWorkerSessionControls(t *testing.T, ctx context.Context, process support.Process, env []string, workingDirectory string) {
 	t.Helper()
@@ -399,7 +423,10 @@ func assertLocalTerminalWorkerSessionControls(t *testing.T, ctx context.Context,
 	}
 }
 
-func TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots(t *testing.T) {
+func runDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "remote-interrupt")
 	var received factoryapi.WorkerSessionInterruptRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/worker-sessions/source-session/interrupt" {
@@ -411,61 +438,47 @@ func TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots(t
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionInterruptResponse{
-			RequestId:                "remote-interrupt-request",
-			SourceWorkerSessionId:    "source-session",
-			SuccessorWorkerSessionId: "successor-session",
-			Phase:                    factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission,
-			Accepted:                 true,
-			Source: factoryapi.WorkerSessionInterruptSnapshot{
-				WorkerSessionId: "source-session", State: factoryapi.WorkerSessionInterruptSnapshotStateCanceled,
-				EventTopic: "worker-session/source-session/events",
-			},
-			Successor: factoryapi.WorkerSessionInterruptSnapshot{
-				WorkerSessionId: "successor-session", State: factoryapi.WorkerSessionInterruptSnapshotStateRunning,
-				EventTopic: "worker-session/successor-session/events",
-			},
+			RequestId: "remote-interrupt-request", SourceWorkerSessionId: "source-session", SuccessorWorkerSessionId: "successor-session",
+			Phase: factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission, Accepted: true,
+			Source:    factoryapi.WorkerSessionInterruptSnapshot{WorkerSessionId: "source-session", State: factoryapi.WorkerSessionInterruptSnapshotStateCanceled, EventTopic: "worker-session/source-session/events"},
+			Successor: factoryapi.WorkerSessionInterruptSnapshot{WorkerSessionId: "successor-session", State: factoryapi.WorkerSessionInterruptSnapshotStateRunning, EventTopic: "worker-session/successor-session/events"},
 		})
 	}))
 	defer server.Close()
-
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: testutil.NewProviderCommandRunner()})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(context.Background(), []string{
+	inputs := support.FakeInputs(ctx, []string{
 		"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "interrupt", "source-session",
 		"--request-id", "remote-interrupt-request", "--successor-worker-session-id", "successor-session",
 		"--replacement-message", "replace the active work", "--async",
 	})
-	if err := process.Execute(inputs.Input); err != nil {
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("remote Worker Session interrupt: %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	var result directWorkerSessionInterruptCLIResult
 	decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
-	if received.RequestId != "remote-interrupt-request" || received.SuccessorWorkerSessionId != "successor-session" ||
-		received.ReplacementMessage != "replace the active work" {
+	if received.RequestId != "remote-interrupt-request" || received.SuccessorWorkerSessionId != "successor-session" || received.ReplacementMessage != "replace the active work" {
 		t.Fatalf("remote interrupt request = %#v, want exact request tuple", received)
 	}
-	if !result.Accepted || result.Phase != string(factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission) ||
-		result.SourceWorkerSessionID != "source-session" || result.SuccessorWorkerSessionID != "successor-session" ||
-		result.Source.State != string(factoryapi.WorkerSessionInterruptSnapshotStateCanceled) ||
-		result.Successor.State != string(factoryapi.WorkerSessionInterruptSnapshotStateRunning) ||
-		result.Source.EventTopic == "" || result.Successor.EventTopic == "" {
+	if !result.Accepted || result.Phase != string(factoryapi.WorkerSessionInterruptResponsePhaseSuccessorAdmission) || result.SourceWorkerSessionID != "source-session" || result.SuccessorWorkerSessionID != "successor-session" || result.Source.State != string(factoryapi.WorkerSessionInterruptSnapshotStateCanceled) || result.Successor.State != string(factoryapi.WorkerSessionInterruptSnapshotStateRunning) || result.Source.EventTopic == "" || result.Successor.EventTopic == "" {
 		t.Fatalf("remote interrupt result = %#v, want admitted source/successor snapshots", result)
 	}
-	functionalevidence.Covers(t, "cli/you.worker-sessions.interrupt")
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback(t *testing.T) {
-	expectedActions := map[string]factoryapi.WorkerSessionControlResponseAction{
-		"pause":     factoryapi.WorkerSessionControlResponseActionPause,
-		"resume":    factoryapi.WorkerSessionControlResponseActionResume,
-		"cancel":    factoryapi.WorkerSessionControlResponseActionCancel,
-		"terminate": factoryapi.WorkerSessionControlResponseActionTerminate,
-	}
-	expectedStates := map[string]factoryapi.WorkerSessionControlResponseState{
-		"pause":     factoryapi.WorkerSessionControlResponseStatePaused,
-		"resume":    factoryapi.WorkerSessionControlResponseStateRunning,
-		"cancel":    factoryapi.WorkerSessionControlResponseStateCanceled,
-		"terminate": factoryapi.WorkerSessionControlResponseStateTerminated,
+func runDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "remote-controls")
+	controls := []struct {
+		name   string
+		action factoryapi.WorkerSessionControlResponseAction
+		state  factoryapi.WorkerSessionControlResponseState
+	}{
+		{"pause", factoryapi.WorkerSessionControlResponseActionPause, factoryapi.WorkerSessionControlResponseStatePaused},
+		{"resume", factoryapi.WorkerSessionControlResponseActionResume, factoryapi.WorkerSessionControlResponseStateRunning},
+		{"cancel", factoryapi.WorkerSessionControlResponseActionCancel, factoryapi.WorkerSessionControlResponseStateCanceled},
+		{"terminate", factoryapi.WorkerSessionControlResponseActionTerminate, factoryapi.WorkerSessionControlResponseStateTerminated},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -474,8 +487,21 @@ func TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback(t *testi
 			return
 		}
 		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		if len(parts) != 3 || parts[0] != "worker-sessions" || parts[1] == "" || expectedActions[parts[2]] == "" {
-			t.Errorf("remote Worker Session control path = %q, want /worker-sessions/<id>/<action>", r.URL.Path)
+		var matched *struct {
+			action factoryapi.WorkerSessionControlResponseAction
+			state  factoryapi.WorkerSessionControlResponseState
+		}
+		for index := range controls {
+			if len(parts) == 3 && parts[0] == "worker-sessions" && parts[1] != "" && parts[2] == controls[index].name {
+				matched = &struct {
+					action factoryapi.WorkerSessionControlResponseAction
+					state  factoryapi.WorkerSessionControlResponseState
+				}{controls[index].action, controls[index].state}
+				break
+			}
+		}
+		if matched == nil {
+			t.Errorf("remote Worker Session control path = %q, want known action route", r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
@@ -488,138 +514,112 @@ func TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback(t *testi
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionControlResponse{
-			WorkerSessionId: "remote-control-" + parts[2],
-			Action:          expectedActions[parts[2]],
-			Outcome:         factoryapi.WorkerSessionControlResponseOutcomeApplied,
-			State:           expectedStates[parts[2]],
-			DispatchId:      "remote-dispatch-" + parts[2],
+			WorkerSessionId: "remote-control-" + parts[2], Action: matched.action,
+			Outcome: factoryapi.WorkerSessionControlResponseOutcomeApplied, State: matched.state,
+			DispatchId: "remote-dispatch-" + parts[2],
 		})
 	}))
 	defer server.Close()
-
-	runner := testutil.NewProviderCommandRunner()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	for action := range expectedActions {
-		action := action
-		t.Run(action, func(t *testing.T) {
-			workerSessionID := "remote-control-" + action
-			inputs := support.FakeInputs(context.Background(), []string{
-				"you", "--remote", "--server", server.URL, "--json", "worker-sessions", action, workerSessionID,
-			})
-			if err := process.Execute(inputs.Input); err != nil {
-				t.Fatalf("remote Worker Session %s: %v\nstdout:%s\nstderr:%s", action, err, inputs.Stdout(), inputs.Stderr())
+	for _, control := range controls {
+		control := control
+		t.Run(control.name, func(t *testing.T) {
+			workerSessionID := "remote-control-" + control.name
+			inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", server.URL, "--json", "worker-sessions", control.name, workerSessionID})
+			inputs.Input.Env = scenario.environment()
+			inputs.Input.WorkingDirectory = scenario.workingDirectory
+			if err := fixture.process.Execute(inputs.Input); err != nil {
+				t.Fatalf("remote Worker Session %s: %v\nstdout:%s\nstderr:%s", control.name, err, inputs.Stdout(), inputs.Stderr())
 			}
 			var result factoryapi.WorkerSessionControlResponse
 			decodeDirectWorkerSessionResult(t, inputs.Stdout(), &result)
-			if result.WorkerSessionId != workerSessionID || result.Action != expectedActions[action] ||
-				result.Outcome != factoryapi.WorkerSessionControlResponseOutcomeApplied || result.State != expectedStates[action] {
-				t.Fatalf("remote Worker Session %s result = %#v, want exact typed response", action, result)
+			if result.WorkerSessionId != workerSessionID || result.Action != control.action || result.Outcome != factoryapi.WorkerSessionControlResponseOutcomeApplied || result.State != control.state {
+				t.Fatalf("remote Worker Session %s result = %#v, want exact typed response", control.name, result)
 			}
 		})
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("remote Worker Session controls caused local provider fallback: %d calls", runner.CallCount())
+	if got := scenario.providerRunner.CallCount(); got != 0 {
+		t.Fatalf("remote Worker Session controls caused local provider fallback: %d calls", got)
 	}
-	functionalevidence.Covers(t,
-		"cli/you.worker-sessions.cancel",
-		"cli/you.worker-sessions.pause",
-		"cli/you.worker-sessions.resume",
-		"cli/you.worker-sessions.terminate",
-	)
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall(t *testing.T) {
+func runDirectWorkerSessionContinueUnknownSourceReturnsNotFoundWithoutProviderCall(t *testing.T, fixture *invokeContinuePackageFixture) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	runner := testutil.NewProviderCommandRunner()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
+	scenario := fixture.scenario(t, "unknown-source")
 	inputs := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "continue", "unknown-worker-session",
-		"--request-id", "unknown-continue-request", "--successor-worker-session-id", "unknown-successor",
-		"--user-message", "unknown source", "--async",
+		"you", "--json", "worker-sessions", "continue", "unknown-worker-session", "--request-id", "unknown-continue-request",
+		"--successor-worker-session-id", "unknown-successor", "--user-message", "unknown source", "--async",
 	})
-	if err := process.Execute(inputs.Input); err == nil {
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err == nil {
 		t.Fatal("unknown Worker Session continuation succeeded, want not found")
 	}
 	assertDirectWorkerSessionCLIError(t, inputs, string(factoryapi.ErrorResponseCodeNOTFOUND))
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider calls after unknown source = %d, want zero", runner.CallCount())
+	if got := scenario.providerRunner.CallCount(); got != 0 {
+		t.Fatalf("provider calls after unknown source = %d, want zero", got)
 	}
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionContinueUnassociatedSourceRejectsWithoutProviderContinuation(t *testing.T) {
+func runDirectWorkerSessionContinueUnassociatedSourceRejectsWithoutProviderContinuation(t *testing.T, fixture *invokeContinuePackageFixture) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: directCodexOutputWithoutSession("completed without a Provider Session"),
+	scenario := fixture.scenario(t, "unassociated-source")
+	executionPath := filepath.Join(fixture.rootDir, "unassociated-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "unassociated-invoke-request", workerSessionID: "unassociated-source", dispatchID: "unassociated-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "complete without a session",
 	})
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-	env := append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir())
-	workingDirectory := t.TempDir()
-
-	invoke := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "invoke", "--request-id", "unassociated-invoke-request",
-		"--worker-session-id", "unassociated-source", "--dispatch-id", "unassociated-dispatch", "--workstation", "direct",
-		"--worker-type", "direct-worker", "--runner", "codex", "--provider", "codex", "--model", "functional-model",
-		"--user-message", "complete without a session",
-	})
-	invoke.Input.Env = env
-	invoke.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(invoke.Input); err != nil {
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env = scenario.environment()
+	invoke.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
 		t.Fatalf("unassociated source invoke: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
 	}
-
 	continuation := support.FakeInputs(ctx, []string{
 		"you", "--json", "worker-sessions", "continue", "unassociated-source", "--request-id", "unassociated-continue-request",
 		"--successor-worker-session-id", "unassociated-successor", "--user-message", "must not resume", "--async",
 	})
-	continuation.Input.Env = env
-	continuation.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(continuation.Input); err == nil {
+	continuation.Input.Env = scenario.environment()
+	continuation.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(continuation.Input); err == nil {
 		t.Fatal("unassociated source continuation succeeded, want provider continuation invalid")
 	}
 	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID")
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider calls after unassociated continuation = %d, want one initial call", runner.CallCount())
+	if got := scenario.providerRunner.CallCount(); got != 1 {
+		t.Fatalf("provider calls after unassociated continuation = %d, want one initial call", got)
 	}
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart(t *testing.T) {
+func runDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart(t *testing.T, fixture *invokeContinuePackageFixture) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	runner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: directCodexSessionOutput("stale-source-thread", "initial output")},
-		platformprocess.CommandResult{
-			Stderr:   []byte("Error: thread/resume failed: no rollout found for thread id stale-source-thread"),
-			ExitCode: 1,
-		},
-	)
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-	support.CleanupProcess(t, process)
-
-	invoke := support.FakeInputs(ctx, []string{
-		"you", "--json", "worker-sessions", "invoke", "--request-id", "stale-invoke-request",
-		"--worker-session-id", "stale-source", "--dispatch-id", "stale-dispatch", "--workstation", "direct",
-		"--worker-type", "direct-worker", "--runner", "codex", "--provider", "codex", "--model", "functional-model",
-		"--user-message", "initial output",
+	scenario := fixture.scenario(t, "stale-provider-session")
+	executionPath := filepath.Join(fixture.rootDir, "stale-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "stale-invoke-request", workerSessionID: "stale-source", dispatchID: "stale-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "initial output",
 	})
-	if err := process.Execute(invoke.Input); err != nil {
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env = scenario.environment()
+	invoke.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
 		t.Fatalf("stale source invoke: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
 	}
-
 	continuation := support.FakeInputs(ctx, []string{
 		"you", "--json", "worker-sessions", "continue", "stale-source", "--request-id", "stale-continue-request",
 		"--successor-worker-session-id", "stale-successor", "--user-message", "resume stale session",
 	})
-	if err := process.Execute(continuation.Input); err == nil {
+	continuation.Input.Env = scenario.environment()
+	continuation.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(continuation.Input); err == nil {
 		t.Fatal("stale Provider Session continuation succeeded, want terminal failure")
 	}
 	assertDirectWorkerSessionCLIError(t, continuation, "WORKER_SESSION_FAILED")
-	requests := runner.Requests()
+	requests := scenario.providerRunner.Requests()
 	if len(requests) != 2 {
 		t.Fatalf("provider calls after stale continuation = %d, want initial plus one exact continuation", len(requests))
 	}
@@ -627,61 +627,65 @@ func TestDirectWorkerSessionContinueStaleProviderSessionDoesNotFreshStart(t *tes
 	if !strings.Contains(continuationArgs, "resume") || !strings.Contains(continuationArgs, "stale-source-thread") {
 		t.Fatalf("stale continuation provider command = %#v, want exact resume identity and no fresh start", requests[1].Args)
 	}
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback(t *testing.T) {
-	tests := []struct {
+func runDirectWorkerSessionRemoteContinueProviderFailuresDoNotFallback(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "remote-continue-failures")
+	cases := []struct {
 		name    string
 		status  int
 		code    string
 		message string
 	}{
-		{name: "foreign provider session", status: http.StatusConflict, code: "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", message: "foreign Provider Session"},
-		{name: "stale provider session", status: http.StatusConflict, code: "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", message: "stale Provider Session"},
-		{name: "unsupported continuation", status: http.StatusConflict, code: "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", message: "unsupported Provider Session continuation"},
-		{name: "admission failure", status: http.StatusServiceUnavailable, code: "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", message: "continuation admission failed"},
+		{"foreign-provider-session", http.StatusConflict, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", "foreign Provider Session"},
+		{"stale-provider-session", http.StatusConflict, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", "stale Provider Session"},
+		{"unsupported-continuation", http.StatusConflict, "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID", "unsupported Provider Session continuation"},
+		{"admission-failure", http.StatusServiceUnavailable, "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED", "continuation admission failed"},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost || r.URL.Path != "/worker-sessions/source-session/continue" {
 					http.NotFound(w, r)
 					return
 				}
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(test.status)
-				_ = json.NewEncoder(w).Encode(map[string]string{"code": test.code, "message": test.message})
+				w.WriteHeader(testCase.status)
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": testCase.code, "message": testCase.message})
 			}))
 			defer server.Close()
-
-			runner := testutil.NewProviderCommandRunner()
-			process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
-			support.CleanupProcess(t, process)
-			inputs := support.FakeInputs(context.Background(), []string{
+			inputs := support.FakeInputs(ctx, []string{
 				"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "continue", "source-session",
 				"--request-id", "provider-failure-request", "--successor-worker-session-id", "provider-failure-successor",
 				"--user-message", "provider failure", "--async",
 			})
-			if err := process.Execute(inputs.Input); err == nil {
+			inputs.Input.Env = scenario.environment()
+			inputs.Input.WorkingDirectory = scenario.workingDirectory
+			if err := fixture.process.Execute(inputs.Input); err == nil {
 				t.Fatal("remote provider continuation failure succeeded, want typed error")
 			}
-			assertDirectWorkerSessionCLIError(t, inputs, test.code)
-			if runner.CallCount() != 0 {
-				t.Fatalf("remote %s caused local provider fallback: %d calls", test.name, runner.CallCount())
+			assertDirectWorkerSessionCLIError(t, inputs, testCase.code)
+			if got := scenario.providerRunner.CallCount(); got != 0 {
+				t.Fatalf("remote %s caused local provider fallback: %d calls", testCase.name, got)
 			}
 		})
 	}
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess(t *testing.T) {
+func runDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "remote-stream-failure")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost && r.URL.Path == "/worker-sessions" {
 			w.WriteHeader(http.StatusAccepted)
-			_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionStartResponse{
-				RequestId: "remote-failure-request", WorkerSessionId: "remote-failure-session", Accepted: true,
-				State: factoryapi.WorkerSessionStartResponseStateRunning,
-			})
+			_ = json.NewEncoder(w).Encode(factoryapi.WorkerSessionStartResponse{RequestId: "remote-failure-request", WorkerSessionId: "remote-failure-session", Accepted: true, State: factoryapi.WorkerSessionStartResponseStateRunning})
 			return
 		}
 		if r.Method == http.MethodGet && r.URL.Path == "/worker-sessions/remote-failure-session/events" {
@@ -695,22 +699,26 @@ func TestDirectWorkerSessionRemoteInvokeStreamSourceFailureThroughRootProcess(t 
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
-
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
-	inputs := support.FakeInputs(context.Background(), []string{
-		"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "invoke",
-		"--request-id", "remote-failure-request", "--worker-session-id", "remote-failure-session",
-		"--dispatch-id", "remote-failure-dispatch", "--workstation", "direct", "--worker-type", "direct-worker",
-		"--runner", "codex", "--provider", "codex", "--model", "functional-model", "--user-message", "stream failure",
+	executionPath := filepath.Join(fixture.rootDir, "remote-failure-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "remote-failure-request", workerSessionID: "remote-failure-session", dispatchID: "remote-failure-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "stream failure",
 	})
-	if err := process.Execute(inputs.Input); err == nil {
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err == nil {
 		t.Fatal("remote stream source failure succeeded, want typed failure")
 	}
 	assertDirectWorkerSessionCLIError(t, inputs, "WORKER_SESSION_STREAM_SOURCE_FAILURE")
+	if got := scenario.providerRunner.CallCount(); got != 0 {
+		t.Fatalf("remote stream failure caused local provider fallback: %d calls", got)
+	}
+	scenario.close(t)
 }
 
-func TestDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess(t *testing.T) {
+func runDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess(t *testing.T, fixture *invokeContinuePackageFixture) {
+	scenario := fixture.scenario(t, "remote-cancellation")
 	requestStarted := make(chan struct{})
 	releaseHandler := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -720,17 +728,18 @@ func TestDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess(t *
 	defer server.Close()
 	defer close(releaseHandler)
 
-	process := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, process)
 	ctx, cancel := context.WithCancel(context.Background())
-	inputs := support.FakeInputs(ctx, []string{
-		"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "invoke",
-		"--request-id", "cancel-request", "--worker-session-id", "cancel-session", "--dispatch-id", "cancel-dispatch",
-		"--workstation", "direct", "--worker-type", "direct-worker", "--runner", "codex", "--provider", "codex",
-		"--model", "functional-model", "--user-message", "cancel this request",
+	defer cancel()
+	executionPath := filepath.Join(fixture.rootDir, "remote-cancel-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "cancel-request", workerSessionID: "cancel-session", dispatchID: "cancel-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "cancel this request",
 	})
+	inputs := support.FakeInputs(ctx, []string{"you", "--remote", "--server", server.URL, "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
 	executeDone := make(chan error, 1)
-	go func() { executeDone <- process.Execute(inputs.Input) }()
+	go func() { executeDone <- fixture.process.Execute(inputs.Input) }()
 	select {
 	case <-requestStarted:
 		cancel()
@@ -746,6 +755,166 @@ func TestDirectWorkerSessionRemoteInvokeCallerCancellationThroughRootProcess(t *
 		t.Fatal("timed out waiting for canceled remote invoke")
 	}
 	assertDirectWorkerSessionCLIError(t, inputs, "WORKER_SESSION_INVOKE_INTERRUPTED")
+	if got := scenario.providerRunner.CallCount(); got != 0 {
+		t.Fatalf("remote cancellation caused local provider fallback: %d calls", got)
+	}
+	scenario.close(t)
+}
+
+func runDirectWorkerSessionEmptyUserMessageRejectsWithoutProviderCall(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "empty-input")
+	executionPath := filepath.Join(fixture.rootDir, "empty-input-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: "empty-input-request", workerSessionID: "empty-input-session", dispatchID: "empty-input-dispatch",
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "",
+	})
+	inputs := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err == nil {
+		t.Fatal("empty Worker Session user message succeeded, want validation failure")
+	}
+	assertDirectWorkerSessionCLIError(t, inputs, "WORKER_SESSION_FAILED")
+	if got := scenario.providerRunner.CallCount(); got != 0 {
+		t.Fatalf("provider calls after empty user message = %d, want zero", got)
+	}
+	scenario.close(t)
+}
+
+func runDirectWorkerSessionExactDuplicateContinuationIsIdempotent(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "duplicate-continuation")
+	sourceID := scenarioScopedID(scenario, "duplicate-source")
+	executionPath := filepath.Join(fixture.rootDir, "duplicate-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: scenarioScopedID(scenario, "duplicate-invoke-request"), workerSessionID: sourceID, dispatchID: scenarioScopedID(scenario, "duplicate-dispatch"),
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "duplicate initial prompt",
+	})
+	invoke := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", executionPath})
+	invoke.Input.Env = scenario.environment()
+	invoke.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(invoke.Input); err != nil {
+		t.Fatalf("duplicate source invoke: %v\nstdout:%s\nstderr:%s", err, invoke.Stdout(), invoke.Stderr())
+	}
+	continueArgs := []string{
+		"you", "--json", "worker-sessions", "continue", sourceID, "--request-id", scenarioScopedID(scenario, "duplicate-continue-request"),
+		"--successor-worker-session-id", scenarioScopedID(scenario, "duplicate-successor"), "--user-message", "duplicate continuation",
+	}
+	first := support.FakeInputs(ctx, continueArgs)
+	first.Input.Env = scenario.environment()
+	first.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(first.Input); err != nil {
+		t.Fatalf("first duplicate continuation: %v\nstdout:%s\nstderr:%s", err, first.Stdout(), first.Stderr())
+	}
+	var firstResult directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, first.Stdout(), &firstResult)
+	second := support.FakeInputs(ctx, continueArgs)
+	second.Input.Env = scenario.environment()
+	second.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(second.Input); err != nil {
+		t.Fatalf("exact duplicate continuation: %v\nstdout:%s\nstderr:%s", err, second.Stdout(), second.Stderr())
+	}
+	var secondResult directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, second.Stdout(), &secondResult)
+	if secondResult != firstResult {
+		t.Fatalf("exact duplicate continuation result = %#v, want original result %#v", secondResult, firstResult)
+	}
+	if got := scenario.providerRunner.CallCount(); got != 2 {
+		t.Fatalf("provider calls after exact duplicate continuation = %d, want initial plus one continuation", got)
+	}
+	conflict := support.FakeInputs(ctx, []string{
+		"you", "--json", "worker-sessions", "continue", sourceID, "--request-id", scenarioScopedID(scenario, "duplicate-continue-request"),
+		"--successor-worker-session-id", scenarioScopedID(scenario, "different-successor"), "--user-message", "changed immutable continuation", "--async",
+	})
+	conflict.Input.Env = scenario.environment()
+	conflict.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(conflict.Input); err == nil {
+		t.Fatal("changed duplicate continuation succeeded, want request-id conflict")
+	}
+	assertDirectWorkerSessionCLIError(t, conflict, string(factoryapi.ErrorResponseCodeWORKERSESSIONCONTINUATIONREQUESTIDCONFLICT))
+	if got := scenario.providerRunner.CallCount(); got != 2 {
+		t.Fatalf("provider calls after changed duplicate continuation = %d, want two", got)
+	}
+	scenario.close(t)
+}
+
+func runDirectWorkerSessionDependencyCancellationCancelsOnceAndRecovers(t *testing.T, fixture *invokeContinuePackageFixture) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	scenario := fixture.scenario(t, "dependency-cancellation")
+	blocking := scenario.blockingRunner
+	executionPath := filepath.Join(fixture.rootDir, "dependency-cancellation-execution.json")
+	writeInvokeContinueExecutionSpec(t, executionPath, invokeContinueExecutionSpec{
+		requestID: scenarioScopedID(scenario, "dependency-cancellation-request"), workerSessionID: scenarioScopedID(scenario, "dependency-cancellation-session"), dispatchID: scenarioScopedID(scenario, "dependency-cancellation-dispatch"),
+		factorySessionID: scenario.session.id, workingDirectory: scenario.workingDirectory, userMessage: "wait for controlled dependency cancellation",
+	})
+	inputs := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--async", "--execution", executionPath})
+	inputs.Input.Env = scenario.environment()
+	inputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(inputs.Input); err != nil {
+		t.Fatalf("dependency cancellation invoke admission: %v\nstdout:%s\nstderr:%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	select {
+	case <-blocking.started:
+	case <-ctx.Done():
+		t.Fatalf("dependency cancellation runner did not start: %v", ctx.Err())
+	}
+	cancelInputs := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "cancel", scenarioScopedID(scenario, "dependency-cancellation-session")})
+	cancelInputs.Input.Env = scenario.environment()
+	cancelInputs.Input.WorkingDirectory = scenario.workingDirectory
+	if err := fixture.process.Execute(cancelInputs.Input); err != nil {
+		t.Fatalf("dependency cancellation control: %v\nstdout:%s\nstderr:%s", err, cancelInputs.Stdout(), cancelInputs.Stderr())
+	}
+	var cancelResult struct {
+		Action  string `json:"action"`
+		Outcome string `json:"outcome"`
+		State   string `json:"state"`
+	}
+	decodeDirectWorkerSessionResult(t, cancelInputs.Stdout(), &cancelResult)
+	if cancelResult.Action != "CANCEL" || cancelResult.Outcome != "APPLIED" || cancelResult.State != "CANCELED" {
+		t.Fatalf("dependency cancellation result = %#v, want applied CANCEL/CANCELED", cancelResult)
+	}
+	select {
+	case <-blocking.CancellationObserved():
+	case <-ctx.Done():
+		t.Fatalf("dependency cancellation provider was not canceled: %v", ctx.Err())
+	}
+	if got := blocking.CallCount(); got != 1 {
+		t.Fatalf("dependency cancellation provider calls = %d, want one", got)
+	}
+	if got := blocking.CancellationCount(); got != 1 {
+		t.Fatalf("dependency cancellation provider cancellations = %d, want one", got)
+	}
+	scenario.close(t)
+
+	recovery := fixture.scenario(t, "cancellation-recovery")
+	recoveryPath := filepath.Join(fixture.rootDir, "cancellation-recovery-execution.json")
+	writeInvokeContinueExecutionSpec(t, recoveryPath, invokeContinueExecutionSpec{
+		requestID: scenarioScopedID(recovery, "cancellation-recovery-request"), workerSessionID: scenarioScopedID(recovery, "cancellation-recovery-session"), dispatchID: scenarioScopedID(recovery, "cancellation-recovery-dispatch"),
+		factorySessionID: recovery.session.id, workingDirectory: recovery.workingDirectory, userMessage: "recover after dependency cancellation",
+	})
+	recovered := support.FakeInputs(ctx, []string{"you", "--json", "worker-sessions", "invoke", "--execution", recoveryPath})
+	recovered.Input.Env = recovery.environment()
+	recovered.Input.WorkingDirectory = recovery.workingDirectory
+	if err := fixture.process.Execute(recovered.Input); err != nil {
+		t.Fatalf("invoke after dependency cancellation: %v\nstdout:%s\nstderr:%s", err, recovered.Stdout(), recovered.Stderr())
+	}
+	var result directWorkerSessionCLIResult
+	decodeDirectWorkerSessionResult(t, recovered.Stdout(), &result)
+	if result.State != "COMPLETED" || !strings.Contains(result.Output, "timeout recovery output COMPLETE") {
+		t.Fatalf("invoke after dependency cancellation result = %#v, want completed recovery", result)
+	}
+	recovery.close(t)
+}
+
+func scenarioScopedID(scenario *invokeContinueScenario, base string) string {
+	if scenario == nil || scenario.runNumber == 0 {
+		return base
+	}
+	return base + "-" + strconv.FormatUint(scenario.runNumber, 10)
 }
 
 func assertDirectWorkerSessionCLIError(t *testing.T, inputs *support.CapturedInputs, wantCode string) {
@@ -770,29 +939,14 @@ func decodeDirectWorkerSessionResult(t *testing.T, stdout string, result any) {
 }
 
 func directCodexSessionOutput(sessionID, content string) []byte {
-	thread, _ := json.Marshal(map[string]any{
-		"type":      "thread.started",
-		"thread_id": sessionID,
-	})
-	item, _ := json.Marshal(map[string]any{
-		"type": "item.completed",
-		"item": map[string]any{
-			"id":   sessionID + "-message",
-			"type": "agent_message",
-			"text": content,
-		},
-	})
+	thread, _ := json.Marshal(map[string]any{"type": "thread.started", "thread_id": sessionID})
+	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": sessionID + "-message", "type": "agent_message", "text": content}})
 	completed := []byte(`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}`)
 	return append(append(append(thread, '\n'), item...), append([]byte{'\n'}, completed...)...)
 }
 
 func directCodexOutputWithoutSession(content string) []byte {
-	item, _ := json.Marshal(map[string]any{
-		"type": "item.completed",
-		"item": map[string]any{
-			"id": "unassociated-message", "type": "agent_message", "text": content,
-		},
-	})
+	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": "unassociated-message", "type": "agent_message", "text": content}})
 	completed := []byte(`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}`)
 	return append(item, append([]byte{'\n'}, completed...)...)
 }

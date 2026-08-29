@@ -22,6 +22,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryinterfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,21 +35,55 @@ const invokeContinuePackageFixtureTimeout = 15 * time.Second
 // after setup; scenario state is carried by explicit Factory Session IDs and
 // the provider runner's recorded calls.
 type invokeContinuePackageFixture struct {
-	rootDir          string
-	hostDir          string
-	homeDir          string
-	workingDirectory string
-	baseURL          string
-	process          support.ApplicationProcess
-	command          *invokeContinuePackageCommand
-	apiStopped       <-chan struct{}
-	apiStarts        *atomic.Int32
-	processBuilds    *atomic.Int32
-	runner           *testutil.ProviderCommandRunner
+	rootDir       string
+	hostDir       string
+	homeDir       string
+	baseURL       string
+	process       support.ApplicationProcess
+	command       *invokeContinuePackageCommand
+	apiStopped    <-chan struct{}
+	apiStarts     *atomic.Int32
+	processBuilds *atomic.Int32
+	scenarioRuns  atomic.Uint64
+	scenarios     []invokeContinueScenario
 
 	sessionsMu        sync.Mutex
 	openedSessionIDs  []string
 	deletedSessionIDs []string
+}
+
+// invokeContinueScenario is a pre-registered provider route plus the
+// scenario-local filesystem and Factory Session scope. The route is selected
+// only by the immutable working directory supplied in the execution request;
+// no request order or mutable registration is involved after BuildProcess.
+type invokeContinueScenario struct {
+	fixture             *invokeContinuePackageFixture
+	name                string
+	runNumber           uint64
+	workingDirectory    string
+	homeDirectory       string
+	providerRunner      invokeContinueProviderCommandRunner
+	streamingRunner     *wsrFT015StreamingProviderRunner
+	blockingRunner      *invokeContinueBlockingProviderRunner
+	unsupportedProvider *unsupportedContinuationProvider
+	reset               func()
+	session             *invokeContinueFactorySession
+}
+
+type invokeContinueProviderCommandRunner interface {
+	platformprocess.CommandRunner
+	CallCount() int
+	Requests() []platformprocess.CommandRequest
+}
+
+func (scenario *invokeContinueScenario) environment() []string {
+	return invokeContinueEnvironment(scenario.homeDirectory)
+}
+
+func (scenario *invokeContinueScenario) close(t testing.TB) {
+	t.Helper()
+	scenario.session.close(t)
+	scenario.session.assertDeleted(t)
 }
 
 type invokeContinuePackageCommand struct {
@@ -113,7 +150,6 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 
 	hostDir := filepath.Join(rootDir, "host-factory")
 	homeDir := filepath.Join(rootDir, "home")
-	workingDirectory := filepath.Join(rootDir, "routes", "local")
 	if err := copyInvokeContinueDirectory(
 		support.LegacyFixtureDir(t, "executor_success"),
 		hostDir,
@@ -126,19 +162,133 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	if err := os.RemoveAll(filepath.Join(hostDir, factoryinterfaces.InputsDir)); err != nil {
 		return nil, fmt.Errorf("clear host Factory seed inputs: %w", err)
 	}
-	for _, dir := range []string{homeDir, workingDirectory} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("create package fixture directory %q: %w", dir, err)
-		}
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create package fixture home %q: %w", homeDir, err)
 	}
 
-	runner := testutil.NewProviderCommandRunner(
+	scenarios := make([]invokeContinueScenario, 0, 16)
+	routes := make([]invokeContinueStaticCommandRouteEntry, 0, 16)
+	addScenario := func(
+		name string,
+		runner platformprocess.CommandRunner,
+		providerRunner invokeContinueProviderCommandRunner,
+		streamingRunner *wsrFT015StreamingProviderRunner,
+		blockingRunner *invokeContinueBlockingProviderRunner,
+		unsupportedProvider *unsupportedContinuationProvider,
+		reset func(),
+	) error {
+		workingDirectory := filepath.Join(rootDir, "routes", name)
+		scenarioHome := filepath.Join(rootDir, "scenario-homes", name)
+		for _, dir := range []string{workingDirectory, scenarioHome} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("create %s scenario directory %q: %w", name, dir, err)
+			}
+		}
+		scenarios = append(scenarios, invokeContinueScenario{
+			name:                name,
+			workingDirectory:    workingDirectory,
+			homeDirectory:       scenarioHome,
+			providerRunner:      providerRunner,
+			streamingRunner:     streamingRunner,
+			blockingRunner:      blockingRunner,
+			unsupportedProvider: unsupportedProvider,
+			reset:               reset,
+		})
+		routes = append(routes, invokeContinueStaticCommandRouteEntry{
+			workingDirectory: workingDirectory,
+			runner:           runner,
+		})
+		return nil
+	}
+
+	localRunner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("local-source-thread", "initial direct output COMPLETE")},
 		platformprocess.CommandResult{Stdout: directCodexSessionOutput("local-source-thread", "continued direct output COMPLETE")},
 	)
-	route := &invokeContinueStaticCommandRoute{
-		workingDirectory: workingDirectory,
-		runner:           runner,
+	if err := addScenario("local", localRunner, localRunner, nil, nil, nil, nil); err != nil {
+		return nil, err
+	}
+	futureRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("future-file-thread", "future-file output COMPLETE"),
+	})
+	if err := addScenario("future-fields", futureRunner, futureRunner, nil, nil, nil, nil); err != nil {
+		return nil, err
+	}
+	streamingRunner := newWSRFT015StreamingProviderRunner()
+	if err := addScenario("recorded-provider-session", streamingRunner, nil, streamingRunner, nil, nil, nil); err != nil {
+		return nil, err
+	}
+	unassociatedRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexOutputWithoutSession("completed without a Provider Session"),
+	})
+	if err := addScenario("unassociated-source", unassociatedRunner, unassociatedRunner, nil, nil, nil, nil); err != nil {
+		return nil, err
+	}
+	staleRunner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: directCodexSessionOutput("stale-source-thread", "initial output")},
+		platformprocess.CommandResult{
+			Stderr:   []byte("Error: thread/resume failed: no rollout found for thread id stale-source-thread"),
+			ExitCode: 1,
+		},
+	)
+	if err := addScenario("stale-provider-session", staleRunner, staleRunner, nil, nil, nil, nil); err != nil {
+		return nil, err
+	}
+	duplicateRunner := newInvokeContinueResettableProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: directCodexSessionOutput("duplicate-source-thread", "duplicate initial output")},
+		platformprocess.CommandResult{Stdout: directCodexSessionOutput("duplicate-source-thread", "duplicate continued output")},
+	)
+	if err := addScenario("duplicate-continuation", duplicateRunner, duplicateRunner, nil, nil, nil, duplicateRunner.Reset); err != nil {
+		return nil, err
+	}
+	blockingRunner := newInvokeContinueBlockingProviderRunner()
+	if err := addScenario("dependency-cancellation", blockingRunner, nil, nil, blockingRunner, nil, blockingRunner.reset); err != nil {
+		return nil, err
+	}
+	recoveryRunner := newInvokeContinueResettableProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("timeout-recovery-thread", "timeout recovery output COMPLETE"),
+	})
+	if err := addScenario("cancellation-recovery", recoveryRunner, recoveryRunner, nil, nil, nil, recoveryRunner.Reset); err != nil {
+		return nil, err
+	}
+	unsupportedProvider := &unsupportedContinuationProvider{
+		MockProvider: testutil.NewMockProvider(workerexecution.InferenceResponse{
+			Content: "initial provider output",
+			ProviderSession: &providers.SessionMetadata{
+				Provider: string(providers.IDCodex),
+				Kind:     providers.SessionIDKind,
+				ID:       "unsupported-source-thread",
+			},
+		}),
+	}
+	unsupportedRunner := testutil.NewProviderCommandRunner()
+	if err := addScenario("unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, unsupportedProvider, nil); err != nil {
+		return nil, err
+	}
+	for _, name := range []string{
+		"unknown-source",
+		"empty-input",
+		"remote-interrupt",
+		"remote-controls",
+		"remote-continue-failures",
+		"remote-stream-failure",
+		"remote-cancellation",
+	} {
+		runner := testutil.NewProviderCommandRunner()
+		if err := addScenario(name, runner, runner, nil, nil, nil, nil); err != nil {
+			return nil, err
+		}
+	}
+	route := &invokeContinueStaticCommandRoute{routes: routes}
+	fallbackProvider, err := providerswire.NewService(providerswire.WithCommandRunner(route))
+	if err != nil {
+		return nil, fmt.Errorf("build fixture provider fallback: %w", err)
+	}
+	unsupportedWorkingDirectory := filepath.Join(rootDir, "routes", "unsupported-provider")
+	providerOverride := &invokeContinueProviderRouter{
+		fallback:                    fallbackProvider,
+		unsupported:                 unsupportedProvider,
+		unsupportedWorkingDirectory: unsupportedWorkingDirectory,
 	}
 	api := support.NewProcessAPIServer()
 	apiStopped := make(chan struct{})
@@ -151,6 +301,7 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 		// This route is complete before root construction and has no registration
 		// or session-based fallback after the process starts.
 		ProviderCommandRunner: route,
+		ProviderOverride:      providerOverride,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			apiStarts.Add(1)
 			err := api.Start(ctx, request)
@@ -185,17 +336,16 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 
 	keepRoot = true
 	return &invokeContinuePackageFixture{
-		rootDir:          rootDir,
-		hostDir:          hostDir,
-		homeDir:          homeDir,
-		workingDirectory: workingDirectory,
-		baseURL:          baseURL,
-		process:          process,
-		command:          command,
-		apiStopped:       apiStopped,
-		apiStarts:        apiStarts,
-		processBuilds:    processBuilds,
-		runner:           runner,
+		rootDir:       rootDir,
+		hostDir:       hostDir,
+		homeDir:       homeDir,
+		baseURL:       baseURL,
+		process:       process,
+		command:       command,
+		apiStopped:    apiStopped,
+		apiStarts:     apiStarts,
+		processBuilds: processBuilds,
+		scenarios:     scenarios,
 	}, nil
 }
 
@@ -270,6 +420,16 @@ func closeInvokeContinuePackageFixture() error {
 			"package fixture Factory Sessions opened = %d, deleted = %d",
 			len(fixture.openedSessionIDs), len(fixture.deletedSessionIDs),
 		))
+	} else {
+		deleted := make(map[string]struct{}, len(fixture.deletedSessionIDs))
+		for _, sessionID := range fixture.deletedSessionIDs {
+			deleted[sessionID] = struct{}{}
+		}
+		for _, sessionID := range fixture.openedSessionIDs {
+			if _, ok := deleted[sessionID]; !ok {
+				errs = append(errs, fmt.Errorf("Factory Session %q was opened but not deleted", sessionID))
+			}
+		}
 	}
 	fixture.sessionsMu.Unlock()
 	if err := os.RemoveAll(fixture.rootDir); err != nil {
@@ -288,6 +448,12 @@ func (fixture *invokeContinuePackageFixture) openSession(t *testing.T) *invokeCo
 		t.Fatalf("CASE-01 Factory Session ID = %q, want explicit non-default session", sessionID)
 	}
 	fixture.sessionsMu.Lock()
+	for _, openedSessionID := range fixture.openedSessionIDs {
+		if openedSessionID == sessionID {
+			fixture.sessionsMu.Unlock()
+			t.Fatalf("Factory Session ID %q was reused across scenarios", sessionID)
+		}
+	}
 	fixture.openedSessionIDs = append(fixture.openedSessionIDs, sessionID)
 	fixture.sessionsMu.Unlock()
 	session := &invokeContinueFactorySession{fixture: fixture, id: sessionID}
@@ -318,7 +484,7 @@ func (session *invokeContinueFactorySession) close(t testing.TB) {
 	session.fixture.sessionsMu.Unlock()
 }
 
-func (session *invokeContinueFactorySession) assertDeleted(t *testing.T) {
+func (session *invokeContinueFactorySession) assertDeleted(t testing.TB) {
 	t.Helper()
 	if !session.closed {
 		t.Fatal("assertDeleted requires a closed Factory Session")
@@ -341,35 +507,329 @@ func (fixture *invokeContinuePackageFixture) assertSpine(t *testing.T) {
 	if got := fixture.apiStarts.Load(); got != 1 {
 		t.Fatalf("SPINE-001 API starts = %d, want exactly one", got)
 	}
-	fixture.sessionsMu.Lock()
-	defer fixture.sessionsMu.Unlock()
-	if len(fixture.openedSessionIDs) != 1 || len(fixture.deletedSessionIDs) != 1 ||
-		fixture.openedSessionIDs[0] != fixture.deletedSessionIDs[0] {
-		t.Fatalf("SPINE-001 session lifecycle opened=%#v deleted=%#v, want one matching open/delete", fixture.openedSessionIDs, fixture.deletedSessionIDs)
+}
+
+func (fixture *invokeContinuePackageFixture) scenario(t *testing.T, name string) *invokeContinueScenario {
+	t.Helper()
+	for index := range fixture.scenarios {
+		if fixture.scenarios[index].name != name {
+			continue
+		}
+		scenario := &fixture.scenarios[index]
+		scenario.fixture = fixture
+		scenario.runNumber = fixture.scenarioRuns.Add(1)
+		if scenario.reset != nil {
+			scenario.reset()
+		}
+		scenario.session = fixture.openSession(t)
+		return scenario
 	}
+	t.Fatalf("invoke/continue scenario %q was not pre-registered", name)
+	return nil
+}
+
+type invokeContinueStaticCommandRouteEntry struct {
+	workingDirectory string
+	runner           platformprocess.CommandRunner
 }
 
 type invokeContinueStaticCommandRoute struct {
-	workingDirectory string
-	runner           *testutil.ProviderCommandRunner
+	routes []invokeContinueStaticCommandRouteEntry
 }
 
-// Run selects only the route fixed before process construction. It deliberately
+// invokeContinueResettableProviderCommandRunner keeps the immutable route
+// stable while allowing -count repetitions to receive a fresh ordered ledger.
+// The package fixture still chooses this runner only from the pre-registered
+// WorkDir route; Reset is test-process reuse, not runtime route mutation.
+type invokeContinueResettableProviderCommandRunner struct {
+	mu      sync.RWMutex
+	results []platformprocess.CommandResult
+	runner  *testutil.ProviderCommandRunner
+}
+
+func newInvokeContinueResettableProviderCommandRunner(
+	results ...platformprocess.CommandResult,
+) *invokeContinueResettableProviderCommandRunner {
+	runner := &invokeContinueResettableProviderCommandRunner{
+		results: append([]platformprocess.CommandResult(nil), results...),
+	}
+	runner.Reset()
+	return runner
+}
+
+func (runner *invokeContinueResettableProviderCommandRunner) Reset() {
+	runner.mu.Lock()
+	runner.runner = testutil.NewProviderCommandRunner(runner.results...)
+	runner.mu.Unlock()
+}
+
+func (runner *invokeContinueResettableProviderCommandRunner) current() *testutil.ProviderCommandRunner {
+	runner.mu.RLock()
+	defer runner.mu.RUnlock()
+	return runner.runner
+}
+
+func (runner *invokeContinueResettableProviderCommandRunner) Run(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return runner.current().Run(ctx, request)
+}
+
+func (runner *invokeContinueResettableProviderCommandRunner) CallCount() int {
+	return runner.current().CallCount()
+}
+
+func (runner *invokeContinueResettableProviderCommandRunner) Requests() []platformprocess.CommandRequest {
+	return runner.current().Requests()
+}
+
+var _ invokeContinueProviderCommandRunner = (*invokeContinueResettableProviderCommandRunner)(nil)
+
+var _ platformprocess.CommandRunner = (*invokeContinueResettableProviderCommandRunner)(nil)
+
+// Run selects only a route fixed before process construction. It deliberately
 // has no mutable map, request-order fallback, or Factory Session lookup.
 func (route *invokeContinueStaticCommandRoute) Run(
 	ctx context.Context,
 	request platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
-	if route == nil || route.runner == nil {
-		return platformprocess.CommandResult{}, errors.New("invoke/continue provider route is unavailable")
+	entry, err := route.entry(request)
+	if err != nil {
+		return platformprocess.CommandResult{}, err
 	}
-	if filepath.Clean(request.WorkDir) != filepath.Clean(route.workingDirectory) {
-		return platformprocess.CommandResult{}, fmt.Errorf("no invoke/continue provider route matched WorkDir %q", request.WorkDir)
+	return entry.runner.Run(ctx, request)
+}
+
+// RunStreaming preserves the optional streaming capability of a scenario
+// runner while retaining the same immutable WorkDir-only route selection.
+// Provider adapters use this extension for live Worker Session observations;
+// a non-streaming scenario falls back to one completed chunk per stream.
+func (route *invokeContinueStaticCommandRoute) RunStreaming(
+	ctx context.Context,
+	request platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	entry, err := route.entry(request)
+	if err != nil {
+		return platformprocess.CommandResult{}, err
 	}
-	return route.runner.Run(ctx, request)
+	if streaming, ok := entry.runner.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	}); ok {
+		return streaming.RunStreaming(ctx, request, observer)
+	}
+	result, runErr := entry.runner.Run(ctx, request)
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if len(result.Stderr) > 0 {
+			observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	return result, runErr
+}
+
+func (route *invokeContinueStaticCommandRoute) entry(
+	request platformprocess.CommandRequest,
+) (invokeContinueStaticCommandRouteEntry, error) {
+	if route == nil {
+		return invokeContinueStaticCommandRouteEntry{}, errors.New("invoke/continue provider route is unavailable")
+	}
+	for _, entry := range route.routes {
+		if filepath.Clean(request.WorkDir) != filepath.Clean(entry.workingDirectory) {
+			continue
+		}
+		if entry.runner == nil {
+			return invokeContinueStaticCommandRouteEntry{}, fmt.Errorf("invoke/continue provider route for WorkDir %q is unavailable", request.WorkDir)
+		}
+		return entry, nil
+	}
+	return invokeContinueStaticCommandRouteEntry{}, fmt.Errorf("no invoke/continue provider route matched WorkDir %q", request.WorkDir)
 }
 
 var _ platformprocess.CommandRunner = (*invokeContinueStaticCommandRoute)(nil)
+
+type invokeContinueProviderRouter struct {
+	fallback                    providers.Service
+	unsupported                 providers.Service
+	unsupportedWorkingDirectory string
+}
+
+func (router *invokeContinueProviderRouter) Execute(
+	ctx context.Context,
+	request providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	if router.matchesUnsupported(request.WorkingDirectory) {
+		return router.unsupported.Execute(ctx, request)
+	}
+	return router.fallback.Execute(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if router.matchesUnsupported(request.Attempt.WorkingDirectory) {
+		return router.unsupported.Continue(ctx, request)
+	}
+	return router.fallback.Continue(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	if router.matchesUnsupported(request.Attempt.WorkingDirectory) {
+		return router.unsupported.ContinueReference(ctx, request)
+	}
+	return router.fallback.ContinueReference(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) matchesUnsupported(workingDirectory string) bool {
+	return router != nil && router.unsupported != nil && filepath.Clean(workingDirectory) == filepath.Clean(router.unsupportedWorkingDirectory)
+}
+
+func (router *invokeContinueProviderRouter) ListProviders(
+	ctx context.Context,
+	request providers.ListProvidersRequest,
+) (providers.ListProvidersResult, error) {
+	return router.fallback.ListProviders(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) GetProvider(
+	ctx context.Context,
+	request providers.GetProviderRequest,
+) (providers.GetProviderResult, error) {
+	return router.fallback.GetProvider(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) ResolveIdentity(
+	ctx context.Context,
+	request providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	return router.fallback.ResolveIdentity(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) ResolveSelection(
+	ctx context.Context,
+	request providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	return router.fallback.ResolveSelection(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) ValidatePrerequisites(
+	ctx context.Context,
+	request providers.ValidatePrerequisitesRequest,
+) error {
+	return router.fallback.ValidatePrerequisites(ctx, request)
+}
+
+func (router *invokeContinueProviderRouter) ControlAttempt(
+	ctx context.Context,
+	request providers.ControlAttemptRequest,
+) (providers.ControlAttemptResult, error) {
+	return router.fallback.ControlAttempt(ctx, request)
+}
+
+var _ providers.Service = (*invokeContinueProviderRouter)(nil)
+
+type invokeContinueExecutionSpec struct {
+	requestID        string
+	workerSessionID  string
+	dispatchID       string
+	factorySessionID string
+	workingDirectory string
+	userMessage      string
+}
+
+func invokeContinueExecutionDocument(spec invokeContinueExecutionSpec) map[string]any {
+	return map[string]any{
+		"requestId":       spec.requestID,
+		"workerSessionId": spec.workerSessionID,
+		"execution": map[string]any{
+			"workstationName":  "direct",
+			"workingDirectory": spec.workingDirectory,
+			"factorySessionId": spec.factorySessionID,
+			"workerType":       "direct-worker",
+			"runnerId":         "codex",
+			"executorProvider": "codex",
+			"modelProvider":    "codex",
+			"model":            "functional-model",
+			"userMessage":      spec.userMessage,
+			"dispatch": map[string]any{
+				"dispatchId":      spec.dispatchID,
+				"workstationName": "direct",
+				"workerType":      "direct-worker",
+			},
+		},
+	}
+}
+
+func writeInvokeContinueJSON(t testing.TB, path string, document map[string]any) {
+	t.Helper()
+	raw, err := json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal invoke/continue execution: %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write invoke/continue execution: %v", err)
+	}
+}
+
+func writeInvokeContinueExecutionSpec(t testing.TB, path string, spec invokeContinueExecutionSpec) {
+	t.Helper()
+	writeInvokeContinueJSON(t, path, invokeContinueExecutionDocument(spec))
+}
+
+type invokeContinueBlockingProviderRunner struct {
+	started       chan struct{}
+	canceled      chan struct{}
+	startOnce     sync.Once
+	cancelOnce    sync.Once
+	calls         atomic.Int32
+	cancellations atomic.Int32
+}
+
+func newInvokeContinueBlockingProviderRunner() *invokeContinueBlockingProviderRunner {
+	return &invokeContinueBlockingProviderRunner{started: make(chan struct{}), canceled: make(chan struct{})}
+}
+
+func (runner *invokeContinueBlockingProviderRunner) reset() {
+	runner.startOnce = sync.Once{}
+	runner.cancelOnce = sync.Once{}
+	runner.started = make(chan struct{})
+	runner.canceled = make(chan struct{})
+	runner.calls.Store(0)
+	runner.cancellations.Store(0)
+}
+
+func (runner *invokeContinueBlockingProviderRunner) Run(
+	ctx context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.calls.Add(1)
+	runner.startOnce.Do(func() { close(runner.started) })
+	<-ctx.Done()
+	runner.cancellations.Add(1)
+	runner.cancelOnce.Do(func() { close(runner.canceled) })
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func (runner *invokeContinueBlockingProviderRunner) CallCount() int {
+	return int(runner.calls.Load())
+}
+
+func (runner *invokeContinueBlockingProviderRunner) CancellationCount() int {
+	return int(runner.cancellations.Load())
+}
+
+func (runner *invokeContinueBlockingProviderRunner) CancellationObserved() <-chan struct{} {
+	return runner.canceled
+}
+
+var _ platformprocess.CommandRunner = (*invokeContinueBlockingProviderRunner)(nil)
 
 func invokeContinueEnvironment(homeDir string) []string {
 	return append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
@@ -382,32 +842,14 @@ func writeInvokeContinueExecution(
 	workingDirectory string,
 ) {
 	t.Helper()
-	document := map[string]any{
-		"requestId":       "local-invoke-request",
-		"workerSessionId": "local-source-session",
-		"execution": map[string]any{
-			"workstationName":  "direct",
-			"workingDirectory": workingDirectory,
-			"factorySessionId": sessionID,
-			"workerType":       "direct-worker",
-			"runnerId":         "codex",
-			"modelProvider":    "codex",
-			"model":            "functional-model",
-			"userMessage":      "initial direct prompt",
-			"dispatch": map[string]any{
-				"dispatchId":      "local-source-dispatch",
-				"workstationName": "direct",
-				"workerType":      "direct-worker",
-			},
-		},
-	}
-	raw, err := json.MarshalIndent(document, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal explicit-session execution: %v", err)
-	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatalf("write explicit-session execution: %v", err)
-	}
+	writeInvokeContinueExecutionSpec(t, path, invokeContinueExecutionSpec{
+		requestID:        "local-invoke-request",
+		workerSessionID:  "local-source-session",
+		dispatchID:       "local-source-dispatch",
+		factorySessionID: sessionID,
+		workingDirectory: workingDirectory,
+		userMessage:      "initial direct prompt",
+	})
 }
 
 func copyInvokeContinueDirectory(sourceDir, targetDir string) error {
