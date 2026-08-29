@@ -57,15 +57,13 @@ func (a *Adapter) GetMetricsCosts(ctx context.Context, sessionID string) (factor
 	if requestedID != "" && a.resolver != nil {
 		scope, err := a.resolver.ResolveRuntimeMetricsScope(ctx, requestedID)
 		if err != nil {
-			// Costs historically accepts an unknown-but-valid selector and
-			// returns NO_USAGE. Preserve that public behavior without allowing
-			// an unresolved selector to widen the query beyond the exact ID.
-			if !errors.Is(err, factorysessions.ErrSessionNotFound) && !errors.Is(err, factorysessions.ErrNotFound) {
-				return factoryapi.CostsReport{}, &costs.QueryError{
-					Kind:    costs.QueryErrorMetricsFailed,
-					Message: "query runtime costs: resolve retained Factory Session scope",
-					Cause:   err,
-				}
+			if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
+				return factoryapi.CostsReport{}, newCostsSessionNotFoundError(requestedID, err)
+			}
+			return factoryapi.CostsReport{}, &costs.QueryError{
+				Kind:    costs.QueryErrorMetricsFailed,
+				Message: "query runtime costs: resolve retained Factory Session scope",
+				Cause:   err,
 			}
 		} else {
 			retainedIDs := normalizedRetainedFactorySessionIDs(scope.RetainedFactorySessionIDs)

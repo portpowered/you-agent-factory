@@ -93,30 +93,24 @@ func TestAdapterPassesExactResolvedScopeToCostsQuery(t *testing.T) {
 	}
 }
 
-func TestAdapterPreservesUnknownSelectorNoUsageCompatibility(t *testing.T) {
+func TestAdapterMapsUnknownSelectorToTypedNotFound(t *testing.T) {
 	t.Parallel()
 
-	var gotRequest costs.QueryRequest
 	query := costs.CostsQuery(func(_ context.Context, request costs.QueryRequest) (costs.Report, error) {
-		gotRequest = request
-		return costs.Report{
-			Scope:  costs.Scope{Kind: costs.ScopeFactorySession, FactorySessionID: "missing-session"},
-			Status: costs.StatusNoUsage,
-		}, nil
+		t.Fatalf("Costs query invoked for an unknown selector: %#v", request)
+		return costs.Report{}, nil
 	})
 	resolver := metricsScopeResolverFunc(func(context.Context, string) (factorysessions.RuntimeMetricsScope, error) {
 		return factorysessions.RuntimeMetricsScope{}, factorysessions.ErrSessionNotFound
 	})
 
-	got, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), "missing-session")
-	if err != nil {
-		t.Fatalf("GetMetricsCosts() error = %v, want historical NO_USAGE compatibility", err)
+	_, err := NewAdapter(query, "metrics", "settings", resolver).GetMetricsCosts(context.Background(), "missing-session")
+	var scopeErr *costsScopeError
+	if !errors.As(err, &scopeErr) || !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("GetMetricsCosts() error = %v, want typed not-found", err)
 	}
-	if gotRequest.FactorySessionID != "missing-session" || len(gotRequest.RetainedFactorySessionIDs) != 0 {
-		t.Fatalf("unknown selector request = %#v, want requested ID without retained scope", gotRequest)
-	}
-	if got.Status != factoryapi.CostsReportStatusNOUSAGE {
-		t.Fatalf("unknown selector status = %q, want NO_USAGE", got.Status)
+	if !strings.Contains(scopeErr.Error(), "missing-session") || !strings.Contains(scopeErr.Error(), "you session list --scope live") {
+		t.Fatalf("not-found error = %q, want actionable selector diagnostic", scopeErr.Error())
 	}
 }
 
