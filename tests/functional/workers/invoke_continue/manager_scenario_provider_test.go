@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,14 +35,43 @@ type s8RemoteProviderRunner struct {
 	stdout     []byte
 	requestLog []platformprocess.CommandRequest
 	markerLog  map[string][]string
+	errorLog   []string
+	active     atomic.Int32
 }
 
 func newS8RemoteProviderRunner(stdout []byte, cases ...s8RemoteProviderCase) *s8RemoteProviderRunner {
-	return &s8RemoteProviderRunner{
+	runner := &s8RemoteProviderRunner{
 		cases:     append([]s8RemoteProviderCase(nil), cases...),
 		stdout:    append([]byte(nil), stdout...),
 		markerLog: make(map[string][]string),
 	}
+	runner.reset()
+	return runner
+}
+
+func (runner *s8RemoteProviderRunner) reset() {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	for index := range runner.cases {
+		runner.cases[index].release = make(chan struct{})
+		runner.cases[index].started = make(chan struct{})
+		runner.cases[index].startOnce = sync.Once{}
+		runner.cases[index].releaseOnce = sync.Once{}
+	}
+	runner.requestLog = nil
+	runner.markerLog = make(map[string][]string)
+	runner.errorLog = nil
+	runner.active.Store(0)
+}
+
+func (runner *s8RemoteProviderRunner) CallCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return len(runner.requestLog)
+}
+
+func (runner *s8RemoteProviderRunner) ActiveCallCount() int {
+	return int(runner.active.Load())
 }
 
 func (runner *s8RemoteProviderRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -61,16 +91,22 @@ func (runner *s8RemoteProviderRunner) run(
 	request platformprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
 ) (platformprocess.CommandResult, error) {
+	runner.active.Add(1)
+	defer runner.active.Add(-1)
 	caseForRequest, err := runner.caseFor(request.WorkDir)
 	if err != nil {
+		runner.recordError(err)
 		return platformprocess.CommandResult{}, err
 	}
 	marker, err := readS8RepositoryMarker(request.WorkDir)
 	if err != nil {
+		runner.recordError(err)
 		return platformprocess.CommandResult{}, err
 	}
 	if marker != caseForRequest.marker {
-		return platformprocess.CommandResult{}, fmt.Errorf("S8 provider working directory %q marker = %q, want %q", request.WorkDir, marker, caseForRequest.marker)
+		err := fmt.Errorf("S8 provider working directory %q marker = %q, want %q", request.WorkDir, marker, caseForRequest.marker)
+		runner.recordError(err)
+		return platformprocess.CommandResult{}, err
 	}
 	runner.mu.Lock()
 	foreignMarkers := make([]string, 0, len(runner.cases)-1)
@@ -83,7 +119,9 @@ func (runner *s8RemoteProviderRunner) run(
 	runner.mu.Unlock()
 	for _, foreignMarker := range foreignMarkers {
 		if marker == foreignMarker {
-			return platformprocess.CommandResult{}, fmt.Errorf("S8 provider working directory %q observed foreign marker %q", request.WorkDir, marker)
+			err := fmt.Errorf("S8 provider working directory %q observed foreign marker %q", request.WorkDir, marker)
+			runner.recordError(err)
+			return platformprocess.CommandResult{}, err
 		}
 	}
 	runner.mu.Lock()
@@ -107,7 +145,9 @@ func (runner *s8RemoteProviderRunner) run(
 	select {
 	case <-caseForRequest.release:
 	case <-ctx.Done():
-		return platformprocess.CommandResult{}, ctx.Err()
+		err := ctx.Err()
+		runner.recordError(err)
+		return platformprocess.CommandResult{}, err
 	}
 	if observer != nil && lineEnd < len(output) {
 		observer(platformprocess.OutputStreamStdout, append([]byte(nil), output[lineEnd:]...))
@@ -124,7 +164,11 @@ func (runner *s8RemoteProviderRunner) caseFor(repository string) (*s8RemoteProvi
 	return nil, fmt.Errorf("unexpected S8 provider working directory %q", repository)
 }
 
-func (runner *s8RemoteProviderRunner) waitStarted(t *testing.T, repository string) {
+func (runner *s8RemoteProviderRunner) waitStarted(
+	t *testing.T,
+	repository string,
+	routeRequests ...func() []platformprocess.CommandRequest,
+) {
 	t.Helper()
 	caseForRequest, err := runner.caseFor(repository)
 	if err != nil {
@@ -135,7 +179,11 @@ func (runner *s8RemoteProviderRunner) waitStarted(t *testing.T, repository strin
 	select {
 	case <-caseForRequest.started:
 	case <-watchdog.C:
-		t.Fatalf("deadlock watchdog expired waiting for provider command in %q", repository)
+		var routed []platformprocess.CommandRequest
+		if len(routeRequests) > 0 && routeRequests[0] != nil {
+			routed = routeRequests[0]()
+		}
+		t.Fatalf("deadlock watchdog expired waiting for provider command in %q; runner calls=%d runner requests=%#v runner errors=%#v route requests=%#v", repository, runner.CallCount(), runner.requests(), runner.errors(), routed)
 	}
 }
 
@@ -156,6 +204,25 @@ func (runner *s8RemoteProviderRunner) requests() []platformprocess.CommandReques
 		requests[index] = cloneS8CommandRequest(request)
 	}
 	return requests
+}
+
+func (runner *s8RemoteProviderRunner) recordError(err error) {
+	if err == nil {
+		return
+	}
+	runner.mu.Lock()
+	runner.errorLog = append(runner.errorLog, err.Error())
+	runner.mu.Unlock()
+}
+
+func (runner *s8RemoteProviderRunner) errors() []string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return append([]string(nil), runner.errorLog...)
+}
+
+func (runner *s8RemoteProviderRunner) Requests() []platformprocess.CommandRequest {
+	return runner.requests()
 }
 
 func (runner *s8RemoteProviderRunner) markers() map[string][]string {
