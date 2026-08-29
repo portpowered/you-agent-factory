@@ -1,19 +1,14 @@
 package output_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -159,23 +154,21 @@ func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			homeDir := t.TempDir()
-			support.InstallPackagedFactory(t, homeDir, "@you/plan-parallel")
 			providerRunner := testutil.NewProviderCommandRunner()
-			inputs := support.FakeInputs(t.Context(), test.args)
-			inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-			inputs.Input.WorkingDirectory = t.TempDir()
-
-			err := support.BuildProcess(t, serviceedges.Edges{
-				ProviderCommandRunner: providerRunner,
-			}).Execute(inputs.Input)
+			stdout, stderr, err := runMachineOutputInvocation(
+				t,
+				test.args,
+				"@you/plan-parallel",
+				providerRunner,
+				nil,
+			)
 			if err == nil {
-				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, inputs.Stdout(), inputs.Stderr())
+				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, stdout, stderr)
 			}
-			if inputs.Stdout() != "" {
-				t.Fatalf("stdout = %q, want empty for usage failure", inputs.Stdout())
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty for usage failure", stdout)
 			}
-			response := decodeSingleJSONErrorResponse(t, inputs.Stderr())
+			response := decodeSingleJSONErrorResponse(t, stderr)
 			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
 				t.Fatalf("ErrorResponse = %#v, want code %s and family BAD_REQUEST", response, test.wantCode)
 			}
@@ -199,8 +192,9 @@ func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
 	t.Run("terminal failure stdout and stderr stay on public contract fields", func(t *testing.T) {
 		stdout, stderr, err := runSingleJSONInvocation(t, []string{
 			"you", "--json", "run", "--named", jsonGoalFactoryName, "--no-record",
+			"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 			"deterministic terminal failure",
-		}, jsonGoalFactoryName, rejectingGoalMockWorkers())
+		}, jsonGoalFactoryName, machineOutputRejectedProviderRunner())
 		if err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
 		}
@@ -238,34 +232,14 @@ func TestCLIJSONOutputSelectionFailsBeforeProductActivation(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var effects atomic.Int32
-			edges := serviceedges.Edges{
-				APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-					effects.Add(1)
-					return nil
-				},
-				BrowserOpener: func(context.Context, string) error {
-					effects.Add(1)
-					return nil
-				},
-				RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
-					effects.Add(1)
-				},
-				FactorySessionIDGenerator: func() string {
-					effects.Add(1)
-					return "unexpected-session"
-				},
-			}
-			inputs := support.FakeInputs(t.Context(), test.args)
-			inputs.Input.WorkingDirectory = t.TempDir()
-
-			err := support.BuildProcess(t, edges).Execute(inputs.Input)
+			stdout, stderr, err := runMachineOutputInvocation(t, test.args, "", nil, &effects)
 			if err == nil {
 				t.Fatal("Process.Execute error = nil, want output-selection failure")
 			}
-			if inputs.Stdout() != "" {
-				t.Fatalf("stdout = %q, want empty", inputs.Stdout())
+			if stdout != "" {
+				t.Fatalf("stdout = %q, want empty", stdout)
 			}
-			response := decodeSingleJSONErrorResponse(t, inputs.Stderr())
+			response := decodeSingleJSONErrorResponse(t, stderr)
 			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
 				t.Fatalf("ErrorResponse = %#v, want code %s", response, test.wantCode)
 			}
@@ -279,56 +253,36 @@ func TestCLIJSONOutputSelectionFailsBeforeProductActivation(t *testing.T) {
 func runGoalSingleJSON(t *testing.T) string {
 	t.Helper()
 
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, jsonGoalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 	args := []string{
 		"you", "--json", "run", "--named", jsonGoalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 		"--no-record",
 		"deterministic single-json success contract",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	stdout, stderr, err := runMachineOutputInvocation(
+		t,
+		args,
+		jsonGoalFactoryName,
+		machineOutputAcceptedProviderRunner(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", stderr)
 	}
-	return inputs.Stdout()
+	return stdout
 }
 
 func runSingleJSONInvocation(
 	t *testing.T,
 	args []string,
 	packagedFactoryName string,
-	mockWorkers *workers.MockWorkersConfig,
+	providerRunner platformprocess.CommandRunner,
 ) (stdout, stderr string, err error) {
 	t.Helper()
-
-	homeDir := t.TempDir()
-	if packagedFactoryName != "" {
-		support.InstallPackagedFactory(t, homeDir, packagedFactoryName)
-	}
-	if mockWorkers != nil {
-		mockWorkersPath := support.WriteMockWorkersConfig(t, mockWorkers)
-		outputFlag := len(args) - 1
-		args = append(args[:outputFlag], append([]string{"--with-mock-workers", mockWorkersPath}, args[outputFlag:]...)...)
-	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	err = support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
-	return inputs.Stdout(), inputs.Stderr(), err
+	return runMachineOutputInvocation(t, args, packagedFactoryName, providerRunner, nil)
 }
 
 func decodeSingleJSONInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {

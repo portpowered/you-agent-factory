@@ -2,15 +2,11 @@ package output_test
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -296,69 +292,48 @@ func mapKeys(values map[string]json.RawMessage) []string {
 
 func runGoalResponseStream(t *testing.T) string {
 	t.Helper()
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
 	args := []string{
 		"you", "--json", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic event integrity contract",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	stdout, stderr, err := runMachineOutputInvocation(
+		t,
+		args,
+		goalFactoryName,
+		machineOutputAcceptedProviderRunner(),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, stdout, stderr)
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", stderr)
 	}
-	return inputs.Stdout()
+	return stdout
 }
 
 func runGoalResponseStreamFailure(t *testing.T) string {
 	t.Helper()
-	homeDir := t.TempDir()
-	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, rejectingGoalMockWorkers())
 	args := []string{
 		"you", "--json", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex", "--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic terminal failure",
 	}
-	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err == nil {
-		t.Fatalf("Process.Execute(%v) error = nil, want terminal invocation failure\nstdout:\n%s\nstderr:\n%s", args, inputs.Stdout(), inputs.Stderr())
+	stdout, stderr, err := runMachineOutputInvocation(
+		t,
+		args,
+		goalFactoryName,
+		machineOutputRejectedProviderRunner(),
+		nil,
+	)
+	if err == nil {
+		t.Fatalf("Process.Execute(%v) error = nil, want terminal invocation failure\nstdout:\n%s\nstderr:\n%s", args, stdout, stderr)
 	}
-	if inputs.Stdout() == "" {
-		t.Fatalf("stdout empty, want NDJSON stream ending in failed invocation_result\nstderr:\n%s", inputs.Stderr())
+	if stdout == "" {
+		t.Fatalf("stdout empty, want NDJSON stream ending in failed invocation_result\nstderr:\n%s", stderr)
 	}
-	return inputs.Stdout()
-}
-
-func rejectingGoalMockWorkers() *workers.MockWorkersConfig {
-	exitCode := 7
-	return &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stderr:   "deterministic worker rejection",
-				ExitCode: &exitCode,
-			},
-		}},
-	}
+	return stdout
 }
