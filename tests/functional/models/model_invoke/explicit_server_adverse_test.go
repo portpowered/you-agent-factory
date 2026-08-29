@@ -41,70 +41,62 @@ func TestBuiltCLIExplicitServerAdverseInputMatrix(t *testing.T) {
 
 	fixture := newBuiltExplicitServerFixture(t)
 	endpoint := fixture.server.URL + "?token=built-process-secret"
+	runBuiltExplicitServerSuccess(t, fixture, binary, workDir, homeDir, endpoint, firstPath, firstImage)
+	runBuiltExplicitServerFailures(t, fixture, binary, workDir, homeDir, endpoint, firstPath)
+	runBuiltExplicitServerRecovery(t, fixture, binary, workDir, homeDir, endpoint, firstPath, firstImage)
+	runBuiltExplicitServerConcurrent(t, fixture, binary, workDir, homeDir, firstPath, secondPath, firstImage, secondImage)
+	runBuiltExplicitServerCancellation(t, fixture, binary, workDir, homeDir, firstPath)
+	runBuiltExplicitServerUnreachable(t, fixture, binary, workDir, homeDir, endpoint, firstPath)
 
+	t.Logf("fresh binary=%s server=%s success-sha256=%s", binary, fixture.server.URL, hashExplicitServerBytes(firstImage))
+}
+
+func runBuiltExplicitServerSuccess(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, endpoint, imagePath string, image []byte) {
+	t.Helper()
 	fixture.setMode(builtExplicitServerSuccess)
-	success := runExplicitServerCLI(t, t.Context(), binary, workDir, homeDir, endpoint,
-		"models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=first prompt", "--input", "image=@"+firstPath,
-	)
-	if success.err != nil || success.exitCode != 0 {
-		t.Fatalf("built happy invocation exit=%d err=%v stdout=%q stderr=%q", success.exitCode, success.err, success.stdout, success.stderr)
+	result := invokeBuiltExplicitServer(t, t.Context(), binary, workDir, homeDir, endpoint, "first prompt", imagePath)
+	if result.err != nil || result.exitCode != 0 {
+		t.Fatalf("built happy invocation exit=%d err=%v stdout=%q stderr=%q", result.exitCode, result.err, result.stdout, result.stderr)
 	}
-	if string(success.stdout) != "controlled response-"+hashExplicitServerBytes(firstImage) || len(success.stderr) != 0 {
-		t.Fatalf("built happy streams stdout=%q stderr=%q, want exact response and empty stderr", success.stdout, success.stderr)
+	if string(result.stdout) != "controlled response-"+hashExplicitServerBytes(image) || len(result.stderr) != 0 {
+		t.Fatalf("built happy streams stdout=%q stderr=%q, want exact response and empty stderr", result.stdout, result.stderr)
 	}
-	fixture.assertLastInput(t, "first prompt", firstImage)
+	fixture.assertLastInput(t, "first prompt", image)
+}
 
+func runBuiltExplicitServerFailures(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, endpoint, imagePath string) {
+	t.Helper()
 	fixture.setMode(builtExplicitServerTypedFailure)
-	typed := runExplicitServerCLI(t, t.Context(), binary, workDir, homeDir, endpoint,
-		"models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=typed failure", "--input", "image=@"+firstPath,
-	)
+	typed := invokeBuiltExplicitServer(t, t.Context(), binary, workDir, homeDir, endpoint, "typed failure", imagePath)
 	assertBuiltExplicitServerFailure(t, typed, "MODEL_BACKEND_NOT_READY", factoryapi.ErrorFamilyInternalServerError, "built typed server failure")
 
 	fixture.setMode(builtExplicitServerMalformed)
-	malformed := runExplicitServerCLI(t, t.Context(), binary, workDir, homeDir, endpoint,
-		"models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=malformed", "--input", "image=@"+firstPath,
-	)
+	malformed := invokeBuiltExplicitServer(t, t.Context(), binary, workDir, homeDir, endpoint, "malformed", imagePath)
 	assertBuiltExplicitServerFailure(t, malformed, "MODEL_BACKEND_FAILURE", factoryapi.ErrorFamilyInternalServerError, "")
+}
 
+func runBuiltExplicitServerRecovery(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, endpoint, imagePath string, image []byte) {
+	t.Helper()
 	fixture.setMode(builtExplicitServerRecovery)
-	firstRecovery := runExplicitServerCLI(t, t.Context(), binary, workDir, homeDir, endpoint,
-		"models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=recovery", "--input", "image=@"+firstPath,
-	)
-	assertBuiltExplicitServerFailure(t, firstRecovery, "MODEL_BACKEND_NOT_READY", factoryapi.ErrorFamilyInternalServerError, "built recovery first failure")
-	secondRecovery := runExplicitServerCLI(t, t.Context(), binary, workDir, homeDir, endpoint,
-		"models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=recovery", "--input", "image=@"+firstPath,
-	)
-	if secondRecovery.err != nil || secondRecovery.exitCode != 0 ||
-		string(secondRecovery.stdout) != "recovered response-"+hashExplicitServerBytes(firstImage) || len(secondRecovery.stderr) != 0 {
-		t.Fatalf("built recovery second invocation exit=%d err=%v stdout=%q stderr=%q", secondRecovery.exitCode, secondRecovery.err, secondRecovery.stdout, secondRecovery.stderr)
+	first := invokeBuiltExplicitServer(t, t.Context(), binary, workDir, homeDir, endpoint, "recovery", imagePath)
+	assertBuiltExplicitServerFailure(t, first, "MODEL_BACKEND_NOT_READY", factoryapi.ErrorFamilyInternalServerError, "built recovery first failure")
+	second := invokeBuiltExplicitServer(t, t.Context(), binary, workDir, homeDir, endpoint, "recovery", imagePath)
+	if second.err != nil || second.exitCode != 0 || string(second.stdout) != "recovered response-"+hashExplicitServerBytes(image) || len(second.stderr) != 0 {
+		t.Fatalf("built recovery second invocation exit=%d err=%v stdout=%q stderr=%q", second.exitCode, second.err, second.stdout, second.stderr)
 	}
+}
 
+func runBuiltExplicitServerConcurrent(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, firstPath, secondPath string, firstImage, secondImage []byte) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
 	fixture.setMode(builtExplicitServerConcurrent)
-	concurrentContext, cancelConcurrent := context.WithTimeout(t.Context(), 20*time.Second)
-	defer cancelConcurrent()
-	results := make(chan builtExplicitServerCLIResult, 2)
-	go func() {
-		results <- runExplicitServerCLI(t, concurrentContext, binary, workDir, homeDir, fixture.server.URL,
-			"models", "invoke", "llm", "--operation", "OMNI",
-			"--input", "prompt=first", "--input", "image=@"+firstPath,
-		)
-	}()
-	go func() {
-		results <- runExplicitServerCLI(t, concurrentContext, binary, workDir, homeDir, fixture.server.URL,
-			"models", "invoke", "llm", "--operation", "OMNI",
-			"--input", "prompt=second", "--input", "image=@"+secondPath,
-		)
-	}()
+	results := runConcurrentBuiltExplicitServerInvocations(t, ctx, fixture, binary, workDir, homeDir, firstPath, secondPath)
 	select {
 	case <-fixture.concurrentReady:
 		close(fixture.concurrentRelease)
-	case <-concurrentContext.Done():
-		t.Fatalf("built concurrent invocations did not reach the server: %v", concurrentContext.Err())
+	case <-ctx.Done():
+		t.Fatalf("built concurrent invocations did not reach the server: %v", ctx.Err())
 	}
 	for range 2 {
 		result := <-results
@@ -118,50 +110,68 @@ func TestBuiltCLIExplicitServerAdverseInputMatrix(t *testing.T) {
 		}
 	}
 	fixture.assertConcurrentInputs(t)
+}
 
-	fixture.setMode(builtExplicitServerBlock)
-	cancelContext, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	cancelledResult := make(chan builtExplicitServerCLIResult, 1)
+func runConcurrentBuiltExplicitServerInvocations(t *testing.T, ctx context.Context, fixture *builtExplicitServerFixture, binary, workDir, homeDir, firstPath, secondPath string) <-chan builtExplicitServerCLIResult {
+	t.Helper()
+	results := make(chan builtExplicitServerCLIResult, 2)
 	go func() {
-		cancelledResult <- runExplicitServerCLI(t, cancelContext, binary, workDir, homeDir, fixture.server.URL,
-			"models", "invoke", "llm", "--operation", "OMNI",
-			"--input", "prompt=cancelled", "--input", "image=@"+firstPath,
-		)
+		results <- invokeBuiltExplicitServer(t, ctx, binary, workDir, homeDir, fixture.server.URL, "first", firstPath)
+	}()
+	go func() {
+		results <- invokeBuiltExplicitServer(t, ctx, binary, workDir, homeDir, fixture.server.URL, "second", secondPath)
+	}()
+	return results
+}
+
+func runBuiltExplicitServerCancellation(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, imagePath string) {
+	t.Helper()
+	fixture.setMode(builtExplicitServerBlock)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	resultChannel := make(chan builtExplicitServerCLIResult, 1)
+	go func() {
+		resultChannel <- invokeBuiltExplicitServer(t, ctx, binary, workDir, homeDir, fixture.server.URL, "cancelled", imagePath)
 	}()
 	select {
 	case <-fixture.blockRequestStarted:
 		cancel()
-	case <-cancelContext.Done():
-		t.Fatalf("built cancellation invocation did not reach the server: %v", cancelContext.Err())
+	case <-ctx.Done():
+		t.Fatalf("built cancellation invocation did not reach the server: %v", ctx.Err())
 	}
-	var cancelled builtExplicitServerCLIResult
+	var result builtExplicitServerCLIResult
 	select {
-	case cancelled = <-cancelledResult:
+	case result = <-resultChannel:
 	case <-time.After(2 * time.Second):
 		t.Fatal("built cancellation invocation did not return after context cancellation")
 	}
 	close(fixture.blockRelease)
-	if cancelled.err == nil || cancelled.exitCode == 0 || len(cancelled.stdout) != 0 {
-		t.Fatalf("built cancellation exit=%d err=%v stdout=%q stderr=%q, want nonzero without success output", cancelled.exitCode, cancelled.err, cancelled.stdout, cancelled.stderr)
+	if result.err == nil || result.exitCode == 0 || len(result.stdout) != 0 {
+		t.Fatalf("built cancellation exit=%d err=%v stdout=%q stderr=%q, want nonzero without success output", result.exitCode, result.err, result.stdout, result.stderr)
 	}
 	select {
 	case <-fixture.blockRequestDone:
 	case <-time.After(2 * time.Second):
 		t.Fatal("built cancellation did not close the blocked request")
 	}
+	cancel()
+}
 
+func runBuiltExplicitServerUnreachable(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, endpoint, imagePath string) {
+	t.Helper()
 	fixture.server.Close()
-	unreachable := runExplicitServerCLI(t, t.Context(), binary, workDir, homeDir, endpoint,
-		"models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=unreachable", "--input", "image=@"+firstPath,
-	)
-	if unreachable.err == nil || unreachable.exitCode == 0 || len(unreachable.stdout) != 0 || strings.Contains(string(unreachable.stderr), "built-process-secret") {
-		t.Fatalf("built unreachable exit=%d err=%v stdout=%q stderr=%q, want safe non-success without token", unreachable.exitCode, unreachable.err, unreachable.stdout, unreachable.stderr)
+	result := invokeBuiltExplicitServer(t, t.Context(), binary, workDir, homeDir, endpoint, "unreachable", imagePath)
+	if result.err == nil || result.exitCode == 0 || len(result.stdout) != 0 || strings.Contains(string(result.stderr), "built-process-secret") {
+		t.Fatalf("built unreachable exit=%d err=%v stdout=%q stderr=%q, want safe non-success without token", result.exitCode, result.err, result.stdout, result.stderr)
 	}
-	support.RequireSafeCLIDiagnostic(t, string(unreachable.stderr))
+	support.RequireSafeCLIDiagnostic(t, string(result.stderr))
+}
 
-	t.Logf("fresh binary=%s server=%s success-sha256=%s", binary, fixture.server.URL, hashExplicitServerBytes(firstImage))
+func invokeBuiltExplicitServer(t *testing.T, ctx context.Context, binary, workDir, homeDir, endpoint, prompt, imagePath string) builtExplicitServerCLIResult {
+	t.Helper()
+	return runExplicitServerCLI(t, ctx, binary, workDir, homeDir, endpoint,
+		"models", "invoke", "llm", "--operation", "OMNI",
+		"--input", "prompt="+prompt, "--input", "image=@"+imagePath,
+	)
 }
 
 type builtExplicitServerMode string
