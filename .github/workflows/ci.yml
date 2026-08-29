@@ -245,9 +245,26 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
+        if: matrix.suite == 'unit'
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+      - uses: actions/setup-go@v5
+        if: matrix.suite == 'functional'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Restore functional coverage Go cache
+        if: matrix.suite == 'functional'
+        id: functional-go-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: functional-coverage-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            functional-coverage-${{ runner.os }}-${{ runner.arch }}-go-${{ env.GO_VERSION }}-
       - uses: actions/setup-node@v4
         if: matrix.suite == 'functional'
         with:
@@ -261,22 +278,6 @@ jobs:
           functional_jobs=8
           echo "Functional CI runner: logical_cpus=${runner_cpus:-unknown} jobs=$functional_jobs"
           echo "jobs=$functional_jobs" >> "$GITHUB_OUTPUT"
-      - name: Verify quarantined package inventory on Linux
-        if: matrix.suite == 'functional'
-        run: bash scripts/ci/verify-functional-quarantine-packages.sh
-        env:
-          FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
-          FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
-      - name: Upload Linux quarantine package evidence
-        if: always() && matrix.suite == 'functional'
-        uses: actions/upload-artifact@v4
-        with:
-          name: functional-quarantine-package-evidence
-          path: .artifacts/functional-test-viz/quarantine-package-evidence.txt
-          if-no-files-found: error
-          retention-days: 14
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage
@@ -384,12 +385,19 @@ jobs:
       # pushes to main use the same complete non-short tier. The run expands
       # ./tests/functional/... once, subtracts only the versioned quarantine,
       # and writes package plus top-level test outcomes before the coverage
-      # gate returns, including on failure.
-      - name: Run complete Linux functional coverage and inventory
+      # gate returns, including on failure. The supervisor starts the unchanged
+      # quarantine validator in the same critical-path window and joins both
+      # independent verdicts before returning.
+      - name: Run Linux functional coverage with concurrent quarantine verification
         if: matrix.suite == 'functional'
         timeout-minutes: 75
-        run: make functional-test-viz
+        shell: bash
+        run: bash scripts/ci/run-functional-coverage-with-quarantine.sh
         env:
+          FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+          FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_TEST_TIER: "merge-full"
           FUNCTIONAL_TEST_TRIGGER: ${{ github.event_name == 'push' && 'push-main' || 'pull_request' }}
@@ -398,9 +406,18 @@ jobs:
           FUNCTIONAL_DEFAULT_JOBS: ${{ steps.functional-parallelism.outputs.jobs }}
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
+          FUNCTIONAL_COVERAGE_BUILD_DIAGNOSTICS: .artifacts/functional-test-viz/coverage-build-diagnostics.json
           INFINITE_YOU_RUN_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_REQUIRE_ACPX_REAL_CLIENT: "1"
           INFINITE_YOU_ACPX_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/functional-test-viz/real-acpx-evidence.json
+      - name: Upload Linux quarantine package evidence
+        if: always() && matrix.suite == 'functional'
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-quarantine-package-evidence
+          path: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+          if-no-files-found: error
+          retention-days: 14
       # Ordinary test and coverage-gate failures are deferred by the runner so
       # this step is the only failing log for those outcomes. Timeout and
       # infrastructure failures keep the full run step failed instead.
@@ -426,7 +443,11 @@ jobs:
             .artifacts/functional-test-viz/diagnostic-status.txt
             .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
             .artifacts/functional-test-viz/functional-coverage-verdict.txt
+            .artifacts/functional-test-viz/coverage-build-diagnostics.json
             .artifacts/functional-test-viz/real-acpx-evidence.json
+            .artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt
+            .artifacts/functional-test-viz/c09-critical-path/coverage-status.txt
+            .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt
           if-no-files-found: ignore
           retention-days: 14
       - name: Require pinned real ACP evidence artifact

@@ -663,7 +663,8 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 }
 
 // TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog
-// now proves CI invokes the single Make-owned functional report entrypoint.
+// now proves CI invokes the supervisor whose coverage child owns the single
+// Make-owned functional report entrypoint.
 func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	workflow, err := os.ReadFile(filepath.Join(repoRoot, ".github", "workflows", "ci.yml"))
@@ -671,8 +672,15 @@ func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLo
 		t.Fatalf("read CI workflow: %v", err)
 	}
 	body := string(workflow)
-	if !strings.Contains(body, "run: make functional-test-viz") {
-		t.Fatalf("functional CI lane does not invoke the canonical Make target:\n%s", body)
+	if !strings.Contains(body, "run: bash scripts/ci/run-functional-coverage-with-quarantine.sh") {
+		t.Fatalf("functional CI lane does not invoke the coverage supervisor:\n%s", body)
+	}
+	supervisor, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "ci", "run-functional-coverage-with-quarantine.sh"))
+	if err != nil {
+		t.Fatalf("read functional coverage supervisor: %v", err)
+	}
+	if !strings.Contains(string(supervisor), "coverage_command=(make functional-test-viz)") {
+		t.Fatalf("functional coverage supervisor does not invoke the canonical Make target:\n%s", string(supervisor))
 	}
 	if strings.Contains(body, "run-functional-test-viz.sh") {
 		t.Fatalf("functional CI lane still invokes the retired Bash runner:\n%s", body)

@@ -332,6 +332,11 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 }
 
 func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string, expectedFunctionalInventory *functionalTestInventory) error {
+	buildDiagnosticRun, probeErr := runCoverageBuildProbe(cfg, plan, testPackages)
+	if probeErr != nil {
+		return errors.Join(probeErr, plan.cleanup())
+	}
+
 	started := time.Now()
 	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages)
 	if snapshotter != nil {
@@ -372,6 +377,15 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	}
 	wallSeconds := time.Since(started).Seconds()
 
+	var buildDiagnosticErr error
+	if buildDiagnosticRun != nil {
+		buildDiagnosticErr = finalizeCoverageBuildDiagnostics(
+			buildDiagnosticRun,
+			strings.TrimSpace(cfg.coverageBuildDiagnosticsOutput),
+			wallSeconds,
+		)
+	}
+
 	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr, expectedFunctionalInventory)
 
 	var mergeErr error
@@ -384,7 +398,7 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	}
 
 	partialCoverageErr := publishPartialCoverageIfNeeded(cfg, profilePath, repoRoot, coverPackages, laneErr, mergeErr)
-	runErr := errors.Join(laneErr, timingWriteErr, mergeErr, partialCoverageErr, plan.cleanup())
+	runErr := errors.Join(laneErr, timingWriteErr, buildDiagnosticErr, mergeErr, partialCoverageErr, plan.cleanup())
 	if !testFailureObserved {
 		return runErr
 	}
