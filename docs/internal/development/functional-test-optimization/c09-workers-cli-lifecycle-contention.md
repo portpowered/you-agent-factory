@@ -26,7 +26,9 @@ later stories.
 - The PRD's source-plan reference was not present in this checkout. The PRD,
   repository standards, current source, and cited CI artifact are therefore the
   authorities for this characterization; the missing source plan is recorded,
-  not reconstructed.
+  not reconstructed. The operator-authorized tracked-ledger replacement is
+  consistent with the sibling dispositions in [PR #2412](https://github.com/portpowered/you-agent-factory/pull/2412#issuecomment-5460857653)
+  and [PR #2416](https://github.com/portpowered/you-agent-factory/pull/2416#issuecomment-5461024854).
 - Paid/remote validation calls made by this story: 0. Existing public CI
   artifact access was read-only.
 
@@ -353,3 +355,92 @@ not prove the operator-owned cancellation terminal projection; the observed
 non-terminal Work/Worker Session/dispatch states are recorded above as the
 product-gap characterization. Full six-selector package coexistence,
 raised-parallelism CI, and clean-room loopback remain Story 004 evidence.
+
+## Story 004 final promotion and clean-room loopback
+
+The local implementation-stage proof is complete for
+`functional-test-optimization-c09-workers-cli-lifecycle-contention-004`.
+The final full package run passed, and a detached clean checkout independently
+reconstructed the six-selector inventory and owned-surface scope. Raised-
+parallelism Backend Functional Coverage and its package timing/topology
+comment remain review-stage evidence; no CI result is committed here.
+
+### Environment and artifact
+
+- Commit/build identifier: `45ea3b7e0eb4fd0912fd4b9220f3d224d95ffa65`, the
+  post-sync implementation/test tree used for the final executable proof. This
+  report reconciliation is documentation-only.
+- Environment and configuration: Windows `10.0.26200.0`, `go1.25.0
+  windows/amd64`, `GOAMD64=v1`, repository `go.mod`, default Go cache, and
+  controlled test-owned temporary roots. No provider credentials, customer
+  data, or paid calls were used.
+- Customer entry point: production `root.BuildProcess` and `Process.Execute`
+  through the public `you run` command shape, with public Factory Session,
+  Work, Worker Session, Factory Event, and dispatch observations where the
+  lifecycle contract owns them.
+- Real and substituted dependencies: production application composition,
+  local filesystem, loopback HTTP, process/listener lifecycle, and stdio
+  boundaries; provider effects are controlled only at
+  `edges.Edges`/`ProviderCommandRunner`.
+- Cost/call budget used: zero remote or paid provider calls; maximum cost
+  `$0`.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| `CHAR-C09-01` | PASS | The committed ledger records the cited jobs=16 selector/phase failure, six-selector denominator, public identity/order witnesses, topology, and pre-correction cleanup gaps. | None for characterization; corrected contention behavior is covered by later gates. |
+| `LIFE-H01`–`LIFE-H05`, `LIFE-U01`–`LIFE-U10`, `LIFE-B01`–`LIFE-B06` accounting | PASS | The six selectors and their adverse subcases retain the named happy, malformed, duplicate, dependency, timeout, cancellation, recovery, ordering, cleanup, and boundary rows; LIFE-U10 and LIFE-B06 are explicitly not applicable/integration-owned, and the operator disposition re-scopes LIFE-U07 while preserving its product-gap characterization. | Future host growth, paid providers, and OS signal/exit behavior remain outside this functional package. |
+| `LIFECYCLE-C09-01` / `ADVERSE-C09-01` | PASS | Stories 002–003 recorded signal-driven readiness, terminal output ordering, public error/state witnesses, provider-call counts, adverse diagnostics, cancellation/recovery, and focused repeat/race results without assertion removal, serialization, or workflow changes. | Raised-parallelism same-head confirmation remains review-owned. |
+| `CLEANUP-C09-01` | PASS | The adverse matrix and forced-unwind child prove joined command/process, closed listener, released gates, provider completion/cancellation, observed session, and absent owned factory/artifact paths on applicable terminal paths. | Host-wide resources outside package ownership. |
+| `REPEAT-C09-01` / focused `RACE-C09-01` | PASS | Story 003 recorded the focused `-count=3` and `-race` commands passing with no race diagnostics. | Other packages and unsupported platform semantics. |
+| `PACKAGE-C09-01` | PASS | `go test -count=1 -timeout=15m ./tests/functional/workers/transports/cli/run/lifecycle` exited 0; all six top-level selectors passed in 22.849s on the post-sync tree. | Remote raised-parallelism timing/topology. |
+| `PR-FUNCTIONAL-C09-01` | REVIEW STAGE | The current workflow's ordinary functional runner remains jobs=4; the final PR must start the authorized jobs=12/16 Backend Functional Coverage evidence and put run/job/artifact IDs plus the package result in a PR comment. | Same-head raised CI result and comparable package timing are not available before PR creation. |
+| Scope and compatibility | PASS | The clean checkout found only the four declared owned paths relative to `origin/main`; no public/generated contract, UI, shared support, baseline, workflow, paid provider, or unrelated package changed. | Full repository CI remains review-owned. |
+| `LOOPBACK-C09-01` | PASS | A detached clean worktree at the implementation/test tree ended clean, had no tracked `prd.json`/`progress.txt`, reproduced exactly six selectors with `go test -list '^Test'`, and retained only the four owned diff paths. No repair was made. | The final PR SHA and terminal CI are review-stage artifacts. |
+| Implementation-stage delivery | REVIEW HANDOFF | Local proof is complete; after the documentation-only reconciliation, the final head will be pushed, the named PR opened with `prd.json` as its body, and required CI started. | Review owns terminal CI, conflict resolution, merge, and the raised-CI comment. |
+
+### Customer journey
+
+1. A detached clean checkout was created at the implementation/test tree and
+   confirmed clean before any temporary validation state. Its task scaffolding
+   inventory was empty because `prd.json` and `progress.txt` are ignored
+   worktree inputs, not deliverables.
+2. `go test -list '^Test' ./tests/functional/workers/transports/cli/run/lifecycle`
+   returned the exact six public top-level selectors with exit 0.
+3. The final package command ran once through the local-real root/process/API
+   boundary and exited 0 in 22.849s, proving package coexistence after the
+   adverse matrix and coordinator changes.
+4. The loopback removed its temporary detached worktree without modifying the
+   tracked tree. No CI artifact, audit transcript, or paid-provider payload is
+   part of this branch.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the characterization, coordinator,
+  adverse-cleanup, operator-gap, and clean-room records remain in this
+  canonical C09 ledger.
+- Permission and error behavior: no authorization boundary is owned by this
+  fixture; malformed sources, provider failure, cancellation, timeout, and
+  public ErrorResponse behavior remain asserted at the CLI/process boundary.
+- Persistence/reload behavior: no persistence contract changed; Factory
+  Session, Work, Worker Session, and retained Factory Event observations remain
+  public projections used by the existing server-attached witness.
+- Accessibility/keyboard/responsive behavior: not applicable; this lane has no
+  UI surface.
+- Operational signals: phase diagnostics, readiness/close timing, process and
+  listener closure, gate release, provider-call counts, public identities,
+  retained event ordering, and owned-path absence are available to review.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| C09-F001 | REVIEW-STAGE | Open the named PR and inspect Backend Functional Coverage. | The exact PR head is green at authorized jobs=12 or jobs=16 and reports comparable package timing/topology. | This cannot exist before the final push; ordinary jobs=4 configuration is insufficient evidence. | `PR-FUNCTIONAL-C09-01` row above; review must record run/job/artifact IDs in a PR comment. |
+| C09-F002 | OPERATOR-OWNED PRODUCT GAP | Run the Story 003 `cancellation_and_recovery` witness. | The lane records the supported cancellation observables without entering excluded runtime code. | Provider cancellation and Factory Session completion pass; runtime-owned Work/Worker Session/dispatch remain non-terminal exactly as documented and accepted by the operator. | Story 003 section and `prd.json.operatorOverride`. |
+
+### Verdict
+
+PASS for local implementation and clean-room validation; REVIEW HANDOFF for
+raised-parallelism CI, final-head timing/topology, terminal CI, conflict
+resolution, and merge.
