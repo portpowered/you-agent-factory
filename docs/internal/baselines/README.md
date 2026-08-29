@@ -285,7 +285,9 @@ and `go test ./internal/ownershipinventory -count=1`.
 The focused S-09 and S-10 identity tests passed.
 The focused S-11 MCP identity tests passed.
 After `make ui-deps`, `make ui-deadcode` matched 30 accepted issues.
-`make ui-component-test` returned `CASE_EXIT=0`.
+The full `make ui-component-test` run executed 1,079 tests with zero test failures.
+It exited 1 because Windows wall time was 217.06 seconds against the 150.00-second budget.
+This local runner limit does not authorize an R-17 edit.
 The R-07 command `bun run check:localized-copy` also exited 0.
 
 Four consumer observations remain explicit.
@@ -341,10 +343,10 @@ GATE-HOSTED passes for this audit revision. Local timing remains diagnostic.
 | C11-R04-001 | `GATE-CONSUMERS`, `internal/functionaltestmetadata` maintainers | At audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`, run `go test ./internal/functionaltestmetadata -run ^TestCommittedBaselineMatchesCurrentUndocumentedCustomerTests$ -count=1`. The checker returned exit 1 with 330 committed identities and 296 discovered identities. | Review the 34-entry set difference, document any still-undocumented test, and manually remove only resolved baseline rows. Rerun the checker in a separately owned correction. This lane makes no baseline edit. |
 | C11-CONTRACT-002 | `GATE-CONSUMERS`, CLI contract owner | At audit SHA `022888528c6b3ae6192a9936db235bd4102fe597`, run `make test-contract`. The command returned exit 1 at `contracts/session_command_family_test.go:116`: `you.session.list --scope default = all, want live`. Focused S-09 and S-10 comparisons still passed. | Confirm the intended default at the contract and production-command sources, then correct the owning contract surface and rerun `make test-contract`. This lane makes no fixture or generated-file edit. |
 
-These blockers keep the catalog lane open. The local dead-code and missing
-latency-artifact results are environment limitations. They are not combined
-with either current-main blocker and do not justify changing a comparison
-file.
+These blockers keep the catalog lane open. The local dead-code, component-runner,
+and missing latency-artifact results are environment limitations. They are not
+combined with either current-main blocker and do not justify changing a
+comparison file.
 
 ### GATE-DOC-REVIEW
 
