@@ -219,3 +219,93 @@ recording, route, and no-listener witnesses above. Five-package lifecycle
 reconciliation is `GATE-CONSENSUS`; final integrated proof is
 `GATE-PACKAGES`/`GATE-LOOPBACK`; PR timing and terminal CI are
 `GATE-PR-CI` and review-owned.
+
+## Validation report: C11 packaged plan and consensus
+
+### Environment and artifact
+
+- Commit/build identifier: `6ccc9706beee8305cbf9fc3a8e8fa27cc60355c6` (runtime
+  validation head; this report addition is documentation-only).
+- Environment and configuration: Windows `10.0.26200.0`, `go1.25.0`
+  `windows/amd64`, repository `go.mod`, `GOFLAGS` unset, no special test
+  configuration.
+- Customer entry point: production `root.BuildProcess` composed by
+  `support.BuildProcessWithContext`, exercised through `Process.Execute` and
+  the public packaged CLI/API/session/event/recording paths.
+- Real and substituted dependencies: local-real application composition and
+  Factory/Work/Event/recording/replay paths; provider, listener, filesystem,
+  recorder, and ID effects are controlled only through `serviceedges.Edges`.
+- Cost/call budget used: zero remote or paid calls and zero cost.
+
+### Project criteria
+
+| Criterion | PASS/FAIL/BLOCKED | Evidence | Unproven edge |
+| --- | --- | --- | --- |
+| GATE-INVENTORY | PASS | The ledger above records exactly 38 eligible C01-C07 rows, zero isolated rows, 15 dynamic nested assertions, selectors, public witnesses, and ownership. | None for the C11 denominator; the external project-wide suite remains separate. |
+| GATE-NAMED | PASS | Story 002 evidence and the delivered named package source show one reusable root, routed preparation cancellation, redaction, recording/replay, deterministic route rejection, reuse, and zero final routes/listener residue. | Terminal PR CI. |
+| GATE-CONSENSUS | PASS | Story 003 evidence plus the integrated run below cover the five package-local one-root fixtures, explicit session ledgers, failure reuse, route cleanup, and public plan/consensus/iteration/subagent witnesses. | Terminal PR CI and merge. |
+| GATE-REPEAT and GATE-RACE | PASS | Story 002 touched router/cancellation repeat and race commands passed; story 003 complete plan-parallel/quorum/Ralph repeat and five-package race commands passed. No sleep or timeout-padding addition appears in the branch diff. | Universal schedule safety outside exercised paths. |
+| PKG/LIFE behavior matrix | PASS | The six-package command exited 0, and the 38-row ledger maps each witness to the public assertion; fixture cleanup probes assert process/listener/root/route/session residue properties. | Remote providers and the project-level post-merge full-suite gate. |
+| GATE-PACKAGES | PASS | The exact six-package command ran once from a clean worktree at the runtime validation head and all six packages exited 0. Source audit found one process construction in each in-scope package. | Review-owned terminal CI. |
+| GATE-SCOPE | PASS | `git diff --name-only origin/main...HEAD` returned 11 paths: the six owned packaged directories and this ledger; unexpected path count was 0. Branch-only ancestry is the three C11 commits from merge base `d4ce490f7c`; PR #2357 is already an ancestor of that base and was not imported by this branch. | A future base refresh may change the three-dot comparison. |
+| Topology and timing | PASS | Pre-change topology was eight roots; delivered source has six `BuildProcessWithContext` sites, one per package. Results were named `14.696s`, plan-execute `1.834s`, plan-parallel `4.715s`, quorum `3.852s`, Ralph `4.272s`, and subagent `8.855s`, versus characterization `23.678s`, `2.499s`, `5.325s`, `3.781s`, `5.171s`, and `11.055s`. Five package results moved down; the quorum `+0.071s` single local observation is recorded as noisy and no fixed local threshold is imposed. | Authoritative PR package timing direction is review-owned; no repeated local benchmark was run. |
+| Security and cost | PASS | Changed functional sources contain no remote/paid invocation; controlled command runners and listeners remain at the declared edges, and prior redaction witnesses passed. | Credentialed remote behavior is intentionally out of scope. |
+| GATE-LOOPBACK | PASS | This read-only report records the environment, exact procedure, evidence, unproven edges, customer journey, and handoff findings without repairing source. | None within implementation scope. |
+| GATE-PR-CI / delivery | PASS (handoff) | Implementation handoff is satisfied when the final head is pushed, the PR is open, required CI has started, and blocking feedback is addressed; review owns terminal results, timing authority, conflicts, and merge. | At report creation, PR creation and CI start remain the final delivery action. |
+| Project full-suite gate | BLOCKED (external) | The source-plan requirement for three consecutive uncached `make test-functional` runs is explicitly post-merge and outside this lane's implementation finish line. | Relevant Project slices must merge and the external gate must report identical pass/fail counts. |
+
+### Customer journey
+
+1. The clean worktree ran the exact command below against the six named
+   packaged functional directories:
+
+   ```text
+   go test ./tests/functional/factory/packaged/named_invocation ./tests/functional/factory/packaged/plan_execute ./tests/functional/factory/packaged/plan_parallel ./tests/functional/factory/packaged/quorum ./tests/functional/factory/packaged/ralph ./tests/functional/factory/packaged/subagent -count=1
+   ```
+
+   It exited `0`: named invocation `14.696s`, plan-execute `1.834s`,
+   plan-parallel `4.715s`, quorum `3.852s`, Ralph `4.272s`, and subagent
+   `8.855s`. The package fixtures' assertions observed the 38 mapped public
+   witnesses, explicit scenario sessions, six process roots, and zero cleanup
+   residue.
+
+### Cross-task integration and usability
+
+- Documentation discoverability: the C11 ledger is under
+  `docs/internal/development/functional-test-optimization/` and records the
+  denominator, source hashes, public selectors, and final validation evidence.
+- Permission and error behavior: existing named-input, cancellation,
+  dependency-failure, partial-completion, and stable-error assertions passed;
+  no public contract changed.
+- Persistence/reload behavior: recording, replay, recovery, and terminal
+  session assertions remain part of the six package witnesses and passed.
+- Accessibility/keyboard/responsive behavior: not applicable; this lane
+  changes functional test fixtures and has no UI surface.
+- Operational signals: listener shutdown, route counts, session ledgers,
+  root removal, and provider call observations are asserted by the fixture
+  cleanup probes.
+
+### Findings
+
+| ID | Severity | Reproduction | Expected | Actual | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| LOOPBACK-001 | Info | Compare the one local six-package result with the characterization table. | Directional package improvement is recorded without a local timing threshold. | Five package results moved down; quorum was `0.071s` higher in this single run. | Integrated command and topology/timing row above. |
+| LOOPBACK-002 | Info | Inspect `origin/main...HEAD` and branch-only ancestry. | Only C11-owned paths and commits are introduced. | 11 allowed paths, zero unexpected paths, three branch-only commits; PR #2357 is inherited through the base, not imported. | GATE-SCOPE audit above. |
+
+### Verdict
+
+PASS for the implementation-stage C11 lane and review handoff. The external
+post-merge full-suite gate, terminal PR CI, authoritative timing verdict,
+conflict resolution, and merge remain owned by the Project/review stages.
+
+### Delta-plan request [Required for FAIL/BLOCKED]
+
+- Affected behavior and criterion: Project full-suite gate only.
+- Root-cause evidence or remaining uncertainty: the required three uncached
+  `make test-functional` runs are defined after the relevant slices merge and
+  cannot be established by this pre-merge lane.
+- Smallest recommended correction/prerequisite: after merge, run the external
+  Project gate three consecutive uncached times and record identical pass/fail
+  counts; do not change this lane for that evidence.
+- Dependencies and retest scope: relevant packaged slices merged; execute the
+  Project-owned full functional suite.
