@@ -401,23 +401,24 @@ func TestCLIRunStdinBoundaryUsesInclusiveWorkPayloadLimit(t *testing.T) {
 	}
 
 	exactMiB := fixture.execute(t, modesInvocationSpec{
-		globalArgs: []string{"--json"},
-		runArgs:    []string{"--output", "primary", "-"},
-		stdin:      strings.Repeat("x", 1<<20),
-		behavior:   modesRouteSuccess,
+		globalArgs:     []string{"--json"},
+		runArgs:        []string{"--output", "primary", "-"},
+		stdin:          strings.Repeat(" ", (1<<20)-4) + "true",
+		stdinSignature: true,
+		behavior:       modesRouteSuccess,
+		result:         "exact 1 MiB stdin COMPLETE",
 	})
-	if exactMiB.err == nil || !strings.Contains(exactMiB.err.Error(), "payloadBytes=1048578") || !strings.Contains(exactMiB.err.Error(), "payloadLimitBytes=65536") {
-		t.Fatalf("exact 1 MiB stdin error = %v, want downstream Work payload-limit rejection", exactMiB.err)
-	}
-	if exactMiB.stdout != "" || exactMiB.providerCalls != 0 || !strings.Contains(exactMiB.stderr, "payload exceeds byte limit") {
-		t.Fatalf("exact 1 MiB stdin stdout=%q stderr=%q provider_calls=%d, want no output and no dispatch", exactMiB.stdout, exactMiB.stderr, exactMiB.providerCalls)
+	assertJSONPrimarySuccess(t, exactMiB, "exact 1 MiB stdin COMPLETE")
+	if len(exactMiB.requests) != 1 {
+		t.Fatalf("exact 1 MiB stdin provider requests = %d, want one dispatch", len(exactMiB.requests))
 	}
 
 	overMiB := fixture.execute(t, modesInvocationSpec{
-		globalArgs: []string{"--json"},
-		runArgs:    []string{"--output", "primary", "-"},
-		stdin:      strings.Repeat("x", (1<<20)+1),
-		behavior:   modesRouteSuccess,
+		globalArgs:     []string{"--json"},
+		runArgs:        []string{"--output", "primary", "-"},
+		stdin:          strings.Repeat(" ", 1<<20) + "x",
+		stdinSignature: true,
+		behavior:       modesRouteSuccess,
 	})
 	if overMiB.err == nil || !strings.Contains(overMiB.err.Error(), "invocation stdin exceeds the 1048576-byte limit") {
 		t.Fatalf("1 MiB plus one stdin error = %v, want stable CLI collector limit diagnostic", overMiB.err)

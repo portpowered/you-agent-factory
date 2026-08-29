@@ -37,15 +37,16 @@ const partialProviderStdout = `{"type":"thread.started","thread_id":"c11-partial
 // modesInvocationSpec describes only the mutable inputs and provider outcome
 // for one public CLI invocation. The application graph remains package-owned.
 type modesInvocationSpec struct {
-	globalArgs    []string
-	runArgs       []string
-	prompt        string
-	stdin         string
-	result        string
-	emptyResult   bool
-	behavior      modesRouteBehavior
-	includePrompt bool
-	context       context.Context
+	globalArgs     []string
+	runArgs        []string
+	prompt         string
+	stdin          string
+	result         string
+	emptyResult    bool
+	stdinSignature bool
+	behavior       modesRouteBehavior
+	includePrompt  bool
+	context        context.Context
 }
 
 type modesInvocationResources struct {
@@ -246,7 +247,7 @@ func (fixture *modesPackageFixture) start(t testing.TB, spec modesInvocationSpec
 		t.Fatalf("create invocation roots: %v", err)
 	}
 	invocationFactoryPath := filepath.Join(workingRoot, "factory", "factory.json")
-	if err := copyModesFactory(fixture.factoryPath, invocationFactoryPath, spec.emptyResult); err != nil {
+	if err := copyModesFactory(fixture.factoryPath, invocationFactoryPath, spec.emptyResult, spec.stdinSignature); err != nil {
 		t.Fatalf("copy invocation Factory: %v", err)
 	}
 	resources := modesInvocationResources{
@@ -437,7 +438,7 @@ func writeModesFactory(rootDir string) (string, error) {
 	return factoryPath, nil
 }
 
-func copyModesFactory(sourcePath, targetPath string, decisionEnvelope bool) error {
+func copyModesFactory(sourcePath, targetPath string, decisionEnvelope, stdinSignature bool) error {
 	sourceDir := filepath.Dir(sourcePath)
 	targetDir := filepath.Dir(targetPath)
 	for _, relative := range []string{
@@ -464,6 +465,24 @@ func copyModesFactory(sourcePath, targetPath string, decisionEnvelope bool) erro
 					return errors.New("modes factory workstation is not an object")
 				}
 				workstation["outcomeFormat"] = "decision-envelope"
+			}
+			data, err = json.MarshalIndent(factory, "", "  ")
+			if err != nil {
+				return err
+			}
+			data = append(data, '\n')
+		}
+		if relative == "factory.json" && stdinSignature {
+			var factory map[string]any
+			if err := json.Unmarshal(data, &factory); err != nil {
+				return err
+			}
+			factory["invocationSignature"] = map[string]any{
+				"parameters": []any{map[string]any{
+					"name":     "marker",
+					"typeHint": "BOOLEAN_STRING",
+					"bindings": []any{map[string]any{"kind": "STDIN"}},
+				}},
 			}
 			data, err = json.MarshalIndent(factory, "", "  ")
 			if err != nil {
