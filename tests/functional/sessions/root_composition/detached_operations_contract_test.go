@@ -16,6 +16,8 @@ import (
 // stateful: assertions verify the translated requests and returned projections
 // rather than merely checking that construction succeeds.
 func TestDetachedOperationsFunctionalContract(t *testing.T) {
+	t.Parallel()
+
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 
@@ -207,6 +209,8 @@ func testDetachedResultsAndPreparation(t *testing.T, ctx context.Context, operat
 }
 
 func TestDetachedOperationsFunctionalValidation(t *testing.T) {
+	t.Parallel()
+
 	if operations, err := (&factorysessions.DetachedOperations{}).Bind(nil); operations != nil || !errors.Is(err, factorysessions.ErrDetachedServiceUnavailable) {
 		t.Fatalf("bind nil = (%#v, %v), want unavailable", operations, err)
 	}

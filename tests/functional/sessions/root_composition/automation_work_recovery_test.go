@@ -26,6 +26,8 @@ const (
 // dispatch output is intermediate and is superseded by a later canonical state
 // change.
 func TestAutomationWorkWithoutRecordedOccupancyRestoresThroughRecordingProjection(t *testing.T) {
+	t.Parallel()
+
 	fixturePath := testutil.MustRepoPath(t, automationRecoveryFixture)
 	fixture := testutil.LoadReplayArtifact(t, fixturePath)
 	assertAutomationRecoveryFixture(t, fixture)

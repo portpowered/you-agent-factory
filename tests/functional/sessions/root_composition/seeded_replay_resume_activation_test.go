@@ -23,6 +23,8 @@ import (
 // in-flight artifact is intentionally unfinalized, while the finished artifact
 // retains its terminal Work state.
 func TestSeededReplayResumeMaterializesRecordedWorkOnceThroughAssembledSession(t *testing.T) {
+	t.Parallel()
+
 	for _, test := range []struct {
 		name     string
 		finished bool
